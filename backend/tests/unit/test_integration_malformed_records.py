@@ -165,6 +165,14 @@ def _make_memory(memory_id='good'):
     }
 
 
+def _memory_record(payload):
+    """Minimal MemoryService record double preserving the integration boundary contract."""
+    record = MagicMock()
+    record.id = payload.get('id')
+    record.model_dump.return_value = payload
+    return record
+
+
 def test_get_tasks_skips_malformed_record():
     valid = {'id': 'good', 'description': 'do x', 'completed': False, 'is_locked': False}
     malformed = {'id': 'bad', 'is_locked': False}  # missing required description/completed
@@ -193,11 +201,15 @@ def test_get_tasks_all_malformed_returns_empty():
 def test_get_memories_skips_malformed_record():
     valid = _make_memory('good')
     malformed = {'id': 'bad', 'is_locked': False}  # missing required uid/created_at/content
-    integ.memory_db.get_memories = MagicMock(return_value=[valid, malformed])
     _setup_gates()
 
-    with patch.object(integ, 'verify_api_key', return_value=True), patch.object(integ, 'apps_utils') as au:
+    with (
+        patch.object(integ, 'verify_api_key', return_value=True),
+        patch.object(integ, 'apps_utils') as au,
+        patch.object(integ, 'MemoryService') as memory_service,
+    ):
         au.app_can_read_memories.return_value = True
+        memory_service.return_value.read.return_value = [_memory_record(valid), _memory_record(malformed)]
         result = integ.get_memories_via_integration(
             request=MagicMock(),
             app_id='app-1',
@@ -223,11 +235,18 @@ def _call_memories():
 
 
 def test_get_memories_all_malformed_returns_empty():
-    integ.memory_db.get_memories = MagicMock(return_value=[{'id': 'b1'}, {'id': 'b2'}])
     _setup_gates()
 
-    with patch.object(integ, 'verify_api_key', return_value=True), patch.object(integ, 'apps_utils') as au:
+    with (
+        patch.object(integ, 'verify_api_key', return_value=True),
+        patch.object(integ, 'apps_utils') as au,
+        patch.object(integ, 'MemoryService') as memory_service,
+    ):
         au.app_can_read_memories.return_value = True
+        memory_service.return_value.read.return_value = [
+            _memory_record({'id': 'b1'}),
+            _memory_record({'id': 'b2'}),
+        ]
         result = _call_memories()
 
     assert result['memories'] == []
@@ -246,8 +265,9 @@ def test_resolve_geolocation_keeps_enrichment():
     from models.geolocation import Geolocation
 
     enriched = Geolocation(latitude=37.78, longitude=-122.4, google_place_id='ChIJ_test', address='1 Main St')
-    with patch.object(integ, 'run_blocking', side_effect=_passthrough_run_blocking), patch.object(
-        integ, 'get_google_maps_location', return_value=enriched
+    with (
+        patch.object(integ, 'run_blocking', side_effect=_passthrough_run_blocking),
+        patch.object(integ, 'get_google_maps_location', return_value=enriched),
     ):
         raw = Geolocation(latitude=37.78, longitude=-122.4)  # coordinates, no google_place_id yet
         result = asyncio.run(integ._resolve_geolocation(raw))
@@ -260,8 +280,9 @@ def test_resolve_geolocation_falls_back_to_raw_on_geocode_miss():
 
     from models.geolocation import Geolocation
 
-    with patch.object(integ, 'run_blocking', side_effect=_passthrough_run_blocking), patch.object(
-        integ, 'get_google_maps_location', return_value=None  # geocoder found nothing
+    with (
+        patch.object(integ, 'run_blocking', side_effect=_passthrough_run_blocking),
+        patch.object(integ, 'get_google_maps_location', return_value=None),  # geocoder found nothing
     ):
         raw = Geolocation(latitude=37.78, longitude=-122.4)
         result = asyncio.run(integ._resolve_geolocation(raw))

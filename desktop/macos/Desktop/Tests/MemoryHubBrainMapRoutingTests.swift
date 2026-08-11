@@ -4,7 +4,7 @@ import XCTest
 
 /// The Memory hub's Brain Map destination is the surface users actually reach
 /// from the Memory menu. It previously rendered `MemoryGraphPage`
-/// unconditionally, so canonical-cohort users kept the legacy graph there even
+/// unconditionally, so assertion-backed users kept the legacy graph there even
 /// though the atlas had already shipped behind `MemoryGraphPresentationMode`.
 final class MemoryHubBrainMapRoutingTests: XCTestCase {
 

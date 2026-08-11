@@ -6,8 +6,8 @@ context window, regardless of total memory count.
 
 Tests exercise:
   - MemoryDB model instantiation and serialization (no external deps)
-  - get_prompt_data() bucket routing (legacy path, DB stubbed via import_isolation)
-  - get_prompt_memories() prompt-string formatting (legacy path, DB stubbed)
+  - get_prompt_data() bucket routing through the universal memory service
+  - get_prompt_memories() prompt-string formatting through the same authority
 
 No Firebase, Redis, stripe, anthropic, or network connections are required.
 Heavy transitive deps (database.memories → stripe, utils.memory.memory_service → anthropic)
@@ -16,7 +16,7 @@ isolation primitives from testing/import_isolation.py.
 """
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,11 +59,10 @@ def mem_module():
     """Load utils.llms.memory fresh with the heavy database chain stubbed out.
 
     Import chain that pulls in heavy packages (stripe, anthropic, …):
-      database.memories → database.helpers → database.users → utils.subscription → stripe
       utils.memory.memory_service → database.vector_db → utils.llm.clients → anthropic
 
-    We stub exactly those two top-level modules.  All other imports
-    (models.memories, utils.memory.memory_system, database._client) are loaded
+    We stub the service module. All other imports
+    (models.memories, database._client) are loaded
     for real since google-cloud-firestore is available in this environment.
     The loaded module is returned as-is; tests patch individual attributes with
     patch.object() inside each test, which auto-restores after the with block.
@@ -71,7 +70,6 @@ def mem_module():
     from testing.import_isolation import AutoMockModule, stub_modules, load_module_fresh
 
     stubs = {
-        'database.memories': AutoMockModule('database.memories'),
         'database.auth': AutoMockModule('database.auth'),
         'utils.memory.memory_service': AutoMockModule('utils.memory.memory_service'),
     }
@@ -135,28 +133,29 @@ class TestBaselineMemoryModel:
 
 class TestBaselineMemoryInjection:
     """
-    Each test patches exactly the three callables that get_prompt_data uses at runtime:
-      - resolve_memory_system  → forced to MemorySystem.LEGACY so the legacy read path runs
-      - memories_db.get_memories  → returns our controlled list of raw memory dicts
-      - get_user_name  → returns 'Alice'
+    Each test supplies one universal MemoryService read result and a user name.
 
-    mem_module is a session-scoped fixture that loaded utils.llms.memory against
-    AutoMockModule stubs for database.memories and utils.memory.memory_service.
-    After loading, the module attributes are bound to those stub objects, so
-    patch.object(mem_module, …) and patch.object(mem_module.memories_db, …) are correct.
+    mem_module is a session-scoped fixture loaded against an isolated
+    utils.memory.memory_service module. Tests replace the bound service class.
     """
+
+    @staticmethod
+    def _service(raw):
+        from models.memories import MemoryDB
+
+        service = MagicMock()
+        service.export_memories.return_value = [MemoryDB.model_validate(item) for item in raw]
+        return service
 
     def test_baseline_memory_lands_in_first_bucket(self, mem_module):
         """get_prompt_data must route is_baseline=True memories into the baseline bucket."""
-        from utils.memory.memory_system import MemorySystem
-
         raw = [
             _raw_memory('Always remember this', is_baseline=True),
             _raw_memory('A regular fact'),
         ]
+        service = self._service(raw)
         with (
-            patch.object(mem_module, 'resolve_memory_system', return_value=MemorySystem.LEGACY),
-            patch.object(mem_module.memories_db, 'get_memories', return_value=raw),
+            patch.object(mem_module, 'MemoryService', return_value=service),
             patch.object(mem_module, 'get_user_name', return_value='Alice'),
         ):
             _, baseline, user_made, generated = mem_module.get_prompt_data('user-1')
@@ -169,12 +168,10 @@ class TestBaselineMemoryInjection:
 
     def test_manually_added_memory_lands_in_user_bucket(self, mem_module):
         """get_prompt_data must route manually_added=True memories into the user_made bucket."""
-        from utils.memory.memory_system import MemorySystem
-
         raw = [_raw_memory('User told the AI this', manually_added=True)]
+        service = self._service(raw)
         with (
-            patch.object(mem_module, 'resolve_memory_system', return_value=MemorySystem.LEGACY),
-            patch.object(mem_module.memories_db, 'get_memories', return_value=raw),
+            patch.object(mem_module, 'MemoryService', return_value=service),
             patch.object(mem_module, 'get_user_name', return_value='Alice'),
         ):
             _, baseline, user_made, generated = mem_module.get_prompt_data('user-1')
@@ -185,12 +182,10 @@ class TestBaselineMemoryInjection:
 
     def test_generated_memory_lands_in_generated_bucket(self, mem_module):
         """get_prompt_data must route ordinary auto-extracted memories into the generated bucket."""
-        from utils.memory.memory_system import MemorySystem
-
         raw = [_raw_memory('Auto-extracted fact')]
+        service = self._service(raw)
         with (
-            patch.object(mem_module, 'resolve_memory_system', return_value=MemorySystem.LEGACY),
-            patch.object(mem_module.memories_db, 'get_memories', return_value=raw),
+            patch.object(mem_module, 'MemoryService', return_value=service),
             patch.object(mem_module, 'get_user_name', return_value='Alice'),
         ):
             _, baseline, user_made, generated = mem_module.get_prompt_data('user-1')
@@ -201,12 +196,10 @@ class TestBaselineMemoryInjection:
 
     def test_prompt_string_contains_baseline_label(self, mem_module):
         """get_prompt_memories must include a distinct baseline label when baselines exist."""
-        from utils.memory.memory_system import MemorySystem
-
         raw = [_raw_memory('Core fact about user', is_baseline=True)]
+        service = self._service(raw)
         with (
-            patch.object(mem_module, 'resolve_memory_system', return_value=MemorySystem.LEGACY),
-            patch.object(mem_module.memories_db, 'get_memories', return_value=raw),
+            patch.object(mem_module, 'MemoryService', return_value=service),
             patch.object(mem_module, 'get_user_name', return_value='Alice'),
         ):
             _, memories_str = mem_module.get_prompt_memories('user-1')
@@ -217,12 +210,10 @@ class TestBaselineMemoryInjection:
 
     def test_prompt_string_omits_baseline_section_when_none_exist(self, mem_module):
         """get_prompt_memories must not include a baseline section when there are no baselines."""
-        from utils.memory.memory_system import MemorySystem
-
         raw = [_raw_memory('A regular fact')]
+        service = self._service(raw)
         with (
-            patch.object(mem_module, 'resolve_memory_system', return_value=MemorySystem.LEGACY),
-            patch.object(mem_module.memories_db, 'get_memories', return_value=raw),
+            patch.object(mem_module, 'MemoryService', return_value=service),
             patch.object(mem_module, 'get_user_name', return_value='Alice'),
         ):
             _, memories_str = mem_module.get_prompt_memories('user-1')
@@ -234,15 +225,13 @@ class TestBaselineMemoryInjection:
 
     def test_locked_memories_excluded_from_all_buckets(self, mem_module):
         """get_prompt_data must skip memories with is_locked=True in all buckets."""
-        from utils.memory.memory_system import MemorySystem
-
         raw = [
             _raw_memory('Locked premium content', is_locked=True),
             _raw_memory('Normal fact'),
         ]
+        service = self._service(raw)
         with (
-            patch.object(mem_module, 'resolve_memory_system', return_value=MemorySystem.LEGACY),
-            patch.object(mem_module.memories_db, 'get_memories', return_value=raw),
+            patch.object(mem_module, 'MemoryService', return_value=service),
             patch.object(mem_module, 'get_user_name', return_value='Alice'),
         ):
             _, baseline, user_made, generated = mem_module.get_prompt_data('user-1')
@@ -253,12 +242,10 @@ class TestBaselineMemoryInjection:
 
     def test_baseline_flag_takes_precedence_over_manually_added(self, mem_module):
         """A memory with both is_baseline=True and manually_added=True must land in the baseline bucket."""
-        from utils.memory.memory_system import MemorySystem
-
         raw = [_raw_memory('Pinned user note', is_baseline=True, manually_added=True)]
+        service = self._service(raw)
         with (
-            patch.object(mem_module, 'resolve_memory_system', return_value=MemorySystem.LEGACY),
-            patch.object(mem_module.memories_db, 'get_memories', return_value=raw),
+            patch.object(mem_module, 'MemoryService', return_value=service),
             patch.object(mem_module, 'get_user_name', return_value='Alice'),
         ):
             _, baseline, user_made, generated = mem_module.get_prompt_data('user-1')

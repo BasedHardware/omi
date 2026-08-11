@@ -443,16 +443,7 @@ def test_canonical_graph_rejects_tampered_and_stale_cursors(monkeypatch):
         kg.get_canonical_knowledge_graph(UID, db_client=db, limit=1, cursor=cursor)
 
 
-def test_canonical_route_is_additive_and_legacy_route_response_is_unchanged(monkeypatch):
-    legacy_payload = {
-        "nodes": [{"id": "legacy-node"}],
-        "edges": [],
-        "truncated": True,
-        "node_count": 1,
-        "edge_count": 0,
-        "node_limit": 500,
-        "edge_limit": 1000,
-    }
+def test_both_graph_routes_use_canonical_assertions_with_compatible_response_shapes(monkeypatch):
     canonical_payload = {
         "nodes": [{"id": "canonical-node"}],
         "edges": [],
@@ -460,7 +451,6 @@ def test_canonical_route_is_additive_and_legacy_route_response_is_unchanged(monk
         "has_more": True,
         "next_cursor": "v3.opaque.signed",
     }
-    monkeypatch.setattr(kg_router, "get_knowledge_graph_payload", lambda _uid: legacy_payload)
     monkeypatch.setattr(
         kg_router.canonical_graph_service,
         "get_canonical_knowledge_graph",
@@ -475,7 +465,15 @@ def test_canonical_route_is_additive_and_legacy_route_response_is_unchanged(monk
     canonical_response = client.get("/v1/knowledge-graph/canonical?limit=200")
 
     assert legacy_response.status_code == 200
-    assert legacy_response.json() == legacy_payload
+    assert legacy_response.json() == {
+        "nodes": [{"id": "canonical-node"}],
+        "edges": [],
+        "truncated": True,
+        "node_count": 1,
+        "edge_count": 0,
+        "node_limit": None,
+        "edge_limit": None,
+    }
     assert canonical_response.status_code == 200
     assert canonical_response.json() == canonical_payload
 

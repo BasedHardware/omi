@@ -3913,7 +3913,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// Root-only prompt materialization is inert until this main-chat surface
-  /// has a current cohort capability projection.
+  /// has a current server capability projection.
   func chatFirstMaterializationContext() -> ChatFirstMaterializationContext? {
     guard let ownerID = runtimeOwnerId else { return nil }
     let surface = mainChatSurfaceReference()

@@ -10,13 +10,11 @@ from typing import Any, Dict, Optional, cast
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
-import database.memories as memory_db
-import database.vector_db as vector_db
 from database._client import db
 import logging
 from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import MemorySystem
 from testing.parity_pack_v0.live_capture import capture_memory_write
 
 logger = logging.getLogger(__name__)
@@ -79,10 +77,10 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
 
     # Check for duplicate preferences via semantic search
     try:
-        existing = vector_db.find_similar_memories(uid, preference, threshold=0.90, limit=3)
+        existing = MemoryService(db_client=db).search(uid, preference, limit=3)
         if existing:
-            content = existing[0].get('content', '')
-            score = existing[0].get('score', 0)
+            content = existing[0].memory.content
+            score = existing[0].score
             logger.info(f"Skipping duplicate preference (score={score:.2f}): {content[:80]}")
             return f"Similar preference already exists: {content}"
     except Exception as e:
@@ -105,18 +103,15 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
     memory_data['scoring'] = MemoryDB.calculate_score(MemoryDB.model_validate(memory_data))
 
     try:
-        if resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
-            MemoryService(db_client=db).create_external_memory(
-                uid,
-                MemoryDB.model_validate(memory_data),
-                memory_system=MemorySystem.CANONICAL,
-                consumer="agent_preference",
-                operation="save_user_preference",
-                upsert_vector=False,
-                require_canonical_promotion=True,
-            )
-        else:
-            memory_db.create_memory(uid, memory_data)
+        MemoryService(db_client=db).create_external_memory(
+            uid,
+            MemoryDB.model_validate(memory_data),
+            memory_system=MemorySystem.CANONICAL,
+            consumer="agent_preference",
+            operation="save_user_preference",
+            upsert_vector=False,
+            require_canonical_promotion=True,
+        )
         capture_memory_write(
             principal_id=uid,
             source="agent_preference_memory_create",

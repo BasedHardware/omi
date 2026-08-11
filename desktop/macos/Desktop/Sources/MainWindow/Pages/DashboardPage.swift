@@ -223,7 +223,7 @@ struct DashboardPage: View {
   /// Present only for the capability-gated main-window Home chat. Shared
   /// Dashboard callers leave this nil and keep journaled rich blocks inert.
   var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
-  /// The cohort shell reuses dashboard content under More, but Chat itself
+  /// The Chat-first shell reuses dashboard content under More, but Chat itself
   /// has one primary home. Legacy callers leave this nil and retain their
   /// inline Home chat exactly as before.
   var onOpenPrimaryChat: (() -> Void)? = nil

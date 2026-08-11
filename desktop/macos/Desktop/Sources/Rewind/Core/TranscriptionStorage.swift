@@ -1065,7 +1065,7 @@ actor TranscriptionStorage {
     }
   }
 
-  /// Source-scoped cache read for the cohort-only Omi capture archive.
+  /// Source-scoped cache read for the universal Omi capture archive.
   /// Filtering happens before ordering and limiting so a cached page cannot
   /// be filled by another source and then client-filtered.
   func getLocalOmiCaptureConversations(

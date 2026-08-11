@@ -70,7 +70,7 @@ def get_canonical_goals(
     include_ended: bool = Query(False),
     uid: str = Depends(require_canonical_task_user),
 ) -> List[dict]:
-    """List goals for enrolled canonical-memory task-system clients only."""
+    """List goals through the generation-fenced universal task system."""
     goals = goals_db.get_all_goals(uid, include_inactive=include_ended)
     return [normalize_goal_response(goal) for goal in goals]
 

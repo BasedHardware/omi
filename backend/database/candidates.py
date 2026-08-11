@@ -10,7 +10,6 @@ from uuid import uuid4
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from config.canonical_memory_cohort import is_canonical_memory_user
 import database.action_items as action_items_db
 from database._client import db
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
@@ -136,8 +135,6 @@ def _task_control_ref(uid: str):
 
 
 def _validate_write_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
-    if not is_canonical_memory_user(uid):
-        raise CandidateConflictError('canonical task intelligence is not enabled')
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
@@ -570,6 +567,33 @@ def list_candidates(
     return parse_snapshots(CandidateRecord, query.stream())
 
 
+def list_candidates_compatibility_page(
+    uid: str,
+    *,
+    account_generation: int,
+    limit: int = 500,
+    offset: int = 0,
+) -> tuple[list[CandidateRecord], int]:
+    """Return valid records plus the raw page size for exhaustive adapters.
+
+    ``parse_snapshots`` deliberately skips malformed rows. Compatibility
+    callers need the unparsed count as their pagination authority so one bad
+    document cannot make a non-final page look exhausted and hide later data.
+    """
+
+    query = (
+        db.collection('users')
+        .document(uid)
+        .collection(CANDIDATES_COLLECTION)
+        .where(filter=FieldFilter('account_generation', '==', account_generation))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+    )
+    if offset:
+        query = query.offset(offset)
+    snapshots = list(query.limit(limit).stream())
+    return parse_snapshots(CandidateRecord, snapshots), len(snapshots)
+
+
 def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datetime) -> dict[str, Any]:
     if not isinstance(candidate.task_change, TaskCreatePayload):
         raise CandidateConflictError('task create Candidate has invalid payload')
@@ -785,8 +809,6 @@ def claim_candidate_integration_dispatch(
                     'updated_at': claim_time,
                 },
             )
-            return None
-        if not is_canonical_memory_user(uid):
             return None
         if payload.get('status') in {'completed', 'suppressed'}:
             return None

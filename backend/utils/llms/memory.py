@@ -1,11 +1,9 @@
 from typing import Any, Dict, List, Optional, Tuple
 
-import database.memories as memories_db
 from database._client import db as firestore_db
 from database.auth import get_user_name
 from models.memories import Memory, MemoryDB
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
 import logging
 
 logger = logging.getLogger(__name__)
@@ -60,14 +58,15 @@ def safe_create_memory(memory_data: Dict[str, Any]) -> MemoryDB:
 
 def get_prompt_data(uid: str) -> Tuple[Optional[str], List[MemoryDB], List[MemoryDB], List[MemoryDB]]:
     # TODO: cache this
-    if resolve_memory_system(uid, db_client=firestore_db) == MemorySystem.CANONICAL:
-        existing_memories = [
-            memory.model_dump(mode='python')
-            for memory in MemoryService(db_client=firestore_db).read(uid, limit=1000)
-            if not getattr(memory, 'is_locked', False)
-        ]
-    else:
-        existing_memories = [m for m in memories_db.get_memories(uid, limit=1000) if not m.get('is_locked')]
+    existing_memories = [
+        memory.model_dump(mode='python')
+        for memory in MemoryService(db_client=firestore_db).export_memories(
+            uid,
+            include_archive=False,
+            page_size=1000,
+        )[:1000]
+        if not getattr(memory, 'is_locked', False)
+    ]
 
     baseline: List[MemoryDB] = []
     user_made: List[MemoryDB] = []

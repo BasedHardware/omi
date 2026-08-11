@@ -72,3 +72,30 @@ def test_list_candidates_does_not_swallow_unexpected_error(monkeypatch):
     with patch.object(candidates_db, "db", _fake_candidates_db([good])):
         with pytest.raises(RuntimeError):
             candidates_db.list_candidates("u1")
+
+
+def test_compatibility_page_reports_raw_count_when_malformed_row_is_skipped(monkeypatch):
+    good = MagicMock()
+    good.id = 'good'
+    good.to_dict.return_value = {'ok': True}
+    bad = MagicMock()
+    bad.id = 'bad'
+    bad.to_dict.return_value = {'bad': True}
+
+    def fake_validate(data):
+        if data.get('bad'):
+            _Probe(x=data)
+        return data
+
+    monkeypatch.setattr(candidates_db.CandidateRecord, 'model_validate', staticmethod(fake_validate))
+
+    with patch.object(candidates_db, 'db', _fake_candidates_db([good, bad])):
+        records, raw_page_size = candidates_db.list_candidates_compatibility_page(
+            'u1',
+            account_generation=7,
+            limit=500,
+            offset=0,
+        )
+
+    assert records == [{'ok': True}]
+    assert raw_page_size == 2

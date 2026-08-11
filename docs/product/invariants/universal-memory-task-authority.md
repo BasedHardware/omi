@@ -41,7 +41,7 @@ Guard names may be refined during implementation, but equivalent behavioral and 
 
 ## Path globs
 
-- `backend/config/canonical_memory_cohort.py`
+- deleted UID-cohort selectors and any attempted replacement
 - `backend/config/memory_rollout.py`
 - `backend/utils/memory/**`
 - `backend/database/memories.py`
