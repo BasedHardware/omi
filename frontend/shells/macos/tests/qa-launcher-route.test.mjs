@@ -221,14 +221,14 @@ test("macOS native fixture capture is offline, query-bound, and probe-waited", (
   try {
     const output = join(run.scratch, "fixture.png");
     const result = spawnSync(run.launcher, [
-      "--fixture", "memories", "--state", "ready", "--theme", "dark",
+      "--fixture", "memories-platform", "--state", "ready", "--theme", "dark",
       "--accessibility", "rtl", "--run-id", "fixture-mac-001", "--capture-out", output,
       "--viewport-width", "960", "--viewport-height", "671",
     ], { encoding: "utf8", env: { ...run.environment, OMI_API_TOKEN: "must-not-leak" } });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(existsSync(output), true);
     const action = run.readActions();
-    assert.match(action, /query=qa=memories&polish=1&state=ready&theme=dark&platform=desktop&accessibility=rtl/);
+    assert.match(action, /query=qa=memories-platform&polish=1&state=ready&theme=dark&platform=desktop&accessibility=rtl/);
     assert.match(action, /api=\|run=fixture-mac-001\|result=\|width=960\|height=671/);
     assert.doesNotMatch(`${result.stdout}${result.stderr}${action}`, /must-not-leak|OMI_API_TOKEN/);
     assert.match(readFileSync(resolve(root, "scripts/run-shell.sh"), "utf8"), /OMI_PROBE_EXIT/);

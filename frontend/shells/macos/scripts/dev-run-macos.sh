@@ -97,7 +97,7 @@ if (( capture_mode )); then
     echo "ERROR: fixture capture cannot be combined with consumer evidence or --accept." >&2
     exit 2
   fi
-  if [[ ! "$fixture" =~ ^(memories|tasks|conversations|folders|listen|chat|settings)$ ]]; then
+  if [[ ! "$fixture" =~ ^(memories|memories-platform|tasks|conversations|folders|listen|chat|settings)$ ]]; then
     echo "ERROR: unknown fixture domain '$fixture'." >&2
     exit 2
   fi
