@@ -21,9 +21,10 @@ checkpoint proves all of the following over the same exact coordinates:
 5. every manifest record has exactly one successful target outcome for that
    restore, and no unmanifested, duplicate, cross-account, or swapped outcome
    is present; and
-6. the final checkpoint binds restore id, restored generation/snapshot,
-   terminal source snapshot/high-water mark, manifest, successful application
-   set, and traffic-fence receipt.
+6. the final checkpoint binds restore id, restored generation/snapshot and
+   completion time, the exact retention-locked source receipt, terminal source
+   snapshot/high-water mark, manifest, successful application set, and
+   traffic-fence receipt.
 
 The checkpoint means only that this lifecycle gate does not fence traffic. It
 does not grant authentication, authorization, generation activation, account
