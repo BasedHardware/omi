@@ -80,15 +80,22 @@ def test_clearing_a_named_app_session_deletes_its_messages(monkeypatch, sessions
         return None
 
     monkeypatch.setattr(chat_router.chat_db, 'clear_chat', _clear_chat)
-    monkeypatch.setattr(chat_router.chat_db, 'delete_chat_session', lambda uid, sid: None)
+    deleted = []
+    monkeypatch.setattr(chat_router.chat_db, 'delete_chat_session', lambda uid, sid: deleted.append((uid, sid)))
     monkeypatch.setattr(chat_router, 'FileChatTool', lambda uid, sid: type('T', (), {'cleanup': lambda self: None})())
-    monkeypatch.setattr(chat_router, 'initial_message_util', lambda uid, app_id=None, chat_session_id=None: None)
+    monkeypatch.setattr(
+        chat_router,
+        'initial_message_util',
+        lambda uid, app_id=None, chat_session_id=None: recorded.update(greeting_session_id=chat_session_id),
+    )
 
     _v2_clear_chat_messages()(app_id=None, plugin_id=None, chat_session_id='sess-app', uid='uid-1')
 
     assert recorded['chat_session_id'] == 'sess-app'
     # `plugin_id == None` would match no message in an app session.
     assert recorded['app_id'] == 'app-9'
+    assert recorded['greeting_session_id'] == 'sess-app'
+    assert deleted == []
 
 
 def test_reading_an_empty_named_session_greets_that_session(monkeypatch, sessions):

@@ -620,6 +620,7 @@ def clear_chat_messages(
     chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    explicitly_addressed_session = chat_session_id is not None
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
@@ -646,10 +647,14 @@ def clear_chat_messages(
             pass
 
     # clear session
-    if chat_session_id is not None:
+    if chat_session_id is not None and not explicitly_addressed_session:
         chat_db.delete_chat_session(uid, chat_session_id)
 
-    return initial_message_util(uid, compat_app_id)
+    return initial_message_util(
+        uid,
+        compat_app_id,
+        chat_session_id=chat_session_id if explicitly_addressed_session else None,
+    )
 
 
 @router.post('/v2/initial-message', tags=['chat'], response_model=Message)
