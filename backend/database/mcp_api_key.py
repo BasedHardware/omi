@@ -7,6 +7,7 @@ from google.cloud import firestore
 
 import database.redis_db as redis_db
 from database._client import get_firestore_client
+from database.read_boundary import parse_snapshot_strict
 from database.api_key_metadata import (
     MCP_API_KEY_AUTH_CONTEXT_VERSION,
     ApiKeyAuthLookupResult,
@@ -278,7 +279,9 @@ def rotate_mcp_key(user_id: str, key_id: str) -> Tuple[str, McpApiKey]:
     projected["app_id"] = app_id
     projected["scopes"] = scopes
     projected["last_used_at"] = None
-    return raw_key, McpApiKey.model_validate(projected)
+    # Credential rotation is correctness-critical, so the repaired projection
+    # goes through the strict shared read boundary rather than a direct parse.
+    return raw_key, parse_snapshot_strict(McpApiKey, key_doc, payload_from_snapshot=lambda _snapshot: projected)
 
 
 def get_mcp_keys_for_user_with_repair_info(

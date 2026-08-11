@@ -128,6 +128,56 @@ routes:
       owner: backend
   - route_type: http
     method: GET
+    path: /v1/memory/platform/quota
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: memories
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/mcp/keys/{key_id}/rotate
+    policy: &api_key_rotation_policy
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: credentials
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/dev/keys/{key_id}/rotate
+    policy: *api_key_rotation_policy
+  - route_type: http
+    method: GET
     path: /v1/crisp/unread
     policy: *desktop_migration_policy
   - route_type: http
