@@ -204,6 +204,59 @@ test("Listen batches transcript text into the single state announcement", async 
   }
 });
 
+test("Listen idle is purposeful, private, and does not repeat an empty backlog", async () => {
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const rendered = await renderComponent(ListenProduction, { store: stateStore({ kind: "idle" }) });
+  try {
+    assert.equal(rendered.container.querySelector(".listen-state-title")?.textContent, EN_MESSAGES["listen.stateIdle"]);
+    assert.ok((rendered.container.textContent ?? "").includes(EN_MESSAGES["listen.privacyControl"]));
+    assert.equal(rendered.container.querySelector(".listen-backlog"), null, "zero backlog is not a second idle message");
+    assert.ok(rendered.container.querySelector('button[data-consumer-action="start-listen"]'));
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("Listen follows new transcript only at the live edge and offers Latest after history intent", async () => {
+  // red-proof: unconditional scroll-to-bottom makes the second scrollTop assertion
+  // change after upward intent; omitting the recovery control makes Latest absent.
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const wire = wireStore();
+  await wire.store.start();
+  wire.sockets[0].open();
+  wire.sockets[0].message(JSON.stringify(readyFrame));
+  wire.sockets[0].message(JSON.stringify([
+    segment("one", "First line", 0, 1),
+    segment("two", "Second line", 1, 2),
+  ]));
+  const rendered = await renderComponent(ListenProduction, { store: wire.store });
+  try {
+    const transcript = rendered.container.querySelector(".listen-transcript");
+    assert.ok(transcript);
+    Object.defineProperties(transcript, {
+      scrollHeight: { configurable: true, value: 900 },
+      clientHeight: { configurable: true, value: 300 },
+      scrollTop: { configurable: true, writable: true, value: 600 },
+    });
+    await rendered.act(async () => {
+      transcript.dispatchEvent(new rendered.window.WheelEvent("wheel", { deltaY: -12, bubbles: true }));
+    });
+    assert.ok(rendered.container.querySelector(".listen-jump-latest"), "upward history intent exposes Latest");
+    transcript.scrollTop = 120;
+    await rendered.act(async () => {
+      wire.sockets[0].message(JSON.stringify([segment("three", "A newer line", 2, 3)]));
+    });
+    assert.equal(transcript.scrollTop, 120, "an opted-out reader is not yanked to the live edge");
+    await rendered.act(async () => {
+      rendered.container.querySelector(".listen-jump-latest")?.click();
+    });
+    assert.equal(transcript.scrollTop, 900);
+    assert.equal(rendered.container.querySelector(".listen-jump-latest"), null);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("reconnect redelivery renders one row with the revision text", async () => {
   const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
   const wire = wireStore();

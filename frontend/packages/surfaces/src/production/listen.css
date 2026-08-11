@@ -148,9 +148,20 @@
 }
 
 .listen-transcript {
+  position: relative;
   display: grid;
   gap: var(--space-sm);
   margin: var(--space-lg) 0;
+  max-height: min(52vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: var(--space-md);
+  border-radius: var(--radius-section);
+}
+
+.listen-transcript:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: 2px;
 }
 
 .listen-transcript-row {
@@ -200,6 +211,39 @@
   margin: var(--space-xl) 0;
 }
 
+.listen-transcript-waiting,
+.listen-privacy-note {
+  margin: var(--space-md) 0;
+  color: var(--content-secondary);
+  line-height: var(--type-body-line);
+}
+
+.listen-transcript-waiting {
+  padding: var(--space-lg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-section);
+  text-align: center;
+}
+
+.listen-privacy-note {
+  font-size: var(--type-label-size);
+}
+
+.listen-jump-latest {
+  position: sticky;
+  inset-block-end: var(--space-md);
+  z-index: 2;
+  display: block;
+  min-height: var(--min-tap-target);
+  margin: calc(var(--space-xl) * -1) auto var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-circular);
+  color: var(--content-primary);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card);
+}
+
 .listen-primary-control {
   min-width: var(--min-tap-target);
   min-height: var(--min-tap-target);
@@ -247,6 +291,20 @@ html[data-platform="mobile"] .listen-state-glyph {
 
 html[data-platform="mobile"] .listen-transcript-row {
   width: min(90%, 560px);
+}
+
+html[data-platform="mobile"] .listen-transcript {
+  max-height: none;
+  overflow: visible;
+  overscroll-behavior: auto;
+}
+
+html[data-platform="mobile"] .listen-jump-latest {
+  position: fixed;
+  inset-inline-start: 50%;
+  inset-block-end: calc(var(--min-tap-target) + var(--space-xxxl) + var(--space-xl) + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  margin: 0;
 }
 
 html[data-platform="mobile"] .listen-controls {

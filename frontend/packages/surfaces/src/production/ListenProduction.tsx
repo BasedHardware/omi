@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatDuration, t } from "@omi-core/i18n";
 import type { ListenEntitlementSnapshot, TranscriptSegment } from "@omi-core/wire-listen";
 import type { ProductionListenStore } from "./ProductionListenStore.js";
@@ -11,6 +11,19 @@ import "./listen.css";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
+
+const LISTEN_LIVE_EDGE_PX = 24;
+
+function listenScrollTarget(transcript: HTMLElement): HTMLElement {
+  if (transcript.ownerDocument.documentElement.dataset["platform"] === "mobile") {
+    return transcript.ownerDocument.scrollingElement as HTMLElement | null ?? transcript;
+  }
+  return transcript;
+}
+
+function isAtListenLiveEdge(target: HTMLElement): boolean {
+  return target.scrollHeight - target.scrollTop - target.clientHeight <= LISTEN_LIVE_EDGE_PX;
+}
 
 function elapsedSeconds(state: CaptureState): number | null {
   switch (state.kind) {
@@ -75,8 +88,12 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
   const [entitlement, setEntitlement] = useState<ListenEntitlementSnapshot | null>(() => store.entitlementState());
   const [status, setStatus] = useState(store.status());
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [showLatest, setShowLatest] = useState(false);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
+  const transcriptRef = useRef<HTMLElement>(null);
+  const followingLatestRef = useRef(true);
+  const touchYRef = useRef<number | null>(null);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
 
   const reload = useCallback(async (): Promise<void> => {
@@ -123,6 +140,52 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
     void boot();
     return () => { active = false; unsubscribe(); };
   }, [locale, reload, store]);
+
+  const jumpToLatest = useCallback((): void => {
+    const transcript = transcriptRef.current;
+    if (!transcript) return;
+    const target = listenScrollTarget(transcript);
+    target.scrollTop = target.scrollHeight;
+    followingLatestRef.current = true;
+    setShowLatest(false);
+  }, []);
+
+  const leaveLiveEdge = useCallback((): void => {
+    followingLatestRef.current = false;
+    setShowLatest(true);
+  }, []);
+
+  const updateFollowing = useCallback((target: HTMLElement): void => {
+    const atEdge = isAtListenLiveEdge(target);
+    followingLatestRef.current = atEdge;
+    setShowLatest(!atEdge);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (segments.length === 0 || !followingLatestRef.current) return;
+    jumpToLatest();
+  }, [jumpToLatest, segments]);
+
+  useEffect(() => {
+    const transcript = transcriptRef.current;
+    const ResizeObserverConstructor = transcript?.ownerDocument.defaultView?.ResizeObserver;
+    if (!transcript || !ResizeObserverConstructor) return;
+    const observer = new ResizeObserverConstructor(() => {
+      if (followingLatestRef.current) jumpToLatest();
+    });
+    observer.observe(transcript);
+    for (const row of transcript.children) observer.observe(row);
+    return () => observer.disconnect();
+  }, [jumpToLatest, segments.length]);
+
+  useEffect(() => {
+    const transcript = transcriptRef.current;
+    if (!transcript) return;
+    const target = listenScrollTarget(transcript);
+    const update = (): void => updateFollowing(target);
+    target.addEventListener("scroll", update, { passive: true });
+    return () => target.removeEventListener("scroll", update);
+  }, [segments.length, updateFollowing]);
 
   const presentedCapture: CaptureState =
     (status.refresh.phase === "initial-loading" || status.refresh.phase === "refreshing")
@@ -191,21 +254,36 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
             )}
             {usageLabel && <p className="listen-entitlement-usage">{usageLabel}</p>}
           </div>
-          <div className="listen-backlog" aria-label={t(locale, "listen.backlogLabel")}>
-            <span className="listen-backlog-label">{t(locale, "listen.backlogLabel")}</span>
-            <span className="listen-backlog-value">
-              {description.backlogSeconds > 0
-                ? t(locale, "listen.backlogHours", { hours })
-                : t(locale, "listen.backlogNone")}
-            </span>
-          </div>
+          {description.backlogSeconds > 0 && (
+            <div className="listen-backlog" aria-label={t(locale, "listen.backlogLabel")}>
+              <span className="listen-backlog-label">{t(locale, "listen.backlogLabel")}</span>
+              <span className="listen-backlog-value">{t(locale, "listen.backlogHours", { hours })}</span>
+            </div>
+          )}
         </section>
         <ProductionLiveAnnouncement message={listenAnnouncement} {...(announcementScheduler ? { scheduler: announcementScheduler } : {})} />
+        {presentedCapture.kind === "capturing" && segments.length === 0 && (
+          <p className="listen-transcript-waiting" role="status">{t(locale, "listen.transcriptWaiting")}</p>
+        )}
         {segments.length > 0 && (
           <section
+            ref={transcriptRef}
             className="listen-transcript"
             aria-label={t(locale, "listen.title")}
             data-transcript-count={segments.length}
+            tabIndex={0}
+            onScroll={(event) => updateFollowing(event.currentTarget)}
+            onWheel={(event) => { if (event.deltaY < 0) leaveLiveEdge(); }}
+            onTouchStart={(event) => { touchYRef.current = event.touches[0]?.clientY ?? null; }}
+            onTouchMove={(event) => {
+              const nextY = event.touches[0]?.clientY ?? null;
+              if (nextY !== null && touchYRef.current !== null && nextY > touchYRef.current) leaveLiveEdge();
+              touchYRef.current = nextY;
+            }}
+            onTouchEnd={() => { touchYRef.current = null; }}
+            onKeyDown={(event) => {
+              if (["ArrowUp", "PageUp", "Home"].includes(event.key)) leaveLiveEdge();
+            }}
           >
             {segments.map((segment, index) => (
               <article
@@ -219,6 +297,12 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
             ))}
           </section>
         )}
+        {showLatest && segments.length > 0 && (
+          <button type="button" className="listen-jump-latest" onClick={jumpToLatest}>
+            {t(locale, "chat.latest")}
+          </button>
+        )}
+        <p className="listen-privacy-note">{t(locale, "listen.privacyControl")}</p>
         <div className="listen-controls" role="group" aria-label={t(locale, "listen.stateLabel")}>
           {description.canStart && (
             <button
