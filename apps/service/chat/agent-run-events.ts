@@ -539,8 +539,18 @@ export const createInMemoryAgentRunEventStore = (): AgentRunEventStore => {
         && !log.events.some((prior) => prior.kind === "tool_request" && prior.callId === event.callId)) {
         return { kind: "rejected", reason: "ordering" };
       }
+      if ((event.kind === "tool_result" || event.kind === "tool_error")
+        && log.events.some((prior) => (prior.kind === "tool_result" || prior.kind === "tool_error")
+          && prior.callId === event.callId)) {
+        return { kind: "rejected", reason: "ordering" };
+      }
       if (event.kind === "approval_resolved"
         && !log.events.some((prior) => prior.kind === "approval_requested"
+          && prior.approvalId === event.approvalId && prior.callId === event.callId)) {
+        return { kind: "rejected", reason: "ordering" };
+      }
+      if (event.kind === "approval_resolved"
+        && log.events.some((prior) => prior.kind === "approval_resolved"
           && prior.approvalId === event.approvalId && prior.callId === event.callId)) {
         return { kind: "rejected", reason: "ordering" };
       }
@@ -590,8 +600,18 @@ export const createInMemoryAgentRunEventStore = (): AgentRunEventStore => {
             && !events.slice(0, index).some((prior) => prior.kind === "tool_request" && prior.callId === event.callId)) {
             throw new TypeError("invalid agent run snapshot tool ordering");
           }
+          if ((event.kind === "tool_result" || event.kind === "tool_error")
+            && events.slice(0, index).some((prior) => (prior.kind === "tool_result" || prior.kind === "tool_error")
+              && prior.callId === event.callId)) {
+            throw new TypeError("invalid agent run snapshot tool ordering");
+          }
           if (event.kind === "approval_resolved"
             && !events.slice(0, index).some((prior) => prior.kind === "approval_requested"
+              && prior.approvalId === event.approvalId && prior.callId === event.callId)) {
+            throw new TypeError("invalid agent run snapshot approval ordering");
+          }
+          if (event.kind === "approval_resolved"
+            && events.slice(0, index).some((prior) => prior.kind === "approval_resolved"
               && prior.approvalId === event.approvalId && prior.callId === event.callId)) {
             throw new TypeError("invalid agent run snapshot approval ordering");
           }

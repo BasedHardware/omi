@@ -45,6 +45,10 @@ const encodeEvent = (event: AgentRunVisibleTimelineEvent): Uint8Array =>
 const streamAgentEvents = (input: {
   readonly events: AgentRunEventStore;
   readonly runId: string;
+  readonly accountId: string;
+  readonly token: string;
+  readonly resolvePrincipal: (token: string) => DevPrincipal | null;
+  readonly resolveGenerationOwner: (accountId: string, runId: string) => boolean;
   readonly initial: readonly AgentRunEvent[];
   readonly visibleById: ReadonlyMap<string, AgentRunVisibleTimelineEvent>;
   readonly afterEventId: string | null;
@@ -69,23 +73,50 @@ const streamAgentEvents = (input: {
       const queueLimit = Math.max(input.maxBatchEvents * 8, input.maxBatchEvents);
       const queue = input.initial.slice(0, queueLimit);
       let overflowed = input.initial.length > queue.length;
-      const emit = (): boolean => {
-        if (controller.desiredSize !== null && controller.desiredSize <= 0) return false;
+      type EmitResult = "closed" | "blocked" | "progress";
+      const emit = (): EmitResult => {
+        if (controller.desiredSize !== null && controller.desiredSize <= 0) return "blocked";
         const batch = queue.splice(0, input.maxBatchEvents);
-        for (const event of batch) {
+        for (const [index, event] of batch.entries()) {
+          if (controller.desiredSize !== null && controller.desiredSize <= 0) {
+            queue.unshift(...batch.slice(index));
+            return "blocked";
+          }
           cursor = event.eventId;
           const visible = input.visibleById.get(event.eventId);
           if (visible !== undefined) controller.enqueue(encodeEvent(visible));
           if (event.kind === "terminal") {
             close();
-            return true;
+            return "closed";
           }
         }
-        return false;
+        return "progress";
+      };
+      const schedule = (poll: () => void): void => {
+        if (stopped || timer !== null) return;
+        try {
+          timer = input.scheduler.setTimeout(() => {
+            timer = null;
+            poll();
+          }, Math.max(1, input.pollIntervalMs));
+        } catch {
+          close();
+        }
       };
       const poll = (): void => {
         if (stopped) return;
         if (input.signal.aborted) {
+          close();
+          return;
+        }
+        try {
+          const principal = input.resolvePrincipal(input.token);
+          if (principal === null || principal.uid !== input.accountId
+            || !input.resolveGenerationOwner(input.accountId, input.runId)) {
+            close();
+            return;
+          }
+        } catch {
           close();
           return;
         }
@@ -101,17 +132,21 @@ const streamAgentEvents = (input: {
           queue.push(...available.slice(0, capacity));
           overflowed ||= available.length > capacity;
         }
-        if (emit()) return;
+        const result = emit();
+        if (result === "closed") return;
+        if (result === "blocked") {
+          // A reader that has not consumed the previous chunk must not cause
+          // a microtask spin. Retry only on the injected positive scheduler
+          // cadence; reconnect remains the bounded escape hatch.
+          schedule(poll);
+          return;
+        }
         if (queue.length === 0) {
           if (overflowed) {
             close();
             return;
           }
-          try {
-            timer = input.scheduler.setTimeout(poll, Math.max(1, input.pollIntervalMs));
-          } catch {
-            close();
-          }
+          schedule(poll);
         } else {
           queueMicrotask(poll);
         }
@@ -161,6 +196,10 @@ export const registerChatAgentRunRoutes = (
     return streamAgentEvents({
       events: deps.events,
       runId,
+      accountId: principal.uid,
+      token,
+      resolvePrincipal: deps.resolvePrincipal,
+      resolveGenerationOwner: deps.resolveGenerationOwner,
       initial,
       visibleById: new Map(timeline.events.map((event) => [event.eventId, event])),
       afterEventId: lastEventId,

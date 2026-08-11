@@ -143,6 +143,64 @@ describe("versioned agent run events", () => {
     expect(store.list(accepted.runId)).toEqual([]);
   });
 
+  test("append and restore reject duplicate tool and approval terminal transitions", () => {
+    const first = runAgentRunScenario(scenario);
+    const accepted = first.events.find((event) => event.kind === "run_accepted")!;
+    const request = first.events.find((event) => event.kind === "tool_request")!;
+    const result = first.events.find((event) => event.kind === "tool_result")!;
+    const store = createInMemoryAgentRunEventStore();
+    expect(store.append({ ...accepted, eventId: "run-alpha:1:accepted", sequence: 1 }).kind).toBe("appended");
+    expect(store.append({ ...request, eventId: "run-alpha:2:request", sequence: 2 }).kind).toBe("appended");
+    expect(store.append({ ...result, eventId: "run-alpha:3:result", sequence: 3 }).kind).toBe("appended");
+    expect(store.append({ ...result, eventId: "run-alpha:4:duplicate-result", sequence: 4 }).kind)
+      .toBe("rejected");
+
+    const approvalRequested = first.events.find((event) => event.kind === "approval_requested")!;
+    const approvalResolved = first.events.find((event) => event.kind === "approval_resolved")!;
+    expect(store.append({ ...approvalRequested, eventId: "run-alpha:4:approval-request", sequence: 4 }).kind)
+      .toBe("appended");
+    expect(store.append({ ...approvalResolved, eventId: "run-alpha:5:approval-resolution", sequence: 5 }).kind)
+      .toBe("appended");
+    expect(store.append({ ...approvalResolved, eventId: "run-alpha:6:duplicate-resolution", sequence: 6 }).kind)
+      .toBe("rejected");
+
+    const snapshot = store.snapshot();
+    const duplicateSnapshot = {
+      runs: [{
+        runId: accepted.runId,
+        events: [...snapshot.runs[0]!.events,
+          { ...approvalResolved, eventId: "run-alpha:6:duplicate-resolution", sequence: 6 }],
+      }],
+    };
+    expect(() => store.restore(duplicateSnapshot)).toThrow("invalid agent run snapshot approval ordering");
+
+    const errorStore = createInMemoryAgentRunEventStore();
+    const errorRequest = { ...request, eventId: "run-error:2:request", runId: "run-error", sequence: 2 };
+    const errorAccepted = { ...accepted, eventId: "run-error:1:accepted", runId: "run-error", sequence: 1 };
+    const toolError = first.events.find((event) => event.kind === "tool_result")!;
+    const errorEvent = {
+      schemaVersion: toolError.schemaVersion,
+      runId: "run-error",
+      attemptId: toolError.attemptId,
+      eventId: "run-error:3:error",
+      sequence: 3,
+      visibility: toolError.visibility,
+      createdAt: toolError.createdAt,
+      safeSummary: "tool error",
+      kind: "tool_error" as const,
+      callId: toolError.callId,
+      toolName: toolError.toolName,
+      errorCode: "tool_failed",
+      errorSummary: "safe failure",
+      retryable: false,
+    };
+    expect(errorStore.append(errorAccepted).kind).toBe("appended");
+    expect(errorStore.append(errorRequest).kind).toBe("appended");
+    expect(errorStore.append(errorEvent).kind).toBe("appended");
+    expect(errorStore.append({ ...errorEvent, eventId: "run-error:4:duplicate-error", sequence: 4 }).kind)
+      .toBe("rejected");
+  });
+
   test("UI projection drops internal events and redaction scanner catches forbidden fields", () => {
     const first = runAgentRunScenario({ terminal: scenario.terminal });
     const internal = { ...first.events[1]!, visibility: "internal" as const };

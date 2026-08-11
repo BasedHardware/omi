@@ -1927,4 +1927,88 @@ describe("ratified chat generation wire red proofs", () => {
     expect(reloaded.list(runId)).toEqual(agentStore.list(runId));
     db.close();
   });
+
+  test("agent timeline closes a live reader after auth revocation on the next bounded poll", async () => {
+    const hanging: ChatGenerationSource = Object.freeze({
+      start: () => Object.freeze({ cancel: (): void => {} }),
+    });
+    const agentStore = createInMemoryAgentRunEventStore();
+    const { db, local } = boot(createInMemoryLocalServiceStores(), hanging,
+      "agent-timeline-auth-lease-proof", createEmptyChatGenerationContextSource(),
+      undefined, undefined, undefined, undefined, agentStore);
+    const admission = await readAdmission(await post(local, create("agent-auth-lease")));
+    const supervisor = createAgentRunEventSupervisor({
+      events: agentStore,
+      nowEpochMilliseconds: () => 1_786_352_400_000,
+      eventId: (id, sequence, kind) => `${id}:event:${sequence}:${kind}`,
+    });
+    supervisor.accepted({ runId: admission.generation.id, attemptId: `${admission.generation.id}:attempt:1`,
+      admissionId: admission.message.id });
+    const response = await agentEvents(local, admission.generation.id);
+    const reader = response.body!.getReader();
+    const initial = await reader.read();
+    expect(initial.done).toBe(false);
+    expect(new TextDecoder().decode(initial.value)).toContain("run_accepted");
+
+    const revoked = await local.app.request("/v1/session/current", {
+      method: "DELETE",
+      headers: auth(local.devToken),
+    });
+    const outcome = await readOutcomeWithin(reader, 100);
+    if (outcome.kind === "timeout") await reader.cancel();
+    expect(revoked.status).toBe(204);
+    expect(outcome).toEqual({ kind: "read", done: true });
+    db.close();
+  });
+
+  test("agent timeline slow readers use one positive-delay backpressure retry without spinning", async () => {
+    const scheduled: number[] = [];
+    const handles = new Set<object>();
+    let clearCalls = 0;
+    const scheduler: ChatGenerationScheduler = {
+      setTimeout(callback, delayMs) {
+        const handle = { callback };
+        handles.add(handle);
+        scheduled.push(delayMs);
+        return handle;
+      },
+      clearTimeout(handle) {
+        clearCalls += 1;
+        if (typeof handle === "object" && handle !== null) handles.delete(handle as object);
+      },
+    };
+    const hanging: ChatGenerationSource = Object.freeze({
+      start: () => Object.freeze({ cancel: (): void => {} }),
+    });
+    const agentStore = createInMemoryAgentRunEventStore();
+    const { db, local } = boot(createInMemoryLocalServiceStores(), hanging,
+      "agent-timeline-backpressure-proof", createEmptyChatGenerationContextSource(),
+      undefined, scheduler, undefined, undefined, agentStore);
+    const admission = await readAdmission(await post(local, create("agent-backpressure")));
+    const runId = admission.generation.id;
+    const attemptId = `${runId}:attempt:1`;
+    const supervisor = createAgentRunEventSupervisor({
+      events: agentStore,
+      nowEpochMilliseconds: () => 1_786_352_400_000,
+      eventId: (id, sequence, kind) => `${id}:event:${sequence}:${kind}`,
+    });
+    supervisor.accepted({ runId, attemptId, admissionId: admission.message.id });
+    for (let index = 0; index < 20; index += 1) {
+      supervisor.status({ runId, attemptId, status: "generating", progressPct: index });
+    }
+    const response = await agentEvents(local, runId);
+    const reader = response.body!.getReader();
+    // Do not read: desiredSize reaches zero after the first enqueue and must
+    // defer rather than queueMicrotask-spin over the remaining events.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const scheduledBefore = scheduled.length;
+    expect(scheduledBefore).toBeGreaterThan(0);
+    expect(scheduled.every((delay) => delay >= 1)).toBe(true);
+    expect(scheduled).toContain(5);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(scheduled.length).toBe(scheduledBefore);
+    await reader.cancel();
+    expect(clearCalls).toBeGreaterThan(0);
+    db.close();
+  });
 });
