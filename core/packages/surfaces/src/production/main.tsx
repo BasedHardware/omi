@@ -175,7 +175,7 @@ type OmiRuntimeState = {
   route: string;
   selected: typeof generationSelection;
   rejected: typeof generationRejected;
-  rendered: { surface: string; memoriesGeneration: "legacy" | "platform" } | null;
+  rendered: { surface: string; memoriesGeneration: "legacy" | "platform" | null } | null;
   mismatch: string | null;
   // The artifact I measured is the artifact I edited: `__OMI_BUILD_STAMP__` is baked in
   // at build time (vite.config.ts's provenance plugin), so a shell or reviewer can read
@@ -200,10 +200,17 @@ if (generationRejected.length > 0) {
 console.info(`OMI_GENERATION_SELECTION ${JSON.stringify(generationSelection)}`);
 
 /** Records what really rendered, and shouts if it contradicts what was asked for. */
-const markRendered = (surface: string, memoriesGeneration: "legacy" | "platform"): void => {
+const markRendered = (
+  surface: string,
+  memoriesGeneration: "legacy" | "platform" | null,
+): void => {
   runtimeState.rendered = { surface, memoriesGeneration };
   document.documentElement.dataset["renderedSurface"] = surface;
-  document.documentElement.dataset["renderedMemoriesGeneration"] = memoriesGeneration;
+  if (memoriesGeneration === null) {
+    delete document.documentElement.dataset["renderedMemoriesGeneration"];
+  } else {
+    document.documentElement.dataset["renderedMemoriesGeneration"] = memoriesGeneration;
+  }
   if (generationMismatch(generationSelection.memories, memoriesGeneration)) {
     // The host asked for the platform generation and is being shown legacy memory records.
     // Never let this be quiet: it is a correct-looking app on the wrong backend.
@@ -228,7 +235,7 @@ const emitReady = (state: string): void => {
     `OMI_PRODUCTION_READY route=${route} state=${state}`
     + ` generation.memories=${generationSelection.memories}`
     + ` rendered=${rendered ? rendered.surface : "none"}`
-    + ` rendered.memories=${rendered ? rendered.memoriesGeneration : "none"}`
+    + ` rendered.memories=${rendered?.memoriesGeneration ?? "none"}`
     + ` mismatch=${runtimeState.mismatch === null ? "no" : "yes"}`
     + ` stamp=${stampSummary(runtimeState.stamp)}`,
   );
@@ -357,18 +364,18 @@ if (query.get("lab") === "1") {
           root.render(<StrictMode><HomeProduction sources={{ memories, conversations }} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "tasks") {
           const store = await stores.openTasks();
-          markRendered("tasks", "legacy");
+          markRendered("tasks", null);
           root.render(<StrictMode><TasksProduction store={store} locale={locale} translate={translateTasks} now={env.now()} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "conversations") {
           const [store, foldersStore] = await Promise.all([
             stores.openConversations(),
             stores.openFolders(),
           ]);
-          markRendered("conversations", "legacy");
+          markRendered("conversations", null);
           root.render(<StrictMode><ConversationsProduction store={store} foldersStore={foldersStore} detailId={detailId} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "folders") {
           const store = await stores.openFolders();
-          markRendered("folders", "legacy");
+          markRendered("folders", null);
           root.render(<StrictMode><FoldersProduction store={store} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "listen") {
           const openSocket = hostConfig.listenSocketFactory
@@ -382,15 +389,15 @@ if (query.get("lab") === "1") {
             handshake: { language: locale, source: listenSource },
           });
           const store = createPlatformProductionListenStore(client, env);
-          markRendered("listen", "platform");
+          markRendered("listen", null);
           root.render(<StrictMode><ListenProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-listen")} /></StrictMode>);
         } else if (route === "chat") {
           const store = await platform.openChat();
-          markRendered("chat", "platform");
+          markRendered("chat", null);
           root.render(<StrictMode><ChatProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-chat")} /></StrictMode>);
         } else if (route === "settings") {
           const store = await createPlatformProductionSettingsStore(http, appearancePreference);
-          markRendered("settings", "platform");
+          markRendered("settings", null);
           root.render(<StrictMode><SettingsProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-settings")} /></StrictMode>);
         } else if (route === "memories") {
           const store = await stores.openMemories();

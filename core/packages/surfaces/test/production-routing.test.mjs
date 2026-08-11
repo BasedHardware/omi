@@ -92,10 +92,25 @@ test("rendering legacy memories while platform was selected is a mismatch", () =
 test("every honest combination is not a mismatch", () => {
   assert.equal(generationMismatch("platform", "platform"), false);
   assert.equal(generationMismatch("legacy", "legacy"), false);
+  assert.equal(
+    generationMismatch("platform", null),
+    false,
+    "an unrelated surface that rendered no memories cannot contradict the memories selection",
+  );
   // Legacy selected, platform rendered cannot happen through the bootstrap, but if it ever
   // did it would not be the silent-wrong-data failure this alarm is for.
   assert.equal(generationMismatch("legacy", "platform"), false);
   // red-proof: a mismatch that fires on the happy path is noise, and noise gets muted.
+});
+
+test("Tasks records no rendered Memories generation under the mixed platform selection", async () => {
+  const main = await read("src/production/main.tsx");
+  assert.match(
+    main,
+    /markRendered\("tasks", null\)/,
+    "the Tasks route must not be mislabeled as a legacy Memories render",
+  );
+  assert.doesNotMatch(main, /markRendered\("tasks", "legacy"\)/);
 });
 
 // ---------------------------------------------------------------------------
@@ -132,16 +147,19 @@ test("what actually rendered is observable from outside the bundle", async () =>
   assert.match(main, /OMI_GENERATION_REJECTED/);
   // The ready line carries the same facts for log scrapers.
   assert.match(main, /OMI_PRODUCTION_READY route=\$\{route\} state=\$\{state\}/);
-  assert.match(main, /rendered\.memoriesGeneration/);
+  assert.match(main, /rendered\?\.memoriesGeneration/);
 
   // Every live render records what it rendered — otherwise `rendered` stays null and the
   // mismatch alarm can never fire.
   for (const marker of [
     'markRendered("memories-platform", "platform")',
     'markRendered("home", "legacy")',
-    'markRendered("tasks", "legacy")',
-    'markRendered("conversations", "legacy")',
-    'markRendered("listen", "platform")',
+    'markRendered("tasks", null)',
+    'markRendered("conversations", null)',
+    'markRendered("folders", null)',
+    'markRendered("listen", null)',
+    'markRendered("chat", null)',
+    'markRendered("settings", null)',
     'markRendered("memories-legacy", "legacy")',
   ]) {
     assert.ok(main.includes(marker), `bootstrap does not record ${marker}`);
