@@ -3,7 +3,22 @@ import { t } from "@omi-core/i18n";
 import type { Folder } from "@omi-core/contracts";
 import type { ProductionFolderStore } from "./ProductionStores.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionNotice, ProductionPageHeader } from "./ProductionPrimitives.js";
+import { ProductionIcon } from "./ProductionIcon.js";
+import "./folders.css";
+
+const FOLDER_NOTICE_TONE = "info" as const;
+const FOLDER_EMPTY_ICON = "library" as const;
+
+function folderHref(folderId: Folder["id"]): string {
+  const params = new URLSearchParams(location.search);
+  params.delete("conversation");
+  params.delete("qa");
+  params.delete("state");
+  params.set("route", "conversations");
+  params.set("folder", folderId);
+  return `?${params.toString()}`;
+}
 
 export function FoldersProduction({ store, locale = "en", onReady }: {
   store: ProductionFolderStore;
@@ -65,7 +80,12 @@ export function FoldersProduction({ store, locale = "en", onReady }: {
     >
       <ProductionChrome locale={locale} active="folders" placement="top" />
       <section className="desktop-page-panel">
-        <ProductionPageHeader className="production-header" eyebrow={t(locale, "conversations.folder")} title={t(locale, "conversations.folder")} />
+        <ProductionPageHeader
+          className="production-header"
+          eyebrow={t(locale, "folders.eyebrow")}
+          title={t(locale, "nav.folders")}
+          description={t(locale, "folders.description")}
+        />
         <ProductionDataSourceBadge source={{ kind: "live", origin: "bridge" }} locale={locale} />
         <ProductionLifecycleRegion
           className="surface-notices"
@@ -76,12 +96,33 @@ export function FoldersProduction({ store, locale = "en", onReady }: {
           retry={phase !== "ready" ? { onRetry: retry } : null}
         />
         <ProductionLiveAnnouncement message={t(locale, "lifecycle.resultsCount", { count: visible.length })} />
+        <ProductionNotice
+          tone={FOLDER_NOTICE_TONE}
+          title={t(locale, "folders.readOnlyTitle")}
+          detail={t(locale, "folders.readOnlyDetail")}
+        />
         {!failed && phase === "ready" && visible.length === 0 && (
-          <p className="empty-state">{t(locale, "lifecycle.empty")}</p>
+          <ProductionEmptyState
+            icon={FOLDER_EMPTY_ICON}
+            title={t(locale, "folders.emptyTitle")}
+            detail={t(locale, "folders.emptyDetail")}
+            action={<a className="folders-all-link" href="?route=conversations">{t(locale, "folders.openConversations")}</a>}
+          />
         )}
         {visible.length > 0 && (
-          <ul className="conversation-list" aria-label={t(locale, "conversations.folder")}>
-            {visible.map((folder) => <li className="conversation-row" key={folder.id}>{folder.name}</li>)}
+          <ul className="folders-list" aria-label={t(locale, "nav.folders")}>
+            {visible.map((folder) => (
+              <li key={folder.id}>
+                <a className="folder-row" href={folderHref(folder.id)}>
+                  <span className="folder-row-icon"><ProductionIcon name="library" /></span>
+                  <span className="folder-row-copy">
+                    <strong>{folder.name}</strong>
+                    <small>{folder.description?.trim() || t(locale, "folders.open")}</small>
+                  </span>
+                  <span className="folder-row-action">{t(locale, "folders.open")}</span>
+                </a>
+              </li>
+            ))}
           </ul>
         )}
       </section>

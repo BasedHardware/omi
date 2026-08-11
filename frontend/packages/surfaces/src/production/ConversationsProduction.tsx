@@ -217,11 +217,12 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
   );
 }
 
-export function ConversationsProduction({ store, foldersStore, fixture, detailId, locale = "en", onReady }: {
+export function ConversationsProduction({ store, foldersStore, fixture, detailId, initialFolderId, locale = "en", onReady }: {
   store: ProductionConversationStore;
   foldersStore: ProductionFolderStore;
   fixture?: ConversationFixtureState | undefined;
   detailId?: string | undefined;
+  initialFolderId?: string | undefined;
   locale?: Locale;
   onReady?: () => void;
 }): React.JSX.Element {
@@ -230,7 +231,7 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
   const [dead, setDead] = useState<Awaited<ReturnType<ProductionConversationStore["deadLetters"]>>>([]);
   const [status, setStatus] = useState(store.status());
   const [operationError, setOperationError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<ConversationFilter>("all");
+  const [filter, setFilter] = useState<ConversationFilter>(() => initialFolderId ? `folder:${initialFolderId}` : "all");
   const [query, setQuery] = useState("");
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);

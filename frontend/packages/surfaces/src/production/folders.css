@@ -1,0 +1,16 @@
+.folders-list { display: grid; gap: var(--space-sm); margin: var(--space-lg) 0 0; padding: 0; list-style: none; }
+.folder-row { display: grid; grid-template-columns: var(--min-tap-target) minmax(0, 1fr) auto; gap: var(--space-md); min-height: calc(var(--min-tap-target) + var(--space-md)); align-items: center; padding: var(--space-sm) var(--space-md); border: 1px solid var(--border); border-radius: var(--radius-section); color: var(--content-primary); background: var(--surface-raised); text-decoration: none; }
+.folder-row:hover, .folder-row:focus-visible { border-color: var(--focus); background: var(--surface-elevated); }
+.folder-row-icon { display: inline-flex; width: var(--min-tap-target); min-height: var(--min-tap-target); align-items: center; justify-content: center; border-radius: var(--radius-control); color: var(--accent); background: var(--accent-soft); }
+.folder-row-copy { min-width: 0; }
+.folder-row-copy strong, .folder-row-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-row-copy small { margin-top: var(--space-xs); color: var(--content-secondary); }
+.folder-row-action { color: var(--accent); font-size: var(--type-button-size); font-weight: var(--type-button-weight); }
+.folders-all-link { display: inline-flex; min-height: var(--min-tap-target); align-items: center; padding: 0 var(--space-md); border: 1px solid var(--border); border-radius: var(--radius-control); text-decoration: none; }
+.folders-list + .production-empty-state { margin-top: var(--space-lg); }
+
+html[data-platform="mobile"] .folder-row { grid-template-columns: var(--min-tap-target) minmax(0, 1fr); padding-inline: 0; border-width: 0 0 1px; border-radius: 0; background: transparent; }
+html[data-platform="mobile"] .folder-row-action { grid-column: 2; }
+
+html[data-platform="desktop"] .folders-list { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+html[data-platform="desktop"] .folder-row { border-color: var(--control-border); background: var(--glass-surface-soft); }

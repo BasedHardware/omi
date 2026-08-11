@@ -30,12 +30,16 @@ test("Folders exposes source, lifecycle, result semantics, and system-folder fil
     const lifecycle = main.querySelector(".production-lifecycle-region");
     assert.equal(lifecycle?.getAttribute("aria-label"), EN_MESSAGES["lifecycle.region"]);
     assert.equal(lifecycle?.getAttribute("data-phase"), "ready");
-    const list = main.querySelector(".conversation-list");
-    assert.equal(list?.getAttribute("aria-label"), EN_MESSAGES["conversations.folder"]);
+    const list = main.querySelector(".folders-list");
+    assert.equal(list?.getAttribute("aria-label"), EN_MESSAGES["nav.folders"]);
     assert.ok(list?.textContent?.includes("Work"));
     assert.equal(list?.textContent?.includes("Other"), false, "system folder is not presented as a user folder");
     assert.equal(list?.getAttribute("aria-live"), null, "list changes use the shared announcement instead");
     assert.equal(main.querySelectorAll('[data-live-region="true"]').length, 1);
+    const row = list?.querySelector("a.folder-row");
+    assert.equal(row?.getAttribute("href"), "?route=conversations&folder=work-folder-one");
+    assert.ok(row?.textContent?.includes(EN_MESSAGES["folders.open"]));
+    assert.ok(main.querySelector(".production-notice"), "the read-only journey is explicit rather than inert");
   } finally {
     await rendered.cleanup();
   }
@@ -61,9 +65,28 @@ test("Folders keeps saved rows visible when a later list read fails", async () =
     await settle(rendered);
     const main = rendered.container.querySelector('main[data-route="folders"]');
     assert.equal(main?.querySelector(".production-lifecycle-region")?.getAttribute("data-phase"), "saved-but-refresh-failed");
-    assert.ok(main?.querySelector(".conversation-list")?.textContent?.includes("Work"));
+    assert.ok(main?.querySelector(".folders-list")?.textContent?.includes("Work"));
     assert.ok(main?.querySelector(".lifecycle-retry"), "saved failure leaves an actionable retry");
     assert.equal(main?.querySelector('[data-empty-kind]'), null, "saved rows are not replaced by an empty claim");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("Folders empty state leads to the complete conversation list", async () => {
+  const FoldersProduction = await loadProductionExport("FoldersProduction.tsx", "FoldersProduction");
+  const store = {
+    status: () => ({ refresh: { phase: "ready", hasSavedData: false }, queue: { phase: "idle", pendingCount: 0 } }),
+    subscribe: () => () => {},
+    async refresh() {},
+    async list() { return []; },
+  };
+  const rendered = await renderComponent(FoldersProduction, { store });
+  try {
+    await settle(rendered);
+    const empty = rendered.container.querySelector(".production-empty-state");
+    assert.ok(empty?.textContent?.includes(EN_MESSAGES["folders.emptyTitle"]));
+    assert.equal(empty?.querySelector("a")?.getAttribute("href"), "?route=conversations");
   } finally {
     await rendered.cleanup();
   }
