@@ -29,9 +29,7 @@ _STUB = (
     "database",
     "utils.other.storage",
     "utils.stt.speaker_embedding",
-    "utils.stt.vad",
     "av",
-    "pydub",
     "firebase_admin",
     "google",
     "pinecone",
@@ -75,6 +73,8 @@ for _n in list(sys.modules):
 sys.meta_path.insert(0, _f)
 try:
     from routers import speech_profile as mod
+    from scripts.stt import j_apply_vad_to_speech_profiles as batch_mod
+    from utils.stt import vad as vad_mod
 finally:
     sys.meta_path.remove(_f)
     for _n in list(sys.modules):
@@ -87,10 +87,6 @@ from fastapi import HTTPException  # noqa: E402  (import after the finder block)
 
 class _FakeDecodeError(Exception):
     """Stand-in for pydub.exceptions.CouldntDecodeError (pydub is stubbed here)."""
-
-
-class _FakeVADEmptyError(ValueError):
-    pass
 
 
 def _fake_upload_file(content: bytes, filename: str = "speech_profile.wav"):
@@ -142,9 +138,7 @@ class TestUploadProfileWavDecodeGuard:
 
         with patch.object(mod, "os") as mock_os, patch("builtins.open", MagicMock()), patch.object(
             mod, "AudioSegment"
-        ) as mock_aseg, patch.object(mod, "VADEmptyError", _FakeVADEmptyError), patch.object(
-            mod, "apply_vad_for_speech_profile", side_effect=_FakeVADEmptyError("Audio is empty")
-        ) as mock_vad, patch.object(
+        ) as mock_aseg, patch.object(vad_mod, "vad_is_empty", return_value=[]) as mock_vad, patch.object(
             mod, "upload_profile_audio"
         ) as mock_upload:
             mock_os.makedirs.return_value = None
@@ -155,5 +149,18 @@ class TestUploadProfileWavDecodeGuard:
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Audio is empty"
-        mock_vad.assert_called_once()
+        mock_vad.assert_called_once_with("_temp/test-uid/speech_profile.wav", return_segments=True)
+        mock_upload.assert_not_called()
+
+    def test_batch_skips_empty_vad_without_uploading(self):
+        with patch.object(batch_mod.os, "makedirs"), patch.object(
+            batch_mod, "get_users_uid", return_value=["test-uid"]
+        ), patch.object(batch_mod, "get_profile_audio_if_exists", return_value="/tmp/profile.wav"), patch.object(
+            batch_mod, "apply_vad_for_speech_profile", side_effect=batch_mod.VADEmptyError("Audio is empty")
+        ) as mock_vad, patch.object(
+            batch_mod, "upload_profile_audio"
+        ) as mock_upload:
+            batch_mod.execute()
+
+        mock_vad.assert_called_once_with("/tmp/profile.wav")
         mock_upload.assert_not_called()

@@ -21,6 +21,7 @@ from utils.stt import vad
 from utils.stt.vad import (
     VADAudioDecodeError,
     VADProcessingError,
+    VADEmptyError,
     vad_is_empty,
     _run_file_vad,
     _get_ort_session,
@@ -33,6 +34,13 @@ from utils.stt.vad import (
     linear16_pcm_is_silent,
     _STATE_SHAPE,
 )
+
+
+def test_apply_vad_for_speech_profile_raises_for_zero_segments():
+    with patch.object(vad, 'vad_is_empty', return_value=[]):
+        with pytest.raises(VADEmptyError, match='Audio is empty'):
+            vad.apply_vad_for_speech_profile('/fake/path.wav')
+
 
 # ---------------------------------------------------------------------------
 # Helpers
