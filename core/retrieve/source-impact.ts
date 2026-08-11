@@ -23,7 +23,8 @@ export type SourceImpactErrorCode =
   | "unauthorized_input"
   | "coordinate_mismatch"
   | "invalid_cursor"
-  | "invalid_opaque_ref";
+  | "invalid_opaque_ref"
+  | "impact_limit_exceeded";
 
 export class SourceImpactError extends Error {
   constructor(readonly code: SourceImpactErrorCode) {
@@ -76,6 +77,7 @@ export interface SourceImpactCodecs {
   readonly verify_cursor: (input: Readonly<{
     cursor: string;
     binding_digest: string;
+    after_key: string;
   }>) => unknown;
   readonly issue_cursor: (input: Readonly<{
     binding_digest: string;
@@ -86,6 +88,7 @@ export interface SourceImpactCodecs {
 const MAX_PAGE_LIMIT = 100;
 const MAX_TARGET_CODE_UNITS = 512;
 const MAX_CURSOR_CODE_UNITS = 4_096;
+const MAX_IMPACT_ROWS = 10_000;
 const OPAQUE_REF = /^si1_[a-f0-9]{64}$/;
 const OPAQUE_CURSOR = /^sic1_[a-f0-9]{64}$/;
 const AFTER_KEY = /^[0-4]:[a-f0-9]{64}$/;
@@ -168,6 +171,10 @@ const parseRequest = (value: unknown): SourceImpactPageRequest => {
   });
 };
 
+/** Validates and detaches a page request without touching authorization or storage. */
+export const assertSourceImpactPageRequest = (value: unknown): SourceImpactPageRequest =>
+  parseRequest(value);
+
 type CodecFunction = (...args: never[]) => unknown;
 
 const codecFunction = (value: unknown): CodecFunction => {
@@ -216,6 +223,64 @@ const targetDigest = (target: SourceImpactTarget): string => sha256CanonicalCont
 
 const compareText = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 
+interface AuthorizedSourceImpactInputs {
+  readonly authorized: AuthorizedProductProjectionSet;
+  readonly snapshot_digest: string;
+  readonly input_digest: string;
+}
+
+const inspectAuthorizedInputs = (
+  input: ApplicationGrantProjectedTreeInputSnapshot,
+  authorizedProjectionValue: AuthorizedProductProjectionSet,
+): AuthorizedSourceImpactInputs => {
+  if (!isApplicationGrantProjectedTreeInput(input)) fail("unauthorized_input");
+  let authorized: AuthorizedProductProjectionSet;
+  try {
+    authorized = inspectAuthorizedProductProjectionSet(authorizedProjectionValue);
+  } catch {
+    return fail("unauthorized_input");
+  }
+  if (authorized.owner_account_id !== input.owner_account_id
+    || authorized.graph_frontier !== input.graph_generation
+    || authorized.reader_projection_digest !== input.reader_projection_digest
+    || authorized.projection_authorization_digest !== input.projection_authorization_digest) {
+    fail("coordinate_mismatch");
+  }
+  const projectionDigest = sha256CanonicalContent(
+    [...authorized.projections].sort((left, right) =>
+      compareText(left.projection_revision_id, right.projection_revision_id)),
+  );
+  const snapshotDigest = sha256CanonicalContent({
+    version: SOURCE_IMPACT_CONTRACT_VERSION,
+    graph_frontier: input.graph_generation,
+    projected_content_digest: input.projected_content_digest,
+    product_projection_digest: projectionDigest,
+    reader_projection_digest: input.reader_projection_digest,
+    projection_authorization_digest: input.projection_authorization_digest,
+  });
+  const inputDigest = sha256CanonicalContent({
+    version: SOURCE_IMPACT_CONTRACT_VERSION,
+    snapshot_digest: snapshotDigest,
+    reader_projection_digest: input.reader_projection_digest,
+    projection_authorization_digest: input.projection_authorization_digest,
+  });
+  if (!DIGEST.test(snapshotDigest) || !DIGEST.test(inputDigest)) fail("coordinate_mismatch");
+  return Object.freeze({
+    authorized,
+    snapshot_digest: snapshotDigest,
+    input_digest: inputDigest,
+  });
+};
+
+/**
+ * Content-safe equality coordinate for a complete authorized source-impact
+ * input. This grants no authority and accepts only the two runtime brands.
+ */
+export const computeAuthorizedSourceImpactInputDigest = (
+  input: ApplicationGrantProjectedTreeInputSnapshot,
+  authorizedProjectionValue: AuthorizedProductProjectionSet,
+): string => inspectAuthorizedInputs(input, authorizedProjectionValue).input_digest;
+
 const projectionIsCurrent = (
   projection: ProductProjectionRevision,
   projections: readonly ProductProjectionRevision[],
@@ -253,6 +318,7 @@ const impactedRows = (
         projectionIsCurrent(projection, projections) ? "current" : "historical",
       )),
   ];
+  if (rows.length > MAX_IMPACT_ROWS) fail("impact_limit_exceeded");
   const seen = new Set<string>();
   for (const row of rows) {
     if (seen.has(row.after_key)) fail("coordinate_mismatch");
@@ -266,10 +332,15 @@ const encodedRef = (
   row: InternalImpactItem,
   seen: Set<string>,
 ): string => {
-  const encoded = codecs.encode_ref(Object.freeze({
-    kind: row.kind,
-    internal_ref: row.internal_ref,
-  }));
+  let encoded: unknown;
+  try {
+    encoded = codecs.encode_ref(Object.freeze({
+      kind: row.kind,
+      internal_ref: row.internal_ref,
+    }));
+  } catch {
+    return fail("invalid_opaque_ref");
+  }
   if (typeof encoded !== "string" || !OPAQUE_REF.test(encoded)
     || encoded === row.internal_ref || seen.has(encoded)) fail("invalid_opaque_ref");
   const encodedString = encoded as string;
@@ -287,31 +358,11 @@ export const enumerateAuthorizedSourceImpact = (
   requestValue: SourceImpactPageRequest,
   codecsValue: SourceImpactCodecs,
 ): SourceImpactPage => {
-  if (!isApplicationGrantProjectedTreeInput(input)) fail("unauthorized_input");
-  let authorized: AuthorizedProductProjectionSet;
-  try {
-    authorized = inspectAuthorizedProductProjectionSet(authorizedProjectionValue);
-  } catch {
-    return fail("unauthorized_input");
-  }
-  if (authorized.owner_account_id !== input.owner_account_id
-    || authorized.graph_frontier !== input.graph_generation
-    || authorized.reader_projection_digest !== input.reader_projection_digest
-    || authorized.projection_authorization_digest !== input.projection_authorization_digest) {
-    fail("coordinate_mismatch");
-  }
+  const inspected = inspectAuthorizedInputs(input, authorizedProjectionValue);
+  const authorized = inspected.authorized;
   const request = parseRequest(requestValue);
   const codecs = parseCodecs(codecsValue);
-  const projectionDigest = sha256CanonicalContent(
-    [...authorized.projections].sort((left, right) =>
-      compareText(left.projection_revision_id, right.projection_revision_id)),
-  );
-  const snapshotDigest = sha256CanonicalContent({
-    version: SOURCE_IMPACT_CONTRACT_VERSION,
-    graph_frontier: input.graph_generation,
-    projected_content_digest: input.projected_content_digest,
-    product_projection_digest: projectionDigest,
-  });
+  const snapshotDigest = inspected.snapshot_digest;
   const queryDigest = sha256CanonicalContent({
     version: SOURCE_IMPACT_CONTRACT_VERSION,
     reader_projection_digest: input.reader_projection_digest,
@@ -320,18 +371,28 @@ export const enumerateAuthorizedSourceImpact = (
     target_digest: targetDigest(request.target),
     snapshot_digest: snapshotDigest,
   });
-  if (!DIGEST.test(snapshotDigest) || !DIGEST.test(queryDigest)) fail("coordinate_mismatch");
+  if (!DIGEST.test(queryDigest)) fail("coordinate_mismatch");
   const rows = impactedRows(input, authorized.projections, request.target);
 
   let afterKey: string | null = null;
   if (request.cursor !== null) {
-    const verified = codecs.verify_cursor(Object.freeze({
-      cursor: request.cursor,
-      binding_digest: queryDigest,
-    }));
-    if (typeof verified !== "string" || !AFTER_KEY.test(verified)
-      || !rows.some((row) => row.after_key === verified)) fail("invalid_cursor");
-    afterKey = verified as string;
+    const matches: string[] = [];
+    for (const row of rows) {
+      let verified: unknown;
+      try {
+        verified = codecs.verify_cursor(Object.freeze({
+          cursor: request.cursor,
+          binding_digest: queryDigest,
+          after_key: row.after_key,
+        }));
+      } catch {
+        return fail("invalid_cursor");
+      }
+      if (verified === true) matches.push(row.after_key);
+      else if (verified !== false) fail("invalid_cursor");
+    }
+    if (matches.length !== 1) fail("invalid_cursor");
+    afterKey = matches[0]!;
   }
   const start = afterKey === null ? 0 : rows.findIndex((row) => row.after_key === afterKey) + 1;
   const selected = rows.slice(start, start + request.limit);
@@ -346,10 +407,15 @@ export const enumerateAuthorizedSourceImpact = (
   let nextCursor: string | null = null;
   if (hasMore) {
     const last = selected.at(-1) ?? fail("invalid_cursor");
-    const issued = codecs.issue_cursor(Object.freeze({
-      binding_digest: queryDigest,
-      after_key: last.after_key,
-    }));
+    let issued: unknown;
+    try {
+      issued = codecs.issue_cursor(Object.freeze({
+        binding_digest: queryDigest,
+        after_key: last.after_key,
+      }));
+    } catch {
+      return fail("invalid_cursor");
+    }
     if (typeof issued !== "string" || !OPAQUE_CURSOR.test(issued)
       || issued === last.after_key) fail("invalid_cursor");
     nextCursor = issued as string;

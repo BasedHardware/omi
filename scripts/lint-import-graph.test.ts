@@ -101,6 +101,29 @@ test("query evaluation constructors are private to the single composition root",
   }
 });
 
+test("source-impact core is private to the final-fenced composition", () => {
+  const routeFixture = join(platformRoot, "apps", "service", "routes", "source-impact-tripwire-fixture.ts");
+  try {
+    writeFileSync(routeFixture, [
+      'import { enumerateAuthorizedSourceImpact } from "../../../core/retrieve/source-impact";',
+      "export const bypass = enumerateAuthorizedSourceImpact;",
+    ].join("\n"));
+    const rejected = runLint();
+    expect(rejected.status).not.toBe(0);
+    expect(`${rejected.stdout}${rejected.stderr}`)
+      .toContain("source-impact core is private to apps/service/composition/source-impact.ts");
+
+    writeFileSync(routeFixture, [
+      'import { createAuthorizedSourceImpactReader } from "../composition/source-impact";',
+      "export const registered = createAuthorizedSourceImpactReader;",
+    ].join("\n"));
+    const accepted = runLint();
+    expect(accepted.status).toBe(0);
+  } finally {
+    rmSync(routeFixture, { force: true });
+  }
+});
+
 const withPortFixture = (source: string, assertion: (result: ReturnType<typeof runLint>) => void): void => {
   try {
     writeFileSync(portFixture, source);

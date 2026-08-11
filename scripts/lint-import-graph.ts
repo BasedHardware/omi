@@ -192,6 +192,14 @@ const PORT_REGISTRY: readonly PortRegistryRow[] = [
       + "measured cost of discovering a second composition after the fact was one memory "
       + "served under two different public ids with every assertion green.",
   },
+  {
+    portType: "AuthorizedSourceImpactReader",
+    composedIn: ["apps/service/composition/source-impact.ts"],
+    reason:
+      "Source-impact final authorization, coherent graph/product loading, and reader-scoped "
+      + "cursor codecs must remain one operation. Routes and QA callers import this reader "
+      + "instead of assembling a second path with weaker revocation or cursor semantics.",
+  },
 ];
 /**
  * Port-composition sites exempted from rule 16. Keyed by (file, 1-indexed
@@ -438,6 +446,8 @@ const storageProvenanceAllowMarker = "storage-provenance-ok(";
 
 const queryEvaluationCompositionRoot = "apps/service/composition/memory-query-evaluation.ts";
 const authorizedLedgerContextCompositionRoot = "apps/service/auth/firebase-application-authorization.ts";
+const sourceImpactCompositionRoot = "apps/service/composition/source-impact.ts";
+const sourceImpactCodecModule = "apps/service/codecs/opaque-refs.ts";
 const queryEvaluationInternalImporters = new Set([
   queryEvaluationCompositionRoot,
   "apps/service/workers/memory-owner-query-evidence-source.ts",
@@ -445,6 +455,7 @@ const queryEvaluationInternalImporters = new Set([
   "apps/service/workers/memory-paired-query-grounding-coordinator.ts",
 ]);
 const queryEvaluationLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*memory-(?:owner-query-evidence-source|authorized-query-grounding-producer|paired-query-grounding-coordinator)(?:\.ts)?["']/;
+const sourceImpactLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*core\/retrieve\/source-impact(?:\.ts)?["']/;
 
 /** Blank out comments so documentation of the fence does not trip the fence. */
 const withoutComments = (text: string): string => text
@@ -494,6 +505,15 @@ for (const file of files(root)) {
       failures.push(
         `${shown}: low-level query-evaluation constructors are private to ${queryEvaluationCompositionRoot}; `
         + "import the registered composition root instead of assembling a parallel grounded or ungrounded path",
+      );
+    }
+    if (shown.startsWith("apps/")
+      && shown !== sourceImpactCompositionRoot
+      && shown !== sourceImpactCodecModule
+      && sourceImpactLowLevelImport.test(code)) {
+      failures.push(
+        `${shown}: source-impact core is private to ${sourceImpactCompositionRoot}; `
+        + "import the registered reader instead of bypassing its final authorization fence",
       );
     }
   }

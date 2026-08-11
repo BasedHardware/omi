@@ -143,6 +143,7 @@ export type ProductProjectionReadImplementation = (
 ) => Promise<unknown>;
 
 const authorizedReadSets = new WeakSet<object>();
+const productProjectionReadRepositories = new WeakSet<object>();
 
 function fail(code: string): never {
   throw new TypeError(`product projection repository ${code}`);
@@ -385,13 +386,27 @@ const parseReadRows = (value: unknown, input: ApplicationGrantProjectedTreeInput
 
 export const defineProductProjectionReadRepository = (
   implementation: ProductProjectionReadImplementation,
-): ProductProjectionReadRepository => Object.freeze({
-  [READ_PORT]: true as const,
-  async loadAuthorized(input: ApplicationGrantProjectedTreeInputSnapshot): Promise<AuthorizedProductProjectionReadSet> {
-    if (!isApplicationGrantProjectedTreeInput(input)) fail("unauthorized_read_input");
-    return parseReadRows(await implementation(input), input);
-  },
-});
+): ProductProjectionReadRepository => {
+  const repository: ProductProjectionReadRepository = Object.freeze({
+    [READ_PORT]: true as const,
+    async loadAuthorized(input: ApplicationGrantProjectedTreeInputSnapshot): Promise<AuthorizedProductProjectionReadSet> {
+      if (!isApplicationGrantProjectedTreeInput(input)) fail("unauthorized_read_input");
+      return parseReadRows(await implementation(input), input);
+    },
+  });
+  productProjectionReadRepositories.add(repository);
+  return repository;
+};
+
+/** Runtime identity check for composition; this grants no read or write authority. */
+export const inspectProductProjectionReadRepository = (
+  value: unknown,
+): ProductProjectionReadRepository => {
+  if (value === null || typeof value !== "object" || !productProjectionReadRepositories.has(value)) {
+    fail("invalid_read_repository");
+  }
+  return value as ProductProjectionReadRepository;
+};
 
 export const selectLatestAuthorizedProductProjectionPayload = (
   identityValue: ProductPropositionIdentity,

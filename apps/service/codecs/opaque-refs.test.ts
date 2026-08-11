@@ -66,8 +66,8 @@ describe("reader-scoped opaque reference codecs", () => {
 
     expect(parseSynthesizedItemId(item)).not.toBeNull();
     expect(parseCitationRef(citation)).not.toBeNull();
-    expect(parseSynthesizedItemId(item)).toBe(item);
-    expect(parseCitationRef(citation)).toBe(citation);
+    expect(String(parseSynthesizedItemId(item))).toBe(item);
+    expect(String(parseCitationRef(citation))).toBe(citation);
   });
 
   test("domain-separates digests so the same input never collides across codecs", () => {
@@ -119,6 +119,30 @@ describe("reader-scoped opaque reference codecs", () => {
     expect(readerA.encodeVisibleKey(input)).toBe(readerA.encodeVisibleKey(input));
     expect(readerA.encodeCitationRef(input)).toBe(readerA.encodeCitationRef(input));
     expect(readerA.encodeTraceRef(input)).toBe(readerA.encodeTraceRef(input));
+  });
+
+  test("source-impact refs and cursors are reader-scoped, domain-separated, and stateless", () => {
+    const first = createReaderScopedOpaqueCodecs(config());
+    const independent = createReaderScopedOpaqueCodecs(config());
+    const otherReader = createReaderScopedOpaqueCodecs(config({
+      reader_projection_digest: READER_B,
+    }));
+    const binding = digest("source-impact-binding");
+    const after = `3:${digest("source-impact-after")}`;
+    const cursor = first.issueSourceImpactCursor(binding, after);
+
+    expect(first.encodeSourceImpactRef("canonical_claim", "claim:1"))
+      .toMatch(/^si1_[a-f0-9]{64}$/);
+    expect(first.encodeSourceImpactRef("canonical_claim", "claim:1"))
+      .toBe(independent.encodeSourceImpactRef("canonical_claim", "claim:1"));
+    expect(first.encodeSourceImpactRef("canonical_claim", "claim:1"))
+      .not.toBe(first.encodeSourceImpactRef("evidence", "claim:1"));
+    expect(cursor).toMatch(/^sic1_[a-f0-9]{64}$/);
+    expect(independent.verifySourceImpactCursor(cursor, binding, after)).toBe(true);
+    expect(otherReader.verifySourceImpactCursor(cursor, binding, after)).toBe(false);
+    expect(first.verifySourceImpactCursor(cursor, digest("other-binding"), after)).toBe(false);
+    expect(first.verifySourceImpactCursor(cursor, binding, `2:${digest("source-impact-after")}`)).toBe(false);
+    expect(first.verifySourceImpactCursor(`sic1_${"0".repeat(64)}`, binding, after)).toBe(false);
   });
 
   test("rejects short secrets and hostile config shapes without reading accessors", () => {

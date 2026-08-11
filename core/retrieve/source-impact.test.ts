@@ -166,7 +166,6 @@ interface CodecHarness {
 }
 
 const codecHarness = (): CodecHarness => {
-  const cursors = new Map<string, { binding_digest: string; after_key: string }>();
   const calls = { refs: 0, verifies: 0, issues: 0 };
   return {
     calls,
@@ -175,16 +174,13 @@ const codecHarness = (): CodecHarness => {
         calls.refs += 1;
         return `si1_${sha256CanonicalContent(input)}`;
       },
-      verify_cursor: ({ cursor, binding_digest }) => {
+      verify_cursor: ({ cursor, binding_digest, after_key }) => {
         calls.verifies += 1;
-        const stored = cursors.get(cursor);
-        return stored?.binding_digest === binding_digest ? stored.after_key : null;
+        return cursor === `sic1_${sha256CanonicalContent({ binding_digest, after_key })}`;
       },
       issue_cursor: (input) => {
         calls.issues += 1;
-        const cursor = `sic1_${sha256CanonicalContent(input)}`;
-        cursors.set(cursor, { ...input });
-        return cursor;
+        return `sic1_${sha256CanonicalContent(input)}`;
       },
     },
   };
@@ -250,10 +246,10 @@ describe("authorized source impact core", () => {
     expect(first.has_more).toBe(true);
     expect(first.next_cursor).toMatch(/^sic1_[a-f0-9]{64}$/);
     const second = enumerateAuthorizedSourceImpact(
-      input, product, request({ limit: 2, cursor: first.next_cursor }), harness.codecs,
+      input, product, request({ limit: 2, cursor: first.next_cursor }), codecHarness().codecs,
     );
     const third = enumerateAuthorizedSourceImpact(
-      input, product, request({ limit: 2, cursor: second.next_cursor }), harness.codecs,
+      input, product, request({ limit: 2, cursor: second.next_cursor }), codecHarness().codecs,
     );
     expect([...first.items, ...second.items, ...third.items]).toHaveLength(5);
     expect(new Set([...first.items, ...second.items, ...third.items].map((item) => item.ref)).size).toBe(5);
@@ -355,6 +351,22 @@ describe("authorized source impact core", () => {
     ));
     expectCode("invalid_opaque_ref", () => enumerateAuthorizedSourceImpact(
       input, product, request(), { ...harness.codecs, encode_ref: ({ internal_ref }) => internal_ref },
+    ));
+    expectCode("invalid_cursor", () => enumerateAuthorizedSourceImpact(
+      input,
+      product,
+      request({ limit: 2, cursor: enumerateAuthorizedSourceImpact(
+        input, product, request({ limit: 2 }), harness.codecs,
+      ).next_cursor }),
+      { ...harness.codecs, verify_cursor: () => true },
+    ));
+    expectCode("invalid_cursor", () => enumerateAuthorizedSourceImpact(
+      input,
+      product,
+      request({ limit: 2, cursor: enumerateAuthorizedSourceImpact(
+        input, product, request({ limit: 2 }), harness.codecs,
+      ).next_cursor }),
+      { ...harness.codecs, verify_cursor: () => { throw new Error("raw secret sentinel"); } },
     ));
   });
 });

@@ -3,8 +3,10 @@
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
 // domain-pending(DIV-DOMX-001)
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { isProxy } from "node:util/types";
+
+import type { SourceImpactItemKind } from "../../../core/retrieve/source-impact";
 
 /**
  * Reader-scoped opaque reference codecs for ApplicationReadPorts.
@@ -19,6 +21,9 @@ const STABLE_VISIBLE_KEY = /^vk1_[a-f0-9]{64}$/;
 const ITEM_REF = /^mem1_[a-f0-9]{64}$/;
 const CITATION_REF = /^cit1_[a-f0-9]{64}$/;
 const TRACE_REF = /^tr1_[a-f0-9]{64}$/;
+const SOURCE_IMPACT_REF = /^si1_[a-f0-9]{64}$/;
+const SOURCE_IMPACT_CURSOR = /^sic1_[a-f0-9]{64}$/;
+const SOURCE_IMPACT_AFTER_KEY = /^[0-4]:[a-f0-9]{64}$/;
 /**
  * The tasks read wire's public item handle.
  *
@@ -50,6 +55,12 @@ const DOMAIN_CITATION_REF = "omi.service.opaque-citation-ref.v1";
 const DOMAIN_TRACE_REF = "omi.service.opaque-trace-ref.v1";
 const DOMAIN_TASK_ITEM_REF = "omi.service.opaque-task-item-ref.v1";
 const DOMAIN_TASK_FRONTIER = "omi.service.opaque-task-frontier.v1";
+const DOMAIN_SOURCE_IMPACT_REF = "omi.service.opaque-source-impact-ref.v1";
+const DOMAIN_SOURCE_IMPACT_CURSOR = "omi.service.opaque-source-impact-cursor.v1";
+
+const SOURCE_IMPACT_KINDS = new Set<SourceImpactItemKind>([
+  "event", "evidence", "provisional_claim", "canonical_claim", "product_projection",
+]);
 
 const CONFIG_KEYS = Object.freeze(["reader_projection_digest", "root_secret"] as const);
 
@@ -74,6 +85,13 @@ export interface ReaderScopedOpaqueCodecs {
   readonly encodeTaskItemRef: (input: string) => string;
   /** The tasks coverage envelope's reader-scoped frontier handle. */
   readonly encodeTaskFrontier: (input: string) => string;
+  readonly encodeSourceImpactRef: (kind: SourceImpactItemKind, internalRef: string) => string;
+  readonly issueSourceImpactCursor: (bindingDigest: string, afterKey: string) => string;
+  readonly verifySourceImpactCursor: (
+    cursor: string,
+    bindingDigest: string,
+    afterKey: string,
+  ) => boolean;
 }
 
 const configurationError = (message: string): never => {
@@ -147,6 +165,13 @@ const encodeOpaque = (
   return encoded;
 };
 
+const sourceImpactCursorInput = (bindingDigest: string, afterKey: string): string => {
+  if (!DIGEST_PATTERN.test(bindingDigest) || !SOURCE_IMPACT_AFTER_KEY.test(afterKey)) {
+    return configurationError("source impact cursor coordinates are invalid");
+  }
+  return `${bindingDigest}\0${afterKey}`;
+};
+
 /**
  * Builds the four ApplicationReadPorts opaque codecs, keyed to one reader.
  * Same reader + same input is deterministic; different readers never share
@@ -156,11 +181,11 @@ export const createReaderScopedOpaqueCodecs = (
   config: ReaderScopedOpaqueCodecConfig,
 ): Readonly<ReaderScopedOpaqueCodecs> => {
   const descriptors = snapshotExactDataDescriptors(config, CONFIG_KEYS);
-  const readerProjectionDigest = descriptors.reader_projection_digest!.value;
+  const readerProjectionDigest = descriptors["reader_projection_digest"]!.value;
   if (typeof readerProjectionDigest !== "string" || !DIGEST_PATTERN.test(readerProjectionDigest)) {
     return configurationError("opaque codec reader_projection_digest must be a lowercase SHA-256 hex digest");
   }
-  const rootSecret = copyRootSecret(descriptors.root_secret!.value);
+  const rootSecret = copyRootSecret(descriptors["root_secret"]!.value);
   const readerSubkey = deriveReaderSubkey(rootSecret, readerProjectionDigest);
   // Drop the copied root material from the closure surface; only the derived
   // reader subkey is retained for encoding.
@@ -179,5 +204,39 @@ export const createReaderScopedOpaqueCodecs = (
       encodeOpaque(readerSubkey, DOMAIN_TASK_ITEM_REF, "task1_", TASK_ITEM_REF, input),
     encodeTaskFrontier: (input: string): string =>
       encodeOpaque(readerSubkey, DOMAIN_TASK_FRONTIER, "frontier-v1:", TASK_FRONTIER_REF, input),
+    encodeSourceImpactRef: (kind: SourceImpactItemKind, internalRef: string): string => {
+      if (!SOURCE_IMPACT_KINDS.has(kind)) {
+        return configurationError("source impact kind is invalid");
+      }
+      return encodeOpaque(
+        readerSubkey,
+        DOMAIN_SOURCE_IMPACT_REF,
+        "si1_",
+        SOURCE_IMPACT_REF,
+        `${kind}\0${internalRef}`,
+      );
+    },
+    issueSourceImpactCursor: (bindingDigest: string, afterKey: string): string =>
+      encodeOpaque(
+        readerSubkey,
+        DOMAIN_SOURCE_IMPACT_CURSOR,
+        "sic1_",
+        SOURCE_IMPACT_CURSOR,
+        sourceImpactCursorInput(bindingDigest, afterKey),
+      ),
+    verifySourceImpactCursor: (cursor: string, bindingDigest: string, afterKey: string): boolean => {
+      if (typeof cursor !== "string" || !SOURCE_IMPACT_CURSOR.test(cursor)) return false;
+      const expected = encodeOpaque(
+        readerSubkey,
+        DOMAIN_SOURCE_IMPACT_CURSOR,
+        "sic1_",
+        SOURCE_IMPACT_CURSOR,
+        sourceImpactCursorInput(bindingDigest, afterKey),
+      );
+      return timingSafeEqual(
+        Buffer.from(cursor.slice("sic1_".length), "hex"),
+        Buffer.from(expected.slice("sic1_".length), "hex"),
+      );
+    },
   });
 };
