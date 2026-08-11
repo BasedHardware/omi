@@ -10,7 +10,7 @@
     "backend/utils/retrieval/agentic.py": 1512,
     "backend/utils/retrieval/tools/calendar_tools.py": 1513,
     "backend/utils/stt/streaming.py": 1523,
-    "backend/utils/sync/pipeline.py": 2500
+    "backend/utils/sync/pipeline.py": 2497
   },
   "raise_justifications": {
     "backend/utils/apps.py": "get_available_app_model_by_id: the set-preferred-app availability authority as a validated App model, so the summary path honors what the setter admitted instead of re-deciding with the installed slice (#10074).",
