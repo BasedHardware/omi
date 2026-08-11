@@ -104,6 +104,33 @@ test("sealed repository receives only a minted context and an explicit non-forma
   expect(calls).toHaveLength(1);
 });
 
+test("durable job graph origins are closed, honest, and request-identity-bearing", async () => {
+  const seen: string[] = [];
+  const repository = defineAuthoritativeLedgerRepository(async (_authorized, request) => {
+    if (request.origin.kind === "non_formation") seen.push(request.origin.reason);
+    return { kind: "committed", commit_id: request.transition.derivation.commit.commit_id, sequence: 1 };
+  });
+  const plan = transition();
+  const reasons = ["promotion", "identity_consolidation", "predicate_alignment"] as const;
+  const digests = new Set<string>();
+  for (const reason of reasons) {
+    const origin = { kind: "non_formation" as const, reason };
+    const requestDigest = authoritativeAppendRequestDigest(plan, origin);
+    digests.add(requestDigest);
+    await repository.append(context(), {
+      append_attempt: {
+        idempotency_key: "append:one",
+        expected_parent_commit: null,
+        request_digest: requestDigest,
+      },
+      origin,
+      transition: plan,
+    });
+  }
+  expect(seen).toEqual([...reasons]);
+  expect(digests.size).toBe(reasons.length);
+});
+
 test("repository rejects missing accounting, owner substitution, and a changed request digest before the adapter", async () => {
   let calls = 0;
   const repository = defineAuthoritativeLedgerRepository(async () => {
@@ -176,12 +203,12 @@ test("formation appends require outcome-to-transition accounting before an adapt
     append_attempt: appendAttempt,
     origin: {
       kind: "formation",
-      outcome: formationOutcome({
+      outcome: parseFormationOutcomeEnvelope(formationOutcome({
         candidate_count: 1,
         candidate_manifest_digest: formationCandidateManifestDigest(1),
         extraction_outcomes: [{ kind: "accepted", candidate_ref: "candidate:1", claim_revision_id: "claim:missing", evidence_ids: ["evidence:one"], repair_codes: [] }],
         placement_outcomes: [{ kind: "retryable_error", input_provisional_revision_id: "claim:missing", attempt: 1, max_attempts: 2, error_code: "model_timeout", next_eligible_at: null }],
-      }),
+      })),
     },
     transition: plan,
   })).rejects.toThrow("accepted provisional claim is absent");
@@ -223,7 +250,7 @@ test("formation accounting rejects provisional revisions not emitted by extracti
     ambiguity_markers: [],
     context_packet: null,
   };
-  plan.revisions = [{ kind: "claim", revision_id: "claim:extra", claim: provisional, placement_status: "provisional_abstained" }];
+  plan.revisions = [{ kind: "claim", revision_id: "claim:extra", claim: provisional as never, placement_status: "provisional_abstained" }];
   plan.placement = {
     offline_experiment: true,
     allocations: {},

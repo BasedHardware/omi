@@ -98,6 +98,7 @@ const expectedTables = [
   "memory_work_heads",
   "memory_work_input_manifest",
   "memory_work_outbox_events",
+  "memory_work_success_results",
   "memory_work_state_revisions",
   "memory_placement_artifacts",
   "memory_predicate_assertion_revisions",
@@ -274,6 +275,38 @@ describe("P2/P3/P4 PostgreSQL schema contract", () => {
     expect(outbox.body).toContain("terminal_state = 'succeeded' AND result_digest IS NOT NULL");
     expect(outbox.body).toContain("terminal_state = 'dead_letter' AND result_digest IS NULL");
     expect(outbox.body).not.toMatch(/payload|body|model|prompt|evidence|query|answer|error/i);
+  });
+
+  test("makes durable-work success atomic with its exact graph origin, receipt, state, and outbox", () => {
+    expect(allSql).toContain("'promotion', 'identity_consolidation', 'predicate_alignment'");
+    expect(allSql).toContain("ADD COLUMN origin_code text GENERATED ALWAYS AS");
+    expect(allSql).toContain("UNIQUE (account_id, commit_id, sequence, origin_code, success_kind)");
+    expect(allSql).toContain("UNIQUE (account_id, commit_id, request_digest, state)");
+
+    const success = tables.find((table) => table.name === "memory_work_success_results")!;
+    expect(success.body).toContain("terminal_state = 'succeeded'");
+    expect(success.body).toContain("formation_work_id text GENERATED ALWAYS AS");
+    expect(success.body).toContain("CASE WHEN work_kind = 'formation' THEN job_id ELSE NULL END");
+    expect(success.body).toContain("result_kind = 'successful_empty'");
+    expect(success.body).toContain("graph_commit_id IS NULL");
+    expect(success.body).toContain("result_kind = 'successful'");
+    expect(success.body).toContain("graph_success_kind = 'success'");
+    expect(success.body).toContain("append_receipt_state = 'finalized'");
+    expect(success.body).toContain("work_kind = 'formation' AND origin_code = 'formation'");
+    expect(success.body).toContain("work_kind = 'promotion' AND origin_code = 'promotion'");
+    expect(success.body).toContain("origin_code = 'identity_consolidation'");
+    expect(success.body).toContain("origin_code = 'predicate_alignment'");
+    expect(success.body).toContain("memory_work_acceptances");
+    expect(success.body).toContain("memory_work_state_revisions");
+    expect(success.body).toContain("memory_derivation_commits");
+    expect(success.body).toContain("memory_formation_outcomes");
+    expect(success.body).toContain("memory_idempotency_receipts");
+    expect(success.body).not.toMatch(/payload|model_output|prompt|query|answer|error/i);
+
+    expect(allSql).toContain("memory_work_outbox_events_success_result_fk");
+    expect(allSql).toContain("REFERENCES omi_memory.memory_work_success_results");
+    expect(allSql).toContain("Deliberately no application or worker grant");
+    expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_work_success_results/s);
   });
 
   test("persists P4 proposition identity, history, citations, redirects, and disposable grouping without grants", () => {

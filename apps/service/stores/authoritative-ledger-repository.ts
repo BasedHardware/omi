@@ -18,8 +18,17 @@ import {
 const REPOSITORY_PORT: unique symbol = Symbol("authoritative-ledger-repository");
 const TOKEN = /^[\x21-\x7e]{1,256}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
-const NON_FORMATION_REASONS = new Set(["repair", "manual_liveness", "historical_replay"] as const);
-export type NonFormationAppendReason = "repair" | "manual_liveness" | "historical_replay";
+const NON_FORMATION_REASONS = new Set([
+  "repair", "manual_liveness", "historical_replay",
+  "promotion", "identity_consolidation", "predicate_alignment",
+] as const);
+export type NonFormationAppendReason =
+  | "repair"
+  | "manual_liveness"
+  | "historical_replay"
+  | "promotion"
+  | "identity_consolidation"
+  | "predicate_alignment";
 
 export interface AppendAttempt {
   readonly idempotency_key: string;

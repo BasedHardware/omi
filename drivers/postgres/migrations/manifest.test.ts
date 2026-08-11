@@ -10,7 +10,7 @@ const directory = new URL("./", import.meta.url);
 describe("PostgreSQL migration manifest", () => {
   test("is an immutable, ordered, gap-free P2/P3/P4 manifest", () => {
     expect(Object.isFrozen(POSTGRES_MIGRATIONS)).toBe(true);
-    expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([1, 2, 3, 4, 5]);
+    expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(new Set(POSTGRES_MIGRATIONS.map((migration) => migration.name)).size)
       .toBe(POSTGRES_MIGRATIONS.length);
     for (const migration of POSTGRES_MIGRATIONS) {
