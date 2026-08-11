@@ -121,6 +121,29 @@ function bindingOnDiskMatches(path, record) {
   }
 }
 
+export function validateCommittedOwner(path, expectedRecord = null) {
+  const bindingPath = ownerBindingPath(path);
+  let record;
+  try {
+    record = readRecord(path);
+  } catch (error) {
+    return Object.freeze({ ok: false, failures: Object.freeze([error.message]) });
+  }
+  const failures = [];
+  if (expectedRecord !== null && JSON.stringify(record) !== JSON.stringify(expectedRecord)) {
+    failures.push("committed owner record differs from the intended record");
+  }
+  const inspected = inspectOwner(record, { bindingPath });
+  failures.push(...inspected.failures);
+  if (!sameRecordOnDisk(path, record)) failures.push("committed owner record changed during validation");
+  if (!bindingOnDiskMatches(bindingPath, record)) failures.push("committed owner binding changed during validation");
+  if (failures.length > 0 && sameRecordOnDisk(path, record)) {
+    unlinkSync(path);
+    if (bindingOnDiskMatches(bindingPath, record)) unlinkSync(bindingPath);
+  }
+  return Object.freeze({ ok: failures.length === 0, failures: Object.freeze(failures) });
+}
+
 export function inspectOwner(record, { bindingPath = null } = {}) {
   const validation = validateOwnerRecord(record);
   const snapshot = processSnapshot(record?.pid);
@@ -171,6 +194,44 @@ function sameRecordOnDisk(path, record) {
 
 function waitBriefly() {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+}
+
+export function stopPreOwnerProcess({ pid, processStartIdentity }) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) {
+    return Object.freeze({ stopped: false, skipped: true, detail: "pre-owner pid is missing or invalid", pid });
+  }
+  if (typeof processStartIdentity !== "string" || processStartIdentity.trim() === "") {
+    return Object.freeze({ stopped: false, skipped: true, detail: "pre-owner process start identity is missing", pid });
+  }
+  const beforeTerm = processSnapshot(pid);
+  if (beforeTerm === null) {
+    return Object.freeze({ stopped: true, skipped: false, detail: "pre-owner service already exited", pid });
+  }
+  if (beforeTerm.startIdentity !== processStartIdentity) {
+    return Object.freeze({ stopped: false, skipped: true, detail: "pre-owner PID was reused or has a stale start identity; signal refused", pid });
+  }
+  if (!commandMatchesService(beforeTerm.command)) {
+    return Object.freeze({ stopped: false, skipped: true, detail: "pre-owner PID has an unknown executable or command; signal refused", pid });
+  }
+
+  // Identity was read immediately before this first signal. The shell never
+  // performs a PID-only fallback: every pre-record cleanup comes through here.
+  process.kill(pid, "SIGTERM");
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (processSnapshot(pid) === null) break;
+    waitBriefly();
+  }
+  const beforeEscalation = processSnapshot(pid);
+  if (beforeEscalation !== null) {
+    if (beforeEscalation.startIdentity !== processStartIdentity) {
+      return Object.freeze({ stopped: false, skipped: true, detail: "pre-owner PID identity changed before escalation; SIGKILL skipped", pid });
+    }
+    if (!commandMatchesService(beforeEscalation.command)) {
+      return Object.freeze({ stopped: false, skipped: true, detail: "pre-owner command changed before escalation; SIGKILL skipped", pid });
+    }
+    process.kill(pid, "SIGKILL");
+  }
+  return Object.freeze({ stopped: true, skipped: false, detail: "verified pre-owner service stopped", pid });
 }
 
 export function stopOwnedProcess(path) {
@@ -270,6 +331,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       if (!inspected.ok) throw new Error(inspected.failures.join("; "));
       const bindingPath = ownerBindingPath(path);
       const binding = bindingFor(record);
+      const immediatelyBeforeCommit = inspectOwner(record);
+      if (!immediatelyBeforeCommit.ok) throw new Error(`owner changed before commit: ${immediatelyBeforeCommit.failures.join("; ")}`);
       writeFileSync(bindingPath, `${JSON.stringify(binding, null, 2)}\n`, { flag: "wx", mode: 0o600 });
       try {
         writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`, { flag: "wx", mode: 0o600 });
@@ -277,14 +340,23 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
         if (bindingOnDiskMatches(bindingPath, record)) unlinkSync(bindingPath);
         throw error;
       }
+      const committed = validateCommittedOwner(path, record);
+      if (!committed.ok) throw new Error(`owner changed during commit: ${committed.failures.join("; ")}`);
       print({ ok: true, pid: record.pid, runId: record.runId });
     } else if (command === "stop") {
       if (!path) throw new Error("stop needs --record");
       const result = stopOwnedProcess(path);
       print(result);
       if (result.skipped && result.detail !== "no owner record") process.exitCode = 3;
+    } else if (command === "stop-pre-owner") {
+      const result = stopPreOwnerProcess({
+        pid: Number(flag(argv, "--pid")),
+        processStartIdentity: flag(argv, "--start-identity"),
+      });
+      print(result);
+      if (result.skipped) process.exitCode = 3;
     } else {
-      throw new Error("usage: process-owner.mjs <new-token|snapshot|prepare|write|stop> ...");
+      throw new Error("usage: process-owner.mjs <new-token|snapshot|prepare|write|stop|stop-pre-owner> ...");
     }
   } catch (error) {
     process.stderr.write(`ERROR: ${error.message}\n`);

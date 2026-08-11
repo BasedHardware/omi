@@ -7,7 +7,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 
-import { EXPECTED_COMMAND, PROCESS_OWNER_SCHEMA, ownerBindingPath, processSnapshot } from "./process-owner.mjs";
+import {
+  EXPECTED_COMMAND,
+  PROCESS_OWNER_SCHEMA,
+  ownerBindingPath,
+  processSnapshot,
+  validateCommittedOwner,
+} from "./process-owner.mjs";
 import { SERVICE_BASE_URL, SERVICE_EXECUTABLE, SERVICE_READINESS_SCHEMA } from "./evidence-matrix.mjs";
 
 const cli = new URL("./process-owner.mjs", import.meta.url);
@@ -109,4 +115,81 @@ test("RED-PROOF a valid-format replacement owner token cannot signal the verifie
   assert.equal(stopped.status, 0, stopped.stderr || stopped.stdout);
   assert.match(stopped.stdout, /"stopped":true/);
   assert.equal(processSnapshot(owned.pid), null);
+});
+
+test("RED-PROOF pre-owner cleanup refuses PID reuse and unknown commands before signaling", async () => {
+  const unrelated = spawn("sleep", ["30"], { stdio: "ignore" });
+  const service = spawn("bun", ["-e", "setInterval(() => {}, 1000)", SERVICE_EXECUTABLE], { stdio: "ignore" });
+  children.push(unrelated, service);
+  await Promise.all([
+    new Promise((resolve) => unrelated.once("spawn", resolve)),
+    new Promise((resolve) => service.once("spawn", resolve)),
+  ]);
+  const unrelatedSnapshot = processSnapshot(unrelated.pid);
+  const serviceSnapshot = processSnapshot(service.pid);
+  assert.ok(unrelatedSnapshot);
+  assert.ok(serviceSnapshot);
+
+  const wrongCommand = spawnSync(process.execPath, [
+    cli.pathname, "stop-pre-owner", "--pid", String(unrelated.pid),
+    "--start-identity", unrelatedSnapshot.startIdentity,
+  ], { encoding: "utf8" });
+  assert.equal(wrongCommand.status, 3);
+  assert.match(wrongCommand.stdout, /unknown executable or command; signal refused/);
+  assert.doesNotThrow(() => process.kill(unrelated.pid, 0));
+
+  const reused = spawnSync(process.execPath, [
+    cli.pathname, "stop-pre-owner", "--pid", String(service.pid),
+    "--start-identity", `${serviceSnapshot.startIdentity}-stale`,
+  ], { encoding: "utf8" });
+  assert.equal(reused.status, 3);
+  assert.match(reused.stdout, /PID was reused or has a stale start identity; signal refused/);
+  assert.doesNotThrow(() => process.kill(service.pid, 0));
+
+  const exact = spawnSync(process.execPath, [
+    cli.pathname, "stop-pre-owner", "--pid", String(service.pid),
+    "--start-identity", serviceSnapshot.startIdentity,
+  ], { encoding: "utf8" });
+  assert.equal(exact.status, 0, exact.stderr || exact.stdout);
+  assert.match(exact.stdout, /verified pre-owner service stopped/);
+  assert.equal(processSnapshot(service.pid), null);
+});
+
+test("RED-PROOF post-commit readiness mutation rolls back durable owner coordinates", async () => {
+  const service = spawn("bun", ["-e", "setInterval(() => {}, 1000)", SERVICE_EXECUTABLE], { stdio: "ignore" });
+  children.push(service);
+  await new Promise((resolve) => service.once("spawn", resolve));
+  const snapshot = processSnapshot(service.pid);
+  assert.ok(snapshot);
+  const databasePath = join(scratch, "commit-service.sqlite");
+  const readinessPath = join(scratch, "commit-readiness.json");
+  const ownerPath = join(scratch, "commit-owner.json");
+  const readiness = {
+    schema: SERVICE_READINESS_SCHEMA,
+    runId: "run-commit-owner",
+    executable: SERVICE_EXECUTABLE,
+    baseUrl: SERVICE_BASE_URL,
+    databasePath,
+    pid: service.pid,
+    evidencePath: "/v1/qa/evidence",
+    devToken: "local-token",
+    ownerAccountId: "local-owner",
+  };
+  writeFileSync(readinessPath, `${JSON.stringify(readiness)}\n`);
+  const written = spawnSync(process.execPath, [
+    cli.pathname, "write", "--record", ownerPath,
+    "--run-id", readiness.runId, "--pid", String(service.pid),
+    "--owner-token", "c".repeat(32), "--start-identity", snapshot.startIdentity,
+    "--database", databasePath, "--readiness", readinessPath,
+  ], { encoding: "utf8" });
+  assert.equal(written.status, 0, written.stderr);
+
+  readiness.runId = "other-valid-run";
+  writeFileSync(readinessPath, `${JSON.stringify(readiness)}\n`);
+  const checked = validateCommittedOwner(ownerPath);
+  assert.equal(checked.ok, false);
+  assert.ok(checked.failures.some((failure) => failure.includes("wrong runId")));
+  assert.equal(existsSync(ownerPath), false);
+  assert.equal(existsSync(ownerBindingPath(ownerPath)), false);
+  assert.doesNotThrow(() => process.kill(service.pid, 0));
 });

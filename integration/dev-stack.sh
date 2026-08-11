@@ -95,15 +95,20 @@ fi
 LEAVE_RUNNING=0
 OWNER_WRITTEN=0
 SERVICE_PID=""
+SERVICE_START_IDENTITY=""
 SERVICE_LOGGER_PID=""
 cleanup() {
   local stop_rc=0
   if (( LEAVE_RUNNING )); then return; fi
   if (( OWNER_WRITTEN )); then
     node "$OWNER_TOOL" stop --record "$OWNERFILE" >/dev/null 2>&1 || stop_rc=$?
-  elif [[ "$SERVICE_PID" =~ ^[0-9]+$ ]] && kill -0 "$SERVICE_PID" 2>/dev/null; then
-    kill "$SERVICE_PID" 2>/dev/null || true
-    wait "$SERVICE_PID" 2>/dev/null || true
+  elif [[ "$SERVICE_PID" =~ ^[0-9]+$ ]]; then
+    if node "$OWNER_TOOL" stop-pre-owner --pid "$SERVICE_PID" \
+      --start-identity "$SERVICE_START_IDENTITY" >/dev/null 2>&1; then
+      wait "$SERVICE_PID" 2>/dev/null || true
+    else
+      stop_rc=$?
+    fi
   fi
   if [[ "$SERVICE_LOGGER_PID" =~ ^[0-9]+$ ]]; then
     for _ in $(seq 1 100); do
