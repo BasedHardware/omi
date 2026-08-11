@@ -313,6 +313,60 @@ final class ShellSummonTests: XCTestCase {
   }
 
   @MainActor
+  // MARK: - Stranded-frame recovery
+
+  /// **A restored frame no display shows is not a placement, it is a lockout.** The sign-in window
+  /// shipped restored to a bottom-right corner sliver (a persisted automation-park frame after a
+  /// display change), leaving its only controls at coordinates no screen shows — with no rail, no
+  /// hotkey and no reachable drag handle to recover it (#11374 follow-up).
+  func testACornerSliverFrameIsNotMeaningfullyOnScreen() {
+    let primary = NSRect(x: 0, y: 0, width: 2048, height: 1330)
+    let secondary = NSRect(x: -1920, y: 250, width: 1920, height: 1080)
+    // The exact shipped failure: 960×712 restored so only a 24×32 sliver overlaps the primary.
+    let stranded = NSRect(x: 2024, y: -382, width: 960, height: 712)
+    XCTAssertFalse(
+      ShellSummonPlacement.isMeaningfullyOnScreen(stranded, visibleFrames: [primary, secondary]))
+    // Centred on either display is fine.
+    XCTAssertTrue(
+      ShellSummonPlacement.isMeaningfullyOnScreen(
+        ShellSummonPlacement.centered(NSSize(width: 960, height: 700), in: primary),
+        visibleFrames: [primary, secondary]))
+    // Straddling the seam still counts once a usable panel area is visible somewhere.
+    XCTAssertTrue(
+      ShellSummonPlacement.isMeaningfullyOnScreen(
+        NSRect(x: -400, y: 400, width: 960, height: 700), visibleFrames: [primary, secondary]))
+    // An edge-touching hairline does not.
+    XCTAssertFalse(
+      ShellSummonPlacement.isMeaningfullyOnScreen(
+        NSRect(x: 2040, y: 1320, width: 960, height: 700), visibleFrames: [primary]))
+    XCTAssertFalse(ShellSummonPlacement.isMeaningfullyOnScreen(stranded, visibleFrames: []))
+  }
+
+  @MainActor
+  func testRecoveryRePlacesAVisibleStrandedShellOntoARealDisplay() throws {
+    guard let screen = NSScreen.main ?? NSScreen.screens.first else {
+      throw XCTSkip("no display in this session")
+    }
+    let window = makeShellWindow()
+    window.title = OMIApp.currentWindowTitle
+    // Strand it: a frame whose overlap with every display is a corner sliver.
+    let visible = screen.visibleFrame
+    window.setFrame(
+      NSRect(x: visible.maxX - 24, y: visible.minY - 680, width: 960, height: 712), display: false)
+    NonintrusiveTestWindow.orderIn(window, preserveFrame: true)
+    defer { window.orderOut(nil) }
+    try XCTSkipIf(
+      !window.isVisible, "session cannot order windows in; recovery is untestable here")
+
+    ShellSummon.recoverStrandedFrameIfNeeded()
+
+    XCTAssertTrue(
+      ShellSummonPlacement.isMeaningfullyOnScreen(
+        window.frame, visibleFrames: NSScreen.screens.map(\.visibleFrame)),
+      "recovery must land the shell where its controls are reachable")
+  }
+
+  @MainActor
   private func makeShellWindow() -> NSWindow {
     NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 960, height: 700),

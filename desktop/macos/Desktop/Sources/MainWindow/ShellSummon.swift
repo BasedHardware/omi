@@ -68,6 +68,23 @@ enum ShellSummonPlacement {
     return clamped(NSRect(origin: remembered.origin, size: size), into: visibleFrame)
   }
 
+  /// The least of a shell a person can actually use: enough visible surface to read the panel and
+  /// press its controls. Anything less is a stranded window — a sliver in a corner from a frame
+  /// restored across a display change (or persisted by an automation park), whose buttons exist at
+  /// coordinates no screen shows. The sign-in window shipped exactly that: restored to a 24×32
+  /// corner sliver, its "Continue" buttons unclickable at any version (#11374 follow-up).
+  static let minimumUsableOverlap = NSSize(width: 320, height: 240)
+
+  /// Whether a frame is meaningfully on some display — not merely intersecting an edge.
+  static func isMeaningfullyOnScreen(
+    _ frame: NSRect, visibleFrames: [NSRect], minimumOverlap: NSSize = minimumUsableOverlap
+  ) -> Bool {
+    visibleFrames.contains { visible in
+      let overlap = visible.intersection(frame)
+      return overlap.width >= minimumOverlap.width && overlap.height >= minimumOverlap.height
+    }
+  }
+
   /// Whether this summon should place the window at all.
   ///
   /// `false` is the interesting answer: a shell already up on the display you are on is a shell you
@@ -397,12 +414,42 @@ enum ShellSummon {
   /// callback: an observer block delivered on the main queue is still a non-isolated closure, so
   /// reading an `NSWindow` out of the notification would be a `sending` race. Passing the window as
   /// the observed object keeps the filtering in `NotificationCenter`, where it is free and safe.
+  /// Re-place a visible shell whose frame no display meaningfully shows.
+  ///
+  /// Restored frames outlive the arrangement that produced them: a display unplugs, a resolution
+  /// changes, or an automation park's corner frame gets persisted — and the next launch restores a
+  /// window whose controls exist off every screen, with no affordance to recover it (the sign-in
+  /// window has no rail, no hotkey and no drag handle a user can reach). Automation presentations
+  /// park deliberately and are exempt; `normal` mode is the user's window and must be reachable.
+  static func recoverStrandedFrameIfNeeded() {
+    guard DesktopAutomationWindowPresentation.currentMode == .normal else { return }
+    guard let window = shellWindow(), window.isVisible else { return }
+    let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+    guard !visibleFrames.isEmpty,
+      !ShellSummonPlacement.isMeaningfullyOnScreen(window.frame, visibleFrames: visibleFrames)
+    else { return }
+    guard let screen = ActiveDisplay.screen() ?? NSScreen.main ?? NSScreen.screens.first else { return }
+    window.setFrame(landingFrame(on: screen), display: true)
+    window.makeKeyAndOrderFront(nil)
+    rememberFrame(of: window)
+  }
+
   private static func rebind(to window: NSWindow) {
     let center = NotificationCenter.default
     for observer in observers { center.removeObserver(observer) }
     observers.removeAll()
     unregisterEscapeRoute()
     boundWindow = window
+    recoverStrandedFrameIfNeeded()
+    for name in [
+      NSApplication.didBecomeActiveNotification,
+      NSApplication.didChangeScreenParametersNotification,
+    ] {
+      observers.append(
+        center.addObserver(forName: name, object: nil, queue: .main) { _ in
+          MainActor.assumeIsolated { recoverStrandedFrameIfNeeded() }
+        })
+    }
     for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
       observers.append(
         center.addObserver(forName: name, object: window, queue: .main) { _ in
@@ -430,11 +477,17 @@ enum ShellSummon {
     // Onboarding completion and sign-out are both `UserDefaults` writes, so this is the one signal
     // that covers the switch in either direction. Re-dressing only on a real change keeps it off the
     // hot path of every other `@AppStorage` write in the app.
+    // `queue: nil` + explicit hop, never `queue: .main`: notification delivery to queue-based
+    // observers is synchronous, so a main-queue observer makes every background
+    // `UserDefaults.set` wait on the main thread — which deadlocked the app when an auth commit
+    // held the session fence while posting and the main thread wanted that fence (#11374).
     observers.append(
-      center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
-        MainActor.assumeIsolated {
-          guard let window = shellWindow(), presentation() != appliedPresentation else { return }
-          applyPresentation(to: window)
+      center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: nil) { _ in
+        DispatchQueue.main.async {
+          MainActor.assumeIsolated {
+            guard let window = shellWindow(), presentation() != appliedPresentation else { return }
+            applyPresentation(to: window)
+          }
         }
       })
   }
