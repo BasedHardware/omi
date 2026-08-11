@@ -237,6 +237,7 @@ export function dispatchProductionCommand(
   for (const command of commands) {
     const chords = command.chord ? [command.chord] : command.chords ?? [];
     if (chords.length === 0 || !chords.some((chord) => chordMatches(event, chord))) continue;
+    if (context.paletteOpen && command.id !== "close-command-palette") continue;
     if (!commandAppliesToRoute(command, context.activeRoute)) continue;
     const textEntry = isTextEntryTarget(event.target);
     if (textEntry && command.textEntryPolicy === "ignore") continue;

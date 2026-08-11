@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
+import { createElement, useState } from "react";
 
 import { EN_MESSAGES } from "@omi-core/i18n";
 import {
@@ -137,7 +138,12 @@ test("registry IDs stay unique and every integrated handler has one definition",
 
 test("command help exposes accurate landmarks, labels, chords, and focus restoration", async () => {
   const ProductionChrome = await loadProductionExport("ProductionChrome.tsx", "ProductionChrome");
-  const rendered = await renderComponent(ProductionChrome, { locale: "en", active: "home", placement: "top" });
+  const Fixture = () => createElement("main", { className: "production-shell", "data-production-shell": "true" },
+    createElement(ProductionChrome, { locale: "en", active: "home", placement: "top" }),
+    createElement("section", { className: "fixture-page" }, createElement("button", { type: "button" }, "Page action")),
+    createElement(ProductionChrome, { locale: "en", active: "home", placement: "bottom" }),
+  );
+  const rendered = await renderComponent(Fixture, {});
   try {
     const primary = rendered.container.querySelector(`nav[aria-label="${EN_MESSAGES["nav.primary"]}"]`);
     assert.ok(primary);
@@ -176,11 +182,104 @@ test("command help exposes accurate landmarks, labels, chords, and focus restora
       rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
     assert.equal(rendered.window.document.activeElement, trigger, "closing help restores trigger focus");
-    assert.equal(primaryNav?.getAttribute("aria-hidden"), null, "closing help restores the background landmark");
-    assert.equal(primaryNav?.inert, false, "closing help restores background interaction");
+    const restoredPrimaryNav = rendered.container.querySelector(`nav[aria-label="${EN_MESSAGES["nav.primary"]}"]`);
+    assert.equal(restoredPrimaryNav?.getAttribute("aria-hidden"), null, "closing help restores the background landmark");
+    assert.equal(restoredPrimaryNav?.inert, false, "closing help restores background interaction");
 
     const mobileLabels = rendered.container.querySelector(".nav-mobile")?.textContent ?? "";
     for (const label of ["Home", "Conversations", "Tasks"]) assert.match(mobileLabels, new RegExp(label));
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("modal command help isolates page controls and restores shell state on close paths", async () => {
+  const ProductionChrome = await loadProductionExport("ProductionChrome.tsx", "ProductionChrome");
+  const dispatch = await loadProductionExport("command-registry.ts", "dispatchProductionCommand");
+  const createRegistry = await loadProductionExport("command-registry.ts", "createProductionCommandRegistry");
+  let pageClicks = 0;
+  let inputEvents = 0;
+  let unmountTop = () => undefined;
+  const Fixture = () => {
+    const [showTop, setShowTop] = useState(true);
+    unmountTop = () => setShowTop(false);
+    return createElement("main", { className: "production-shell", "data-production-shell": "true" },
+      showTop ? createElement(ProductionChrome, { locale: "en", active: "home", placement: "top" }) : null,
+      createElement("section", { className: "fixture-page" },
+        createElement("button", { type: "button", onClick: () => { pageClicks += 1; } }, "Page action"),
+        createElement("input", { onInput: () => { inputEvents += 1; } }),
+      ),
+      createElement(ProductionChrome, { locale: "en", active: "home", placement: "bottom" }),
+    );
+  };
+  const rendered = await renderComponent(Fixture, {});
+  try {
+    const shell = rendered.container.querySelector("[data-production-shell='true']");
+    const page = shell?.querySelector(".fixture-page");
+    const pageButton = page?.querySelector("button");
+    const pageInput = page?.querySelector("input");
+    const bottomNav = shell?.querySelector(".production-nav-bottom");
+    const bottomLink = bottomNav?.querySelector("a");
+    assert.ok(shell && page && pageButton && pageInput && bottomNav && bottomLink);
+    const priorPageAria = "false";
+    const priorPageInert = true;
+    page.setAttribute("aria-hidden", priorPageAria);
+    page.inert = priorPageInert;
+    bottomNav.setAttribute("aria-hidden", "false");
+    bottomNav.inert = true;
+    bottomLink.addEventListener("click", () => { pageClicks += 1; });
+
+    const trigger = rendered.container.querySelector("button.command-discovery-trigger");
+    assert.ok(trigger);
+    await rendered.act(async () => { trigger.click(); });
+    const dialog = rendered.container.querySelector('[role="dialog"]');
+    const topNav = rendered.container.querySelector(`nav[aria-label="${EN_MESSAGES["nav.primary"]}"]`);
+    const backdrop = rendered.container.querySelector(".command-palette-backdrop");
+    assert.ok(dialog && topNav && backdrop);
+    assert.equal(page.getAttribute("aria-hidden"), "true");
+    assert.equal(page.inert, true);
+    assert.equal(bottomNav.getAttribute("aria-hidden"), "true");
+    assert.equal(bottomNav.inert, true);
+    assert.equal(topNav.getAttribute("aria-hidden"), "true");
+    pageButton.click();
+    pageInput.dispatchEvent(new rendered.window.Event("input", { bubbles: true, cancelable: true }));
+    bottomLink.click();
+    assert.equal(pageClicks, 0, "inert page and bottom navigation reject programmatic pointer activation");
+    assert.equal(inputEvents, 0, "inert page rejects programmatic input events");
+    pageInput.focus();
+    assert.equal(rendered.window.document.activeElement, dialog, "focus cannot escape the modal shell");
+    const blockedCommand = new rendered.window.KeyboardEvent("keydown", { key: "n", ctrlKey: true, bubbles: true });
+    assert.equal(dispatch(blockedCommand, createRegistry(), {
+      activeRoute: "tasks",
+      navigate: () => undefined,
+      handlers: { "new-task": () => { pageClicks += 1; } },
+      paletteOpen: true,
+    }), false, "background command dispatch is disabled while modal help is open");
+
+    await rendered.act(async () => {
+      rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    assert.equal(page.getAttribute("aria-hidden"), priorPageAria);
+    assert.equal(page.inert, priorPageInert);
+    assert.equal(bottomNav.getAttribute("aria-hidden"), "false");
+    assert.equal(bottomNav.inert, true);
+
+    await rendered.act(async () => { trigger.click(); });
+    const reopenedBackdrop = rendered.container.querySelector(".command-palette-backdrop");
+    assert.ok(reopenedBackdrop);
+    await rendered.act(async () => {
+      reopenedBackdrop.dispatchEvent(new rendered.window.MouseEvent("mousedown", { bubbles: true }));
+    });
+    assert.equal(page.getAttribute("aria-hidden"), priorPageAria, "backdrop close restores page semantics");
+    assert.equal(page.inert, priorPageInert, "backdrop close restores page inert state");
+
+    await rendered.act(async () => { trigger.click(); });
+    assert.ok(rendered.container.querySelector(".command-palette-backdrop"));
+    await rendered.act(async () => { unmountTop(); });
+    assert.equal(page.getAttribute("aria-hidden"), priorPageAria, "unmount restores page semantics");
+    assert.equal(page.inert, priorPageInert, "unmount restores page inert state");
+    assert.equal(bottomNav.getAttribute("aria-hidden"), "false", "unmount restores bottom nav semantics");
+    assert.equal(bottomNav.inert, true, "unmount restores bottom nav inert state");
   } finally {
     await rendered.cleanup();
   }
