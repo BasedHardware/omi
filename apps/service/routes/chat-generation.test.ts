@@ -31,6 +31,7 @@ import {
   type ChatGenerationScheduler,
   type ChatGenerationSource,
 } from "../chat/generation-source";
+import type { ChatGenerationLivenessPolicy } from "../chat/generation-supervisor";
 import type { ChatGenerationStreamPolicy } from "./chat-messages";
 import type { ChatGenerationFrame } from "../stores/chat-generation-events-store";
 import type { ChatGenerationEventsStore } from "../stores/chat-generation-events-store";
@@ -67,6 +68,7 @@ const boot = (
   generationContext: ChatGenerationContextSource = createEmptyChatGenerationContextSource(),
   generationStreamPolicy?: ChatGenerationStreamPolicy,
   generationStreamScheduler?: ChatGenerationScheduler,
+  generationLiveness?: ChatGenerationLivenessPolicy,
 ) => {
   const db = new Database(":memory:");
   const local = createLocalDevService({
@@ -80,6 +82,7 @@ const boot = (
     generationContext,
     generationStreamPolicy,
     generationStreamScheduler,
+    generationLiveness,
   });
   return { db, local, stores };
 };
@@ -1643,6 +1646,45 @@ describe("ratified chat generation wire red proofs", () => {
     expect(heartbeat.done).toBe(false);
     expect(new TextDecoder().decode(heartbeat.value)).toContain(": heartbeat");
     await reader.cancel();
+    db.close();
+  });
+
+  test("scheduler cleanup faults stay inside the callback boundary and still fail once", async () => {
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        queueMicrotask(() => input.onComplete());
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const scheduler: ChatGenerationScheduler = Object.freeze({
+      setTimeout(callback): symbol {
+        queueMicrotask(callback);
+        return Symbol("timer");
+      },
+      clearTimeout(): void {
+        throw new Error("injected timer cleanup fault");
+      },
+    });
+    const { db, local, stores } = boot(
+      createInMemoryLocalServiceStores(),
+      source,
+      "chat-scheduler-cleanup-proof",
+      createEmptyChatGenerationContextSource(),
+      undefined,
+      scheduler,
+      {
+        firstEventDeadlineMs: 10,
+        maxRunDurationMs: 20,
+        heartbeatIntervalMs: 0,
+        cancelGraceMs: 0,
+      },
+    );
+    const { admission, eventsResponse } = await admitAndOpen(local, create("scheduler-cleanup"));
+    const frames = parseSse(await eventsResponse.text());
+    expect(frames.at(-1)?.event).toBe("failed");
+    expect(stores.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)
+      ?.filter((event) => ["done", "failed", "cancelled"].includes(event.frame.kind))).toHaveLength(1);
+    expect((await history(local)).filter((message) => message.sender === "ai")).toHaveLength(0);
     db.close();
   });
 });

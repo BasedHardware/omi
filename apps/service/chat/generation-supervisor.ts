@@ -340,7 +340,13 @@ export const createChatGenerationSupervisor = (
   };
 
   const clearTimer = (handle: unknown | null): void => {
-    if (handle !== null) scheduler.clearTimeout(handle);
+    if (handle === null) return;
+    try {
+      scheduler.clearTimeout(handle);
+    } catch {
+      // A scheduler is an injected seam; timer cleanup must never escape a
+      // provider callback or prevent durable terminalization.
+    }
   };
 
   const clearLivenessTimers = (state: ActiveGeneration): void => {
@@ -698,12 +704,22 @@ export const createChatGenerationSupervisor = (
               }
             },
             onComplete(): void {
-              markProviderEvent(state);
-              void finalize(state, "done", state.text);
+              try {
+                if (state.terminal) return;
+                markProviderEvent(state);
+                void finalize(state, "done", state.text);
+              } catch {
+                void finalize(state, "failed", "", defaultFailure("callback"));
+              }
             },
             onError(error): void {
-              markProviderEvent(state);
-              void finalize(state, "failed", "", classifyFailure(error, "provider"));
+              try {
+                if (state.terminal) return;
+                markProviderEvent(state);
+                void finalize(state, "failed", "", classifyFailure(error, "provider"));
+              } catch {
+                void finalize(state, "failed", "", defaultFailure("callback"));
+              }
             },
           });
           state.run = run;
