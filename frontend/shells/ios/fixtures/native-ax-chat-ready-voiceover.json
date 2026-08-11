@@ -1,13 +1,13 @@
 {
-  "schema": "omi.native-ios-semantic-supplementary/v1",
-  "kind": "supplementary_semantic",
+  "schema": "omi.polish.matrix-coordinate/v1",
+  "kind": "ax_snapshot",
   "domain": "chat",
   "shell": "ios",
   "state": "ready",
   "theme": "light",
-  "width": "compact",
-  "accessibility": "none",
-  "run_id": "ios-semantic-chat-ready-20260811",
+  "width": "regular",
+  "accessibility": "voiceover",
+  "run_id": "ios-ax-chat-ready-voiceover-20260811",
   "capture_class": "native_fixture",
   "source_tier": "native_shell",
   "source_shas": {
@@ -15,8 +15,8 @@
     "platform": "7a2d37808521d7225dcc75a6e76bb1f02ce9e9e2"
   },
   "viewport": {
-    "width": 402,
-    "height": 874,
+    "width": 834,
+    "height": 1194,
     "scale": 3
   }
 }
