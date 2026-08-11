@@ -1,0 +1,3 @@
+{
+  "change": "Improved microphone recovery so a reset cannot process audio captured before the reset"
+}
