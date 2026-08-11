@@ -5,7 +5,7 @@ import type { ProvisionalClaim } from "../../core/schema";
 import { predicateIdForName } from "../../core/consolidate/predicate-identity";
 import { SqliteLedger } from "../sqlite";
 import { DeterministicFakeModel } from "./port";
-import { commitSessionStmToLtmTransition } from "./stm-ltm-transition";
+import { commitSessionStmToLtmTransition, planSessionStmToLtmTransition } from "./stm-ltm-transition";
 
 test("I1 commits event and evidence with a session transition so later claims are live", async () => {
   const identity = { namespace_instance_ref: "device", local_key: "owner", producer: { producer_ref: "producer", contract_ref: "contract" }, asserted_identity: { domain: "person", scope_ref: "owner" } };
@@ -16,6 +16,10 @@ test("I1 commits event and evidence with a session transition so later claims ar
   const model = new DeterministicFakeModel((request) => request.strategy === "mention-local-handle" ? { mentions: [{ claim_revision_id: "p", slot_id: "speaker", surface: "I", evidence_id: "e", antecedent_handle: null }] } : request.strategy === "local-handle-durable-entity" ? { decision: "same", entity_id: "entity:owner" } : request.strategy === "scope-role-binding" ? { bindings: { speaker: "entity:owner" }, scope: { locality: "durable", scope_ref: "global" } } : { decision: "accept_ltm" });
   const ledger = new SqliteLedger(new Database(":memory:"));
   const request = { ledger, model, session_id: "session", formation_work_id: "work:session:event:v1", owner_account_id: "owner", graph_frontier: 0, provisionals: [claim], entities: [{ entity_id: "entity:owner", owner_account_id: "owner", entity_revision_id: "entity:owner:r1", handle: "owner", labels: ["Owner"] }], evidence, events: [event], valid_times: { p: { typed_expression: { kind: "absolute" as const, granularity: "instant" as const, value: "2026-01-01T00:00:00Z" }, resolved_interval: { kind: "instant" as const, start: "2026-01-01T00:00:00Z", end: "2026-01-01T00:00:00Z", timezone: "UTC", granularity: "instant" as const }, derivation: { resolver_version: "test", timezone: "UTC" } } }, parent_commit: null, versions: { strategy_version: "test", model_version: "fake", prompt_version: "test", policy_version: "test", code_version: "test", schema_version: "test", tokenizer_version: "test", tool_version: "test" }, identity_authorizations: [authorization], identity_authority_context: { owner_confirmations: [{ confirmation_ref: "confirm", owner_account_id: "owner", endpoints: authorization.endpoints, relation: "same" as const }], producer_assertions: [], standing_policies: [] } };
+  const { ledger: _ledger, ...planning } = request;
+  const planned = await planSessionStmToLtmTransition(planning);
+  expect(planned.revisions.some((revision) => revision.kind === "claim" && revision.placement_status === "canonical")).toBe(true);
+  expect(ledger.snapshot("owner").claims).toEqual([]);
   await commitSessionStmToLtmTransition(request);
   await expect(commitSessionStmToLtmTransition({ ...request, identity_authorizations: [] })).rejects.toThrow("formation work id reused with changed input or versions");
   await expect(commitSessionStmToLtmTransition({ ...request, identity_authority_context: { owner_confirmations: [], producer_assertions: [], standing_policies: [] } })).rejects.toThrow("formation work id reused with changed input or versions");

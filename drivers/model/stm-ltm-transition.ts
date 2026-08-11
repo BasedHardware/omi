@@ -34,6 +34,8 @@ export interface SessionStmLtmRequest {
   identity_authority_context?: IdentityAuthorityContext;
 }
 
+export type SessionStmLtmPlanningRequest = Omit<SessionStmLtmRequest, "ledger">;
+
 const sessionWorkCoordinate = (owner: string, session: string, work: string): string =>
   sha256CanonicalRedacted({ owner, session, work });
 const sessionKey = (coordinate: string) => `cold-session:${coordinate}`;
@@ -45,7 +47,7 @@ const unscopedIdentity = (session: string, mention: Mention): SourceIdentityRef 
   asserted_identity: { domain: null, scope_ref: null },
 });
 
-const sourceIdentityForMention = (request: SessionStmLtmRequest, mention: Mention): SourceIdentityRef =>
+const sourceIdentityForMention = (request: SessionStmLtmPlanningRequest, mention: Mention): SourceIdentityRef =>
   // Mention planning is the authority boundary: only the observed speaker slot
   // receives the evidence producer coordinate. Reloading the evidence-wide
   // identity here upgraded every named bystander or repaired speaker slot into
@@ -53,11 +55,7 @@ const sourceIdentityForMention = (request: SessionStmLtmRequest, mention: Mentio
   mention.source_identity_ref ?? unscopedIdentity(request.session_id, mention);
 const revisionContent = (revision: AtomicGraphTransition["revisions"][number]) => revision.kind === "claim" ? revision.claim : revision.kind === "event" ? revision.event : revision.kind === "evidence" ? revision.evidence : revision.kind === "mention" ? revision.mention : revision.kind === "identity_authorization" ? revision.authorization : revision.kind === "coreference_support" ? revision.support : revision.kind === "entity" ? revision.entity : revision.kind === "identity" ? revision.constraint : revision.kind === "predicate" ? revision.predicate : revision.assertion;
 
-/**
- * The cold-run transition boundary: it makes all decisions first, constructs
- * canonical facts from those outputs, then writes the whole session once.
- */
-export const commitSessionStmToLtmTransition = async (request: SessionStmLtmRequest): Promise<{ commit_id: string; sequence: number; idempotent: boolean }> => {
+const sessionPreflight = (request: SessionStmLtmPlanningRequest) => {
   if (!request.session_id || !request.formation_work_id || !request.owner_account_id) throw new Error("session transition requires stable session, formation work, and owner ids");
   const coordinate = sessionWorkCoordinate(request.owner_account_id, request.session_id, request.formation_work_id);
   const key = sessionKey(coordinate);
@@ -93,13 +91,15 @@ export const commitSessionStmToLtmTransition = async (request: SessionStmLtmRequ
     versions: request.versions,
     success_kind: "successful_empty",
   });
-  const prior = request.ledger.findCommitByIdempotencyKey(key);
-  // Resume before any model edge only when both inputs and every strategy
-  // coordinate are identical. Reusing a work id with changed content is loud.
-  if (prior) {
-    if (prior.input_version_digest !== preflight.commit.input_version_digest) throw new Error(`formation work id reused with changed input or versions: ${request.formation_work_id}`);
-    return { commit_id: prior.commit_id, sequence: prior.sequence, idempotent: true };
-  }
+  return { coordinate, key, inputRevisions, preflight };
+};
+
+/**
+ * The cold-run transition boundary: it makes all decisions first, constructs
+ * canonical facts from those outputs, then writes the whole session once.
+ */
+export const planSessionStmToLtmTransition = async (request: SessionStmLtmPlanningRequest): Promise<AtomicGraphTransition> => {
+  const { coordinate, key, inputRevisions } = sessionPreflight(request);
 
   const mentioned = await invokeClaimMentionStrategy(request.model, request.owner_account_id, request.provisionals, request.evidence);
   const mentions: Mention[] = [];
@@ -160,7 +160,7 @@ export const commitSessionStmToLtmTransition = async (request: SessionStmLtmRequ
     } else mentions.push(source);
   }
 
-  const revisions: AtomicGraphTransition["revisions"] = [];
+  const revisions: AtomicGraphTransition["revisions"][number][] = [];
   // One predicate id spans all observations of a normalized relation name;
   // optional semantic roles produce immutable sibling revisions. Keying this
   // map by predicate id would silently discard a second role set in one session.
@@ -183,10 +183,10 @@ export const commitSessionStmToLtmTransition = async (request: SessionStmLtmRequ
     if (request.events && !eventsByRevision.has(evidence.event_revision_id)) throw new Error(`evidence lacks committed event revision: ${evidence.evidence_id}`);
     revisions.push({ kind: "evidence", revision_id: `evidence-revision:${evidence.evidence_id}`, evidence });
   }
-  const adjacency: AtomicGraphTransition["adjacency"] = [];
-  const results: AtomicGraphTransition["placement"]["results"] = [];
+  const adjacency: AtomicGraphTransition["adjacency"][number][] = [];
+  const results: AtomicGraphTransition["placement"]["results"][number][] = [];
   const allocations: Record<string, string> = {};
-  const artifacts: AtomicGraphTransition["artifacts"] = [...candidateArtifacts];
+  const artifacts: AtomicGraphTransition["artifacts"][number][] = [...candidateArtifacts];
   const admittedProvisionals = new Set<string>();
   const ownerEntityIds = new Set(sessionEntities.filter((entity) => entity.owner_account_id === request.owner_account_id).map((entity) => entity.entity_id));
   for (const provisional of request.provisionals) {
@@ -242,5 +242,18 @@ export const commitSessionStmToLtmTransition = async (request: SessionStmLtmRequ
     output_revisions: revisions.map((revision) => ({ revision_id: revision.revision_id, content: revisionContent(revision) })),
     versions: request.versions, success_kind: allocations && Object.keys(allocations).length ? "success" : "successful_empty",
   });
-  return request.ledger.appendTransitionPlan({ placement: { offline_experiment: true, allocations, results }, derivation, revisions, adjacency, artifacts, identity_authority_context: request.identity_authority_context });
+  return { placement: { offline_experiment: true, allocations, results }, derivation, revisions, adjacency, artifacts, identity_authority_context: request.identity_authority_context };
+};
+
+export const commitSessionStmToLtmTransition = async (request: SessionStmLtmRequest): Promise<{ commit_id: string; sequence: number; idempotent: boolean }> => {
+  const { key, preflight } = sessionPreflight(request);
+  const prior = request.ledger.findCommitByIdempotencyKey(key);
+  // Resume before any model edge only when both inputs and every strategy
+  // coordinate are identical. Reusing a work id with changed content is loud.
+  if (prior) {
+    if (prior.input_version_digest !== preflight.commit.input_version_digest) throw new Error(`formation work id reused with changed input or versions: ${request.formation_work_id}`);
+    return { commit_id: prior.commit_id, sequence: prior.sequence, idempotent: true };
+  }
+  const { ledger, ...planning } = request;
+  return ledger.appendTransitionPlan(await planSessionStmToLtmTransition(planning));
 };
