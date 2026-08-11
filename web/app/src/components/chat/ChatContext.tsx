@@ -8,6 +8,9 @@ import {
   useMemo,
   ReactNode,
 } from 'react';
+import { useChat as useChatSession } from '@/hooks/useChat';
+
+type SharedChat = ReturnType<typeof useChatSession>;
 
 interface ChatContext {
   // Panel state
@@ -27,9 +30,11 @@ interface ChatContext {
    */
   selectedChatSessionId: string | null;
   selectChatSession: (sessionId: string | null) => void;
+  chat: SharedChat;
 
   // App-specific chat (for notification routing)
   selectedAppId: string | null;
+  selectApp: (appId: string | null) => void;
   openChatWithApp: (appId: string) => void;
   clearAppContext: () => void;
 }
@@ -48,6 +53,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [currentContext, setCurrentContext] = useState<ChatContextInfo | null>(null);
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [selectedChatSessionId, setSelectedChatSessionId] = useState<string | null>(null);
+  const chat = useChatSession({
+    appId: selectedAppId ?? undefined,
+    chatSessionId: selectedChatSessionId,
+  });
 
   const openChat = useCallback(() => setIsOpen(true), []);
   const closeChat = useCallback(() => setIsOpen(false), []);
@@ -59,6 +68,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const selectChatSession = useCallback((sessionId: string | null) => {
     setSelectedChatSessionId(sessionId);
+  }, []);
+
+  const selectApp = useCallback((appId: string | null) => {
+    setSelectedAppId(appId);
   }, []);
 
   // Open chat with a specific app context
@@ -83,7 +96,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setContext,
       selectedChatSessionId,
       selectChatSession,
+      chat,
       selectedAppId,
+      selectApp,
       openChatWithApp,
       clearAppContext,
     }),
@@ -96,7 +111,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setContext,
       selectedChatSessionId,
       selectChatSession,
+      chat,
       selectedAppId,
+      selectApp,
       openChatWithApp,
       clearAppContext,
     ],

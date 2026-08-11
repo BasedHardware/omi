@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from '@tschk/moonshine-next/navigation';
-import Link from 'next/link';
+import Link from '@tschk/moonshine-next/link';
 import { AppForm } from '@/components/apps/AppForm';
 import { getApp } from '@/lib/api';
 import type { App } from '@/types/apps';

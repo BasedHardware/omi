@@ -17,6 +17,7 @@ const LIMIT = 20;
 export interface UseHomeTasksReturn {
   items: ActionItem[];
   loading: boolean;
+  error: string | null;
   complete: (id: string) => Promise<void>;
 }
 
@@ -26,7 +27,7 @@ export function useHomeTasks(): UseHomeTasksReturn {
   // by it even though every other surface treats them as open. The unfiltered
   // list is active-first and includes those documents; openness is decided here
   // the same way the Tasks page decides it.
-  const { data, loading } = useAsyncResource('home:tasks', () =>
+  const { data, loading, error } = useAsyncResource('home:tasks', () =>
     getActionItems({ limit: LIMIT }),
   );
 
@@ -52,5 +53,5 @@ export function useHomeTasks(): UseHomeTasksReturn {
     }
   }, []);
 
-  return { items, loading, complete };
+  return { items, loading, error, complete };
 }

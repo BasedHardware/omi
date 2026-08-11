@@ -32,6 +32,7 @@ interface ChatComposerProps {
   /** Resolves once the send completes, so the caller can react to the first message. */
   onSend: (text: string, fileIds: string[]) => Promise<void>;
   isStreaming: boolean;
+  disabled?: boolean;
   appId?: string;
   placeholder?: string;
   /**
@@ -58,6 +59,7 @@ interface ChatComposerProps {
 export function ChatComposer({
   onSend,
   isStreaming,
+  disabled = false,
   appId,
   placeholder = 'Ask anything...',
   recording,
@@ -110,7 +112,8 @@ export function ChatComposer({
       // Update items with uploaded IDs
       setSelectedFiles((prev) =>
         prev.map((item) => {
-          const uploadedFile = uploadedFiles.find((f) => f.name === item.file.name);
+          const fileIndex = filesToAdd.indexOf(item.file);
+          const uploadedFile = fileIndex >= 0 ? uploadedFiles[fileIndex] : undefined;
           if (uploadedFile) {
             return { ...item, uploading: false, uploadedId: uploadedFile.id };
           }
@@ -151,7 +154,12 @@ export function ChatComposer({
 
   const handleSend = async () => {
     const text = input;
-    if (!text.trim() || isStreaming) return;
+    if (
+      (!text.trim() && !selectedFiles.some((item) => item.uploadedId)) ||
+      disabled ||
+      isStreaming
+    )
+      return;
 
     // Get file IDs from uploaded files
     const fileIds = selectedFiles
@@ -176,6 +184,7 @@ export function ChatComposer({
 
   const canSend =
     (input.trim() || selectedFiles.some((f) => f.uploadedId)) &&
+    !disabled &&
     !isStreaming &&
     !isUploading;
 
@@ -198,7 +207,7 @@ export function ChatComposer({
           <FilePreview
             files={selectedFiles}
             onRemove={handleRemoveFile}
-            disabled={isStreaming}
+            disabled={disabled || isStreaming}
           />
         </div>
       )}
@@ -211,7 +220,7 @@ export function ChatComposer({
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        disabled={isStreaming}
+        disabled={disabled || isStreaming}
         rows={1}
         className={cn(
           'no-scrollbar w-full resize-none bg-transparent px-5 pt-4',
@@ -226,7 +235,7 @@ export function ChatComposer({
         {/* File attach button */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={isStreaming || selectedFiles.length >= MAX_FILES}
+          disabled={disabled || isStreaming || selectedFiles.length >= MAX_FILES}
           className={iconButton}
           title={
             selectedFiles.length >= MAX_FILES ? `Max ${MAX_FILES} files` : 'Attach file'
@@ -247,7 +256,7 @@ export function ChatComposer({
         {/* Dictation: types for you. */}
         <InlineVoiceRecorder
           onTranscript={handleVoiceTranscript}
-          disabled={isStreaming}
+          disabled={disabled || isStreaming}
         />
 
         <div className="flex-1" />
@@ -258,7 +267,7 @@ export function ChatComposer({
         {recording && (
           <button
             onClick={recording.isActive ? recording.onStop : recording.onStart}
-            disabled={recording.disabled}
+            disabled={disabled || recording.disabled}
             className={cn(
               iconButton,
               recording.isActive &&

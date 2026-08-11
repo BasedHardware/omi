@@ -13,9 +13,9 @@ import type { Goal } from '@/types/goals';
 
 interface GoalCardProps {
   goal: Goal;
-  onSetProgress: (id: string, currentValue: number) => Promise<void>;
-  onRename: (id: string, title: string) => Promise<void>;
-  onRemove: (id: string) => Promise<void>;
+  onSetProgress: (id: string, currentValue: number) => Promise<boolean | void>;
+  onRename: (id: string, title: string) => Promise<boolean | void>;
+  onRemove: (id: string) => Promise<boolean | void>;
   onOpen: (goal: Goal) => void;
 }
 

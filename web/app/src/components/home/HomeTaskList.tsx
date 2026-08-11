@@ -20,10 +20,11 @@ const VISIBLE = 4;
 interface HomeTaskListProps {
   items: ActionItem[];
   loading: boolean;
+  error: string | null;
   onComplete: (id: string) => void;
 }
 
-export function HomeTaskList({ items, loading, onComplete }: HomeTaskListProps) {
+export function HomeTaskList({ items, loading, error, onComplete }: HomeTaskListProps) {
   if (loading) {
     return (
       <div className="w-full space-y-2">
@@ -32,6 +33,10 @@ export function HomeTaskList({ items, loading, onComplete }: HomeTaskListProps) 
         ))}
       </div>
     );
+  }
+
+  if (error) {
+    return <p className="text-center text-sm text-error">Could not load tasks.</p>;
   }
 
   if (items.length === 0) {

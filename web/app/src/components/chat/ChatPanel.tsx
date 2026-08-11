@@ -4,7 +4,6 @@ import { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Sparkles, Trash2, Brain, Paperclip, ArrowLeft } from 'lucide-react';
 import { useChat as useChatContext } from './ChatContext';
-import { useChat } from '@/hooks/useChat';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
 import { InlineVoiceRecorder } from './VoiceRecorder';
@@ -47,14 +46,8 @@ function getQuickPrompts(contextType: string | undefined): string[] {
 }
 
 export function ChatPanel() {
-  const {
-    isOpen,
-    closeChat,
-    currentContext,
-    selectedAppId,
-    selectedChatSessionId,
-    clearAppContext,
-  } = useChatContext();
+  const { isOpen, closeChat, currentContext, selectedAppId, chat, clearAppContext } =
+    useChatContext();
   const {
     messages,
     isLoading,
@@ -65,10 +58,7 @@ export function ChatPanel() {
     sendMessage,
     clearHistory,
     loadHistory,
-  } = useChat({
-    appId: selectedAppId || undefined,
-    chatSessionId: selectedChatSessionId,
-  });
+  } = chat;
 
   const [input, setInput] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
@@ -145,7 +135,8 @@ export function ChatPanel() {
       // Update items with uploaded IDs
       setSelectedFiles((prev) =>
         prev.map((item) => {
-          const uploadedFile = uploadedFiles.find((f) => f.name === item.file.name);
+          const fileIndex = filesToAdd.indexOf(item.file);
+          const uploadedFile = fileIndex >= 0 ? uploadedFiles[fileIndex] : undefined;
           if (uploadedFile) {
             return { ...item, uploading: false, uploadedId: uploadedFile.id };
           }
@@ -185,7 +176,8 @@ export function ChatPanel() {
   };
 
   const handleSend = async (text: string = input) => {
-    if (!text.trim() || isStreaming) return;
+    if ((!text.trim() && !selectedFiles.some((item) => item.uploadedId)) || isStreaming)
+      return;
 
     // Get file IDs from uploaded files
     const fileIds = selectedFiles

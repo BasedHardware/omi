@@ -9,27 +9,27 @@ import { restingMode } from '@/lib/homeStage';
  */
 describe('restingMode', () => {
   it('rests on the hub for an account with no history', () => {
-    expect(restingMode({ isLoading: false, messageCount: 0, isStreaming: false })).toBe(
-      'hub',
-    );
+    expect(
+      restingMode({ isLoading: false, hasMeaningfulHistory: false, isStreaming: false }),
+    ).toBe('hub');
   });
 
   it('opens straight into chat when history exists', () => {
-    expect(restingMode({ isLoading: false, messageCount: 3, isStreaming: false })).toBe(
-      'chat',
-    );
+    expect(
+      restingMode({ isLoading: false, hasMeaningfulHistory: true, isStreaming: false }),
+    ).toBe('chat');
   });
 
   it('holds the hub while history is still loading', () => {
     // A stale count during the fetch would otherwise flash an empty transcript.
-    expect(restingMode({ isLoading: true, messageCount: 3, isStreaming: false })).toBe(
-      'hub',
-    );
+    expect(
+      restingMode({ isLoading: true, hasMeaningfulHistory: true, isStreaming: false }),
+    ).toBe('hub');
   });
 
   it('moves to chat on the first send, before any message is stored', () => {
-    expect(restingMode({ isLoading: false, messageCount: 0, isStreaming: true })).toBe(
-      'chat',
-    );
+    expect(
+      restingMode({ isLoading: false, hasMeaningfulHistory: false, isStreaming: true }),
+    ).toBe('chat');
   });
 });

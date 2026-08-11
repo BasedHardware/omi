@@ -5,7 +5,6 @@ import Image from '@tschk/moonshine-next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Target } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { useChat } from '@/hooks/useChat';
 import { useChat as useChatContext } from '@/components/chat/ChatContext';
 import { useGoals } from '@/hooks/useGoals';
 import { useHomeTasks } from '@/hooks/useHomeTasks';
@@ -20,6 +19,7 @@ import { GoalDetailSheet } from './GoalDetailSheet';
 import { HomeTaskList } from './HomeTaskList';
 import { restingMode } from '@/lib/homeStage';
 import { cn } from '@/lib/utils';
+import { AppSelector } from '@/components/chat/AppSelector';
 
 /**
  * Home — the one place Omi answers from.
@@ -47,7 +47,7 @@ export function HomePage() {
   const { user } = useAuth();
   // Home renders the same transcript the panel does, so it reads the same
   // selected session rather than pinning itself to the shared thread.
-  const { selectedChatSessionId } = useChatContext();
+  const { chat, selectedAppId, selectApp } = useChatContext();
   const {
     messages,
     isLoading,
@@ -57,7 +57,7 @@ export function HomePage() {
     error,
     sendMessage,
     loadHistory,
-  } = useChat({ chatSessionId: selectedChatSessionId });
+  } = chat;
 
   const {
     state: recordingState,
@@ -74,10 +74,16 @@ export function HomePage() {
     recordingState === 'paused' ||
     recordingState === 'initializing';
 
-  const { items: tasks, loading: tasksLoading, complete: completeTask } = useHomeTasks();
+  const {
+    items: tasks,
+    loading: tasksLoading,
+    error: tasksError,
+    complete: completeTask,
+  } = useHomeTasks();
   const {
     goals,
     loading: goalsLoading,
+    error: goalsError,
     addGoal,
     editGoal,
     setProgress,
@@ -102,8 +108,10 @@ export function HomePage() {
     askRef.current?.focus();
   }, []);
 
-  const inChat =
-    restingMode({ isLoading, messageCount: messages.length, isStreaming }) === 'chat';
+  const hasMeaningfulHistory = messages.some(
+    (message) => message.sender === 'human' || message.from_external_integration,
+  );
+  const inChat = restingMode({ isLoading, hasMeaningfulHistory, isStreaming }) === 'chat';
 
   const handleSend = async (text: string, fileIds: string[]) => {
     await sendMessage(text, fileIds);
@@ -176,6 +184,7 @@ export function HomePage() {
                 <HomeTaskList
                   items={tasks}
                   loading={tasksLoading}
+                  error={tasksError}
                   onComplete={completeTask}
                 />
               </div>
@@ -185,7 +194,7 @@ export function HomePage() {
                   <button
                     key={prompt}
                     onClick={() => void handleSend(prompt, [])}
-                    disabled={isStreaming}
+                    disabled={isLoading || isStreaming}
                     className={cn(
                       'rounded-full px-4 py-2 text-sm',
                       'border border-stroke bg-bg-tertiary hover:bg-bg-quaternary',
@@ -248,6 +257,7 @@ export function HomePage() {
                     ))}
                   </ul>
                 )}
+                {goalsError && <p className="mt-3 text-sm text-error">{goalsError}</p>}
               </section>
             </motion.div>
           )}
@@ -277,6 +287,8 @@ export function HomePage() {
             ref={askRef}
             onSend={handleSend}
             isStreaming={isStreaming}
+            disabled={isLoading}
+            appId={selectedAppId ?? undefined}
             placeholder={
               isCapturing ? 'Ask about what you are recording...' : 'Ask anything...'
             }
@@ -286,6 +298,11 @@ export function HomePage() {
               onStart: () => void startRecording(),
               onStop: () => void stopRecording(),
             }}
+          />
+          <AppSelector
+            selectedAppId={selectedAppId}
+            onSelectApp={selectApp}
+            disabled={isLoading || isStreaming}
           />
         </div>
       </div>

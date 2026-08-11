@@ -12,7 +12,7 @@ import { GoalSparkline } from './GoalSparkline';
 interface GoalDetailSheetProps {
   goal: Goal | null;
   onClose: () => void;
-  onSave: (id: string, updates: UpdateGoalParams) => Promise<void>;
+  onSave: (id: string, updates: UpdateGoalParams) => Promise<boolean>;
 }
 
 export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps) {
@@ -22,6 +22,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
   const [unit, setUnit] = useState('');
   const [saving, setSaving] = useState(false);
   const [editedGoalId, setEditedGoalId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Reset the edit fields whenever a different goal is opened. Adjusting during
   // render rather than in an effect avoids showing the previous goal's values
@@ -43,9 +44,19 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
   const targetValid = isBoolean || (Number.isFinite(targetValue) && targetValue > 0);
   const canSave = dirty && title.trim().length > 0 && targetValid && !saving;
 
+  const close = () => {
+    setEditedGoalId(null);
+    setTitle('');
+    setTarget('');
+    setUnit('');
+    setSaveError(null);
+    onClose();
+  };
+
   const save = async () => {
     if (!canSave) return;
     setSaving(true);
+    setSaveError(null);
 
     // Send only what changed; the backend rejects an empty update with a 400.
     const updates: UpdateGoalParams = {};
@@ -53,15 +64,25 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
     if (targetChanged) updates.target_value = targetValue;
     if (unit.trim() !== (goal.unit ?? '')) updates.unit = unit.trim() || null;
 
-    await onSave(goal.id, updates);
-    setSaving(false);
-    onClose();
+    try {
+      const success = await onSave(goal.id, updates);
+      if (!success) {
+        setSaveError('Could not save this goal. Please try again.');
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+      close();
+    } catch {
+      setSaveError('Could not save this goal. Please try again.');
+      setSaving(false);
+    }
   };
 
   const delta = historyDelta(detail.history);
 
   return (
-    <Dialog.Root open onOpenChange={(next) => !next && onClose()}>
+    <Dialog.Root open onOpenChange={(next) => !next && close()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-card border border-stroke bg-bg-raised p-6">
@@ -177,6 +198,7 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
                 {saving ? 'Saving…' : 'Save changes'}
               </button>
             </div>
+            {saveError && <p className="mt-2 text-sm text-error">{saveError}</p>}
           </section>
         </Dialog.Content>
       </Dialog.Portal>

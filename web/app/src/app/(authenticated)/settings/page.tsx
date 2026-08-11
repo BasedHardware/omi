@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { SettingsPage } from '@/components/settings/SettingsPage';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function Settings() {
   useEffect(() => {
@@ -15,3 +16,5 @@ export default function Settings() {
     </div>
   );
 }
+
+registerMoonshineRoute('/settings', Settings, 'authenticated');

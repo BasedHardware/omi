@@ -21,9 +21,9 @@ export interface UseGoalsReturn {
   error: string | null;
   refresh: () => Promise<void>;
   addGoal: (params: CreateGoalParams) => Promise<Goal | null>;
-  editGoal: (id: string, updates: UpdateGoalParams) => Promise<void>;
-  setProgress: (id: string, currentValue: number) => Promise<void>;
-  removeGoal: (id: string) => Promise<void>;
+  editGoal: (id: string, updates: UpdateGoalParams) => Promise<boolean>;
+  setProgress: (id: string, currentValue: number) => Promise<boolean>;
+  removeGoal: (id: string) => Promise<boolean>;
 }
 
 function messageFor(err: unknown, fallback: string): string {
@@ -63,7 +63,7 @@ export function createGoalsStore() {
     apply: (goal: Goal) => Goal,
     request: () => Promise<Goal>,
     failureMessage: string,
-  ) => {
+  ): Promise<boolean> => {
     const previous = goals.peek().find((goal) => goal.id === id);
     goals.set((current) => current.map((goal) => (goal.id === id ? apply(goal) : goal)));
 
@@ -71,12 +71,14 @@ export function createGoalsStore() {
       const updated = await request();
       goals.set((current) => current.map((goal) => (goal.id === id ? updated : goal)));
       error.set(null);
+      return true;
     } catch (err) {
       console.error(failureMessage, err);
       if (previous) {
         goals.set((current) => current.map((goal) => (goal.id === id ? previous : goal)));
       }
       error.set(messageFor(err, failureMessage));
+      return false;
     }
   };
 
@@ -93,19 +95,21 @@ export function createGoalsStore() {
     }
   };
 
-  const remove = async (id: string) => {
+  const remove = async (id: string): Promise<boolean> => {
     const removed = goals.peek().find((goal) => goal.id === id);
     goals.set((current) => current.filter((goal) => goal.id !== id));
 
     try {
       await deleteGoal(id);
       error.set(null);
+      return true;
     } catch (err) {
       console.error('Failed to delete goal:', err);
       if (removed) {
         goals.set((current) => [...current, removed]);
       }
       error.set(messageFor(err, 'Failed to delete goal'));
+      return false;
     }
   };
 

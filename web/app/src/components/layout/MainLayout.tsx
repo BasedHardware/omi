@@ -7,20 +7,33 @@ import dynamic from '@tschk/moonshine-next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
 import { BottomNavigation } from './BottomNavigation';
-import { NotificationProvider, useNotificationContext } from '@/components/notifications/NotificationContext';
+import {
+  NotificationProvider,
+  useNotificationContext,
+} from '@/components/notifications/NotificationContext';
 import { HeaderRecordingIndicator } from '@/components/recording';
 import { getChatApps } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MemoriesPrefetcher } from '@/components/memories/MemoriesPrefetcher';
+import { ChatBubble } from '@/components/chat/ChatBubble';
 
 // Dynamic imports for panels - not visible on initial load
-const ChatPanel = dynamic(() => import('@/components/chat/ChatPanel').then(mod => ({ default: mod.ChatPanel })), {
-  ssr: false,
-});
+const ChatPanel = dynamic(
+  () => import('@/components/chat/ChatPanel').then((mod) => ({ default: mod.ChatPanel })),
+  {
+    ssr: false,
+  },
+);
 
-const NotificationCenter = dynamic(() => import('@/components/notifications/NotificationCenter').then(mod => ({ default: mod.NotificationCenter })), {
-  ssr: false,
-});
+const NotificationCenter = dynamic(
+  () =>
+    import('@/components/notifications/NotificationCenter').then((mod) => ({
+      default: mod.NotificationCenter,
+    })),
+  {
+    ssr: false,
+  },
+);
 
 /**
  * Handles routing from notification clicks to the appropriate panel.
@@ -89,10 +102,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
         <MemoriesPrefetcher />
         <div className="h-screen w-screen bg-bg-primary flex overflow-hidden">
           {/* Sidebar */}
-          <Sidebar
-            isOpen={sidebarOpen}
-            onClose={() => setSidebarOpen(false)}
-          />
+          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
           {/* Main content area - flex row to support push/slide panels */}
           <div className="flex-1 flex min-w-0 h-full overflow-hidden">
@@ -105,7 +115,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                     'flex-shrink-0',
                     'flex items-center gap-4 px-4 py-4 lg:px-8',
                     'bg-bg-primary/80 backdrop-blur-md',
-                    'border-b border-bg-tertiary'
+                    'border-b border-bg-tertiary',
                   )}
                 >
                   <MobileMenuButton onClick={() => setSidebarOpen(true)} />
@@ -168,6 +178,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
 
             {/* Notification center - push/slide from right */}
             <NotificationCenter />
+            {pathname !== '/home' && <ChatBubble />}
           </div>
 
           {/* Bottom navigation - mobile only */}

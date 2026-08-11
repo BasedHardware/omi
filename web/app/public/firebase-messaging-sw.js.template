@@ -85,7 +85,7 @@ self.addEventListener('notificationclick', (event) => {
       // - If yes: open chat panel with that app
       // - If no: open notification center (notification-only apps like Bitcoin)
       const appId = pathParts.pop();
-      targetUrl = `${self.location.origin}/?chatApp=${appId}`;
+      targetUrl = `${self.location.origin}/home?chatApp=${appId}`;
     } else {
       // Default: use the navigate_to path directly
       targetUrl = `${self.location.origin}${navigateTo}`;

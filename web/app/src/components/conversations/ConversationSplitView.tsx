@@ -198,6 +198,7 @@ export function ConversationSplitView() {
 
   // Track the previous URL conversation ID to detect when it changes
   const prevUrlConversationIdRef = useRef(urlConversationId);
+  const prevUrlRecapIdRef = useRef(urlRecapId);
 
   // Update selection when URL changes (e.g., navigating from a notification or bottom nav)
   useEffect(() => {
@@ -218,12 +219,30 @@ export function ConversationSplitView() {
 
   // A recap deep link resolves to the full recap once the list has loaded.
   useEffect(() => {
-    if (!urlRecapId) return;
+    const prevUrlRecapId = prevUrlRecapIdRef.current;
+    prevUrlRecapIdRef.current = urlRecapId;
+
+    if (!urlRecapId) {
+      if (prevUrlRecapId !== null) {
+        setSelectedRecap(null);
+        setSelection(null);
+        preventAutoSelect.current = true;
+      }
+      return;
+    }
+
     setSelection({ kind: 'recap', id: urlRecapId });
     preventAutoSelect.current = false;
     const known = recaps.find((r) => r.id === urlRecapId);
-    if (known) setSelectedRecap(known);
-  }, [urlRecapId, recaps]);
+    setSelectedRecap(known ?? null);
+    void getRecapDetail(urlRecapId).then((fullRecap) => {
+      if (fullRecap) {
+        setSelectedRecap((current) =>
+          current?.id === fullRecap.id ? fullRecap : current,
+        );
+      }
+    });
+  }, [urlRecapId, recaps, getRecapDetail]);
 
   // Determine if we're showing search results or regular list
   const isSearching = searchQuery.trim().length > 0;
@@ -304,13 +323,9 @@ export function ConversationSplitView() {
 
   // Conversations page first, then recaps, so one scroller drives both sources.
   const handleLoadMore = useCallback(() => {
-    if (!isSearching && hasMore) {
-      loadMore();
-      return;
-    }
-    if (!isSearching && recapsHasMore) {
-      loadMoreRecaps();
-    }
+    if (isSearching) return;
+    if (hasMore) void loadMore();
+    if (recapsHasMore) void loadMoreRecaps();
   }, [isSearching, hasMore, loadMore, recapsHasMore, loadMoreRecaps]);
 
   // Handle star toggle
@@ -820,7 +835,14 @@ export function ConversationSplitView() {
                     }}
                   />
                 ) : (
-                  <RecapDetailPanel recapId={selection.id} recap={selectedRecap} />
+                  <RecapDetailPanel
+                    recapId={selection.id}
+                    recap={selectedRecap}
+                    onBack={() => {
+                      setSelection(null);
+                      preventAutoSelect.current = true;
+                    }}
+                  />
                 )}
               </motion.div>
             </AnimatePresence>

@@ -62,6 +62,7 @@ export function ConnectedServices() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const loaded = await getIntegrations().catch(() => []);
@@ -82,21 +83,24 @@ export function ConnectedServices() {
     if (integration.coming_soon || loadingId) return;
 
     setLoadingId(integration.id);
+    setError(null);
     try {
       const authUrl = await getIntegrationOAuthUrl(integration.id);
-      if (authUrl) {
-        // Open OAuth URL in new window
-        window.open(authUrl, '_blank', 'width=600,height=700');
-        // Note: User will complete OAuth in the popup, then we need to refresh
-        // Set up a listener for when they return
-        const checkConnection = setInterval(async () => {
-          await refresh();
-        }, 3000);
-        // Stop checking after 2 minutes
-        setTimeout(() => clearInterval(checkConnection), 120000);
-      }
+      if (!authUrl) throw new Error('Could not start the connection.');
+      // Open OAuth URL in new window
+      window.open(authUrl, '_blank', 'width=600,height=700');
+      // Note: User will complete OAuth in the popup, then we need to refresh
+      // Set up a listener for when they return
+      const checkConnection = setInterval(async () => {
+        await refresh();
+      }, 3000);
+      // Stop checking after 2 minutes
+      setTimeout(() => clearInterval(checkConnection), 120000);
     } catch (error) {
       console.error('Failed to get OAuth URL:', error);
+      setError(
+        error instanceof Error ? error.message : 'Could not start the connection.',
+      );
     } finally {
       setLoadingId(null);
     }
@@ -112,6 +116,9 @@ export function ConnectedServices() {
       await refresh();
     } catch (error) {
       console.error('Failed to disconnect:', error);
+      setError(
+        error instanceof Error ? error.message : 'Could not disconnect the service.',
+      );
     } finally {
       setLoadingId(null);
     }
@@ -135,6 +142,7 @@ export function ConnectedServices() {
           {summary.connected} of {summary.available} connected
         </p>
       </div>
+      {error && <p className="text-sm text-error">{error}</p>}
       {isLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />

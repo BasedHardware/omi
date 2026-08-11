@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Brain, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -55,6 +55,13 @@ export function MemoryList({
   // Infinite scroll - trigger when approaching end of virtual items
   useEffect(() => {
     const virtualItems = virtualizer.getVirtualItems();
+    if (memories.length === 0 && hasMore && !loading && !loadingMore) {
+      setLoadingMore(true);
+      onLoadMore().finally(() => {
+        setLoadingMore(false);
+      });
+      return;
+    }
     if (!virtualItems.length) return;
 
     const lastItem = virtualItems[virtualItems.length - 1];
@@ -83,7 +90,7 @@ export function MemoryList({
   }, [highlightedMemoryId, memories, virtualizer]);
 
   // Empty state
-  if (!loading && memories.length === 0) {
+  if (!loading && !hasMore && memories.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <div className="w-16 h-16 rounded-full bg-bg-tertiary flex items-center justify-center mb-4">

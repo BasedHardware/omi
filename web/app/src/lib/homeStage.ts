@@ -10,7 +10,7 @@ export type HomeStageMode = 'hub' | 'chat';
 
 export interface HomeStageInputs {
   isLoading: boolean;
-  messageCount: number;
+  hasMeaningfulHistory: boolean;
   /**
    * A send in flight counts as chat: the stage must move on the first message
    * rather than waiting for the reply to land, or the hub would flash back.
@@ -20,11 +20,11 @@ export interface HomeStageInputs {
 
 export function restingMode({
   isLoading,
-  messageCount,
+  hasMeaningfulHistory,
   isStreaming,
 }: HomeStageInputs): HomeStageMode {
   if (isStreaming) return 'chat';
   // While history is still loading the count is not yet a fact about the
   // account, so the hub holds rather than flashing an empty transcript.
-  return !isLoading && messageCount > 0 ? 'chat' : 'hub';
+  return !isLoading && hasMeaningfulHistory ? 'chat' : 'hub';
 }

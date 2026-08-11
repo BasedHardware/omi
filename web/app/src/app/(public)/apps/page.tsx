@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getAllAppsV2, transformToPlugin } from '@/lib/api/public';
+import { getAllAppsV2, getAppsV2, transformToPlugin } from '@/lib/api/public';
 import AppList from '@/components/marketplace/AppList';
 import { PromoCard } from '@/components/marketplace/PromoCard';
 import { CollectionPageJsonLd } from '@/components/seo/JsonLd';
@@ -13,12 +13,22 @@ export default function AppsMarketplacePage() {
 
   useEffect(() => {
     let active = true;
-    getAllAppsV2(true).then((allApps) => {
-      if (!active) return;
-      // Transform plugins to have Set for capabilities
-      setPlugins(allApps.map(transformToPlugin));
-      setLoaded(true);
-    });
+    getAppsV2(true)
+      .then((response) => {
+        if (!active) return;
+        const initialApps = Array.from(
+          new Map(
+            response.groups.flatMap((group) => group.data).map((app) => [app.id, app]),
+          ).values(),
+        );
+        setPlugins(initialApps.map(transformToPlugin));
+        setLoaded(true);
+        return getAllAppsV2(true);
+      })
+      .then((allApps) => {
+        if (!active || !allApps) return;
+        setPlugins(allApps.map(transformToPlugin));
+      });
     return () => {
       active = false;
     };

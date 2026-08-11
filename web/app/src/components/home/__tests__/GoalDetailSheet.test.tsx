@@ -33,7 +33,7 @@ function goal(overrides: Partial<Goal> = {}): Goal {
 }
 
 function setup(overrides: Partial<Goal> = {}) {
-  const onSave = vi.fn().mockResolvedValue(undefined);
+  const onSave = vi.fn().mockResolvedValue(true);
   const onClose = vi.fn();
   render(<GoalDetailSheet goal={goal(overrides)} onClose={onClose} onSave={onSave} />);
   return { onSave, onClose, user: userEvent.setup() };

@@ -106,7 +106,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
    */
   const sendMessage = useCallback(
     async (text: string, fileIds?: string[], context?: ChatContextInfo | null) => {
-      if (!text.trim() || isStreaming) return;
+      if ((!text.trim() && !fileIds?.length) || isStreaming) return;
 
       const isCurrent = claimRequest();
       setError(null);

@@ -24,7 +24,7 @@ function RouteView({ route }: { route: ClientRoute }): ReactNode {
   } else if (route.kind === 'public') {
     content = createElement(PublicLayout, null, content);
   }
-  return createElement(RootLayout, null, content);
+  return content;
 }
 
 async function mountClientRoutes(): Promise<void> {
@@ -43,7 +43,9 @@ async function mountClientRoutes(): Promise<void> {
     path: route.path,
     element: createElement(RouteView, { route }),
   }));
-  createRoot(host).render(createElement(MoonshineRouter, { routes, runtime }));
+  createRoot(host).render(
+    createElement(RootLayout, null, createElement(MoonshineRouter, { routes, runtime })),
+  );
 }
 
 export function registerMoonshineRoute(

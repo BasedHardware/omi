@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { getApprovedApps, getAppsV2, publicApiBaseUrl } from '@/lib/api/public';
 
 /**
@@ -20,6 +20,10 @@ function stubFetch() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+beforeEach(() => {
+  vi.stubGlobal('window', {});
 });
 
 describe('public API origin', () => {
