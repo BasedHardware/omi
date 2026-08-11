@@ -114,6 +114,40 @@ class TaskChatState: ObservableObject {
     _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     _ turns: [KernelJournalTurnWrite]
   ) async throws -> AgentRuntimeProcess.JournalOperationResult
+  typealias QueryOperation =
+    @MainActor (
+      _ prompt: String,
+      _ workstreamId: String,
+      _ producingTurnId: String,
+      _ workspacePath: String,
+      _ mode: String,
+      _ taskContext: String?,
+      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+      _ onTextDelta: @escaping AgentBridge.TextDeltaHandler,
+      _ onToolActivity: @escaping AgentBridge.ToolActivityHandler,
+      _ onThinkingDelta: @escaping AgentBridge.ThinkingDeltaHandler,
+      _ onToolResultDisplay: @escaping AgentBridge.ToolResultDisplayHandler,
+      _ onAuthRequired: @escaping AgentBridge.AuthRequiredHandler,
+      _ onAuthSuccess: @escaping AgentBridge.AuthSuccessHandler
+    ) async throws -> AgentBridge.QueryResult
+  typealias UpdateJournalMessageOperation =
+    @MainActor (
+      _ workstreamId: String,
+      _ ownerID: String,
+      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+      _ message: ChatMessage,
+      _ status: KernelJournalTurnStatus?
+    ) async throws -> KernelJournalTurn
+  typealias TerminalizeJournalMessageOperation =
+    @MainActor (
+      _ workstreamId: String,
+      _ ownerID: String,
+      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+      _ message: ChatMessage,
+      _ producingRunId: String,
+      _ producingAttemptId: String,
+      _ disposition: KernelJournalTerminalDisposition
+    ) async throws -> KernelJournalTurn
 
   let workstreamId: String
   @Published private(set) var activeTaskId: String
@@ -161,6 +195,9 @@ class TaskChatState: ObservableObject {
   private let attachJournalEventsOperation: AttachJournalEventsOperation
   private let listJournalTurnsOperation: ListJournalTurnsOperation
   private let recordJournalExchangeOperation: RecordJournalExchangeOperation
+  private let updateJournalMessageOperation: UpdateJournalMessageOperation
+  private let queryOperation: QueryOperation
+  private let terminalizeJournalMessageOperation: TerminalizeJournalMessageOperation
   private var ownerGeneration: UInt64 = 0
   private var isOwnerInvalidated = false
 
@@ -180,7 +217,10 @@ class TaskChatState: ObservableObject {
     },
     attachJournalEventsOperation: AttachJournalEventsOperation? = nil,
     listJournalTurnsOperation: ListJournalTurnsOperation? = nil,
-    recordJournalExchangeOperation: RecordJournalExchangeOperation? = nil
+    recordJournalExchangeOperation: RecordJournalExchangeOperation? = nil,
+    updateJournalMessageOperation: UpdateJournalMessageOperation? = nil,
+    queryOperation: QueryOperation? = nil,
+    terminalizeJournalMessageOperation: TerminalizeJournalMessageOperation? = nil
   ) {
     let ownerID = Self.normalizedOwnerID(ownerIDProvider()) ?? ""
     self.activeTaskId = taskId
@@ -219,6 +259,50 @@ class TaskChatState: ObservableObject {
           ownerID: ownerID,
           authorizationSnapshot: authorizationSnapshot,
           turns: turns
+        )
+      }
+    self.updateJournalMessageOperation =
+      updateJournalMessageOperation ?? {
+        workstreamId, ownerID, authorizationSnapshot, message, status in
+        try await TaskChatRuntime.updateJournalMessage(
+          workstreamId: workstreamId,
+          ownerID: ownerID,
+          authorizationSnapshot: authorizationSnapshot,
+          message: message,
+          status: status
+        )
+      }
+    self.queryOperation =
+      queryOperation ?? {
+        prompt, workstreamId, producingTurnId, workspacePath, mode, taskContext, authorizationSnapshot,
+        onTextDelta, onToolActivity, onThinkingDelta, onToolResultDisplay, onAuthRequired, onAuthSuccess in
+        try await TaskChatRuntime.query(
+          prompt: prompt,
+          workstreamId: workstreamId,
+          producingTurnId: producingTurnId,
+          workspacePath: workspacePath,
+          mode: mode,
+          taskContext: taskContext,
+          authorizationSnapshot: authorizationSnapshot,
+          onTextDelta: onTextDelta,
+          onToolActivity: onToolActivity,
+          onThinkingDelta: onThinkingDelta,
+          onToolResultDisplay: onToolResultDisplay,
+          onAuthRequired: onAuthRequired,
+          onAuthSuccess: onAuthSuccess
+        )
+      }
+    self.terminalizeJournalMessageOperation =
+      terminalizeJournalMessageOperation ?? {
+        workstreamId, ownerID, authorizationSnapshot, message, producingRunId, producingAttemptId, disposition in
+        try await TaskChatRuntime.terminalizeJournalMessage(
+          workstreamId: workstreamId,
+          ownerID: ownerID,
+          authorizationSnapshot: authorizationSnapshot,
+          message: message,
+          producingRunId: producingRunId,
+          producingAttemptId: producingAttemptId,
+          disposition: disposition
         )
       }
     self.draftText = ChatDraftStore.shared.text(
@@ -447,24 +531,28 @@ class TaskChatState: ObservableObject {
     if let last = contiguous.last { journalHighWater = last.turnSeq }
   }
 
-  private func scheduleJournalUpdate(
+  func scheduleJournalUpdate(
     messageId: String,
     status: KernelJournalTurnStatus? = nil
   ) {
     guard let lease = captureOwnerLease() else { return }
-    guard let message = messages.first(where: { $0.id == messageId }) else { return }
+    guard messages.contains(where: { $0.id == messageId }) else { return }
     journalWriteCoordinator.schedule(
       messageID: messageId,
       supersededByTerminalization: status == .streaming,
       coalescingDelay: status == .streaming ? .milliseconds(150) : nil
     ) { @MainActor [weak self] in
       guard let self, self.isCurrent(lease) else { return }
-      _ = try? await TaskChatRuntime.updateJournalMessage(
-        workstreamId: self.workstreamId,
-        ownerID: lease.ownerID,
-        authorizationSnapshot: lease.authorizationSnapshot,
-        message: message,
-        status: status
+      // Resolve the snapshot when the coalesced write actually runs; a row
+      // captured at schedule time is up to one coalescing window stale and the
+      // reveal ticks have already moved past it.
+      guard let message = self.messages.first(where: { $0.id == messageId }) else { return }
+      _ = try? await self.updateJournalMessageOperation(
+        self.workstreamId,
+        lease.ownerID,
+        lease.authorizationSnapshot,
+        message,
+        status
       )
     }
   }
@@ -556,14 +644,14 @@ class TaskChatState: ObservableObject {
       let message = messages.first(where: { $0.id == messageId })
     else { return false }
     guard
-      let turn = try? await TaskChatRuntime.terminalizeJournalMessage(
-        workstreamId: workstreamId,
-        ownerID: lease.ownerID,
-        authorizationSnapshot: lease.authorizationSnapshot,
-        message: message,
-        producingRunId: producingRunId,
-        producingAttemptId: producingAttemptId,
-        disposition: disposition
+      let turn = try? await terminalizeJournalMessageOperation(
+        workstreamId,
+        lease.ownerID,
+        lease.authorizationSnapshot,
+        message,
+        producingRunId,
+        producingAttemptId,
+        disposition
       )
     else {
       return false
@@ -703,20 +791,20 @@ class TaskChatState: ObservableObject {
         }
       }
 
-      let queryResult = try await TaskChatRuntime.query(
-        prompt: trimmedText,
-        workstreamId: workstreamId,
-        producingTurnId: aiMessageId,
-        workspacePath: workspacePath,
-        mode: chatMode.rawValue,
-        taskContext: taskContext,
-        authorizationSnapshot: lease.authorizationSnapshot,
-        onTextDelta: textDeltaHandler,
-        onToolActivity: toolActivityHandler,
-        onThinkingDelta: thinkingDeltaHandler,
-        onToolResultDisplay: toolResultDisplayHandler,
-        onAuthRequired: onAuthRequired ?? { _, _ in },
-        onAuthSuccess: onAuthSuccess ?? {}
+      let queryResult = try await queryOperation(
+        trimmedText,
+        workstreamId,
+        aiMessageId,
+        workspacePath,
+        chatMode.rawValue,
+        taskContext,
+        lease.authorizationSnapshot,
+        textDeltaHandler,
+        toolActivityHandler,
+        thinkingDeltaHandler,
+        toolResultDisplayHandler,
+        onAuthRequired ?? { _, _ in },
+        onAuthSuccess ?? {}
       )
       await callbackQueue.drain()
       guard isCurrent(lease) else { return }

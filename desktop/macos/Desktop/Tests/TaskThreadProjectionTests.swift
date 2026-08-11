@@ -274,6 +274,11 @@ import XCTest
   }
 
   @MainActor
+  private final class TaskChatStateBox {
+    weak var value: TaskChatState?
+  }
+
+  @MainActor
   private final class TaskChatOwnerBox {
     var value: String?
 
@@ -570,6 +575,69 @@ import XCTest
       XCTAssertTrue(state.messages.isEmpty)
       XCTAssertFalse(state.isSending)
       XCTAssertEqual(state.errorMessage, "Could not save this message. Try again.")
+    }
+
+    /// A `.streaming` journal coalesce used to capture the assistant row when it
+    /// was *scheduled*. 150 ms later the reveal ticks had already advanced the
+    /// visible text, so the write sent a stale prefix — and `updateTurn`
+    /// refreshes the journal straight back into the transcript, permanently
+    /// dropping every character revealed inside the coalescing window.
+    func testStreamingJournalCoalesceSendsTheTextVisibleWhenItRuns() async {
+      let owner = TaskChatOwnerBox("owner-a")
+      let written = expectation(description: "the coalesced streaming write runs")
+      var writtenText: String?
+      let state = TaskChatState(
+        taskId: "task-coalesce",
+        workstreamId: "workstream-coalesce-\(UUID().uuidString)",
+        workspacePath: "/tmp",
+        ownerIDProvider: { owner.value },
+        updateJournalMessageOperation: { _, _, _, message, _ in
+          writtenText = message.text
+          written.fulfill()
+          throw BridgeError.agentError("journal write stubbed")
+        }
+      )
+      state.messages = [
+        ChatMessage(id: "assistant-coalesce", text: "Hel", sender: .ai, isStreaming: true)
+      ]
+
+      state.scheduleJournalUpdate(messageId: "assistant-coalesce", status: .streaming)
+      // Reveal ticks keep advancing while the 150 ms coalesce is pending.
+      state.messages[0].text = "Hello world"
+
+      await fulfillment(of: [written], timeout: 2.0)
+      XCTAssertEqual(
+        writtenText, "Hello world",
+        "A coalesced streaming write must send the row as it stands when the write runs")
+    }
+
+    private static func acceptedTurn(
+      for write: KernelJournalTurnWrite,
+      workstreamId: String
+    ) -> KernelJournalTurn {
+      let surface = AgentSurfaceReference.workstream(workstreamId: workstreamId)
+      return KernelJournalTurn(
+        dictionary: [
+          "conversationId": "conversation-stop",
+          "turnId": write.turnId,
+          "turnSeq": write.role == "user" ? 1 : 2,
+          "conversationGeneration": 1,
+          "generationBaseTurnSeq": 0,
+          "producerId": "producer:\(write.turnId)",
+          "payloadHash": "sha256:\(write.turnId)",
+          "role": write.role,
+          "surfaceKind": surface.surfaceKind,
+          "externalRefKind": surface.externalRefKind,
+          "externalRefId": surface.externalRefId,
+          "content": write.content,
+          "origin": write.origin,
+          "status": write.status.rawValue,
+          "contentBlocks": KernelJournalTurnWrite.jsonArray(write.contentBlocksJSON),
+          "resources": KernelJournalTurnWrite.jsonArray(write.resourcesJSON),
+          "metadataJson": write.metadataJSON,
+          "createdAtMs": write.createdAtMs,
+          "updatedAtMs": write.createdAtMs,
+        ])!
     }
 
     func testSuspendedOwnerAJournalPageCannotPublishAfterInvalidation() async throws {

@@ -3599,7 +3599,7 @@ class ChatProvider: ObservableObject {
     status: KernelJournalTurnStatus? = nil,
     surface: AgentSurfaceReference? = nil
   ) {
-    guard let message = messages.first(where: { $0.id == messageId }) else { return }
+    guard messages.contains(where: { $0.id == messageId }) else { return }
     guard let ownerID = journalOwnerByMessageID[messageId] ?? runtimeOwnerId else { return }
     let targetSurface = surface ?? mainChatSurfaceReference()
     // A `.streaming` coalesce must never land after the terminal mutation (it
@@ -3612,6 +3612,12 @@ class ChatProvider: ObservableObject {
       coalescingDelay: status == .streaming ? .milliseconds(150) : nil
     ) { @MainActor [weak self] in
       guard let self else { return }
+      // Resolve the snapshot when the coalesced write actually runs. Capturing
+      // the row at schedule time sent a prefix that the reveal ticks had already
+      // moved past, and `updateTurn` refreshes the journal straight back into
+      // `messages` — replacing the newer local text with that stale prefix and
+      // permanently dropping the span in between.
+      guard let message = self.messages.first(where: { $0.id == messageId }) else { return }
       _ = await self.kernelTurnProjection.updateTurn(
         surface: targetSurface,
         message: message,
