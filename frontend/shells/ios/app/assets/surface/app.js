@@ -1,6 +1,6 @@
 (() => {
   // surface/src/bridge.g.ts
-  var BRIDGE_CONTRACT_VERSION = "0.1.0";
+  var BRIDGE_CONTRACT_VERSION = "0.2.0";
 
   class OmiShellBridge {
     #seq = 0;
@@ -57,7 +57,7 @@
   var $ = (id) => document.getElementById(id);
   var out = $("out");
   var benchOut = $("bench");
-  var BUILD_STAMP = "2026-08-06 06:16:36Z";
+  var BUILD_STAMP = "2026-08-11 04:29:52Z";
   $("mode").textContent = `contract ${BRIDGE_CONTRACT_VERSION} · build ${BUILD_STAMP} · ` + `origin ${location.protocol}//${location.host || "assets"} · ` + `bridge ${bridge.available ? "attached" : "MISSING"}`;
   $("btn-device").addEventListener("click", async () => {
     const t0 = performance.now();

@@ -239,7 +239,7 @@ enum SessionBootstrap {
   /// Keychain account, SCOPED TO THE BACKEND ORIGIN.
   ///
   /// A single "api" account is wrong the moment you repoint the shell: running
-  /// against 127.0.0.1:4747 and then against 127.0.0.1:4801 would reuse the
+  /// against 127.0.0.1:4801 and then against 127.0.0.1:4851 would reuse the
   /// first backend's token against the second, and the app would render an
   /// empty or 401 screen that looks exactly like a UI bug. Scoping by
   /// scheme+host+port keeps one credential per backend.
