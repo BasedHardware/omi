@@ -628,7 +628,7 @@ import XCTest
             operation: "record_exchange",
             conversationId: "conversation-stop",
             turn: nil,
-            turns: writes.map { Self.acceptedTurn(for: $0, workstreamId: workstreamId) },
+            turns: try writes.map { try Self.acceptedTurn(for: $0, workstreamId: workstreamId) },
             clearedCount: 0,
             highWaterTurnSeq: 2,
             conversationGeneration: 1,
@@ -658,7 +658,7 @@ import XCTest
         },
         terminalizeJournalMessageOperation: { workstreamId, _, _, message, _, _, disposition in
           XCTAssertEqual(disposition, .discard, "A stopped turn terminalizes as discarded, not accepted")
-          return Self.acceptedTurn(
+          return try Self.acceptedTurn(
             for: message.journalWrite(origin: "workstream", status: .failed),
             workstreamId: workstreamId)
         }
@@ -677,30 +677,31 @@ import XCTest
     private static func acceptedTurn(
       for write: KernelJournalTurnWrite,
       workstreamId: String
-    ) -> KernelJournalTurn {
+    ) throws -> KernelJournalTurn {
       let surface = AgentSurfaceReference.workstream(workstreamId: workstreamId)
-      return KernelJournalTurn(
-        dictionary: [
-          "conversationId": "conversation-stop",
-          "turnId": write.turnId,
-          "turnSeq": write.role == "user" ? 1 : 2,
-          "conversationGeneration": 1,
-          "generationBaseTurnSeq": 0,
-          "producerId": "producer:\(write.turnId)",
-          "payloadHash": "sha256:\(write.turnId)",
-          "role": write.role,
-          "surfaceKind": surface.surfaceKind,
-          "externalRefKind": surface.externalRefKind,
-          "externalRefId": surface.externalRefId,
-          "content": write.content,
-          "origin": write.origin,
-          "status": write.status.rawValue,
-          "contentBlocks": KernelJournalTurnWrite.jsonArray(write.contentBlocksJSON),
-          "resources": KernelJournalTurnWrite.jsonArray(write.resourcesJSON),
-          "metadataJson": write.metadataJSON,
-          "createdAtMs": write.createdAtMs,
-          "updatedAtMs": write.createdAtMs,
-        ])!
+      return try XCTUnwrap(
+        KernelJournalTurn(
+          dictionary: [
+            "conversationId": "conversation-stop",
+            "turnId": write.turnId,
+            "turnSeq": write.role == "user" ? 1 : 2,
+            "conversationGeneration": 1,
+            "generationBaseTurnSeq": 0,
+            "producerId": "producer:\(write.turnId)",
+            "payloadHash": "sha256:\(write.turnId)",
+            "role": write.role,
+            "surfaceKind": surface.surfaceKind,
+            "externalRefKind": surface.externalRefKind,
+            "externalRefId": surface.externalRefId,
+            "content": write.content,
+            "origin": write.origin,
+            "status": write.status.rawValue,
+            "contentBlocks": KernelJournalTurnWrite.jsonArray(write.contentBlocksJSON),
+            "resources": KernelJournalTurnWrite.jsonArray(write.resourcesJSON),
+            "metadataJson": write.metadataJSON,
+            "createdAtMs": write.createdAtMs,
+            "updatedAtMs": write.createdAtMs,
+          ]))
     }
 
     func testSuspendedOwnerAJournalPageCannotPublishAfterInvalidation() async throws {
