@@ -416,12 +416,12 @@ def check_codemagic_release_publishers() -> list[str]:
         return [*errors, "canonical and preview workflows must both have scripts"]
     if canonical_scripts is not preview_scripts:
         errors.append("preview scripts must be the exact YAML alias node used by the canonical workflow")
-    # 23 = 21 hardening-approved steps + the INV-BETA-1 "Create Omi Beta variant"
-    # step (founder-reviewed re-land, PR #10317) + the separately surfaced
-    # signed Omi Beta smoke step. Stable and Beta keep identical evidence gates;
-    # distinct provider steps make an otherwise private-log failure diagnosable.
-    if len(canonical_scripts) != 23:
-        errors.append("canonical workflow must retain exactly 23 approved script steps")
+    # 21 approved steps retain the release security boundary while moving the
+    # stable/Beta Apple submissions into two identity-labelled parallel batches.
+    # The full Beta smoke remains distinct; stable keeps the structural artifact
+    # audit without paying for a duplicate launch/auth/notification exercise.
+    if len(canonical_scripts) != 21:
+        errors.append("canonical workflow must retain exactly 21 approved script steps")
 
     for scalar in _iter_semantic_strings(canonical):
         for forbidden_authority in _FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES:
@@ -565,8 +565,10 @@ def check_desktop_codemagic_release() -> list[str]:
         "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
         "desktop/macos/scripts/publish-desktop-debug-symbols.sh",
         "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
+        "desktop/macos/scripts/create-desktop-dmgs.sh",
+        "desktop/macos/scripts/create-omi-beta-variant.sh",
+        "desktop/macos/scripts/notarize-desktop-artifacts.sh",
         "desktop/macos/scripts/smoke-signed-desktop-artifact.sh",
-        "desktop/macos/scripts/test-tool-surfaces.sh",
         "desktop/macos/Desktop/Omi-Release.entitlements",
         "desktop/macos/Desktop/Node.entitlements",
         "desktop/macos/dmg-assets/dmgbuild_settings.py",
@@ -602,8 +604,36 @@ def check_desktop_codemagic_release() -> list[str]:
 
     smoke_index = desktop_workflow_body.find("Smoke signed desktop artifact")
     beta_smoke_index = desktop_workflow_body.find("Smoke signed desktop beta artifact")
+    prepare_beta_index = desktop_workflow_body.find("Prepare Omi Beta identity")
+    notarize_apps_index = desktop_workflow_body.find("Notarize stable and Beta apps concurrently")
+    create_dmgs_index = desktop_workflow_body.find("Create stable and Beta DMGs concurrently")
+    notarize_dmgs_index = desktop_workflow_body.find("Notarize stable and Beta DMGs concurrently")
+    sparkle_index = desktop_workflow_body.find("Create stable and Beta Sparkle archives")
     release_index = desktop_workflow_body.find("Create GitHub release")
     dispatch_index = desktop_workflow_body.find("Dispatch trusted macOS beta qualification")
+    if not (
+        -1
+        < prepare_beta_index
+        < notarize_apps_index
+        < create_dmgs_index
+        < notarize_dmgs_index
+        < sparkle_index
+        < smoke_index
+    ):
+        errors.append(
+            "desktop release must prepare both identities, notarize apps, create DMGs, notarize DMGs, "
+            "and sign Sparkle archives before smoke"
+        )
+    for required_fragment in (
+        "scripts/notarize-desktop-artifacts.sh",
+        "scripts/create-desktop-dmgs.sh",
+        '--artifact stable "$APP_BUNDLE"',
+        '--artifact beta "$BUILD_DIR/$BETA_APP_NAME.app"',
+        '--artifact stable "$DMG_PATH"',
+        '--artifact beta "$BETA_DMG_PATH"',
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"parallel desktop packaging is missing required fragment: {required_fragment}")
     if smoke_index == -1:
         errors.append("desktop release must run the signed artifact smoke before publishing the GitHub release")
     elif release_index == -1 or smoke_index > release_index:
@@ -662,8 +692,22 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("Codemagic desktop release must not run Docker-backed beta qualification")
     if "scripts/smoke-signed-desktop-artifact.sh" not in desktop_workflow_body:
         errors.append("desktop release smoke step must invoke scripts/smoke-signed-desktop-artifact.sh")
-    if "--notification-callback-canary" not in desktop_workflow_body:
-        errors.append("desktop release smoke must prove the UserNotifications callback before publishing a candidate")
+    stable_smoke_body = (
+        desktop_workflow_body[smoke_index:beta_smoke_index]
+        if smoke_index != -1 and beta_smoke_index != -1
+        else ""
+    )
+    beta_smoke_body = (
+        desktop_workflow_body[beta_smoke_index:release_index]
+        if beta_smoke_index != -1 and release_index != -1
+        else ""
+    )
+    for forbidden_fragment in ("--launch", "--auth-storage-canary", "--notification-callback-canary"):
+        if forbidden_fragment in stable_smoke_body:
+            errors.append(f"stable structural smoke must not run duplicate behavioral probe {forbidden_fragment}")
+    for required_fragment in ("--launch", "--auth-storage-canary", "--notification-callback-canary"):
+        if required_fragment not in beta_smoke_body:
+            errors.append(f"signed Beta smoke is missing required behavioral probe {required_fragment}")
 
     smoke_script = ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh"
     if smoke_script.exists():
@@ -948,6 +992,10 @@ def check_desktop_qualification_runner() -> list[str]:
     candidate_gate = ROOT / ".github/scripts/check-desktop-auto-beta-candidate.py"
     candidate_gate_text = candidate_gate.read_text(encoding="utf-8") if candidate_gate.exists() else ""
     for required_fragment in (
+        "REQUIRED_STRUCTURAL_SMOKE_CHECKS",
+        "REQUIRED_BETA_BEHAVIORAL_SMOKE_CHECKS",
+        "require_behavioral_checks=False",
+        "require_behavioral_checks=True",
         "UserNotifications settings callback completion canary passed",
         "notification_callback_canary",
         "callback canary",
