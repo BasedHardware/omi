@@ -46,8 +46,11 @@ and detaches the returned decoded claims:
 - all inspected claims are own enumerable data, never accessors, proxies,
   classes, symbols, or inherited aliases.
 
-Success returns only a frozen Firebase identity containing the Firebase uid,
-the fixed authentication strength `firebase-id-token`, and token expiry. It
+Success returns only a frozen Firebase identity containing the exact configured
+Firebase project id, Firebase uid, the fixed authentication strength
+`firebase-id-token`, and token expiry. The explicit project coordinate prevents
+a uid, which Firebase scopes to one project, from being rebound through a
+credential source for another project. It
 does not copy email, phone, provider data, custom claims, raw token bytes, or
 adapter metadata. Verification throw/rejection, revoked/disabled user,
 malformed claims, wrong project/issuer, expiry, future time, and deployed
@@ -74,7 +77,7 @@ tests before route activation.
 
 ## Pre-registered tests
 
-1. Exact project/issuer/subject/time claims return one frozen identity after
+1. Exact project/issuer/subject/time claims return one frozen project-bound identity after
    one adapter call with `checkRevoked=true`.
 2. Wrong audience, issuer, uid/sub mismatch, empty/oversized subject, expired
    token, future issue/auth time, unsafe counters, malformed token, and hostile

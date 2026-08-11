@@ -16,7 +16,8 @@ capability, owner, credential, grant, or account epoch.
 
 Authorization runs in this order and never speculates around a failed stage:
 
-1. verify the token through the landed identity-only boundary;
+1. verify the token through the landed identity-only boundary, retaining its
+   exact configured Firebase project coordinate;
 2. ask the credential/grant source once for the exact configured application
    and capability under that Firebase uid;
 3. strictly validate an active head-bound credential and exact active enabled
@@ -31,13 +32,15 @@ Authorization runs in this order and never speculates around a failed stage:
    context whose expiry is the minimum of token expiry, credential expiry, and
    configured lifetime.
 
-The credential/grant source request is frozen and contains only Firebase uid,
-configured application id, and configured capability. It receives no raw token.
+The credential/grant source request is frozen and contains only the verified
+Firebase project id and uid, configured application id, and configured
+capability. It receives no raw token.
 Its `current | absent | unavailable` envelope is untrusted plain data. A current
 row is exact-shaped and carries the full repository revalidation coordinates;
 the composition copies no raw record or provider detail.
 
-The source's returned Firebase uid must equal the verified uid and its
+The source's returned Firebase project id and uid must equal the verified pair
+and its
 authentication strength must be exactly `firebase-id-token`. The source also
 returns the separate bounded principal coordinate persisted on the credential;
 the composition does not derive it from the uid or require Firebase's broader
@@ -84,7 +87,7 @@ sealed authorize operation, never the issuer or raw mint input.
    emit one branded frozen context with minimum expiry.
 2. Invalid identity calls neither source; absent grant calls no control source;
    no refusal produces or exposes an account id.
-3. Wrong uid binding, malformed principal, application, capability, auth
+3. Wrong Firebase project/uid binding, malformed principal, application, capability, auth
    strength, lifecycle,
    enabled flag, expiry, account, digest, or unsafe version/counter denies before
    issuer access.
