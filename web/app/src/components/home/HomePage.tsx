@@ -198,7 +198,12 @@ export function HomePage() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25 }}
-                className="mx-auto flex min-h-full max-w-[560px] flex-col items-center justify-center px-4 py-8 sm:px-6 sm:py-12"
+                className={cn(
+                  'mx-auto flex max-w-[560px] flex-col items-center justify-center px-4 py-8 sm:px-6 sm:py-12',
+                  historyMessages.length > 0
+                    ? 'min-h-[calc(100%-5rem)] scroll-mt-20'
+                    : 'min-h-full',
+                )}
               >
                 <Image
                   src="/logo.png"

@@ -121,6 +121,7 @@ describe('Home Currents ordering', () => {
     expect(
       history.compareDocumentPosition(currents) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(currents).toHaveClass('scroll-mt-20', 'min-h-[calc(100%-5rem)]');
     expect(goals).toHaveClass('grid');
     expect(goals).not.toHaveClass('sm:grid-cols-2');
     expect(
