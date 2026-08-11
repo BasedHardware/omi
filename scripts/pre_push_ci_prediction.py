@@ -79,6 +79,12 @@ ROUTING_INPUTS = {
     ".github/scripts/test_pre_push_ci_prediction.py",
 }
 
+FLUTTER_GENERATION_DEFINITION_INPUTS = {
+    ".github/workflows/mobile-app-checks.yml",
+}
+
+FLUTTER_GENERATION_DEFINITION_PREFIXES = (".github/actions/detect-changes/",)
+
 DESKTOP_SWIFT_TEST_INPUTS = {
     "desktop/macos/Desktop/Package.swift",
     "desktop/macos/Desktop/Package.resolved",
@@ -182,6 +188,13 @@ def _is_codegen_input(
 
 def _is_app_l10n_input(path: str) -> bool:
     return (path.startswith("app/lib/l10n/") and path.endswith(".arb")) or path == "app/l10n.yaml"
+
+
+def _defines_flutter_generation(path: str) -> bool:
+    # Routing metadata cannot make a committed generated file stale, but the
+    # files that define the regeneration commands or forward their outputs can:
+    # they must keep waking the regeneration lanes they own.
+    return path in FLUTTER_GENERATION_DEFINITION_INPUTS or path.startswith(FLUTTER_GENERATION_DEFINITION_PREFIXES)
 
 
 def _is_app_compile_smoke_input(path: str) -> bool:
@@ -305,7 +318,7 @@ def resolve_impact(
         if path in WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS:
             selected.add("windows-kgworker-native-closure")
 
-    if ".github/workflows/mobile-app-checks.yml" in normalized_paths:
+    if any(_defines_flutter_generation(path) for path in normalized_paths):
         selected.update({"flutter-codegen", "flutter-l10n"})
 
     if selector_changed:

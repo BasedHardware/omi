@@ -135,11 +135,32 @@ class PrePushCiPredictionTests(unittest.TestCase):
                 self.assertFalse(plan.includes("flutter-l10n"))
                 self.assertEqual(github_outputs(plan)["has_flutter_generated"], "false")
 
+    def test_manifest_only_diff_still_skips_flutter_regeneration(self) -> None:
+        plan = self.plan([".github/checks-manifest.yaml"])
+
+        self.assertFalse(plan.includes("flutter-codegen"))
+        self.assertFalse(plan.includes("flutter-l10n"))
+        self.assertEqual(github_outputs(plan)["has_flutter_generated"], "false")
+
     def test_mobile_workflow_change_wakes_flutter_regeneration(self) -> None:
         plan = self.plan([".github/workflows/mobile-app-checks.yml"])
 
         self.assertTrue(plan.includes("flutter-codegen"))
         self.assertTrue(plan.includes("flutter-l10n"))
+        outputs = github_outputs(plan)
+        self.assertEqual(outputs["has_flutter_generated"], "true")
+        self.assertEqual(outputs["has_app_codegen"], "true")
+        self.assertEqual(outputs["has_app_l10n"], "true")
+
+    def test_detect_changes_action_change_wakes_flutter_regeneration(self) -> None:
+        plan = self.plan([".github/actions/detect-changes/action.yml"])
+
+        self.assertTrue(plan.includes("flutter-codegen"))
+        self.assertTrue(plan.includes("flutter-l10n"))
+        outputs = github_outputs(plan)
+        self.assertEqual(outputs["has_flutter_generated"], "true")
+        self.assertEqual(outputs["has_app_codegen"], "true")
+        self.assertEqual(outputs["has_app_l10n"], "true")
 
     def test_real_generator_inputs_still_wake_flutter_regeneration(self) -> None:
         codegen = self.plan(["app/build.yaml"])
