@@ -480,6 +480,16 @@ async def execute_backend_tool(name: str, params: dict[str, Any]) -> str:
     return result.get("result") or json.dumps(result, default=str)
 
 
+def read_only_sql_authorizer(
+    action: int, arg1: str | None, arg2: str | None, dbname: str | None, source: str | None
+) -> int:
+    if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION):
+        return sqlite3.SQLITE_OK
+    if action == sqlite3.SQLITE_PRAGMA and arg1 is not None and arg1.casefold() == "data_version" and arg2 is None:
+        return sqlite3.SQLITE_OK
+    return sqlite3.SQLITE_DENY
+
+
 def execute_sql(query: str) -> str:
     if runtime.db is None:
         return json.dumps({"error": "Database not loaded. Upload omi.db first."})
@@ -495,14 +505,9 @@ def execute_sql(query: str) -> str:
     if not re.search(r"\bLIMIT\b", query, re.I):
         query = query.rstrip().rstrip(";") + " LIMIT 200"
     try:
-        def authorizer(action: int, arg1: str | None, arg2: str | None, dbname: str | None, source: str | None) -> int:
-            if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION):
-                return sqlite3.SQLITE_OK
-            return sqlite3.SQLITE_DENY
-
         with runtime.lock:
             try:
-                runtime.db.set_authorizer(authorizer)
+                runtime.db.set_authorizer(read_only_sql_authorizer)
                 cursor = runtime.db.execute(query)
                 rows = [dict(row) for row in cursor.fetchall()]
             finally:
