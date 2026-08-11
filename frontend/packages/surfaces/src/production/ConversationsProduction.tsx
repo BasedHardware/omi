@@ -141,6 +141,7 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
   const [editingTitle, setEditingTitle] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const editTriggerRef = useRef<HTMLButtonElement>(null);
   const restoreTitleFocusRef = useRef(false);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
@@ -181,7 +182,12 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
     setConfirmingDelete(false);
   };
   const deleteConversation = async (): Promise<void> => {
-    if (await run(() => store.delete(conversation.id))) location.assign(listHref(fixture));
+    setDeleting(true);
+    if (await run(() => store.delete(conversation.id))) {
+      location.assign(listHref(fixture));
+      return;
+    }
+    setDeleting(false);
   };
   return (
     <section className="conversation-detail" data-conversation-detail={conversation.id}>
@@ -245,7 +251,8 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
       {canPatch && confirmingDelete && (
         <section
           className="conversation-delete-confirmation"
-          role="alertdialog"
+          role="group"
+          aria-busy={deleting || undefined}
           aria-labelledby={deleteTitleId}
           aria-describedby={deleteBodyId}
           onKeyDown={(event) => { if (event.key === "Escape") cancelDelete(); }}
@@ -253,8 +260,8 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
           <h3 id={deleteTitleId}>{t(locale, "conversations.deleteConfirm")}</h3>
           <p id={deleteBodyId}>{t(locale, "conversations.deleteBody")}</p>
           <div className="conversation-delete-confirmation-actions">
-            <button type="button" autoFocus onClick={cancelDelete}>{t(locale, "common.cancel")}</button>
-            <button type="button" className="is-destructive" onClick={() => void deleteConversation()}>{t(locale, "conversations.delete")}</button>
+            <button type="button" autoFocus disabled={deleting} onClick={cancelDelete}>{t(locale, "common.cancel")}</button>
+            <button type="button" className="is-destructive" disabled={deleting} onClick={() => void deleteConversation()}>{t(locale, deleting ? "conversations.deleting" : "conversations.delete")}</button>
           </div>
         </section>
       )}
