@@ -140,6 +140,24 @@ describe("structured Chat generation context packets", () => {
     expect(whole.budget.compacted).toBe(true);
   });
 
+  test("continuity and selected attachments win when optional evidence fills the budget", () => {
+    const packet = createChatGenerationContextPacket({
+      accountId: ACCOUNT,
+      generationId: "generation:priority",
+      nowEpochMilliseconds: 230,
+      maxTokens: 6,
+      candidates: [candidate("optional-evidence", { tokenEstimate: 1, priority: 100 })],
+      history: [message("history:latest", "recent turn", "human", 229)],
+      attachments: [{ id: "attachment:chosen", displayName: "notes", mediaType: "text/plain", sizeBytes: 1, contentReference: null }],
+      attachmentSubset: ["attachment:chosen"],
+    });
+    expect(packet.transcriptTail.map((turn) => turn.messageId)).toEqual(["history:latest"]);
+    expect(packet.attachments).toHaveLength(1);
+    expect(packet.items).toHaveLength(0);
+    expect(packet.budget.omittedItemCount).toBe(1);
+    expect(packet.budget.compacted).toBe(true);
+  });
+
   test("turn two resolves a first-turn reference and replay keeps one packet hash", async () => {
     const firstTurn = message("human:first", "Remember the project codename is Atlas", "human", 100);
     const firstStored = admitted(firstTurn.id, "generation:first", firstTurn.text);
@@ -239,11 +257,11 @@ describe("structured Chat generation context packets", () => {
       generationId: "generation:value-redaction",
       nowEpochMilliseconds: 710,
       candidates: [candidate("dirty", {
-        redactedPreview: "token=secret attachment_id=opaque-attachment",
+        redactedPreview: "token=secret attachment.id=opaque-attachment api.key=secret",
         inclusionReason: "api_key=secret",
       })],
     });
-    const legacy = normalizeChatGenerationContext(["token=secret file_id=opaque-file"], {
+    const legacy = normalizeChatGenerationContext(["token=secret file.id=opaque-file reference.id=opaque-reference"], {
       accountId: ACCOUNT,
       generationId: "generation:legacy-redaction",
       nowEpochMilliseconds: 710,

@@ -204,8 +204,8 @@ const redactText = (value: string, max = 512): string => {
   const bounded = value.slice(0, max);
   const redacted = bounded
     .replace(/Bearer\s+[^\s,;]+/giu, "[redacted]")
-    .replace(/(?:api[_ -]?key|authorization|token|secret|password|access[_ -]?token)\s*[:=]\s*[^\s,;]+/giu, "[redacted]")
-    .replace(/(?:attachment|file|opaque|reference)(?:[_ -]?id)?\s*[:=]\s*[^\s,;]+/giu, "[redacted]")
+    .replace(/(?:api[_. -]?key|authorization|token|secret|password|access[_. -]?token)\s*[:=]\s*[^\s,;]+/giu, "[redacted]")
+    .replace(/(?:attachment|file|opaque|reference)(?:[_. -]?id)?\s*[:=]\s*[^\s,;]+/giu, "[redacted]")
     .replace(/BEGIN\s+[^\n]*PRIVATE\s+KEY[\s\S]*?END\s+[^\n]*PRIVATE\s+KEY/giu, "[redacted]");
   return redacted.trim().length === 0 ? "[redacted]" : redacted;
 };
@@ -325,12 +325,54 @@ export const createChatGenerationContextPacket = (
   const eligible = candidates.filter((candidate) => candidate.ownerAccountId === input.accountId
     && (candidate.expiresAt === null || candidate.expiresAt > input.nowEpochMilliseconds)
     && candidate.policyDecision !== "excluded");
+  const tail = transcriptTail(input.history ?? []);
+  const undelivered = deltas(input.undeliveredDeltas ?? []);
+  const attachmentIds = new Set(input.attachmentSubset ?? []);
+  const attachments = attachmentRefs(input.attachments ?? [], attachmentIds);
   const byConflict = new Set<string>();
   const selected: ChatGenerationContextItem[] = [];
   let usedTokens = 0;
   let omittedItemCount = candidates.length - eligible.length;
   let selfNoiseTokens = candidates.filter((candidate) => !eligible.includes(candidate))
     .reduce((total, candidate) => total + candidate.tokenEstimate, 0);
+  const takeWithBudget = <T>(
+    entries: readonly T[],
+    maxEntries: number,
+    tokenCost: (entry: T) => number,
+    newestFirst = false,
+  ): { readonly selected: readonly T[]; readonly omitted: number; readonly noise: number } => {
+    const bounded = entries.slice(Math.max(0, entries.length - maxEntries));
+    let omitted = entries.length - bounded.length;
+    let noise = entries.slice(0, Math.max(0, entries.length - maxEntries))
+      .reduce((total, entry) => total + tokenCost(entry), 0);
+    const selectedIndexes = new Set<number>();
+    const indices = [...bounded.keys()];
+    if (newestFirst) indices.reverse();
+    for (const index of indices) {
+      const entry = bounded[index]!;
+      const cost = tokenCost(entry);
+      if (usedTokens + cost > maxTokens) {
+        omitted += 1;
+        noise += cost;
+        continue;
+      }
+      usedTokens += cost;
+      selectedIndexes.add(index);
+    }
+    return {
+      selected: Object.freeze(bounded.filter((_entry, index) => selectedIndexes.has(index))),
+      omitted,
+      noise,
+    };
+  };
+  // Continuity and selected attachment receipts outrank optional retrieval
+  // evidence: reserve newest transcript and admitted attachment metadata first.
+  const boundedTail = takeWithBudget(tail, MAX_TRANSCRIPT_TAIL, (entry) => entry.tokenEstimate, true);
+  omittedItemCount += boundedTail.omitted;
+  selfNoiseTokens += boundedTail.noise;
+  const boundedAttachments = takeWithBudget(attachments, attachments.length, attachmentTokenEstimate);
+  omittedItemCount += boundedAttachments.omitted;
+  selfNoiseTokens += boundedAttachments.noise;
   for (const candidate of eligible.sort(candidateOrder)) {
     if (candidate.conflictKey !== null && candidate.conflictKey !== undefined && byConflict.has(candidate.conflictKey)) {
       omittedItemCount += 1;
@@ -365,43 +407,9 @@ export const createChatGenerationContextPacket = (
       trust: "untrusted-evidence",
     }));
   }
-  const tail = transcriptTail(input.history ?? []);
-  const undelivered = deltas(input.undeliveredDeltas ?? []);
-  const attachmentIds = new Set(input.attachmentSubset ?? []);
-  const attachments = attachmentRefs(input.attachments ?? [], attachmentIds);
-
-  const takeWithBudget = <T>(
-    entries: readonly T[],
-    maxEntries: number,
-    tokenCost: (entry: T) => number,
-  ): { readonly selected: readonly T[]; readonly omitted: number; readonly noise: number } => {
-    const bounded = entries.slice(Math.max(0, entries.length - maxEntries));
-    let omitted = entries.length - bounded.length;
-    let noise = entries.slice(0, Math.max(0, entries.length - maxEntries))
-      .reduce((total, entry) => total + tokenCost(entry), 0);
-    const kept: T[] = [];
-    for (let index = bounded.length - 1; index >= 0; index -= 1) {
-      const entry = bounded[index]!;
-      const cost = tokenCost(entry);
-      if (usedTokens + cost > maxTokens) {
-        omitted += 1;
-        noise += cost;
-        continue;
-      }
-      usedTokens += cost;
-      kept.unshift(entry);
-    }
-    return { selected: Object.freeze(kept), omitted, noise };
-  };
-  const boundedTail = takeWithBudget(tail, MAX_TRANSCRIPT_TAIL, (entry) => entry.tokenEstimate);
-  omittedItemCount += boundedTail.omitted;
-  selfNoiseTokens += boundedTail.noise;
   const boundedDeltas = takeWithBudget(undelivered, MAX_UNDELIVERED_DELTAS, (entry) => entry.tokenEstimate);
   omittedItemCount += boundedDeltas.omitted;
   selfNoiseTokens += boundedDeltas.noise;
-  const boundedAttachments = takeWithBudget(attachments, attachments.length, attachmentTokenEstimate);
-  omittedItemCount += boundedAttachments.omitted;
-  selfNoiseTokens += boundedAttachments.noise;
   const packetWithoutHash = {
     schemaVersion: CHAT_CONTEXT_PACKET_SCHEMA_VERSION,
     traceVersion: CHAT_CONTEXT_TRACE_VERSION,
@@ -419,7 +427,7 @@ export const createChatGenerationContextPacket = (
       selfNoiseTokens,
       omittedItemCount,
       compacted: omittedItemCount > 0 || tail.length > MAX_TRANSCRIPT_TAIL
-        || undelivered.length > MAX_UNDELIVERED_DELTAS || selected.length >= MAX_CONTEXT_ITEMS,
+        || undelivered.length > MAX_UNDELIVERED_DELTAS || attachments.length > boundedAttachments.selected.length,
     }),
   };
   const packetHash = hashText(canonicalJson(packetWithoutHash));
