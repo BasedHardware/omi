@@ -83,7 +83,7 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return "usage: capture-native-fixture-batch.mjs --manifest matrix.json --out-root /scratch/out [--shell macos|ios|both] [--offset N] [--limit N] [--prepare | --prepared-input-set FILE] [--assemble-receipt --result-path FILE --started-at ISO --finished-at ISO] [--replay-proof] [--dry-run]";
+  return "usage: capture-native-fixture-batch.mjs --manifest matrix.json --out-root /scratch/out [--shell macos|ios|both] [--offset N] [--limit N] [--prepare | --prepared-input-set FILE] [--assemble-receipt --result-path FILE --started-at ISO --finished-at ISO --stdout-file FILE --stderr-file FILE] [--replay-proof] [--dry-run]";
 }
 
 function canonical(value) {
@@ -586,6 +586,8 @@ function assembleReceipt(resultPath, outRoot, manifestPath, manifest, args) {
   const finishedAt = args.finished_at;
   if (typeof startedAt !== "string" || typeof finishedAt !== "string" || Number.isNaN(Date.parse(startedAt)) || Number.isNaN(Date.parse(finishedAt)) || Date.parse(finishedAt) < Date.parse(startedAt)) fail("--started-at/--finished-at must be ordered ISO timestamps");
   if ((Date.parse(finishedAt) - Date.parse(startedAt)) / 1000 > timeoutSeconds) fail("assembled capture duration exceeds timeout");
+  if (args.stdout_file && hashFile(ensureCoreFile(args.stdout_file, "--stdout-file")) !== result.stdout_sha256) fail("captured stdout hash does not match batch result");
+  if (args.stderr_file && hashFile(ensureCoreFile(args.stderr_file, "--stderr-file")) !== result.stderr_sha256) fail("captured stderr hash does not match batch result");
   const resultArtifact = { root: "core", path: authorityRelative(resultPath), sha256: resultSha };
   const artifactHashes = { [`${resultArtifact.root}:${resultArtifact.path}`]: resultSha };
   const artifactBeforeHashes = { [`${resultArtifact.root}:${resultArtifact.path}`]: null };
