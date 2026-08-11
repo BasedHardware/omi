@@ -10,6 +10,7 @@ import {
 } from "./generation-supervisor";
 import {
   createScriptedChatGenerationSource,
+  registerChatGenerationSourceCapability,
   readChatGenerationSourceCapability,
   type ChatGenerationScheduler,
   type ChatGenerationSource,
@@ -111,7 +112,7 @@ const sourceWithFault = (
   scheduler: DeterministicChatGenerationScheduler,
 ): ChatGenerationSource => {
   const scripted = createScriptedChatGenerationSource(scenario.script ?? [], scheduler);
-  return Object.freeze({
+  const source: ChatGenerationSource = Object.freeze({
     capability: scripted.capability,
     start(input) {
       const run = scripted.start(input);
@@ -125,6 +126,11 @@ const sourceWithFault = (
         },
       });
     },
+  });
+  return registerChatGenerationSourceCapability(source, {
+    tier: "deterministic-scripted",
+    adapter: "scripted-chat-generation",
+    deterministic: true,
   });
 };
 

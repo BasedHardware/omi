@@ -33,6 +33,8 @@ export interface ChatGenerationSourceCapabilityReceipt {
  * never proof that a provider is live or that a model was contacted.
  */
 export interface ChatGenerationSource {
+  /** Legacy declaration retained for compatibility; runtime receipts are
+   * read from the private registration below, never this field. */
   readonly capability?: ChatGenerationSourceCapabilityReceipt;
   start(input: ChatGenerationSourceInput): ChatGenerationSourceRun;
 }
@@ -50,6 +52,10 @@ const UNKNOWN_CAPABILITY: ChatGenerationSourceCapabilityReceipt = Object.freeze(
 
 const CAPABILITY_KEYS = Object.freeze(["adapter", "deterministic", "tier"]);
 const SAFE_ADAPTER = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u;
+// Source objects are untrusted (including Proxy instances). Keep capability
+// provenance out-of-band so reading a receipt cannot invoke source traps,
+// inherited properties, or accessors.
+const REGISTERED_CAPABILITIES = new WeakMap<object, ChatGenerationSourceCapabilityReceipt>();
 
 const unknownCapability = (): ChatGenerationSourceCapabilityReceipt => UNKNOWN_CAPABILITY;
 
@@ -91,17 +97,29 @@ const canonicalCapability = (candidate: unknown): ChatGenerationSourceCapability
 export const readChatGenerationSourceCapability = (
   source: ChatGenerationSource,
 ): ChatGenerationSourceCapabilityReceipt => {
-  try {
-    // Capability declarations are untrusted input. Read only an own data
-    // descriptor so inherited values and accessor/proxy getters cannot run
-    // while a receipt is being inspected.
-    if (source === null || typeof source !== "object") return unknownCapability();
-    const descriptor = Object.getOwnPropertyDescriptor(source, "capability");
-    if (descriptor === undefined || !("value" in descriptor)) return unknownCapability();
-    return canonicalCapability(descriptor.value);
-  } catch {
+  if ((typeof source !== "object" && typeof source !== "function") || source === null) {
     return unknownCapability();
   }
+  // WeakMap.get is identity-only: it does not inspect or execute anything on
+  // a source object, including Proxy traps. Unregistered declarations fail
+  // closed to unknown and therefore cannot masquerade as provider proof.
+  return REGISTERED_CAPABILITIES.get(source) ?? unknownCapability();
+};
+
+/**
+ * Attach a detached, validated capability receipt to a source by identity.
+ * This is an internal dependency seam; callers must provide the receipt from
+ * trusted adapter wiring, not from a source object's declaration field.
+ */
+export const registerChatGenerationSourceCapability = (
+  source: ChatGenerationSource,
+  capability: unknown,
+): ChatGenerationSource => {
+  if ((typeof source !== "object" && typeof source !== "function") || source === null) {
+    return source;
+  }
+  REGISTERED_CAPABILITIES.set(source, canonicalCapability(capability));
+  return source;
 };
 
 export interface ScriptedChatGenerationStep {
@@ -128,7 +146,7 @@ export const createScriptedChatGenerationSource = (
   scheduler: ChatGenerationScheduler = realtimeChatGenerationScheduler,
 ): ChatGenerationSource => {
   const steps = Object.freeze(script.map(validateStep));
-  return Object.freeze({
+  const source: ChatGenerationSource = Object.freeze({
     capability: Object.freeze({
       tier: "deterministic-scripted" as const,
       adapter: "scripted-chat-generation",
@@ -162,5 +180,10 @@ export const createScriptedChatGenerationSource = (
         },
       });
     },
+  });
+  return registerChatGenerationSourceCapability(source, {
+    tier: "deterministic-scripted",
+    adapter: "scripted-chat-generation",
+    deterministic: true,
   });
 };
