@@ -182,6 +182,27 @@ describe("versioned agent run events", () => {
       "reference_id",
       "opaqueReference",
     ]);
+    expect(scanAgentRunRedactions({
+      nested: {
+        opaque: "opaque-a",
+        opaque_ref: "opaque-b",
+        "opaque-ref": "opaque-c",
+        file_ref: "opaque-d",
+        "file-ref": "opaque-e",
+        attachment_ref: "opaque-f",
+        "attachment-ref": "opaque-g",
+        safeSummary: "opaque=opaque-h file_ref=opaque-i attachment-ref:opaque-j",
+      },
+    })).toEqual([
+      "nested.opaque",
+      "nested.opaque_ref",
+      "nested.opaque-ref",
+      "nested.file_ref",
+      "nested.file-ref",
+      "nested.attachment_ref",
+      "nested.attachment-ref",
+      "nested.safeSummary",
+    ]);
     expect(projectAgentRunTimeline(first.events.slice(1))).toBeNull();
     expect(projectAgentRunTimeline([
       first.events[0]!,
