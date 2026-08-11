@@ -192,6 +192,9 @@ struct FloatingBarNotification: Identifiable, Equatable {
   /// Optional opaque proactive-suggestion join keys. No card content or screen
   /// provenance enters notification analytics through this field.
   let suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
+  /// Optional opaque Advice delivery key. It is consumed only at the actual
+  /// floating-bar presentation boundary and carries no advice or screen content.
+  let insightDeliveryID: UUID?
   /// Screenshot JPEG data from the moment the notification was generated (not shown in UI)
   let screenshotData: Data?
 
@@ -203,6 +206,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil
   ) {
     self.ownerID = ownerID
@@ -212,6 +216,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.context = context
     self.action = action
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
+    self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData
   }
 
