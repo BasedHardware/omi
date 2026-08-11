@@ -427,7 +427,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           children: [
                             const Padding(
                               padding: EdgeInsets.only(top: 2),
-                              child: Icon(Icons.graphic_eq, size: 14, color: Color(0xFF8B7CFF)),
+                              child: Icon(Icons.graphic_eq, size: 14, color: Colors.white70),
                             ),
                             const SizedBox(width: 8),
                             Expanded(

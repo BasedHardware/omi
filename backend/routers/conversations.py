@@ -1359,7 +1359,7 @@ def search_conversations_endpoint(
     transcript_ids: List[str] = []
     merge_cap = effective_per_page
     if effective_page == 1 and (search_request.query or '').strip():
-        merge_cap = min(max(effective_per_page * 3, effective_per_page), 60)
+        merge_cap = min(max(effective_per_page * 3, effective_per_page), 250)
         transcript_ids = search_transcript_conversation_ids(
             uid,
             search_request.query,

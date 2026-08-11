@@ -199,7 +199,8 @@ class ConversationProvider extends ChangeNotifier {
       speakerId: selectedSpeakerId,
     );
     if (generation != _sessionGeneration || !_isSignedIn()) return;
-    convos.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    // Search results are ranked by the server, including transcript-match relevance.
+    // Re-sorting by recency would bury older spoken-moment matches.
     searchedConversations = convos;
     currentSearchPage = current;
     totalSearchPages = total;

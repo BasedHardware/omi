@@ -6,12 +6,6 @@ live only in transcript segments. This module:
 1. Merges summary/Typesense hits with transcript-chunk vector hits (when indexed).
 2. Builds grep-style transcript snippets from hydrated Firestore segments (with
    start/end for client seek-to-moment).
-Conversation vectors embed structured summaries only, so MCP `search_conversations`
-misses exact phrases that live only in transcript segments. This module:
-
-1. Merges summary/Typesense hits with transcript-chunk vector hits (when indexed).
-2. Builds bounded grep-style transcript snippets with timings for MCP and app seek UX.
-
 Chunk indexing is optional (`TRANSCRIPT_CHUNK_INDEXING_ENABLED`); snippet extraction
 always runs on returned conversations so clients get evidence even for summary hits.
 """
@@ -23,11 +17,14 @@ import re
 import unicodedata
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from utils.log_sanitizer import sanitize
+
 logger = logging.getLogger(__name__)
 
 # Letters/digits in any script (not ASCII-only) so multi-term non-English queries
 # can still extract lexical snippets after a semantic transcript hit.
 _TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
+_MAX_SNIPPET_CHARS = 2000
 
 
 def _normalize_text(value: str) -> str:
@@ -130,9 +127,12 @@ def build_transcript_match_snippets(
         except (TypeError, ValueError):
             end_f = None
 
+        snippet_text = "\n".join(lines)
+        if len(snippet_text) > _MAX_SNIPPET_CHARS:
+            snippet_text = snippet_text[:_MAX_SNIPPET_CHARS].rstrip() + "..."
         snippets.append(
             {
-                "text": "\n".join(lines),
+                "text": snippet_text,
                 "segment_id": hit.get("id"),
                 "start": start_f,
                 "end": end_f,
@@ -174,7 +174,7 @@ def search_transcript_conversation_ids(
     search_transcript_chunks: Callable[..., Any],
 ) -> List[str]:
     """Fail-open transcript-chunk → conversation ids (empty when index off / errors)."""
-    limit = max(1, min(int(limit or 10), 100))
+    limit = max(1, min(int(limit or 10), 250))
     if not (query or "").strip():
         return []
     transcript_ids: List[str] = []
@@ -193,7 +193,7 @@ def search_transcript_conversation_ids(
         logger.warning(
             "conversation search: transcript chunk search failed uid=%s: %s",
             uid,
-            e,
+            sanitize(str(e)),
         )
     return merge_summary_and_transcript_ids(transcript_ids, [], limit)
 
@@ -214,7 +214,7 @@ def resolve_mcp_conversation_search_ids(
     When ``embed_query`` is provided, the query is embedded once and the vector is
     shared across both Pinecone namespace lookups.
     """
-    limit = max(1, min(int(limit or 10), 100))
+    limit = max(1, min(int(limit or 10), 250))
     shared_vector: Optional[List[float]] = embed_query(query) if embed_query is not None else None
     vector_kw: Dict[str, Any] = {"query_vector": shared_vector} if shared_vector is not None else {}
     summary_ids = query_vectors(query, uid, starts_at=starts_at, ends_at=ends_at, k=limit, **vector_kw) or []
@@ -229,7 +229,7 @@ def resolve_mcp_conversation_search_ids(
             if isinstance(row, dict) and row.get("conversation_id"):
                 transcript_ids.append(str(row["conversation_id"]))
     except Exception as e:  # noqa: BLE001 - transcript index is optional / best-effort
-        logger.warning("mcp conversation search: transcript chunk search failed uid=%s: %s", uid, e)
+        logger.warning("mcp conversation search: transcript chunk search failed uid=%s: %s", uid, sanitize(str(e)))
     return merge_summary_and_transcript_ids(transcript_ids, summary_ids, limit)
 
 

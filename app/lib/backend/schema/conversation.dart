@@ -60,9 +60,10 @@ SearchMomentSeek? searchMomentSeekFromSnippets({
   required String searchQuery,
 }) {
   if (searchQuery.trim().isEmpty || snippets.isEmpty) return null;
-  final start = snippets.first.start;
-  if (start == null) return null;
-  return SearchMomentSeek(start: start, end: snippets.first.end ?? start);
+  final snippet = snippets.firstWhereOrNull((candidate) => candidate.start != null);
+  if (snippet == null) return null;
+  final start = snippet.start!;
+  return SearchMomentSeek(start: start, end: snippet.end ?? start);
 }
 
 class CreateConversationResponse {
