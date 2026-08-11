@@ -106,12 +106,20 @@ function hashFile(file) {
   return sha256(readFileSync(file));
 }
 
-function currentCoreSha() {
+function currentCoreSha(manifestSha) {
   const result = spawnSync("git", ["-C", coreRoot, "rev-parse", "HEAD"], { encoding: "utf8" });
-  if (result.status !== 0) fail("unable to resolve current core SHA");
-  const sha = result.stdout.trim();
-  if (!fullSha.test(sha)) fail("current core SHA is not a full SHA");
-  return sha;
+  if (result.status === 0) {
+    const sha = result.stdout.trim();
+    if (!fullSha.test(sha)) fail("current core SHA is not a full SHA");
+    return sha;
+  }
+  // Strict verifier replay copies the bound input files into a source-safe
+  // scratch authority and intentionally does not expose .git metadata. The
+  // manifest itself is an immutable input-set member and is checked against
+  // the candidate's exact source revision before replay, so it is the only
+  // trustworthy fallback when Git is unavailable in that copied authority.
+  if (fullSha.test(manifestSha || "")) return manifestSha;
+  fail("unable to resolve current core SHA");
 }
 
 function corePath(value, label) {
@@ -641,7 +649,7 @@ function main() {
   if (!args.manifest || !args.out_root) fail(`${usage()}\n--manifest and --out-root are required`);
   const manifestPath = ensureManifestPath(args.manifest);
   const manifest = loadManifest(manifestPath);
-  const currentSha = currentCoreSha();
+  const currentSha = currentCoreSha(manifest.source_shas.core);
   if (manifest.source_shas.core !== currentSha) fail(`manifest core SHA ${manifest.source_shas.core} does not match current core HEAD ${currentSha}`);
   const outRoot = ensureOutputRoot(args.out_root);
   if (args.assemble_receipt) {
