@@ -67,7 +67,11 @@ binding retains only a digest of the random owner token plus the process coordin
 the owner record's token with another valid-looking value therefore refuses stop without signaling.
 Service diagnostics pass through a streaming sanitizer before their first persisted byte; retained
 logs and final evidence artifacts are scanned for the readiness credential, bearer credentials,
-and backend origins.
+and backend origins. The raw run id claims its run directory with one exclusive `mkdir`; an existing
+directory is prior evidence and is never reused or overwritten. The sanitizer activates only after
+the readiness schema, raw run id, executable, origin, database, PID, and kernel process-start identity
+all match this launch, and self-terminates when that exact service identity ends even if another
+process inherited the log pipe.
 P7's structural and real-subprocess tests own the single-store proof; H3 does not invent
 store-set fields on this readiness schema.
 

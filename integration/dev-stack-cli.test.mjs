@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -28,8 +28,7 @@ function roots() {
 }
 
 async function occupy(port) {
-  const existing = spawnSync("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" }).stdout
-    .trim().split(/\s+/u).filter(Boolean).map(Number);
+  const existing = portPids(port);
   if (existing.length > 0) return existing;
   const child = spawn(process.execPath, ["-e", `require("net").createServer().listen(${port},"127.0.0.1")`], { stdio: "ignore" });
   listeners.push(child);
@@ -41,6 +40,16 @@ async function occupy(port) {
     .trim().split(/\s+/u).filter(Boolean).map(Number);
   assert.ok(owned.includes(child.pid), `test listener did not bind ${port}`);
   return owned;
+}
+
+function portPids(port) {
+  return spawnSync("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" }).stdout
+    .trim().split(/\s+/u).filter(Boolean).map(Number);
+}
+
+function processIdsMatching(fragment) {
+  return spawnSync("pgrep", ["-f", fragment], { encoding: "utf8" }).stdout
+    .trim().split(/\s+/u).filter(Boolean).map(Number);
 }
 
 function run(args, rootPair = roots()) {
@@ -79,4 +88,64 @@ test("RED-PROOF occupied 4851 refuses a second service listener and preserves it
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /required port 4851 is occupied.*not kill it or start a second listener/s);
   for (const pid of listenerPids) assert.doesNotThrow(() => process.kill(pid, 0));
+});
+
+test("RED-PROOF a claimed raw run id is exclusive and prior evidence is never overwritten", () => {
+  const rootPair = roots();
+  const runRoot = join(scratch, "run-root");
+  const priorRun = join(runRoot, "runs", "reused-run");
+  mkdirSync(join(priorRun, "logs"), { recursive: true });
+  const sentinel = join(priorRun, "prior-evidence.json");
+  const readiness = join(priorRun, "service-readiness.json");
+  writeFileSync(sentinel, "{\"prior\":true}\n");
+  writeFileSync(readiness, "{\"stale\":true}\n");
+  const beforeFiles = readdirSync(priorRun).sort();
+  const listenersBefore = portPids(4851);
+
+  const result = run(["--up", "--run-id", "reused-run"], rootPair);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /already owns a run directory.*refusing to reuse or overwrite prior evidence/);
+  assert.doesNotMatch(result.stdout + result.stderr, /service-ready/);
+  assert.equal(readFileSync(sentinel, "utf8"), "{\"prior\":true}\n");
+  assert.equal(readFileSync(readiness, "utf8"), "{\"stale\":true}\n");
+  assert.deepEqual(readdirSync(priorRun).sort(), beforeFiles);
+  assert.equal(existsSync(join(runRoot, "service-owner.json")), false);
+  assert.deepEqual(portPids(4851), listenersBefore);
+});
+
+test("RED-PROOF mismatched readiness cleans up the exact service and logger process tree", () => {
+  const rootPair = roots();
+  const launcher = join(rootPair.platform, "apps/service/bin/dev-server.ts");
+  writeFileSync(launcher, `
+    import { writeFileSync } from "node:fs";
+    const port = Number(process.env.OMI_PORT);
+    Bun.serve({ hostname: "127.0.0.1", port, fetch(request) {
+      return new URL(request.url).pathname === "/ready" ? new Response("ok") : new Response("missing", { status: 404 });
+    }});
+    writeFileSync(process.env.OMI_DEV_READY_RECORD, JSON.stringify({
+      schema: "omi.dev-service-readiness.v1",
+      runId: "stale-other-run",
+      executable: "apps/service/bin/dev-server.ts",
+      baseUrl: "http://127.0.0.1:4851",
+      databasePath: process.env.OMI_QA_DB,
+      pid: process.pid,
+      evidencePath: "/v1/qa/evidence",
+      devToken: "new-failed-run-secret",
+      ownerAccountId: "local-owner",
+    }) + "\\n");
+    console.log("token=new-failed-run-secret http://127.0.0.1:4851 Authorization: Bearer new-failed-run-secret");
+  `);
+  const runRoot = join(scratch, "run-root");
+  const listenersBefore = portPids(4851);
+
+  const result = run(["--up", "--run-id", "expected-run"], rootPair);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /wrong runId/);
+  assert.doesNotMatch(result.stdout + result.stderr, /service-ready/);
+  assert.deepEqual(portPids(4851), listenersBefore);
+  assert.deepEqual(processIdsMatching(`${runRoot}/runs/expected-run/logs/service.log`), []);
+  assert.equal(existsSync(join(runRoot, "service-owner.json")), false);
+  assert.equal(existsSync(join(runRoot, "runs", "expected-run")), false);
 });

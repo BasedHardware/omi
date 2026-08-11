@@ -13,6 +13,7 @@ const lanes = read("./lanes.mjs");
 const doctor = read("./doctor.sh");
 const evidenceCli = read("./lib/evidence-cli.mjs");
 const owner = read("./lib/process-owner.mjs");
+const sanitizer = read("./lib/sanitize-log.mjs");
 const macos = read("../core/shells/macos/scripts/dev-run-macos.sh");
 const ios = read("../core/shells/ios/scripts/dev-run-ios.sh");
 
@@ -105,6 +106,8 @@ test("RED-PROOF stop signals only a durable exact process owner", () => {
 });
 
 test("RED-PROOF service output reaches disk only through the streaming sanitizer", () => {
+  assert.match(stack, /if ! mkdir "\$RUN_DIR"/);
+  assert.match(stack, /refusing to reuse or overwrite prior evidence/);
   assert.match(stack, /mkfifo "\$SERVICE_LOG_PIPE"/);
   assert.match(stack, /"\$LOG_SANITIZER" --stream --out "\$LOG_DIR\/service\.log"/);
   assert.match(stack, /exec bun "\$SERVICE_REL" \) > "\$SERVICE_LOG_PIPE" 2>&1 &/);
@@ -112,4 +115,10 @@ test("RED-PROOF service output reaches disk only through the streaming sanitizer
   assert.match(stack, /"\$ARTIFACT_GUARD" --readiness "\$READINESS_PATH" --path "\$LOG_DIR"/);
   assert.match(stack, /retained_paths=\("\$LOG_DIR" "\$MACOS_RESULT" "\$IOS_RESULT" "\$CONSUMER_RESULT" "\$PRODUCER_RESULT" "\$FACTS_PATH"\)/);
   assert.match(stack, /retained_paths\+\=\("\$REPORTFILE"\)/);
+  for (const coordinate of ["--run-id", "--executable", "--base-url", "--database", "--pid", "--process-start-identity"]) {
+    assert.match(stack, new RegExp(coordinate));
+  }
+  assert.match(sanitizer, /validateServiceReadiness/);
+  assert.match(sanitizer, /snapshot\.startIdentity !== expectedStartIdentity/);
+  assert.match(sanitizer, /activated && !commandMatchesService/);
 });
