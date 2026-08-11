@@ -24,14 +24,15 @@ test("task fixtures cover the truthful lifecycle and queue matrix", async () => 
   // boundaries and screenshots drift with the wall clock.
 });
 
-test("tasks derive UTC calendar groups and preserve no-due tasks in Later", async () => {
+test("tasks derive UTC urgency groups and preserve no-due tasks separately", async () => {
   // RETAINED-SOURCE-ASSERTION: calendar injection and the closed group union are structural grouping constraints.
   const source = await read("src/production/TasksProduction.tsx");
   assert.match(source, /calendarDay\?:/);
   assert.match(source, /groupFor\(task, now, dayFormatter\)/);
-  assert.match(source, /if \(task\.dueAt === null\) return "later"/);
+  assert.match(source, /if \(task\.dueAt === null\) return "noDeadline"/);
+  assert.match(source, /if \(task\.dueAt < now\) return "overdue"/);
   assert.match(source, /86_400_000/);
-  assert.match(source, /type GroupKey = "today" \| "tomorrow" \| "later"/);
+  assert.match(source, /type GroupKey = "overdue" \| "today" \| "tomorrow" \| "later" \| "noDeadline"/);
   assert.match(source, /tasks\.noDueDate/);
   assert.doesNotMatch(source, /new Date\(\)\.getDate/);
   // red-proof: replacing groupFor with a fixed bucket would put tomorrow and

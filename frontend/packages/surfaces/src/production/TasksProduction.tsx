@@ -4,19 +4,22 @@ import type { MessageKey, MessageVariables } from "@omi-core/i18n";
 import type { ProductionTaskStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { ProductionIcon } from "./ProductionIcon.js";
 import { tasksEmptyKind } from "./tasks-presentation.js";
 import "./tasks.css";
 
 type Translate = <K extends MessageKey>(key: K, vars?: MessageVariables<K>) => string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
-type GroupKey = "today" | "tomorrow" | "later";
+type GroupKey = "overdue" | "today" | "tomorrow" | "later" | "noDeadline";
 const GROUP_KEYS: Record<GroupKey, MessageKey> = {
+  overdue: "tasks.overdue",
   today: "tasks.today",
   tomorrow: "tasks.tomorrow",
   later: "tasks.later",
+  noDeadline: "tasks.noDeadline",
 };
+const TASK_EMPTY_ICON = "tasks" as const;
 
 export type TasksProductionProps = {
   store: ProductionTaskStore;
@@ -68,12 +71,13 @@ function dateInputValue(timestamp: number | null): string {
 }
 
 function groupFor(task: Task, now: number, calendarDay: (timestamp: number) => string): GroupKey {
-  if (task.dueAt === null) return "later";
+  if (task.dueAt === null) return "noDeadline";
   const current = calendarDay(now);
   const due = calendarDay(task.dueAt);
   if (due === current) return "today";
   const tomorrow = calendarDay(now + 86_400_000);
   if (due === tomorrow) return "tomorrow";
+  if (task.dueAt < now) return "overdue";
   return "later";
 }
 
@@ -159,6 +163,7 @@ function TaskCard({ task, store, translate, formatDate, run, selected, onSelect 
               <label>
                 <span>{translate("tasks.dueDateLabel")}</span>
                 <input type="date" value={dueDraft} onChange={(event) => setDueDraft(event.target.value)} aria-label={translate("tasks.dueDateLabel")} />
+                <small className="task-date-hint">{translate("tasks.dueDateHint")}</small>
               </label>
             </div>
           ) : (
@@ -250,7 +255,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   }, [reload, store, translate]);
 
   const grouped = useMemo(() => {
-    const groups: Record<GroupKey, Task[]> = { today: [], tomorrow: [], later: [] };
+    const groups: Record<GroupKey, Task[]> = { overdue: [], today: [], tomorrow: [], later: [], noDeadline: [] };
     const needle = query.trim().toLocaleLowerCase(locale);
     for (const task of rows) {
       if (!needle || task.description.toLocaleLowerCase(locale).includes(needle)) groups[groupFor(task, now, dayFormatter)].push(task);
@@ -280,7 +285,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
     }
   };
 
-  const groups: GroupKey[] = ["today", "tomorrow", "later"];
+  const groups: GroupKey[] = ["overdue", "today", "tomorrow", "later", "noDeadline"];
   const selectedTask = selectedTaskId ? rows.find((task) => task.id === selectedTaskId) : undefined;
   const filtering = query.trim().length > 0;
   const visibleCount = groups.reduce((count, group) => count + grouped[group].length, 0);
@@ -359,6 +364,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
         <label>
           <span>{translate("tasks.dueDateLabel")}</span>
           <input type="date" value={dueDraft} onChange={(event) => setDueDraft(event.target.value)} aria-label={translate("tasks.dueDateLabel")} />
+          <small className="task-date-hint">{translate("tasks.dueDateHint")}</small>
         </label>
         <button type="button" onClick={() => void add()} disabled={!draft.trim()}>{translate("tasks.add")}</button>
         <button type="button" className="tasks-create-cancel" onClick={() => setCreateOpen(false)}>{translate("common.cancel")}</button>
@@ -374,21 +380,28 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       {status.refresh.phase === "initial-loading" ? (
         <p className="tasks-empty-state">{translate("common.loading")}</p>
       ) : status.refresh.phase === "ready" && rows.length === 0 ? (
-        <div className="tasks-empty-state" data-empty-kind="empty-projection"><strong>{translate("tasks.emptyTitle")}</strong><p>{translate("tasks.emptyBody")}</p></div>
+        <div data-empty-kind="empty-projection">
+          <ProductionEmptyState
+            icon={TASK_EMPTY_ICON}
+            title={translate("tasks.emptyTitle")}
+            detail={translate("tasks.emptyBody")}
+            action={<button type="button" onClick={openCreate}>{translate("tasks.newTask")}</button>}
+          />
+        </div>
       ) : status.refresh.phase === "unavailable" && rows.length === 0 ? (
         <p className="tasks-empty-state">{translate("lifecycle.unavailable")}</p>
       ) : emptyKind === "filtered-out" ? (
         <p className="tasks-empty-state" data-empty-kind="filtered-out">{translate("common.noResults")}</p>
       ) : (
         <section className="tasks-groups" aria-label={translate("tasks.title")}>
-          {groups.map((group) => (
+          {groups.filter((group) => grouped[group].length > 0).map((group) => (
             <section className={`tasks-group tasks-group-${group}`} key={group} aria-labelledby={`tasks-heading-${group}`}>
               <div className="tasks-group-heading">
-                <ProductionIcon name={group === "later" ? "history" : "calendar"} size={18} />
+                <ProductionIcon name={group === "noDeadline" ? "history" : "calendar"} size={18} />
                 <h2 id={`tasks-heading-${group}`}>{groupLabel(group, translate)}</h2>
                 <span className="tasks-group-count">{grouped[group].length}</span>
               </div>
-              {grouped[group].length === 0 ? <p className="tasks-group-empty">{translate("lifecycle.empty")}</p> : grouped[group].map((task) => (
+              {grouped[group].map((task) => (
                 <TaskCard key={task.id} task={task} store={store} translate={translate} formatDate={dateFormatter} run={run} selected={task.id === selectedTaskId} onSelect={setSelectedTaskId} />
               ))}
             </section>

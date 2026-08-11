@@ -38,6 +38,7 @@ function dayStart(now: number): number {
 function baseRows(now: number): Task[] {
   const today = dayStart(now);
   return [
+    task({ id: id("fixture-task-overdue"), description: "Follow up on the overdue review note", dueAt: today - DAY_MS + 12 * 3_600_000 }, now),
     task({ id: id("fixture-task-today"), description: "Review the first captured note", dueAt: today + 15 * 3_600_000, source: "user" }, now),
     task({ id: id("fixture-task-design"), description: "Compare the desktop render with the approved reference", dueAt: today + 16 * 3_600_000 }, now),
     task({ id: id("fixture-task-glass"), description: "Validate the native glass window on a light and dark desktop", dueAt: today + 17 * 3_600_000 }, now),
