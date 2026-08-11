@@ -179,7 +179,7 @@ export function fixtureChatStore(state: ChatFixtureState): ProductionChatStore {
     ? [{
         opId: "fixture-dead-send",
         text: "Reconstruct this message without replaying its old envelope.",
-        attachmentIds: ["fixture-staged-one", "fixture-staged-two"],
+        attachmentCount: 2,
       }]
     : [];
 

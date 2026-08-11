@@ -857,7 +857,7 @@ test("Chat announces the latest terminal delivery without rereading the thread",
   }
 });
 
-test("retained dead send shows exact authored text and ordered ids with discard only", async () => {
+test("retained dead send shows authored text and a safe attachment count with discard only", async () => {
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const createProductionChatStore = await loadProductionExport(
     "ProductionChatStore.ts",
@@ -885,10 +885,10 @@ test("retained dead send shows exact authored text and ordered ids with discard 
     const panel = rendered.container.querySelector(".chat-dead-letters");
     assert.ok(panel);
     assert.ok(panel.textContent.includes("Exact authored text"));
-    assert.deepEqual(
-      [...panel.querySelectorAll(".chat-dead-attachment-ids code")].map((item) => item.textContent),
-      ["opaque-one", "opaque-two"],
-    );
+    assert.ok(panel.textContent.includes("2 attachments"));
+    assert.equal(panel.textContent.includes("opaque-one"), false);
+    assert.equal(panel.textContent.includes("opaque-two"), false);
+    assert.equal(panel.querySelector("code"), null);
     assert.equal([...panel.querySelectorAll("button")].some((button) => /retry/i.test(button.textContent)), false);
     const discard = panel.querySelector("button");
     assert.ok(discard);
