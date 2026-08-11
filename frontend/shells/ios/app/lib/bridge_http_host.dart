@@ -93,17 +93,30 @@ class BridgeHttpNormalizedResponse {
 }
 
 /// Correlation gate for the one-way channel: an id can produce at most one
-/// page reply. Unknown/duplicate late replies are dropped at this boundary.
+/// reply in the document that issued it. The bridge-web request sequence is
+/// document-local and restarts at `h1` after navigation, while this host lives
+/// for the process. Capturing the epoch at request receipt both permits the new
+/// document's `h1` and prevents a late prior-document reply from targeting it.
 class BridgeHttpReplyGate {
   BridgeHttpReplyGate({this.maxEntries = 256}) : assert(maxEntries > 0);
 
   final int maxEntries;
-  final Set<String> _settled = <String>{};
-  final Queue<String> _order = Queue<String>();
+  final Set<(int, String)> _settled = <(int, String)>{};
+  final Queue<(int, String)> _order = Queue<(int, String)>();
+  int _documentEpoch = 0;
 
-  bool accept(String id) {
-    if (!_settled.add(id)) return false;
-    _order.addLast(id);
+  int get documentEpoch => _documentEpoch;
+
+  int beginDocument() {
+    _documentEpoch += 1;
+    return _documentEpoch;
+  }
+
+  bool accept(int documentEpoch, String id) {
+    if (documentEpoch != _documentEpoch) return false;
+    final key = (documentEpoch, id);
+    if (!_settled.add(key)) return false;
+    _order.addLast(key);
     while (_order.length > maxEntries) {
       _settled.remove(_order.removeFirst());
     }
@@ -264,6 +277,9 @@ class BridgeHttpHost {
 
   void close() => _client.close(force: true);
 
+  /// Fence every in-flight reply to the document that created its request.
+  void beginDocument() => _replyGate.beginDocument();
+
   /// Public only for the generated fixture runner; the live message handler
   /// calls this exact policy before opening a socket.
   static BridgeHttpPolicyResult prepareForConformance({
@@ -311,11 +327,18 @@ class BridgeHttpHost {
   }
 
   Future<void> _handle(WebViewController controller, String raw) async {
+    final documentEpoch = _replyGate.documentEpoch;
     String id = '?';
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) {
-        return _fail(controller, id, BridgeHttpFailureReason.shellError, 'malformed bridge http request');
+        return _fail(
+          controller,
+          documentEpoch,
+          id,
+          BridgeHttpFailureReason.shellError,
+          'malformed bridge http request',
+        );
       }
       final rawId = decoded['id'];
       if (rawId is! String) {
@@ -327,7 +350,13 @@ class BridgeHttpHost {
       final method = decoded['method'];
       final path = decoded['path'];
       if (method is! String || path is! String) {
-        return _fail(controller, id, BridgeHttpFailureReason.shellError, 'missing or unsupported method/path');
+        return _fail(
+          controller,
+          documentEpoch,
+          id,
+          BridgeHttpFailureReason.shellError,
+          'missing or unsupported method/path',
+        );
       }
 
       final rawHeaders = decoded['headers'];
@@ -350,7 +379,7 @@ class BridgeHttpHost {
         clientIdentity: clientIdentity,
       );
       if (decision.request == null) {
-        return _fail(controller, id, decision.failureReason!, decision.detail!);
+        return _fail(controller, documentEpoch, id, decision.failureReason!, decision.detail!);
       }
       servedCount += 1;
       final prepared = decision.request!;
@@ -384,16 +413,22 @@ class BridgeHttpHost {
       // An environment token can be loaded again only by a later process.
       _observeResponse(method: prepared.method, path: prepared.path, status: response.statusCode);
 
-      await _reply(controller, id, <String, dynamic>{'ok': true, 'response': out});
+      await _reply(controller, documentEpoch, id, <String, dynamic>{'ok': true, 'response': out});
     } on TimeoutException {
-      await _fail(controller, id, BridgeHttpFailureReason.timeout, 'request timed out');
+      await _fail(controller, documentEpoch, id, BridgeHttpFailureReason.timeout, 'request timed out');
     } on SocketException catch (e) {
       // Detail carries the OS error code only — never the URL or the token.
-      await _fail(controller, id, BridgeHttpFailureReason.offline, 'socket error ${e.osError?.errorCode ?? -1}');
+      await _fail(
+        controller,
+        documentEpoch,
+        id,
+        BridgeHttpFailureReason.offline,
+        'socket error ${e.osError?.errorCode ?? -1}',
+      );
     } on HttpException {
-      await _fail(controller, id, BridgeHttpFailureReason.offline, 'http exception');
+      await _fail(controller, documentEpoch, id, BridgeHttpFailureReason.offline, 'http exception');
     } catch (_) {
-      await _fail(controller, id, BridgeHttpFailureReason.shellError, 'unexpected shell error');
+      await _fail(controller, documentEpoch, id, BridgeHttpFailureReason.shellError, 'unexpected shell error');
     }
   }
 
@@ -401,8 +436,14 @@ class BridgeHttpHost {
     custody.observeResponse(method: method, path: path, status: status);
   }
 
-  Future<void> _fail(WebViewController controller, String id, BridgeHttpFailureReason reason, String detail) {
-    return _reply(controller, id, <String, dynamic>{
+  Future<void> _fail(
+    WebViewController controller,
+    int documentEpoch,
+    String id,
+    BridgeHttpFailureReason reason,
+    String detail,
+  ) {
+    return _reply(controller, documentEpoch, id, <String, dynamic>{
       'ok': false,
       'failure': <String, dynamic>{'id': id, 'reason': reason.wire, 'detail': detail},
     });
@@ -411,8 +452,8 @@ class BridgeHttpHost {
   /// Deliver exactly one reply per id by invoking the page's reply function.
   /// Both arguments are JSON-encoded, so nothing in a path or body can break out
   /// of the expression.
-  Future<void> _reply(WebViewController controller, String id, Map<String, dynamic> reply) async {
-    if (!_replyGate.accept(id)) return;
+  Future<void> _reply(WebViewController controller, int documentEpoch, String id, Map<String, dynamic> reply) async {
+    if (!_replyGate.accept(documentEpoch, id)) return;
     final js =
         '${BridgeHttpContract.replyFunction}('
         '${jsonEncode(id)},'
