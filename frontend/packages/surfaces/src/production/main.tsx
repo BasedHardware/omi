@@ -294,6 +294,7 @@ if (query.get("lab") === "1") {
     ? fixtureValue as TaskFixtureState
     : undefined;
   const detailId = query.get("conversation") ?? (requestedQa === "conversation-detail" && conversationFixture ? fixtureConversationDetailId(conversationFixture) : undefined);
+  const initialFolderId = query.get("folder")?.trim() || undefined;
   const propositionFixture = fixtureRequest && requestedQa === "memories-platform" && PROPOSITION_FIXTURE_STATES.includes(fixtureValue as PropositionFixtureState)
     ? fixtureValue as PropositionFixtureState
     : undefined;
@@ -318,7 +319,7 @@ if (query.get("lab") === "1") {
   } else if (taskFixture) {
     root.render(<StrictMode><TasksProduction store={fixtureTaskStore(taskFixture)} fixture={taskFixture} locale={locale} translate={translateTasks} now={TASK_FIXED_NOW} onReady={() => emitReady(`fixture:${taskFixture}`)} /></StrictMode>);
   } else if (conversationFixture) {
-    root.render(<StrictMode><ConversationsProduction store={fixtureConversationStore(conversationFixture, requestedQa === "conversation-detail")} foldersStore={fixtureFolderStore()} fixture={conversationFixture} detailId={detailId} locale={locale} onReady={() => emitReady(`fixture:${conversationFixture}`)} /></StrictMode>);
+    root.render(<StrictMode><ConversationsProduction store={fixtureConversationStore(conversationFixture, requestedQa === "conversation-detail")} foldersStore={fixtureFolderStore()} fixture={conversationFixture} detailId={detailId} initialFolderId={initialFolderId} locale={locale} onReady={() => emitReady(`fixture:${conversationFixture}`)} /></StrictMode>);
   } else if (memoryFixture) {
     root.render(<StrictMode><MemoriesProduction store={fixtureStore(memoryFixture)} fixture={memoryFixture} locale={locale} onReady={() => emitReady(`fixture:${memoryFixture}`)} /></StrictMode>);
   } else if (route === "unsupported") {
@@ -390,7 +391,7 @@ if (query.get("lab") === "1") {
             stores.openFolders(),
           ]);
           markRendered("conversations", null);
-          root.render(<StrictMode><ConversationsProduction store={store} foldersStore={foldersStore} detailId={detailId} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
+          root.render(<StrictMode><ConversationsProduction store={store} foldersStore={foldersStore} detailId={detailId} initialFolderId={initialFolderId} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "folders") {
           const store = await stores.openFolders();
           markRendered("folders", null);

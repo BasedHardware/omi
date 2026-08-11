@@ -10,7 +10,7 @@ import {
 
 after(closeRenderHarness);
 
-async function renderConversation(state, detail = false) {
+async function renderConversation(state, detail = false, initialFolderId) {
   const ConversationsProduction = await loadProductionExport("ConversationsProduction.tsx", "ConversationsProduction");
   const fixtureConversationStore = await loadProductionExport("conversation-fixtures.ts", "fixtureConversationStore");
   const fixtureFolderStore = await loadProductionExport("conversation-fixtures.ts", "fixtureFolderStore");
@@ -20,8 +20,28 @@ async function renderConversation(state, detail = false) {
     foldersStore: fixtureFolderStore(),
     fixture: state,
     ...(detail ? { detailId: fixtureConversationDetailId(state) } : {}),
+    ...(initialFolderId ? { initialFolderId } : {}),
   });
 }
+
+test("a folder route opens Conversations with that folder selected", async () => {
+  const rendered = await renderConversation("normal", false, "work-folder-one");
+  try {
+    await rendered.act(async () => {
+      for (let index = 0; index < 6; index += 1) await Promise.resolve();
+    });
+    const selected = [...rendered.container.querySelectorAll(".conversation-filter button")]
+      .find((button) => button.textContent?.trim() === "Work");
+    assert.equal(selected?.getAttribute("aria-pressed"), "true");
+    assert.match(
+      rendered.container.querySelector('main[data-route="conversations"]')?.getAttribute("data-consumer-semantic") ?? "",
+      /conversations:visible:3:total:7:/,
+      "the selected folder controls the visible conversation projection",
+    );
+  } finally {
+    await rendered.cleanup();
+  }
+});
 
 test("conversation rows render the compact accessible reference shape", async () => {
   const rendered = await renderConversation("normal");
