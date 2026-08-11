@@ -1,7 +1,10 @@
-"""Canonical default read rollout module (WS-G8a).
+"""Universal default-memory authorization and global incident gate.
 
-Neutral ``default_read_rollout`` is the source of truth. Legacy ``default_read_rollout`` remains an importable alias.
+Released rollout-shaped response fields remain compatibility metadata; they do
+not select users or storage authorities.
 """
+
+# LIFECYCLE: permanent
 
 from dataclasses import dataclass
 from enum import Enum
