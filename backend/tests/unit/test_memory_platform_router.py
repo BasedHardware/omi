@@ -70,3 +70,64 @@ def test_memory_platform_route_returns_stable_secret_free_response(memory_platfo
     }
     assert 'secret' not in response.text.lower()
     assert 'credential' not in response.text.lower()
+
+
+def _client(memory_platform_router):
+    app = FastAPI()
+    app.include_router(memory_platform_router.router)
+    app.dependency_overrides[memory_platform_router.auth.get_current_user_uid] = lambda: 'test-user'
+    return TestClient(app)
+
+
+def test_quota_route_exposes_remaining_platform_allowance(memory_platform_router, monkeypatch):
+    monkeypatch.setattr(
+        memory_platform_router,
+        'get_platform_quota_snapshot',
+        lambda _uid: {
+            'plan': 'Free',
+            'plan_type': 'basic',
+            'used': 4,
+            'limit': 1000,
+            'remaining': 996,
+            'allowed': True,
+            'reset_at': 1780000000,
+        },
+    )
+
+    response = _client(memory_platform_router).get('/v1/memory/platform/quota')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'plan': 'Free',
+        'plan_type': 'basic',
+        'unit': 'requests',
+        'used': 4,
+        'limit': 1000,
+        'remaining': 996,
+        'allowed': True,
+        'reset_at': 1780000000,
+    }
+
+
+def test_search_over_quota_returns_429_naming_the_plan(memory_platform_router, monkeypatch):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(
+        memory_platform_router,
+        '_require_product_authorization',
+        lambda _uid: types.SimpleNamespace(policy=object(), global_gate=object(), observability={}),
+    )
+
+    def _over_quota(_uid):
+        raise HTTPException(
+            status_code=429,
+            detail={'error': 'platform_quota_exceeded', 'plan_type': 'basic', 'limit': 1000},
+        )
+
+    monkeypatch.setattr(memory_platform_router, 'enforce_platform_quota', _over_quota)
+
+    response = _client(memory_platform_router).get('/v1/memory/platform/search')
+
+    assert response.status_code == 429
+    assert response.json()['detail']['plan_type'] == 'basic'
+    assert response.json()['detail']['limit'] == 1000

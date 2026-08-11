@@ -108,6 +108,9 @@ class PlanLimits(BaseModel):
     # (displayed as "Plus") cap by question count; `architect` caps by cost_usd.
     chat_questions_per_month: Optional[int] = None
     chat_cost_usd_per_month: Optional[float] = None
+    # Memory Platform API cap (search + ingest requests per calendar month).
+    # None = uncapped; every paid plan is uncapped today.
+    platform_api_requests_per_month: Optional[int] = None
 
 
 class ChatQuotaUnit(str, Enum):

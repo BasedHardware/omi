@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -46,6 +46,21 @@ class MemoryPlatformCapability(BaseModel):
     zkr: ZkrCompatibility = ZkrCompatibility()
 
 
+class MemoryPlatformQuota(BaseModel):
+    """Remaining Memory Platform API allowance for the current calendar month."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    plan: str
+    plan_type: str
+    unit: Literal["requests"] = "requests"
+    used: int
+    limit: Optional[int] = None  # None = uncapped
+    remaining: Optional[int] = None  # None = uncapped
+    allowed: bool = True
+    reset_at: int  # unix seconds — start of next month UTC
+
+
 class MemoryPlatformIngestResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -65,6 +80,7 @@ __all__ = [
     "MemoryPlatformCapability",
     "MemoryPlatformContract",
     "MemoryPlatformIngestResponse",
+    "MemoryPlatformQuota",
     "MemorySurfaceNames",
     "McpSurfaceName",
     "RestSurfaceName",

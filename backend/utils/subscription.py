@@ -760,6 +760,13 @@ PLUS_TIER_MONTHLY_SECONDS_LIMIT = PLUS_TIER_MINUTES_LIMIT_PER_MONTH * 60
 PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '200'))
 UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH', '1000'))
 
+# Memory Platform API cap for the Free tier. Deliberately generous: the free
+# allowance exists to make the API evaluable end to end, not to be a teaser, and
+# every already-signed-up Free user must keep being served. Paid plans are
+# uncapped (`None`) rather than metered, so no existing subscriber can be
+# regressed by shipping this gate. Env-overridable for ops.
+FREE_PLATFORM_API_REQUESTS_PER_MONTH = int(os.getenv('FREE_PLATFORM_API_REQUESTS_PER_MONTH', '1000'))
+
 # Features available during the 3-day desktop trial (matches paid-plan behavior).
 TRIAL_FEATURES = [
     'unlimited_listening',
@@ -914,6 +921,7 @@ def get_basic_plan_limits() -> PlanLimits:
         words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
         insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
         chat_questions_per_month=FREE_CHAT_QUESTIONS_PER_MONTH,
+        platform_api_requests_per_month=FREE_PLATFORM_API_REQUESTS_PER_MONTH,
     )
 
 
