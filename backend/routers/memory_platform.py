@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from database._client import db
+from database._client import get_firestore_client
 from models.memories import Memory, MemoryCategory, MemoryDB
 from models.memory_product import ProductMemorySearchResponse
 from models.memory_platform import (
@@ -73,10 +73,10 @@ def _global_read_gate_observability(gate) -> dict:
     }
 
 
-def _require_product_authorization(uid: str):
+def _require_product_authorization(uid: str, db_client):
     decision = authorize_memory_product_memory_route(
         ProductAuthorizationContext(uid=uid, consumer='omi_chat', surface='platform_search'),
-        db_client=db,
+        db_client=db_client,
     )
     if not decision.allowed:
         raise HTTPException(status_code=decision.status_code, detail=decision.observability)
@@ -108,13 +108,18 @@ def get_memory_platform_quota(uid: str = Depends(auth.get_current_user_uid)) -> 
     response_model=ProductMemorySearchResponse,
 )
 def search_memory_platform(
-    query: str = Query('', max_length=MAX_PLATFORM_SEARCH_QUERY_LENGTH),
-    limit: int = Query(100, ge=1, le=MAX_PRODUCT_MEMORY_READ_LIMIT),
-    offset: int = Query(0, ge=0, le=MAX_PLATFORM_SEARCH_OFFSET),
+    # The handler owns bound validation so an out-of-range request gets the
+    # documented 400. Declaring the bounds as Query constraints would let FastAPI
+    # reject them with a 422 before this function is ever entered, so the
+    # published contract and the direct-call tests would both be wrong.
+    query: str = Query('', description=f'At most {MAX_PLATFORM_SEARCH_QUERY_LENGTH} characters.'),
+    limit: int = Query(100, description=f'Between 1 and {MAX_PRODUCT_MEMORY_READ_LIMIT}.'),
+    offset: int = Query(0, description=f'Between 0 and {MAX_PLATFORM_SEARCH_OFFSET}.'),
     uid: str = Depends(_rate_limited_uid('tools:search')),
 ):
     _validate_search_bounds(query, limit, offset)
-    authz = _require_product_authorization(uid)
+    db_client = get_firestore_client()
+    authz = _require_product_authorization(uid, db_client)
     policy = authz.policy
     if policy is None or authz.global_gate is None:
         raise HTTPException(status_code=503, detail='Service temporarily unavailable')
@@ -125,7 +130,7 @@ def search_memory_platform(
         response = fetch_default_product_memory_search(
             uid=uid,
             query=query,
-            db_client=db,
+            db_client=db_client,
             policy=policy,
             now=_current_time(),
             limit=limit,
@@ -154,7 +159,8 @@ def ingest_memory_platform(
     if not memory.content.strip():
         raise HTTPException(status_code=400, detail='content must not be blank')
 
-    decision = canonical_write_decision(uid, db_client=db)
+    db_client = get_firestore_client()
+    decision = canonical_write_decision(uid, db_client=db_client)
     if decision.memory_system != MemorySystem.CANONICAL or not decision.enabled:
         raise HTTPException(
             status_code=503,
@@ -176,7 +182,7 @@ def ingest_memory_platform(
         client_device_id=resolve_client_device_from_request(request).client_device_id,
     )
     try:
-        created = MemoryService(db_client=db).create_external_memory(
+        created = MemoryService(db_client=db_client).create_external_memory(
             uid,
             memory_db,
             memory_system=MemorySystem.CANONICAL,

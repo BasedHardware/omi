@@ -7,6 +7,15 @@ import routers.memory_platform as memory_platform
 from models.memories import Memory, MemoryCategory
 from utils.memory.memory_system import MemorySystem
 
+_INJECTED_CLIENT = SimpleNamespace(name='injected-firestore-client')
+
+
+@pytest.fixture(autouse=True)
+def injected_firestore_client(monkeypatch):
+    """The router resolves its Firestore client per call, so tests can own it."""
+    monkeypatch.setattr(memory_platform, 'get_firestore_client', lambda: _INJECTED_CLIENT)
+    return _INJECTED_CLIENT
+
 
 def _request(headers=None):
     return SimpleNamespace(headers=headers or {})
@@ -39,7 +48,7 @@ def test_platform_search_is_bounded_and_uses_canonical_product_reader(monkeypatc
     calls = []
     metered = _stub_quota(monkeypatch)
 
-    monkeypatch.setattr(memory_platform, '_require_product_authorization', lambda uid: _authorization())
+    monkeypatch.setattr(memory_platform, '_require_product_authorization', lambda uid, db_client: _authorization())
 
     def fake_search(**kwargs):
         calls.append(kwargs)
@@ -60,7 +69,7 @@ def test_platform_search_is_bounded_and_uses_canonical_product_reader(monkeypatc
     assert len(calls) == 1
     assert calls[0]['uid'] == 'user-1'
     assert calls[0]['query'] == 'launch'
-    assert calls[0]['db_client'] is memory_platform.db
+    assert calls[0]['db_client'] is _INJECTED_CLIENT
     assert calls[0]['limit'] == 3
     assert calls[0]['offset'] == 4
     assert result['uid'] == 'user-1'
@@ -88,6 +97,7 @@ def test_platform_ingest_uses_canonical_memory_service(monkeypatch):
 
     class FakeMemoryService:
         def __init__(self, db_client):
+            assert db_client is _INJECTED_CLIENT
             calls.append(('init', db_client))
 
         def create_external_memory(self, *args, **kwargs):
