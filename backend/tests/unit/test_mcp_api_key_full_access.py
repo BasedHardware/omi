@@ -201,7 +201,6 @@ def test_legacy_mcp_key_auth_repairs_identity_scopes_and_memory_grant(monkeypatc
             "key_prefix": "omi_mcp",
             "created_at": datetime.utcnow(),
             "last_used_at": None,
-            "scopes": ["memories.read"],
         }
     )
     redis = _Redis()
@@ -235,13 +234,11 @@ def test_stale_cached_mcp_key_auth_repairs_once_and_rewrites_cache(monkeypatch):
             "id": "cached-key",
             "user_id": "user-1",
             "hashed_key": "hashed",
-            "scopes": ["memories.read"],
         }
     )
     redis = _Redis()
     redis.auth_context = {
         "user_id": "user-1",
-        "scopes": ["memories.read"],
         "key_id": "cached-key",
         "app_id": None,
     }

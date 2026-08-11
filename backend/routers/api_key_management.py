@@ -7,11 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException
 
 import database.dev_api_key as dev_api_key_db
 import database.mcp_api_key as mcp_api_key_db
-from database.api_key_metadata import ApiKeyRevocationUnavailableError, ApiKeyValidationError
+from database.api_key_metadata import (
+    ApiKeyNotFoundError,
+    ApiKeyRevocationUnavailableError,
+    ApiKeyValidationError,
+)
 from dependencies import get_current_user_id
-from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
-from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
+from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated, DevApiKeyRotated
+from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated, McpApiKeyRotated
 from utils.dev_cache import invalidate_developer_cache
+from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 from utils.observability.api_keys import record_api_key_repairs, record_api_key_revocation_exhausted
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 
@@ -45,11 +50,41 @@ def create_mcp_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_use
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
+    if key_data.scopes is not None:
+        unknown = sorted(set(key_data.scopes) - set(MCP_FULL_ACCESS_SCOPES))
+        if not key_data.scopes or unknown:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid scopes. Available: {sorted(MCP_FULL_ACCESS_SCOPES)}",
+            )
+
     try:
-        raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
+        raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip(), scopes=key_data.scopes)
     except ApiKeyValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
+
+
+@mcp_router.post(
+    "/v1/mcp/keys/{key_id}/rotate",
+    response_model=McpApiKeyRotated,
+    tags=["mcp"],
+    summary="Rotate Key",
+    operation_id="rotate_key_v1_mcp_keys__key_id__rotate_post",
+)
+def rotate_mcp_key(key_id: str, uid: str = Depends(get_current_user_id)):
+    """Issue a new secret for an existing MCP key. The raw key is returned once.
+
+    The previous secret stops working immediately — there is no grace window.
+    """
+    try:
+        raw_key, api_key_data = mcp_api_key_db.rotate_mcp_key(uid, key_id)
+    except ApiKeyNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="API key not found") from exc
+    except ApiKeyRevocationUnavailableError as exc:
+        record_api_key_revocation_exhausted(key_kind="mcp", log=logger)
+        raise HTTPException(status_code=503, detail="API key rotation temporarily unavailable") from exc
+    return McpApiKeyRotated(**api_key_data.model_dump(), key=raw_key)
 
 
 @mcp_router.delete(
@@ -117,6 +152,29 @@ def create_developer_key(key_data: DevApiKeyCreate, uid: str = Depends(get_curre
     # Developer status changes affect proactive-notification limits immediately.
     invalidate_developer_cache(uid)
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
+
+
+@developer_router.post(
+    "/v1/dev/keys/{key_id}/rotate",
+    response_model=DevApiKeyRotated,
+    tags=["API Keys"],
+    summary="Rotate Key",
+    operation_id="rotateApiKey",
+)
+def rotate_developer_key(key_id: str, uid: str = Depends(get_current_user_id)):
+    """Issue a new secret for an existing Developer key. The raw key is returned once.
+
+    The previous secret stops working immediately — there is no grace window.
+    """
+    try:
+        raw_key, api_key_data = dev_api_key_db.rotate_dev_key(uid, key_id)
+    except ApiKeyNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="API key not found") from exc
+    except ApiKeyRevocationUnavailableError as exc:
+        record_api_key_revocation_exhausted(key_kind="dev", log=logger)
+        raise HTTPException(status_code=503, detail="API key rotation temporarily unavailable") from exc
+    invalidate_developer_cache(uid)
+    return DevApiKeyRotated(**api_key_data.model_dump(), key=raw_key)
 
 
 @developer_router.delete(
