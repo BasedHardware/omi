@@ -35,7 +35,15 @@ PURPLE_PATTERNS = [
     re.compile(r"Color\.purple\b"),
     re.compile(r"\.purple\b"),  # SwiftUI shorthand: .foregroundStyle(.purple)
     re.compile(r"Colors\.purple\b"),  # Flutter
+    # Flutter's most common purple, and previously invisible here: `\bpurple\b`
+    # cannot match inside `deepPurple` because camelCase puts no word boundary
+    # before it, and none of the other patterns spell it either.
+    re.compile(r"\bdeepPurple(?:Accent)?\b"),
     re.compile(r"#(?:7C3AED|8B5CF6|A855F7|9333EA|6D28D9|AF52DE|D946EF|A78BFA|C4B5FD)\b", re.I),
+    # The same hues as written in Dart. Flutter spells colours `Color(0xFF8B5CF6)`,
+    # so the `#RRGGBB` pattern above never matched a Flutter literal — the alpha
+    # channel is optional because both forms appear in the app.
+    re.compile(r"0x(?:[0-9A-F]{2})?(?:7C3AED|8B5CF6|A855F7|9333EA|6D28D9|AF52DE|D946EF|A78BFA|C4B5FD)\b", re.I),
     re.compile(r"purple(?:Primary|Secondary|Accent|Light|Gradient|LightGradient)\b"),
     re.compile(r"purple-(?:primary|secondary|accent|\d{2,4})\b"),  # Tailwind: bg-purple-500 etc.
     re.compile(r"--purple-"),
