@@ -6,7 +6,6 @@ import os
 import sqlite3
 import sys
 import threading
-import time
 import types
 from pathlib import Path
 
@@ -145,6 +144,7 @@ def test_database_integrity_check_does_not_block_event_loop(tmp_path: Path, monk
     payload = create_database(tmp_path / "uploaded.db", "replacement", "ready")
     started = threading.Event()
     release = threading.Event()
+    timer_fired = threading.Event()
     worker = None
 
     def slow_validation(_path):
@@ -166,22 +166,24 @@ def test_database_integrity_check_does_not_block_event_loop(tmp_path: Path, monk
         upload_task = asyncio.create_task(module.upload_database(Request()))
         assert await asyncio.to_thread(started.wait, 1)
         await asyncio.sleep(0.01)
-        elapsed = time.monotonic() - started_at
         release.set()
         result = await upload_task
-        return elapsed, result
+        return result
 
-    timer = threading.Timer(0.2, release.set)
-    started_at = time.monotonic()
+    def release_from_timer():
+        timer_fired.set()
+        release.set()
+
+    timer = threading.Timer(0.2, release_from_timer)
     timer.start()
     try:
-        elapsed, result = asyncio.run(run_upload())
+        result = asyncio.run(run_upload())
     finally:
         release.set()
         timer.cancel()
         module.runtime.close_database()
 
-    assert elapsed < 0.15
+    assert not timer_fired.is_set()
     assert worker is not threading.main_thread()
     assert result == (len(payload), len(payload))
 
@@ -191,6 +193,7 @@ def test_database_upload_fsync_does_not_block_event_loop(tmp_path: Path, monkeyp
     payload = create_database(tmp_path / "uploaded.db", "replacement", "ready")
     started = threading.Event()
     release = threading.Event()
+    timer_fired = threading.Event()
     worker = None
     calls = 0
 
@@ -214,22 +217,24 @@ def test_database_upload_fsync_does_not_block_event_loop(tmp_path: Path, monkeyp
         upload_task = asyncio.create_task(module.upload_database(Request()))
         assert await asyncio.to_thread(started.wait, 1)
         await asyncio.sleep(0.01)
-        elapsed = time.monotonic() - started_at
         release.set()
         result = await upload_task
-        return elapsed, result
+        return result
 
-    timer = threading.Timer(0.2, release.set)
-    started_at = time.monotonic()
+    def release_from_timer():
+        timer_fired.set()
+        release.set()
+
+    timer = threading.Timer(0.2, release_from_timer)
     timer.start()
     try:
-        elapsed, result = asyncio.run(run_upload())
+        result = asyncio.run(run_upload())
     finally:
         release.set()
         timer.cancel()
         module.runtime.close_database()
 
-    assert elapsed < 0.15
+    assert not timer_fired.is_set()
     assert worker is not threading.main_thread()
     assert result == (len(payload), len(payload))
 
@@ -243,6 +248,7 @@ def test_database_installation_is_offloaded_and_serialized_with_db_use(tmp_path:
 
     install_started = threading.Event()
     release_install = threading.Event()
+    timer_fired = threading.Event()
     query_started = threading.Event()
     install_thread = None
     original_close = module.runtime.close_database
@@ -281,8 +287,11 @@ def test_database_installation_is_offloaded_and_serialized_with_db_use(tmp_path:
         query_result = await query_task
         return query_blocked, result, query_result
 
-    timer = threading.Timer(0.2, release_install.set)
-    started_at = time.monotonic()
+    def release_install_from_timer():
+        timer_fired.set()
+        release_install.set()
+
+    timer = threading.Timer(0.2, release_install_from_timer)
     timer.start()
     try:
         query_blocked, result, query_result = asyncio.run(run_upload())
@@ -291,7 +300,7 @@ def test_database_installation_is_offloaded_and_serialized_with_db_use(tmp_path:
         timer.cancel()
         module.runtime.close_database()
 
-    assert time.monotonic() - started_at < 0.15
+    assert not timer_fired.is_set()
     assert install_thread is not threading.main_thread()
     assert query_blocked
     assert result == (len(payload), len(payload))
