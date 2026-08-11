@@ -71,7 +71,15 @@ final class ModelQoSTests: XCTestCase {
     ModelQoS.activeTier = .premium
     XCTAssertEqual(ModelQoS.Gemini.proactive, "gemini-2.5-flash")
     XCTAssertEqual(ModelQoS.Gemini.taskExtraction, "gemini-2.5-flash")
-    XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-2.5-flash")
+  }
+
+  /// Insight is Pro on every tier by design — the timer caps it at ~6 analyses/hour, and the
+  /// premium-tier drop to Flash tracked a click-through fall from 2.34% to under 1%.
+  func testInsightIsProOnEveryTier() {
+    for tier in ModelTier.allCases {
+      ModelQoS.activeTier = tier
+      XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-2.5-pro")
+    }
   }
 
   func testGeminiMaxUsesPro() {
