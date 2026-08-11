@@ -131,6 +131,9 @@ def ingest_memory_platform(
     memory: Memory,
     uid: str = Depends(_rate_limited_uid('memories:create')),
 ) -> MemoryPlatformIngestResponse:
+    if not memory.content.strip():
+        raise HTTPException(status_code=400, detail='content must not be blank')
+
     decision = canonical_write_decision(uid, db_client=db)
     if decision.memory_system != MemorySystem.CANONICAL or not decision.enabled:
         raise HTTPException(

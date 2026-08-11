@@ -93,6 +93,19 @@ def test_platform_ingest_uses_canonical_memory_service(monkeypatch):
     assert calls[1][1]['require_canonical_promotion'] is True
 
 
+@pytest.mark.parametrize('blank_content', ['', '   ', '\n\t '])
+def test_platform_ingest_rejects_blank_content_as_client_input(monkeypatch, blank_content):
+    def unreachable(*args, **kwargs):
+        raise AssertionError('blank ingest must not reach the canonical write decision')
+
+    monkeypatch.setattr(memory_platform, 'canonical_write_decision', unreachable)
+
+    with pytest.raises(HTTPException) as error:
+        memory_platform.ingest_memory_platform(Memory(content=blank_content), uid='user-1')
+
+    assert error.value.status_code == 400
+
+
 def test_platform_ingest_fails_closed_when_canonical_write_is_unavailable(monkeypatch):
     monkeypatch.setattr(
         memory_platform,
