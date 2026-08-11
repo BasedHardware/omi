@@ -18,7 +18,7 @@ const DEFAULT_CONTEXT_TOKEN_BUDGET = 1_024;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
 const SAFE_HASH = /^sha256:[0-9a-f]{64}$/u;
 const CONTROL = /[\u0000-\u001f\u007f]/u;
-const REDACTION_MARKER = /(?:Bearer\s+|api[_ -]?key\s*[:=]|authorization\s*[:=]|attachment(?:[_ -]?id)?\s*[:=]|BEGIN\s+.*PRIVATE\s+KEY)/iu;
+const REDACTION_MARKER = /(?:Bearer\s+|(?:api[_ -]?key|authorization|access[_ -]?token|token|secret|password)\s*[:=]|(?:attachment|file|opaque|reference)(?:[_ -]?id)?\s*[:=]|BEGIN\s+.*PRIVATE\s+KEY)/iu;
 
 export type ChatGenerationContextPolicyDecision = "included" | "excluded" | "degraded";
 
@@ -190,6 +190,8 @@ const isSafeInt = (value: unknown): value is number => typeof value === "number"
 const isSafeText = (value: unknown, max = 512): value is string => typeof value === "string"
   && value.length > 0 && value.length <= max && value.trim().length > 0 && !CONTROL.test(value)
   && !REDACTION_MARKER.test(value);
+const isContextText = (value: unknown, max = 512): value is string => typeof value === "string"
+  && value.length > 0 && value.length <= max && value.trim().length > 0 && !CONTROL.test(value);
 const tokenEstimateOf = (value: string): number => Math.max(1, Math.ceil(value.trim().split(/\s+/u).length * 1.3));
 const hashText = (value: string): string => `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 
@@ -203,7 +205,7 @@ const redactText = (value: string, max = 512): string => {
   const redacted = bounded
     .replace(/Bearer\s+[^\s,;]+/giu, "[redacted]")
     .replace(/(?:api[_ -]?key|authorization|token|secret|password|access[_ -]?token)\s*[:=]\s*[^\s,;]+/giu, "[redacted]")
-    .replace(/attachment(?:[_ -]?id)?\s*[:=]\s*[^\s,;]+/giu, "[redacted]")
+    .replace(/(?:attachment|file|opaque|reference)(?:[_ -]?id)?\s*[:=]\s*[^\s,;]+/giu, "[redacted]")
     .replace(/BEGIN\s+[^\n]*PRIVATE\s+KEY[\s\S]*?END\s+[^\n]*PRIVATE\s+KEY/giu, "[redacted]");
   return redacted.trim().length === 0 ? "[redacted]" : redacted;
 };
@@ -228,8 +230,8 @@ const validateCandidate = (candidate: ChatGenerationContextCandidate): void => {
     || !(candidate.claimId === null || isSafeId(candidate.claimId)) || !isSafeId(candidate.evidenceId)
     || !isSafeId(candidate.ownerAccountId) || !isSafeHash(candidate.sourceHash)
     || !isSafeInt(candidate.capturedAt) || !(candidate.expiresAt === null || isSafeInt(candidate.expiresAt))
-    || !isSafeText(candidate.redactedPreview) || !isSafeInt(candidate.tokenEstimate)
-    || candidate.tokenEstimate === 0 || !isSafeText(candidate.inclusionReason)
+    || !isContextText(candidate.redactedPreview) || !isSafeInt(candidate.tokenEstimate)
+    || candidate.tokenEstimate === 0 || !isContextText(candidate.inclusionReason)
     || (candidate.policyDecision !== undefined && !["included", "excluded", "degraded"].includes(candidate.policyDecision))
     || (candidate.priority !== undefined && (typeof candidate.priority !== "number" || !Number.isFinite(candidate.priority)))
     || (candidate.conflictKey !== undefined && !(candidate.conflictKey === null || isSafeId(candidate.conflictKey)))) {
@@ -262,11 +264,10 @@ const transcriptTail = (
 ): readonly ChatGenerationTranscriptTurn[] => Object.freeze([...history]
   .sort((left, right) => left.createdAt < right.createdAt ? -1
     : left.createdAt > right.createdAt ? 1 : left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
-  .slice(-MAX_TRANSCRIPT_TAIL)
   .map((message) => Object.freeze({
     messageId: message.id,
     sender: message.sender,
-    payloadHash: message.payloadHash.startsWith("sha256:") ? message.payloadHash : hashText(message.text),
+    payloadHash: isSafeHash(message.payloadHash) ? message.payloadHash : hashText(message.text),
     redactedText: redactText(message.text),
     tokenEstimate: tokenEstimateOf(message.text),
     trust: "untrusted-transcript" as const,
@@ -277,7 +278,6 @@ const deltas = (
   input: readonly ChatGenerationUndeliveredDelta[],
 ): readonly ChatGenerationUndeliveredDelta[] => Object.freeze([...input]
   .sort((left, right) => left.sequence - right.sequence || (left.eventId < right.eventId ? -1 : 1))
-  .slice(-MAX_UNDELIVERED_DELTAS)
   .map((delta) => {
     if (!isSafeId(delta.eventId) || !isSafeHash(delta.payloadHash) || !isSafeInt(delta.sequence)
       || !isSafeInt(delta.tokenEstimate) || delta.tokenEstimate === 0
@@ -294,6 +294,9 @@ const deltas = (
       injectionPolicy: "data-only" as const,
     });
   }));
+
+const attachmentTokenEstimate = (attachment: ChatGenerationContextAttachment): number =>
+  tokenEstimateOf(`${attachment.label} ${attachment.mediaType}`);
 
 export interface CreateChatGenerationContextPacketInput {
   readonly accountId: string;
@@ -334,6 +337,11 @@ export const createChatGenerationContextPacket = (
       selfNoiseTokens += candidate.tokenEstimate;
       continue;
     }
+    if (selected.length >= MAX_CONTEXT_ITEMS) {
+      omittedItemCount += 1;
+      selfNoiseTokens += candidate.tokenEstimate;
+      continue;
+    }
     if (usedTokens + candidate.tokenEstimate > maxTokens) {
       omittedItemCount += 1;
       selfNoiseTokens += candidate.tokenEstimate;
@@ -350,9 +358,9 @@ export const createChatGenerationContextPacket = (
       sourceHash: candidate.sourceHash,
       capturedAt: candidate.capturedAt,
       expiresAt: candidate.expiresAt,
-      redactedPreview: candidate.redactedPreview,
+      redactedPreview: redactText(candidate.redactedPreview),
       tokenEstimate: candidate.tokenEstimate,
-      inclusionReason: candidate.inclusionReason,
+      inclusionReason: redactText(candidate.inclusionReason),
       policyDecision: candidate.policyDecision ?? "included",
       trust: "untrusted-evidence",
     }));
@@ -360,6 +368,40 @@ export const createChatGenerationContextPacket = (
   const tail = transcriptTail(input.history ?? []);
   const undelivered = deltas(input.undeliveredDeltas ?? []);
   const attachmentIds = new Set(input.attachmentSubset ?? []);
+  const attachments = attachmentRefs(input.attachments ?? [], attachmentIds);
+
+  const takeWithBudget = <T>(
+    entries: readonly T[],
+    maxEntries: number,
+    tokenCost: (entry: T) => number,
+  ): { readonly selected: readonly T[]; readonly omitted: number; readonly noise: number } => {
+    const bounded = entries.slice(Math.max(0, entries.length - maxEntries));
+    let omitted = entries.length - bounded.length;
+    let noise = entries.slice(0, Math.max(0, entries.length - maxEntries))
+      .reduce((total, entry) => total + tokenCost(entry), 0);
+    const kept: T[] = [];
+    for (let index = bounded.length - 1; index >= 0; index -= 1) {
+      const entry = bounded[index]!;
+      const cost = tokenCost(entry);
+      if (usedTokens + cost > maxTokens) {
+        omitted += 1;
+        noise += cost;
+        continue;
+      }
+      usedTokens += cost;
+      kept.unshift(entry);
+    }
+    return { selected: Object.freeze(kept), omitted, noise };
+  };
+  const boundedTail = takeWithBudget(tail, MAX_TRANSCRIPT_TAIL, (entry) => entry.tokenEstimate);
+  omittedItemCount += boundedTail.omitted;
+  selfNoiseTokens += boundedTail.noise;
+  const boundedDeltas = takeWithBudget(undelivered, MAX_UNDELIVERED_DELTAS, (entry) => entry.tokenEstimate);
+  omittedItemCount += boundedDeltas.omitted;
+  selfNoiseTokens += boundedDeltas.noise;
+  const boundedAttachments = takeWithBudget(attachments, attachments.length, attachmentTokenEstimate);
+  omittedItemCount += boundedAttachments.omitted;
+  selfNoiseTokens += boundedAttachments.noise;
   const packetWithoutHash = {
     schemaVersion: CHAT_CONTEXT_PACKET_SCHEMA_VERSION,
     traceVersion: CHAT_CONTEXT_TRACE_VERSION,
@@ -367,16 +409,17 @@ export const createChatGenerationContextPacket = (
     generationId: input.generationId,
     createdAt: input.nowEpochMilliseconds,
     items: Object.freeze(selected),
-    transcriptTail: tail,
-    undeliveredDeltas: undelivered,
-    attachments: attachmentRefs(input.attachments ?? [], attachmentIds),
+    transcriptTail: boundedTail.selected,
+    undeliveredDeltas: boundedDeltas.selected,
+    attachments: boundedAttachments.selected,
     budget: Object.freeze({
       maxTokens,
       usedTokens,
       remainingTokens: maxTokens - usedTokens,
       selfNoiseTokens,
       omittedItemCount,
-      compacted: omittedItemCount > 0 || tail.length === MAX_TRANSCRIPT_TAIL || undelivered.length === MAX_UNDELIVERED_DELTAS,
+      compacted: omittedItemCount > 0 || tail.length > MAX_TRANSCRIPT_TAIL
+        || undelivered.length > MAX_UNDELIVERED_DELTAS || selected.length >= MAX_CONTEXT_ITEMS,
     }),
   };
   const packetHash = hashText(canonicalJson(packetWithoutHash));

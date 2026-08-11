@@ -111,6 +111,35 @@ describe("structured Chat generation context packets", () => {
     });
   });
 
+  test("bounds item count and budgets transcript, delta, and attachment payloads together", () => {
+    const many = Array.from({ length: 70 }, (_, index) => candidate(`item:${index}`, { tokenEstimate: 1 }));
+    const bounded = createChatGenerationContextPacket({
+      accountId: ACCOUNT,
+      generationId: "generation:bounded",
+      nowEpochMilliseconds: 210,
+      maxTokens: 1_000,
+      candidates: many,
+    });
+    expect(bounded.items).toHaveLength(64);
+    expect(bounded.budget.omittedItemCount).toBe(6);
+    expect(bounded.budget.selfNoiseTokens).toBe(6);
+    const whole = createChatGenerationContextPacket({
+      accountId: ACCOUNT,
+      generationId: "generation:whole-budget",
+      nowEpochMilliseconds: 220,
+      maxTokens: 6,
+      candidates: [candidate("evidence", { tokenEstimate: 1 })],
+      history: [message("history:one", "one two three four", "human", 219)],
+      undeliveredDeltas: [delta("delta:one", 1, "pending one two three")],
+      attachments: [{ id: "attachment:one", displayName: "notes.txt", mediaType: "text/plain", sizeBytes: 1, contentReference: null }],
+      attachmentSubset: ["attachment:one"],
+    });
+    expect(whole.budget.usedTokens).toBeLessThanOrEqual(6);
+    expect(whole.budget.usedTokens + whole.budget.remainingTokens).toBe(6);
+    expect(whole.budget.omittedItemCount).toBeGreaterThan(0);
+    expect(whole.budget.compacted).toBe(true);
+  });
+
   test("turn two resolves a first-turn reference and replay keeps one packet hash", async () => {
     const firstTurn = message("human:first", "Remember the project codename is Atlas", "human", 100);
     const firstStored = admitted(firstTurn.id, "generation:first", firstTurn.text);
@@ -202,6 +231,36 @@ describe("structured Chat generation context packets", () => {
     });
     expect(packet.transcriptTail[0]?.redactedText).not.toContain("secret");
     expect(packet.attachments[0]?.label).toBe("[redacted]");
+  });
+
+  test("candidate and legacy previews redact credential/opaque-reference value forms", () => {
+    const packet = createChatGenerationContextPacket({
+      accountId: ACCOUNT,
+      generationId: "generation:value-redaction",
+      nowEpochMilliseconds: 710,
+      candidates: [candidate("dirty", {
+        redactedPreview: "token=secret attachment_id=opaque-attachment",
+        inclusionReason: "api_key=secret",
+      })],
+    });
+    const legacy = normalizeChatGenerationContext(["token=secret file_id=opaque-file"], {
+      accountId: ACCOUNT,
+      generationId: "generation:legacy-redaction",
+      nowEpochMilliseconds: 710,
+    });
+    expect(JSON.stringify(packet)).not.toMatch(/secret|opaque-attachment/iu);
+    expect(JSON.stringify(legacy)).not.toMatch(/secret|opaque-file/iu);
+    const invalidHashHistory = {
+      ...message("history:invalid-hash", "safe text", "human", 709),
+      payloadHash: "sha256:not-a-hash",
+    };
+    const repaired = createChatGenerationContextPacket({
+      accountId: ACCOUNT,
+      generationId: "generation:invalid-hash",
+      nowEpochMilliseconds: 710,
+      history: [invalidHashHistory],
+    });
+    expect(repaired.transcriptTail[0]?.payloadHash).toMatch(/^sha256:[0-9a-f]{64}$/u);
   });
 
   test("malformed, extra-key, mutated, and cross-owner packets fail closed", () => {
