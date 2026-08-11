@@ -603,6 +603,10 @@ const redirectFields = (value: unknown): ProductPropositionRedirect => {
   return Object.freeze({ ...withoutId, redirect_id: expectedId });
 };
 
+/** Strict persistence/replay parser for an already-derived redirect. */
+export const parseProductPropositionRedirect = (value: unknown): ProductPropositionRedirect =>
+  redirectFields(value);
+
 export interface BuildProductRedirectInput {
   readonly owner_account_id: string;
   readonly source_proposition_id: string;
@@ -782,6 +786,10 @@ const groupFields = (value: unknown): ProductGroupProjection => {
   if (input["group_projection_id"] !== expectedId) fail(code);
   return Object.freeze({ ...withoutId, group_projection_id: expectedId });
 };
+
+/** Strict persistence/replay parser for an already-derived rebuildable group. */
+export const parseProductGroupProjection = (value: unknown): ProductGroupProjection =>
+  groupFields(value);
 
 export const buildProductGroupProjection = (inputValue: Readonly<{
   owner_account_id: string;
