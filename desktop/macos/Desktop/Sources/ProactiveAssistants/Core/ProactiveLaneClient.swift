@@ -18,6 +18,7 @@ struct ProactiveLaneResult: Equatable, Sendable {
 enum ProactiveLaneClientError: Error {
   case invalidResponse
   case http(Int)
+  case ownerChanged
 }
 
 actor ProactiveLaneClient {
@@ -47,8 +48,14 @@ actor ProactiveLaneClient {
     imageData: Data? = nil,
     jsonSchema: [String: Any],
     cacheKey: String? = nil,
-    maxCompletionTokens: Int = 1024
+    maxCompletionTokens: Int = 1024,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ProactiveLaneResult {
+    if let authorizationSnapshot {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw ProactiveLaneClientError.ownerChanged
+      }
+    }
     var content: [[String: Any]] = [["type": "text", "text": prompt]]
     if let imageData {
       content.append([
@@ -73,10 +80,28 @@ actor ProactiveLaneClient {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue(try await authorization(), forHTTPHeaderField: "Authorization")
+    let authHeader: String
+    if let authorizationSnapshot {
+      let authService = await MainActor.run { AuthService.shared }
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw ProactiveLaneClientError.ownerChanged
+      }
+      authHeader = try await authService.getAuthHeader(expectedUserId: authorizationSnapshot.ownerID)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw ProactiveLaneClientError.ownerChanged
+      }
+    } else {
+      authHeader = try await authorization()
+    }
+    request.setValue(authHeader, forHTTPHeaderField: "Authorization")
     request.timeoutInterval = 90
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
     let (data, response) = try await session.data(for: request)
+    if let authorizationSnapshot {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw ProactiveLaneClientError.ownerChanged
+      }
+    }
     guard let http = response as? HTTPURLResponse else { throw ProactiveLaneClientError.invalidResponse }
     guard (200..<300).contains(http.statusCode) else { throw ProactiveLaneClientError.http(http.statusCode) }
     return try Self.parseEnvelope(data)
@@ -116,13 +141,21 @@ enum ScreenDerivedContent {
 }
 
 enum ContextProactivityTelemetry {
+  static func boundedProviderModel(_ value: String) -> String {
+    switch value.lowercased() {
+    case "gpt-5.6-luna": "gpt-5.6-luna"
+    case "gpt-5-nano": "gpt-5-nano"
+    default: "other"
+    }
+  }
+
   static func record(_ result: ProactiveLaneResult) async {
     await MainActor.run {
       PostHogManager.shared.track(
         "context_bucket_model_usage",
         properties: [
           "operation": result.operation,
-          "provider_model": result.providerModel,
+          "provider_model": boundedProviderModel(result.providerModel),
           "cached_tokens": result.usage.cachedTokens,
           "cache_write_tokens": result.usage.cacheWriteTokens,
           "cache_write": result.cacheWrite,

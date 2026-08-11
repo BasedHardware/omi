@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from jsonschema import Draft202012Validator, SchemaError, ValidationError
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from database import redis_db
@@ -52,6 +53,21 @@ class ProactiveCompletionRequest(BaseModel):
             raise ValueError("explicit caching is available only for proactive_reasoning")
         if self.response_format.get("type") != "json_schema":
             raise ValueError("response_format.type must be json_schema")
+        json_schema = self.response_format.get("json_schema")
+        if not isinstance(json_schema, dict):
+            raise ValueError("response_format.json_schema must be an object")
+        name = json_schema.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("response_format.json_schema.name is required")
+        if json_schema.get("strict") is not True:
+            raise ValueError("response_format.json_schema.strict must be true")
+        schema = json_schema.get("schema")
+        if not isinstance(schema, dict):
+            raise ValueError("response_format.json_schema.schema must be an object")
+        try:
+            Draft202012Validator.check_schema(schema)
+        except SchemaError as exc:
+            raise ValueError("response_format.json_schema.schema is invalid") from exc
         encoded = json.dumps(self.model_dump(mode="json"), separators=(",", ":")).encode("utf-8")
         if len(encoded) > _MAX_REQUEST_BYTES:
             raise ValueError("request exceeds the 5 MiB proactive payload limit")
@@ -117,7 +133,45 @@ def _gateway_payload(request: ProactiveCompletionRequest) -> dict[str, Any]:
     if request.cache_key is not None:
         payload["prompt_cache_key"] = request.cache_key
         payload["prompt_cache_options"] = {"mode": "explicit", "ttl": "30m"}
+        payload["messages"] = _add_explicit_cache_breakpoint(request.messages)
     return payload
+
+
+def _add_explicit_cache_breakpoint(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Mark the stable prompt prefix for the gateway's explicit cache protocol.
+
+    The desktop client sends the stable bucket prompt as the first text part and the
+    current frame as a later image part.  Keep the marker before image content so the
+    gateway can cache the text prefix without changing the visible prompt.
+    """
+    copied = [dict(message) for message in messages]
+    for message in reversed(copied):
+        content = message.get("content")
+        if isinstance(content, list):
+            parts = [dict(part) if isinstance(part, dict) else part for part in content]
+            if any(
+                isinstance(part, dict) and part.get("prompt_cache_breakpoint") == {"mode": "explicit"} for part in parts
+            ):
+                return copied
+            marker = {"type": "text", "text": "", "prompt_cache_breakpoint": {"mode": "explicit"}}
+            image_index = next(
+                (
+                    index
+                    for index, part in enumerate(parts)
+                    if isinstance(part, dict) and part.get("type") == "image_url"
+                ),
+                len(parts),
+            )
+            parts.insert(image_index, marker)
+            message["content"] = parts
+            return copied
+        if isinstance(content, str):
+            message["content"] = [
+                {"type": "text", "text": content},
+                {"type": "text", "text": "", "prompt_cache_breakpoint": {"mode": "explicit"}},
+            ]
+            return copied
+    return copied
 
 
 def _usage_envelope(response: Mapping[str, Any]) -> ProactiveUsageEnvelope:
@@ -165,6 +219,7 @@ async def proactive_completion(
         raise HTTPException(status_code=502, detail="Proactive model unavailable") from exc
     if not isinstance(response_body, dict):
         raise HTTPException(status_code=502, detail="Proactive model returned an invalid response")
+    _validate_gateway_output(response_body, request)
     usage = _usage_envelope(response_body)
     provider_model = response_body.get("model")
     return ProactiveCompletionEnvelope(
@@ -176,3 +231,25 @@ async def proactive_completion(
         fallback_class="unknown",
         response=response_body,
     )
+
+
+def _validate_gateway_output(response: Mapping[str, Any], request: ProactiveCompletionRequest) -> None:
+    """Fail closed if the gateway/provider did not honor the strict JSON contract."""
+    response_format = request.response_format.get("json_schema")
+    schema = response_format.get("schema") if isinstance(response_format, Mapping) else None
+    choices = response.get("choices")
+    if not isinstance(schema, Mapping) or not isinstance(choices, list) or not choices:
+        raise HTTPException(status_code=502, detail="Proactive model returned invalid structured output")
+    validator = Draft202012Validator(schema)
+    for choice in choices:
+        if not isinstance(choice, Mapping):
+            raise HTTPException(status_code=502, detail="Proactive model returned invalid structured output")
+        message = choice.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        if not isinstance(content, str):
+            raise HTTPException(status_code=502, detail="Proactive model returned invalid structured output")
+        try:
+            decoded = json.loads(content)
+            validator.validate(decoded)
+        except (json.JSONDecodeError, ValidationError, TypeError) as exc:
+            raise HTTPException(status_code=502, detail="Proactive model returned invalid structured output") from exc

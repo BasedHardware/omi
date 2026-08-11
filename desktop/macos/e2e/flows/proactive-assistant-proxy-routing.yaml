@@ -5,22 +5,7 @@ description: Proactive model clients resolve through the non-production desktop 
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/CandidateSink.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketRollup.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketSchema.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketStore.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketsFeature.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDeliveryAuthority.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDetection.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextLedgerResurfacingService.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextSubjectBindingService.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextTitleNormalizer.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextVisitCoordinator.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/InsightSQLPrivacy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveLaneClient.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/TaskContextualResurfacingService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift
 preconditions:

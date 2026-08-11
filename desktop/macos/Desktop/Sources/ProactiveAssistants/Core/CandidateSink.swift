@@ -6,14 +6,26 @@ import Foundation
 actor CandidateSink {
   static let shared = CandidateSink()
 
-  func graduateValidatedFacts(deliveryID: String, factIDs: [String]) async {
+  private struct GraduationFact: Decodable, FetchableRecord, Sendable {
+    let id: String
+    let statement: String
+    let evidenceText: String
+    let confidence: Double
+  }
+
+  func graduateValidatedFacts(
+    deliveryID: String,
+    factIDs: [String],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async {
     let normalizedFactIDs = factIDs.map { $0.hasPrefix("fact:") ? String($0.dropFirst(5)) : $0 }
     guard !normalizedFactIDs.isEmpty else { return }
-    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+    let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { return }
     do {
-      let rows = try await pool.read { db in
-        try Row.fetchAll(
+      let facts = try await pool.read { db in
+        try GraduationFact.fetchAll(
           db,
           sql: """
               SELECT id, statement, evidenceText, confidence FROM bucket_facts
@@ -23,40 +35,51 @@ actor CandidateSink {
             """,
           arguments: StatementArguments([deliveryID] + normalizedFactIDs))
       }
-      guard !rows.isEmpty else { return }
-      let control = try await APIClient.shared.getCandidateWorkflowControl()
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot), !facts.isEmpty else { return }
+      let control = try await APIClient.shared.getCandidateWorkflowControl(
+        expectedOwnerId: authorizationSnapshot.ownerID,
+        authorizationSnapshot: authorizationSnapshot)
       guard control.workflowMode == .read, let generation = control.accountGeneration else { return }
-      for row in rows {
-        let id: String = row["id"]
-        let statement: String = row["statement"]
-        let evidenceText: String = row["evidenceText"]
-        let confidence: Double = row["confidence"]
-        let excerptHash = ContextBucketStore.referenceHash(evidenceText)
+      for fact in facts {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+        let excerptHash = ContextBucketStore.referenceHash(fact.evidenceText)
         let candidate = OmiAPI.CandidateCreate.taskCreate(
           OmiAPI.TaskCreateCandidate(
-            captureConfidence: confidence,
+            captureConfidence: fact.confidence,
             evidenceRefs: [
               OmiAPI.EvidenceRef(
                 excerptHash: excerptHash,
-                id: "bucket-fact:\(id)",
+                id: "bucket-fact:\(fact.id)",
                 kind: .local_screen,
                 scope: .device_local,
                 version: "context_bucket.v1")
             ],
-            ownershipConfidence: confidence,
+            ownershipConfidence: fact.confidence,
             proposedAction: "create",
             sourceSurface: "context_bucket",
             subjectKind: "task",
-            taskChange: OmiAPI.TaskCreatePayload(description_: statement)))
+            taskChange: OmiAPI.TaskCreatePayload(description_: fact.statement)))
         _ = try await APIClient.shared.createCanonicalCandidate(
           candidate,
-          idempotencyKey: "context-bucket:\(deliveryID):\(id)",
-          accountGeneration: generation)
-        try await pool.write { db in
-          try db.execute(
-            sql:
-              "UPDATE bucket_facts SET dispositionState = 'candidate_pending', updatedAt = ? WHERE id = ? AND validityState = 'validated'",
-            arguments: [Date(), id])
+          idempotencyKey: "context-bucket:\(deliveryID):\(fact.id)",
+          accountGeneration: generation,
+          expectedOwnerId: authorizationSnapshot.ownerID,
+          authorizationSnapshot: authorizationSnapshot)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+        let mutationAuthorization = LocalMutationAuthorization {
+          RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+        }
+        try await mutationAuthorization.withCommitLease {
+          let (_, currentPoolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+          guard currentPoolEpoch == poolEpoch else {
+            throw ContextBucketStoreError.staleFence
+          }
+          try await pool.write { db in
+            try db.execute(
+              sql:
+                "UPDATE bucket_facts SET dispositionState = 'candidate_pending', updatedAt = ? WHERE id = ? AND validityState = 'validated'",
+              arguments: [Date(), fact.id])
+          }
         }
       }
     } catch {

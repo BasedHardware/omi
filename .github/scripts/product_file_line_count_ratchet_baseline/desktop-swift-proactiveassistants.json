@@ -1,11 +1,11 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1727,
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1651
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1652
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Task candidate context now carries only backend action-item IDs, while local SQLite/staged evidence remains id-less so the model cannot target it for a backend mutation.",
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "CaptureGate transition diagnostics + kCGAnyInputEventType idle-sentinel fix"
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "Screen lock now interrupts the active context visit beside the existing capture-pause lifecycle boundary."
   },
   "threshold": 1500
 }

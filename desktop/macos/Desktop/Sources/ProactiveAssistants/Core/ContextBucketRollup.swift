@@ -193,13 +193,40 @@ extension ContextBucketStore {
   func purgeExcludedApp(_ appName: String, now: Date = Date()) async throws -> Set<String> {
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
-    return try await pool.write { db in
-      let affected = try ContextBucketPurger.delete(appName: appName, in: db)
-      for bucketID in affected {
+
+    // A chunk is time-based rather than app-based, so privacy-first cleanup may
+    // discard allowed frames sharing the same file.  Capture exclusion is set
+    // synchronously by the caller; cancel only a writer whose current path is
+    // known to contain an excluded row, avoiding unrelated chunk rotation.
+    let existingArtifacts = try await pool.read { db in
+      try ContextBucketPurger.artifacts(appName: appName, in: db)
+    }
+    if let activeChunk = await VideoChunkEncoder.shared.currentChunkPath,
+      existingArtifacts.videoChunkPaths.contains(activeChunk)
+    {
+      switch await VideoChunkEncoder.shared.cancel() {
+      case .markerWriteFailed:
+        throw ContextBucketStoreError.purgeFailed
+      case .markerRecorded, .noActiveChunk:
+        break
+      }
+    }
+    // Remove the bytes before deleting their database rows.  If storage is
+    // temporarily unavailable, the rows remain discoverable and the durable
+    // app marker retries this same artifact set on the next launch.
+    try await RewindStorage.shared.deleteScreenshots(relativePaths: existingArtifacts.imagePaths)
+    try await RewindStorage.shared.deleteVideoChunks(relativePaths: existingArtifacts.videoChunkPaths)
+
+    let result = try await pool.write { db in
+      let result = try ContextBucketPurger.deleteWithArtifacts(appName: appName, in: db, now: now)
+      for bucketID in result.affectedBucketIDs {
         _ = try Self.publishVersion(in: db, bucketID: bucketID, now: now)
       }
-      return affected
+      return result
     }
+    // The transaction also removes every row sharing a privacy-deleted chunk,
+    // so no surviving screenshot row can reference the removed file.
+    return result.affectedBucketIDs
   }
 
   private func poolForRollup(_ fence: ContextVisitFence) async throws -> DatabasePool {
@@ -263,19 +290,128 @@ extension ContextBucketStore {
   }
 }
 
+struct ContextBucketPurgeArtifacts: Sendable {
+  let affectedBucketIDs: Set<String>
+  let imagePaths: [String]
+  let videoChunkPaths: [String]
+}
+
 enum ContextBucketPurger {
+  /// Compatibility seam for deterministic SQL-only tests and callers that do
+  /// not need to remove files. Production uses `deleteWithArtifacts` below.
   static func delete(appName: String, in db: Database) throws -> Set<String> {
-    let affected = Set(
-      try String.fetchAll(
-        db, sql: "SELECT DISTINCT bucketID FROM bucket_entries WHERE appName = ?", arguments: [appName]))
+    try deleteWithArtifacts(appName: appName, in: db).affectedBucketIDs
+  }
+
+  static func artifacts(appName: String, in db: Database) throws -> ContextBucketPurgeArtifacts {
+    let affected = try affectedBucketIDs(appName: appName, in: db)
+    guard try db.tableExists("screenshots") else {
+      return ContextBucketPurgeArtifacts(
+        affectedBucketIDs: affected, imagePaths: [], videoChunkPaths: [])
+    }
+    let columns = Set(
+      try Row.fetchAll(db, sql: "PRAGMA table_info(screenshots)").compactMap { $0["name"] as String? })
+    guard columns.contains("appName") else {
+      return ContextBucketPurgeArtifacts(
+        affectedBucketIDs: affected, imagePaths: [], videoChunkPaths: [])
+    }
+    let imagePaths: [String] =
+      columns.contains("imagePath")
+      ? try String.fetchAll(
+        db,
+        sql:
+          "SELECT imagePath FROM screenshots WHERE appName = ? AND imagePath IS NOT NULL AND imagePath != ''",
+        arguments: [appName])
+      : []
+    let videoChunkPaths: [String] =
+      columns.contains("videoChunkPath")
+      ? try String.fetchAll(
+        db,
+        sql:
+          "SELECT DISTINCT videoChunkPath FROM screenshots WHERE appName = ? AND videoChunkPath IS NOT NULL AND videoChunkPath != ''",
+        arguments: [appName])
+      : []
+    return ContextBucketPurgeArtifacts(
+      affectedBucketIDs: affected,
+      imagePaths: imagePaths,
+      videoChunkPaths: videoChunkPaths)
+  }
+
+  static func deleteWithArtifacts(
+    appName: String, in db: Database, now: Date = Date()
+  ) throws -> ContextBucketPurgeArtifacts {
+    let result = try artifacts(appName: appName, in: db)
+    let affected = result.affectedBucketIDs
+    // Invalidate every fence before deleting entries.  Extraction checks both
+    // `fenceIsValid` and the completed visit row, so a completed request that
+    // resumes after this transaction can no longer repopulate the bucket.
+    if try db.tableExists("context_visits") {
+      try db.execute(
+        sql: "DELETE FROM context_visits WHERE appName = ?", arguments: [appName])
+    }
     if try db.tableExists("observations") {
       try db.execute(sql: "DELETE FROM observations WHERE appName = ?", arguments: [appName])
     }
     try db.execute(sql: "DELETE FROM bucket_facts WHERE appName = ?", arguments: [appName])
     try db.execute(sql: "DELETE FROM bucket_entries WHERE appName = ?", arguments: [appName])
-    try db.execute(sql: "DELETE FROM screenshots WHERE appName = ?", arguments: [appName])
+    if try db.tableExists("screenshots") {
+      try db.execute(sql: "DELETE FROM screenshots WHERE appName = ?", arguments: [appName])
+      // A video chunk is shared by time, not by app.  The privacy-first file
+      // deletion above removes the whole chunk, so remove every row that still
+      // points at it rather than leaving allowed-app rows with dangling media
+      // references (and, more importantly, no hidden path to deleted bytes).
+      for videoChunkPath in result.videoChunkPaths {
+        try db.execute(
+          sql: "DELETE FROM screenshots WHERE videoChunkPath = ?", arguments: [videoChunkPath])
+      }
+      for imagePath in result.imagePaths {
+        try db.execute(sql: "DELETE FROM screenshots WHERE imagePath = ?", arguments: [imagePath])
+      }
+    }
+    if !affected.isEmpty {
+      // Historical versions contain the frozen bytes that cannot be attributed
+      // to individual rows. Remove all versions and republish only surviving
+      // entries, so deleted text cannot survive in a previous cache prefix.
+      for bucketID in affected {
+        try db.execute(
+          sql: "DELETE FROM bucket_versions WHERE bucketID = ?", arguments: [bucketID])
+        try db.execute(
+          sql: "UPDATE bucket_entries SET isCompacted = 0, bucketVersionID = NULL WHERE bucketID = ?",
+          arguments: [bucketID])
+        try db.execute(
+          sql: "DELETE FROM proactive_deliveries WHERE bucketID = ?", arguments: [bucketID])
+        try db.execute(
+          sql: """
+            UPDATE context_buckets
+            SET notifyWorthiness = COALESCE(
+              (SELECT MAX(notifyWorthiness) FROM bucket_facts
+               WHERE bucket_facts.bucketID = context_buckets.id AND validityState = 'validated'), 0),
+              updatedAt = ?
+            WHERE id = ?
+            """,
+          arguments: [now, bucketID])
+      }
+    }
     if try db.tableExists("ocr_texts"), try db.tableExists("ocr_occurrences") {
       try db.execute(sql: "DELETE FROM ocr_texts WHERE id NOT IN (SELECT DISTINCT ocrTextId FROM ocr_occurrences)")
+    }
+    return result
+  }
+
+  private static func affectedBucketIDs(appName: String, in db: Database) throws -> Set<String> {
+    var affected = Set(
+      try String.fetchAll(
+        db, sql: "SELECT DISTINCT bucketID FROM bucket_entries WHERE appName = ?", arguments: [appName]))
+    if try db.tableExists("bucket_facts") {
+      affected.formUnion(
+        try String.fetchAll(
+          db, sql: "SELECT DISTINCT bucketID FROM bucket_facts WHERE appName = ?", arguments: [appName]))
+    }
+    if try db.tableExists("context_visits") {
+      affected.formUnion(
+        try String.fetchAll(
+          db, sql: "SELECT DISTINCT bucketID FROM context_visits WHERE appName = ? AND bucketID IS NOT NULL",
+          arguments: [appName]))
     }
     return affected
   }
@@ -292,7 +428,12 @@ actor ContextBucketRollupWriter {
   }
 
   func extract(frame: CapturedFrame, fence: ContextVisitFence) async {
-    guard fence.bucketID != nil, await store.fenceIsValid(fence) else { return }
+    guard
+      fence.bucketID != nil,
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      await store.fenceIsValid(fence)
+    else { return }
     let evidenceRef = frame.screenshotId.map { "screenshot:\($0)" } ?? "visit:\(fence.visitID)"
     let prompt = """
       \(ScreenDerivedContent.untrustedPreamble)
@@ -308,10 +449,14 @@ actor ContextBucketRollupWriter {
         prompt: prompt,
         imageData: frame.jpegData,
         jsonSchema: Self.schema,
-        maxCompletionTokens: 1200)
+        maxCompletionTokens: 1200,
+        authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       let extraction = try JSONDecoder().decode(BucketExtraction.self, from: Data(result.content.utf8))
-      guard await store.fenceIsValid(fence) else { return }
+      guard
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        await store.fenceIsValid(fence)
+      else { return }
       _ = try await store.writeExtraction(
         extraction,
         for: fence,

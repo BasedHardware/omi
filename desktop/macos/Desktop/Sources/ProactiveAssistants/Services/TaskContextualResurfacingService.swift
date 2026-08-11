@@ -889,7 +889,8 @@ actor TaskContextualResurfacingService {
 
   func observe(_ event: TaskLocalContextEvent) async {
     if await MainActor.run(body: { ContextBucketsFeature.isEnabled }) {
-      await ContextLedgerResurfacingService.shared.observe(event)
+      // ContextProactivityEngine owns flag-on resurfacing and the delivery ledger.
+      // The legacy observer must not run a parallel lookup or notification path.
       return
     }
     ensureOwnerChangeObserver()

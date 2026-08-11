@@ -38,11 +38,44 @@ def test_operation_pins_lane_and_only_reasoning_enables_explicit_cache():
     assert reasoning["model"] == "omi:auto:desktop-proactive-reasoning"
     assert reasoning["prompt_cache_key"] == "bucket-7-version-3"
     assert reasoning["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
+    parts = reasoning["messages"][0]["content"]
+    assert parts[0]["type"] == "text"
+    assert parts[1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+
+
+def test_request_requires_strict_valid_nested_json_schema():
+    payload = request().model_dump(mode="json")
+    payload["response_format"] = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "result",
+            "strict": False,
+            "schema": {"type": "object"},
+        },
+    }
+    with pytest.raises(ValueError, match="strict must be true"):
+        desktop_proactivity.ProactiveCompletionRequest(**payload)
+
+    payload["response_format"]["json_schema"]["strict"] = True
+    payload["response_format"]["json_schema"]["schema"] = {"type": "not-a-json-schema-type"}
+    with pytest.raises(ValueError, match="schema is invalid"):
+        desktop_proactivity.ProactiveCompletionRequest(**payload)
 
 
 def test_extraction_rejects_cache_key():
     with pytest.raises(ValueError, match="only for proactive_reasoning"):
         request(cache_key="not-allowed")
+
+
+def test_facade_rejects_gateway_content_that_breaks_requested_schema():
+    with pytest.raises(desktop_proactivity.HTTPException) as invalid:
+        desktop_proactivity._validate_gateway_output(
+            {
+                "choices": [{"message": {"content": '{"summary": 3}'}}],
+            },
+            request(),
+        )
+    assert invalid.value.status_code == 502
 
 
 @pytest.mark.asyncio

@@ -56,6 +56,9 @@ public class ProactiveAssistantsPlugin: NSObject {
   // Backpressure: prevents unbounded CGImage accumulation (~24MB each) when video
   // encoding is slower than the capture rate — the primary cause of multi-GB memory growth.
   private(set) var isProcessingRewindFrame = false
+  func finishRewindFrameProcessing() {
+    isProcessingRewindFrame = false
+  }
   private(set) var droppedFrameCount = 0
 
   /// Periodic screen recording permission recheck interval (60 seconds).
@@ -933,17 +936,14 @@ public class ProactiveAssistantsPlugin: NSObject {
           } else {
             isProcessingRewindFrame = true
             let windowTitle = self.currentWindowTitle
-            Task { [weak self] in
-              await RewindIndexer.shared.processFrame(
-                cgImage: cgImage,
-                appName: appName,
-                windowTitle: windowTitle,
-                captureTime: captureTime
-              )
-              await MainActor.run {
-                self?.isProcessingRewindFrame = false
-              }
+            guard let exclusionSnapshot = RewindCaptureExclusionGeneration.snapshot(appName: appName)
+            else {
+              isProcessingRewindFrame = false
+              return
             }
+            enqueueRewindFrame(
+              cgImage: cgImage, appName: appName, windowTitle: windowTitle,
+              captureTime: captureTime, exclusionSnapshot: exclusionSnapshot)
           }
         }
       } else {
@@ -1007,12 +1007,12 @@ public class ProactiveAssistantsPlugin: NSObject {
           }
         } else {
           isProcessingRewindFrame = true
-          Task { [weak self] in
-            await RewindIndexer.shared.processFrame(frame)
-            await MainActor.run {
-              self?.isProcessingRewindFrame = false
-            }
+          guard let exclusionSnapshot = RewindCaptureExclusionGeneration.snapshot(appName: resolvedApp)
+          else {
+            isProcessingRewindFrame = false
+            return
           }
+          enqueueRewindFrame(frame, exclusionSnapshot: exclusionSnapshot)
         }
       }
     } else {
@@ -1201,6 +1201,7 @@ public class ProactiveAssistantsPlugin: NSObject {
       queue: .main
     ) { [weak self] _ in
       Task { @MainActor in
+        ContextVisitCoordinator.interruptForSleepIfEnabled()
         self?.handleScreenLock()
       }
     }

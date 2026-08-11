@@ -12,6 +12,7 @@ enum ContextBucketSchema {
     "bucket_facts",
     "subject_bindings",
     "proactive_deliveries",
+    "context_bucket_migration_meta",
   ]
 
   private struct LegacyBinding: Codable {
@@ -22,12 +23,33 @@ enum ContextBucketSchema {
     let updatedAt: Date
   }
 
+  private struct LegacyBindingsLoad {
+    let present: Bool
+    let bindings: [LegacyBinding]
+  }
+
   static func registerMigration(
     on migrator: inout DatabaseMigrator,
     defaults: UserDefaults,
-    ownerID: String
+    ownerID: String,
+    fallbackOwnerID: String? = nil
   ) {
-    let legacyBindings = loadLegacyBindings(defaults: defaults, ownerID: ownerID)
+    let effectiveOwnerID = effectiveLegacyOwnerID(ownerID)
+    let primary = loadLegacyBindings(defaults: defaults, ownerID: effectiveOwnerID)
+    let fallback = fallbackOwnerID.map { effectiveLegacyOwnerID($0) }
+    let sourceOwnerID: String?
+    let legacyBindings: [LegacyBinding]
+    if primary.present {
+      sourceOwnerID = primary.bindings.isEmpty ? nil : effectiveOwnerID
+      legacyBindings = primary.bindings
+    } else if let fallback, fallback != effectiveOwnerID {
+      let fallbackLoad = loadLegacyBindings(defaults: defaults, ownerID: fallback)
+      sourceOwnerID = fallbackLoad.bindings.isEmpty ? nil : fallback
+      legacyBindings = fallbackLoad.bindings
+    } else {
+      sourceOwnerID = nil
+      legacyBindings = []
+    }
     migrator.registerMigration(migrationName) { db in
       try createTables(in: db)
       for binding in legacyBindings {
@@ -54,6 +76,13 @@ enum ContextBucketSchema {
             binding.updatedAt,
           ])
       }
+      try db.execute(
+        sql: """
+          INSERT OR REPLACE INTO context_bucket_migration_meta
+            (migrationName, ownerID, sourceOwnerID, importedCount, createdAt)
+          VALUES (?, ?, ?, ?, ?)
+          """,
+        arguments: [migrationName, effectiveOwnerID, sourceOwnerID, legacyBindings.count, Date()])
     }
   }
 
@@ -62,11 +91,28 @@ enum ContextBucketSchema {
     defaults: UserDefaults,
     ownerID: String
   ) throws {
-    let migrationApplied = try queue.read { db in
-      try db.tableExists("subject_bindings")
+    let migration: (importedCount: Int, sourceOwnerID: String?)? = try queue.read { db in
+      guard try db.tableExists("context_bucket_migration_meta") else { return nil }
+      guard
+        let row = try Row.fetchOne(
+          db,
+          sql: """
+            SELECT importedCount, sourceOwnerID FROM context_bucket_migration_meta
+            WHERE migrationName = ? AND ownerID = ?
+            """,
+          arguments: [migrationName, effectiveLegacyOwnerID(ownerID)])
+      else { return nil }
+      return (row["importedCount"] as Int? ?? 0, row["sourceOwnerID"] as String?)
     }
-    guard migrationApplied else { return }
-    defaults.removeObject(forKey: legacyDefaultsKey(ownerID: ownerID))
+    // A table existing only proves that a previous version created the schema;
+    // it does not prove that this owner's legacy source was consumed.  Keep the
+    // defaults key for late/rollback writers when no import was recorded.
+    guard let migration, migration.importedCount > 0, let sourceOwnerID = migration.sourceOwnerID else {
+      return
+    }
+    defaults.removeObject(
+      forKey: .taskContextSubjectMatches(
+        ownerHash: legacyOwnerHash(sourceOwnerID)))
   }
 
   @discardableResult
@@ -77,21 +123,47 @@ enum ContextBucketSchema {
     return db.changesCount
   }
 
-  static func legacyDefaultsKey(ownerID: String) -> String {
-    let digest = SHA256.hash(data: Data(ownerID.utf8))
-      .map { String(format: "%02x", $0) }
-      .joined()
-    return "taskContextSubjectMatches.v1.\(digest.prefix(24))"
+  /// Test/migration fixture helper retained for callers that need to seed the
+  /// pre-context-buckets defaults entry. Production reads/removes use the
+  /// typed `ScopedDefaultsKey` directly below so the storage namespace cannot
+  /// drift from the live legacy matcher.
+  static func legacyDefaultsKey(ownerID: String) -> ScopedDefaultsKey {
+    .taskContextSubjectMatches(ownerHash: legacyOwnerHash(effectiveLegacyOwnerID(ownerID)))
   }
 
-  private static func loadLegacyBindings(defaults: UserDefaults, ownerID: String) -> [LegacyBinding] {
-    guard let data = defaults.data(forKey: legacyDefaultsKey(ownerID: ownerID)),
-      let decoded = try? JSONDecoder().decode([LegacyBinding].self, from: data)
-    else { return [] }
-    return decoded
+  /// The legacy matcher names the signed-out owner `signed-out`; Rewind's
+  /// anonymous database directory is still named `anonymous`.  Keep storage
+  /// paths unchanged while using the same owner namespace for migration keys.
+  static func effectiveLegacyOwnerID(_ ownerID: String) -> String {
+    ownerID == "anonymous" ? "signed-out" : ownerID
+  }
+
+  private static func legacyOwnerHash(_ ownerID: String) -> String {
+    SHA256.hash(data: Data(ownerID.utf8))
+      .map { String(format: "%02x", $0) }
+      .joined()
+      .prefix(24)
+      .description
+  }
+
+  private static func loadLegacyBindings(defaults: UserDefaults, ownerID: String) -> LegacyBindingsLoad {
+    guard
+      let data = defaults.data(
+        forKey: .taskContextSubjectMatches(ownerHash: legacyOwnerHash(ownerID)))
+    else { return LegacyBindingsLoad(present: false, bindings: []) }
+    let decoded = (try? JSONDecoder().decode([LegacyBinding].self, from: data)) ?? []
+    return LegacyBindingsLoad(present: true, bindings: decoded)
   }
 
   private static func createTables(in db: Database) throws {
+    try db.create(table: "context_bucket_migration_meta") { table in
+      table.primaryKey("migrationName", .text)
+      table.column("ownerID", .text).notNull()
+      table.column("sourceOwnerID", .text)
+      table.column("importedCount", .integer).notNull()
+      table.column("createdAt", .datetime).notNull()
+    }
+
     try db.create(table: "context_buckets") { table in
       table.primaryKey("id", .text)
       table.column("subjectKind", .text).notNull()

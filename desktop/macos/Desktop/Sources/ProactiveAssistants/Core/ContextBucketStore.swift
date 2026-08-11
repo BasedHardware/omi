@@ -24,6 +24,41 @@ struct ContextBucketSnapshot: Equatable, Sendable {
 enum ContextBucketStoreError: Error {
   case databaseUnavailable
   case staleFence
+  case purgeFailed
+}
+
+/// SQL selection used by deterministic GC. Keeping selection separate from
+/// deletion makes the active-visit protection directly testable without
+/// invoking the singleton database actor.
+enum ContextBucketGarbageCollection {
+  static func staleBucketIDs(in db: Database, before cutoff: Date) throws -> [String] {
+    try String.fetchAll(
+      db,
+      sql: """
+        SELECT context_buckets.id FROM context_buckets
+        WHERE lastVisitedAt IS NOT NULL AND lastVisitedAt < ?
+          AND NOT EXISTS (
+            SELECT 1 FROM context_visits
+            WHERE context_visits.bucketID = context_buckets.id AND outcome = 'active'
+          )
+        """,
+      arguments: [cutoff])
+  }
+
+  static func overflowBucketIDs(in db: Database, keeping: Int) throws -> [String] {
+    try String.fetchAll(
+      db,
+      sql: """
+        SELECT context_buckets.id FROM context_buckets
+        WHERE NOT EXISTS (
+          SELECT 1 FROM context_visits
+          WHERE context_visits.bucketID = context_buckets.id AND outcome = 'active'
+        )
+        ORDER BY COALESCE(lastVisitedAt, createdAt) DESC
+        LIMIT -1 OFFSET ?
+        """,
+      arguments: [max(0, keeping)])
+  }
 }
 
 actor ContextBucketStore {
@@ -178,15 +213,12 @@ actor ContextBucketStore {
       try db.execute(
         sql: "DELETE FROM bucket_facts WHERE expiresAt IS NOT NULL AND expiresAt <= ?",
         arguments: [now])
-      try db.execute(
-        sql: "DELETE FROM context_buckets WHERE lastVisitedAt IS NOT NULL AND lastVisitedAt < ?",
-        arguments: [now.addingTimeInterval(-30 * 24 * 60 * 60)])
-      let overflow = try String.fetchAll(
-        db,
-        sql: """
-            SELECT id FROM context_buckets ORDER BY COALESCE(lastVisitedAt, createdAt) DESC
-            LIMIT -1 OFFSET 250
-          """)
+      let stale = try ContextBucketGarbageCollection.staleBucketIDs(
+        in: db, before: now.addingTimeInterval(-30 * 24 * 60 * 60))
+      for id in stale {
+        try db.execute(sql: "DELETE FROM context_buckets WHERE id = ?", arguments: [id])
+      }
+      let overflow = try ContextBucketGarbageCollection.overflowBucketIDs(in: db, keeping: 250)
       for id in overflow {
         try db.execute(sql: "DELETE FROM context_buckets WHERE id = ?", arguments: [id])
       }

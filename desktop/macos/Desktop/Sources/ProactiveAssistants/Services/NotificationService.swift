@@ -550,24 +550,26 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     ownerID: String,
     title: String,
     message: String,
-    context: FloatingBarNotificationContext
-  ) -> Bool {
+    context: FloatingBarNotificationContext,
+    onPresented: (() -> Void)? = nil,
+    onDropped: (() -> Void)? = nil
+  ) -> OwnerBoundNotificationPresentationResult {
     guard !ownerID.isEmpty,
-      RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID) != nil,
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled,
       FloatingControlBarManager.shared.isEnabled
-    else { return false }
-    let result = FloatingControlBarManager.shared.showNotification(
+    else { return .rejectedOwnerChange }
+    return FloatingControlBarManager.shared.showNotification(
       ownerID: ownerID,
       title: title,
       message: message,
       assistantId: "context-director",
       sound: .default,
-      context: context)
-    switch result {
-    case .presented, .queued: return true
-    case .suppressed, .windowUnavailable, .rejectedOwnerChange: return false
-    }
+      context: context,
+      authorizationSnapshot: authorizationSnapshot,
+      onPresented: onPresented,
+      onDropped: onDropped)
   }
 
   /// The only delivery path for contextual task interruptions. Unlike the

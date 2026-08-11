@@ -18,6 +18,11 @@ struct ContextVisitStateMachine: Equatable {
     phase = .idle
     return fence
   }
+
+  var activeFence: ContextVisitFence? {
+    guard case .active(let fence) = phase else { return nil }
+    return fence
+  }
 }
 
 actor ContextVisitCoordinator {
@@ -38,6 +43,8 @@ actor ContextVisitCoordinator {
   private var state = ContextVisitStateMachine()
   private var reconciled = false
   private var lastGCAt = Date.distantPast
+  private var transitionInFlight = false
+  private var transitionWaiters: [CheckedContinuation<Void, Never>] = []
 
   init(store: ContextBucketStore) { self.store = store }
 
@@ -47,13 +54,17 @@ actor ContextVisitCoordinator {
     departingFrame: CapturedFrame?,
     now: Date = Date()
   ) async throws -> Transition {
+    await waitForTransitionTurn()
+    defer { releaseTransitionTurn() }
     if !reconciled {
       _ = try await store.reconcileInterruptedVisits(now: now)
+      _ = try await store.reconcileAbandonedDeliveries(now: now)
       try await store.runDeterministicGC(now: now)
       lastGCAt = now
       reconciled = true
     }
     if now.timeIntervalSince(lastGCAt) >= 24 * 60 * 60 {
+      _ = try await store.reconcileAbandonedDeliveries(now: now)
       try await store.runDeterministicGC(now: now)
       lastGCAt = now
     }
@@ -75,15 +86,20 @@ actor ContextVisitCoordinator {
   func leaveForExcludedContext(
     departingFrame: CapturedFrame?, now: Date = Date()
   ) async throws -> Departure {
-    try await finalizeActive(
+    await waitForTransitionTurn()
+    defer { releaseTransitionTurn() }
+    return try await finalizeActive(
       departingFrame: departingFrame, exitReason: "excluded_context", now: now)
   }
 
   func interruptForSleep(now: Date = Date()) async {
-    guard let active = state.takeActive() else { return }
+    await waitForTransitionTurn()
+    defer { releaseTransitionTurn() }
+    guard let active = state.activeFence else { return }
     do {
       try await store.finalizeVisit(
         active, outcome: "interrupted", exitReason: "system_sleep", lastScreenshotID: nil, endedAt: now)
+      _ = state.takeActive()
     } catch {
       logError("ContextVisitCoordinator: sleep finalization failed", error: error)
     }
@@ -92,7 +108,7 @@ actor ContextVisitCoordinator {
   private func finalizeActive(
     departingFrame: CapturedFrame?, exitReason: String, now: Date
   ) async throws -> Departure {
-    guard let departing = state.takeActive() else {
+    guard let departing = state.activeFence else {
       return Departure(fence: nil, qualified: false)
     }
     let qualified = now.timeIntervalSince(departing.startedAt) >= 1
@@ -102,7 +118,26 @@ actor ContextVisitCoordinator {
       exitReason: exitReason,
       lastScreenshotID: departingFrame?.screenshotId,
       endedAt: now)
+    _ = state.takeActive()
     return Departure(fence: departing, qualified: qualified)
+  }
+
+  private func waitForTransitionTurn() async {
+    guard transitionInFlight else {
+      transitionInFlight = true
+      return
+    }
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      transitionWaiters.append(continuation)
+    }
+  }
+
+  private func releaseTransitionTurn() {
+    if transitionWaiters.isEmpty {
+      transitionInFlight = false
+    } else {
+      transitionWaiters.removeFirst().resume()
+    }
   }
 
   @MainActor static func interruptForSleepIfEnabled() {

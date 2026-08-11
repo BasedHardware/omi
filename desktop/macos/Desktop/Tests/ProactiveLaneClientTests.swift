@@ -18,4 +18,9 @@ final class ProactiveLaneClientTests: XCTestCase {
     XCTAssertEqual(parsed.lane, "omi:auto:desktop-proactive-reasoning")
     XCTAssertEqual(parsed.content, "{\"decision\":\"silence\"}")
   }
+
+  func testTelemetryProviderModelIsBounded() {
+    XCTAssertEqual(ContextProactivityTelemetry.boundedProviderModel("gpt-5.6-luna"), "gpt-5.6-luna")
+    XCTAssertEqual(ContextProactivityTelemetry.boundedProviderModel("attacker-controlled-model"), "other")
+  }
 }

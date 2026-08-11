@@ -18,11 +18,13 @@ enum ContextTitleNormalizer {
     result = String(result.filter { !progressCharacters.contains($0) })
     result = replacing(#"\b\d{1,2}:\d{2}(:\d{2})?\b"#, in: result)
     result = replacing(#"\b\d+[×x]\d+\b"#, in: result)
-    result = replacing(#"\(\d+\)"#, in: result)
-    result = replacing(#"\[\d+\]"#, in: result)
 
     let app = appName?.lowercased() ?? ""
     if app.contains("telegram") || app.contains("slack") || app.contains("discord") {
+      // Messaging apps append unread counts to the conversation title. Keep this
+      // app-scoped: `(123)` in a document title is identity, not cosmetic noise.
+      result = replacing(#"\s*\(\d+\)\s*$"#, in: result)
+      result = replacing(#"\s*\[\d+\]\s*$"#, in: result)
       result = replacing(#"\s*[-–—]\s*\d+\s+(new\s+)?messages?\s*$"#, in: result)
     }
     if app.contains("terminal") || app.contains("iterm") || app.contains("warp") {

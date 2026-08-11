@@ -53,6 +53,110 @@ final class ContextBucketSchemaTests: XCTestCase {
     XCTAssertNil(defaults.data(forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: ownerID)))
   }
 
+  func testAnonymousDatabaseUsesSignedOutLegacyOwnerNamespace() throws {
+    let suiteName = "ContextBucketSchemaTests.anonymous.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let updatedAt = Date(timeIntervalSince1970: 1_725_000_000)
+    defaults.set(
+      try JSONEncoder().encode([
+        LegacyBinding(
+          referenceHash: "sha256:signed-out",
+          subjectKind: "task",
+          subjectID: "task-anonymous",
+          workstreamID: nil,
+          updatedAt: updatedAt)
+      ]),
+      forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: "signed-out"))
+
+    let queue = try DatabaseQueue()
+    try createBaseScreenshotsTable(in: queue)
+    var migrator = DatabaseMigrator()
+    // The database was initialized under anonymous, then retargeted to the
+    // real owner. The physical move supplies signed-out as the fallback source.
+    ContextBucketSchema.registerMigration(
+      on: &migrator,
+      defaults: defaults,
+      ownerID: "real-owner",
+      fallbackOwnerID: "signed-out")
+    try migrator.migrate(queue)
+    let subjectID = try queue.read { db in
+      try String.fetchOne(db, sql: "SELECT subjectID FROM subject_bindings")
+    }
+    XCTAssertEqual(subjectID, "task-anonymous")
+    try ContextBucketSchema.removeMigratedLegacyDefaults(
+      afterMigrating: queue, defaults: defaults, ownerID: "real-owner")
+    XCTAssertNil(defaults.data(forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: "signed-out")))
+  }
+
+  func testPrimaryOwnerSourceWinsOverSignedOutFallback() throws {
+    let suiteName = "ContextBucketSchemaTests.primary-fallback.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let updatedAt = Date(timeIntervalSince1970: 1_725_000_000)
+    let makeBinding: (String, String) throws -> Data = { referenceHash, subjectID in
+      try JSONEncoder().encode([
+        LegacyBinding(
+          referenceHash: referenceHash,
+          subjectKind: "task",
+          subjectID: subjectID,
+          workstreamID: nil,
+          updatedAt: updatedAt)
+      ])
+    }
+    defaults.set(
+      try makeBinding("sha256:real", "task-real"),
+      forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: "real-owner"))
+    defaults.set(
+      try makeBinding("sha256:signed-out", "task-signed-out"),
+      forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: "signed-out"))
+
+    let queue = try DatabaseQueue()
+    try createBaseScreenshotsTable(in: queue)
+    var migrator = DatabaseMigrator()
+    ContextBucketSchema.registerMigration(
+      on: &migrator,
+      defaults: defaults,
+      ownerID: "real-owner",
+      fallbackOwnerID: "signed-out")
+    try migrator.migrate(queue)
+
+    let subjectID = try queue.read { db in
+      try String.fetchOne(db, sql: "SELECT subjectID FROM subject_bindings")
+    }
+    XCTAssertEqual(subjectID, "task-real")
+    try ContextBucketSchema.removeMigratedLegacyDefaults(
+      afterMigrating: queue, defaults: defaults, ownerID: "real-owner")
+    XCTAssertNil(defaults.data(forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: "real-owner")))
+    XCTAssertNotNil(defaults.data(forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: "signed-out")))
+  }
+
+  func testLateLegacyWritesRemainWhenMigrationConsumedNoSource() throws {
+    let suiteName = "ContextBucketSchemaTests.late-write.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let queue = try DatabaseQueue()
+    try createBaseScreenshotsTable(in: queue)
+    var migrator = DatabaseMigrator()
+    let ownerID = "owner-late"
+    ContextBucketSchema.registerMigration(on: &migrator, defaults: defaults, ownerID: ownerID)
+    try migrator.migrate(queue)
+    let updatedAt = Date(timeIntervalSince1970: 1_725_000_000)
+    defaults.set(
+      try JSONEncoder().encode([
+        LegacyBinding(
+          referenceHash: "sha256:late",
+          subjectKind: "task",
+          subjectID: "task-late",
+          workstreamID: nil,
+          updatedAt: updatedAt)
+      ]),
+      forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: ownerID))
+    try ContextBucketSchema.removeMigratedLegacyDefaults(
+      afterMigrating: queue, defaults: defaults, ownerID: ownerID)
+    XCTAssertNotNil(defaults.data(forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: ownerID)))
+  }
+
   func testDeliveryTTLDeletesOnlyExpiredRows() throws {
     let queue = try migratedQueue()
     let now = Date(timeIntervalSince1970: 1_725_000_000)

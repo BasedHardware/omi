@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import GRDB
 
 struct ContextDirectorDecision: Codable, Equatable, Sendable {
   let decision: String
@@ -25,6 +26,28 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
   }
 }
 
+extension ContextBucketStore {
+  func activeFenceIsValid(_ fence: ContextVisitFence) async -> Bool {
+    let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool, poolEpoch == fence.poolEpoch else { return false }
+    do {
+      return try await pool.read { db in
+        try Bool.fetchOne(
+          db,
+          sql: """
+            SELECT EXISTS(
+              SELECT 1 FROM context_visits
+              WHERE id = ? AND contextGeneration = ? AND poolEpoch = ? AND outcome = 'active'
+            )
+            """,
+          arguments: [fence.visitID, fence.contextGeneration, fence.poolEpoch]) ?? false
+      }
+    } catch {
+      return false
+    }
+  }
+}
+
 actor ContextProactivityEngine {
   static let shared = ContextProactivityEngine(client: .shared, store: .shared)
   private let client: ProactiveLaneClient
@@ -44,11 +67,17 @@ actor ContextProactivityEngine {
 
   func contextEntered(_ fence: ContextVisitFence) async {
     guard let bucketID = fence.bucketID, !inFlightBuckets.contains(bucketID) else { return }
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     inFlightBuckets.insert(bucketID)
     defer { inFlightBuckets.remove(bucketID) }
     do { try await Task.sleep(nanoseconds: dwellNanoseconds) } catch { return }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     do { try await store.markVisitSettled(fence) } catch { return }
-    guard await store.fenceIsValid(fence), let snapshot = await store.snapshot(for: fence) else { return }
+    guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      await store.activeFenceIsValid(fence),
+      let snapshot = await store.snapshot(for: fence)
+    else { return }
     // Facts are the only source of notification worthiness. A bucket containing
     // ambient narrative alone cannot purchase a frontier-model call.
     guard snapshot.notifyWorthiness > 0, !snapshot.validatedFacts.isEmpty else { return }
@@ -71,6 +100,14 @@ actor ContextProactivityEngine {
     let attempt: ContextDeliveryAttempt
     do { attempt = try await store.beginDeliveryAttempt(fence: fence, snapshot: snapshot, gate: gate) } catch { return }
     guard attempt.reason == .allowed, let deliveryID = attempt.id else { return }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: "silence",
+        provenanceJSON: "{\"failure\":\"stale_owner\"}",
+        state: "failed")
+      return
+    }
 
     let taskContext = await MainActor.run {
       (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks).prefix(20)
@@ -91,6 +128,17 @@ actor ContextProactivityEngine {
       App: \(currentFrame.appName)
       Window: \(currentFrame.windowTitle ?? "")
       """
+    guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      await store.activeFenceIsValid(fence)
+    else {
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: "silence",
+        provenanceJSON: "{\"failure\":\"stale_visit\"}",
+        state: "failed")
+      return
+    }
     do {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.reasoningOperation,
@@ -98,9 +146,20 @@ actor ContextProactivityEngine {
         imageData: currentFrame.jpegData,
         jsonSchema: Self.schema,
         cacheKey: "bucket:\(snapshot.bucketID):v\(snapshot.version)",
-        maxCompletionTokens: 800)
+        maxCompletionTokens: 800,
+        authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
-      guard await store.fenceIsValid(fence) else { return }
+      guard
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        await store.activeFenceIsValid(fence)
+      else {
+        await terminalize(
+          deliveryID: deliveryID,
+          decisionType: "silence",
+          provenanceJSON: "{\"failure\":\"stale_visit\"}",
+          state: "failed")
+        return
+      }
       let decision = try JSONDecoder().decode(ContextDirectorDecision.self, from: Data(result.content.utf8)).clamped()
       let entryRefs = await store.validatedEntryRefs(
         decision.bucketEntryRefs, bucketID: snapshot.bucketID)
@@ -110,7 +169,7 @@ actor ContextProactivityEngine {
         "bucket_entry_refs": entryRefs,
         "fact_ids": decision.factIDs,
         "reasoning": decision.reasoning,
-        "provider_model": result.providerModel,
+        "provider_model": ContextProactivityTelemetry.boundedProviderModel(result.providerModel),
         "cached_tokens": result.usage.cachedTokens,
         "cache_write_tokens": result.usage.cacheWriteTokens,
       ]
@@ -134,8 +193,19 @@ actor ContextProactivityEngine {
       try await store.completeDelivery(
         id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
         message: decision.message, state: "policy_approved")
-      guard let ownerID = await MainActor.run(body: { RuntimeOwnerIdentity.currentOwnerId() }) else { return }
-      let delivered = await MainActor.run {
+      guard
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        await store.activeFenceIsValid(fence),
+        let ownerID = await MainActor.run(body: { RuntimeOwnerIdentity.currentOwnerId() })
+      else {
+        await terminalize(
+          deliveryID: deliveryID,
+          decisionType: "silence",
+          provenanceJSON: "{\"failure\":\"stale_visit\"}",
+          state: "failed")
+        return
+      }
+      let presentation = await MainActor.run {
         let context = FloatingBarNotificationContext(
           sourceTitle: decision.title,
           assistantId: "context-director",
@@ -146,19 +216,109 @@ actor ContextProactivityEngine {
           ownerID: ownerID,
           title: decision.title,
           message: decision.message,
-          context: context)
+          context: context,
+          onPresented: { [weak self] in
+            guard let self else { return }
+            Task {
+              await self.completePresentedDelivery(
+                deliveryID: deliveryID,
+                decisionType: decision.decision,
+                provenanceJSON: provenanceJSON,
+                message: decision.message,
+                factIDs: decision.factIDs,
+                fence: fence,
+                authorizationSnapshot: authorizationSnapshot)
+            }
+          },
+          onDropped: { [weak self] in
+            guard let self else { return }
+            Task {
+              await self.terminalize(
+                deliveryID: deliveryID,
+                decisionType: "silence",
+                provenanceJSON: "{\"failure\":\"notification_dropped\"}",
+                state: "failed")
+            }
+          })
       }
-      try await store.completeDelivery(
-        id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
-        message: decision.message, state: delivered ? "delivered" : "suppressed")
-      if delivered, decision.decision == "task_candidate" {
-        await CandidateSink.shared.graduateValidatedFacts(deliveryID: deliveryID, factIDs: decision.factIDs)
+      switch presentation {
+      case .presented:
+        await completePresentedDelivery(
+          deliveryID: deliveryID,
+          decisionType: decision.decision,
+          provenanceJSON: provenanceJSON,
+          message: decision.message,
+          factIDs: decision.factIDs,
+          fence: fence,
+          authorizationSnapshot: authorizationSnapshot)
+      case .queued:
+        // Keep the row policy-approved until the floating bar actually presents it.
+        return
+      case .suppressed, .windowUnavailable, .rejectedOwnerChange:
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
+          message: decision.message, state: "suppressed")
       }
     } catch {
-      try? await store.completeDelivery(
-        id: deliveryID, decisionType: "silence", provenanceJSON: "{\"failure\":\"network_or_parse\"}",
-        message: nil, state: "failed")
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: "silence",
+        provenanceJSON: "{\"failure\":\"network_or_parse\"}",
+        state: "failed")
       // Network and model failures are intentionally silent.
+    }
+  }
+
+  private func terminalize(
+    deliveryID: String,
+    decisionType: String,
+    provenanceJSON: String,
+    state: String
+  ) async {
+    try? await store.completeDelivery(
+      id: deliveryID,
+      decisionType: decisionType,
+      provenanceJSON: provenanceJSON,
+      message: nil,
+      state: state)
+  }
+
+  private func completePresentedDelivery(
+    deliveryID: String,
+    decisionType: String,
+    provenanceJSON: String,
+    message: String,
+    factIDs: [String],
+    fence: ContextVisitFence,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async {
+    guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      await store.activeFenceIsValid(fence)
+    else {
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: "silence",
+        provenanceJSON: "{\"failure\":\"stale_visit\"}",
+        state: "failed")
+      return
+    }
+    do {
+      try await store.completeDelivery(
+        id: deliveryID, decisionType: decisionType, provenanceJSON: provenanceJSON,
+        message: message, state: "delivered")
+      if decisionType == "task_candidate" {
+        await CandidateSink.shared.graduateValidatedFacts(
+          deliveryID: deliveryID,
+          factIDs: factIDs,
+          authorizationSnapshot: authorizationSnapshot)
+      }
+    } catch {
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: decisionType,
+        provenanceJSON: provenanceJSON,
+        state: "failed")
     }
   }
 

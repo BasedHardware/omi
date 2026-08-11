@@ -19,6 +19,21 @@ struct ContextDeliveryAttempt: Equatable, Sendable {
   let reason: ContextDeliveryGateReason
 }
 
+enum ContextDeliveryReconciliation {
+  static func reconcileAbandoned(in db: Database, cutoff: Date) throws -> Int {
+    try db.execute(
+      sql: """
+        UPDATE proactive_deliveries
+        SET decisionType = 'silence', lifecycleState = 'failed',
+            provenanceJson = '{"failure":"abandoned"}', message = NULL
+        WHERE lifecycleState IN ('attempted', 'model_completed', 'policy_approved')
+          AND attemptedAt <= ?
+        """,
+      arguments: [cutoff])
+    return db.changesCount
+  }
+}
+
 enum ContextDeliveryBudget {
   static func dailyLimit(frequencyLevel: Int) -> Int {
     [0, 2, 4, 8, 12, 20][max(0, min(5, frequencyLevel))]
@@ -40,6 +55,22 @@ enum ContextDeliveryBudget {
 }
 
 extension ContextBucketStore {
+  /// Fail closed for deliveries whose producer disappeared during an account
+  /// switch, crash, or queued-notification reset. This is deliberately
+  /// conservative: only rows older than the timeout and still in a
+  /// nonterminal lifecycle are reconciled.
+  @discardableResult
+  func reconcileAbandonedDeliveries(
+    now: Date = Date(), timeout: TimeInterval = 15 * 60
+  ) async throws -> Int {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
+    let cutoff = now.addingTimeInterval(-max(0, timeout))
+    return try await pool.write { db in
+      try ContextDeliveryReconciliation.reconcileAbandoned(in: db, cutoff: cutoff)
+    }
+  }
+
   func beginDeliveryAttempt(
     fence: ContextVisitFence,
     snapshot: ContextBucketSnapshot,
@@ -54,8 +85,8 @@ extension ContextBucketStore {
       let duplicate =
         try Bool.fetchOne(
           db,
-          sql: "SELECT EXISTS(SELECT 1 FROM proactive_deliveries WHERE bucketVersionID = ?)",
-          arguments: [snapshot.versionID]) ?? false
+          sql: "SELECT EXISTS(SELECT 1 FROM proactive_deliveries WHERE visitID = ? AND bucketVersionID = ?)",
+          arguments: [fence.visitID, snapshot.versionID]) ?? false
       guard !duplicate else { return ContextDeliveryAttempt(id: nil, reason: .duplicate) }
       let startOfDay = Calendar.current.startOfDay(for: now)
       let lastDeliveredAt = try Date.fetchOne(
@@ -97,24 +128,24 @@ extension ContextBucketStore {
   ) async throws {
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
-    let timestampColumn: String
+    let timestampColumn: String?
     switch state {
     case "model_completed": timestampColumn = "modelCompletedAt"
     case "policy_approved": timestampColumn = "policyApprovedAt"
     case "delivered": timestampColumn = "deliveredAt"
-    default: timestampColumn = "updatedAt"
+    default: timestampColumn = nil
     }
     try await pool.write { db in
-      if timestampColumn == "updatedAt" {
-        try db.execute(
-          sql:
-            "UPDATE proactive_deliveries SET decisionType = ?, lifecycleState = ?, provenanceJson = ?, message = ? WHERE id = ?",
-          arguments: [decisionType, state, provenanceJSON, message, id])
-      } else {
+      if let timestampColumn {
         try db.execute(
           sql:
             "UPDATE proactive_deliveries SET decisionType = ?, lifecycleState = ?, provenanceJson = ?, message = ?, \(timestampColumn) = ? WHERE id = ?",
           arguments: [decisionType, state, provenanceJSON, message, now, id])
+      } else {
+        try db.execute(
+          sql:
+            "UPDATE proactive_deliveries SET decisionType = ?, lifecycleState = ?, provenanceJson = ?, message = ? WHERE id = ?",
+          arguments: [decisionType, state, provenanceJSON, message, id])
       }
     }
   }

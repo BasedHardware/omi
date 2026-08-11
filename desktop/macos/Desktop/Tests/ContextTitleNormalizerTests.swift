@@ -15,6 +15,21 @@ final class ContextTitleNormalizerTests: XCTestCase {
       "Launch")
   }
 
+  func testNumericDocumentSuffixRemainsPartOfIdentityOutsideMessagingApps() {
+    XCTAssertNotEqual(
+      ContextTitleNormalizer.identityKey(appName: "Safari", windowTitle: "Issue (123)"),
+      ContextTitleNormalizer.identityKey(appName: "Safari", windowTitle: "Issue (456)"))
+  }
+
+  func testMessagingUnreadCountIsRemovedOnlyForMessagingApps() {
+    XCTAssertEqual(
+      ContextTitleNormalizer.normalize("Project room (42)", appName: "Telegram"),
+      ContextTitleNormalizer.normalize("Project room", appName: "Telegram"))
+    XCTAssertNotEqual(
+      ContextTitleNormalizer.normalize("Project room (42)", appName: "Safari"),
+      ContextTitleNormalizer.normalize("Project room", appName: "Safari"))
+  }
+
   func testUntitledDoesNotBecomeMergeableIdentity() {
     XCTAssertNil(ContextTitleNormalizer.normalize("   ", appName: "Safari"))
   }

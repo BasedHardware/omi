@@ -225,34 +225,6 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
     grounding.openCommitments = Array(alwaysRelevant)
 
-    let bucketsEnabled = await MainActor.run { ContextBucketsFeature.isEnabled }
-    if bucketsEnabled {
-      let key = ContextTitleNormalizer.identityKey(
-        appName: frame.appName, windowTitle: frame.windowTitle)
-      if let snapshot = await ContextBucketStore.shared.snapshot(forNormalizedKey: key) {
-        let stable =
-          String(
-            data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
-        grounding.relatedScreens = [stable]
-        return grounding
-      }
-      // Lazy bucket creation means the first qualifying visit deliberately uses
-      // today's local FTS grounding, but never the canonical memory system.
-      guard let searchTerm = Self.groundingSearchTerm(for: frame) else { return grounding }
-      do {
-        let commitments = try await ActionItemStorage.shared.searchFTS(
-          query: searchTerm, limit: 10, includeCompleted: false)
-        grounding.openCommitments.append(contentsOf: commitments.map(\.description))
-        let screens = try await RewindDatabase.shared.search(
-          query: searchTerm,
-          startDate: Date().addingTimeInterval(-30 * 24 * 60 * 60),
-          limit: 12)
-        grounding.relatedScreens = screens.compactMap { Self.describeScreen($0, excluding: frame) }
-      } catch {
-        logError("Suggestion: flag-on FTS grounding unavailable", error: error)
-      }
-      return grounding
-    }
     grounding.goals = currentOwnerGoals()
     refreshGoalsIfStale()
 
@@ -391,7 +363,7 @@ actor SuggestionAssistant: ProactiveAssistant {
   /// Reuses the shared normalizer so spinners, timers and unread counts do not become
   /// search noise.
   private static func groundingSearchTerm(for frame: CapturedFrame) -> String? {
-    guard let normalized = ContextDetection.normalizeWindowTitle(frame.windowTitle) else {
+    guard let normalized = ContextDetection.normalizeWindowTitle(frame.windowTitle, appName: frame.appName) else {
       return nil
     }
     // Must be sanitized before it reaches FTS5 — see SuggestionSearchTerm.
