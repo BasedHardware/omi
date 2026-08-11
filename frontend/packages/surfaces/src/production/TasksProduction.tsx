@@ -5,6 +5,7 @@ import type { ProductionTaskStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionIcon } from "./ProductionIcon.js";
 import { tasksEmptyKind } from "./tasks-presentation.js";
 import "./tasks.css";
 
@@ -339,8 +340,8 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
         </div>
         <div className="tasks-header-actions">
           <ProductionSearchField className="tasks-search" label={translate("tasks.filterSavedPlaceholder")} placeholder={translate("tasks.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
-          <button className="tasks-add-trigger" type="button" aria-expanded={createOpen} aria-label={createOpen ? translate("common.cancel") : translate("tasks.newTask")} onClick={() => { setCreateOpen((open) => !open); if (!createOpen) requestAnimationFrame(() => draftRef.current?.focus()); }}>{createOpen ? "×" : "+"}</button>
-          <button className="tasks-settings-trigger" type="button" disabled aria-label={translate("nav.settings")}>•••</button>
+          <button className="tasks-add-trigger" type="button" aria-expanded={createOpen} aria-label={createOpen ? translate("common.cancel") : translate("tasks.newTask")} onClick={() => { setCreateOpen((open) => !open); if (!createOpen) requestAnimationFrame(() => draftRef.current?.focus()); }}><ProductionIcon name={createOpen ? "close" : "plus"} /></button>
+          <button className="tasks-settings-trigger" type="button" disabled aria-label={translate("nav.settings")}><ProductionIcon name="more" /></button>
         </div>
       </header>
       <ProductionDataSourceBadge source={source} locale={locale} />
@@ -390,6 +391,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
           {groups.map((group) => (
             <section className={`tasks-group tasks-group-${group}`} key={group} aria-labelledby={`tasks-heading-${group}`}>
               <div className="tasks-group-heading">
+                <ProductionIcon name={group === "later" ? "history" : "calendar"} size={18} />
                 <h2 id={`tasks-heading-${group}`}>{groupLabel(group, translate)}</h2>
                 <span className="tasks-group-count">{grouped[group].length}</span>
               </div>
@@ -417,7 +419,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       <button type="button" className="tasks-mobile-fab" aria-expanded={createOpen} onClick={() => {
         setCreateOpen(true);
         requestAnimationFrame(() => draftRef.current?.focus());
-      }} aria-label={translate("tasks.add")}>+</button>
+      }} aria-label={translate("tasks.add")}><ProductionIcon name="plus" /></button>
       </section>
       <ProductionChrome locale={locale} active="tasks" placement="bottom" />
     </main>

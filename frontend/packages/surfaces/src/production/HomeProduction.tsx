@@ -4,6 +4,7 @@ import { formatDate, formatNumber, t } from "@omi-core/i18n";
 import type { RefreshStatus, StoreStatus } from "@omi-core/domain";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionIcon } from "./ProductionIcon.js";
 import { presentMemoryContent } from "./memory-presentation.js";
 import { combineHomeRefreshStatuses, homeSurfacePresentation } from "./home-presentation.js";
 import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
@@ -149,7 +150,7 @@ export function HomeProduction({ sources, source, locale = "en", onReady }: {
           <h1 className="visually-hidden" id="home-title">{t(locale, "home.title")}</h1>
           <label className="home-search">
             <span className="visually-hidden">{t(locale, "common.search")}</span>
-            <span className="home-query-mark" aria-hidden="true"><span /></span>
+            <ProductionIcon name="search" className="home-query-mark" size={22} />
             <input
               ref={searchRef}
               autoFocus
@@ -164,7 +165,7 @@ export function HomeProduction({ sources, source, locale = "en", onReady }: {
                 }
               }}
             />
-            {query && <button type="button" className="home-search-clear" onClick={() => { setQuery(""); searchRef.current?.focus(); }} aria-label={t(locale, "common.clearSearch")}>×</button>}
+            {query && <button type="button" className="home-search-clear" onClick={() => { setQuery(""); searchRef.current?.focus(); }} aria-label={t(locale, "common.clearSearch")}><ProductionIcon name="close" size={18} /></button>}
           </label>
         </section>
 
@@ -193,11 +194,11 @@ export function HomeProduction({ sources, source, locale = "en", onReady }: {
               {results.map((row) => {
                 const date = formatDate(row.timestamp, locale, { dateStyle: "medium" });
                 if (row.kind === "memory") return <article className="home-result-row" key={`memory:${row.value.id}`}>
-                  <span className="home-result-icon is-memory" aria-hidden="true" />
+                  <span className="home-result-icon is-memory"><ProductionIcon name="library" size={18} /></span>
                   <div className="home-result-copy"><p>{presentMemoryContent(row.value.content).body}</p><small>{[t(locale, "nav.memories"), date].join(" · ")}</small></div>
                 </article>;
                 if (row.kind === "conversation") return <a className="home-result-row" href={conversationHref(row.value.id)} key={`conversation:${row.value.id}`}>
-                  <span className="home-result-icon is-conversation" aria-hidden="true" />
+                  <span className="home-result-icon is-conversation"><ProductionIcon name="conversations" size={18} /></span>
                   <div className="home-result-copy"><p>{row.value.title || t(locale, "conversations.untitled")}</p><small>{[t(locale, "nav.conversations"), date, row.value.overview].filter(Boolean).join(" · ")}</small></div>
                 </a>;
               })}

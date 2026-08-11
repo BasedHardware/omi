@@ -227,17 +227,11 @@ html[data-platform="desktop"] .tasks-create textarea { height: 34px; resize: non
 html[data-platform="desktop"] .tasks-groups { gap: 22px; }
 html[data-platform="desktop"] .tasks-group { gap: 1px; }
 html[data-platform="desktop"] .tasks-group-heading { min-height: 32px; border: 0; }
-html[data-platform="desktop"] .tasks-group-heading::before {
+html[data-platform="desktop"] .tasks-group-heading > .production-icon {
   width: 19px;
   color: rgba(35,43,51,.78);
-  font-size: 18px;
-  line-height: 1;
-  text-align: center;
-  content: "☀︎";
 }
-html[data-platform="desktop"] .tasks-group-tomorrow .tasks-group-heading::before { content: "◐"; }
-html[data-platform="desktop"] .tasks-group-later .tasks-group-heading::before { content: "○"; }
-html[data-platform="desktop"] .tasks-group h2 { font-family: "Open Runde", ui-rounded, -apple-system, sans-serif; font-size: 17px; letter-spacing: -.25px; }
+html[data-platform="desktop"] .tasks-group h2 { font-family: var(--type-title-family); font-size: 17px; letter-spacing: -.25px; }
 html[data-platform="desktop"] .tasks-group-count { display: none; }
 html[data-platform="desktop"] .task-card {
   grid-template-columns: minmax(0,1fr) auto;
