@@ -21,7 +21,7 @@ Host the memory UI on your own origin and embed it with a strict sandbox:
   title="Omi memory"
   loading="lazy"
   referrerpolicy="strict-origin-when-cross-origin"
-  sandbox="allow-scripts allow-same-origin"
+  sandbox="allow-scripts"
   style="width:100%;height:560px;border:0"
 ></iframe>
 ```
