@@ -12019,7 +12019,7 @@
           "match_snippets": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+              "$ref": "#/components/schemas/routers__mcp__TranscriptMatchSnippet"
             },
             "title": "Match Snippets",
             "type": "array"
@@ -19249,7 +19249,7 @@
           "match_snippets": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+              "$ref": "#/components/schemas/routers__mcp__TranscriptMatchSnippet"
             },
             "title": "Match Snippets",
             "type": "array"
@@ -21825,7 +21825,7 @@
         "type": "object"
       },
       "TranscriptMatchSnippet": {
-        "description": "Grep-style transcript evidence for MCP and app search seek-to-moment UX.",
+        "description": "Grep-style transcript hit returned on conversation search for seek-to-moment UX.",
         "properties": {
           "end": {
             "anyOf": [
@@ -24505,6 +24505,86 @@
           "status"
         ],
         "title": "WrappedStatusResponse",
+        "type": "object"
+      },
+      "routers__mcp__TranscriptMatchSnippet": {
+        "description": "Grep-style transcript evidence for MCP search hits (#6621).",
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          },
+          "segment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Id"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TranscriptMatchSnippet",
         "type": "object"
       },
       "routers__memories__BatchMemoriesRequest": {
