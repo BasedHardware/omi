@@ -465,6 +465,11 @@ export const pairMemoryEvaluationResults = (
   return pair;
 };
 
+export const assertVerifiedMemoryEvaluationResult = (value: unknown): Readonly<MemoryEvaluationResult> => {
+  if (value === null || typeof value !== "object" || !verifiedResults.has(value)) fail("unverified_result");
+  return value as Readonly<MemoryEvaluationResult>;
+};
+
 export const assertVerifiedMemoryEvaluationPair = (value: unknown): Readonly<MemoryEvaluationPair> => {
   if (value === null || typeof value !== "object" || !verifiedPairs.has(value)) fail("unverified_pair");
   return value as Readonly<MemoryEvaluationPair>;
