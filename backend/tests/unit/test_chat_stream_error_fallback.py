@@ -103,6 +103,7 @@ def _make_client():
 
     chat_utils = harness.load_real_module('utils.chat', BACKEND_DIR / 'utils' / 'chat.py')
 
+    sys.modules.pop('utils.chat_session_target', None)
     sys.modules.pop('routers.chat', None)
     router_module = harness.load_real_module('routers.chat', BACKEND_DIR / 'routers' / 'chat.py')
 

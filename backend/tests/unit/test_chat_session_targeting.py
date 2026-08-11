@@ -119,19 +119,9 @@ def test_blank_session_id_is_treated_as_absent(monkeypatch):
 
 
 def test_current_session_resolves_to_the_newest(monkeypatch):
-    """The newest session wins, and it is not the query that decides.
+    """The newest timestamped session is selected by the ordered query.
 
-    This asserted `.order_by('created_at', DESCENDING)` on the query. That
-    ordering is what the original bug report asked for, but Firestore excludes
-    from an ordered query every document that lacks the ordered field
-    (https://firebase.google.com/docs/firestore/query-data/order-limit-data
-    #limitations), so a session written without `created_at` became invisible
-    and the user's history was stranded behind a freshly created session.
-
-    The ranking therefore moved into `get_chat_session`, and this test moved
-    with it: it now asserts the outcome the ordering was there to produce.
-    `tests/unit/test_chat_session_selection.py` covers the untimestamped case
-    and guards against `order_by` returning to the query.
+    The fallback query still handles legacy sessions without `created_at`.
     """
     import database.chat as chat_db
 
@@ -175,7 +165,5 @@ def test_current_session_resolves_to_the_newest(monkeypatch):
     result = chat_db.get_chat_session('uid-1', app_id=None)
 
     assert result['id'] == 'sess-newest'
-    assert 'order_by' not in recorder
-    # The read stays bounded even though the newest is no longer picked by the
-    # query; an unbounded scan of a heavy user's sessions is its own outage.
-    assert recorder['limit'] == chat_db.CURRENT_CHAT_SESSION_SCAN_LIMIT
+    assert recorder['order_by'][0] == '__name__'
+    assert recorder['limit'] == 1

@@ -232,6 +232,7 @@ def _build_quota_exceeded_reply(
         sender='human',
         type='text',
         app_id=compat_app_id,
+        chat_session_id=chat_session.id if chat_session else None,
     )
     chat_db.add_message(uid, user_msg.model_dump())
     if chat_session:
@@ -267,6 +268,7 @@ def _build_quota_exceeded_reply(
         sender='ai',
         type='text',
         app_id=compat_app_id,
+        chat_session_id=chat_session.id if chat_session else None,
     )
     chat_db.add_message(uid, ai_msg.model_dump())
     if chat_session:
@@ -448,9 +450,15 @@ def send_message(
 
         chat_db.add_message(uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
-        if app_id:
+        usage_app_id = app_id_from_app or compat_app_id
+        if usage_app_id:
             try:
-                record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+                record_app_usage(
+                    uid,
+                    usage_app_id,
+                    UsageHistoryType.chat_message_sent,
+                    message_id=ai_message.id,
+                )
             except Exception as analytics_exc:
                 # Message is already durable; analytics must not change the client-visible id.
                 logger.error(

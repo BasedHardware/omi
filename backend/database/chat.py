@@ -10,7 +10,10 @@ from google.api_core.exceptions import AlreadyExists, Conflict, FailedPreconditi
 from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
 
-from database.firestore_index_registry import CURRENT_CHAT_SESSION_QUERY
+from database.firestore_index_registry import (
+    CURRENT_CHAT_SESSION_ORDERED_QUERY,
+    CURRENT_CHAT_SESSION_QUERY,
+)
 
 # Sessions are per-user and per-app, so this is a ceiling on a small collection
 # rather than a page size; it exists so a pathological account cannot turn one
@@ -676,9 +679,32 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
     session. A session with no timestamp sorts oldest, and its id breaks ties so
     the answer is stable across calls.
     """
+    collection = db.collection('users').document(uid).collection('chat_sessions')
+    ordered_sessions = (
+        CURRENT_CHAT_SESSION_ORDERED_QUERY.build(
+            collection,
+            {'app_id': app_id},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .order_by('__name__', direction=firestore.Query.DESCENDING)
+        .limit(1)
+        .stream()
+    )
+    ordered_docs = [_typed_doc(session) for session in ordered_sessions]
+    if ordered_docs:
+        return max(
+            ordered_docs,
+            key=lambda data: (
+                data.get('created_at') is not None,
+                data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
+                str(data.get('id') or ''),
+            ),
+        )
+
     sessions = (
         CURRENT_CHAT_SESSION_QUERY.build(
-            db.collection('users').document(uid).collection('chat_sessions'),
+            collection,
             {'app_id': app_id},
             field_filter_factory=FieldFilter,
         )

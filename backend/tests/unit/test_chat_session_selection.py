@@ -98,10 +98,10 @@ def test_no_sessions_returns_none(monkeypatch):
     assert result is None
 
 
-def test_the_query_does_not_order_by_created_at(monkeypatch):
+def test_the_timestamped_query_orders_by_created_at(monkeypatch):
     # A static guard on the mechanism, not just the outcome: reintroducing
     # `.order_by('created_at')` would pass every test above when the fixtures
     # all carry the field, and silently reopen the legacy hole in production.
     _, query = _run(monkeypatch, [_doc('only', NOW)])
 
-    assert not query.order_by.called
+    assert query.order_by.called
