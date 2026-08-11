@@ -86,6 +86,7 @@ test("conversation detail orders metadata before summary and supports Enter and 
     const editAgain = [...rendered.container.querySelectorAll("button")]
       .find((button) => button.textContent?.trim() === EN_MESSAGES["conversations.editTitle"]);
     assert.ok(editAgain);
+    assert.equal(rendered.window.document.activeElement, editAgain, "Escape restores focus to Edit title");
     await rendered.act(async () => { editAgain.click(); });
     input = rendered.container.querySelector(`input[aria-label="${EN_MESSAGES["conversations.editTitle"]}"]`);
     assert.ok(input);
@@ -98,6 +99,9 @@ test("conversation detail orders metadata before summary and supports Enter and 
       await Promise.resolve();
     });
     assert.equal(rendered.container.querySelector(".conversation-detail-title-editor h2")?.textContent, "Renamed in the render test");
+    const savedEdit = [...rendered.container.querySelectorAll("button")]
+      .find((button) => button.textContent?.trim() === EN_MESSAGES["conversations.editTitle"]);
+    assert.equal(rendered.window.document.activeElement, savedEdit, "successful save restores focus to Edit title");
   } finally {
     await rendered.cleanup();
   }
@@ -130,6 +134,29 @@ test("conversation detail renders patch controls only across the canPatch bounda
   }
   // red-proof: omitting the canPatch action block from a normal detail makes
   // the positive boundary assertion fail; rendering it for locked/discarded fails the negative side.
+});
+
+test("conversation deletion uses a named in-product confirmation and restores focus on cancel", async () => {
+  const rendered = await renderConversation("normal", true);
+  try {
+    const trigger = rendered.container.querySelector(".conversation-delete-trigger");
+    assert.ok(trigger);
+    await rendered.act(async () => { trigger.click(); });
+    const dialog = rendered.container.querySelector('[role="alertdialog"]');
+    assert.ok(dialog, "delete opens a bounded product confirmation instead of browser chrome");
+    const titleId = dialog.getAttribute("aria-labelledby");
+    const bodyId = dialog.getAttribute("aria-describedby");
+    assert.equal(rendered.window.document.getElementById(titleId)?.textContent, EN_MESSAGES["conversations.deleteConfirm"]);
+    assert.equal(rendered.window.document.getElementById(bodyId)?.textContent, EN_MESSAGES["conversations.deleteBody"]);
+    assert.equal(rendered.window.document.activeElement?.textContent?.trim(), EN_MESSAGES["common.cancel"]);
+    await rendered.act(async () => {
+      dialog.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    assert.equal(rendered.container.querySelector('[role="alertdialog"]'), null);
+    assert.equal(rendered.window.document.activeElement, trigger, "Escape returns focus to the delete trigger");
+  } finally {
+    await rendered.cleanup();
+  }
 });
 
 test("conversation dead letters render product copy and never backend summaries", async () => {

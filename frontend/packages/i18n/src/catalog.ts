@@ -48,6 +48,8 @@ export const EN_MESSAGES = {
   "conversations.saveTitle": "Save title",
   "conversations.delete": "Delete conversation",
   "conversations.deleteConfirm": "Delete this conversation?",
+  "conversations.deleteBody": "This removes it from your saved conversations. This action cannot be undone.",
+  "conversations.detailNotFoundBody": "It may have been removed or is no longer available in this account.",
   "conversations.lockedBody": "Full content was not provided; this conversation is read-only.",
   "conversations.discarded": "Discarded",
   "conversations.all": "All",

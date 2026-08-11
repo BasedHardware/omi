@@ -76,8 +76,10 @@ test("conversation production slice stays within the ratified list/detail contra
   assert.match(fixtures, /if \(state === "empty" && detail\)/);
   assert.match(source, /\{canPatch && <div className="conversation-detail-actions">/);
   const editableActions = source.match(/\{canPatch && <div className="conversation-detail-actions">([\s\S]*?)<\/div>\}/)?.[1] ?? "";
-  assert.match(editableActions, /store\.delete\(conversation\.id\)/);
-  assert.match(editableActions, /confirm\(t\(locale, "conversations\.deleteConfirm"\)\)/);
+  assert.match(editableActions, /conversation-delete-trigger/);
+  assert.match(source, /\{canPatch && confirmingDelete &&/);
+  assert.match(source, /const deleteConversation[\s\S]*store\.delete\(conversation\.id\)/);
+  assert.doesNotMatch(source, /globalThis\.confirm|window\.confirm/);
   assert.match(source, /conversations\.discardedBody/);
   assert.match(source, /conversation\.starred \? t\(locale, "conversations\.unstar"\) : t\(locale, "conversations\.star"\)/);
   // red-proof: moving delete outside canPatch lets locked/discarded rows mutate

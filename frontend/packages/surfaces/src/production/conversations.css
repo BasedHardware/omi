@@ -217,6 +217,22 @@
 .conversation-detail-actions select { min-width: 9rem; }
 .conversation-detail-actions label { display: grid; gap: var(--space-xs); color: var(--content-secondary); font-size: var(--type-label-size); }
 .conversation-detail > .locked-explanation { margin: 0; padding: var(--space-md); border-inline-start: var(--focus-ring-width) solid var(--warning); background: var(--surface-elevated); }
+.conversation-delete-trigger { color: var(--danger); }
+.conversation-delete-confirmation {
+  display: grid;
+  gap: var(--space-sm);
+  max-width: 36rem;
+  padding: var(--space-lg);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-section);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+.conversation-delete-confirmation h3,
+.conversation-delete-confirmation p { margin: 0; }
+.conversation-delete-confirmation p { color: var(--content-secondary); }
+.conversation-delete-confirmation-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); justify-content: flex-end; }
+.conversation-delete-confirmation-actions .is-destructive { border-color: var(--danger); color: var(--danger); }
 
 html[data-platform="desktop"] .conversation-list { max-width: 920px; }
 html[data-platform="desktop"] .conversation-day-group { gap: 0; }
@@ -252,6 +268,8 @@ html[data-platform="mobile"] .conversation-detail-meta div { padding-inline: var
 html[data-platform="mobile"] .conversation-summary { padding: var(--space-md) 0 0; border-width: 1px 0 0; border-radius: 0; background: transparent; }
 html[data-platform="mobile"] .conversation-detail-actions label { flex: 1 1 9rem; }
 html[data-platform="mobile"] .conversation-detail-actions select { width: 100%; }
+html[data-platform="mobile"] .conversation-delete-confirmation { max-width: none; padding: var(--space-md); }
+html[data-platform="mobile"] .conversation-delete-confirmation-actions button { flex: 1 1 9rem; }
 
 html[data-platform="desktop"] .conversation-controls { margin: 0 0 10px; padding-top: 14px; }
 html[data-platform="desktop"] .conversation-search { max-width: none; }
