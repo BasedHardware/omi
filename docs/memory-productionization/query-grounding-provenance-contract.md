@@ -1,8 +1,9 @@
 # Finalized query grounding and provenance contract
 
 Status: P5 contract, legacy compatibility gate, inert PostgreSQL schema, sealed
-repository, and production-neutral producer/source kernels, 2026-08-11; no
-concrete PostgreSQL adapter, route, grant, or runtime activation landed
+repository, production-neutral producer/source kernels, and paired-coordinator
+preregistration, 2026-08-11; no concrete PostgreSQL adapter, route, grant, or
+runtime activation landed
 
 ## Purpose
 
@@ -207,6 +208,10 @@ Landed sub-units:
   copied input. Empty projections become deterministic zero-model-call query
   gaps. The concrete PostgreSQL loader, codec secret, and service composition
   remain absent.
+- `paired-query-grounding-coordinator-contract.md` freezes the next bridge:
+  sequential authority/shadow/repeat execution only through the atomic
+  grounding producer, verified immutable pair persistence, zero-call replay,
+  and no statistic or truth judgment inside orchestration.
 
 ## Pre-registered acceptance tests
 
