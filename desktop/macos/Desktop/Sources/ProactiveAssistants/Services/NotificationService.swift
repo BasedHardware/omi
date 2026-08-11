@@ -242,8 +242,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         switch Self.openAction(assistantId: assistantId, title: title) {
         case .resetScreenCapture:
           self.handleScreenCaptureResetAction(source: "notification_click")
-        case .openSupportThread:
-          self.openSupportThread(source: "notification_click")
         case .none:
           break
         }
@@ -292,19 +290,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     case none
     /// The screen-recording repair, which is an action rather than a page.
     case resetScreenCapture
-    /// The founder/support thread the reply arrived in.
-    case openSupportThread
   }
 
   /// Resolve the tap destination from the notification's provenance.
   ///
-  /// Support replies are matched on `assistantId`, not on their display title, because the title is
-  /// user-visible copy: renaming the banner must not silently disconnect its tap. The
-  /// screen-capture case still matches on title only because that is how its own delivery gates
+  /// The screen-capture case matches on title because that is how its own delivery gates
   /// (`screenCaptureResetShownKey`) already identify it — changing that identity is a separate
   /// change with its own suppression-state migration.
   static func openAction(assistantId: String, title: String) -> OpenAction {
-    if assistantId == SupportThreadRoute.assistantId { return .openSupportThread }
     if title == screenCaptureResetTitle { return .resetScreenCapture }
     return .none
   }
@@ -316,22 +309,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     ScreenCaptureService.resetScreenCapturePermissionAndRestart()
   }
 
-  /// Bring up the support thread the tapped reply belongs to.
-  ///
-  /// The window is revealed first because a banner can arrive with the main window closed, which is
-  /// exactly when a founder reply is worth surfacing. Non-`private` so a test can drive this
-  /// without a real `UNUserNotificationCenter` delivery.
-  func openSupportThread(source: String) {
-    log("Support thread open requested from \(source)")
-    SupportThreadRoute.open()
-  }
-
   /// Send a notification via the floating bar, and optionally as a native macOS system banner.
   ///
   /// `deliverSystemBanner` defaults to `false` because proactive AI notifications are
   /// floating-bar only by default — users who disabled the floating bar reported clicking
   /// the top-right system banner and getting no conversation context, which was confusing.
-  /// Functional notifications (Crisp support replies, screen-recording permission
+  /// Functional notifications (screen-recording permission
   /// prompts with a repair action) must pass `deliverSystemBanner: true` so they
   /// still surface as a system banner — they either have no floating-bar equivalent
   /// or must reach the user even when the floating bar is hidden/snoozed.

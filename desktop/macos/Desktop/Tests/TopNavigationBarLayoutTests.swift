@@ -192,17 +192,16 @@ final class TopNavigationBarLayoutTests: XCTestCase {
 
   }
 
-  /// **The two pages that had no door.** `PermissionsPage` and `HelpPage` render correctly and
-  /// always did — their only writers were the sidebar the glass shell stopped rendering, so the app
-  /// reached a state where it notified the user about support replies they could not open and told
-  /// them to fix permissions on a page nothing led to.
+  /// **The page that had no door.** `PermissionsPage` renders correctly and always did — its only
+  /// writer was the sidebar the glass shell stopped rendering, so the app reached a state where it
+  /// told the user to fix permissions on a page nothing led to.
   ///
-  /// Their door is a row in the Settings list, which the bar's gear opens. Three things have to
-  /// hold together for that to be a door at all, so all three are asserted here: the row is in the
-  /// list, the row mounts the **whole** page rather than a summary of it (INV-NAV-1 in the other
+  /// Its door is a row in the Settings list, which the bar's gear opens. Three things have to hold
+  /// together for that to be a door at all, so all three are asserted here: the row is in the list,
+  /// the row mounts the **whole** page rather than a summary of it (INV-NAV-1 in the other
   /// direction), and the gear that opens Settings is still on the bar.
   func testTheStrandedUtilityPagesAreReachedThroughTheSettingsList() {
-    for destination in [ShellDestination.permissions, .help] {
+    for destination in [ShellDestination.permissions] {
       XCTAssertEqual(destination.reach, .settingsSidebar)
       guard let section = destination.settingsSection else {
         return XCTFail("\(destination.title) names no Settings row")
@@ -217,7 +216,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
 
     XCTAssertEqual(
       TopNavigationRoutes.persistentItems.map(\.index), [SidebarNavItem.settings.rawValue],
-      "the gear is the only way into Settings, and both stranded pages now live behind it")
+      "the gear is the only way into Settings, and the stranded page now lives behind it")
     XCTAssertTrue(
       TopNavigationRoutes.persistentItems.contains { $0.tooltip.lowercased().contains("permission") },
       "the gear has promised permissions all along — now it has to be telling the truth")
@@ -301,20 +300,20 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       "Apps lost its pill and nothing noticed — connectors and exports have no other door")
   }
 
-  /// The same negative proof for the Settings list, because that is how `PermissionsPage` and
-  /// `HelpPage` got stranded in the first place: the surface that wrote to them stopped rendering
-  /// and nothing said so. Both ways of losing the door have to be visible to the checker — the row
-  /// disappearing, and the gear that opens the list disappearing.
+  /// The same negative proof for the Settings list, because that is how `PermissionsPage` got
+  /// stranded in the first place: the surface that wrote to it stopped rendering and nothing said
+  /// so. Both ways of losing the door have to be visible to the checker — the row disappearing, and
+  /// the gear that opens the list disappearing.
   func testTheReachabilityCheckerCatchesAPageWhoseSettingsDoorWasRemoved() {
-    let listWithoutHelp = SettingsSidebarRoutes.visibleSections.filter { $0 != .help }
+    let listWithoutPermissions = SettingsSidebarRoutes.visibleSections.filter { $0 != .permissions }
     XCTAssertEqual(
-      ShellDestination.unreachable(settingsSidebarSections: listWithoutHelp), [.help],
-      "Help lost its Settings row and nothing noticed")
+      ShellDestination.unreachable(settingsSidebarSections: listWithoutPermissions), [.permissions],
+      "Permissions lost its Settings row and nothing noticed")
 
     XCTAssertEqual(
       Set(ShellDestination.unreachable(persistentItems: [])),
-      [.permissions, .help],
-      "without the gear there is no way into Settings, so both pages behind it are stranded")
+      [.permissions],
+      "without the gear there is no way into Settings, so the page behind it is stranded")
   }
 
   func testLibraryPillReadsAsCurrentOnEveryHubView() {
