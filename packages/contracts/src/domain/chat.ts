@@ -154,7 +154,7 @@ export type ChatCompletedAssistantMessage = ChatMessageFields & {
   generationOutcome: "completed";
 };
 
-/** Canonical retained assistant cancellation. */
+/** Canonical retained non-empty assistant cancellation. */
 export type ChatCancelledAssistantMessage = ChatMessageFields & {
   sender: "ai";
   generationOutcome: "cancelled";
@@ -261,15 +261,14 @@ export type ChatAdvisoryFrame =
  * Terminal stream outcome (INV-CHAT-002).
  *
  * `done.message` is the complete canonical assistant message, never the last
- * delta. Cancellation retains its non-empty partial as a complete canonical
- * message and carries it here non-null, so "stopped on purpose" can never be
- * confused with a truncated success. `failed` is the only terminal without a
- * canonical assistant record.
+ * delta. Cancellation retains a non-empty partial as a complete canonical
+ * cancelled message, while an empty cancellation carries explicit `null` and
+ * creates no assistant record. `failed` remains message-less.
  */
 export type ChatTerminalFrame =
   | { kind: "done"; message: ChatCompletedAssistantMessage }
   | { kind: "failed"; error: { code: string; retryable: boolean } }
-  | { kind: "cancelled"; message: ChatCancelledAssistantMessage };
+  | { kind: "cancelled"; message: ChatCancelledAssistantMessage | null };
 
 /** Complete ratified SSE data-frame grammar. Heartbeat comments are not frames. */
 export type ChatGenerationFrame = ChatAdvisoryFrame | ChatTerminalFrame;

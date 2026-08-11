@@ -308,6 +308,8 @@ export function wireToChatGenerationFrame(raw: unknown): ChatGenerationFrame | n
       return { kind: "done", message };
     }
     case "cancelled": {
+      if (!Object.hasOwn(raw, "message")) return null;
+      if (raw["message"] === null) return { kind: "cancelled", message: null };
       const message = wireToChatMessage(raw["message"]);
       if (
         message === null ||
@@ -317,6 +319,7 @@ export function wireToChatGenerationFrame(raw: unknown): ChatGenerationFrame | n
       return { kind: "cancelled", message };
     }
     case "failed": {
+      if (Object.hasOwn(raw, "message")) return null;
       const error = raw["error"];
       if (
         !isRecord(error) ||
