@@ -100,6 +100,31 @@ describe("deterministic Chat generation scenarios", () => {
       .toHaveLength(1);
   });
 
+  test("an empty scripted completion is a deterministic failed terminal", async () => {
+    const result = await runChatGenerationScenario({
+      prompt: "empty",
+      script: [],
+    });
+    expect(result.trace).toEqual([
+      { atMs: 0, kind: "snapshot", text: "" },
+      { atMs: 0, kind: "failed", errorCode: "generation_provider_failed" },
+    ]);
+    expect(result.terminal).toBe("failed");
+  });
+
+  test("a whitespace-only scripted completion is not a completed answer", async () => {
+    const result = await runChatGenerationScenario({
+      prompt: "whitespace",
+      script: [{ delayMs: 2, text: " \n\t" }],
+    });
+    expect(result.trace).toEqual([
+      { atMs: 0, kind: "snapshot", text: "" },
+      { atMs: 2, kind: "delta", text: " \n\t" },
+      { atMs: 2, kind: "failed", errorCode: "generation_provider_failed" },
+    ]);
+    expect(result.terminal).toBe("failed");
+  });
+
   test("callback faults, cancellation, and timeout each have one terminal", async () => {
     const callback = await runChatGenerationScenario({
       prompt: "callback",

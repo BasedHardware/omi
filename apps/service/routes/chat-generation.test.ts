@@ -870,6 +870,61 @@ describe("ratified chat generation wire red proofs", () => {
     }
   });
 
+  for (const [name, complete] of [
+    ["synchronous", (input: Parameters<ChatGenerationSource["start"]>[0]): void => input.onComplete()],
+    ["asynchronous", (input: Parameters<ChatGenerationSource["start"]>[0]): void => queueMicrotask(() => input.onComplete())],
+    ["whitespace", (input: Parameters<ChatGenerationSource["start"]>[0]): void => {
+      input.onDelta(" \n\t");
+      input.onComplete();
+    }],
+  ] as const) {
+    test(`${name} empty provider completion is failed without an assistant fallback`, async () => {
+      const source: ChatGenerationSource = Object.freeze({
+        start(input) {
+          complete(input);
+          return Object.freeze({ cancel: (): void => {} });
+        },
+      });
+      const { db, local } = boot(createInMemoryLocalServiceStores(), source, `chat-empty-${name}-proof`);
+      const { admission, eventsResponse } = await admitAndOpen(local, create(`empty-${name}`));
+      const frames = parseSse(await eventsResponse.text());
+      expect(frames.map((frame) => frame.event)).toEqual(["failed"]);
+      expect(frames.at(-1)?.data).toEqual({
+        kind: "failed",
+        error: { code: "generation_provider_failed", retryable: true },
+      });
+      expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
+      const replay = parseSse(await (await generationEvents(local, admission.generation.id)).text());
+      expect(replay).toEqual([frames.at(-1)]);
+      expect(frames.filter((frame) => ["done", "failed", "cancelled"].includes(frame.event)))
+        .toHaveLength(1);
+      db.close();
+    });
+  }
+
+  test("meaningful leading and trailing whitespace remains in a completed answer", async () => {
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        input.onDelta(" answer ");
+        input.onComplete();
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const { db, local } = boot(createInMemoryLocalServiceStores(), source, "chat-whitespace-content-proof");
+    const { admission, eventsResponse } = await admitAndOpen(local, create("whitespace-content"));
+    const frames = parseSse(await eventsResponse.text());
+    expect(frames.at(-1)?.event).toBe("done");
+    const done = frames.at(-1)?.data;
+    if (done?.kind !== "done") throw new TypeError("missing done frame");
+    expect(done.message.text).toBe(" answer ");
+    expect((await history(local)).map((entry) => [entry.sender, entry.text])).toEqual([
+      ["human", "Tell me something useful"],
+      ["ai", " answer "],
+    ]);
+    expect((await generationEvents(local, admission.generation.id)).status).toBe(200);
+    db.close();
+  });
+
   test("an out-of-band timeout cannot create a ghost terminal without admission", async () => {
     const stores = createInMemoryLocalServiceStores();
     const supervisor = createChatGenerationSupervisor({

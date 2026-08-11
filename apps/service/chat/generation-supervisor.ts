@@ -223,6 +223,13 @@ export const createChatGenerationSupervisor = (
     failure: ChatGenerationFailure | null = null,
   ): boolean => {
     if (state.terminal) return true;
+    // A provider that completes without emitting any text has not produced a
+    // truthful answer. Keep this terminal in the failed grammar so projection
+    // cannot persist the apology fallback as a completed assistant message.
+    if (kind === "done" && text.trim().length === 0) {
+      kind = "failed";
+      failure = state.failure ?? defaultFailure("provider");
+    }
     if (kind === "done" && state.failure !== null) {
       kind = "failed";
       text = "";
