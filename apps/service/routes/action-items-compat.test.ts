@@ -12,7 +12,10 @@ import {
   type LocalServiceStores,
 } from "../app-facing";
 import { createSqliteLocalServiceStores } from "../../../drivers/sqlite/service-stores";
-import { actionItemsCompatCreateDigest } from "./action-items-compat";
+import {
+  actionItemsCompatCreateDigest,
+  isActionItemsCompatInvocation,
+} from "./action-items-compat";
 
 const OWNER = "compatibility-owner";
 const OTHER = "compatibility-other";
@@ -20,6 +23,7 @@ const PATH = "/v1/action-items";
 const NOW = 1_786_406_400_123;
 const PATCH_NOW = NOW + 60_000;
 const RUN = "action-items-compat-run";
+const BAD_REQUEST_WIRE = JSON.stringify({ error: "bad_request" });
 
 const canonicalBag = (
   description: string,
@@ -80,6 +84,11 @@ const request = (
 
 const json = async (response: Response): Promise<Record<string, unknown>> =>
   await response.json() as Record<string, unknown>;
+
+const jsonResponseForTest = (value: unknown): Response => new Response(JSON.stringify(value), {
+  status: 200,
+  headers: { "content-type": "application/json" },
+});
 
 const legacyDigest = (accountId: string, description: string): string =>
   createHash("sha256")
@@ -285,7 +294,10 @@ describe("legacy action-items exact wire and store semantics", () => {
     });
     expect(clockCalls).toBe(1);
 
-    for (const [description, id] of [["second", "compat-exact-002"], ["third", "compat-exact-003"]]) {
+    for (const [description, id] of [
+      ["second", "compat-exact-002"],
+      ["third", "compat-exact-003"],
+    ] as const) {
       expect((await request(service, PATH, "POST", { description })).status).toBe(200);
       expect(service.writePath.tasks.readRecord(OWNER, id)).not.toBeNull();
     }
@@ -299,15 +311,15 @@ describe("legacy action-items exact wire and store semantics", () => {
     expect(firstPage.status).toBe(200);
     const firstPageBody = await json(firstPage);
     expect(firstPageBody).toMatchObject({ has_more: true });
-    expect(firstPageBody.action_items).toHaveLength(2);
-    expect((firstPageBody.action_items as unknown[])[0]).toEqual(created);
-    expect(((await request(service, `${PATH}?limit=2&offset=2`).then(json)).action_items as unknown[]))
+    expect(firstPageBody["action_items"]).toHaveLength(2);
+    expect((firstPageBody["action_items"] as unknown[])[0]).toEqual(created);
+    expect(((await request(service, `${PATH}?limit=2&offset=2`).then(json))["action_items"] as unknown[]))
       .toHaveLength(1);
     const defaults = await json(await request(service, PATH));
-    expect(defaults.has_more).toBe(false);
-    expect(defaults.action_items).toHaveLength(3);
+    expect(defaults["has_more"]).toBe(false);
+    expect(defaults["action_items"]).toHaveLength(3);
     expect((await request(service, `${PATH}?limit=500`)).status).toBe(200);
-    expect(((await request(service, `${PATH}?offset=2`).then(json)).action_items as unknown[]))
+    expect(((await request(service, `${PATH}?offset=2`).then(json))["action_items"] as unknown[]))
       .toHaveLength(1);
 
     const beforePatch = service.writePath.tasks.readRecord(OWNER, "compat-exact-001")!;
@@ -315,7 +327,7 @@ describe("legacy action-items exact wire and store semantics", () => {
       description: "patched",
       completed: true,
       due_at: null,
-      owner: "assistant",
+      owner: "other",
       sort_order: 4,
       indent_level: 2,
     });
@@ -327,7 +339,7 @@ describe("legacy action-items exact wire and store semantics", () => {
       completed: true,
       completed_at: new Date(PATCH_NOW).toISOString(),
       due_at: null,
-      owner: "assistant",
+      owner: "other",
       sort_order: 4,
       indent_level: 2,
       updated_at: new Date(PATCH_NOW).toISOString(),
@@ -387,12 +399,12 @@ describe("legacy action-items exact wire and store semantics", () => {
     const retry = await json(await request(service, PATH, "POST", {
       description: "mixed case task",
     }));
-    expect(first.id).toBe("compat-idempotent-001");
-    expect(retry.id).toBe(first.id);
+    expect(first["id"]).toBe("compat-idempotent-001");
+    expect(retry["id"]).toBe(first["id"]);
     expect(service.writePath.tasks.listRecords(OWNER)).toHaveLength(1);
     expect(clockCalls).toBe(1);
 
-    const stored = service.writePath.tasks.readRecord(OWNER, String(first.id))!;
+    const stored = service.writePath.tasks.readRecord(OWNER, String(first["id"]))!;
     const privateKeys = Object.keys(stored.content).filter((key) => key.includes("legacy"));
     expect(privateKeys).toHaveLength(1);
     expect(stored.content[privateKeys[0]!]).toBe(legacyDigest(OWNER, "  Mixed CASE task  "));
@@ -401,18 +413,18 @@ describe("legacy action-items exact wire and store semantics", () => {
       expect(JSON.stringify(value)).not.toContain(String(stored.content[privateKeys[0]!]));
     }
 
-    expect((await request(service, `${PATH}/${first.id}`, "PATCH", {
+    expect((await request(service, `${PATH}/${String(first["id"])}`, "PATCH", {
       description: "a changed description",
       completed: true,
     })).status).toBe(200);
-    expect(service.writePath.tasks.readRecord(OWNER, String(first.id))!.content[privateKeys[0]!])
+    expect(service.writePath.tasks.readRecord(OWNER, String(first["id"]))!.content[privateKeys[0]!])
       .toBe(legacyDigest(OWNER, "  Mixed CASE task  "));
 
     const afterCompletion = await json(await request(service, PATH, "POST", {
       description: "MIXED CASE TASK",
     }));
-    expect(afterCompletion.id).toBe("compat-idempotent-002");
-    expect(afterCompletion.id).not.toBe(first.id);
+    expect(afterCompletion["id"]).toBe("compat-idempotent-002");
+    expect(afterCompletion["id"]).not.toBe(first["id"]);
     expect(service.writePath.tasks.listRecords(OWNER)).toHaveLength(2);
   });
 
@@ -508,7 +520,8 @@ describe("legacy action-items hardening and account scoping", () => {
     }
     expect((await request(service, `${PATH}/compat-hardening-seed`, "DELETE", {})).status).toBe(400);
 
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    const unpolluted: Record<string, unknown> = {};
+    expect(unpolluted["polluted"]).toBeUndefined();
     expect(Object.getPrototypeOf(service.writePath.tasks.readRecord(OWNER, "compat-hardening-seed")!.content))
       .toBe(Object.prototype);
     expect(service.writePath.tasks.readRecord(OWNER, "compat-hardening-seed")).toEqual(before);
@@ -528,7 +541,7 @@ describe("legacy action-items hardening and account scoping", () => {
       [`${PATH}/search`, "POST"],
       [`${PATH}/batch`, "PATCH"],
       [`${PATH}/`, "GET"],
-    ]) {
+    ] as const) {
       const response = await request(service, path, method);
       expect(response.status).toBe(404);
       expect(await response.text()).toBe(JSON.stringify({ error: "not_found" }));
@@ -622,7 +635,7 @@ describe("legacy action-items single-process race and store-seam proofs", () => 
         expect(responses.every((response) => response.status === 200)).toBeTrue();
         const legacyWires = await Promise.all(responses.map((response) => response.text()));
         const legacyRows = legacyWires.map((wire) => JSON.parse(wire) as Record<string, unknown>);
-        const returnedIds = legacyRows.map((row) => String(row.id));
+        const returnedIds = legacyRows.map((row) => String(row["id"]));
         expect(new Set(returnedIds)).toEqual(new Set(["compat-concurrent-proof"]));
         for (const id of returnedIds) expectVendoredRecordIdBoundary(id);
 
@@ -682,8 +695,8 @@ describe("legacy action-items single-process race and store-seam proofs", () => 
         const response = await request(booted.service, PATH, "POST", { description: "new row" });
         expect(response.status).toBe(200);
         const created = await json(response);
-        expect(created.id).toBe("compat-collision-new");
-        expectVendoredRecordIdBoundary(String(created.id));
+        expect(created["id"]).toBe("compat-collision-new");
+        expectVendoredRecordIdBoundary(String(created["id"]));
         expect(JSON.stringify(booted.stores.tasks.readRecord(OWNER, "compat-collision-live"))).toBe(original);
         expect(booted.stores.tasks.listRecords(OWNER)).toHaveLength(2);
       } finally {
@@ -720,6 +733,7 @@ describe("legacy action-items single-process race and store-seam proofs", () => 
         expect(created.applied).toBeTrue();
         if (!created.applied) throw new Error("initial create unexpectedly conflicted");
         const staleRevision = created.revision;
+        if (staleRevision === null) throw new Error("create returned a null revision");
 
         expect(booted.stores.tasks.apply(OWNER, { op: "delete", record_id: recordId }).applied).toBeTrue();
         const recreated = booted.stores.tasks.apply(OWNER, {
@@ -784,5 +798,200 @@ describe("legacy action-items single-process race and store-seam proofs", () => 
     expect(owner.length).toBe(9);
     expect(`${owner.length}:${owner}:${description.trim().toLowerCase()}`).toBe(expectedPayload);
     expect(actionItemsCompatCreateDigest(owner, description)).toBe(expectedDigest);
+  });
+});
+
+describe("legacy action-items historical request validation", () => {
+  for (const composition of ["in-memory", "sqlite"] as const) {
+    test(`${composition}: POST distinguishes omitted source from every invalid explicit value`, async () => {
+      const booted = bootComposition(composition, {
+        ids: ["compat-source-default", "compat-source-custom"],
+      });
+      try {
+        const defaulted = await request(booted.service, PATH, "POST", { description: "default source" });
+        expect(defaulted.status).toBe(200);
+        expect((await json(defaulted))["source"]).toBe("manual");
+
+        const customSource = "historical:custom-source";
+        const custom = await request(booted.service, PATH, "POST", {
+          description: "custom source",
+          source: customSource,
+        });
+        expect(custom.status).toBe(200);
+        expect((await json(custom))["source"]).toBe(customSource);
+
+        for (const source of [null, "", "x".repeat(65), 7, false, [], {}]) {
+          const before = storeBytes(booted.stores);
+          const response = await request(booted.service, PATH, "POST", {
+            description: `rejected source ${typeof source}`,
+            source,
+          });
+          expect(response.status).toBe(400);
+          expect(await response.text()).toBe(BAD_REQUEST_WIRE);
+          expect(storeBytes(booted.stores)).toBe(before);
+        }
+      } finally {
+        booted.close();
+      }
+    });
+
+    test(`${composition}: PATCH enforces historical owner and safe-integer sort order`, async () => {
+      const booted = bootComposition(composition);
+      try {
+        const recordId = "compat-historical-patch";
+        booted.stores.tasks.apply(OWNER, {
+          op: "create",
+          record_id: recordId,
+          content: canonicalBag("historical validation"),
+        });
+
+        for (const owner of ["user", "other", "unknown"]) {
+          const response = await request(booted.service, `${PATH}/${recordId}`, "PATCH", { owner });
+          expect(response.status).toBe(200);
+          expect((await json(response))["owner"]).toBe(owner);
+        }
+        for (const sortOrder of [-17, 0, 23]) {
+          const response = await request(booted.service, `${PATH}/${recordId}`, "PATCH", {
+            sort_order: sortOrder,
+          });
+          expect(response.status).toBe(200);
+          expect((await json(response))["sort_order"]).toBe(sortOrder);
+        }
+
+        for (const owner of [null, "assistant", "USER", 7, false, [], {}]) {
+          const before = storeBytes(booted.stores);
+          const response = await request(booted.service, `${PATH}/${recordId}`, "PATCH", { owner });
+          expect(response.status).toBe(400);
+          expect(await response.text()).toBe(BAD_REQUEST_WIRE);
+          expect(storeBytes(booted.stores)).toBe(before);
+        }
+
+        const invalidSortBodies: readonly unknown[] = [
+          { sort_order: 1.5 },
+          { sort_order: Number.MAX_SAFE_INTEGER + 1 },
+          "{\"sort_order\":1e309}",
+          { sort_order: null },
+          { sort_order: "1" },
+          { sort_order: true },
+          { sort_order: {} },
+        ];
+        for (const body of invalidSortBodies) {
+          const before = storeBytes(booted.stores);
+          const response = await request(booted.service, `${PATH}/${recordId}`, "PATCH", body);
+          expect(response.status).toBe(400);
+          expect(await response.text()).toBe(BAD_REQUEST_WIRE);
+          expect(storeBytes(booted.stores)).toBe(before);
+        }
+      } finally {
+        booted.close();
+      }
+    });
+
+    test(`${composition}: create and patch round-trip historical aware years 0001 through 9999`, async () => {
+      const booted = bootComposition(composition, { ids: ["compat-early-year"] });
+      try {
+        const created = await request(booted.service, PATH, "POST", {
+          description: "early datetime",
+          due_at: "0001-01-02T03:04:05Z",
+        });
+        expect(created.status).toBe(200);
+        expect((await json(created))["due_at"]).toBe("0001-01-02T03:04:05.000Z");
+        expect(booted.stores.tasks.readRecord(OWNER, "compat-early-year")?.content["dueAt"])
+          .toBe(Date.parse("0001-01-02T03:04:05.000Z"));
+
+        const year99 = await request(booted.service, `${PATH}/compat-early-year`, "PATCH", {
+          due_at: "0099-06-07T08:09:10Z",
+        });
+        expect(year99.status).toBe(200);
+        expect((await json(year99))["due_at"]).toBe("0099-06-07T08:09:10.000Z");
+
+        const year999 = await request(booted.service, `${PATH}/compat-early-year`, "PATCH", {
+          due_at: "0999-12-31T23:59:59.999+01:30",
+        });
+        expect(year999.status).toBe(200);
+        expect((await json(year999))["due_at"]).toBe("0999-12-31T22:29:59.999Z");
+        expect(booted.stores.tasks.readRecord(OWNER, "compat-early-year")?.content["dueAt"])
+          .toBe(Date.parse("0999-12-31T22:29:59.999Z"));
+
+        const year9999 = await request(booted.service, `${PATH}/compat-early-year`, "PATCH", {
+          due_at: "9999-12-31T23:59:59.999Z",
+        });
+        expect(year9999.status).toBe(200);
+        expect((await json(year9999))["due_at"]).toBe("9999-12-31T23:59:59.999Z");
+
+        for (const dueAt of [
+          "0000-01-01T00:00:00Z",
+          "10000-01-01T00:00:00Z",
+          "0099-01-01T00:00:00",
+          "0099-01-01T00:00:00.0000Z",
+          "0999-02-29T00:00:00Z",
+          "0099-01-01T00:00:00+24:00",
+          "0099-01-01T00:00:00z",
+          "0099-01-01T00:00:00+0000",
+        ]) {
+          const before = storeBytes(booted.stores);
+          const response = await request(booted.service, `${PATH}/compat-early-year`, "PATCH", {
+            due_at: dueAt,
+          });
+          expect(response.status).toBe(400);
+          expect(await response.text()).toBe(BAD_REQUEST_WIRE);
+          expect(storeBytes(booted.stores)).toBe(before);
+        }
+      } finally {
+        booted.close();
+      }
+    });
+  }
+});
+
+describe("legacy action-items exact producer-evidence classification", () => {
+  test("the classifier accepts only the five released route shapes", () => {
+    for (const [method, path] of [
+      ["GET", PATH],
+      ["GET", `${PATH}/ids`],
+      ["POST", PATH],
+      ["PATCH", `${PATH}/compat-safe-id`],
+      ["DELETE", `${PATH}/%63ompat-safe-id`],
+    ] as const) {
+      expect(isActionItemsCompatInvocation(method, path)).toBeTrue();
+    }
+
+    for (const [method, path] of [
+      ["GET", `${PATH}/`],
+      ["PATCH", `${PATH}/`],
+      ["PATCH", `${PATH}/compat-safe-id/nested`],
+      ["DELETE", `${PATH}/..%2Fescape`],
+      ["PATCH", `${PATH}/bad%20id`],
+      ["DELETE", `${PATH}/%`],
+      ["PATCH", `${PATH}/abc`],
+      ["PATCH", `${PATH}/${"x".repeat(129)}`],
+      ["PATCH", `${PATH}/search`],
+      ["DELETE", `${PATH}/batch`],
+      ["PATCH", `${PATH}/ids`],
+      ["PUT", PATH],
+      ["GET", `${PATH}/compat-safe-id`],
+      ["POST", `${PATH}/compat-safe-id`],
+    ] as const) {
+      expect(isActionItemsCompatInvocation(method, path)).toBeFalse();
+    }
+  });
+
+  test("later successful sibling routes cannot move the compatibility evidence counter", async () => {
+    const service = boot();
+    service.app.patch(`${PATH}/search/future`, () => jsonResponseForTest({ ok: true }));
+    service.app.delete(`${PATH}/batch/future`, () => jsonResponseForTest({ ok: true }));
+    service.app.patch(`${PATH}/`, () => jsonResponseForTest({ ok: true }));
+    const headers = evidenceHeaders as Record<string, string>;
+
+    expect((await request(service, `${PATH}/ids`, "GET", undefined, headers)).status).toBe(200);
+    expect(evidenceCount(service)).toBe(1);
+    for (const [method, path] of [
+      ["PATCH", `${PATH}/search/future`],
+      ["DELETE", `${PATH}/batch/future`],
+      ["PATCH", `${PATH}/`],
+    ] as const) {
+      expect((await request(service, path, method, undefined, headers)).status).toBe(200);
+      expect(evidenceCount(service)).toBe(1);
+    }
   });
 });

@@ -32,6 +32,7 @@ const INTERNAL_BODY = JSON.stringify({ error: "internal_server_error" });
 const MAX_BODY_CODE_UNITS = 65_536;
 const MAX_CREATE_ID_ATTEMPTS = 32;
 const SAFE_LEGACY_ID = /^[A-Za-z0-9_-]{4,128}$/;
+const HISTORICAL_TASK_OWNERS = new Set(["user", "other", "unknown"]);
 const PRIVATE_CREATE_DIGEST_KEY = "__omi.legacy.action_items.create_digest.v1";
 const FROZEN_STATIC_SIBLINGS = new Set([
   "batch",
@@ -75,7 +76,7 @@ interface PatchInput {
   readonly description?: string;
   readonly completed?: boolean;
   readonly dueAt?: number | null;
-  readonly owner?: string | null;
+  readonly owner?: string;
   readonly sortOrder?: number;
   readonly indentLevel?: number;
 }
@@ -180,26 +181,49 @@ const parseIsoEpochMilliseconds = (value: unknown): number | undefined => {
   if (typeof value !== "string") return undefined;
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
   if (match === null) return undefined;
-  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number) as [
-    number, number, number, number, number, number,
-  ];
-  if (year < 1_000) return undefined;
+  const yearRaw = match[1];
+  const monthRaw = match[2];
+  const dayRaw = match[3];
+  const hourRaw = match[4];
+  const minuteRaw = match[5];
+  const secondRaw = match[6];
+  const zone = match[8];
+  if (yearRaw === undefined || monthRaw === undefined || dayRaw === undefined
+    || hourRaw === undefined || minuteRaw === undefined || secondRaw === undefined
+    || zone === undefined) return undefined;
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  const second = Number(secondRaw);
+  if (year < 1) return undefined;
   const milliseconds = Number((match[7] ?? "0").padEnd(3, "0"));
-  const wall = Date.UTC(year, month - 1, day, hour, minute, second, milliseconds);
-  const wallDate = new Date(wall);
+  // Date.UTC remaps years 0..99 to 1900..1999. Setting the full year explicitly
+  // preserves Python's historical aware-datetime range without changing storage.
+  const wallDate = new Date(0);
+  wallDate.setUTCFullYear(year, month - 1, day);
+  wallDate.setUTCHours(hour, minute, second, milliseconds);
+  const wall = wallDate.getTime();
   if (wallDate.getUTCFullYear() !== year || wallDate.getUTCMonth() !== month - 1
     || wallDate.getUTCDate() !== day || wallDate.getUTCHours() !== hour
     || wallDate.getUTCMinutes() !== minute || wallDate.getUTCSeconds() !== second
     || wallDate.getUTCMilliseconds() !== milliseconds) return undefined;
 
   let offsetMinutes = 0;
-  if (match[8] !== "Z") {
-    const offset = /^([+-])(\d{2}):(\d{2})$/.exec(match[8]!);
+  if (zone !== "Z") {
+    const offset = /^([+-])(\d{2}):(\d{2})$/.exec(zone);
     if (offset === null) return undefined;
-    const offsetHours = Number(offset[2]);
-    const offsetRemainder = Number(offset[3]);
+    const offsetSign = offset[1];
+    const offsetHoursRaw = offset[2];
+    const offsetRemainderRaw = offset[3];
+    if (offsetSign === undefined || offsetHoursRaw === undefined || offsetRemainderRaw === undefined) {
+      return undefined;
+    }
+    const offsetHours = Number(offsetHoursRaw);
+    const offsetRemainder = Number(offsetRemainderRaw);
     if (offsetHours > 23 || offsetRemainder > 59) return undefined;
-    offsetMinutes = (offsetHours * 60 + offsetRemainder) * (offset[1] === "+" ? 1 : -1);
+    offsetMinutes = (offsetHours * 60 + offsetRemainder) * (offsetSign === "+" ? 1 : -1);
   }
   const epoch = wall - offsetMinutes * 60_000;
   if (!Number.isSafeInteger(epoch)) return undefined;
@@ -209,17 +233,19 @@ const parseIsoEpochMilliseconds = (value: unknown): number | undefined => {
 
 const parseCreate = (body: Readonly<Record<string, unknown>>): CreateInput | null => {
   if (!hasExactAllowedKeys(body, new Set(["description", "due_at", "source"]))) return null;
-  if (typeof body.description !== "string" || body.description.length < 1
-    || body.description.length > 4_096) return null;
+  const description = body["description"];
+  if (typeof description !== "string" || description.length < 1
+    || description.length > 4_096) return null;
   let dueAt: number | null = null;
-  if (Object.prototype.hasOwnProperty.call(body, "due_at") && body.due_at !== null) {
-    const parsed = parseIsoEpochMilliseconds(body.due_at);
+  const dueAtValue = body["due_at"];
+  if (Object.prototype.hasOwnProperty.call(body, "due_at") && dueAtValue !== null) {
+    const parsed = parseIsoEpochMilliseconds(dueAtValue);
     if (parsed === undefined) return null;
     dueAt = parsed;
   }
-  const source = body.source ?? "manual";
+  const source = Object.prototype.hasOwnProperty.call(body, "source") ? body["source"] : "manual";
   if (typeof source !== "string" || source.length < 1 || source.length > 64) return null;
-  return Object.freeze({ description: body.description, dueAt, source });
+  return Object.freeze({ description, dueAt, source });
 };
 
 const parsePatch = (body: Readonly<Record<string, unknown>>): PatchInput | null => {
@@ -236,39 +262,45 @@ const parsePatch = (body: Readonly<Record<string, unknown>>): PatchInput | null 
     description?: string;
     completed?: boolean;
     dueAt?: number | null;
-    owner?: string | null;
+    owner?: string;
     sortOrder?: number;
     indentLevel?: number;
   } = {};
   if (Object.prototype.hasOwnProperty.call(body, "description")) {
-    if (typeof body.description !== "string" || body.description.length < 1
-      || body.description.length > 4_096) return null;
-    patch.description = body.description;
+    const description = body["description"];
+    if (typeof description !== "string" || description.length < 1
+      || description.length > 4_096) return null;
+    patch.description = description;
   }
   if (Object.prototype.hasOwnProperty.call(body, "completed")) {
-    if (typeof body.completed !== "boolean") return null;
-    patch.completed = body.completed;
+    const completed = body["completed"];
+    if (typeof completed !== "boolean") return null;
+    patch.completed = completed;
   }
   if (Object.prototype.hasOwnProperty.call(body, "due_at")) {
-    if (body.due_at === null) patch.dueAt = null;
+    const dueAt = body["due_at"];
+    if (dueAt === null) patch.dueAt = null;
     else {
-      const parsed = parseIsoEpochMilliseconds(body.due_at);
+      const parsed = parseIsoEpochMilliseconds(dueAt);
       if (parsed === undefined) return null;
       patch.dueAt = parsed;
     }
   }
   if (Object.prototype.hasOwnProperty.call(body, "owner")) {
-    if (body.owner !== null && typeof body.owner !== "string") return null;
-    patch.owner = body.owner as string | null;
+    const owner = body["owner"];
+    if (typeof owner !== "string" || !HISTORICAL_TASK_OWNERS.has(owner)) return null;
+    patch.owner = owner;
   }
   if (Object.prototype.hasOwnProperty.call(body, "sort_order")) {
-    if (typeof body.sort_order !== "number" || !Number.isFinite(body.sort_order)) return null;
-    patch.sortOrder = body.sort_order;
+    const sortOrder = body["sort_order"];
+    if (typeof sortOrder !== "number" || !Number.isSafeInteger(sortOrder)) return null;
+    patch.sortOrder = sortOrder;
   }
   if (Object.prototype.hasOwnProperty.call(body, "indent_level")) {
-    if (!Number.isSafeInteger(body.indent_level)
-      || (body.indent_level as number) < 0 || (body.indent_level as number) > 3) return null;
-    patch.indentLevel = body.indent_level as number;
+    const indentLevel = body["indent_level"];
+    if (!Number.isSafeInteger(indentLevel) || typeof indentLevel !== "number"
+      || indentLevel < 0 || indentLevel > 3) return null;
+    patch.indentLevel = indentLevel;
   }
   return Object.freeze(patch);
 };
@@ -289,17 +321,17 @@ const iso = (value: number | null): string | null => value === null ? null : new
 
 const projectRecord = (record: TasksRecord): LegacyActionItemRow => {
   const bag = record.content;
-  const description = bag.description;
-  const completed = bag.completed;
-  const completedAt = bag.completedAt;
-  const dueAt = bag.dueAt;
-  const owner = bag.owner;
-  const source = bag.source;
-  const provenance = bag.provenance;
-  const sortOrder = bag.sortOrder;
-  const indentLevel = bag.indentLevel;
-  const createdAt = bag.createdAt;
-  const updatedAt = bag.updatedAt;
+  const description = bag["description"];
+  const completed = bag["completed"];
+  const completedAt = bag["completedAt"];
+  const dueAt = bag["dueAt"];
+  const owner = bag["owner"];
+  const source = bag["source"];
+  const provenance = bag["provenance"];
+  const sortOrder = bag["sortOrder"];
+  const indentLevel = bag["indentLevel"];
+  const createdAt = bag["createdAt"];
+  const updatedAt = bag["updatedAt"];
   if (typeof description !== "string" || typeof completed !== "boolean"
     || (completedAt !== null && !Number.isSafeInteger(completedAt))
     || (dueAt !== null && !Number.isSafeInteger(dueAt))
@@ -353,7 +385,7 @@ const createOrReuseActionItem = (
 ): TasksRecord => {
   const digest = actionItemsCompatCreateDigest(accountId, input.description);
   const retry = deps.store.listRecords(accountId).find((record) =>
-    record.content.completed === false && record.content[PRIVATE_CREATE_DIGEST_KEY] === digest);
+    record.content["completed"] === false && record.content[PRIVATE_CREATE_DIGEST_KEY] === digest);
   if (retry !== undefined) return retry;
 
   const now = injectedNow(deps.nowEpochMilliseconds);
@@ -398,8 +430,19 @@ export const isActionItemsCompatInvocation = (method: string, path: string): boo
   if (method === "GET" && (path === ACTION_ITEMS_COMPAT_PATH || path === ACTION_ITEMS_COMPAT_IDS_PATH)) {
     return true;
   }
-  return (method === "POST" && path === ACTION_ITEMS_COMPAT_PATH)
-    || (["PATCH", "DELETE"].includes(method) && path.startsWith(`${ACTION_ITEMS_COMPAT_PATH}/`));
+  if (method === "POST") return path === ACTION_ITEMS_COMPAT_PATH;
+  if (method !== "PATCH" && method !== "DELETE") return false;
+  const prefix = `${ACTION_ITEMS_COMPAT_PATH}/`;
+  if (!path.startsWith(prefix)) return false;
+  const encodedId = path.slice(prefix.length);
+  if (encodedId.length === 0 || encodedId.includes("/")) return false;
+  let id: string;
+  try {
+    id = decodeURIComponent(encodedId);
+  } catch {
+    return false;
+  }
+  return !FROZEN_STATIC_SIBLINGS.has(id) && SAFE_LEGACY_ID.test(id);
 };
 
 export const registerActionItemsCompatRoutes = (
@@ -436,6 +479,7 @@ export const registerActionItemsCompatRoutes = (
 
   app.patch(`${ACTION_ITEMS_COMPAT_PATH}/:id`, guarded(async (context, principal) => {
     const id = context.req.param("id");
+    if (id === undefined) return fixedResponse(NOT_FOUND_BODY, 404);
     if (FROZEN_STATIC_SIBLINGS.has(id)) return fixedResponse(NOT_FOUND_BODY, 404);
     if (hasAccountOverrideHeader(context) || !hasNoQuery(context.req.url) || !hasJsonContentType(context)) {
       return fixedResponse(BAD_REQUEST_BODY, 400);
@@ -450,15 +494,15 @@ export const registerActionItemsCompatRoutes = (
 
     const now = injectedNow(deps.nowEpochMilliseconds);
     const patch: Record<string, unknown> = { updatedAt: now };
-    if (input.description !== undefined) patch.description = input.description;
+    if (input.description !== undefined) patch["description"] = input.description;
     if (input.completed !== undefined) {
-      patch.completed = input.completed;
-      patch.completedAt = input.completed ? now : null;
+      patch["completed"] = input.completed;
+      patch["completedAt"] = input.completed ? now : null;
     }
-    if (input.dueAt !== undefined) patch.dueAt = input.dueAt;
-    if (input.owner !== undefined) patch.owner = input.owner;
-    if (input.sortOrder !== undefined) patch.sortOrder = input.sortOrder;
-    if (input.indentLevel !== undefined) patch.indentLevel = input.indentLevel;
+    if (input.dueAt !== undefined) patch["dueAt"] = input.dueAt;
+    if (input.owner !== undefined) patch["owner"] = input.owner;
+    if (input.sortOrder !== undefined) patch["sortOrder"] = input.sortOrder;
+    if (input.indentLevel !== undefined) patch["indentLevel"] = input.indentLevel;
     const applied = deps.store.apply(principal.uid, { op: "patch", record_id: id, patch });
     if (!applied.applied) throw new TypeError("unconditional compatibility patch conflicted");
     const stored = deps.store.readRecord(principal.uid, id);
@@ -472,6 +516,7 @@ export const registerActionItemsCompatRoutes = (
       return fixedResponse(BAD_REQUEST_BODY, 400);
     }
     const id = context.req.param("id");
+    if (id === undefined) return fixedResponse(NOT_FOUND_BODY, 404);
     if (FROZEN_STATIC_SIBLINGS.has(id)) return fixedResponse(NOT_FOUND_BODY, 404);
     if (!SAFE_LEGACY_ID.test(id)) return fixedResponse(BAD_REQUEST_BODY, 400);
     // Load-bearing: TasksStore delete reports applied for an absent id. Keep
