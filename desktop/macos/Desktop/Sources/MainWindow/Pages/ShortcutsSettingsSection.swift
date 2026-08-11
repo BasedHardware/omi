@@ -8,7 +8,6 @@ struct ShortcutsSettingsSection: View {
   @State private var captureError: String?
   @State private var pendingModifierOnlyShortcut: ShortcutSettings.KeyboardShortcut?
   @State private var localShortcutCaptureMonitor: Any?
-  @State private var pttInputDevices: [AudioCaptureService.InputDevice] = []
 
   init(highlightedSettingId: Binding<String?> = .constant(nil)) {
     self._highlightedSettingId = highlightedSettingId
@@ -23,13 +22,11 @@ struct ShortcutsSettingsSection: View {
     VStack(spacing: OmiSpacing.xl) {
       askOmiKeyCard
       pttKeyCard
-      pttMicrophoneCard
       doubleTapCard
       pttSoundsCard
       muteAudioCard
     }
     .onAppear {
-      refreshPTTInputDevices()
     }
     .onDisappear {
       stopShortcutCapture()
@@ -156,45 +153,6 @@ struct ShortcutsSettingsSection: View {
       shortcutSelectionLabel(tokens: shortcut.displayTokens, isSelected: isSelected)
     }
     .buttonStyle(.plain)
-  }
-
-  private var pttMicrophoneCard: some View {
-    HStack(spacing: OmiSpacing.lg) {
-      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        Text("Push-to-Talk Microphone")
-          .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(Ink.primary)
-        Text(
-          "Automatic follows your system input and uses the built-in mic with Bluetooth output to keep replies clear. Choose a microphone to override it."
-        )
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-      }
-      Spacer()
-      SettingsMenuPicker(selection: $settings.pttInputDeviceUID) {
-        Text("Automatic").tag("")
-        ForEach(pttInputDevices, id: \.uid) { device in
-          Text(device.name).tag(device.uid)
-        }
-        if !settings.pttInputDeviceUID.isEmpty,
-          !pttInputDevices.contains(where: { $0.uid == settings.pttInputDeviceUID })
-        {
-          Text("Unavailable selected microphone").tag(settings.pttInputDeviceUID)
-        }
-      }
-    }
-    .padding(OmiSpacing.xl)
-    .background(
-      RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
-        .fill(Ink.rowFill)
-    )
-    .modifier(
-      SettingHighlightModifier(
-        settingId: "floatingbar.pttmicrophone", highlightedSettingId: $highlightedSettingId))
-  }
-
-  private func refreshPTTInputDevices() {
-    pttInputDevices = AudioCaptureService.availableInputDevices()
   }
 
   private var doubleTapCard: some View {

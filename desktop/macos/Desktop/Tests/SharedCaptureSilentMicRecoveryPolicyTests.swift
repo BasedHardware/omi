@@ -22,3 +22,22 @@ final class SharedCaptureSilentMicRecoveryPolicyTests: XCTestCase {
       .stopAndSurfaceError)
   }
 }
+
+/// Nik's prod log showed 31 silent-mic detections and 14 alerts in one sitting: the
+/// fallback pinned the built-in mic, the rebuild re-resolved the system default back to a
+/// silent AirPods Max, repeat. These pin that a healed route outranks the system default.
+final class SilentMicRoutePolicyTests: XCTestCase {
+  func testHealedDeviceSurvivesARebuild() {
+    XCTAssertEqual(
+      SilentMicRoutePolicy.captureDeviceID(healed: 86, systemDefault: 97), 86,
+      "a rebuild must not move capture back onto the route that was already proven silent")
+  }
+
+  func testSystemDefaultIsUsedWhenNothingHasBeenHealed() {
+    XCTAssertEqual(SilentMicRoutePolicy.captureDeviceID(healed: nil, systemDefault: 97), 97)
+  }
+
+  func testNoDeviceAtAllStaysNil() {
+    XCTAssertNil(SilentMicRoutePolicy.captureDeviceID(healed: nil, systemDefault: nil))
+  }
+}

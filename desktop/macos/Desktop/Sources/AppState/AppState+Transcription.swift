@@ -19,6 +19,9 @@ extension AppState {
     guard !isTranscribing else { return }
     sttSession.prepareForStart()
     silentMicRecoveryAttempts = 0
+    // A new session re-evaluates the route from scratch: the user may have unplugged the
+    // dead device, and pinning last session's heal would ignore a working default.
+    silentMicHealedDeviceID = nil
     meetingEndFinalizationInProgress = false
 
     // Paywall hard-stop: every code path that enables the mic + WS streaming
@@ -693,6 +696,9 @@ extension AppState {
     // Silent healing — no user-facing UI, the recording just keeps working.
     audioCaptureService?.stopCapture()
     audioCaptureService = AudioCaptureService(overrideDeviceID: builtInID)
+    // Hold the healed route for the rest of the session so the next rebuild does not
+    // re-resolve back to the silent default and undo this.
+    silentMicHealedDeviceID = builtInID
     recordingInputDeviceName =
       AudioCaptureService.getCurrentMicrophoneName() ?? "Built-in Microphone"
 
@@ -724,7 +730,12 @@ extension AppState {
     }
 
     audioCaptureService?.stopCapture()
-    audioCaptureService = AudioCaptureService()
+    // Rebuilding must not silently move the user back onto a route already proven dead.
+    if let healed = silentMicHealedDeviceID {
+      audioCaptureService = AudioCaptureService(overrideDeviceID: healed)
+    } else {
+      audioCaptureService = AudioCaptureService()
+    }
     AudioLevelMonitor.shared.updateMicrophoneLevel(0)
 
     if !sttSession.useLocalSTT {
@@ -1265,6 +1276,7 @@ extension AppState {
     captureReconcilePending = false
     pendingCoreAudioCaptureRecoveryReason = nil
     silentMicRecoveryAttempts = 0
+    silentMicHealedDeviceID = nil
     isAwaitingMeeting = false
     meetingEndFinalizationInProgress = false
 

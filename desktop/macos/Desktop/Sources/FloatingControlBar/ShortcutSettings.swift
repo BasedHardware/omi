@@ -367,6 +367,28 @@ class ShortcutSettings: ObservableObject {
 
   /// Empty means Automatic. A non-empty value is a stable CoreAudio device UID
   /// selected specifically for push-to-talk, independent of the macOS default input.
+  /// The one microphone choice, shared by transcription and push-to-talk.
+  ///
+  /// Push-to-talk used to carry its own picker in Shortcuts settings, so a user could
+  /// select a microphone in one place and still be recorded by another. There is one
+  /// physical microphone; there is now one setting, the transcription one.
+  static var unifiedMicrophoneUID: String {
+    migratePTTMicrophoneChoiceIfNeeded()
+    return UserDefaults.standard.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+  }
+
+  /// Carry a PTT-only choice into the shared setting once, so unifying does not silently
+  /// discard a microphone the user deliberately picked.
+  private static func migratePTTMicrophoneChoiceIfNeeded() {
+    let defaults = UserDefaults.standard
+    guard !defaults.bool(forKey: "shortcut_pttMicrophoneMergedIntoPreferred") else { return }
+    defaults.set(true, forKey: "shortcut_pttMicrophoneMergedIntoPreferred")
+    let legacy = defaults.string(forKey: DefaultsKey.shortcutPTTInputDeviceUID.rawValue) ?? ""
+    let current = defaults.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+    guard !legacy.isEmpty, current.isEmpty else { return }
+    defaults.set(legacy, forKey: AudioCaptureService.preferredInputUIDDefaultsKey)
+  }
+
   @Published var pttInputDeviceUID: String {
     didSet { UserDefaults.standard.set(pttInputDeviceUID, forKey: .shortcutPTTInputDeviceUID) }
   }

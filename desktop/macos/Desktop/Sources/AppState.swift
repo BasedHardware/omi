@@ -449,6 +449,15 @@ class AppState: ObservableObject {
   /// transcription session. This lives above `AudioCaptureService` because each
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
   var silentMicRecoveryAttempts = 0
+
+  /// The input device a silent-mic fallback healed onto, held for the rest of the session.
+  ///
+  /// Without this the heal is undone by its own recovery: `handleSilentMicFallback` pins
+  /// capture to the built-in mic, then the next watchdog trip rebuilds the CoreAudio stack
+  /// with a plain `AudioCaptureService()`, which re-resolves the *system default* input —
+  /// still the silent Bluetooth device. The two fight until the attempt cap is hit and the
+  /// user gets an alert, then it starts over.
+  var silentMicHealedDeviceID: AudioDeviceID?
   var meetingEndFinalizationInProgress = false
   @Published var isAwaitingMeeting = false
 
