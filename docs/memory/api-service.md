@@ -44,7 +44,7 @@ The hosted MCP server exposes a read-only `memory_platform` tool with `memories.
 {
   "mcpServers": {
     "omi": {
-      "url": "https://api.omi.me/mcp",
+      "url": "https://api.omi.me/v1/mcp/sse",
       "headers": { "Authorization": "Bearer ${OMI_MCP_KEY}" }
     }
   }
@@ -65,7 +65,9 @@ Store keys in a server-side secret store. Do not place them in source, browser s
 
 ## Plan and quota
 
-Platform API access follows the Omi subscription. `GET /v1/payments/overage-info` reports the current plan, included usage, consumed usage, and any overage. Plan and usage are also shown at [`/memory-platform/billing`](https://h.omi.me/memory-platform/billing), alongside the upgrade path through Stripe checkout.
+Platform API access follows the Omi subscription. `GET /v1/memory/platform/quota` reports the platform allowance: `plan`, `plan_type`, `unit`, `used`, `limit`, `remaining`, `allowed`, and `reset_at`. `limit` and `remaining` are `null` on an uncapped plan. Over-quota requests get a `429` naming the plan, limit, usage, and reset instant.
+
+`GET /v1/payments/overage-info` is a different meter — it reports chat-question usage and chat overage, not Memory Platform requests. Plan and usage are also shown at [`/memory-platform/billing`](https://h.omi.me/memory-platform/billing), alongside the upgrade path through Stripe checkout.
 
 ## zkr replicas
 
