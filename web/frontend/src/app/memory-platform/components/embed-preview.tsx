@@ -22,9 +22,12 @@ export default function EmbedPreview() {
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
-      // A frame sandboxed without allow-same-origin posts from the opaque
-      // origin "null"; accept only that, or this page's own origin.
-      if (event.origin !== 'null' && event.origin !== window.location.origin) return;
+      // The published contract validates the SENDER, because a frame sandboxed
+      // without allow-same-origin posts from the opaque origin "null" and an
+      // origin check cannot distinguish it from any other opaque sender. The
+      // in-page preview's widget posts through window.parent, which is this
+      // window, so that is the sender to accept.
+      if (event.source !== window) return;
       const data = event.data as { type?: string; height?: number };
       if (data?.type === WIDGET_READY_EVENT) setLastEvent(WIDGET_READY_EVENT);
       if (data?.type === WIDGET_RESIZE_EVENT) setLastEvent(WIDGET_RESIZE_EVENT);

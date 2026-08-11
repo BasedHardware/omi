@@ -10,6 +10,7 @@ import {
   type PlatformMemoryItem,
 } from '@/src/lib/api/memory-platform';
 import { useSessionToken } from '../hooks/use-session-token';
+import { useEmbedSession } from '../hooks/use-embed-session';
 
 export const WIDGET_READY_EVENT = 'omi.memory.embed.ready';
 export const WIDGET_RESIZE_EVENT = 'omi.memory.embed.resize';
@@ -42,6 +43,7 @@ interface MemoryWidgetProps {
 
 export default function MemoryWidget({ demo = false }: MemoryWidgetProps) {
   const { user, loading, getToken } = useSessionToken();
+  const { framed, awaitingHost, getHostToken } = useEmbedSession();
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<PlatformMemoryItem[]>(demo ? SAMPLE_MEMORIES : []);
   const [error, setError] = useState<string | null>(null);
@@ -71,12 +73,27 @@ export default function MemoryWidget({ demo = false }: MemoryWidgetProps) {
     );
   }, [demo, items, query]);
 
+  /**
+   * A framed widget cannot reach Firebase: the documented sandbox gives it an
+   * opaque origin with no storage access. Its credential comes from the host
+   * page over postMessage instead. Top-level, the signed-in Firebase session is
+   * still the source of truth.
+   */
+  const resolveToken = useCallback(async () => {
+    if (framed) return getHostToken();
+    return getToken();
+  }, [framed, getHostToken, getToken]);
+
   const runSearch = useCallback(async () => {
-    if (demo) return;
+    if (demo || pending) return;
     setError(null);
-    const token = await getToken();
+    const token = await resolveToken();
     if (!token) {
-      setError('Sign in to search your canonical memory.');
+      setError(
+        framed
+          ? 'Waiting for the host page to provide a session.'
+          : 'Sign in to search your canonical memory.',
+      );
       return;
     }
     setPending(true);
@@ -88,7 +105,7 @@ export default function MemoryWidget({ demo = false }: MemoryWidgetProps) {
     } finally {
       setPending(false);
     }
-  }, [demo, getToken, query]);
+  }, [demo, framed, pending, resolveToken, query]);
 
   return (
     <div
@@ -130,7 +147,12 @@ export default function MemoryWidget({ demo = false }: MemoryWidgetProps) {
       ) : null}
 
       {error ? <p className="text-xs text-[#ff806a]">{error}</p> : null}
-      {!demo && !loading && !user ? (
+      {!demo && framed && awaitingHost ? (
+        <p className="text-xs text-neutral-500">
+          Waiting for the host page to provide a session.
+        </p>
+      ) : null}
+      {!demo && !framed && !loading && !user ? (
         <p className="text-xs text-neutral-500">
           This widget reads through your own origin in production. Never ship a durable
           API key to the browser.
