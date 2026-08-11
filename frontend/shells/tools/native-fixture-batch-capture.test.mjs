@@ -127,6 +127,7 @@ test("batch rejects AX/keyboard rows, stale source, and unbound devices before l
       ["unsupported kind", manifest([coordinate("macos", "bad-kind", { kind: "ax_snapshot" })]), /only screenshot/],
       ["stale source", stale, /does not match current core HEAD/],
       ["missing device", manifest([coordinate("macos", "no-device", { device: undefined })]), /device binding is required/],
+      ["extra source", manifest([coordinate("macos", "extra-source", { source_shas: { core: coreSha, platform: platformSha, extra: coreSha } })]), /only full core\/platform/],
     ];
     for (const [name, value, expected] of cases) {
       const matrix = path.join(root, ".build", `native-fixture-batch-red-matrix-${process.pid}-${name.replaceAll(" ", "-")}.json`);

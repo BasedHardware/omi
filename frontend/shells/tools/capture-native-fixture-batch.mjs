@@ -271,7 +271,7 @@ function validateCoordinate(coordinate, root, index) {
   if (!safeRunId.test(coordinate.run_id) || ["anonymous", "overflow"].includes(coordinate.run_id) || coordinate.run_id.startsWith("__") || coordinate.run_id.includes("::")) fail(`coordinate ${index}: run_id is unsafe`);
   if (coordinate.capture_class !== "native_fixture") fail(`${coordinate.run_id}: capture_class must be native_fixture`);
   if (coordinate.source_tier !== "native_shell") fail(`${coordinate.run_id}: source_tier must be native_shell`);
-  if (!coordinate.source_shas || !fullSha.test(coordinate.source_shas.core) || !fullSha.test(coordinate.source_shas.platform)) fail(`${coordinate.run_id}: source_shas.core/platform must be full SHAs`);
+  if (!coordinate.source_shas || Object.keys(coordinate.source_shas).sort().join(",") !== "core,platform" || !fullSha.test(coordinate.source_shas.core) || !fullSha.test(coordinate.source_shas.platform)) fail(`${coordinate.run_id}: source_shas must contain only full core/platform SHAs`);
   const policy = widthPolicy[coordinate.shell][coordinate.width];
   if (!coordinate.viewport || coordinate.viewport.width !== policy.width || coordinate.viewport.height !== policy.height || coordinate.viewport.scale !== policy.scale) fail(`${coordinate.run_id}: viewport must exactly match ${coordinate.shell}/${coordinate.width} policy`);
   validateDevice(coordinate);
@@ -286,7 +286,7 @@ function loadManifest(file) {
   try { manifest = JSON.parse(readFileSync(file, "utf8")); } catch (error) { fail(`manifest cannot be read: ${error.message}`); }
   if (manifest.schema !== "omi.polish.matrix-manifest/v1") fail("manifest schema must be omi.polish.matrix-manifest/v1");
   if (manifest.capture_class !== "native_fixture" || manifest.source_tier !== "native_shell") fail("manifest must be native_fixture/native_shell");
-  if (!manifest.source_shas || !fullSha.test(manifest.source_shas.core) || !fullSha.test(manifest.source_shas.platform)) fail("manifest source SHAs must be full SHA values");
+  if (!manifest.source_shas || Object.keys(manifest.source_shas).sort().join(",") !== "core,platform" || !fullSha.test(manifest.source_shas.core) || !fullSha.test(manifest.source_shas.platform)) fail("manifest source SHAs must contain only full core/platform values");
   if (!Array.isArray(manifest.coordinates) || manifest.coordinates.length === 0 || manifest.coordinates.length > maxCoordinates) fail(`manifest coordinates must contain 1..${maxCoordinates} entries`);
   if (manifest.coordinate_count !== manifest.coordinates.length) fail("manifest coordinate_count does not match coordinates");
   const seen = new Set();
