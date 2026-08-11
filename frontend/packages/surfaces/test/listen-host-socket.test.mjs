@@ -48,6 +48,11 @@ for (const shell of ["macos", "ios"]) {
     assert.deepEqual(posted, [{ id: "listen-preflight-1", action: "preflight", operation: "check" }]);
     host.__omiListenPreflightEvent("listen-preflight-1", {
       type: "preflight", requestId: "listen-preflight-1", permission: "granted",
+      deviceState: "available", deviceLabel: { toString() { throw new Error("hostile getter"); } }, recovery: null,
+    });
+    assert.equal(provider.snapshot().permission, "checking", "malformed host state cannot mint granted");
+    host.__omiListenPreflightEvent("listen-preflight-1", {
+      type: "preflight", requestId: "listen-preflight-1", permission: "granted",
       deviceState: "available", deviceLabel: "Default microphone", recovery: null,
     });
     await pending;

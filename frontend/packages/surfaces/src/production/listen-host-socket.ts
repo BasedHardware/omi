@@ -68,13 +68,27 @@ function parseEvent(event: ListenHostEvent | string): ListenHostEvent | null {
 }
 
 function parsePreflightEvent(event: ListenPreflightEvent | string): ListenPreflightEvent | null {
-  if (typeof event !== "string") return event;
   try {
-    const parsed = JSON.parse(event) as Partial<ListenPreflightEvent>;
-    if (parsed.type !== "preflight" || typeof parsed.requestId !== "string") return null;
-    if (!["unknown", "checking", "granted", "denied", "restricted", "unavailable"].includes(parsed.permission ?? "")) return null;
-    if (!["unknown", "checking", "available", "unavailable"].includes(parsed.deviceState ?? "")) return null;
-    return parsed as ListenPreflightEvent;
+    const parsed: unknown = typeof event === "string" ? JSON.parse(event) : event;
+    if (parsed === null || typeof parsed !== "object") return null;
+    const candidate = parsed as Record<string, unknown>;
+    const permission = candidate["permission"];
+    const deviceState = candidate["deviceState"];
+    const requestId = candidate["requestId"];
+    const recovery = candidate["recovery"];
+    if (candidate["type"] !== "preflight" || typeof requestId !== "string") return null;
+    if (typeof permission !== "string" || !["unknown", "checking", "granted", "denied", "restricted", "unavailable"].includes(permission)) return null;
+    if (typeof deviceState !== "string" || !["unknown", "checking", "available", "unavailable"].includes(deviceState)) return null;
+    if (recovery !== undefined && recovery !== null && recovery !== "request-permission" && recovery !== "open-settings") return null;
+    if (candidate["deviceLabel"] !== undefined && candidate["deviceLabel"] !== null && typeof candidate["deviceLabel"] !== "string") return null;
+    return {
+      type: "preflight",
+      requestId,
+      permission: permission as PlatformListenPermissionState,
+      deviceState: deviceState as PlatformListenInputDeviceState,
+      ...(candidate["deviceLabel"] === undefined ? {} : { deviceLabel: candidate["deviceLabel"] as string | null }),
+      ...(recovery === undefined ? {} : { recovery: recovery as "request-permission" | "open-settings" | null }),
+    };
   } catch {
     return null;
   }
