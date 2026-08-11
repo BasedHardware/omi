@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { deflateSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -37,6 +38,52 @@ function manifest(coordinates) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function pngCrc(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function fixturePng(width, height) {
+  const rows = Buffer.alloc(height * (width * 4 + 1), 0);
+  for (let row = 0; row < height; row += 1) rows[row * (width * 4 + 1)] = 0;
+  const chunk = (type, body) => {
+    const kind = Buffer.from(type);
+    const payload = Buffer.concat([kind, body]);
+    const out = Buffer.alloc(12 + body.length);
+    out.writeUInt32BE(body.length, 0);
+    payload.copy(out, 4);
+    out.writeUInt32BE(pngCrc(payload), 8 + body.length);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 6;
+  return Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n", "binary"), chunk("IHDR", header), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+}
+
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+
+function inputEntriesForFake(manifestPath, appPath) {
+  const files = [manifestPath, producer, ...walk(appPath)];
+  const entries = files.map((file) => ({ key: `core:${path.relative(root, file)}`, sha256: sha256(readFileSync(file)), size: statSync(file).size, mode: statSync(file).mode & 0o777 })).sort((left, right) => left.key.localeCompare(right.key));
+  const tree = sha256(canonical(entries));
+  return { id: `input-v1-${tree}`, entries, tree_sha256: tree };
+}
+
+function walk(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const file = path.join(directory, entry.name);
+    return entry.isDirectory() ? walk(file) : [file];
+  });
 }
 
 test("batch dry-run validates exact coordinate schema and emits one-build plan", () => {
@@ -184,6 +231,45 @@ test("assemble-receipt binds result manifest separately from replay artifacts", 
     assert.match(receipt.batch_id, /^batch-v1-[0-9a-f]{64}$/);
     assert.ok(receipt.command_receipt.artifact_hashes[`core:${path.relative(root, resultPath)}`]);
     assert.equal(receipt.coverage.length, 1);
+  } finally {
+    rmSync(outRoot, { recursive: true, force: true });
+    rmSync(matrix, { force: true });
+  }
+});
+
+test("prepared one-coordinate capture recreates PNG, sidecar, and result deterministically", () => {
+  const outRoot = path.join(root, ".build", `native-fixture-fake-capture-${process.pid}`);
+  const matrix = path.join(root, ".build", `native-fixture-fake-capture-matrix-${process.pid}.json`);
+  try {
+    const coordinate = coordinateForAssembly();
+    writeFileSync(matrix, JSON.stringify(manifest([coordinate])));
+    const app = path.join(outRoot, "build/macos/omi-on-polish-batch.app");
+    const executable = path.join(app, "Contents/MacOS/omi-on-polish-batch");
+    const resources = path.join(app, "Contents/Resources");
+    mkdirSync(path.dirname(executable), { recursive: true });
+    mkdirSync(resources, { recursive: true });
+    writeFileSync(path.join(resources, "fake.png"), fixturePng(960, 671));
+    writeFileSync(path.join(resources, "omi-build-stamp.json"), "{\"fixture\":true}\n");
+    writeFileSync(executable, "#!/bin/sh\ncp \"$(dirname \"$0\")/../Resources/fake.png\" \"$OMI_SNAPSHOT_PATH\"\n");
+    chmodSync(executable, 0o755);
+    const preparedPath = path.join(outRoot, "prepared-input-set.json");
+    const descriptor = {
+      schema: "omi.polish.native-fixture-prepared/v1", source_shas: { core: coreSha, platform: platformSha }, manifest_path: `core:${path.relative(root, matrix)}`, manifest_sha256: sha256(readFileSync(matrix)), shell: "macos", offset: 0, limit: 1, coordinate_run_ids: [coordinate.run_id],
+      artifacts: { macos: { shell: "macos", app: `core:${path.relative(root, app)}`, build_dir: `core:${path.relative(root, path.join(outRoot, "build/macos"))}`, stamp: `core:${path.relative(root, path.join(app, "Contents/Resources/omi-build-stamp.json"))}`, stamp_sha256: sha256(readFileSync(path.join(app, "Contents/Resources/omi-build-stamp.json"))), bundle_id: null } },
+      authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
+    };
+    descriptor.input_set = inputEntriesForFake(matrix, app);
+    mkdirSync(outRoot, { recursive: true });
+    writeFileSync(preparedPath, JSON.stringify(descriptor, null, 2));
+    const run = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "0", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60"], { encoding: "utf8" });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /NATIVE_FIXTURE_BATCH_COMPLETE members=1/);
+    const result = JSON.parse(readFileSync(path.join(outRoot, "batch-result.json"), "utf8"));
+    assert.equal(result.schema, "omi.polish.native-fixture-batch-result/v1");
+    assert.equal(result.batch_id, undefined);
+    assert.equal(Object.keys(result.members).length, 1);
+    const image = path.join(outRoot, "captures/macos/assembly-fake.png");
+    assert.equal(readFileSync(image).length, fixturePng(960, 671).length);
   } finally {
     rmSync(outRoot, { recursive: true, force: true });
     rmSync(matrix, { force: true });
