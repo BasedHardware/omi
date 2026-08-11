@@ -404,14 +404,22 @@ def search_action_items(
 
 
 @router.get("/v1/action-items/ids", response_model=ActionItemIdsResponse, tags=['action-items'])
-def list_action_item_ids(uid: str = Depends(auth.get_current_user_uid)):
+def list_action_item_ids(
+    completed: Optional[bool] = Query(
+        None,
+        description="When present, return only non-deleted IDs in this completion bucket",
+    ),
+    uid: str = Depends(auth.get_current_user_uid),
+):
     """Return all of the user's action-item IDs (IDs only, no field reads).
 
     A lightweight way for a client to reconcile which tasks it has without paging the full
     list. Declared before /v1/action-items/{action_item_id} so the static path is not
     captured as an action item id.
     """
-    return {"ids": action_items_db.get_action_item_ids(uid)}
+    if completed is None:
+        return {"ids": action_items_db.get_action_item_ids(uid)}
+    return {"ids": action_items_db.get_visible_action_item_ids(uid, completed=completed)}
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
@@ -560,6 +568,10 @@ def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str =
     vector store delete and the FCM cancellation message both use their batch
     helpers — no per-id loop on this hot path.
     """
+    existing_items = action_items_db.get_action_items_by_ids(uid, request.ids)
+    if any(item.get('is_locked', False) for item in existing_items):
+        raise HTTPException(status_code=402, detail="A paid plan is required to delete locked action items.")
+
     deleted_ids = action_items_db.delete_action_items_batch(uid, request.ids)
 
     if deleted_ids:

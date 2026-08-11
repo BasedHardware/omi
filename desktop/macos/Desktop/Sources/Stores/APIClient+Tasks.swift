@@ -177,15 +177,54 @@ extension APIClient {
   /// Used as an independent confirmation before an empty incomplete-task page
   /// is allowed to reconcile (wipe) synced local rows.
   func getActionItemIds(
+    completed: Bool? = nil,
     expectedOwnerId: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [String] {
+    let endpoint = completed.map { "v1/action-items/ids?completed=\($0)" } ?? "v1/action-items/ids"
     let response: ActionItemIdsResponse = try await get(
-      "v1/action-items/ids",
+      endpoint,
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot
     )
     return response.ids
+  }
+
+  /// Delete task IDs through the backend's existing chunked bulk endpoint.
+  /// The endpoint accepts at most 10,000 IDs; callers chunk larger selections
+  /// so an honest Select All never falls back to serial network requests.
+  func batchDeleteActionItems(
+    ids: [String],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
+    struct BatchDeleteRequest: Encodable { let ids: [String] }
+    struct BatchDeleteResponse: Decodable {
+      let status: String
+      let deletedCount: Int
+      let deletedIds: [String]
+
+      private enum CodingKeys: String, CodingKey {
+        case status
+        case deletedCount = "deleted_count"
+        case deletedIds = "deleted_ids"
+      }
+    }
+
+    for batch in ids.chunked(maxSize: 10_000) {
+      let response: BatchDeleteResponse = try await post(
+        "v1/action-items/batch-delete",
+        body: BatchDeleteRequest(ids: batch),
+        expectedOwnerId: expectedOwnerId,
+        authorizationSnapshot: authorizationSnapshot
+      )
+      guard response.status.lowercased() == "ok",
+        response.deletedCount == batch.count,
+        Set(response.deletedIds) == Set(batch)
+      else {
+        throw APIError.invalidResponse
+      }
+    }
   }
 
   /// Restore rows the retired migration moved out of action_items. A pre-fix

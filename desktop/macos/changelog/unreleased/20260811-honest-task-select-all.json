@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Select All so it includes every task, not just the currently loaded page"
+}

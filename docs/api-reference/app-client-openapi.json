@@ -25080,6 +25080,24 @@
         "operationId": "list_action_item_ids_v1_action_items_ids_get",
         "parameters": [
           {
+            "description": "When present, return only non-deleted IDs in this completion bucket",
+            "in": "query",
+            "name": "completed",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "When present, return only non-deleted IDs in this completion bucket",
+              "title": "Completed"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,

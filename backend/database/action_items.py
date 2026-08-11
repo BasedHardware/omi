@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
-from ._client import db
+from ._client import db, get_firestore_client
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +106,32 @@ def get_action_item_ids(uid: str) -> List[str]:
     Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
     coll = db.collection('users').document(uid).collection(action_items_collection)
     return [doc.id for doc in coll.select([]).stream()]
+
+
+def get_visible_action_item_ids(
+    uid: str,
+    *,
+    completed: bool,
+    firestore_client: Any = None,
+) -> List[str]:
+    """Return IDs in one visible Tasks status bucket.
+
+    The account-wide ID census intentionally includes every document for reconciliation
+    and account deletion. UI Select All needs a narrower contract: exclude soft-deleted
+    rows and normalize legacy missing/null ``completed`` values to the active bucket.
+    """
+    client = firestore_client or get_firestore_client()
+    coll = client.collection('users').document(uid).collection(action_items_collection)
+    visible_ids: List[str] = []
+    for doc in coll.select(['completed', 'status', 'deleted']).stream():
+        data = _typed_doc(doc)
+        if data.get('deleted'):
+            continue
+        completed_value = data.get('completed')
+        is_completed = data.get('status') == 'completed' if completed_value is None else completed_value is True
+        if is_completed == completed:
+            visible_ids.append(doc.id)
+    return visible_ids
 
 
 def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: bool = False) -> Dict[str, Any]:

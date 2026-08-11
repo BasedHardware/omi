@@ -8739,10 +8739,13 @@ export async function batch_delete_action_items_v1_action_items_batch_delete_pos
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function list_action_item_ids_v1_action_items_ids_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ActionItemIdsResponse> {
+export async function list_action_item_ids_v1_action_items_ids_get(query: { completed?: boolean | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ActionItemIdsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/action-items/ids`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
     headers: {
