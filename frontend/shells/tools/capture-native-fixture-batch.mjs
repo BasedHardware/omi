@@ -319,6 +319,16 @@ function allowedEnvironment(outRoot, shell) {
   return env;
 }
 
+function cleanupEnvironment(env) {
+  const home = env?.HOME;
+  if (typeof home !== "string") return;
+  const scratchRoot = path.dirname(home);
+  if (path.basename(scratchRoot) !== "scratch-home") return;
+  if (existsSync(scratchRoot) && !lstatSync(scratchRoot).isSymbolicLink()) {
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+}
+
 function commandSpec(command, args, cwd, env, timeoutSeconds) {
   return { command, args, cwd, env, timeoutSeconds };
 }
@@ -714,6 +724,7 @@ function main() {
     preparedDescriptor.input_set = inputSet(manifestPath, artifacts);
     writeAtomic(preparedPath, preparedDescriptor);
     const preparedInput = inputSet(manifestPath, artifacts, [preparedPath]);
+    for (const artifact of Object.values(artifacts)) cleanupEnvironment(artifact.env);
     process.stdout.write(`NATIVE_FIXTURE_PREPARED: ${preparedInput.id} coordinates=${coordinates.length} file=${authorityRelative(preparedPath)}\n`);
     return;
   }
@@ -730,6 +741,7 @@ function main() {
       clearIosStatusBar(device, artifacts.ios.env);
       restoreIosDevice(device, artifacts.ios);
     }
+    for (const artifact of Object.values(artifacts)) cleanupEnvironment(artifact.env);
     throw error;
   }
   const capturesRoot = path.join(outRoot, "captures");
@@ -808,6 +820,7 @@ function main() {
         restoreIosDevice(device, artifacts.ios);
       }
     }
+    for (const artifact of Object.values(artifacts)) cleanupEnvironment(artifact.env);
   }
   const elapsedSeconds = Number(process.hrtime.bigint() - captureStarted) / 1e9;
   if (elapsedSeconds > timeoutSeconds) fail(`capture command exceeded timeout (${elapsedSeconds.toFixed(3)}s > ${timeoutSeconds}s)`);
