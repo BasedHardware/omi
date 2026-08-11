@@ -381,8 +381,8 @@ class ShortcutSettings: ObservableObject {
   /// discard a microphone the user deliberately picked.
   private static func migratePTTMicrophoneChoiceIfNeeded() {
     let defaults = UserDefaults.standard
-    guard !defaults.bool(forKey: "shortcut_pttMicrophoneMergedIntoPreferred") else { return }
-    defaults.set(true, forKey: "shortcut_pttMicrophoneMergedIntoPreferred")
+    guard !defaults.bool(forKey: .shortcutPTTMicrophoneMergedIntoPreferred) else { return }
+    defaults.set(true, forKey: .shortcutPTTMicrophoneMergedIntoPreferred)
     let legacy = defaults.string(forKey: DefaultsKey.shortcutPTTInputDeviceUID.rawValue) ?? ""
     let current = defaults.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
     guard !legacy.isEmpty, current.isEmpty else { return }
