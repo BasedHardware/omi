@@ -84,6 +84,7 @@ import {
   type ChatGenerationStreamPolicy,
   registerChatMessagesRoutes,
 } from "./routes/chat-messages";
+import type { ChatGenerationRetentionPolicy } from "./stores/chat-generation-events-store";
 import { registerChatAttachmentsRoute } from "./routes/chat-attachments";
 import {
   isActionItemsCompatInvocation,
@@ -210,6 +211,7 @@ export interface LocalServiceOptions {
   readonly generationLiveness?: ChatGenerationLivenessPolicy;
   readonly generationStreamPolicy?: ChatGenerationStreamPolicy;
   readonly generationStreamScheduler?: import("./chat/generation-source").ChatGenerationScheduler;
+  readonly generationRetentionPolicy?: ChatGenerationRetentionPolicy;
   /** Test-only complete supervisor override. */
   readonly chatSupervisor?: ChatGenerationSupervisor;
   /** Test override; production-shaped listen authentication is rechecked at least once per second. */
@@ -831,6 +833,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       opaqueChatId("revision", accountId, messageId, String(journalRevision), payloadHash),
     streamPolicy: options.generationStreamPolicy,
     streamScheduler: options.generationStreamScheduler,
+    retentionPolicy: options.generationRetentionPolicy,
   });
   registerChatAttachmentsRoute(app, {
     resolvePrincipal,

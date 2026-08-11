@@ -55,6 +55,11 @@ export interface ChatGenerationRetentionPolicy {
   readonly maxDetailEvents: number;
 }
 
+export const DEFAULT_CHAT_GENERATION_RETENTION_POLICY: ChatGenerationRetentionPolicy = Object.freeze({
+  ttlMs: 24 * 60 * 60 * 1_000,
+  maxDetailEvents: 128,
+});
+
 export interface ChatGenerationRetentionMetadata {
   readonly ttlMs: number;
   readonly expiresAt: number;

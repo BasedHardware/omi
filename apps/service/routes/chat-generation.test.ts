@@ -1759,6 +1759,8 @@ describe("ratified chat generation wire red proofs", () => {
     const { db, local, stores } = boot();
     const { admission, eventsResponse } = await admitAndOpen(local, create("retention-replay"));
     await eventsResponse.text();
+    await (await generationEvents(local, admission.generation.id)).text();
+    expect(stores.chatEvents.retentionMetadata!(ACCOUNT, admission.generation.id)).not.toBeNull();
     const all = stores.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)!;
     const oldCursor = all.find((event) => event.frame.kind === "snapshot")?.id;
     expect(oldCursor).toBeDefined();
@@ -1772,6 +1774,17 @@ describe("ratified chat generation wire red proofs", () => {
     const replay = await generationEvents(local, admission.generation.id, oldCursor);
     const frames = parseSse(await replay.text());
     expect(frames.at(-1)?.event).toBe("done");
+    db.close();
+  });
+
+  test("app-facing composition applies bounded liveness defaults when omitted", async () => {
+    const hanging: ChatGenerationSource = Object.freeze({
+      start: () => Object.freeze({ cancel: (): void => {} }),
+    });
+    const { db, local } = boot(createInMemoryLocalServiceStores(), hanging, "chat-default-liveness-proof");
+    const { eventsResponse } = await admitAndOpen(local, create("default-liveness"));
+    const frames = parseSse(await eventsResponse.text());
+    expect(frames.at(-1)?.data).toEqual({ kind: "failed", error: { code: "generation_timeout", retryable: true } });
     db.close();
   });
 });

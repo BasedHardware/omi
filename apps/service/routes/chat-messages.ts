@@ -44,7 +44,9 @@ import type {
   ChatGenerationEvent,
   ChatGenerationEventsStore,
   ChatGenerationRetentionMetadata,
+  ChatGenerationRetentionPolicy,
 } from "../stores/chat-generation-events-store";
+import { DEFAULT_CHAT_GENERATION_RETENTION_POLICY } from "../stores/chat-generation-events-store";
 
 export const CHAT_MESSAGES_PATH = "/v1/chat-messages";
 export const CHAT_GENERATIONS_PATH = "/v1/chat-generations";
@@ -88,6 +90,7 @@ export interface ChatMessagesRouteDependencies {
   /** Optional bounded SSE delivery policy; defaults preserve the existing wire cadence. */
   readonly streamPolicy?: ChatGenerationStreamPolicy;
   readonly streamScheduler?: ChatGenerationScheduler;
+  readonly retentionPolicy?: ChatGenerationRetentionPolicy;
 }
 
 export interface ChatGenerationStreamPolicy {
@@ -736,6 +739,15 @@ export const registerChatMessagesRoutes = (
     let retention: ChatGenerationRetentionMetadata | null = null;
     try {
       retention = deps.events.retentionMetadata?.(principal.uid, generationId) ?? null;
+      if (lifecycle.state === "terminal" && deps.events.compact !== undefined
+        && (retention === null || deps.nowEpochMilliseconds() >= retention.expiresAt)) {
+        const policy = deps.retentionPolicy ?? DEFAULT_CHAT_GENERATION_RETENTION_POLICY;
+        deps.events.compact(principal.uid, generationId, deps.nowEpochMilliseconds(), {
+          ttlMs: retention?.ttlMs ?? policy.ttlMs,
+          maxDetailEvents: policy.maxDetailEvents,
+        });
+        retention = deps.events.retentionMetadata?.(principal.uid, generationId) ?? retention;
+      }
     } catch {
       return generationReplayExpired();
     }
