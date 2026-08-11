@@ -21,6 +21,7 @@ export * from "./walk";
 export * from "./trajectory";
 export * from "./projection-boundary";
 export * from "./authorization-boundary";
+export * from "./source-impact";
 
 export interface CommittedClaim {
   revision_id: string;

@@ -556,6 +556,17 @@ export const buildAuthorizedProductProjectionSet = (
   return result;
 };
 
+/**
+ * Read-only inspection of the exact branded set. This does not mint authority;
+ * it lets other pure retrieval contracts reuse the already-authorized rows.
+ */
+export const inspectAuthorizedProductProjectionSet = (
+  value: AuthorizedProductProjectionSet,
+): AuthorizedProductProjectionSet => {
+  if (!authorizedProductProjectionSets.has(value)) fail("invalid_projection");
+  return value;
+};
+
 export const selectLatestAuthorizedProductProjection = (
   identityValue: ProductPropositionIdentity,
   authorizedSet: AuthorizedProductProjectionSet,
