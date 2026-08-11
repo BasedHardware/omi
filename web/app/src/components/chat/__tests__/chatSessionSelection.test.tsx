@@ -59,4 +59,25 @@ describe('chat session selection', () => {
     await waitFor(() => expect(getMessages).toHaveBeenCalled());
     expect(getMessages).toHaveBeenCalledWith(undefined, null);
   });
+
+  it('loads history after switching from an already loaded session', async () => {
+    const view = render(
+      <ChatProvider>
+        <OpenWithSession sessionId="sess-a" />
+        <ChatPanel />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(getMessages).toHaveBeenCalledWith(undefined, 'sess-a'));
+    vi.mocked(getMessages).mockClear();
+
+    view.rerender(
+      <ChatProvider>
+        <OpenWithSession sessionId="sess-b" />
+        <ChatPanel />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(getMessages).toHaveBeenCalledWith(undefined, 'sess-b'));
+  });
 });

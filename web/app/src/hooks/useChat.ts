@@ -52,7 +52,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const currentAppIdRef = useRef(appId);
   const currentSessionIdRef = useRef(chatSessionId);
   // Track if we've loaded history for the current app + session
-  const historyLoadedRef = useRef(false);
+  const historyLoadedRef = useRef<string | null>(null);
 
   // A load or a stream belongs to the thread it was started for. Switching
   // threads mid-flight must not let the previous thread's response land in the
@@ -70,7 +70,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     ) {
       currentAppIdRef.current = appId;
       currentSessionIdRef.current = chatSessionId;
-      historyLoadedRef.current = false;
+      historyLoadedRef.current = null;
       setMessages([]);
       setError(null);
       setStreamingText('');
@@ -84,7 +84,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
    * Load message history from server
    */
   const loadHistory = useCallback(async () => {
-    if (historyLoadedRef.current) return;
+    const targetKey = `${appId ?? ''}||${chatSessionId ?? ''}`;
+    if (historyLoadedRef.current === targetKey) return;
 
     const isCurrent = claimRequest();
     setIsLoading(true);
@@ -94,7 +95,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       const history = await getMessages(appId, chatSessionId);
       if (!isCurrent()) return;
       setMessages([...history].reverse());
-      historyLoadedRef.current = true;
+      historyLoadedRef.current = targetKey;
     } catch (err) {
       if (!isCurrent()) return;
       console.error('Failed to load message history:', err);
@@ -234,7 +235,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       await clearMessagesApi(appId, chatSessionId);
       if (!isCurrent()) return;
       setMessages([]);
-      historyLoadedRef.current = false;
+      historyLoadedRef.current = null;
     } catch (err) {
       if (!isCurrent()) return;
       console.error('Failed to clear messages:', err);
