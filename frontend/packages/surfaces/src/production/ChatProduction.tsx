@@ -205,6 +205,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
     sendInFlightRef.current = true;
     setSending(true);
     setOperationError(null);
+    let postSendHistoryRequest: number | null = null;
     try {
       await store.send({
         text,
@@ -220,6 +221,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
         return next;
       });
       const request = ++historyRequestRef.current;
+      postSendHistoryRequest = request;
       const page = await store.history();
       if (request === historyRequestRef.current) {
         setMessages((current) => reconcileMessages(current, page.messages));
@@ -229,6 +231,10 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
         setStatus(store.status());
       }
     } catch {
+      if (
+        postSendHistoryRequest !== null &&
+        postSendHistoryRequest !== historyRequestRef.current
+      ) return;
       setOperationError(t(locale, "chat.error"));
       setStatus(store.status());
     } finally {

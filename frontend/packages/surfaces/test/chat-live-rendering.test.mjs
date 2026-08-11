@@ -117,10 +117,12 @@ class JournalFirstRaceChatStore {
   listeners = new Set();
   messages = [];
   sent = [];
+  currentStatus = status();
   holdNextHistory = false;
   releaseOlderHistory = null;
+  rejectOlderHistory = null;
 
-  status() { return status(); }
+  status() { return this.currentStatus; }
   subscribe(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   async refresh() {}
   async history() {
@@ -131,7 +133,10 @@ class JournalFirstRaceChatStore {
     };
     if (!this.holdNextHistory) return page;
     this.holdNextHistory = false;
-    return new Promise((resolve) => { this.releaseOlderHistory = () => resolve(page); });
+    return new Promise((resolve, reject) => {
+      this.releaseOlderHistory = () => resolve(page);
+      this.rejectOlderHistory = () => reject(new Error("stale pre-admission history failed"));
+    });
   }
   async loadOlder() { return { messages: [], hasOlder: false, olderCursor: null }; }
   async send(input) {
@@ -139,6 +144,20 @@ class JournalFirstRaceChatStore {
     // The real outbox resolves at durable journal time. Canonical admission is
     // a later transport callback, so the component's direct post-send history
     // read can legitimately capture the pre-admission projection.
+    this.messages = [
+      {
+        role: "user",
+        text: input.text,
+        delivery: { kind: "echo", clientMessageId: "journal-race-human" },
+        attachments: [],
+      },
+      {
+        role: "assistant",
+        text: "Stale streaming answer",
+        delivery: { kind: "streaming", generationId: "journal-race-generation" },
+        attachments: [],
+      },
+    ];
     this.holdNextHistory = true;
   }
   capabilities() {
@@ -154,17 +173,30 @@ class JournalFirstRaceChatStore {
   async discardDeadLetter() {}
   async cancel() {}
   admitCanonical(text) {
-    this.messages = [{
-      role: "user",
-      text,
-      delivery: {
-        kind: "canonical",
-        serverId: "canonical-race-human",
-        clientMessageId: "canonical-race-human",
-        generationOutcome: null,
+    this.messages = [
+      {
+        role: "user",
+        text,
+        delivery: {
+          kind: "canonical",
+          serverId: "canonical-race-human",
+          clientMessageId: "canonical-race-human",
+          generationOutcome: null,
+        },
+        attachments: [],
       },
-      attachments: [],
-    }];
+      {
+        role: "assistant",
+        text: "Canonical terminal answer",
+        delivery: {
+          kind: "canonical",
+          serverId: "canonical-race-assistant",
+          clientMessageId: null,
+          generationOutcome: "completed",
+        },
+        attachments: [],
+      },
+    ];
     for (const listener of this.listeners) listener();
   }
 }
@@ -266,7 +298,9 @@ test("RED-PROOF older async history cannot overwrite a newer canonical admission
       for (let index = 0; index < 8; index += 1) await Promise.resolve();
     });
     assert.equal(productionRoot.dataset.consumerChatAdmissionCount, "1");
-    assert.equal(rendered.container.querySelectorAll(".chat-message").length, 1);
+    assert.equal(rendered.container.querySelectorAll(".chat-message").length, 2);
+    assert.ok(rendered.container.textContent.includes("Canonical terminal answer"));
+    assert.equal(rendered.container.querySelector(".chat-message.is-streaming"), null);
 
     await rendered.act(async () => {
       store.releaseOlderHistory();
@@ -278,6 +312,50 @@ test("RED-PROOF older async history cannot overwrite a newer canonical admission
       "a pre-admission response resolving last cannot roll rendered canonical admission backward",
     );
     assert.ok(rendered.container.textContent.includes("Journal-first race question"));
+    assert.ok(
+      rendered.container.textContent.includes("Canonical terminal answer"),
+      "the older streaming projection cannot replace the canonical terminal assistant",
+    );
+    assert.equal(rendered.container.textContent.includes("Stale streaming answer"), false);
+    assert.equal(rendered.container.querySelector(".chat-message.is-streaming"), null);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("stale post-send history rejection cannot surface an error after canonical admission", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const store = new JournalFirstRaceChatStore();
+  const rendered = await renderComponent(ChatProduction, { store });
+  try {
+    const productionRoot = rendered.container.querySelector("main[data-route='chat']");
+    const textarea = rendered.container.querySelector("textarea.chat-draft");
+    const send = rendered.container.querySelector("button.chat-send");
+    assert.ok(productionRoot);
+    assert.ok(textarea);
+    assert.ok(send);
+
+    await setTextarea(rendered, textarea, "Stale rejection race question");
+    await click(rendered, send);
+    assert.equal(typeof store.rejectOlderHistory, "function");
+
+    await rendered.act(async () => {
+      store.admitCanonical("Stale rejection race question");
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    await rendered.act(async () => {
+      store.currentStatus = {
+        refresh: { phase: "unavailable", hasSavedData: true },
+        queue: { phase: "idle", pendingCount: 0 },
+      };
+      store.rejectOlderHistory();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    assert.equal(productionRoot.dataset.consumerChatAdmissionCount, "1");
+    assert.ok(rendered.container.textContent.includes("Canonical terminal answer"));
+    assert.equal(rendered.container.querySelector("[role='alert']"), null);
+    assert.equal(productionRoot.dataset.surfaceState, "ready");
+    assert.equal(rendered.container.querySelector(".status-notice"), null);
   } finally {
     await rendered.cleanup();
   }
