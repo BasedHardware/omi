@@ -605,7 +605,7 @@ export const createChatGenerationSupervisor = (
       const message = text.length === 0 ? null : assistantMessage(state, text);
       const prior = deps.events.listAfter(state.accountId, state.generationId, null);
       if (prior === null) throw new TypeError("chat generation event log disappeared");
-      deps.finalization.finalize({
+      const finalized = deps.finalization.finalize({
         accountId: state.accountId,
         generationId: state.generationId,
         eventId: deps.eventId(state.accountId, state.generationId, kind, prior.length + 1),
@@ -619,7 +619,12 @@ export const createChatGenerationSupervisor = (
             ? { kind: "done", message: message ?? assistantMessage(state, FALLBACK_TEXT) }
             : { kind: "cancelled", message },
       });
-      recordAgentTerminal(state, kind, kind === "failed" ? state.failure : null);
+      const canonicalKind = finalized.frame.kind;
+      recordAgentTerminal(
+        state,
+        canonicalKind,
+        canonicalKind === "failed" ? finalized.frame.error : null,
+      );
     } catch {
       state.terminal = false;
       return false;

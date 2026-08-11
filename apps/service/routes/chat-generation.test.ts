@@ -1516,6 +1516,7 @@ describe("ratified chat generation wire red proofs", () => {
       if (admitted.kind !== "created") throw new TypeError("race admission failed");
       let firstCallbacks: Parameters<ChatGenerationSource["start"]>[0] | null = null;
       let secondCallbacks: Parameters<ChatGenerationSource["start"]>[0] | null = null;
+      const agentRunEvents = createInMemoryAgentRunEventStore();
       const source = (capture: (input: Parameters<ChatGenerationSource["start"]>[0]) => void): ChatGenerationSource =>
         Object.freeze({
           start(input) {
@@ -1537,6 +1538,7 @@ describe("ratified chat generation wire red proofs", () => {
         assistantMessageId: () => "assistant-race",
         eventId: (_accountId, _generationId, kind, sequence) => `event-race-${kind}-${sequence}`,
         revision: () => "revision-assistant-race",
+        agentRunEvents,
       });
       const first = supervisor(firstStores, source((input) => { firstCallbacks = input; }));
       const second = supervisor(secondStores, source((input) => { secondCallbacks = input; }));
@@ -1575,6 +1577,14 @@ describe("ratified chat generation wire red proofs", () => {
         ["human", "race"],
         ["ai", "winner"],
       ]);
+      const agentTerminalEvents = agentRunEvents.list("generation-race")
+        .filter((event) => event.kind === "terminal");
+      expect(agentTerminalEvents).toHaveLength(1);
+      expect(agentTerminalEvents[0]).toMatchObject({
+        terminalOutcome: "completed",
+        terminalCode: "completed",
+        retryable: false,
+      });
     } finally {
       secondDb.close();
       firstDb.close();
