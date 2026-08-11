@@ -7,7 +7,7 @@ import {
   clearMessages as clearMessagesApi,
   saveRealtimeMessage,
 } from '@/lib/api';
-import type { ClientMessage, MessageChunk } from '@/types/conversation';
+import type { ClientMessage, MessageChunk, MessageFile } from '@/types/conversation';
 import type { ChatContextInfo } from '@/components/chat/ChatContext';
 import { useRequestOwner } from '@/hooks/useRequestOwner';
 
@@ -31,6 +31,7 @@ interface UseChatReturn {
     text: string,
     fileIds?: string[],
     context?: ChatContextInfo | null,
+    optimisticFiles?: MessageFile[],
   ) => Promise<void>;
   clearHistory: () => Promise<void>;
   loadHistory: () => Promise<void>;
@@ -107,7 +108,12 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
    * Send a message and handle streaming response
    */
   const sendMessage = useCallback(
-    async (text: string, fileIds?: string[], context?: ChatContextInfo | null) => {
+    async (
+      text: string,
+      fileIds?: string[],
+      context?: ChatContextInfo | null,
+      optimisticFiles?: MessageFile[],
+    ) => {
       if ((!text.trim() && !fileIds?.length) || isStreaming) return;
 
       const isCurrent = claimRequest();
@@ -119,14 +125,27 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       // Add user message to the list immediately (optimistic update).
       // Client-only fields (`ask_for_nps`) live on ClientMessage; backend REST
       // authority for messages is the generated `Message` schema.
+      const createdAt = new Date().toISOString();
+      const uploadedFilesById = new Map(
+        optimisticFiles?.map((file) => [file.id, file]) ?? [],
+      );
       const userMessage: ClientMessage = {
         id: `temp-${Date.now()}`,
-        created_at: new Date().toISOString(),
+        created_at: createdAt,
         text: text.trim(),
         sender: 'human',
         type: 'text',
         from_external_integration: false,
-        files: [],
+        files: (fileIds ?? []).map(
+          (id) =>
+            uploadedFilesById.get(id) ?? {
+              id,
+              created_at: createdAt,
+              mime_type: 'application/octet-stream',
+              name: 'Attached file',
+              openai_file_id: '',
+            },
+        ),
         memories: [],
         ask_for_nps: false,
       };

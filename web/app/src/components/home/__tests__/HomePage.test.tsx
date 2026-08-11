@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomePage } from '@/components/home/HomePage';
+import type { MessageFile } from '@/types/conversation';
 
 const sendMessage = vi.fn(async () => undefined);
 const loadHistory = vi.fn(async () => undefined);
@@ -98,7 +99,7 @@ vi.mock('@/components/chat/ChatComposer', () => ({
     onSend,
     recording,
   }: {
-    onSend: (text: string, fileIds: string[]) => void;
+    onSend: (text: string, files: MessageFile[]) => void;
     recording: { onStart: () => void };
   }) => (
     <>
@@ -149,7 +150,7 @@ describe('Home Currents ordering', () => {
     expect(
       currents.compareDocumentPosition(currentChat) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(sendMessage).toHaveBeenCalledWith('New question', []);
+    expect(sendMessage).toHaveBeenCalledWith('New question', [], undefined, []);
   });
 
   it('routes the composer live control through Gemini Live', () => {

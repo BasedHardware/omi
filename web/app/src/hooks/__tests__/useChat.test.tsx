@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MessageFile } from '@/types/conversation';
 
 vi.mock('@/lib/api', () => ({
   getMessages: vi.fn(),
@@ -146,5 +147,41 @@ describe('useChat session ownership', () => {
         sessionId: 'sess-live',
       }),
     );
+  });
+
+  it('renders uploaded files in an optimistic attachment-only message', async () => {
+    vi.mocked(sendMessageStream).mockResolvedValue(undefined as never);
+    const attachment: MessageFile = {
+      id: 'file-1',
+      name: 'notes.txt',
+      created_at: '2026-08-11T00:00:00Z',
+      mime_type: 'text/plain',
+      openai_file_id: 'openai-file-1',
+    };
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.sendMessage('', [attachment.id], undefined, [attachment]);
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0]).toMatchObject({
+      text: '',
+      sender: 'human',
+      files: [attachment],
+    });
+  });
+
+  it('keeps ID-only attachment sends visible in the optimistic message', async () => {
+    vi.mocked(sendMessageStream).mockResolvedValue(undefined as never);
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.sendMessage('', ['file-2']);
+    });
+
+    expect(result.current.messages[0]?.files).toEqual([
+      expect.objectContaining({ id: 'file-2', name: 'Attached file' }),
+    ]);
   });
 });

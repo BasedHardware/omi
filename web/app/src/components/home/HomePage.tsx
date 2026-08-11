@@ -18,6 +18,7 @@ import { GoalComposer } from './GoalComposer';
 import { GoalDetailSheet } from './GoalDetailSheet';
 import { HomeTaskList } from './HomeTaskList';
 import { cn } from '@/lib/utils';
+import type { MessageFile } from '@/types/conversation';
 
 /**
  * Home — the one place Omi answers from.
@@ -110,9 +111,14 @@ export function HomePage() {
     document.title = 'Omi - Your AI Companion';
   }, []);
 
-  const handleSend = async (text: string, fileIds: string[]) => {
+  const handleSend = async (text: string, files: MessageFile[]) => {
     setExchangeStart((current) => current ?? messages.length);
-    await sendMessage(text, fileIds);
+    await sendMessage(
+      text,
+      files.map((file) => file.id),
+      undefined,
+      files,
+    );
   };
 
   const name = firstName(user?.displayName);

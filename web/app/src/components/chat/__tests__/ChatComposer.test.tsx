@@ -1,6 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatComposer } from '@/components/chat/ChatComposer';
+import type { MessageFile } from '@/types/conversation';
 
 const reducedMotion = vi.hoisted(() => ({ value: false }));
 
@@ -13,6 +14,28 @@ vi.mock('@/lib/api', () => ({
   transcribeVoiceMessage: vi.fn(),
   uploadChatFiles: vi.fn(),
 }));
+
+const { uploadChatFiles } = await import('@/lib/api');
+
+type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void };
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function uploadedFile(id: string, name: string): MessageFile {
+  return {
+    id,
+    name,
+    created_at: '2026-08-11T00:00:00Z',
+    mime_type: 'text/plain',
+    openai_file_id: `openai-${id}`,
+  };
+}
 
 const makeMediaQuery = (matches: boolean): MediaQueryList =>
   ({
@@ -122,6 +145,107 @@ describe('ChatComposer recording control', () => {
     expect(screen.getByTestId('composer-live-mark')).toHaveAttribute(
       'data-pulse-max',
       '1',
+    );
+  });
+});
+
+describe('ChatComposer attachments', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('sends uploaded metadata for an attachment-only message', async () => {
+    const attachment = uploadedFile('file-1', 'notes.txt');
+    vi.mocked(uploadChatFiles).mockResolvedValue([attachment]);
+    const onSend = vi.fn(async () => {});
+    const { container } = render(<ChatComposer onSend={onSend} isStreaming={false} />);
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: { files: [new File(['notes'], 'notes.txt', { type: 'text/plain' })] },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('', [attachment]));
+  });
+
+  it('blocks Enter while an attachment upload is pending', async () => {
+    const upload = deferred<MessageFile[]>();
+    vi.mocked(uploadChatFiles).mockReturnValue(upload.promise);
+    const onSend = vi.fn(async () => {});
+    const { container } = render(<ChatComposer onSend={onSend} isStreaming={false} />);
+    const textarea = screen.getByPlaceholderText('Ask anything...');
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    fireEvent.change(textarea, { target: { value: 'Read this' } });
+    fireEvent.change(fileInput, {
+      target: { files: [new File(['one'], 'one.txt', { type: 'text/plain' })] },
+    });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Attach file' })).toBeDisabled();
+
+    await act(async () => {
+      upload.resolve([uploadedFile('file-1', 'one.txt')]);
+      await upload.promise;
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled(),
+    );
+  });
+
+  it('keeps send blocked until every concurrent upload batch finishes', async () => {
+    const firstUpload = deferred<MessageFile[]>();
+    const secondUpload = deferred<MessageFile[]>();
+    vi.mocked(uploadChatFiles)
+      .mockReturnValueOnce(firstUpload.promise)
+      .mockReturnValueOnce(secondUpload.promise);
+    const onSend = vi.fn(async () => {});
+    const { container } = render(<ChatComposer onSend={onSend} isStreaming={false} />);
+    const textarea = screen.getByPlaceholderText('Ask anything...');
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    fireEvent.change(textarea, { target: { value: 'Read both' } });
+    fireEvent.change(fileInput, {
+      target: { files: [new File(['one'], 'one.txt', { type: 'text/plain' })] },
+    });
+    fireEvent.change(fileInput, {
+      target: { files: [new File(['two'], 'two.txt', { type: 'text/plain' })] },
+    });
+    await waitFor(() => expect(uploadChatFiles).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      firstUpload.resolve([uploadedFile('file-1', 'one.txt')]);
+      await firstUpload.promise;
+    });
+
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+
+    const secondAttachment = uploadedFile('file-2', 'two.txt');
+    await act(async () => {
+      secondUpload.resolve([secondAttachment]);
+      await secondUpload.promise;
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled(),
+    );
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() =>
+      expect(onSend).toHaveBeenCalledWith('Read both', [
+        uploadedFile('file-1', 'one.txt'),
+        secondAttachment,
+      ]),
     );
   });
 });
