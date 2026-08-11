@@ -1,6 +1,7 @@
 # Zero-model memory contamination audit contract
 
-Status: P5 preregistration, 2026-08-11; implementation not yet landed
+Status: P5 audit kernel landed, 2026-08-11; production provenance adapter remains
+preregistered and inactive
 
 ## Purpose and inherited definition
 
@@ -38,6 +39,10 @@ requires wiring inside the exact authorized retrieval/composition producer—whe
 trace-to-claim correspondence exists—and artifact parity with the inherited
 29.7% measurement. An adapter that reconstructs correspondence from answer text
 or opaque-reference shape is forbidden.
+
+The exact producer, artifact, atomic staging, revalidation, and legacy-parity
+requirements are frozen in
+`docs/memory-productionization/query-grounding-provenance-contract.md`.
 
 ## Deterministic classification
 
