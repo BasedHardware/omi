@@ -637,6 +637,26 @@ def delete_cached_mcp_api_key_strict(hashed_key: str) -> bool:
     return True
 
 
+# The tombstone must outlive every auth-cache TTL it fences, so a racing
+# authentication cannot outlast the record that its credential was retired.
+API_KEY_RETIREMENT_TTL_SECONDS = 2 * 3600
+
+
+def mark_api_key_hash_retired_strict(hashed_key: str, ttl: int = API_KEY_RETIREMENT_TTL_SECONDS) -> bool:
+    """Durably record that a credential hash was rotated away, raising on failure."""
+    r.set(f'api_key_retired:{hashed_key}', '1', ex=ttl)
+    return True
+
+
+def api_key_hash_is_retired(hashed_key: str) -> Optional[bool]:
+    """Tri-state retirement read: True retired, False active, None unreadable."""
+    try:
+        return r.get(f'api_key_retired:{hashed_key}') is not None
+    except Exception as exc:
+        logger.error("Error reading API key retirement tombstone: %s", exc)
+        return None
+
+
 # ******************************************************
 # ****************** DEV API KEYS **********************
 # ******************************************************

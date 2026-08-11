@@ -4,8 +4,29 @@ from enum import Enum
 import re
 from typing import Any, Optional, Sequence, TypeGuard
 
-MCP_API_KEY_AUTH_CONTEXT_VERSION = 3
+# Bumped to 4 when per-key MCP scopes became authoritative. An entry written by a
+# revision whose normalize_mcp_scopes() always widened to full access must not be
+# honored by a revision that treats a recorded scope list as the whole grant.
+MCP_API_KEY_AUTH_CONTEXT_VERSION = 4
 DEV_API_KEY_AUTH_CONTEXT_VERSION = 1
+
+
+def retired_hash_fences_cache(retirement: Optional[bool]) -> bool:
+    """Whether a rotation tombstone forbids trusting or writing this hash's auth cache.
+
+    ``retirement`` is the tri-state read of the durable retirement tombstone:
+    ``True`` retired, ``False`` provably active, ``None`` unreadable.
+
+    Deleting the auth cache before the credential swap is not sufficient on its
+    own: an authentication that already read the pre-swap Firestore document can
+    write its entry back afterwards, keeping the retired secret valid for the
+    remainder of the cache TTL. The tombstone outlives that TTL, so a cache entry
+    is only honored while the fence is provably absent — an unreadable fence is
+    treated as retired, which costs a Firestore lookup and never authorizes a
+    rotated-away secret.
+    """
+    return retirement is not False
+
 
 _EPOCH_UTC = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _PREFIX_PATTERNS = {

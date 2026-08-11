@@ -20,6 +20,7 @@ from database.api_key_metadata import (
     is_valid_api_key_hash,
     normalize_api_key_scopes,
     project_api_key_metadata,
+    retired_hash_fences_cache,
 )
 from database.memory_app_key_grants import (
     remove_developer_api_key_memory_grant,
@@ -119,10 +120,13 @@ def rotate_dev_key(user_id: str, key_id: str) -> Tuple[str, DevApiKey]:
     """Issue a new secret for an existing Developer key, preserving its identity.
 
     Rotation is a hard cutover with no grace window: the previous secret stops
-    authorizing the moment the swap commits. The cached auth context is deleted
-    strictly first, because a surviving cache entry would keep the retired secret
-    valid for the cache TTL. Name, scopes, creation time, and the key's memory
-    grant are carried over unchanged; only the credential changes.
+    authorizing the moment the swap commits. The retired hash is tombstoned before
+    its cache entry is deleted, because deleting alone loses the race — an
+    authentication that already read the pre-swap document can write the retired
+    hash back into the cache afterwards. The tombstone outlives the cache TTL and
+    the authentication path refuses to honor a fenced entry. Name, scopes, creation
+    time, and the key's memory grant are carried over unchanged; only the
+    credential changes.
     """
     firestore_client = _db()
     key_ref = firestore_client.collection("dev_api_keys").document(key_id)
@@ -137,6 +141,12 @@ def rotate_dev_key(user_id: str, key_id: str) -> Tuple[str, DevApiKey]:
     previous_hashed_key = key_data.get("hashed_key")
     if not is_valid_api_key_hash(previous_hashed_key):
         raise ApiKeyRevocationUnavailableError("Developer API key credential metadata is invalid")
+    try:
+        fenced = redis_db.mark_api_key_hash_retired_strict(previous_hashed_key)
+    except Exception as exc:
+        raise ApiKeyRevocationUnavailableError("Developer API key rotation fence failed") from exc
+    if fenced is not True:
+        raise ApiKeyRevocationUnavailableError("Developer API key rotation fence was not confirmed")
     try:
         cache_deleted = redis_db.delete_cached_dev_api_key_strict(previous_hashed_key)
     except Exception as exc:
@@ -264,9 +274,11 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     secret_part = api_key.replace("omi_dev_", "", 1)
     hashed_key = hash_dev_api_key(secret_part)
 
-    # Check cache first
+    # Check cache first. A rotated-away secret must not be authorized by a cache
+    # entry, including one a racing authentication wrote back after rotation.
+    cache_fenced = retired_hash_fences_cache(redis_db.api_key_hash_is_retired(hashed_key))
     cache_read = redis_db.read_cached_dev_api_key_data(hashed_key)
-    cached_data = cache_read.data if cache_read.mode == ApiKeyCacheReadMode.HIT else None
+    cached_data = cache_read.data if (not cache_fenced and cache_read.mode == ApiKeyCacheReadMode.HIT) else None
     if cached_data and _valid_cached_auth_context(cached_data):
         return ApiKeyAuthLookupResult(
             context={
@@ -308,16 +320,17 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     ):
         repairs.add(ApiKeyAuthRepair.SCOPES)
 
-    cache_written = redis_db.cache_dev_api_key(
-        hashed_key,
-        user_id,
-        scopes,
-        key_id=key_id,
-        app_id=app_id,
-        auth_context_version=DEV_API_KEY_AUTH_CONTEXT_VERSION,
-    )
-    if cache_written is not True:
-        repairs.add(ApiKeyAuthRepair.CACHE_WRITE)
+    if not cache_fenced:
+        cache_written = redis_db.cache_dev_api_key(
+            hashed_key,
+            user_id,
+            scopes,
+            key_id=key_id,
+            app_id=app_id,
+            auth_context_version=DEV_API_KEY_AUTH_CONTEXT_VERSION,
+        )
+        if cache_written is not True:
+            repairs.add(ApiKeyAuthRepair.CACHE_WRITE)
     key_ref = key_doc.reference
     key_ref.update(
         {

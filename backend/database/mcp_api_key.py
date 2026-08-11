@@ -23,6 +23,7 @@ from database.api_key_metadata import (
     is_valid_api_key_hash,
     normalize_api_key_app_id,
     project_api_key_metadata,
+    retired_hash_fences_cache,
     valid_api_key_app_id,
 )
 from models.mcp_api_key import McpApiKey
@@ -227,11 +228,14 @@ def rotate_mcp_key(user_id: str, key_id: str) -> Tuple[str, McpApiKey]:
     """Issue a new secret for an existing MCP key, preserving its identity.
 
     Rotation is a hard cutover with no grace window: the previous secret stops
-    authorizing the moment the swap commits. The cached auth context is deleted
-    strictly first, because a surviving cache entry would keep the retired secret
-    valid for the cache TTL — an unbounded-in-practice window this contract does
-    not offer. Name, app identity, scopes, creation time, and the key's memory
-    grant are carried over unchanged; only the credential changes.
+    authorizing the moment the swap commits. The retired hash is tombstoned before
+    its cache entry is deleted, because deleting alone loses the race — an
+    authentication that already read the pre-swap document can write the retired
+    hash back into the cache afterwards. The tombstone outlives the cache TTL and
+    the authentication path refuses to honor a fenced entry, so a rotated-away
+    secret cannot be re-cached into validity. Name, app identity, scopes, creation
+    time, and the key's memory grant are carried over unchanged; only the
+    credential changes.
     """
     firestore_client = _db()
     key_ref = firestore_client.collection("mcp_api_keys").document(key_id)
@@ -246,6 +250,12 @@ def rotate_mcp_key(user_id: str, key_id: str) -> Tuple[str, McpApiKey]:
     previous_hashed_key = key_data.get("hashed_key")
     if not is_valid_api_key_hash(previous_hashed_key):
         raise ApiKeyRevocationUnavailableError("MCP API key credential metadata is invalid")
+    try:
+        fenced = redis_db.mark_api_key_hash_retired_strict(previous_hashed_key)
+    except Exception as exc:
+        raise ApiKeyRevocationUnavailableError("MCP API key rotation fence failed") from exc
+    if fenced is not True:
+        raise ApiKeyRevocationUnavailableError("MCP API key rotation fence was not confirmed")
     try:
         cache_deleted = redis_db.delete_cached_mcp_api_key_strict(previous_hashed_key)
     except Exception as exc:
@@ -382,8 +392,11 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     secret_part = api_key.replace("omi_mcp_", "", 1)
     hashed_key = hash_api_key(secret_part)
 
+    # A rotated-away secret must not be authorized by a cache entry, including one
+    # a racing authentication wrote back after rotation deleted it.
+    cache_fenced = retired_hash_fences_cache(redis_db.api_key_hash_is_retired(hashed_key))
     cache_read = redis_db.read_cached_mcp_api_key_auth_context(hashed_key)
-    cached_data = cache_read.data if cache_read.mode == ApiKeyCacheReadMode.HIT else None
+    cached_data = cache_read.data if (not cache_fenced and cache_read.mode == ApiKeyCacheReadMode.HIT) else None
     if cached_data and _valid_cached_auth_context(cached_data):
         return ApiKeyAuthLookupResult(
             context={
@@ -435,16 +448,17 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     key_ref.update({"id": key_id, "last_used_at": datetime.now(timezone.utc), "app_id": app_id, "scopes": scopes})
     if _ensure_mcp_memory_grant(user_id, key_id, app_id, firestore_client, key_scopes=scopes):
         repairs.add(ApiKeyAuthRepair.MEMORY_GRANT)
-    cache_written = redis_db.cache_mcp_api_key_auth_context(
-        hashed_key,
-        user_id,
-        scopes,
-        key_id=key_id,
-        app_id=app_id,
-        auth_context_version=MCP_API_KEY_AUTH_CONTEXT_VERSION,
-    )
-    if cache_written is not True:
-        repairs.add(ApiKeyAuthRepair.CACHE_WRITE)
+    if not cache_fenced:
+        cache_written = redis_db.cache_mcp_api_key_auth_context(
+            hashed_key,
+            user_id,
+            scopes,
+            key_id=key_id,
+            app_id=app_id,
+            auth_context_version=MCP_API_KEY_AUTH_CONTEXT_VERSION,
+        )
+        if cache_written is not True:
+            repairs.add(ApiKeyAuthRepair.CACHE_WRITE)
 
     return ApiKeyAuthLookupResult(
         context={"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id},
