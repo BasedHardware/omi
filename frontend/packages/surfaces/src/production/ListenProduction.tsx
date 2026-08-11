@@ -225,7 +225,7 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
             ))}
           </section>
         )}
-        <div className="listen-controls" aria-label={t(locale, "listen.stateLabel")}>
+        <div className="listen-controls" role="group" aria-label={t(locale, "listen.stateLabel")}>
           {description.canStart && (
             <button
               type="button"

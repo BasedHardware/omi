@@ -175,7 +175,7 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
           queue={status.queue}
           deadLetterCount={dead.length}
           operationError={operationError}
-          nextAction={status.refresh.phase !== "ready" || operationError ? t(locale, "common.retry") : null}
+          nextAction={status.refresh.phase !== "ready" ? t(locale, "common.retry") : null}
           retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
         />
         <ProductionLiveAnnouncement message={saveNotice ?? signedOutNotice} />

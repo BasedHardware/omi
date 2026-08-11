@@ -249,7 +249,7 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
               <a href={href("memories")} aria-current={active === "memories" || active === "conversations" || active === "folders" ? "page" : undefined}><ChromeIcon name="library" /><span className="nav-label">{t(locale, "nav.library")}</span></a>
               <a href={href("tasks")} aria-current={active === "tasks" ? "page" : undefined}><ChromeIcon name="tasks" /><span className="nav-label">{t(locale, "nav.tasks")}</span></a>
             </div>
-            <div className="nav-utilities" aria-label={t(locale, "nav.settings")}>
+            <div className="nav-utilities" role="group" aria-label={t(locale, "nav.settings")}>
               <button type="button" className="nav-icon-control" disabled aria-disabled="true" aria-label={t(locale, "nav.microphone")} title={t(locale, "nav.microphone")}><ChromeIcon name="microphone" /></button>
               <button type="button" className="nav-icon-control" disabled aria-disabled="true" aria-label={t(locale, "nav.screenCapture")} title={t(locale, "nav.screenCapture")}><ChromeIcon name="screen" /></button>
               <button ref={paletteTriggerRef} type="button" className="command-discovery-trigger" onClick={openPalette} aria-haspopup={commandPopupRole} aria-expanded={paletteOpen} title={t(locale, "tasks.shortcuts")}>

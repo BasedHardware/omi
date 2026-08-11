@@ -175,12 +175,12 @@ export function HomeProduction({ sources, source, locale = "en", onReady }: {
             phase={refresh.phase}
             hasSavedData={refresh.hasSavedData}
             locale={locale}
-            nextAction={presentation.phase === "unavailable" ? t(locale, canRetry ? "common.retry" : "nav.settings") : null}
+            nextAction={presentation.phase === "unavailable" && canRetry ? t(locale, "common.retry") : null}
             retry={presentation.phase === "unavailable" && canRetry ? { onRetry: retry } : null}
           />
           <ProductionLiveAnnouncement message={t(locale, filtering ? "home.matchCount" : "home.loadedCount", { count: formatNumber(results.length, locale) })} />
           <header className="home-results-header">
-            <div className="home-kind-filter" aria-label={t(locale, "common.search")}>
+            <div className="home-kind-filter" role="group" aria-label={t(locale, "common.search")}>
               {(["all", "conversation", "memory"] as const).map((value) => <button type="button" key={value} aria-pressed={kind === value} onClick={() => setKind(value)}>
                 {value === "all" ? t(locale, "conversations.all") : value === "memory" ? t(locale, "nav.memories") : t(locale, "nav.conversations")}
               </button>)}

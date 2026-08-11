@@ -335,7 +335,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
           queue={status.queue}
           deadLetterCount={deadLetters.length}
           operationError={operationError}
-          nextAction={status.refresh.phase !== "ready" ? t(locale, "common.retry") : operationError ? t(locale, "chat.retryComposer") : null}
+          nextAction={status.refresh.phase !== "ready" ? t(locale, "common.retry") : null}
           retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
         />
         <ProductionLiveAnnouncement
