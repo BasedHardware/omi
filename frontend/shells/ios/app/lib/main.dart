@@ -546,42 +546,57 @@ class _SurfaceHostState extends State<SurfaceHost>
   }
 
   Future<void> _publishCaptureReadiness() async {
-    final result = await _controller.runJavaScriptReturningResult('''
+    Map<Object?, Object?>? readiness;
+    for (var attempt = 0; attempt < 80 && readiness == null; attempt += 1) {
+      final result = await _controller.runJavaScriptReturningResult('''
         (() => {
           const root = document.querySelector('main[data-production-shell="true"]');
           if (!root) return JSON.stringify({ok:false});
           return JSON.stringify({
             ok: true,
+            domain: String(document.documentElement.dataset.polishDomain || ''),
+            polish_state: String(document.documentElement.dataset.polishState || ''),
             route: String(root.getAttribute('data-route') || ''),
             fixture: String(root.getAttribute('data-qa-fixture') || ''),
             state: String(root.getAttribute('data-surface-state') || '')
           });
         })()
       ''');
-    Object? decoded = result;
-    if (result is String) {
-      try {
-        decoded = jsonDecode(result);
-      } on FormatException {
-        throw StateError('capture readiness result was not JSON');
+      Object? decoded = result;
+      if (result is String) {
+        try {
+          decoded = jsonDecode(result);
+        } on FormatException {
+          throw StateError('capture readiness result was not JSON');
+        }
       }
+      if (decoded is Map && decoded['ok'] == true) {
+        readiness = decoded;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    if (decoded is! Map ||
-        decoded['ok'] != true ||
-        decoded['route'] is! String ||
-        (decoded['route'] as String).isEmpty ||
-        decoded['fixture'] is! String ||
-        !(decoded['fixture'] as String).startsWith('polish:') ||
-        decoded['state'] is! String ||
-        (decoded['state'] as String).isEmpty) {
+    if (readiness == null ||
+        readiness['domain'] is! String ||
+        (readiness['domain'] as String).isEmpty ||
+        readiness['polish_state'] is! String ||
+        (readiness['polish_state'] as String).isEmpty ||
+        readiness['route'] is! String ||
+        (readiness['route'] as String).isEmpty ||
+        readiness['fixture'] is! String ||
+        (readiness['fixture'] as String).isEmpty ||
+        readiness['state'] is! String ||
+        (readiness['state'] as String).isEmpty) {
       throw StateError('capture surface did not expose a typed fixture root');
     }
     final confirmed = await const MethodChannel('omi/capture-launch')
         .invokeMethod<bool>('ready', <String, String>{
           'run_id': _captureRunId,
-          'route': decoded['route'] as String,
-          'fixture': decoded['fixture'] as String,
-          'state': decoded['state'] as String,
+          'domain': readiness['domain'] as String,
+          'polish_state': readiness['polish_state'] as String,
+          'route': readiness['route'] as String,
+          'fixture': readiness['fixture'] as String,
+          'state': readiness['state'] as String,
         });
     if (confirmed != true) {
       throw StateError('native capture host did not confirm readiness');
@@ -592,7 +607,9 @@ class _SurfaceHostState extends State<SurfaceHost>
   Future<void> _finishPageLoad(String url) async {
     if (_captureOnly) {
       // The WK page-finished callback precedes React's typed fixture root.
-      // Capture readiness is published only after OMI_PRODUCTION_READY.
+      // Begin bounded DOM polling here; the console ready signal is a second
+      // trigger, guarded by _captureReadinessStarted.
+      _beginCaptureReadiness();
       return;
     }
     if (_consumerEvidence != null) {

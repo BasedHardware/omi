@@ -59,6 +59,15 @@ const widthPolicy = {
     wide: { width: 1032, height: 1376, scale: 2, orientation: "portrait" },
   },
 };
+const fixturePolicy = {
+  memories: { loading: "loading", empty: "empty", ready: "normal", error: "unavailable", offline: "degraded", busy: "paged" },
+  tasks: { loading: "loading", empty: "empty", ready: "normal", error: "unavailable", offline: "saved-failed", busy: "sending", complete: "complete" },
+  conversations: { loading: "loading", empty: "empty", ready: "normal", error: "unavailable", offline: "saved-failed", busy: "sending" },
+  folders: { loading: "polish:loading", empty: "polish:empty", ready: "polish:ready", error: "polish:error", offline: "polish:offline" },
+  chat: { loading: "loading", empty: "empty", ready: "ready", error: "unavailable", offline: "saved-failed", busy: "streaming", complete: "normal", cancelled: "cancelled" },
+  listen: { loading: "polish:loading", empty: "polish:empty", ready: "polish:ready", error: "polish:error", offline: "polish:offline", busy: "polish:busy", complete: "polish:complete" },
+  settings: { loading: "loading", empty: "signed-out", ready: "signed-in", error: "unavailable", offline: "saving-failed" },
+};
 
 function fail(message) {
   throw new Error(message);
@@ -595,11 +604,13 @@ function waitForIosReadiness(coordinate, artifact, markerPath, nonce, waitSecond
   while (Date.now() <= deadline) {
     const marker = readIosReadiness(coordinate.device.udid, markerPath, artifact.env);
     if (marker &&
-        Object.keys(marker).sort().join(",") === "fixture,nonce,route,run_id,state" &&
+        Object.keys(marker).sort().join(",") === "domain,fixture,nonce,polish_state,route,run_id,state" &&
         marker.nonce === nonce &&
         marker.run_id === coordinate.run_id &&
+        marker.domain === coordinate.domain &&
+        marker.polish_state === coordinate.state &&
         marker.route === coordinate.domain &&
-        marker.fixture === `polish:${coordinate.domain}` &&
+        marker.fixture === fixturePolicy[coordinate.domain]?.[coordinate.state] &&
         typeof marker.state === "string" &&
         /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/.test(marker.state)) {
       return;
