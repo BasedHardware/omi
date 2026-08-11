@@ -298,7 +298,9 @@ export class SqliteChatGenerationEventsStore implements ChatGenerationEventsStor
         redactedEventCount += 1;
       }
       const previous = this.retentionMetadata(accountId, generationId);
-      const expiresAt = Math.max(...details.map((row) => row.created_at)) + policy.ttlMs;
+      const expiresAt = details.length === 0
+        ? nowEpochMilliseconds + policy.ttlMs
+        : Math.max(...details.map((row) => row.created_at)) + policy.ttlMs;
       const metadata = Object.freeze({
         ttlMs: policy.ttlMs,
         expiresAt,

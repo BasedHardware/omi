@@ -32,3 +32,24 @@ test("SQLite chat generation compaction persists redaction metadata", () => {
   expect(store.retentionMetadata(accountId, generationId)).toEqual(result?.metadata);
   db.close();
 });
+
+test("SQLite retention handles generations with no detail frames", () => {
+  const db = new Database(":memory:");
+  const store = new SqliteChatGenerationEventsStore(db);
+  const accountId = "retention-account";
+  const generationId = "generation:no-detail";
+  const message = {
+    id: "human:no-detail", text: "prompt", sender: "human" as const, type: "text" as const,
+    createdAt: 0, updatedAt: 0, chatSessionId: null, appId: null, journalRevision: 1,
+    payloadHash: `sha256:${"c".repeat(64)}`, messageSource: "chat", rating: null, reported: false,
+    revision: "revision:human", attachments: [],
+  };
+  store.append({ accountId, generationId, eventId: "event:accepted", createdAt: 0,
+    frame: { kind: "accepted", message, generation: { id: generationId } } });
+  store.append({ accountId, generationId, eventId: "event:cancelled", createdAt: 3,
+    frame: { kind: "cancelled", message: null } });
+  const result = store.compact(accountId, generationId, 20, { ttlMs: 10, maxDetailEvents: 0 });
+  expect(result?.metadata.expiresAt).toBe(30);
+  expect(result?.metadata.redactedEventCount).toBe(0);
+  db.close();
+});
