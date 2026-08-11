@@ -49,26 +49,54 @@ describe('app detail metadata', () => {
   });
 
   it('sets an app-specific title, canonical URL and social preview tags', () => {
-    applyAppDetailMetadata({
+    const restore = applyAppDetailMetadata({
       id: 'note-taker',
       name: 'Note Taker',
       description: 'Takes notes.',
+      category: 'productivity-and-organization',
       image: 'https://cdn.example.com/note.png',
     });
 
-    expect(document.title).toBe('Note Taker — Omi App Store');
+    expect(document.title).toBe('Note Taker - Productivity And Organization App');
     const canonical = document.head.querySelector<HTMLLinkElement>(
       'link[rel="canonical"]',
     );
     expect(canonical?.href).toBe(`${window.location.origin}/apps/note-taker`);
     expect(
       document.head.querySelector('meta[property="og:title"]')?.getAttribute('content'),
-    ).toBe('Note Taker');
+    ).toBe('Note Taker - Productivity And Organization App');
     expect(
       document.head.querySelector('meta[property="og:image"]')?.getAttribute('content'),
     ).toBe('https://cdn.example.com/note.png');
     expect(
       document.head.querySelector('meta[name="description"]')?.getAttribute('content'),
-    ).toBe('Takes notes.');
+    ).toBe('Takes notes. Available on Omi, the AI-powered wearable platform.');
+
+    restore();
+    expect(document.title).toBe('');
+    expect(document.head.querySelector('link[rel="canonical"]')).toBeNull();
+    expect(document.head.querySelector('meta[property="og:title"]')).toBeNull();
+  });
+
+  it('restores metadata owned by the previous route', () => {
+    document.head.innerHTML =
+      '<meta name="description" content="Marketplace"><link rel="canonical" href="/apps">';
+    document.title = 'Omi App Store';
+
+    const restore = applyAppDetailMetadata({
+      id: 'note-taker',
+      name: 'Note Taker',
+      description: 'Takes notes.',
+      category: 'productivity-and-organization',
+    });
+    restore();
+
+    expect(document.title).toBe('Omi App Store');
+    expect(
+      document.head.querySelector('meta[name="description"]')?.getAttribute('content'),
+    ).toBe('Marketplace');
+    expect(
+      document.head.querySelector('link[rel="canonical"]')?.getAttribute('href'),
+    ).toBe('/apps');
   });
 });

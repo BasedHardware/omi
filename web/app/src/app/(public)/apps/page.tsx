@@ -26,7 +26,7 @@ export default function AppsMarketplacePage() {
         return getAllAppsV2(true);
       })
       .then((allApps) => {
-        if (!active || !allApps) return;
+        if (!active || !allApps?.length) return;
         setPlugins(allApps.map(transformToPlugin));
       });
     return () => {

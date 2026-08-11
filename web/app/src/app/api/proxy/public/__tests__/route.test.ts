@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { GET, isPublicProxyPath } from '@/app/api/proxy/public/[...path]/route';
+import {
+  GET,
+  isPublicProxyPath,
+  publicProxyCacheControl,
+} from '@/app/api/proxy/public/[...path]/route';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -73,6 +77,29 @@ describe('public proxy upstream handling', () => {
     const bad = await GET(new Request('https://app.omi.me/api/proxy/public/v2/apps'));
     // A cached 503 would outlive the outage that produced it.
     expect(bad.headers.get('Cache-Control')).toBeNull();
+  });
+
+  it('never caches changing fair-use case status', async () => {
+    expect(publicProxyCacheControl('v1/fair-use/case/FU-abc123/status', true)).toBe(
+      'no-store',
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('{"stage":"warning"}', {
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    );
+
+    const response = await GET(
+      new Request(
+        'https://app.omi.me/api/proxy/public/v1/fair-use/case/FU-abc123/status',
+      ),
+    );
+
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
   });
 
   it('bounds the wait on the backend rather than holding the connection open', async () => {

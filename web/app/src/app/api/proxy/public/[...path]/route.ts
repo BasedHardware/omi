@@ -44,6 +44,15 @@ const UPSTREAM_TIMEOUT_MS = 10_000;
  * a cached error would outlive the outage that produced it.
  */
 const SUCCESS_CACHE_CONTROL = 'public, max-age=60, stale-while-revalidate=300';
+const FAIR_USE_STATUS_PATH = /^v1\/fair-use\/case\/[^/]+\/status$/;
+
+export function publicProxyCacheControl(
+  path: string,
+  succeeded: boolean,
+): string | undefined {
+  if (FAIR_USE_STATUS_PATH.test(path)) return 'no-store';
+  return succeeded ? SUCCESS_CACHE_CONTROL : undefined;
+}
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
@@ -66,7 +75,8 @@ export async function GET(request: Request) {
       'Content-Type':
         response.headers.get('content-type') || 'application/json; charset=utf-8',
     };
-    if (response.ok) headers['Cache-Control'] = SUCCESS_CACHE_CONTROL;
+    const cacheControl = publicProxyCacheControl(path, response.ok);
+    if (cacheControl) headers['Cache-Control'] = cacheControl;
     return new Response(body, { status: response.status, headers });
   } catch (error) {
     console.error('Public proxy error:', error);

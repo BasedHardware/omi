@@ -29,24 +29,40 @@ export function applyAppDetailMetadata(app: {
   id: string;
   name: string;
   description: string;
+  category: string;
   image?: string;
-}): void {
-  if (typeof document === 'undefined') return;
-  document.title = `${app.name} — Omi App Store`;
+}): () => void {
+  if (typeof document === 'undefined') return () => {};
+  const previousTitle = document.title;
+  const restorers: Array<() => void> = [];
+  const title = `${app.name} - ${formatCategoryName(app.category)} App`;
+  const description = `${app.description} Available on Omi, the AI-powered wearable platform.`;
+  document.title = title;
   const url = `${window.location.origin}/apps/${app.id}`;
 
   const setMeta = (selector: string, attr: string, key: string, content: string) => {
     let el = document.head.querySelector<HTMLMetaElement>(selector);
+    const existed = Boolean(el);
+    const previousContent = el?.getAttribute('content');
     if (!el) {
       el = document.createElement('meta');
       el.setAttribute(attr, key);
       document.head.appendChild(el);
     }
     el.setAttribute('content', content);
+    restorers.push(() => {
+      if (!existed) {
+        el?.remove();
+      } else if (previousContent == null) {
+        el?.removeAttribute('content');
+      } else {
+        el?.setAttribute('content', previousContent);
+      }
+    });
   };
 
-  setMeta('meta[name="description"]', 'name', 'description', app.description);
-  setMeta('meta[property="og:title"]', 'property', 'og:title', app.name);
+  setMeta('meta[name="description"]', 'name', 'description', description);
+  setMeta('meta[property="og:title"]', 'property', 'og:title', title);
   setMeta(
     'meta[property="og:description"]',
     'property',
@@ -57,14 +73,41 @@ export function applyAppDetailMetadata(app: {
   if (app.image) {
     setMeta('meta[property="og:image"]', 'property', 'og:image', app.image);
   }
+  setMeta('meta[name="twitter:card"]', 'name', 'twitter:card', 'summary_large_image');
+  setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', title);
+  setMeta(
+    'meta[name="twitter:description"]',
+    'name',
+    'twitter:description',
+    app.description,
+  );
+  if (app.image) {
+    setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', app.image);
+  }
 
   let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  const canonicalExisted = Boolean(canonical);
+  const previousCanonical = canonical?.getAttribute('href');
   if (!canonical) {
     canonical = document.createElement('link');
     canonical.rel = 'canonical';
     document.head.appendChild(canonical);
   }
   canonical.href = url;
+  restorers.push(() => {
+    if (!canonicalExisted) {
+      canonical?.remove();
+    } else if (previousCanonical == null) {
+      canonical?.removeAttribute('href');
+    } else {
+      canonical?.setAttribute('href', previousCanonical);
+    }
+  });
+
+  return () => {
+    document.title = previousTitle;
+    for (const restore of restorers.reverse()) restore();
+  };
 }
 
 // Helper function to format category name
@@ -98,12 +141,13 @@ export default function PluginDetailPage() {
 
   useEffect(() => {
     let active = true;
+    let restoreMetadata: (() => void) | undefined;
     // Get v2 apps to find related ones
     Promise.all([findAppById(id), getAppsV2(true)]).then(([app, response]) => {
       if (!active) return;
       setPlugin(app);
       if (app) {
-        applyAppDetailMetadata(app);
+        restoreMetadata = applyAppDetailMetadata(app);
         // Flatten all apps from groups
         const rawPlugins: V2AppData[] = response.groups.flatMap((group) => group.data);
         // Get related apps based on category
@@ -121,6 +165,7 @@ export default function PluginDetailPage() {
     });
     return () => {
       active = false;
+      restoreMetadata?.();
     };
   }, [id]);
 
