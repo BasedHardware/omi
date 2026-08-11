@@ -20,7 +20,9 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   var isEnabled: Bool {
     get async {
-      await MainActor.run { SuggestionAssistantSettings.shared.isEnabled }
+      await MainActor.run {
+        !ContextBucketsFeature.isEnabled && SuggestionAssistantSettings.shared.isEnabled
+      }
     }
   }
 
@@ -222,6 +224,35 @@ actor SuggestionAssistant: ProactiveAssistant {
         .map(Self.describeCommitment)
     }
     grounding.openCommitments = Array(alwaysRelevant)
+
+    let bucketsEnabled = await MainActor.run { ContextBucketsFeature.isEnabled }
+    if bucketsEnabled {
+      let key = ContextTitleNormalizer.identityKey(
+        appName: frame.appName, windowTitle: frame.windowTitle)
+      if let snapshot = await ContextBucketStore.shared.snapshot(forNormalizedKey: key) {
+        let stable =
+          String(
+            data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
+        grounding.relatedScreens = [stable]
+        return grounding
+      }
+      // Lazy bucket creation means the first qualifying visit deliberately uses
+      // today's local FTS grounding, but never the canonical memory system.
+      guard let searchTerm = Self.groundingSearchTerm(for: frame) else { return grounding }
+      do {
+        let commitments = try await ActionItemStorage.shared.searchFTS(
+          query: searchTerm, limit: 10, includeCompleted: false)
+        grounding.openCommitments.append(contentsOf: commitments.map(\.description))
+        let screens = try await RewindDatabase.shared.search(
+          query: searchTerm,
+          startDate: Date().addingTimeInterval(-30 * 24 * 60 * 60),
+          limit: 12)
+        grounding.relatedScreens = screens.compactMap { Self.describeScreen($0, excluding: frame) }
+      } catch {
+        logError("Suggestion: flag-on FTS grounding unavailable", error: error)
+      }
+      return grounding
+    }
     grounding.goals = currentOwnerGoals()
     refreshGoalsIfStale()
 
@@ -350,17 +381,19 @@ actor SuggestionAssistant: ProactiveAssistant {
     let formatter = DateFormatter()
     formatter.dateFormat = "MMM d HH:mm"
     let when = formatter.string(from: screenshot.timestamp)
-    let where_ = screenshot.windowTitle.map { "\(screenshot.appName) — \($0)" } ?? screenshot.appName
-    guard let ocr = screenshot.ocrText, !ocr.isEmpty else { return "\(when) · \(where_)" }
+    let location = screenshot.windowTitle.map { "\(screenshot.appName) — \($0)" } ?? screenshot.appName
+    guard let ocr = screenshot.ocrText, !ocr.isEmpty else { return "\(when) · \(location)" }
     let snippet = ocr.replacingOccurrences(of: "\n", with: " ").prefix(200)
-    return "\(when) · \(where_): \(snippet)"
+    return "\(when) · \(location): \(snippet)"
   }
 
   /// Derive a search term from the window title, which is where the topic or person lives.
   /// Reuses the shared normalizer so spinners, timers and unread counts do not become
   /// search noise.
   private static func groundingSearchTerm(for frame: CapturedFrame) -> String? {
-    guard let normalized = ContextDetection.normalizeWindowTitle(frame.windowTitle) else { return nil }
+    guard let normalized = ContextDetection.normalizeWindowTitle(frame.windowTitle) else {
+      return nil
+    }
     // Must be sanitized before it reaches FTS5 — see SuggestionSearchTerm.
     let sanitized = SuggestionSearchTerm.sanitize(normalized)
     // Very short titles ("Inbox", "New Tab") carry no signal worth searching on.

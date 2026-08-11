@@ -488,6 +488,15 @@ class RewindSettings: ObservableObject {
     if Self.defaultExcludedApps.contains(appName) {
       removedDefaults.remove(appName)
     }
+    Task { @MainActor in
+      if ContextBucketsFeature.isEnabled {
+        do {
+          _ = try await ContextBucketStore.shared.purgeExcludedApp(appName)
+        } catch {
+          logError("RewindSettings: purge-on-exclude failed", error: error)
+        }
+      }
+    }
   }
 
   /// Remove an app from the exclusion list

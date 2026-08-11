@@ -1,11 +1,11 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": 1734,
-    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3423
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3433
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": "The bounded incomplete-task storage surface reads all dated rows and pages only No Deadline rows, so TasksStore can preserve bucket boundaries without loading the entire undated local universe; it remains beside the existing task query and persistence owner rather than duplicating SQLite semantics. Single-snapshot dated/no-deadline reads prevent due-date races from omitting tasks between bucket queries.",
-    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Nullable screenshot capture provenance preserves the canonical-memory device identity and prevents multi-Mac screen activity from overwriting local row IDs."
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Registers the seven-table context-bucket migration in the per-owner Rewind transaction domain and removes the migrated legacy binding key only after success."
   },
   "threshold": 1500
 }

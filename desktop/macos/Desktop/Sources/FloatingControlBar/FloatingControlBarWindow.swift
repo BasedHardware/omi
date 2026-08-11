@@ -2500,6 +2500,7 @@ class FloatingControlBarManager {
   private static let kAskOmiEnabled = "askOmiBarEnabled"
   private static let kSnoozedUntil = "floatingBar_snoozedUntil"
   private static let recentNotificationReuseInterval: TimeInterval = 60
+  private static let durableProvenanceReuseInterval: TimeInterval = 30 * 24 * 60 * 60
   static let snoozeTwoHoursDuration: TimeInterval = 2 * 60 * 60
 
   struct NotificationProjectionSnapshot: Equatable {
@@ -4132,8 +4133,10 @@ class FloatingControlBarManager {
         subject: subject
       )
     else { return }
-    let matched = TaskContextSubjectMatcher.shared.resolve(event)
-    Task { await TaskContextualResurfacingService.shared.observe(matched) }
+    Task {
+      let matched = await ContextSubjectBindingService.shared.resolve(event)
+      await TaskContextualResurfacingService.shared.observe(matched)
+    }
   }
 
   private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
@@ -4161,7 +4164,7 @@ class FloatingControlBarManager {
       key.ownerID == ownerID,
       let stored = storedNotificationMessages[key],
       stored.ownerID == ownerID,
-      Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval,
+      Date().timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context),
       let provider = historyChatProvider,
       let message = provider.messages.last(where: { $0.clientTurnId == stored.messageClientTurnId })
     else { return nil }
@@ -4177,7 +4180,7 @@ class FloatingControlBarManager {
     let key = OwnerNotificationKey(ownerID: ownerID, notificationID: notificationID)
     guard let stored = storedNotificationMessages[key],
       stored.ownerID == ownerID,
-      Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval,
+      Date().timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context),
       let provider = historyChatProvider,
       let notificationMessage = provider.messages.last(where: {
         $0.clientTurnId == stored.messageClientTurnId
@@ -4240,7 +4243,7 @@ class FloatingControlBarManager {
   private func purgeExpiredNotificationMessages() {
     let now = Date()
     storedNotificationMessages = storedNotificationMessages.filter { _, stored in
-      now.timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval
+      now.timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context)
     }
 
     if let mostRecentNotificationKey,
@@ -4461,7 +4464,7 @@ class FloatingControlBarManager {
         }
       }
 
-    let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
+    let notificationContextSuffix = await notificationContextSuffixIfNeeded(for: message)
     currentTracer?.end("pre_llm")
     guard
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
@@ -4714,15 +4717,22 @@ class FloatingControlBarManager {
     chatCancellable = nil
   }
 
-  private func notificationContextSuffixIfNeeded(for message: String) -> String? {
+  private func notificationContextSuffixIfNeeded(for message: String) async -> String? {
     guard let pendingNotificationContext else { return nil }
 
     let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedMessage.isEmpty else { return nil }
 
+    let durableProvenance: String? =
+      if let ref = pendingNotificationContext.context?.provenanceRef {
+        await ContextBucketStore.shared.deliveryProvenance(id: ref)
+      } else {
+        nil
+      }
     return notificationContextSuffix(
       message: pendingNotificationContext.message,
-      context: pendingNotificationContext.context
+      context: pendingNotificationContext.context,
+      durableProvenance: durableProvenance
     )
   }
 
@@ -4730,7 +4740,8 @@ class FloatingControlBarManager {
   /// Shared by the tap path and the voice path so both describe a card identically.
   private func notificationContextSuffix(
     message: ChatMessage,
-    context: FloatingBarNotificationContext?
+    context: FloatingBarNotificationContext?,
+    durableProvenance: String? = nil
   ) -> String {
     var provenanceLines: [String] = []
     if let context {
@@ -4757,6 +4768,12 @@ class FloatingControlBarManager {
       if let detail = context.detail, !detail.isEmpty {
         provenanceLines.append("detail: \(detail)")
       }
+      if let provenanceRef = context.provenanceRef, !provenanceRef.isEmpty {
+        provenanceLines.append("provenance_ref: proactive_deliveries/\(provenanceRef)")
+      }
+    }
+    if let durableProvenance, !durableProvenance.isEmpty {
+      provenanceLines.append("resolved_delivery_provenance: \(durableProvenance)")
     }
 
     let provenanceBlock = provenanceLines.isEmpty ? "" : "\n\n" + provenanceLines.joined(separator: "\n")
@@ -4788,6 +4805,12 @@ class FloatingControlBarManager {
     \(body)\(provenance)
     </floating_bar_notification_context>
     """
+  }
+
+  private static func reuseInterval(for context: FloatingBarNotificationContext?) -> TimeInterval {
+    context?.provenanceRef?.isEmpty == false
+      ? durableProvenanceReuseInterval
+      : recentNotificationReuseInterval
   }
 
   func clearPendingNotificationContext() {

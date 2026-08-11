@@ -887,7 +887,11 @@ actor TaskContextualResurfacingService {
     )
   }
 
-  func observe(_ event: TaskLocalContextEvent) {
+  func observe(_ event: TaskLocalContextEvent) async {
+    if await MainActor.run(body: { ContextBucketsFeature.isEnabled }) {
+      await ContextLedgerResurfacingService.shared.observe(event)
+      return
+    }
     ensureOwnerChangeObserver()
     guard let lease = captureOwnerLease() else {
       resetOwnerState()

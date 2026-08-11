@@ -172,6 +172,31 @@ struct FloatingBarNotificationContext: Equatable {
   let currentActivity: String?
   let reasoning: String?
   let detail: String?
+  /// Durable lookup key into `proactive_deliveries`. Unlike the legacy card
+  /// context, this survives the old 60-second follow-up window.
+  let provenanceRef: String?
+
+  init(
+    sourceTitle: String,
+    assistantId: String,
+    sourceApp: String? = nil,
+    windowTitle: String? = nil,
+    contextSummary: String? = nil,
+    currentActivity: String? = nil,
+    reasoning: String? = nil,
+    detail: String? = nil,
+    provenanceRef: String? = nil
+  ) {
+    self.sourceTitle = sourceTitle
+    self.assistantId = assistantId
+    self.sourceApp = sourceApp
+    self.windowTitle = windowTitle
+    self.contextSummary = contextSummary
+    self.currentActivity = currentActivity
+    self.reasoning = reasoning
+    self.detail = detail
+    self.provenanceRef = provenanceRef
+  }
 }
 
 enum FloatingBarNotificationAction: Equatable {

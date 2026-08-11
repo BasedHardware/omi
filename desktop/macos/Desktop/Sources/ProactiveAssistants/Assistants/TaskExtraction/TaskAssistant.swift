@@ -828,21 +828,7 @@ actor TaskAssistant: ProactiveAssistant {
   /// Normalize (app, window) into a stable dedupe key. Strips Telegram-style trailing
   /// counters and collapses whitespace so the same chat across reopens hashes the same.
   static func analyzedKey(for frame: CapturedFrame) -> String {
-    let app = frame.appName.lowercased()
-    let title = normalizedWindowTitle(frame.windowTitle)
-    return "\(app)::\(title)"
-  }
-
-  private static func normalizedWindowTitle(_ title: String?) -> String {
-    guard let raw = title, !raw.isEmpty else { return "" }
-    var t = raw.lowercased()
-    // Strip Telegram-style trailing message counters: " (247887)" / "(247887)".
-    if let range = t.range(of: #"\s*\(\d+\)\s*$"#, options: .regularExpression) {
-      t.removeSubrange(range)
-    }
-    // Collapse whitespace runs so " foo   bar " == "foo bar".
-    t = t.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
-    return t
+    ContextTitleNormalizer.legacyTaskIdentityKey(appName: frame.appName, windowTitle: frame.windowTitle)
   }
 
   private func pruneStaleDedupeEntries(now: Date, ttl: TimeInterval) {

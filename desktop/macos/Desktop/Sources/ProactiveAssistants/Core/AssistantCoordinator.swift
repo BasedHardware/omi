@@ -78,10 +78,20 @@ class AssistantCoordinator {
   /// and window title changes — one unified path with one delay mechanism.
   /// - Returns: `true` if a context switch was detected and fired.
   @discardableResult
-  func checkContextSwitch(newApp: String, newWindowTitle: String?) -> Bool {
+  func checkContextSwitch(newApp: String, newWindowTitle: String?) async -> Bool {
+    let bucketsEnabled = ContextBucketsFeature.isEnabled
     guard lastTrackedApp != nil else {
       lastTrackedApp = newApp
       lastTrackedWindowTitle = newWindowTitle
+      if bucketsEnabled, !RewindSettings.shared.isAppExcluded(newApp) {
+        do {
+          let transition = try await ContextVisitCoordinator.shared.transition(
+            toApp: newApp, windowTitle: newWindowTitle, departingFrame: nil)
+          Task { await ContextProactivityEngine.shared.contextEntered(transition.arrivingFence) }
+        } catch {
+          logError("Context buckets: failed to persist initial visit", error: error)
+        }
+      }
       return false
     }
 
@@ -104,18 +114,56 @@ class AssistantCoordinator {
 
     // Context is an input to canonical re-evaluation, never permission to
     // notify. Privacy-excluded apps do not even produce a normalized hash.
-    if AuthService.shared.isSignedIn,
+    if !bucketsEnabled, AuthService.shared.isSignedIn,
       !RewindSettings.shared.isAppExcluded(newApp),
       let event = TaskLocalContextEvent.appWindow(
         appName: newApp,
         windowTitle: newWindowTitle
       )
     {
-      let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      let matched = await ContextSubjectBindingService.shared.resolve(event)
       Task { await TaskContextualResurfacingService.shared.observe(matched) }
     }
 
-    // Fire on all assistants
+    if bucketsEnabled {
+      if RewindSettings.shared.isAppExcluded(newApp) {
+        do {
+          let departure = try await ContextVisitCoordinator.shared.leaveForExcludedContext(
+            departingFrame: departingFrame)
+          if departure.qualified, let fence = departure.fence, let departingFrame {
+            Task { await ContextBucketRollupWriter.shared.extract(frame: departingFrame, fence: fence) }
+          }
+        } catch {
+          logError("Context buckets: failed to close visit before excluded context", error: error)
+        }
+        return true
+      }
+      do {
+        let transition = try await ContextVisitCoordinator.shared.transition(
+          toApp: newApp,
+          windowTitle: newWindowTitle,
+          departingFrame: departingFrame)
+        if transition.departingQualified, let departingFence = transition.departingFence, let departingFrame {
+          Task { await ContextBucketRollupWriter.shared.extract(frame: departingFrame, fence: departingFence) }
+        }
+        // TaskAssistant keeps its timer fallback and messaging fast path. The
+        // coordinator is the only exit writer while the flag is enabled.
+        if let taskAssistant = assistants["task-extraction"] {
+          Task {
+            await taskAssistant.onContextSwitch(
+              departingFrame: departingFrame,
+              newApp: newApp,
+              newWindowTitle: newWindowTitle)
+          }
+        }
+        Task { await ContextProactivityEngine.shared.contextEntered(transition.arrivingFence) }
+      } catch {
+        logError("Context buckets: context transition failed", error: error)
+      }
+      return true
+    }
+
+    // Flag-off rollback path: fire today's independent assistants unchanged.
     for (_, assistant) in assistants {
       Task {
         await assistant.onContextSwitch(
@@ -134,6 +182,11 @@ class AssistantCoordinator {
   /// Keep the latest frame reference fresh (call on every capture, even during delay).
   func trackFrame(_ frame: CapturedFrame) {
     lastTrackedFrame = frame
+  }
+
+  func trackedFrameForDirector(startedAt: Date) -> CapturedFrame? {
+    guard let frame = lastTrackedFrame, frame.captureTime >= startedAt else { return nil }
+    return frame
   }
 
   /// Distribute a captured frame to all enabled assistants

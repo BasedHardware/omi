@@ -2552,9 +2552,19 @@ actor RewindDatabase {
       }
     }
 
+    let contextBucketOwnerID = openedForUserId ?? targetUserId()
+    ContextBucketSchema.registerMigration(
+      on: &migrator,
+      defaults: .standard,
+      ownerID: contextBucketOwnerID)
+
     RewindAbandonedVideoChunkQuarantine.registerMigration(on: &migrator)
 
     try migrator.migrate(queue)
+    try ContextBucketSchema.removeMigratedLegacyDefaults(
+      afterMigrating: queue,
+      defaults: .standard,
+      ownerID: contextBucketOwnerID)
   }
 
   // MARK: - OCR Precision Reduction Migration

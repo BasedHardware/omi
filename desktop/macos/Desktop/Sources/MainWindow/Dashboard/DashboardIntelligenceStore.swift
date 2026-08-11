@@ -339,7 +339,7 @@ final class DashboardIntelligenceStore: ObservableObject {
     let opened = await recommendationActionHandler(recommendation)
     guard requireCurrentOwner(ownerScope) else { return false }
     if opened {
-      TaskContextSubjectMatcher.shared.bindRecentContext(
+      await ContextSubjectBindingService.shared.bindRecentContext(
         to: TaskContextSubject(
           kind: recommendation.subjectKind,
           id: recommendation.subjectID,

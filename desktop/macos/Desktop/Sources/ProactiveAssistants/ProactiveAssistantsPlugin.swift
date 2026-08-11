@@ -764,7 +764,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Unified context switch detection (covers app changes, window ID changes, and title changes)
     // Called BEFORE trackFrame so the coordinator's departing frame is from the previous context
     if let appForCheck = realAppName ?? currentApp {
-      let switched = AssistantCoordinator.shared.checkContextSwitch(
+      let switched = await AssistantCoordinator.shared.checkContextSwitch(
         newApp: appForCheck,
         newWindowTitle: windowTitle
       )
@@ -1178,10 +1178,10 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Pause the capture timer while sleeping (same as screen lock)
         self?.captureTimer?.invalidate()
         self?.captureTimer = nil
+        ContextVisitCoordinator.interruptForSleepIfEnabled()
       }
     }
     systemEventObservers.append(sleepObserver)
-
     // System wake from sleep
     let wakeObserver = NotificationCenter.default.addObserver(
       forName: .systemDidWake,
