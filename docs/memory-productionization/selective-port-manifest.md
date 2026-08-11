@@ -217,6 +217,21 @@ with typed persisted strategy versions rather than research environment variable
 
 P0 is closed. Runtime source changes may now begin as separately tested vertical slices.
 
+## P2 pre-registration — PostgreSQL authority, 2026-08-11
+
+The current tree contains no PostgreSQL migration, driver, pool, repository, or real
+database harness. P2 therefore begins with the expand-only authority contract in
+[`postgresql-authority-contract.md`](postgresql-authority-contract.md), not a mechanical
+copy of the SQLite QA schema. The first slice requires a sealed authorized write context,
+transaction-local account and grant coordinates, tenant-bearing composite constraints,
+owner/epoch-scoped exact replay, graph-head compare-and-swap, atomic formation outcome,
+and a real PostgreSQL pool/lock/crash suite before activation.
+
+The supported PostgreSQL major remains open in backend WS-003, and this host currently
+has no PostgreSQL or container runtime. Migration/source work may land inertly, but P2's
+production-semantic gate cannot be claimed until the version and hermetic runtime are
+pinned. No pgvector, route, worker, model, or runtime default is part of this first unit.
+
 ## P1 adoption record — grounded formation, 2026-08-11
 
 The first measured extraction port is selective even within the four named
