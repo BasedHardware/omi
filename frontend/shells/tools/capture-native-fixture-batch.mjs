@@ -427,6 +427,8 @@ function writePreparedInputSet(file, manifestPath, manifest, coordinates, outRoo
 function resolvePreparedArtifact(descriptor, name) {
   const item = descriptor.artifacts?.[name];
   if (!item || typeof item.app !== "string" || !item.app.startsWith("core:")) fail(`prepared input set is missing ${name} app`);
+  if (name === "ios" && item.bundle_id !== "me.omi.proto.omiWebviewProto") fail("prepared iOS bundle id is not the capture shell");
+  if (name === "macos" && item.bundle_id !== null) fail("prepared macOS bundle id must be null");
   const app = ensureCoreDirectory(item.app.slice("core:".length), `${name} app`);
   const buildDir = ensureCoreDirectory(String(item.build_dir || "").replace(/^core:/, ""), `${name} build_dir`);
   const stamp = ensureCoreFile(String(item.stamp || "").replace(/^core:/, ""), `${name} stamp`);

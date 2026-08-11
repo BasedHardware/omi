@@ -176,6 +176,7 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /prepared app contains unsupported symlink/);
   assert.match(source, /artifact\?\.stamp/);
   assert.match(source, /ensureCoreFile\(String\(item\.stamp/);
+  assert.match(source, /prepared iOS bundle id is not the capture shell/);
   assert.match(source, /screenConfig.*geometry/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /elapsedSeconds/);
