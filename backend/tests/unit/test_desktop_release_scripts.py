@@ -222,12 +222,15 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
 
 def test_codemagic_produces_canonical_app_and_strictly_verifiable_dmg():
     workflow = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
+    dmg_helper = (REPO_ROOT / "desktop/macos/scripts/create-desktop-dmgs.sh").read_text(encoding="utf-8")
     smoke = (REPO_ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh").read_text(encoding="utf-8")
     assert workflow.count('APP_NAME: "Omi"') == 1
     assert 'APP_NAME: "omi"' not in workflow
-    assert "xattr -d com.apple.FinderInfo" in workflow
-    assert "xattr -d com.apple.ResourceFork" in workflow
-    assert 'codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"' in workflow
+    assert "scripts/create-desktop-dmgs.sh" in workflow
+    assert "xattr -d com.apple.FinderInfo" in dmg_helper
+    assert "xattr -d com.apple.ResourceFork" in dmg_helper
+    assert 'codesign --verify --deep --strict --verbose=2 "$staged_app"' in dmg_helper
+    assert 'xcrun stapler validate "$staged_app"' in dmg_helper
     assert 'dmg_app_name="$(expected_app_bundle_name)"' in smoke
     assert 'dmg_app="$DMG_MOUNTPOINT/$dmg_app_name"' in smoke
     assert "DMG-contained $dmg_app_name failed deep strict codesign verification" in smoke
