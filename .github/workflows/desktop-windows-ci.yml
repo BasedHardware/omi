@@ -140,15 +140,15 @@ jobs:
           xvfb-run -a bash -euo pipefail -c '
             dist/linux-unpacked/omi-windows --no-sandbox &
             app_pid=$!
-            for _ in $(seq 1 30); do
+            # Electron main process must stay up for the whole readiness window
+            # before we SIGTERM it. Do not name this counter `_`: bash rewrites
+            # `$_` to the last argument of the previous command, so `kill -0
+            # "$app_pid"` would make the window collapse to one iteration.
+            for i in $(seq 1 5); do
               if ! kill -0 "$app_pid" 2>/dev/null; then
                 wait "$app_pid" || true
-                echo "unpacked app exited before readiness window" >&2
+                echo "unpacked app exited before readiness window (second $i)" >&2
                 exit 1
-              fi
-              # Electron main process is up; give the event loop a beat before SIGTERM.
-              if [ "$_" -ge 5 ]; then
-                break
               fi
               sleep 1
             done
