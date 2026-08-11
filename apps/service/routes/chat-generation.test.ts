@@ -22,6 +22,7 @@ import {
 } from "../chat/generation-supervisor";
 import {
   createEmptyChatGenerationContextSource,
+  type ChatGenerationContextSource,
 } from "../chat/generation-context";
 import {
   createScriptedChatGenerationSource,
@@ -81,9 +82,13 @@ const post = (local: ReturnType<typeof createLocalDevService>, body: unknown): P
   }));
 
 interface ChatAdmissionBody {
-  readonly message: ChatMessageRecord;
+  readonly message: ChatMessageRecord & { readonly generationOutcome: null };
   readonly generation: { readonly id: string };
 }
+
+type ChatWireMessage = ChatMessageRecord & {
+  readonly generationOutcome: "completed" | "cancelled" | null;
+};
 
 const readAdmission = async (response: Response): Promise<ChatAdmissionBody> =>
   await response.json() as ChatAdmissionBody;
@@ -302,6 +307,7 @@ describe("ratified chat generation wire red proofs", () => {
       id: "terminal-canonical",
       sender: "human",
       text: "Tell me something useful",
+      generationOutcome: null,
     });
 
     const frames = parseSse(await eventsResponse.text());
@@ -313,7 +319,20 @@ describe("ratified chat generation wire red proofs", () => {
     expect(terminal?.kind).toBe("done");
     const canonical = (await history(local)).find((message) => message.sender === "ai");
     if (terminal?.kind !== "done" || canonical === undefined) throw new TypeError("missing terminal");
+    expect((terminal.message as ChatWireMessage).generationOutcome).toBe("completed");
+    expect((canonical as ChatWireMessage).generationOutcome).toBe("completed");
     expect(JSON.stringify(terminal.message)).toBe(JSON.stringify(canonical));
+
+    const reopened = await generationEvents(local, admission.generation.id);
+    const reopenedFrames = parseSse(await reopened.text());
+    expect(reopenedFrames).toHaveLength(1);
+    expect(reopenedFrames[0]?.data).toEqual(terminal);
+    const healed = await generationEvents(
+      local,
+      admission.generation.id,
+      reopenedFrames[0]!.id,
+    );
+    expect(parseSse(await healed.text())[0]?.data).toEqual(terminal);
     db.close();
   });
 
@@ -457,6 +476,8 @@ describe("ratified chat generation wire red proofs", () => {
     }
     expect(terminal.message.text).toBe("retained partial");
     const canonical = (await history(local)).find((message) => message.sender === "ai");
+    expect((terminal.message as ChatWireMessage).generationOutcome).toBe("cancelled");
+    expect((canonical as ChatWireMessage | undefined)?.generationOutcome).toBe("cancelled");
     expect(JSON.stringify(canonical)).toBe(JSON.stringify(terminal.message));
 
     const repeated = await local.app.request(
@@ -476,6 +497,60 @@ describe("ratified chat generation wire red proofs", () => {
       { headers: { ...auth(local.devToken), "last-event-id": terminalFrames.at(-1)!.id } },
     );
     expect(parseSse(await replayAtTerminal.text())[0]?.data).toEqual(terminal);
+    db.close();
+  });
+
+  test("cancellation before context or provider start retains one empty cancelled assistant", async () => {
+    let releaseContext: ((value: readonly string[]) => void) | null = null;
+    const context: ChatGenerationContextSource = Object.freeze({
+      load: (): Promise<readonly string[]> => new Promise((resolve) => {
+        releaseContext = resolve;
+      }),
+    });
+    let starts = 0;
+    const source: ChatGenerationSource = Object.freeze({
+      start() {
+        starts += 1;
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const stores = createInMemoryLocalServiceStores();
+    const db = new Database(":memory:");
+    const local = createLocalDevService({
+      db,
+      stores,
+      ownerAccountId: ACCOUNT,
+      memoryCount: 0,
+      accountTimezone: "UTC",
+      devSecretLabel: "chat-cancel-before-start-proof",
+      generationSource: source,
+      generationContext: context,
+    });
+    const admitted = await post(local, create("cancel-before-start"));
+    const admission = await readAdmission(admitted);
+    const cancelled = await local.app.request(
+      `/v1/chat-generations/${admission.generation.id}`,
+      { method: "DELETE", headers: auth(local.devToken) },
+    );
+    expect(cancelled.status).toBe(202);
+    if (releaseContext === null) throw new TypeError("generation context did not start loading");
+    releaseContext(Object.freeze([]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const response = await generationEvents(local, admission.generation.id);
+    const frames = parseSse(await response.text());
+    expect(frames).toHaveLength(1);
+    expect(frames[0]?.data).toMatchObject({
+      kind: "cancelled",
+      message: { sender: "ai", text: "", generationOutcome: "cancelled" },
+    });
+    if (frames[0]?.data.kind !== "cancelled") throw new TypeError("missing cancellation");
+    const canonical = (await history(local)).find((message) => message.sender === "ai");
+    expect(JSON.stringify(canonical)).toBe(JSON.stringify(frames[0].data.message));
+    expect(starts).toBe(0);
+    expect(stores.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)?.map(
+      (event) => event.frame.kind,
+    )).toEqual(["accepted", "snapshot", "cancelled"]);
     db.close();
   });
 
@@ -620,6 +695,8 @@ describe("ratified chat generation wire red proofs", () => {
         kind: "failed",
         error: { code: "generation_interrupted", retryable: true },
       });
+      expect(Object.hasOwn(completed.at(-1)?.data ?? {}, "message")).toBe(false);
+      expect(Object.hasOwn(completed.at(-1)?.data ?? {}, "generationOutcome")).toBe(false);
     }
     db.close();
   });
@@ -976,8 +1053,19 @@ describe("ratified chat generation wire red proofs", () => {
         );
         const frames = parseSse(await replay.text());
         expect(frames.map((frame) => frame.event)).toEqual(["cancelled"]);
+        expect(frames[0]?.data).toMatchObject({
+          kind: "cancelled",
+          message: { sender: "ai", text: "", generationOutcome: "cancelled" },
+        });
         expect(starts).toBe(0);
-        expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
+        expect((await history(local)).map((entry) => [
+          entry.sender,
+          entry.text,
+          (entry as ChatWireMessage).generationOutcome,
+        ])).toEqual([
+          ["human", "cancel after restart", null],
+          ["ai", "", "cancelled"],
+        ]);
         expect((await local.app.request("/v1/chat-generations/generation-restart-cancel", {
           method: "DELETE",
           headers: auth(local.devToken),

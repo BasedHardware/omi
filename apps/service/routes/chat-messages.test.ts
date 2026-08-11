@@ -67,10 +67,10 @@ const inertSupervisor = (): ChatGenerationSupervisor => Object.freeze({
 });
 
 const admissionBody = async (response: Response): Promise<{
-  readonly message: ChatMessageRecord;
+  readonly message: ChatMessageRecord & { readonly generationOutcome: null };
   readonly generation: { readonly id: string };
 }> => await response.json() as {
-  readonly message: ChatMessageRecord;
+  readonly message: ChatMessageRecord & { readonly generationOutcome: null };
   readonly generation: { readonly id: string };
 };
 
@@ -99,11 +99,24 @@ describe("ratified /v1/chat-messages route", () => {
     expect(admitted.status).toBe(201);
     expect(admitted.headers.get("content-type")).toContain("application/json");
     expect(await admitted.json()).toEqual({
-      message: expect.objectContaining({
+      message: {
         id: "json-admission",
         text: "message json-admission",
         sender: "human",
-      }),
+        type: "text",
+        createdAt: 1_786_352_400_000,
+        updatedAt: 1_786_352_400_000,
+        chatSessionId: null,
+        appId: null,
+        journalRevision: 1,
+        payloadHash: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        messageSource: "desktop_chat",
+        rating: null,
+        reported: false,
+        revision: expect.stringMatching(/^revision_[0-9a-f]{64}$/),
+        attachments: [],
+        generationOutcome: null,
+      },
       generation: { id: expect.any(String) },
     });
     db.close();
@@ -226,10 +239,11 @@ describe("ratified /v1/chat-messages route", () => {
       });
       expect(first.status).toBe(200);
       const firstPage = await first.json() as {
-        messages: ChatMessageRecord[];
+        messages: Array<ChatMessageRecord & { generationOutcome: null }>;
         page: { olderCursor: string; hasOlder: boolean };
       };
       expect(firstPage.messages.map((message) => message.id)).toEqual(["m3", "m4"]);
+      expect(firstPage.messages.map((message) => message.generationOutcome)).toEqual([null, null]);
 
       // The other WAL connection writes a backdated row after page 1 and before page 2.
       // Its ordering key lands between the two pages, but its insertion sequence is above
@@ -260,10 +274,11 @@ describe("ratified /v1/chat-messages route", () => {
       );
       expect(second.status).toBe(200);
       const secondPage = await second.json() as {
-        messages: ChatMessageRecord[];
+        messages: Array<ChatMessageRecord & { generationOutcome: null }>;
         page: { olderCursor: null; hasOlder: boolean };
       };
       expect(secondPage.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+      expect(secondPage.messages.map((message) => message.generationOutcome)).toEqual([null, null]);
       expect(secondPage.page).toEqual({ olderCursor: null, hasOlder: false });
       const replayedSecond = await local.app.request(secondUrl, {
         headers: AUTHORIZATION(local.devToken),
@@ -407,6 +422,38 @@ describe("ratified /v1/chat-messages route", () => {
       id: "future-vocabulary",
       sender: "unknown",
       type: "unknown",
+    });
+    db.close();
+  });
+
+  test("history fails closed for an assistant row without its authoritative terminal", async () => {
+    const stores = createInMemoryLocalServiceStores();
+    expect(stores.chatMessages.writeCanonical(ACCOUNT, {
+      id: "orphan-assistant",
+      text: "must not be guessed completed",
+      sender: "ai",
+      type: "text",
+      createdAt: 20,
+      updatedAt: 20,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 1,
+      payloadHash: "sha256:orphan-assistant",
+      messageSource: "chat_generation",
+      rating: null,
+      reported: false,
+      revision: "revision-orphan-assistant",
+      attachments: [],
+    }, "generation-without-terminal").kind).toBe("created");
+    const { db, local } = bootInMemory(stores);
+
+    const response = await local.app.request("/v1/chat-messages?limit=100", {
+      headers: AUTHORIZATION(local.devToken),
+    });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: { code: "service_unavailable", retryable: true, action: "retry" },
     });
     db.close();
   });

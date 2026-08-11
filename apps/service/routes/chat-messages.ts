@@ -256,6 +256,53 @@ const parseHistoryQuery = (request: Request): {
 const TERMINAL_KINDS = new Set(["done", "failed", "cancelled"]);
 const isTerminal = (event: ChatGenerationEvent): boolean => TERMINAL_KINDS.has(event.frame.kind);
 
+type ChatGenerationOutcome = "completed" | "cancelled" | null;
+type ChatWireMessage = ChatMessageRecord & {
+  readonly generationOutcome: ChatGenerationOutcome;
+};
+
+const withGenerationOutcome = (
+  message: ChatMessageRecord,
+  generationOutcome: ChatGenerationOutcome,
+): ChatWireMessage => Object.freeze({ ...message, generationOutcome });
+
+const sameCanonicalMessage = (left: ChatMessageRecord, right: ChatMessageRecord): boolean =>
+  canonicalJson(left as unknown as Json) === canonicalJson(right as unknown as Json);
+
+/**
+ * The terminal event is the authority for an assistant's outcome. The message
+ * row deliberately does not duplicate that state, so an orphan or a mismatched
+ * terminal fails closed instead of silently becoming a completed answer.
+ */
+const projectHistoryMessage = (
+  accountId: string,
+  message: ChatMessageRecord,
+  messages: ChatMessagesStore,
+  events: ChatGenerationEventsStore,
+): ChatWireMessage => {
+  if (message.sender !== "ai") return withGenerationOutcome(message, null);
+  const stored = messages.readMessage(accountId, message.id);
+  if (stored === null || stored.generationId === null
+    || !sameCanonicalMessage(stored.message, message)) {
+    throw new TypeError("canonical assistant has no matching generation identity");
+  }
+  const generationEvents = events.listAfter(accountId, stored.generationId, null);
+  const terminals = generationEvents?.filter(isTerminal) ?? [];
+  if (terminals.length !== 1) {
+    throw new TypeError("canonical assistant has no unique terminal event");
+  }
+  const terminal = terminals[0]!;
+  if ((terminal.frame.kind !== "done" && terminal.frame.kind !== "cancelled")
+    || terminal.frame.message === null
+    || !sameCanonicalMessage(terminal.frame.message, message)) {
+    throw new TypeError("canonical assistant disagrees with its terminal event");
+  }
+  return withGenerationOutcome(
+    message,
+    terminal.frame.kind === "done" ? "completed" : "cancelled",
+  );
+};
+
 type ExternalChatGenerationEvent = ChatGenerationEvent & {
   readonly frame: Exclude<ChatGenerationEvent["frame"], { readonly kind: "accepted" }>;
 };
@@ -264,8 +311,27 @@ const isExternalGenerationEvent = (
   event: ChatGenerationEvent,
 ): event is ExternalChatGenerationEvent => event.frame.kind !== "accepted";
 
+const projectExternalFrame = (
+  frame: ExternalChatGenerationEvent["frame"],
+): ExternalChatGenerationEvent["frame"] | Readonly<{
+  kind: "done" | "cancelled";
+  message: ChatWireMessage;
+}> => {
+  if (frame.kind !== "done" && frame.kind !== "cancelled") return frame;
+  if (frame.message === null || frame.message.sender !== "ai") {
+    throw new TypeError("terminal Chat frame has no canonical assistant message");
+  }
+  return Object.freeze({
+    kind: frame.kind,
+    message: withGenerationOutcome(
+      frame.message,
+      frame.kind === "done" ? "completed" : "cancelled",
+    ),
+  });
+};
+
 const encodeSse = (event: ExternalChatGenerationEvent): Uint8Array => new TextEncoder().encode(
-  `event: ${event.frame.kind}\nid: ${event.id}\ndata: ${JSON.stringify(event.frame)}\n\n`,
+  `event: ${event.frame.kind}\nid: ${event.id}\ndata: ${JSON.stringify(projectExternalFrame(event.frame))}\n\n`,
 );
 
 const streamEvents = (input: {
@@ -405,16 +471,23 @@ export const registerChatMessagesRoutes = (
         olderThan: cursor?.olderThan ?? null,
       });
       const nowEpochMilliseconds = deps.nowEpochMilliseconds();
-      const messages = Object.freeze(page.messages.map((message): ChatMessageRecord =>
-        Object.freeze({
-          ...message,
+      const messages = Object.freeze(page.messages.map((message): ChatWireMessage => {
+        const projected = projectHistoryMessage(
+          principal.uid,
+          message,
+          deps.messages,
+          deps.events,
+        );
+        return Object.freeze({
+          ...projected,
           attachments: deps.attachments.projectMessageAttachments({
             accountId: principal.uid,
             messageId: message.id,
             attachments: message.attachments ?? Object.freeze([]),
             nowEpochMilliseconds,
           }),
-        })));
+        });
+      }));
       const oldest = messages[0];
       const cursorIssuedAt = cursor?.issuedAtEpochSeconds ?? deps.nowEpochSeconds();
       const olderCursor = page.hasOlder && oldest !== undefined
@@ -535,6 +608,7 @@ export const registerChatMessagesRoutes = (
       });
       const projectedMessage = Object.freeze({
         ...admission.stored.message,
+        generationOutcome: null,
         attachments: deps.attachments.projectMessageAttachments({
           accountId: principal.uid,
           messageId: admission.stored.message.id,
