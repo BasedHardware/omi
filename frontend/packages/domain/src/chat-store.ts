@@ -334,7 +334,9 @@ export class ChatMessagesStore {
       GENERATION_DELIVERIES_KEY,
       JSON.stringify([...existing.filter((item) => item.generationId !== generationId), next]),
     );
-    if (terminal.kind !== "failed") {
+    if (terminal.kind === "done") {
+      await this.projection.upsertServerRows([terminal.message]);
+    } else if (terminal.kind === "cancelled" && terminal.message !== null) {
       await this.projection.upsertServerRows([terminal.message]);
     }
     this.active.delete(generationId);

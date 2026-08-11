@@ -123,6 +123,13 @@ function failedGeneration(): string {
   );
 }
 
+function emptyCancelledGeneration(): string {
+  return (
+    sseEvent("event-snapshot", "snapshot", { kind: "snapshot", text: "" }) +
+    sseEvent("event-cancelled", "cancelled", { kind: "cancelled", message: null })
+  );
+}
+
 class StoreTestStream implements BridgePayloadStream {
   cancelled = false;
 
@@ -359,6 +366,40 @@ test("an admitted human send and a failed assistant generation remain two visibl
     expectedDeliveries,
     "the failed assistant outcome remains visible after app restart",
   );
+});
+
+test("empty cancellation is durable terminal state and never a fabricated assistant record", async () => {
+  const disk = new MemoryStore();
+  const env = new ManualEnv();
+  const http = new ScriptedHttp();
+  const streams = new StoreTestStreamPort([{ chunks: [emptyCancelledGeneration()] }]);
+  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http, streams);
+
+  await store.send("stop before there is assistant content");
+  const clientMessageId = (await store.list())[0]!.id;
+  http.respond(...successfulSend(clientMessageId, "stop before there is assistant content"));
+  await env.advance(10);
+  await drainMicrotasks();
+
+  assert.deepEqual(
+    (await store.list()).map(({ sender, text, generationOutcome }) => ({ sender, text, generationOutcome })),
+    [{ sender: "human", text: "stop before there is assistant content", generationOutcome: null }],
+    "null cancellation leaves the admitted human and creates no empty assistant row",
+  );
+  assert.deepEqual(await store.generationDeliveries(), [{
+    generationId: `generation-${clientMessageId}`,
+    clientMessageId,
+    terminal: { kind: "cancelled", message: null },
+  }]);
+  assert.deepEqual(store.activeGenerations(), []);
+
+  const reopened = await ChatMessagesStore.open(
+    disk.openBridge("u"),
+    new ManualEnv(),
+    new ScriptedHttp(),
+  );
+  assert.deepEqual(await reopened.generationDeliveries(), await store.generationDeliveries());
+  assert.equal((await reopened.list()).filter((message) => message.sender === "ai").length, 0);
 });
 
 test("the same op replayed produces the same payload hash and does not duplicate a message", async () => {

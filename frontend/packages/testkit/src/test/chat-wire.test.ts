@@ -141,20 +141,61 @@ test("a history page with duplicate message ids is rejected intact", () => {
   );
 });
 
-test("cancelled and completed terminals are distinct and cancellation retains the partial", () => {
-  // red-proof: remove the cancelled arm or make its message nullable. This
-  // construction or the retained-partial read stops compiling.
+test("cancelled and completed terminals are distinct across retained and empty cancellation", () => {
+  // red-proof: collapse cancelled into done, forbid null, or widen a non-null
+  // cancellation away from the cancelled outcome. Compilation or the exact
+  // retained/empty assertions fail.
   const partial = {
     ...canonicalMessage("assistant-partial-01", "ai", "The retained partial"),
     generationOutcome: "cancelled" as const,
   };
-  const cancelled: ChatTerminalFrame = { kind: "cancelled", message: partial };
+  const cancelledWithPartial: ChatTerminalFrame = { kind: "cancelled", message: partial };
+  const cancelledWithoutContent: ChatTerminalFrame = { kind: "cancelled", message: null };
   const completed: ChatTerminalFrame = {
     kind: "done",
     message: canonicalMessage("assistant-complete-01", "ai", "The complete answer"),
   };
-  assert.notEqual(cancelled.kind, completed.kind);
-  assert.equal(cancelled.message.text, "The retained partial");
+  assert.notEqual(cancelledWithPartial.kind, completed.kind);
+  assert.equal(cancelledWithPartial.message?.text, "The retained partial");
+  assert.equal(cancelledWithoutContent.message, null);
+});
+
+test("ratified terminal parser accepts only nullable cancelled message arm A", () => {
+  const partial = {
+    ...canonicalMessage("assistant-cancelled-wire", "ai", "Retained partial"),
+    generationOutcome: "cancelled" as const,
+  };
+  assert.deepEqual(
+    wireToChatGenerationFrame({ kind: "cancelled", message: partial }),
+    { kind: "cancelled", message: partial },
+  );
+  assert.deepEqual(
+    wireToChatGenerationFrame({ kind: "cancelled", message: null }),
+    { kind: "cancelled", message: null },
+    "platform empty cancellation is explicit null, not an omitted or fabricated assistant",
+  );
+  assert.equal(
+    wireToChatGenerationFrame({ kind: "cancelled" }),
+    null,
+    "missing message is not the ratified explicit no-content state",
+  );
+  assert.equal(
+    wireToChatGenerationFrame({
+      kind: "cancelled",
+      message: canonicalMessage("assistant-wrong-outcome", "ai", "Not cancelled"),
+    }),
+    null,
+  );
+  assert.equal(wireToChatGenerationFrame({ kind: "done", message: null }), null);
+  assert.equal(
+    wireToChatGenerationFrame({
+      kind: "failed",
+      error: { code: "provider_down", retryable: true },
+      message: null,
+    }),
+    null,
+    "failed remains message-less rather than borrowing cancellation null",
+  );
 });
 
 test("exported chat types exclude illegal message, terminal, and page states", () => {
@@ -174,6 +215,17 @@ test("exported chat types exclude illegal message, terminal, and page states", (
   const doneHuman: ChatTerminalFrame = { kind: "done", message: human };
   // @ts-expect-error cancelled frames require generationOutcome=cancelled
   const cancelledCompleted: ChatTerminalFrame = { kind: "cancelled", message: completed };
+  const cancelledEmpty: ChatTerminalFrame = { kind: "cancelled", message: null };
+  // @ts-expect-error cancellation must carry the explicit message coordinate, even when empty
+  const cancelledMissing: ChatTerminalFrame = { kind: "cancelled" };
+  // @ts-expect-error completed terminal always carries a non-null completed message
+  const doneEmpty: ChatTerminalFrame = { kind: "done", message: null };
+  const failedWithMessage: ChatTerminalFrame = {
+    kind: "failed",
+    error: { code: "provider_down", retryable: true },
+    // @ts-expect-error failed terminal is message-less
+    message: null,
+  };
   // @ts-expect-error an AI message cannot carry the human-only null outcome
   const aiWithoutTerminalOutcome: ChatMessage = { ...completed, generationOutcome: null };
   // @ts-expect-error hasOlder=true requires an opaque older cursor
@@ -183,6 +235,10 @@ test("exported chat types exclude illegal message, terminal, and page states", (
   assert.equal(acceptedFrame.kind, "accepted");
   assert.equal(doneHuman.kind, "done");
   assert.equal(cancelledCompleted.kind, "cancelled");
+  assert.equal(cancelledEmpty.message, null);
+  assert.equal(cancelledMissing.kind, "cancelled");
+  assert.equal(doneEmpty.kind, "done");
+  assert.equal(failedWithMessage.kind, "failed");
   assert.equal(aiWithoutTerminalOutcome.generationOutcome, null);
   assert.equal(missingOlderCursor.olderCursor, null);
 });
