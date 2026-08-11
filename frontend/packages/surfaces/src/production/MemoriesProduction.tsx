@@ -182,7 +182,7 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
     : { kind: "live", origin: "bridge" }) satisfies SurfaceDataSource;
 
   return (
-    <main className="production-shell" data-production-shell="true" data-route="memories" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`memories:visible:${visibleRows.length}:total:${rows.length}`}>
+    <main className="production-shell" aria-label={t(locale, "memories.title")} data-production-shell="true" data-route="memories" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`memories:visible:${visibleRows.length}:total:${rows.length}`}>
       <ProductionChrome locale={locale} active="memories" placement="top" />
       <section className="desktop-page-panel">
       <ProductionLibrarySegment locale={locale} active="memories" />

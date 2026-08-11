@@ -323,7 +323,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   };
 
   return (
-    <main ref={shellRef} className="production-shell tasks-production-shell" data-production-shell="true" data-route="tasks" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`tasks:visible:${visibleCount}:total:${rows.length}`}>
+    <main ref={shellRef} className="production-shell tasks-production-shell" aria-label={translate("tasks.title")} data-production-shell="true" data-route="tasks" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`tasks:visible:${visibleCount}:total:${rows.length}`}>
       <ProductionChrome locale={locale} active="tasks" placement="top" commandHandlers={{
         "new-task": openCreate,
         "navigate-task": navigateTask,

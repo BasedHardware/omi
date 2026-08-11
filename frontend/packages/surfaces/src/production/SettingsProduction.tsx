@@ -159,7 +159,7 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
         : null;
 
   return (
-    <main className="production-shell settings-production-shell" data-production-shell="true" data-route="settings" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={"settings:sections:account-plan-appearance:appearance-control:" + (showAppearance ? "shown" : "hidden") + ":signout-control:" + (showPlan ? "shown" : "hidden")}>
+    <main className="production-shell settings-production-shell" aria-label={t(locale, "settings.title")} data-production-shell="true" data-route="settings" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={"settings:sections:account-plan-appearance:appearance-control:" + (showAppearance ? "shown" : "hidden") + ":signout-control:" + (showPlan ? "shown" : "hidden")}>
       <ProductionChrome locale={locale} active="settings" placement="top" />
       <section className="desktop-page-panel">
         <ProductionPageHeader className="settings-header" eyebrow={t(locale, "nav.settings")} title={t(locale, "settings.title")} description={t(locale, "settings.subtitle")} />

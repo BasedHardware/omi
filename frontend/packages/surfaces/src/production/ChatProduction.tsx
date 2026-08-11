@@ -458,7 +458,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
   ).length;
 
   return (
-    <main className="production-shell" data-production-shell="true" data-route="chat" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-chat-admission-count={admittedUserMessages} data-consumer-semantic={`chat:messages:${messages.length}:admitted:${admittedUserMessages}:streaming:${messages.some((message) => message.delivery.kind === "streaming") ? 1 : 0}:staging:${stagingAvailable ? 1 : 0}`}>
+    <main className="production-shell" aria-label={t(locale, "chat.title")} data-production-shell="true" data-route="chat" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-chat-admission-count={admittedUserMessages} data-consumer-semantic={`chat:messages:${messages.length}:admitted:${admittedUserMessages}:streaming:${messages.some((message) => message.delivery.kind === "streaming") ? 1 : 0}:staging:${stagingAvailable ? 1 : 0}`}>
       <ProductionChrome locale={locale} active="chat" placement="top" commandHandlers={{
         "send-chat": send,
       }} commandEnabled={{ "send-chat": canSend }} />
