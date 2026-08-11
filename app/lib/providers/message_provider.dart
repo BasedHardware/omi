@@ -320,9 +320,9 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void clearSelectedFile(int index) {
-    selectedFiles.removeAt(index);
-    selectedFileTypes.removeAt(index);
-    uploadedFiles.removeAt(index);
+    if (index < selectedFiles.length) selectedFiles.removeAt(index);
+    if (index < selectedFileTypes.length) selectedFileTypes.removeAt(index);
+    if (index < uploadedFiles.length) uploadedFiles.removeAt(index);
     notifyListeners();
   }
 
@@ -350,7 +350,13 @@ class MessageProvider extends ChangeNotifier {
   Future<List<MessageFile>?> uploadFiles(List<File> files, String? appId) async {
     if (files.isNotEmpty) {
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
-      var res = await uploadFilesServer(files, appId: appId);
+      List<MessageFile>? res;
+      try {
+        res = await uploadFilesServer(files, appId: appId);
+      } catch (e) {
+        Logger.debug('uploadFiles failed: $e');
+        res = null;
+      }
       if (res != null) {
         uploadedFiles.addAll(res);
       } else {
