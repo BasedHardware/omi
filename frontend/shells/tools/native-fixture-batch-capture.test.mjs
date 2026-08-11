@@ -159,6 +159,8 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /buildIos\(manifest/);
   assert.match(source, /status_bar.*override/);
   assert.match(source, /status_bar.*clear/);
+  assert.match(source, /let launched = false/);
+  assert.match(source, /finally \{\n    if \(launched\)/);
   assert.match(source, /batch-v1-/);
   assert.match(source, /omi\.polish\.screenshot\/v1/);
   assert.match(source, /batch_members/);
