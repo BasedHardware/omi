@@ -263,6 +263,7 @@ export const EN_MESSAGES = {
   "chat.attachmentReady": "Attached {mimeType}, {sizeBytes} bytes",
   "chat.attachmentMetadata": "{mediaType}, {sizeBytes} bytes",
   "chat.attachmentContentUnavailable": "Content unavailable.",
+  "chat.retainedAttachmentCount": "{count} attachments were retained with this unsent message. Their private references stay hidden.",
   "chat.attachmentLimit": "Up to {count} attachments per message.",
   "chat.attachmentLimitReached": "Attachment limit reached: {count}.",
   "chat.attachmentCapUnknown": "Attachments stay unavailable until the server reports its limit.",

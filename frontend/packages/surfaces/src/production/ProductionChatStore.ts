@@ -28,7 +28,8 @@ export type { StagedChatAttachment } from "@omi-core/contracts";
 export interface RetainedChatSend {
   readonly opId: string;
   readonly text: string | null;
-  readonly attachmentIds: readonly string[] | null;
+  /** Safe recovery metadata. Opaque staged ids never cross into the UI port. */
+  readonly attachmentCount: number | null;
 }
 
 /** Production Chat surface port. Fixtures and the live adapter share it. */
@@ -157,7 +158,7 @@ async function projectedHistory(store: ChatMessagesStore): Promise<readonly Chat
 function retainedChatSend(letter: import("@omi-core/contracts").DeadLetter): RetainedChatSend {
   const payload = deadLetterPayload(letter);
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-    return { opId: letter.opId, text: null, attachmentIds: null };
+    return { opId: letter.opId, text: null, attachmentCount: null };
   }
   const op = payload as Record<string, unknown>;
   if (
@@ -167,12 +168,12 @@ function retainedChatSend(letter: import("@omi-core/contracts").DeadLetter): Ret
     !op["attachmentIds"].every((id) =>
       typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u.test(id))
   ) {
-    return { opId: letter.opId, text: null, attachmentIds: null };
+    return { opId: letter.opId, text: null, attachmentCount: null };
   }
   return {
     opId: letter.opId,
     text: op["text"],
-    attachmentIds: [...op["attachmentIds"]] as string[],
+    attachmentCount: op["attachmentIds"].length,
   };
 }
 

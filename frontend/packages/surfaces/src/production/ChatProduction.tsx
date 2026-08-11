@@ -558,10 +558,10 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                     {letter.text}
                   </pre>
                 )}
-                {letter.attachmentIds !== null && letter.attachmentIds.length > 0 && (
-                  <ol className="chat-dead-attachment-ids" aria-label={t(locale, "chat.attachments")}>
-                    {letter.attachmentIds.map((id) => <li key={id}><code>{id}</code></li>)}
-                  </ol>
+                {letter.attachmentCount !== null && letter.attachmentCount > 0 && (
+                  <p className="chat-dead-attachment-summary">
+                    {t(locale, "chat.retainedAttachmentCount", { count: letter.attachmentCount })}
+                  </p>
                 )}
                 <button type="button" onClick={() => void run(() => store.discardDeadLetter(letter.opId))}>
                   {t(locale, "dead.remove")}
