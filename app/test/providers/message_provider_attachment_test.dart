@@ -21,15 +21,16 @@ void main() {
   });
 
   // Regression: a failed upload batch must only remove itself from the tray —
-  // earlier successfully uploaded selections and their uploadedFiles entries stay.
+  // earlier successfully uploaded selections and their uploadedFiles entries stay,
+  // even when the failed file shares its path with an earlier selection.
   test('uploadFiles failure removes only the failed batch from the selection', () async {
     final provider = MessageProvider();
-    provider.selectedFiles.add(File('/tmp/uploaded_ok.png'));
+    final uploaded = File('/tmp/same.png');
+    provider.selectedFiles.add(uploaded);
     provider.selectedFileTypes.add('image');
-    provider.uploadedFiles
-        .add(MessageFile('oai-1', null, 'uploaded_ok.png', 'image/png', 'ok-1', DateTime(2026), null));
+    provider.uploadedFiles.add(MessageFile('oai-1', null, 'same.png', 'image/png', 'ok-1', DateTime(2026), null));
 
-    final failed = File('/tmp/failed.png');
+    final failed = File('/tmp/same.png');
     provider.selectedFiles.add(failed);
     provider.selectedFileTypes.add('image');
 
@@ -37,16 +38,19 @@ void main() {
       await provider.uploadFiles([failed], null);
     } catch (_) {}
 
-    expect(provider.selectedFiles.map((f) => f.path), ['/tmp/uploaded_ok.png']);
+    expect(provider.selectedFiles, [uploaded]);
     expect(provider.selectedFileTypes, ['image']);
     expect(provider.uploadedFiles.map((f) => f.id), ['ok-1']);
   });
 
-  test('clearSelectedFile out-of-range index is a no-op', () {
+  test('clearSelectedFile out-of-range or negative index is a no-op', () {
     final provider = MessageProvider();
+    provider.uploadedFiles.add(MessageFile('oai-1', null, 'stale.png', 'image/png', 'stale-1', DateTime(2026), null));
 
     provider.clearSelectedFile(0);
+    provider.clearSelectedFile(-1);
 
     expect(provider.selectedFiles, isEmpty);
+    expect(provider.uploadedFiles.length, 1);
   });
 }

@@ -320,8 +320,9 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void clearSelectedFile(int index) {
-    if (index < selectedFiles.length) selectedFiles.removeAt(index);
-    if (index < selectedFileTypes.length) selectedFileTypes.removeAt(index);
+    if (index < 0 || index >= selectedFiles.length) return;
+    selectedFiles.removeAt(index);
+    selectedFileTypes.removeAt(index);
     if (index < uploadedFiles.length) uploadedFiles.removeAt(index);
     notifyListeners();
   }
@@ -360,9 +361,8 @@ class MessageProvider extends ChangeNotifier {
       if (res != null) {
         uploadedFiles.addAll(res);
       } else {
-        final failedPaths = files.map((e) => e.path).toSet();
         for (var i = selectedFiles.length - 1; i >= 0; i--) {
-          if (failedPaths.contains(selectedFiles[i].path)) {
+          if (files.any((f) => identical(f, selectedFiles[i]))) {
             selectedFiles.removeAt(i);
             selectedFileTypes.removeAt(i);
           }
