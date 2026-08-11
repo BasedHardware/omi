@@ -12,7 +12,7 @@ import { useScrollEdges } from '@/hooks/useScrollEdges';
 import { ChatComposer, type ChatComposerHandle } from '@/components/chat/ChatComposer';
 import { ChatTranscript } from '@/components/chat/ChatTranscript';
 import { RecordingStage } from '@/components/chat/RecordingStage';
-import { useRecordingContext } from '@/components/recording/RecordingContext';
+import { useGeminiLive } from '@/hooks/useGeminiLive';
 import { GoalCard } from './GoalCard';
 import { GoalComposer } from './GoalComposer';
 import { GoalDetailSheet } from './GoalDetailSheet';
@@ -55,22 +55,8 @@ export function HomePage() {
     error,
     sendMessage,
     loadHistory,
+    appendRealtimeExchange,
   } = chat;
-
-  const {
-    state: recordingState,
-    segments,
-    duration,
-    micLevel,
-    startRecording,
-    pauseRecording,
-    resumeRecording,
-    stopRecording,
-  } = useRecordingContext();
-  const isCapturing =
-    recordingState === 'recording' ||
-    recordingState === 'paused' ||
-    recordingState === 'initializing';
 
   const {
     items: tasks,
@@ -95,6 +81,8 @@ export function HomePage() {
   const askRef = useRef<ChatComposerHandle>(null);
   const currentsRef = useRef<HTMLDivElement>(null);
   const { ref: scrollRef, edges } = useScrollEdges<HTMLDivElement>();
+  const live = useGeminiLive({ messages, onExchange: appendRealtimeExchange });
+  const isLive = live.state !== 'idle';
 
   // Track the goal by id, not by value, so the sheet keeps showing live data
   // after an optimistic write replaces the object.
@@ -134,9 +122,9 @@ export function HomePage() {
 
   return (
     <div className="flex h-full flex-col">
-      {error && (
+      {(error || live.error) && (
         <div className="flex-shrink-0 border-b border-error/20 bg-error/10 px-6 py-3">
-          <p className="text-sm text-error">{error}</p>
+          <p className="text-sm text-error">{error || live.error}</p>
         </div>
       )}
 
@@ -201,7 +189,7 @@ export function HomePage() {
                 className={cn(
                   'mx-auto flex max-w-[560px] flex-col items-center justify-center px-4 py-8 sm:px-6 sm:py-12',
                   historyMessages.length > 0
-                    ? 'min-h-[calc(100%-5rem)] scroll-mt-20'
+                    ? 'min-h-[calc(100%-14rem)] scroll-mt-56'
                     : 'min-h-full',
                 )}
               >
@@ -323,16 +311,16 @@ export function HomePage() {
       <div className="flex-shrink-0 px-4 pb-4 pt-3 sm:px-6 sm:pb-6">
         <div className="mx-auto w-full max-w-[640px] space-y-3 md:max-w-[720px] xl:max-w-[820px]">
           <AnimatePresence>
-            {isCapturing && (
+            {isLive && (
               <RecordingStage
-                segments={segments}
-                duration={duration}
-                level={micLevel}
-                isPaused={recordingState === 'paused'}
-                isInitializing={recordingState === 'initializing'}
-                onPause={pauseRecording}
-                onResume={resumeRecording}
-                onStop={() => void stopRecording()}
+                segments={live.segments}
+                duration={live.duration}
+                level={live.level}
+                isPaused={live.state === 'paused'}
+                isInitializing={live.state === 'connecting'}
+                onPause={live.pause}
+                onResume={live.resume}
+                onStop={live.stop}
               />
             )}
           </AnimatePresence>
@@ -343,14 +331,15 @@ export function HomePage() {
             isStreaming={isStreaming}
             disabled={isLoading}
             appId={selectedAppId ?? undefined}
-            placeholder={
-              isCapturing ? 'Ask about what you are recording...' : 'Ask anything...'
-            }
+            placeholder={isLive ? 'Talk with Omi live...' : 'Ask anything...'}
             recording={{
-              isActive: isCapturing,
-              level: micLevel,
-              onStart: () => void startRecording(),
-              onStop: () => void stopRecording(),
+              isActive: isLive,
+              level: live.level,
+              onStart: () => {
+                setExchangeStart((current) => current ?? messages.length);
+                void live.start();
+              },
+              onStop: live.stop,
             }}
           />
         </div>

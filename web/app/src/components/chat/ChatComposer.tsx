@@ -4,7 +4,7 @@ import { useRef, useState, useEffect, useImperativeHandle } from 'react';
 import { ArrowUp, Paperclip } from 'lucide-react';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
 import { InlineVoiceRecorder } from './VoiceRecorder';
-import { OmiOrb } from '@/components/ui/OmiOrb';
+import { OmiPulseMark } from '@/components/ui/OmiPulseMark';
 import { uploadChatFiles } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -279,12 +279,11 @@ export function ChatComposer({
               recording.isActive ? 'Stop conversation' : 'Start a live conversation'
             }
           >
-            <OmiOrb
-              state={recording.isActive ? 'listening' : 'idle'}
-              motion="pulse"
+            <OmiPulseMark
               level={recording.isActive ? Math.min(0.3, Math.max(0, recording.level)) : 0}
               size={20}
-              paused={!recording.isActive}
+              active={recording.isActive}
+              testId="composer-live-mark"
             />
           </button>
         )}

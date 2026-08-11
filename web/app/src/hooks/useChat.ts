@@ -5,6 +5,7 @@ import {
   getMessages,
   sendMessageStream,
   clearMessages as clearMessagesApi,
+  saveRealtimeMessage,
 } from '@/lib/api';
 import type { ClientMessage, MessageChunk } from '@/types/conversation';
 import type { ChatContextInfo } from '@/components/chat/ChatContext';
@@ -33,6 +34,7 @@ interface UseChatReturn {
   ) => Promise<void>;
   clearHistory: () => Promise<void>;
   loadHistory: () => Promise<void>;
+  appendRealtimeExchange: (humanText: string, aiText: string) => Promise<void>;
 }
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
@@ -223,6 +225,52 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     }
   }, [appId, chatSessionId, claimRequest]);
 
+  const appendRealtimeExchange = useCallback(
+    async (humanText: string, aiText: string) => {
+      const isCurrent = claimRequest();
+      const entries = [
+        { text: humanText.trim(), sender: 'human' as const },
+        { text: aiText.trim(), sender: 'ai' as const },
+      ].filter((entry) => entry.text);
+      if (entries.length === 0) return;
+
+      const optimistic = entries.map((entry) => ({
+        id: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+        text: entry.text,
+        sender: entry.sender,
+        type: 'text' as const,
+        from_external_integration: false,
+        files: [],
+        memories: [],
+        ask_for_nps: false,
+        message_source: 'realtime_voice',
+        chat_session_id: chatSessionId,
+        app_id: appId,
+      }));
+
+      setMessages((current) => [...current, ...optimistic]);
+      setError(null);
+
+      try {
+        for (const message of optimistic) {
+          await saveRealtimeMessage({
+            text: message.text,
+            sender: message.sender,
+            clientMessageId: message.id,
+            appId,
+            sessionId: chatSessionId,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to save live conversation:', err);
+        if (isCurrent()) setError('Live conversation was not saved to chat history');
+        throw err;
+      }
+    },
+    [appId, chatSessionId, claimRequest],
+  );
+
   return {
     messages,
     isLoading,
@@ -233,5 +281,6 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     sendMessage,
     clearHistory,
     loadHistory,
+    appendRealtimeExchange,
   };
 }

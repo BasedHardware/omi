@@ -592,6 +592,64 @@ export async function deleteChatSession(id: string): Promise<void> {
   await fetchWithAuth(`/v2/chat-sessions/${id}`, { method: 'DELETE' });
 }
 
+export interface RealtimeSessionToken {
+  provider: 'gemini';
+  token: string;
+  expires_at?: string;
+}
+
+export interface RealtimeUsageReport {
+  input_text_tokens: number;
+  input_audio_tokens: number;
+  input_cached_tokens: number;
+  output_text_tokens: number;
+  output_audio_tokens: number;
+}
+
+interface SavedRealtimeMessage {
+  id: string;
+  created_at: string;
+  session_id?: string | null;
+}
+
+export async function createGeminiLiveSession(): Promise<RealtimeSessionToken> {
+  return fetchWithAuth<RealtimeSessionToken>('/v2/realtime/session', {
+    method: 'POST',
+    body: JSON.stringify({ provider: 'gemini' }),
+  });
+}
+
+export async function saveRealtimeMessage(params: {
+  text: string;
+  sender: 'human' | 'ai';
+  clientMessageId: string;
+  appId?: string;
+  sessionId?: string | null;
+}): Promise<SavedRealtimeMessage> {
+  return fetchWithAuth<SavedRealtimeMessage>('/v2/desktop/messages', {
+    method: 'POST',
+    body: JSON.stringify({
+      text: params.text,
+      sender: params.sender,
+      app_id: params.appId,
+      session_id: params.sessionId,
+      client_message_id: params.clientMessageId,
+      message_source: 'realtime_voice',
+    }),
+  });
+}
+
+export async function reportGeminiLiveUsage(usage: RealtimeUsageReport): Promise<void> {
+  await fetchWithAuth('/v2/realtime/usage', {
+    method: 'POST',
+    body: JSON.stringify({
+      provider: 'gemini',
+      model: 'gemini-3.1-flash-live-preview',
+      ...usage,
+    }),
+  });
+}
+
 // ============================================================================
 // Goals & Scores API
 // ============================================================================

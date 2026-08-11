@@ -5,7 +5,14 @@ vi.mock('@/lib/clientDevice', () => ({
   getWebDeviceIdHash: vi.fn().mockResolvedValue('device'),
 }));
 
-const { clearMessages, getMessages, sendMessageStream } = await import('@/lib/api');
+const {
+  clearMessages,
+  getMessages,
+  sendMessageStream,
+  createGeminiLiveSession,
+  saveRealtimeMessage,
+  reportGeminiLiveUsage,
+} = await import('@/lib/api');
 
 /**
  * Every `/v2/messages` call must carry the session the reader has selected.
@@ -90,5 +97,57 @@ describe('chat session routing', () => {
     const url = requestedUrls()[0];
     expect(url).toContain('app_id=app-1');
     expect(url).toContain('chat_session_id=sess-9');
+  });
+
+  it('mints managed Gemini Live sessions through the authenticated proxy', async () => {
+    await createGeminiLiveSession();
+
+    const [url, request] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(url)).toBe('/api/proxy/v2/realtime/session');
+    expect(request?.method).toBe('POST');
+    expect(JSON.parse(String(request?.body))).toEqual({ provider: 'gemini' });
+  });
+
+  it('persists live turns into the selected chat history', async () => {
+    await saveRealtimeMessage({
+      text: 'Hello Omi',
+      sender: 'human',
+      clientMessageId: 'live-1',
+      appId: 'app-1',
+      sessionId: 'sess-9',
+    });
+
+    const [url, request] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(url)).toBe('/api/proxy/v2/desktop/messages');
+    expect(JSON.parse(String(request?.body))).toEqual({
+      text: 'Hello Omi',
+      sender: 'human',
+      app_id: 'app-1',
+      session_id: 'sess-9',
+      client_message_id: 'live-1',
+      message_source: 'realtime_voice',
+    });
+  });
+
+  it('reports managed Gemini Live usage', async () => {
+    await reportGeminiLiveUsage({
+      input_text_tokens: 1,
+      input_audio_tokens: 2,
+      input_cached_tokens: 3,
+      output_text_tokens: 4,
+      output_audio_tokens: 5,
+    });
+
+    const [url, request] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(url)).toBe('/api/proxy/v2/realtime/usage');
+    expect(JSON.parse(String(request?.body))).toEqual({
+      provider: 'gemini',
+      model: 'gemini-3.1-flash-live-preview',
+      input_text_tokens: 1,
+      input_audio_tokens: 2,
+      input_cached_tokens: 3,
+      output_text_tokens: 4,
+      output_audio_tokens: 5,
+    });
   });
 });

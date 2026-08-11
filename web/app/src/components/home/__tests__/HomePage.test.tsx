@@ -4,6 +4,8 @@ import { HomePage } from '@/components/home/HomePage';
 
 const sendMessage = vi.fn(async () => undefined);
 const loadHistory = vi.fn(async () => undefined);
+const appendRealtimeExchange = vi.fn(async () => undefined);
+const startLive = vi.fn(async () => undefined);
 
 vi.mock('@tschk/moonshine-next/image', () => ({
   default: ({ alt }: React.ComponentProps<'img'>) => <img alt={alt} />,
@@ -37,19 +39,21 @@ vi.mock('@/components/chat/ChatContext', () => ({
       error: null,
       sendMessage,
       loadHistory,
+      appendRealtimeExchange,
     },
   }),
 }));
-vi.mock('@/components/recording/RecordingContext', () => ({
-  useRecordingContext: () => ({
+vi.mock('@/hooks/useGeminiLive', () => ({
+  useGeminiLive: () => ({
     state: 'idle',
     segments: [],
     duration: 0,
-    micLevel: 0,
-    startRecording: vi.fn(),
-    pauseRecording: vi.fn(),
-    resumeRecording: vi.fn(),
-    stopRecording: vi.fn(),
+    level: 0,
+    error: null,
+    start: startLive,
+    pause: vi.fn(),
+    resume: vi.fn(),
+    stop: vi.fn(),
   }),
 }));
 vi.mock('@/hooks/useGoals', () => ({
@@ -90,10 +94,21 @@ vi.mock('@/components/chat/ChatTranscript', () => ({
   ),
 }));
 vi.mock('@/components/chat/ChatComposer', () => ({
-  ChatComposer: ({ onSend }: { onSend: (text: string, fileIds: string[]) => void }) => (
-    <button type="button" onClick={() => onSend('New question', [])}>
-      Send test
-    </button>
+  ChatComposer: ({
+    onSend,
+    recording,
+  }: {
+    onSend: (text: string, fileIds: string[]) => void;
+    recording: { onStart: () => void };
+  }) => (
+    <>
+      <button type="button" onClick={() => onSend('New question', [])}>
+        Send test
+      </button>
+      <button type="button" onClick={recording.onStart}>
+        Start live test
+      </button>
+    </>
   ),
 }));
 vi.mock('@/components/home/GoalComposer', () => ({ GoalComposer: () => null }));
@@ -121,7 +136,7 @@ describe('Home Currents ordering', () => {
     expect(
       history.compareDocumentPosition(currents) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(currents).toHaveClass('scroll-mt-20', 'min-h-[calc(100%-5rem)]');
+    expect(currents).toHaveClass('scroll-mt-56', 'min-h-[calc(100%-14rem)]');
     expect(goals).toHaveClass('grid');
     expect(goals).not.toHaveClass('sm:grid-cols-2');
     expect(
@@ -135,5 +150,13 @@ describe('Home Currents ordering', () => {
       currents.compareDocumentPosition(currentChat) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(sendMessage).toHaveBeenCalledWith('New question', []);
+  });
+
+  it('routes the composer live control through Gemini Live', () => {
+    render(<HomePage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start live test' }));
+
+    expect(startLive).toHaveBeenCalledTimes(1);
   });
 });

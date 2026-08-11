@@ -3,6 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RecordingStage } from '@/components/chat/RecordingStage';
 import type { TranscriptSegment } from '@/components/recording/RecordingContext';
 
+const reducedMotion = vi.hoisted(() => ({ value: false }));
+
+vi.mock('framer-motion', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('framer-motion')>()),
+  useReducedMotion: () => reducedMotion.value,
+}));
+
 function segment(id: string, text: string): TranscriptSegment {
   return { id, text, speaker: 0, isUser: true, timestamp: 0 };
 }
@@ -27,6 +34,7 @@ function renderStage(props: Partial<Parameters<typeof RecordingStage>[0]> = {}) 
 }
 
 beforeEach(() => {
+  reducedMotion.value = false;
   // jsdom has no layout, so the anchor's scroll call has to be stubbed for the
   // component to be renderable at all.
   Element.prototype.scrollIntoView = vi.fn();
@@ -109,7 +117,7 @@ describe('RecordingStage transcript', () => {
   });
 });
 
-describe('RecordingStage Omi ring', () => {
+describe('RecordingStage Omi mark', () => {
   function geometry() {
     return Array.from(
       screen.getByRole('img', { name: 'Omi live' }).querySelectorAll('circle'),
@@ -117,11 +125,10 @@ describe('RecordingStage Omi ring', () => {
       circle.getAttribute('cx'),
       circle.getAttribute('cy'),
       circle.getAttribute('r'),
-      circle.getAttribute('opacity'),
     ]);
   }
 
-  it('keeps one ring geometry while starting, listening, and paused', () => {
+  it('keeps the canonical eight-dot mark while starting, listening, and paused', () => {
     const { rerender } = renderStage({ isInitializing: true, level: 0 });
     const starting = geometry();
 
@@ -152,24 +159,40 @@ describe('RecordingStage Omi ring', () => {
 
     expect(listening).toEqual(starting);
     expect(geometry()).toEqual(starting);
-    expect(starting).toEqual([
-      ['20', '20', '15', '0.18'],
-      ['20', '20', '10', '0.1'],
-      ['20', '20', '3.5', '0.92'],
-    ]);
+    expect(starting).toHaveLength(8);
+    expect(new Set(starting.map((dot) => dot[2]))).toEqual(new Set(['17.2']));
+    expect(
+      screen
+        .getByRole('img', { name: 'Omi live' })
+        .querySelectorAll('path, line, polyline, polygon, rect, ellipse'),
+    ).toHaveLength(0);
   });
 
-  it('keeps the ring stationary with reduced motion', () => {
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: true,
-      media: query,
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    }));
+  it('pulses only the whole mark while preserving its geometry', () => {
+    const { rerender } = renderStage({ level: 0 });
+    const resting = geometry();
+
+    expect(screen.getByTestId('omi-live-mark')).toHaveAttribute('data-pulse-min', '0.94');
+    expect(screen.getByTestId('omi-live-mark')).toHaveAttribute('data-pulse-max', '1.02');
+
+    rerender(
+      <RecordingStage
+        segments={[]}
+        duration={1}
+        level={1}
+        isPaused={false}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('omi-live-mark')).toHaveAttribute('data-pulse-max', '1.07');
+    expect(geometry()).toEqual(resting);
+  });
+
+  it('keeps the mark stationary with reduced motion', () => {
+    reducedMotion.value = true;
     const { rerender } = renderStage({ level: 0 });
     const resting = geometry();
 
@@ -185,6 +208,8 @@ describe('RecordingStage Omi ring', () => {
       />,
     );
 
+    expect(screen.getByTestId('omi-live-mark')).toHaveAttribute('data-pulse-min', '1');
+    expect(screen.getByTestId('omi-live-mark')).toHaveAttribute('data-pulse-max', '1');
     expect(geometry()).toEqual(resting);
   });
 });

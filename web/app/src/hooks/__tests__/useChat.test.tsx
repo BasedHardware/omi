@@ -5,9 +5,10 @@ vi.mock('@/lib/api', () => ({
   getMessages: vi.fn(),
   sendMessageStream: vi.fn(),
   clearMessages: vi.fn(),
+  saveRealtimeMessage: vi.fn(),
 }));
 
-const { getMessages, sendMessageStream } = await import('@/lib/api');
+const { getMessages, sendMessageStream, saveRealtimeMessage } = await import('@/lib/api');
 const { useChat } = await import('@/hooks/useChat');
 
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void };
@@ -107,5 +108,43 @@ describe('useChat session ownership', () => {
 
     expect(result.current.streamingText).toBe('');
     expect(result.current.messages).toHaveLength(0);
+  });
+
+  it('adds and persists Gemini Live turns in the selected chat session', async () => {
+    vi.mocked(saveRealtimeMessage).mockImplementation(async (params) => ({
+      id: params.clientMessageId,
+      created_at: '2026-08-11T00:00:00Z',
+      session_id: 'sess-live',
+    }));
+    const { result } = renderHook(() =>
+      useChat({ appId: 'app-1', chatSessionId: 'sess-live' }),
+    );
+
+    await act(async () => {
+      await result.current.appendRealtimeExchange('Hello Omi', 'Hello there');
+    });
+
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      'Hello Omi',
+      'Hello there',
+    ]);
+    expect(saveRealtimeMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        text: 'Hello Omi',
+        sender: 'human',
+        appId: 'app-1',
+        sessionId: 'sess-live',
+      }),
+    );
+    expect(saveRealtimeMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        text: 'Hello there',
+        sender: 'ai',
+        appId: 'app-1',
+        sessionId: 'sess-live',
+      }),
+    );
   });
 });

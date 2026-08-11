@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Pause, Play, Square } from 'lucide-react';
 import type { TranscriptSegment } from '@/components/recording/RecordingContext';
+import { OmiPulseMark } from '@/components/ui/OmiPulseMark';
 import { cn } from '@/lib/utils';
 
 /**
@@ -51,7 +52,6 @@ export function RecordingStage({
 }: RecordingStageProps) {
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
-  const activity = Math.min(1, Math.max(0, level));
 
   // The transcript is capped, so without an anchor the stage keeps showing the
   // first thing that was said instead of the thing being said now.
@@ -74,34 +74,13 @@ export function RecordingStage({
       )}
     >
       <div className="flex items-center gap-4 px-5 py-4">
-        <motion.div
-          className="flex h-11 w-11 flex-shrink-0 items-center justify-center"
-          animate={{
-            scale: reducedMotion || isPaused ? 1 : 1 + activity * 0.04,
-            opacity: isInitializing ? 0.76 : isPaused ? 0.68 : 0.82 + activity * 0.18,
-          }}
-          transition={{ duration: reducedMotion ? 0 : 0.08, ease: 'easeOut' }}
-        >
-          <svg
-            width="40"
-            height="40"
-            viewBox="0 0 40 40"
-            className="text-text-primary"
-            role="img"
-            aria-label="Omi live"
-          >
-            <circle
-              cx="20"
-              cy="20"
-              r="15"
-              fill="none"
-              stroke="currentColor"
-              opacity="0.18"
-            />
-            <circle cx="20" cy="20" r="10" fill="currentColor" opacity="0.1" />
-            <circle cx="20" cy="20" r="3.5" fill="currentColor" opacity="0.92" />
-          </svg>
-        </motion.div>
+        <OmiPulseMark
+          size={42}
+          level={level}
+          active={!isPaused && !isInitializing}
+          label="Omi live"
+          testId="omi-live-mark"
+        />
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-text-primary">{status}</p>

@@ -1,6 +1,13 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatComposer } from '@/components/chat/ChatComposer';
+
+const reducedMotion = vi.hoisted(() => ({ value: false }));
+
+vi.mock('framer-motion', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('framer-motion')>()),
+  useReducedMotion: () => reducedMotion.value,
+}));
 
 vi.mock('@/lib/api', () => ({
   transcribeVoiceMessage: vi.fn(),
@@ -27,22 +34,12 @@ const geometry = (circles: SVGCircleElement[]) =>
   ]);
 
 describe('ChatComposer recording control', () => {
-  const frames: FrameRequestCallback[] = [];
-
   beforeEach(() => {
-    frames.length = 0;
+    reducedMotion.value = false;
     vi.stubGlobal(
       'matchMedia',
       vi.fn(() => makeMediaQuery(false)),
     );
-    vi.stubGlobal(
-      'requestAnimationFrame',
-      vi.fn((callback: FrameRequestCallback) => {
-        frames.push(callback);
-        return frames.length;
-      }),
-    );
-    vi.stubGlobal('cancelAnimationFrame', vi.fn());
   });
 
   afterEach(() => {
@@ -66,7 +63,10 @@ describe('ChatComposer recording control', () => {
     const idleGeometry = geometry(idleCircles);
 
     expect(idleCircles).toHaveLength(8);
-    expect(frames).toHaveLength(0);
+    expect(screen.getByTestId('composer-live-mark')).toHaveAttribute(
+      'data-pulse-min',
+      '1',
+    );
 
     rerender(
       <ChatComposer
@@ -79,26 +79,20 @@ describe('ChatComposer recording control', () => {
     const listeningButton = screen.getByRole('button', { name: 'Stop conversation' });
     const listeningOrb = within(listeningButton).getByRole('img', { name: 'Omi' });
     const listeningCircles = Array.from(listeningOrb.querySelectorAll('circle'));
-    const initialStyles = listeningCircles.map((circle) => circle.style.cssText);
 
     expect(geometry(listeningCircles)).toEqual(idleGeometry);
-    expect(frames).toHaveLength(1);
-
-    act(() => frames.shift()?.(16));
-    act(() => frames.shift()?.(300));
-
-    expect(geometry(listeningCircles)).toEqual(idleGeometry);
-    expect(listeningCircles.map((circle) => circle.style.cssText)).not.toEqual(
-      initialStyles,
+    expect(screen.getByTestId('composer-live-mark')).toHaveAttribute(
+      'data-pulse-min',
+      '0.94',
     );
-    expect(
-      listeningCircles.every(
-        (circle) => circle.style.transform !== '' && circle.style.opacity !== '',
-      ),
-    ).toBe(true);
+    expect(screen.getByTestId('composer-live-mark')).toHaveAttribute(
+      'data-pulse-max',
+      '1.035',
+    );
   });
 
   it('does not schedule listening movement when reduced motion is enabled', () => {
+    reducedMotion.value = true;
     vi.stubGlobal(
       'matchMedia',
       vi.fn(() => makeMediaQuery(true)),
@@ -121,6 +115,13 @@ describe('ChatComposer recording control', () => {
     expect(
       within(button).getByRole('img', { name: 'Omi' }).querySelectorAll('circle'),
     ).toHaveLength(8);
-    expect(requestAnimationFrame).not.toHaveBeenCalled();
+    expect(screen.getByTestId('composer-live-mark')).toHaveAttribute(
+      'data-pulse-min',
+      '1',
+    );
+    expect(screen.getByTestId('composer-live-mark')).toHaveAttribute(
+      'data-pulse-max',
+      '1',
+    );
   });
 });
