@@ -61,7 +61,6 @@ from models.geolocation import Geolocation, GeolocationInput, validated_geolocat
 from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from models.other import Person, CreatePerson
 from models.shared import StatusResponse
-from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta
 
@@ -103,7 +102,6 @@ from utils.subscription import (
     enforce_chat_quota,
     get_trial_metadata,
 )
-from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.cloud_tasks import (
     AccountDeletionTaskAuthentication,
