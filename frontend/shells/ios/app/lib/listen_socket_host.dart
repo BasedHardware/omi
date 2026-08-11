@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'bridge_http_host.dart';
+import 'listen_preflight_policy.dart';
 
 /// One shell-owned authority composes both privileged transports.
 class ShellTransportAuthority {
@@ -185,6 +186,11 @@ class ListenSocketHost {
     }
     final path = decoded['path'];
     if (action != 'open' || path is! String) return;
+    if (!await _listenPreflightReady()) {
+      await _emit(controller, id, const <String, Object>{'type': 'error'});
+      await _emit(controller, id, const <String, Object>{'type': 'close', 'code': 1008});
+      return;
+    }
     final decision = ListenSocketHostPolicy.prepare(
       path: path,
       baseUrl: baseUrl,
@@ -228,6 +234,19 @@ class ListenSocketHost {
     } catch (_) {
       await _emit(controller, id, const <String, Object>{'type': 'error'});
       await _emit(controller, id, const <String, Object>{'type': 'close', 'code': 1006});
+    }
+  }
+
+  Future<bool> _listenPreflightReady() async {
+    try {
+      final value = await _preflightChannel.invokeMethod<Object?>('check');
+      return value is Map && listenPreflightCanOpen(value.cast<Object?, Object?>());
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 

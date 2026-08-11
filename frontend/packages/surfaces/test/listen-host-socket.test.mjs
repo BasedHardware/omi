@@ -95,4 +95,27 @@ for (const shell of ["macos", "ios"]) {
     assert.equal(touched, false, "parser reads own data descriptors only");
     assert.equal(provider.snapshot().permission, "unavailable", "accessor-backed state fails closed");
   });
+
+  test(`${shell} preflight rejects Proxy-wrapped host replies without accepting forged readiness`, async () => {
+    const createProvider = await loadProductionExport(
+      "listen-host-socket.ts",
+      "createProductionListenHostPreflightProvider",
+    );
+    const posted = [];
+    const channel = { postMessage(message) { posted.push(JSON.parse(message)); } };
+    const host = shell === "macos"
+      ? { webkit: { messageHandlers: { omiListenSocket: channel } } }
+      : { omiListenSocket: channel };
+    const provider = createProvider(host);
+    const pending = provider.refresh();
+    const valid = {
+      type: "preflight", requestId: "listen-preflight-1", permission: "granted",
+      deviceState: "available", deviceLabel: "Default microphone", recovery: null,
+    };
+    host.__omiListenPreflightEvent("listen-preflight-1", new Proxy(valid, {}));
+    await pending;
+    assert.equal(provider.snapshot().permission, "unavailable", "Proxy host state fails closed");
+    assert.equal(provider.snapshot().device.state, "unavailable");
+    assert.equal(posted[0]?.operation, "check");
+  });
 }

@@ -117,6 +117,8 @@ export interface PlatformListenPreflightSnapshot {
 const PREFLIGHT_PERMISSIONS = ["unknown", "checking", "granted", "denied", "restricted", "unavailable"] as const;
 const PREFLIGHT_DEVICES = ["unknown", "checking", "available", "unavailable"] as const;
 const PREFLIGHT_RECOVERY = ["request-permission", "open-settings"] as const;
+const PREFLIGHT_SNAPSHOT_KEYS = ["permission", "device", "recovery"] as const;
+const PREFLIGHT_DEVICE_FIELDS = ["state", "label"] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
@@ -138,6 +140,34 @@ function ownData(value: unknown, key: string): unknown {
 }
 
 /**
+ * `Object.getOwnPropertyDescriptor` alone is not a proxy boundary: a Proxy
+ * over a plain object can faithfully report every descriptor. Structured
+ * cloning rejects Proxy instances while accepting the plain data objects that
+ * native hosts produce. Unknown/accessor keys are rejected before cloning.
+ */
+function isPlainDataObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return false;
+    const ownKeys = Reflect.ownKeys(value);
+    if (ownKeys.length !== keys.length || ownKeys.some((key) =>
+      typeof key !== "string" || !keys.includes(key))) return false;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    if (keys.some((key) => {
+      const descriptor = descriptors[key];
+      return descriptor === undefined || !("value" in descriptor);
+    })) return false;
+    const clone = globalThis.structuredClone;
+    if (typeof clone !== "function") return false;
+    clone(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Return a detached, immutable snapshot at every adapter boundary. This
  * prevents a caller from mutating a host-owned object between `preflight()`
  * and `start()` to bypass permission/device checks.
@@ -145,8 +175,10 @@ function ownData(value: unknown, key: string): unknown {
 export function freezeListenPreflightSnapshot(
   value: unknown,
 ): PlatformListenPreflightSnapshot {
+  if (!isPlainDataObject(value, PREFLIGHT_SNAPSHOT_KEYS)) return UNAVAILABLE_LISTEN_PREFLIGHT;
   const permission = ownData(value, "permission");
   const deviceValue = ownData(value, "device");
+  if (!isPlainDataObject(deviceValue, PREFLIGHT_DEVICE_FIELDS)) return UNAVAILABLE_LISTEN_PREFLIGHT;
   const deviceState = ownData(deviceValue, "state");
   const deviceLabel = ownData(deviceValue, "label");
   const recovery = ownData(value, "recovery");
@@ -296,7 +328,10 @@ export function createPlatformListenCaptureClient(
   const preflightSnapshot = (): PlatformListenPreflightSnapshot => {
     if (preflight === undefined) return UNAVAILABLE_LISTEN_PREFLIGHT;
     try {
-      return freezeListenPreflightSnapshot(preflight.snapshot());
+      const raw = preflight.snapshot();
+      // A provider is a host boundary. Proxy-wrapped snapshots are rejected
+      // before descriptor reads; only plain data reaches the immutable clone.
+      return freezeListenPreflightSnapshot(raw);
     } catch {
       return UNAVAILABLE_LISTEN_PREFLIGHT;
     }

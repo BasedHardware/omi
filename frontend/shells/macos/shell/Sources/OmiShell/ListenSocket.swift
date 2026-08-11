@@ -31,6 +31,10 @@ struct ListenSocketPreparedRequest {
 }
 
 enum ListenPreflightPolicy {
+  static func canOpen(permission: AVAuthorizationStatus, inputAvailable: Bool) -> Bool {
+    permission == .authorized && inputAvailable
+  }
+
   static func payload(
     permission: AVAuthorizationStatus, inputAvailable: Bool
   ) -> [String: Any] {
@@ -177,6 +181,12 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
     return ListenPreflightPolicy.payload(
       permission: AVCaptureDevice.authorizationStatus(for: .audio), inputAvailable: hasInput)
   }
+
+  private func listenPreflightCanOpen() -> Bool {
+    ListenPreflightPolicy.canOpen(
+      permission: AVCaptureDevice.authorizationStatus(for: .audio),
+      inputAvailable: AVCaptureDevice.default(for: .audio) != nil)
+  }
   private lazy var session: URLSession = {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.httpCookieStorage = nil
@@ -253,6 +263,11 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
       return
     }
     guard command.action == "open", let path = command.path else { return }
+    guard listenPreflightCanOpen() else {
+      emit(id: command.id, payload: ["type": "error"], webView: webView)
+      emit(id: command.id, payload: ["type": "close", "code": 1008], webView: webView)
+      return
+    }
     switch prepareUsingCurrentCustodyForConformance(id: command.id, path: path) {
     case .failure:
       emit(id: command.id, payload: ["type": "error"], webView: webView)
