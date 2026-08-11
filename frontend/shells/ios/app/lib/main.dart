@@ -145,23 +145,18 @@ String surfaceQueryForLaunch({
   required bool captureOnly,
   required String compileQuery,
   required List<String> arguments,
-  String? environmentQuery,
 }) {
   if (!captureOnly) return compileQuery;
   const prefix = '--omi-capture-query=';
   final matches = arguments
       .where((argument) => argument.startsWith(prefix))
       .toList();
-  final environment = environmentQuery?.trim();
-  final hasEnvironment = environment != null && environment.isNotEmpty;
-  if ((hasEnvironment ? 1 : 0) + matches.length != 1) {
+  if (matches.length != 1) {
     throw const FormatException(
-      'capture build requires exactly one native capture query source',
+      'capture build requires exactly one native capture query argument',
     );
   }
-  final raw = hasEnvironment
-      ? environment
-      : matches.single.substring(prefix.length);
+  final raw = matches.single.substring(prefix.length);
   if (raw.isEmpty || raw.length > 1024 || raw.contains('#')) {
     throw const FormatException(
       'capture query is empty, too long, or contains a fragment',
@@ -244,19 +239,19 @@ String surfaceQueryForLaunch({
       .join('&');
 }
 
-String get _activeSurfaceQuery => surfaceQueryForLaunch(
-  captureOnly: _captureOnly,
-  compileQuery: _surfaceQuery,
-  arguments: Platform.executableArguments,
-  environmentQuery: Platform.environment['OMI_CAPTURE_QUERY'],
-);
-
 String captureRunIdForLaunch({
   required bool captureOnly,
-  String? environmentRunId,
+  required List<String> arguments,
 }) {
   if (!captureOnly) return '';
-  final value = environmentRunId?.trim() ?? '';
+  const prefix = '--omi-capture-run-id=';
+  final matches = arguments
+      .where((argument) => argument.startsWith(prefix))
+      .toList();
+  if (matches.length != 1) {
+    throw const FormatException('capture build requires one native run id');
+  }
+  final value = matches.single.substring(prefix.length).trim();
   if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$').hasMatch(value)) {
     throw const FormatException(
       'capture build requires one safe native run id',
@@ -265,10 +260,19 @@ String captureRunIdForLaunch({
   return value;
 }
 
-String get _captureRunId => captureRunIdForLaunch(
-  captureOnly: _captureOnly,
-  environmentRunId: Platform.environment['OMI_CAPTURE_RUN_ID'],
-);
+late final String _activeSurfaceQuery;
+late final String _captureRunId;
+
+Future<List<String>> captureLaunchArguments({
+  required bool captureOnly,
+  required List<String> executableArguments,
+}) async {
+  if (!captureOnly) return executableArguments;
+  final values = await const MethodChannel(
+    'omi/capture-launch',
+  ).invokeListMethod<String>('arguments');
+  return values ?? const <String>[];
+}
 
 ThemeMode shellThemeModeForSurfaceQuery(String raw) {
   var query = raw.trim();
@@ -303,7 +307,23 @@ Color shellBackgroundForSurfaceQuery(String raw, Brightness systemBrightness) {
       : const Color(0xFFF5F7F9);
 }
 
-void main() => runApp(const OmiApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final arguments = await captureLaunchArguments(
+    captureOnly: _captureOnly,
+    executableArguments: Platform.executableArguments,
+  );
+  _activeSurfaceQuery = surfaceQueryForLaunch(
+    captureOnly: _captureOnly,
+    compileQuery: _surfaceQuery,
+    arguments: arguments,
+  );
+  _captureRunId = captureRunIdForLaunch(
+    captureOnly: _captureOnly,
+    arguments: arguments,
+  );
+  runApp(const OmiApp());
+}
 
 class OmiApp extends StatelessWidget {
   const OmiApp({super.key});

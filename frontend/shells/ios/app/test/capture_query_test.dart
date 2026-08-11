@@ -57,41 +57,38 @@ void main() {
     });
   }
 
-  test('capture builds accept the simulator child environment query', () {
+  test('capture builds accept the native allowlisted launch arguments', () {
     final query = _valid.substring('--omi-capture-query='.length);
     expect(
       surfaceQueryForLaunch(
         captureOnly: true,
         compileQuery: '',
-        arguments: const [],
-        environmentQuery: query,
+        arguments: [_valid],
       ),
       query,
     );
     expect(
       captureRunIdForLaunch(
         captureOnly: true,
-        environmentRunId: 'mx-v1-chat-ready',
+        arguments: const ['--omi-capture-run-id=mx-v1-chat-ready'],
       ),
       'mx-v1-chat-ready',
     );
   });
 
-  test('capture query sources and run ids fail closed', () {
-    final query = _valid.substring('--omi-capture-query='.length);
+  test('capture launch arguments and run ids fail closed', () {
     expect(
       () => surfaceQueryForLaunch(
         captureOnly: true,
         compileQuery: '',
-        arguments: [_valid],
-        environmentQuery: query,
+        arguments: [_valid, _valid],
       ),
       throwsFormatException,
     );
     expect(
       () => captureRunIdForLaunch(
         captureOnly: true,
-        environmentRunId: '../unsafe',
+        arguments: const ['--omi-capture-run-id=../unsafe'],
       ),
       throwsFormatException,
     );
