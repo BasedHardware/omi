@@ -95,6 +95,7 @@ export class ChatMessagesStore {
   private readonly active = new Map<string, ActiveChatGeneration>();
   private readonly observations = new Map<string, ChatGenerationObservation>();
   private readonly agentRuns = new Map<string, StoredChatAgentRunTimeline>();
+  private readonly agentRunEventIds = new Map<string, Set<string>>();
   private readonly agentObservations = new Map<string, AgentRunObservation>();
   private chatCapabilities: ChatCapabilitiesWire | null = null;
   private historyWindow: ChatHistoryWindow = { hasOlder: false, olderCursor: null };
@@ -431,16 +432,24 @@ export class ChatMessagesStore {
           lastEventId: null,
           observationState: "observing" as const,
         };
+        if (current.clientMessageId !== clientMessageId) {
+          throw new Error("agent-run client binding changed");
+        }
         if (incoming.kind === "error") {
           this.agentObservations.delete(generationId);
           this.agentRuns.set(generationId, { ...current, observationState: "failed" });
           this.notify();
           return;
         }
-        if (current.events.some((event) => event.sequence === incoming.event.sequence)) continue;
         const latestSequence = current.events.at(-1)?.sequence ?? 0;
-        if (incoming.event.sequence <= latestSequence) {
-          throw new Error("agent-run sequence moved backwards");
+        if (incoming.event.sequence !== latestSequence + 1
+          || (latestSequence === 0 && incoming.event.kind !== "run_accepted")
+          || (latestSequence > 0 && incoming.event.kind === "run_accepted")) {
+          throw new Error("agent-run sequence is not contiguous");
+        }
+        const eventIds = this.agentRunEventIds.get(generationId) ?? new Set<string>();
+        if (eventIds.has(incoming.id)) {
+          throw new Error("agent-run event cursor was reused");
         }
         const entry: StoredAgentRunLogEntry = {
           generationId,
@@ -449,6 +458,8 @@ export class ChatMessagesStore {
           event: incoming.event,
         };
         await this.agentRunLog.append(JSON.stringify(entry));
+        eventIds.add(incoming.id);
+        this.agentRunEventIds.set(generationId, eventIds);
         const terminal = incoming.event.kind === "terminal";
         this.agentRuns.set(generationId, {
           generationId,
@@ -569,22 +580,50 @@ export class ChatMessagesStore {
 
   private async restoreAgentRuns(): Promise<void> {
     const entries = await this.agentRunLog.scan(0);
+    const invalidGenerations = new Set<string>();
+    const storedToken = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
+    const invalidate = (generationId: string): void => {
+      invalidGenerations.add(generationId);
+      this.agentRuns.delete(generationId);
+      this.agentRunEventIds.delete(generationId);
+    };
     for (const logEntry of entries) {
       try {
         const raw = JSON.parse(logEntry.payload) as unknown;
         if (raw === null || typeof raw !== "object" || Array.isArray(raw)) continue;
         const keys = Object.keys(raw).sort();
-        if (keys.join(",") !== "clientMessageId,event,eventId,generationId") continue;
         const candidate = raw as Partial<StoredAgentRunLogEntry>;
-        if (typeof candidate.generationId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u.test(candidate.generationId)
-          || typeof candidate.clientMessageId !== "string"
-          || typeof candidate.eventId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u.test(candidate.eventId)) continue;
+        if (typeof candidate.generationId !== "string" || !storedToken.test(candidate.generationId)) continue;
+        if (invalidGenerations.has(candidate.generationId)) continue;
+        if (keys.join(",") !== "clientMessageId,event,eventId,generationId") {
+          invalidate(candidate.generationId);
+          continue;
+        }
+        if (typeof candidate.clientMessageId !== "string" || !storedToken.test(candidate.clientMessageId)
+          || typeof candidate.eventId !== "string" || !storedToken.test(candidate.eventId)) {
+          invalidate(candidate.generationId);
+          continue;
+        }
         const event = parseStoredAgentRunUiEvent(candidate.event);
-        if (event === null) continue;
+        if (event === null) {
+          invalidate(candidate.generationId);
+          continue;
+        }
         const current = this.agentRuns.get(candidate.generationId);
-        if (current?.events.some((stored) => stored.sequence === event.sequence)) continue;
         const latestSequence = current?.events.at(-1)?.sequence ?? 0;
-        if (event.sequence <= latestSequence || current?.observationState === "complete") continue;
+        const eventIds = this.agentRunEventIds.get(candidate.generationId) ?? new Set<string>();
+        const invalid = (current !== undefined && current.clientMessageId !== candidate.clientMessageId)
+          || eventIds.has(candidate.eventId)
+          || event.sequence !== latestSequence + 1
+          || (latestSequence === 0 && event.kind !== "run_accepted")
+          || (latestSequence > 0 && event.kind === "run_accepted")
+          || current?.observationState === "complete";
+        if (invalid) {
+          invalidate(candidate.generationId);
+          continue;
+        }
+        eventIds.add(candidate.eventId);
+        this.agentRunEventIds.set(candidate.generationId, eventIds);
         this.agentRuns.set(candidate.generationId, {
           generationId: candidate.generationId,
           clientMessageId: candidate.clientMessageId as RecordId,

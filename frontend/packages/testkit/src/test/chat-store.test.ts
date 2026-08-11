@@ -352,6 +352,66 @@ test("privacy-reduced agent activity persists in an append-only log and restores
   );
 });
 
+test("agent activity restore rejects partial, cursor-reused, and client-rebound timelines", async () => {
+  const disk = new MemoryStore();
+  const bridge = disk.openBridge("corrupt-agent-runs");
+  const log = await bridge.openLog("chat-agent-run-events");
+  const accepted = (sequence: number) => ({
+    sequence,
+    createdAt: 1_786_442_400_000 + sequence,
+    kind: "run_accepted",
+    safeSummary: "Run accepted",
+    details: {},
+  });
+  const status = (sequence: number) => ({
+    sequence,
+    createdAt: 1_786_442_400_000 + sequence,
+    kind: "status",
+    safeSummary: "Generating",
+    details: { status: "generating", progressPct: 50 },
+  });
+  const append = async (
+    generationId: string,
+    clientMessageId: string,
+    eventId: string,
+    event: Readonly<Record<string, unknown>>,
+  ) => log.append(JSON.stringify({ generationId, clientMessageId, eventId, event }));
+
+  await append("generation-valid", "message-valid", "event-valid-1", accepted(1));
+  await append("generation-valid", "message-valid", "event-valid-2", status(2));
+  await append("generation-reused", "message-reused", "event-same", accepted(1));
+  await append("generation-reused", "message-reused", "event-same", status(2));
+  await append("generation-rebound", "message-original", "event-rebound-1", accepted(1));
+  await append("generation-rebound", "message-other", "event-rebound-2", status(2));
+  await append("generation-partial", "message-partial", "event-partial-2", status(2));
+  await append("generation-malformed", "message-malformed", "event-malformed-1", accepted(1));
+  await append("generation-malformed", "message-malformed", "event-malformed-2", {
+    ...status(2),
+    safeSummary: "rawArguments: hidden",
+  });
+
+  const reopened = await ChatMessagesStore.open(
+    disk.openBridge("corrupt-agent-runs"),
+    new ManualEnv(),
+    new ScriptedHttp(),
+  );
+  assert.deepEqual(
+    reopened.agentRunTimelines().map((timeline) => ({
+      generationId: timeline.generationId,
+      clientMessageId: timeline.clientMessageId,
+      eventKinds: timeline.events.map((event) => event.kind),
+      lastEventId: timeline.lastEventId,
+    })),
+    [{
+      generationId: "generation-valid",
+      clientMessageId: "message-valid",
+      eventKinds: ["run_accepted", "status"],
+      lastEventId: "event-valid-2",
+    }],
+    "only one-client, unique-cursor, run-accepted-first timelines may reach the UI",
+  );
+});
+
 test("observer failure durably leaves a non-streaming failed generation state", async () => {
   const disk = new MemoryStore();
   const env = new ManualEnv();
