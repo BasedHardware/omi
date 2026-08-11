@@ -6,12 +6,14 @@ import {
   defineMemoryStrategyAssignmentPolicy,
   registerMemoryStrategy,
   type MemoryStrategyAssignmentBundle,
+  type MemoryStrategyKind,
 } from "../../../core/consolidate/strategy-assignment";
 import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
 import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-context-internal";
 import {
   defineMemoryEvaluationEvidenceSource,
   type CopiedMemoryEvaluationInput,
+  type MemoryEvaluationEvidenceSourceKind,
 } from "../stores/memory-evaluation-evidence-source";
 import {
   defineMemoryShadowResultRepository,
@@ -52,6 +54,7 @@ const copiedInput = async (
   inputFrontier: string,
   payload: unknown,
   authorized = context(),
+  sourceKind: MemoryEvaluationEvidenceSourceKind = "formation_input_snapshot",
 ): Promise<Readonly<CopiedMemoryEvaluationInput>> => {
   const source = defineMemoryEvaluationEvidenceSource(async (sourceContext, request) => ({
     kind: "found",
@@ -63,7 +66,7 @@ const copiedInput = async (
     payload,
   }));
   const loaded = await source.load(authorized, {
-    source_kind: "formation_input_snapshot",
+    source_kind: sourceKind,
     source_ref: "source:snapshot:one",
     input_frontier: inputFrontier,
   });
@@ -71,17 +74,21 @@ const copiedInput = async (
   return loaded.copied_input;
 };
 
-const assignment = (shadowCount = 2): Readonly<MemoryStrategyAssignmentBundle> => {
+const assignment = (
+  shadowCount = 2,
+  workKind: MemoryStrategyKind = "formation",
+): Readonly<MemoryStrategyAssignmentBundle> => {
   const strategy = (id: string, prompt: string) => registerMemoryStrategy({
     version: MEMORY_STRATEGY_VERSION,
     strategy_id: id,
-    work_kind: "formation",
+    work_kind: workKind,
     coordinates: {
-      strategy_version: "formation:v1", model_version: "deepseek:v1",
+      strategy_version: `${workKind}:v1`, model_version: "deepseek:v1",
       prompt_version: prompt, policy_version: "policy:v1", code_version: "code:v1",
       schema_version: "schema:v1", tokenizer_version: "tokenizer:v1",
-      tool_version: "none", result_contract_version: "formation-result:v2",
-      speaker_strategy_version: "speaker:v1", boundary_strategy_version: "boundary:v1",
+      tool_version: "none", result_contract_version: `${workKind}-result:v2`,
+      speaker_strategy_version: workKind === "formation" ? "speaker:v1" : "none",
+      boundary_strategy_version: workKind === "formation" ? "boundary:v1" : "none",
     },
   });
   const strategies = [
@@ -90,8 +97,8 @@ const assignment = (shadowCount = 2): Readonly<MemoryStrategyAssignmentBundle> =
     strategy("strategy:shadow:b", "prompt:v3"),
   ];
   const policy = defineMemoryStrategyAssignmentPolicy({
-    policy_id: `policy:formation:${shadowCount}`,
-    work_kind: "formation",
+    policy_id: `policy:${workKind}:${shadowCount}`,
+    work_kind: workKind,
     unit_kind: "session",
     key_version: "assignment-key:v1",
     authority_strategy_id: strategies[0]!.strategy_id,
@@ -232,6 +239,40 @@ describe("production-neutral memory offline replay coordinator", () => {
       kind: "completed", model_calls: 3, reused_results: 3,
     });
     expect(calls).toBe(3);
+  });
+
+  test("retrieval and composition assignments replay only in the isolated evaluation plane", async () => {
+    for (const workKind of ["retrieval", "composition"] as const) {
+      const storage = memoryRepository();
+      let calls = 0;
+      const coordinator = defineMemoryOfflineReplayCoordinator({
+        result_repository: storage.repository,
+        produce: async (request) => {
+          calls += 1;
+          expect(request.strategy.work_kind).toBe(workKind);
+          expect(request.copied_input.source_kind).toBe("authorized_graph_snapshot");
+          return {
+            kind: "produced",
+            result_contract_version: request.strategy.coordinates.result_contract_version,
+            response_digest: sha256CanonicalContent({ workKind, role: request.evaluation_role }),
+            normalized_result: { content_safe_read_result: true },
+          };
+        },
+      });
+      const copied = await copiedInput(
+        `frontier:${workKind}`,
+        { authorized_projection: [] },
+        context(),
+        "authorized_graph_snapshot",
+      );
+      await expect(coordinator.run(context(), {
+        assignment_bundle: assignment(1, workKind),
+        evaluation_run_id: evaluationRunId,
+        copied_input: copied,
+        repeats: 2,
+      })).resolves.toMatchObject({ kind: "completed", model_calls: 4, reused_results: 0 });
+      expect(calls).toBe(4);
+    }
   });
 
   test("forged inputs, assignments, capabilities, and invalid repeat bounds fail before production", async () => {

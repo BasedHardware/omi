@@ -119,7 +119,7 @@ const expectedTables = [
   "platform_schema_migrations",
 ] as const;
 
-describe("P2/P3/P4 PostgreSQL schema contract", () => {
+describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
   test("contains exactly the reviewed expand-only surface", () => {
     expect(tables.map((table) => table.name).sort()).toEqual([...expectedTables].sort());
     expect(allSql).not.toMatch(/CREATE\s+(?:TABLE|TYPE).*\b(?:search|embedding|experiment)/i);
@@ -388,6 +388,30 @@ describe("P2/P3/P4 PostgreSQL schema contract", () => {
     }
     expect(allSql).toContain("Deliberately no application, worker, evaluator, or migration-runner grant");
     expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_strategy_(?:evaluation|shadow_results)/s);
+  });
+
+  test("widens retrieval and composition only inside the isolated experiment plane", () => {
+    const migration = migrationSql.find((entry) => entry.version === 10)!.sql;
+    const widenedTables = [
+      "memory_strategy_definitions",
+      "memory_strategy_assignment_policies",
+      "memory_strategy_policy_shadows",
+      "memory_strategy_assignment_bundles",
+      "memory_strategy_shadow_assignments",
+      "memory_strategy_evaluation_baselines",
+      "memory_strategy_shadow_results",
+    ];
+    for (const table of widenedTables) {
+      expect(migration).toContain(`ALTER TABLE omi_memory.${table}`);
+      expect(migration).toContain(`DROP CONSTRAINT ${table}_work_kind_check`);
+      expect(migration).toContain(`ADD CONSTRAINT ${table}_work_kind_check`);
+    }
+    expect((migration.match(/'retrieval', 'composition'/g) ?? [])).toHaveLength(7);
+    expect(migration).not.toMatch(/ALTER TABLE omi_memory\.memory_(?:work_|graph_|product_|derivation_)/);
+    expect(migration).not.toMatch(/\b(?:GRANT|CREATE ROLE|CREATE FUNCTION|CREATE TRIGGER|DELETE|UPDATE)\b/);
+    const acceptance = tables.find((table) => table.name === "memory_work_acceptances")!;
+    expect(acceptance.body).toContain("'formation', 'promotion', 'identity_cluster', 'predicate_batch'");
+    expect(acceptance.body).not.toMatch(/retrieval|composition/);
   });
 
   test("persists P4 proposition identity, history, citations, redirects, and disposable grouping without grants", () => {

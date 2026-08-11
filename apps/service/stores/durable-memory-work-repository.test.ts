@@ -15,6 +15,7 @@ import {
   createMemoryStrategyAssigner,
   defineMemoryStrategyAssignmentPolicy,
   registerMemoryStrategy,
+  type MemoryStrategyKind,
 } from "../../../core/consolidate/strategy-assignment";
 import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-context-internal";
 import {
@@ -30,7 +31,7 @@ const digest = (character: string): string => character.repeat(64);
 
 const strategyAssignment = (
   owner = "account:alice",
-  workKind: "formation" | "promotion" | "identity_cluster" | "predicate_batch" = "formation",
+  workKind: MemoryStrategyKind = "formation",
 ) => {
   const strategy = registerMemoryStrategy({
     version: MEMORY_STRATEGY_VERSION,
@@ -229,6 +230,15 @@ describe("durable work acceptance repository", () => {
       strategy_assignment: wrongKind,
       request_digest: digest("0"),
     })).rejects.toThrow("assignment_work_kind_mismatch");
+
+    for (const evaluationOnlyKind of ["retrieval", "composition"] as const) {
+      const evaluationOnly = strategyAssignment("account:alice", evaluationOnlyKind);
+      await expect(repository.accept(context("memories.work.accept"), {
+        ...request,
+        strategy_assignment: evaluationOnly,
+        request_digest: digest("0"),
+      })).rejects.toThrow("assignment_work_kind_mismatch");
+    }
 
     await expect(repository.accept(context("memories.work.accept"), acceptanceRequest(
       accepted({ execution_contract_digest: digest("f") }),

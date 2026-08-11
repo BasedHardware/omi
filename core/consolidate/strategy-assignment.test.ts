@@ -7,15 +7,17 @@ import {
   defineMemoryStrategyAssignmentPolicy,
   registerMemoryStrategy,
   type MemoryStrategyDefinition,
+  type MemoryStrategyKind,
 } from "./strategy-assignment";
 
 const definition = (
   strategyId: string,
   overrides: Partial<MemoryStrategyDefinition["coordinates"]> = {},
+  workKind: MemoryStrategyKind = "formation",
 ): MemoryStrategyDefinition => ({
   version: MEMORY_STRATEGY_VERSION,
   strategy_id: strategyId,
-  work_kind: "formation",
+  work_kind: workKind,
   coordinates: {
     strategy_version: "formation:v1",
     model_version: "deepseek-flash:v1",
@@ -82,6 +84,75 @@ describe("memory strategy registry", () => {
         { strategy_id: "strategy:shadow-a", basis_points: 2 },
       ],
     }, strategies)).toThrow("duplicate_shadow_strategy");
+  });
+
+  test("retrieval and composition are explicit evaluation strategy kinds", () => {
+    for (const workKind of ["retrieval", "composition"] as const) {
+      const authority = registerMemoryStrategy(definition(
+        `strategy:${workKind}:authority`,
+        {
+          strategy_version: `${workKind}:v1`,
+          result_contract_version: `${workKind}-result:v1`,
+          speaker_strategy_version: "none",
+          boundary_strategy_version: "none",
+        },
+        workKind,
+      ));
+      const candidate = registerMemoryStrategy(definition(
+        `strategy:${workKind}:candidate`,
+        {
+          strategy_version: `${workKind}:v2`,
+          result_contract_version: `${workKind}-result:v1`,
+          speaker_strategy_version: "none",
+          boundary_strategy_version: "none",
+        },
+        workKind,
+      ));
+      const readPolicy = defineMemoryStrategyAssignmentPolicy({
+        policy_id: `policy:${workKind}:v1`, work_kind: workKind, unit_kind: "session",
+        key_version: "assignment-key:v1", authority_strategy_id: authority.strategy_id,
+        shadow_candidates: [{ strategy_id: candidate.strategy_id, basis_points: 10_000 }],
+      }, [authority, candidate]);
+      const assigned = createMemoryStrategyAssigner(new Uint8Array(32).fill(9)).assign({
+        owner_account_id: "account:alice", unit_ref: "session:read:one",
+        policy: readPolicy, strategies: [authority, candidate],
+      });
+      expect(assigned.work_kind).toBe(workKind);
+      expect(assigned.shadows).toHaveLength(1);
+      expect(assertMintedMemoryStrategyAssignment(assigned)).toBe(assigned);
+    }
+    expect(() => registerMemoryStrategy({
+      ...definition("strategy:bad"), work_kind: "retrieve" as never,
+    })).toThrow("invalid_definition");
+  });
+
+  test("the read-side vocabulary expansion does not perturb durable formation identities", () => {
+    const golden = registerMemoryStrategy({
+      version: MEMORY_STRATEGY_VERSION,
+      strategy_id: "strategy:formation:golden",
+      work_kind: "formation",
+      coordinates: {
+        strategy_version: "formation:v1", model_version: "deepseek-flash:v1",
+        prompt_version: "prompt:v1", policy_version: "policy:v1", code_version: "code:v1",
+        schema_version: "schema:v1", tokenizer_version: "tokenizer:v1", tool_version: "none",
+        result_contract_version: "formation-result:v2", speaker_strategy_version: "speaker:v1",
+        boundary_strategy_version: "boundary:v1",
+      },
+    });
+    const goldenPolicy = defineMemoryStrategyAssignmentPolicy({
+      policy_id: "policy:formation:golden", work_kind: "formation", unit_kind: "session",
+      key_version: "key:v1", authority_strategy_id: golden.strategy_id, shadow_candidates: [],
+    }, [golden]);
+    const goldenAssignment = createMemoryStrategyAssigner(new Uint8Array(32).fill(1)).assign({
+      owner_account_id: "account:alice", unit_ref: "session:one",
+      policy: goldenPolicy, strategies: [golden],
+    });
+    expect(golden.execution_contract_digest)
+      .toBe("9ca8b9d41cfa0fe67a38cae82d806a23438d5ecf1c7b8282c0ced16321090c9f");
+    expect(goldenPolicy.policy_digest)
+      .toBe("c8b552937cf3700f11537a1eaf8fa7ae41869b73c75c781083585cfa32ac0f5d");
+    expect(goldenAssignment.assignment_bundle_id)
+      .toBe("msb1_18395e7850b294562a820f55c27393ab947ecffc1296e6bf74b64583299b5ab8");
   });
 });
 

@@ -10,6 +10,7 @@ export const MEMORY_STRATEGY_ASSIGNMENT_VERSION = "memory-strategy-assignment-v1
 
 export type MemoryStrategyAssignmentUnitKind = "account" | "session" | "work";
 export type MemoryStrategyAssignmentMode = "authority" | "shadow";
+export type MemoryStrategyKind = DurableMemoryWorkKind | "retrieval" | "composition";
 
 export interface MemoryStrategyCoordinates {
   readonly strategy_version: string;
@@ -28,7 +29,7 @@ export interface MemoryStrategyCoordinates {
 export interface MemoryStrategyDefinition {
   readonly version: typeof MEMORY_STRATEGY_VERSION;
   readonly strategy_id: string;
-  readonly work_kind: DurableMemoryWorkKind;
+  readonly work_kind: MemoryStrategyKind;
   readonly coordinates: Readonly<MemoryStrategyCoordinates>;
 }
 
@@ -46,7 +47,7 @@ export interface MemoryStrategyAssignmentPolicy {
   readonly version: typeof MEMORY_STRATEGY_ASSIGNMENT_POLICY_VERSION;
   readonly policy_id: string;
   readonly policy_digest: string;
-  readonly work_kind: DurableMemoryWorkKind;
+  readonly work_kind: MemoryStrategyKind;
   readonly unit_kind: MemoryStrategyAssignmentUnitKind;
   readonly key_version: string;
   readonly authority_strategy_id: string;
@@ -68,7 +69,7 @@ export interface MemoryStrategyAssignmentBundle {
   readonly assignment_bundle_id: string;
   readonly assignment_bundle_digest: string;
   readonly owner_account_id: string;
-  readonly work_kind: DurableMemoryWorkKind;
+  readonly work_kind: MemoryStrategyKind;
   readonly unit_kind: MemoryStrategyAssignmentUnitKind;
   readonly unit_digest: string;
   readonly policy: Readonly<MemoryStrategyAssignmentPolicy>;
@@ -79,7 +80,7 @@ export interface MemoryStrategyAssignmentBundle {
 
 export interface MemoryStrategyAssignmentPolicyInput {
   readonly policy_id: string;
-  readonly work_kind: DurableMemoryWorkKind;
+  readonly work_kind: MemoryStrategyKind;
   readonly unit_kind: MemoryStrategyAssignmentUnitKind;
   readonly key_version: string;
   readonly authority_strategy_id: string;
@@ -91,8 +92,8 @@ export interface MemoryStrategyAssignmentPolicyInput {
 
 const TOKEN = /^[\x21-\x7e]{1,256}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
-const WORK_KINDS = new Set<DurableMemoryWorkKind>([
-  "formation", "promotion", "identity_cluster", "predicate_batch",
+const WORK_KINDS = new Set<MemoryStrategyKind>([
+  "formation", "promotion", "identity_cluster", "predicate_batch", "retrieval", "composition",
 ]);
 const UNIT_KINDS = new Set<MemoryStrategyAssignmentUnitKind>(["account", "session", "work"]);
 const COORDINATE_KEYS = [
@@ -148,9 +149,9 @@ const digest = (value: unknown, code: string): string => {
   return value as string;
 };
 
-const workKind = (value: unknown, code: string): DurableMemoryWorkKind => {
-  if (typeof value !== "string" || !WORK_KINDS.has(value as DurableMemoryWorkKind)) fail(code);
-  return value as DurableMemoryWorkKind;
+const workKind = (value: unknown, code: string): MemoryStrategyKind => {
+  if (typeof value !== "string" || !WORK_KINDS.has(value as MemoryStrategyKind)) fail(code);
+  return value as MemoryStrategyKind;
 };
 
 const unitKind = (value: unknown, code: string): MemoryStrategyAssignmentUnitKind => {
@@ -227,7 +228,7 @@ export const parseRegisteredMemoryStrategy = (
 
 const normalizeRegistry = (
   value: readonly RegisteredMemoryStrategy[],
-  expectedWorkKind?: DurableMemoryWorkKind,
+  expectedWorkKind?: MemoryStrategyKind,
 ): readonly Readonly<RegisteredMemoryStrategy>[] => {
   const strategies = exactArray(value, 128, "invalid_registry")
     .map(normalizeRegisteredStrategy)
@@ -443,7 +444,7 @@ const normalizeMemoryStrategyAssignmentPolicy = (value: unknown): Readonly<Memor
   return Object.freeze({ ...core, policy_digest: policyDigest });
 };
 
-/** Only assignments minted by the injected deterministic selector may authorize durable work. */
+/** Only assignments minted by the injected deterministic selector enter evaluation or work acceptance. */
 export const assertMintedMemoryStrategyAssignment = (
   value: unknown,
 ): Readonly<MemoryStrategyAssignmentBundle> => {

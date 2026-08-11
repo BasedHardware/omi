@@ -60,7 +60,7 @@ adds no route, worker, database client, scheduler, or runtime composition.
    and all durable runner/formation tests remain green.
 4. Unknown near-miss work kinds fail strict parsing and cannot enter either
    plane.
-5. Migration checks widen exactly the five strategy/evaluation tables that own
+5. Migration checks widen exactly the seven strategy/evaluation tables that own
    a `work_kind`; every durable-work table remains on the four-kind vocabulary.
 6. Migration bytes are checksummed and contain no grant, role, route, trigger,
    function, graph/product relation, or destructive data rewrite.
