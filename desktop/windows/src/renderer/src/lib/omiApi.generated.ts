@@ -1517,6 +1517,16 @@ export interface DevApiKeyCreated {
   scopes?: Array<string> | null;
 }
 
+export interface DevApiKeyRotated {
+  created_at: string;
+  id: string;
+  key: string;
+  key_prefix: string;
+  last_used_at?: string | null;
+  name: string;
+  scopes?: Array<string> | null;
+}
+
 export interface DeveloperActionItem {
   completed: boolean;
   completed_at?: string | null;
@@ -2243,9 +2253,21 @@ export interface McpApiKey {
 
 export interface McpApiKeyCreate {
   name: string;
+  scopes?: Array<string> | null;
 }
 
 export interface McpApiKeyCreated {
+  app_id?: string | null;
+  created_at: string;
+  id: string;
+  key: string;
+  key_prefix: string;
+  last_used_at?: string | null;
+  name: string;
+  scopes?: Array<string> | null;
+}
+
+export interface McpApiKeyRotated {
   app_id?: string | null;
   created_at: string;
   id: string;
@@ -2736,6 +2758,7 @@ export interface PlanLimits {
   chat_cost_usd_per_month?: number | null;
   chat_questions_per_month?: number | null;
   insights_gained?: number | null;
+  platform_api_requests_per_month?: number | null;
   transcription_seconds?: number | null;
   words_transcribed?: number | null;
 }
@@ -4218,6 +4241,7 @@ export interface OmiApiSchemas {
   "DevApiKey": DevApiKey;
   "DevApiKeyCreate": DevApiKeyCreate;
   "DevApiKeyCreated": DevApiKeyCreated;
+  "DevApiKeyRotated": DevApiKeyRotated;
   "DeveloperActionItem": DeveloperActionItem;
   "DeveloperConversation": DeveloperConversation;
   "DeveloperConversationActionItem": DeveloperConversationActionItem;
@@ -4316,6 +4340,7 @@ export interface OmiApiSchemas {
   "McpApiKey": McpApiKey;
   "McpApiKeyCreate": McpApiKeyCreate;
   "McpApiKeyCreated": McpApiKeyCreated;
+  "McpApiKeyRotated": McpApiKeyRotated;
   "McpCreateActionItem": McpCreateActionItem;
   "McpOauthGrantsResponse": McpOauthGrantsResponse;
   "McpRefreshToolsResponse": McpRefreshToolsResponse;
@@ -5914,6 +5939,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/dev/keys/{key_id}/rotate": {
+    post: {
+      operationId: "rotateApiKey";
+      responses: {
+        "200": DevApiKeyRotated;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/dev/user/action-items": {
     get: {
       operationId: "listActionItems";
@@ -6763,6 +6798,16 @@ export interface OmiApiPaths {
         "204": void;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/keys/{key_id}/rotate": {
+    post: {
+      operationId: "rotate_key_v1_mcp_keys__key_id__rotate_post";
+      responses: {
+        "200": McpApiKeyRotated;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -11256,6 +11301,21 @@ export async function revokeApiKey(path: { key_id: string }, init?: OmiApiClient
   return;
 }
 
+export async function rotateApiKey(path: { key_id: string }, init?: OmiApiClientInit): Promise<DevApiKeyRotated> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/dev/keys/${path.key_id}/rotate`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function listActionItems(query: { conversation_id?: string | null, completed?: boolean | null, start_date?: string | null, end_date?: string | null, limit?: number, offset?: number }, init?: OmiApiClientInit): Promise<Array<DeveloperActionItem>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/dev/user/action-items`;
@@ -12886,6 +12946,21 @@ export async function delete_key_v1_mcp_keys__key_id__delete(path: { key_id: str
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return;
+}
+
+export async function rotate_key_v1_mcp_keys__key_id__rotate_post(path: { key_id: string }, init?: OmiApiClientInit): Promise<McpApiKeyRotated> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/keys/${path.key_id}/rotate`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
 export async function get_memories_v1_mcp_memories_get(query: { limit?: number, offset?: number, categories?: string | null, sort?: string, reviewed?: boolean | null, manually_added?: boolean | null, updated_after?: string | null, include_activity?: boolean, include_sensitive?: boolean }, init?: OmiApiClientInit): Promise<Array<CleanerMemory>> {
@@ -16458,4 +16533,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 399 client methods generated.
+// Total: 401 client methods generated.
