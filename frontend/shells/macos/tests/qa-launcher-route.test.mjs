@@ -43,9 +43,12 @@ const rows = domains.map((domain) => ({runId,shell:"macos",domain,fixture:"none"
 writeFileSync(file, JSON.stringify({schema:"omi.consumer-evidence.v1",runId,rows}));
 `);
   writeFileSync(join(scripts, "run-shell.sh"), `#!/bin/bash
-printf 'launch|query=%s|surface_url=%s|surface_path=%s|api=%s|run=%s|result=%s\n' \
+printf 'launch|query=%s|surface_url=%s|surface_path=%s|api=%s|run=%s|result=%s|width=%s|height=%s\n' \
   "\${OMI_SURFACE_QUERY-}" "\${OMI_SURFACE_URL-unset}" "\${OMI_SURFACE_PATH-unset}" \
-  "\${OMI_API_BASE_URL-}" "\${OMI_RUN_CLIENT_ID-}" "\${OMI_CONSUMER_EVIDENCE_PATH-}" >> "\$OMI_TEST_ACTION_LOG"
+  "\${OMI_API_BASE_URL-}" "\${OMI_RUN_CLIENT_ID-}" "\${OMI_CONSUMER_EVIDENCE_PATH-}" "\${OMI_NATIVE_VIEWPORT_WIDTH-}" "\${OMI_NATIVE_VIEWPORT_HEIGHT-}" >> "\$OMI_TEST_ACTION_LOG"
+if [[ -n "\${OMI_SNAPSHOT_PATH:-}" ]]; then
+  printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=' | base64 -D > "\$OMI_SNAPSHOT_PATH"
+fi
 if [[ -n "\${OMI_CONSUMER_EVIDENCE_PATH:-}" ]]; then
   node "\$OMI_TEST_WRITER" "\$OMI_CONSUMER_EVIDENCE_PATH" "\$OMI_RUN_CLIENT_ID"
 fi
@@ -95,7 +98,8 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
   const source = readFileSync(launcher, "utf8");
   assert.match(source, /OMI_SURFACE_PORT:-5290/);
   assert.match(source, /home\|memories\|conversations\|tasks\|folders\|chat\|settings\|listen/);
-  assert.doesNotMatch(source, /qa=|rig=dev|--fixture|4841/);
+  assert.doesNotMatch(source, /qa=(memories|tasks|chat)|rig=dev|4841/);
+  assert.match(source, /--fixture/);
 
   const run = fixture();
   try {
@@ -207,6 +211,27 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
     assert.doesNotMatch(evidenceLaunch, /qa=|rig=dev/);
     assert.match(evidenceLaunch, /run=raw-macos-run\|result=.*macos-consumer\.json/);
     assert.doesNotMatch(evidenceLaunch, /raw-macos-run::macos/);
+  } finally {
+    rmSync(run.scratch, { recursive: true, force: true });
+  }
+});
+
+test("macOS native fixture capture is offline, query-bound, and probe-waited", () => {
+  const run = fixture();
+  try {
+    const output = join(run.scratch, "fixture.png");
+    const result = spawnSync(run.launcher, [
+      "--fixture", "memories", "--state", "ready", "--theme", "dark",
+      "--accessibility", "rtl", "--run-id", "fixture-mac-001", "--capture-out", output,
+      "--viewport-width", "960", "--viewport-height", "671",
+    ], { encoding: "utf8", env: { ...run.environment, OMI_API_TOKEN: "must-not-leak" } });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(existsSync(output), true);
+    const action = run.readActions();
+    assert.match(action, /query=qa=memories&polish=1&state=ready&theme=dark&platform=desktop&accessibility=rtl/);
+    assert.match(action, /api=\|run=fixture-mac-001\|result=\|width=960\|height=671/);
+    assert.doesNotMatch(`${result.stdout}${result.stderr}${action}`, /must-not-leak|OMI_API_TOKEN/);
+    assert.match(readFileSync(resolve(root, "scripts/run-shell.sh"), "utf8"), /OMI_PROBE_EXIT/);
   } finally {
     rmSync(run.scratch, { recursive: true, force: true });
   }

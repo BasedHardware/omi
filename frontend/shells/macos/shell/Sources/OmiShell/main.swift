@@ -83,6 +83,16 @@ func redactedURL(_ url: URL) -> String {
   return components.url?.absoluteString ?? "(invalid-url)"
 }
 
+/// Fixture captures may pin the webview to a manifest viewport while normal
+/// launches retain the approved comparison frame. Bounds keep an untrusted
+/// environment value from creating an enormous window in a scratch run.
+func captureDimension(_ name: String, fallback: CGFloat, minimum: CGFloat, maximum: CGFloat) -> CGFloat {
+  guard let raw = env[name], let value = Double(raw), value.isFinite,
+    value >= Double(minimum), value <= Double(maximum)
+  else { return fallback }
+  return CGFloat(value)
+}
+
 /// Apply an optional path/query to every load strategy, including a bundled
 /// loopback server. `OMI_SURFACE_PATH=/?selftest=1` remains accepted for the
 /// existing probe scripts; `OMI_SURFACE_QUERY` is the explicit query-only form.
@@ -446,7 +456,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
 
-    let contentRect = NSRect(x: 0, y: 0, width: 934, height: 671)
+    let fixtureCapture = env["OMI_PROBE_EXIT"] != nil
+    let contentRect = NSRect(
+      x: 0, y: 0,
+      width: fixtureCapture ? captureDimension("OMI_NATIVE_VIEWPORT_WIDTH", fallback: 934, minimum: 760, maximum: 2400) : 934,
+      height: fixtureCapture ? captureDimension("OMI_NATIVE_VIEWPORT_HEIGHT", fallback: 671, minimum: 560, maximum: 1800) : 671)
     let handlers = NativeHandlers()
     // Privileged-HTTP custody: SessionBootstrap resolves base URL + token via
     // Keychain → optional scratch issuer → OMI_API_TOKEN env. Neither value is

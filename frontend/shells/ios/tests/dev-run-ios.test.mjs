@@ -67,6 +67,9 @@ if [[ "$1 $2" == "simctl launch" ]]; then
     cp "${nativeResult}" "${container}/Documents/omi-c3b3-consumer-run-launcher-proof.json"
   fi
 fi
+if [[ "$1 $2" == "simctl io" && "$4" == "screenshot" ]]; then
+  printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=' | base64 -D > "$5"
+fi
 exit 0
 `);
     chmodSync(flutter, 0o755);
@@ -106,6 +109,19 @@ exit 0
     assert.match(readFileSync(argsFile, "utf8"), /SURFACE_QUERY=route=home&platform=mobile/);
     assert.match(readFileSync(argsFile, "utf8"), /OMI_API_BASE_URL=http:\/\/127\.0\.0\.1:4851/);
     assert.doesNotMatch(readFileSync(argsFile, "utf8"), /generation=platform/);
+
+    const fixtureCapture = path.join(scratch, "ios-fixture.png");
+    const captured = spawnSync("/bin/bash", [
+      launcher, "--fixture", "memories", "--state", "ready", "--theme", "dark",
+      "--accessibility", "rtl", "--run-id", "fixture-ios-001", "--capture-out", fixtureCapture,
+      "--device", "simulator-proof",
+    ], { encoding: "utf8", env: { ...env, OMI_API_TOKEN: "must-not-leak" } });
+    assert.equal(captured.status, 0, captured.stderr || captured.stdout);
+    assert.equal(existsSync(fixtureCapture), true);
+    const captureArgs = readFileSync(argsFile, "utf8");
+    assert.match(captureArgs, /--dart-define=SURFACE_QUERY=qa=memories&polish=1&state=ready&theme=dark&platform=mobile&accessibility=rtl/);
+    assert.match(readFileSync(simctlLog, "utf8"), /simctl io simulator-proof screenshot .*ios-fixture\.png/);
+    assert.doesNotMatch(`${captured.stdout}${captured.stderr}`, /must-not-leak/);
 
     const fixtureMode = spawnSync(
       "/bin/bash",
