@@ -45,6 +45,7 @@ class RenderedDomainChat {
   sent = [];
   cancelled = [];
   deliveries = [];
+  timelines = [];
   dead = [];
   discarded = [];
   caps = {
@@ -72,6 +73,7 @@ class RenderedDomainChat {
   pendingMessageIds() { return []; }
   activeGenerations() { return this.active; }
   async generationDeliveries() { return this.deliveries; }
+  agentRunTimelines() { return this.timelines; }
   async deadLetters() { return this.dead; }
   async discardDeadLetter(opId) {
     this.discarded.push(opId);
@@ -808,9 +810,26 @@ test("observer and provider failures render as non-streaming assistant failures"
     assert.equal(composer.value, "Question");
     assert.equal(rendered.window.document.activeElement, composer);
     assert.equal(domain.sent.length, 0, "recovery never silently resends or invents retry semantics");
+    await setTextarea(rendered, composer, "   ");
+    await click(rendered, recovery);
+    assert.equal(composer.value, "   ", "recovery preserves even whitespace-only unsent drafts");
     await setTextarea(rendered, composer, "Keep this newer draft");
     await click(rendered, recovery);
     assert.equal(composer.value, "Keep this newer draft", "recovery never overwrites unsent composer work");
+    await rendered.act(async () => {
+      domain.deliveries = [{
+        generationId: "provider-failed-unmatched",
+        clientMessageId: "missing-human",
+        terminal: { kind: "failed", error: { code: "provider_down", retryable: true } },
+      }];
+      domain.notify();
+      await Promise.resolve();
+    });
+    assert.equal(
+      rendered.container.querySelector(".chat-failure-recovery"),
+      null,
+      "a missing admitted human cannot render a recovery action that has no executable source",
+    );
   } finally {
     await rendered.cleanup();
   }
@@ -864,6 +883,35 @@ test("Chat announces the latest terminal delivery without rereading the thread",
     const announcement = rendered.container.querySelector('[data-live-region="true"]');
     assert.ok(announcement?.textContent?.includes(EN_MESSAGES["chat.stopped"]));
     assert.equal(announcement?.textContent?.includes(EN_MESSAGES["lifecycle.resultsCount"]), false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("agent activity renders safe capability, context, two tools, approval status, recovery, usage, and terminal", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const fixtureChatStore = await loadProductionExport("chat-fixtures.ts", "fixtureChatStore");
+  const rendered = await renderComponent(ChatProduction, {
+    store: fixtureChatStore("normal"),
+    fixture: "normal",
+  });
+  try {
+    const timeline = rendered.container.querySelector(".chat-agent-run");
+    assert.ok(timeline);
+    assert.equal(timeline.dataset.agentRunState, "complete");
+    assert.ok(timeline.textContent.includes(EN_MESSAGES["chat.agentScripted"]));
+    assert.equal(timeline.querySelectorAll('[data-agent-event="tool_request"]').length, 2);
+    assert.equal(timeline.querySelectorAll('[data-agent-event="tool_result"]').length, 2);
+    assert.equal(timeline.querySelectorAll('[data-agent-event="approval_requested"]').length, 1);
+    assert.equal(timeline.querySelectorAll('[data-agent-event="recovery"]').length, 1);
+    assert.equal(timeline.querySelectorAll('[data-agent-event="usage"]').length, 1);
+    assert.equal(timeline.querySelectorAll('[data-agent-event="terminal"]').length, 1);
+    assert.ok(timeline.textContent.includes(EN_MESSAGES["chat.agentApprovalNoAction"]));
+    assert.equal(timeline.querySelector("button"), null, "approval receipt cannot mint an unratified action");
+    assert.doesNotMatch(
+      timeline.textContent,
+      /callId|approvalId|eventId|runId|opaque|rawArguments|chain.of.thought/iu,
+    );
   } finally {
     await rendered.cleanup();
   }

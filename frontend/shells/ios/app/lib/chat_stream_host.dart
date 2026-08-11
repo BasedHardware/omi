@@ -74,7 +74,7 @@ class ChatStreamHost {
       return;
     }
     final session = _sessions[id];
-    if (session == null || channel != BridgeStreamContract.chatGenerationChannel) {
+    if (session == null || channel != session.channel) {
       return;
     }
     if (type == BridgeStreamContract.grantMessage) {
@@ -98,25 +98,29 @@ class ChatStreamHost {
 
   Future<void> _open(Map<String, dynamic> frame, String id, String channel) async {
     if (_sessions.containsKey(id)) return;
-    if (channel != BridgeStreamContract.chatGenerationChannel) {
+    if (channel != BridgeStreamContract.chatGenerationChannel &&
+        channel != BridgeStreamContract.chatAgentRunChannel) {
       await _emitError(id, 'invalid-request', _documentEpoch, channel: channel);
       return;
     }
     final fields = BridgeStreamContract.toShellFields[BridgeStreamContract.openMessage]!;
     if (!_hasExactKeys(frame, fields) || !_isPositiveCredit(frame['credit']) || frame['params'] is! String) {
-      await _emitError(id, 'invalid-request', _documentEpoch);
+      await _emitError(id, 'invalid-request', _documentEpoch, channel: channel);
       return;
     }
     dynamic decodedParams;
     try {
       decodedParams = jsonDecode(frame['params'] as String);
     } on FormatException {
-      await _emitError(id, 'invalid-request', _documentEpoch);
+      await _emitError(id, 'invalid-request', _documentEpoch, channel: channel);
       return;
     }
+    final parameterFields = channel == BridgeStreamContract.chatGenerationChannel
+        ? BridgeStreamContract.chatGenerationParameterFields
+        : BridgeStreamContract.chatAgentRunParameterFields;
     if (decodedParams is! Map<String, dynamic> ||
-        !_hasOptionalKeys(decodedParams, BridgeStreamContract.chatGenerationParameterFields, const {'generationId'})) {
-      await _emitError(id, 'invalid-request', _documentEpoch);
+        !_hasOptionalKeys(decodedParams, parameterFields, const {'generationId'})) {
+      await _emitError(id, 'invalid-request', _documentEpoch, channel: channel);
       return;
     }
     final generationId = decodedParams['generationId'];
@@ -124,17 +128,18 @@ class ChatStreamHost {
     if (generationId is! String ||
         !_safeOpaque.hasMatch(generationId) ||
         (lastEventId != null && (lastEventId is! String || !_safeOpaque.hasMatch(lastEventId)))) {
-      await _emitError(id, 'invalid-request', _documentEpoch);
+      await _emitError(id, 'invalid-request', _documentEpoch, channel: channel);
       return;
     }
     final token = custody.currentToken;
     if (token == null) {
-      await _emitError(id, 'not-authenticated', _documentEpoch);
+      await _emitError(id, 'not-authenticated', _documentEpoch, channel: channel);
       return;
     }
     final session = _ChatStreamSession(
       host: this,
       id: id,
+      channel: channel,
       generationId: generationId,
       lastEventId: lastEventId as String?,
       credit: frame['credit'] as int,
@@ -146,8 +151,10 @@ class ChatStreamHost {
     unawaited(session.start());
   }
 
-  Uri _eventsUrl(String generationId) =>
-      baseUrl.resolve('/v1/chat-generations/${Uri.encodeComponent(generationId)}/events');
+  Uri _eventsUrl(String generationId, String channel) {
+    final suffix = channel == BridgeStreamContract.chatAgentRunChannel ? 'agent-events' : 'events';
+    return baseUrl.resolve('/v1/chat-generations/${Uri.encodeComponent(generationId)}/$suffix');
+  }
 
   bool _isCurrent(_ChatStreamSession session) =>
       !_closed && session.epoch == _documentEpoch && identical(_sessions[session.id], session);
@@ -161,7 +168,7 @@ class ChatStreamHost {
     await sink.streamFrame(<String, Object>{
       't': BridgeStreamContract.dataMessage,
       'id': session.id,
-      'channel': BridgeStreamContract.chatGenerationChannel,
+      'channel': session.channel,
       'payload': payload,
     }, generation: session.documentGeneration);
   }
@@ -171,7 +178,7 @@ class ChatStreamHost {
     await sink.streamFrame(<String, Object>{
       't': BridgeStreamContract.endMessage,
       'id': session.id,
-      'channel': BridgeStreamContract.chatGenerationChannel,
+      'channel': session.channel,
     }, generation: session.documentGeneration);
   }
 
@@ -209,6 +216,7 @@ class _ChatStreamSession {
   _ChatStreamSession({
     required this.host,
     required this.id,
+    required this.channel,
     required this.generationId,
     required this.lastEventId,
     required this.credit,
@@ -219,6 +227,7 @@ class _ChatStreamSession {
 
   final ChatStreamHost host;
   final String id;
+  final String channel;
   final String generationId;
   final String? lastEventId;
   final String token;
@@ -233,7 +242,7 @@ class _ChatStreamSession {
 
   Future<void> start() async {
     try {
-      final request = await host._httpClient.openUrl('GET', host._eventsUrl(generationId));
+      final request = await host._httpClient.openUrl('GET', host._eventsUrl(generationId, channel));
       _request = request;
       if (!host._isCurrent(this)) {
         request.abort();
@@ -327,7 +336,13 @@ class _ChatStreamSession {
     host._retire(this);
     _request?.abort();
     await _subscription?.cancel();
-    await host._emitError(id, failure, epoch, documentGeneration: documentGeneration);
+    await host._emitError(
+      id,
+      failure,
+      epoch,
+      channel: channel,
+      documentGeneration: documentGeneration,
+    );
   }
 
   Future<void> cancel() async {

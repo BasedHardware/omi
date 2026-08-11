@@ -83,6 +83,60 @@ void main() {
     await host.close();
   });
 
+  test('agent run channel uses the fixed native route and preserves its channel', () async {
+    final client = FakeChatNativeHttpClient()
+      ..responses.add(
+        FakeChatNativeHttpResponse(
+          statusCode: 200,
+          contentType: 'text/event-stream',
+          bytes: Stream<List<int>>.value(utf8.encode('id: run-1\nevent: status\ndata: {}\n\n')),
+        ),
+      );
+    final scripts = <String>[];
+    final host = makeHost(client, scripts, ShellCredentialCustody('native-secret'));
+    await host.handleMessage(
+      frame(<String, Object>{
+        't': 'open',
+        'id': 's-agent-run',
+        'channel': 'chat-agent-run-events',
+        'params': jsonEncode(<String, Object>{
+          'generationId': 'generation/agent',
+          'lastEventId': 'run-before',
+        }),
+        'credit': 2,
+      }),
+    );
+    await waitFor(() => scripts.map(parseSingleArgumentFrame).any((item) => item['t'] == 'end'));
+    final request = client.requests.single;
+    expect(request.url.path, '/v1/chat-generations/generation%2Fagent/agent-events');
+    expect(request.headers['last-event-id'], 'run-before');
+    expect(request.headers['authorization'], 'Bearer native-secret');
+    final frames = scripts.map(parseSingleArgumentFrame).toList(growable: false);
+    expect(frames.every((item) => item['channel'] == 'chat-agent-run-events'), isTrue);
+    expect(scripts.join(), isNot(contains('native-secret')));
+    await host.close();
+  });
+
+  test('invalid agent run open terminates on its own logical channel', () async {
+    final client = FakeChatNativeHttpClient();
+    final scripts = <String>[];
+    final host = makeHost(client, scripts, ShellCredentialCustody('native-secret'));
+    await host.handleMessage(
+      frame(<String, Object>{
+        't': 'open',
+        'id': 's-agent-invalid',
+        'channel': 'chat-agent-run-events',
+        'params': '{"generationId":7}',
+        'credit': 1,
+      }),
+    );
+    final emitted = scripts.map(parseSingleArgumentFrame).single;
+    expect(emitted['t'], 'error');
+    expect(emitted['channel'], 'chat-agent-run-events');
+    expect(client.requests, isEmpty);
+    await host.close();
+  });
+
   test('credit pauses delivery, grant resumes exactly its count, and cancel closes the socket', () async {
     // red-proof: delete `subscription.pause()` in `_ChatStreamSession.start`;
     // all three chunks reach the JS sink before the grant assertion.

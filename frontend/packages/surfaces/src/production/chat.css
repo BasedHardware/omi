@@ -127,6 +127,55 @@ html[data-platform="mobile"] .chat-jump-latest {
   color: var(--content-primary);
 }
 
+.chat-agent-run {
+  margin-top: var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+}
+
+.chat-agent-run summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-height: var(--min-tap-target);
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  color: var(--content-primary);
+}
+
+.chat-agent-capability,
+.chat-agent-state {
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--surface-elevated);
+  color: var(--content-secondary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+}
+
+.chat-agent-run ol {
+  display: grid;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0 var(--space-sm) var(--space-sm) calc(var(--space-xl) + var(--space-xs));
+}
+
+.chat-agent-run li p {
+  margin: 0;
+}
+
+.chat-agent-detail {
+  color: var(--content-secondary);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
+}
+
+.chat-agent-detail span + span::before {
+  content: " · ";
+}
+
 .chat-message button {
   margin-top: var(--space-sm);
 }

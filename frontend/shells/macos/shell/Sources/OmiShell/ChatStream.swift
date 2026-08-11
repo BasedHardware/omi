@@ -26,6 +26,7 @@ enum ChatStreamPolicy {
 
   static func prepare(
     id: String,
+    channel: String,
     generationId: String,
     lastEventId: String?,
     baseURL: URL,
@@ -43,7 +44,13 @@ enum ChatStreamPolicy {
       components.scheme == "http" || components.scheme == "https",
       components.host != nil
     else { return .failure("invalid-origin") }
-    components.percentEncodedPath = "/v1/chat-generations/\(encodedGenerationId)/events"
+    let suffix: String
+    switch channel {
+    case BridgeStreamContract.chatGenerationChannel: suffix = "events"
+    case BridgeStreamContract.chatAgentRunChannel: suffix = "agent-events"
+    default: return .failure("invalid-channel")
+    }
+    components.percentEncodedPath = "/v1/chat-generations/\(encodedGenerationId)/\(suffix)"
     components.query = nil
     components.fragment = nil
     guard let url = components.url else { return .failure("invalid-origin") }
@@ -189,10 +196,11 @@ final class ChatStreamHandler: NSObject, WKScriptMessageHandler, URLSessionDataD
   }
 
   func prepareUsingCurrentCustodyForConformance(
-    id: String, generationId: String, lastEventId: String?
+    id: String, generationId: String, lastEventId: String?,
+    channel: String = BridgeStreamContract.chatGenerationChannel
   ) -> ChatStreamPolicyDecision {
     ChatStreamPolicy.prepare(
-      id: id, generationId: generationId, lastEventId: lastEventId,
+      id: id, channel: channel, generationId: generationId, lastEventId: lastEventId,
       baseURL: baseURL, token: custody.currentToken(), runId: runId)
   }
 
@@ -229,6 +237,7 @@ final class ChatStreamHandler: NSObject, WKScriptMessageHandler, URLSessionDataD
     guard let type = frame["t"] as? String,
       let channel = frame["channel"] as? String,
       channel == BridgeStreamContract.chatGenerationChannel
+        || channel == BridgeStreamContract.chatAgentRunChannel
     else {
       rejectRoutable(id: id, webView: webView)
       return
@@ -242,7 +251,7 @@ final class ChatStreamHandler: NSObject, WKScriptMessageHandler, URLSessionDataD
     case BridgeStreamContract.ToShellMessage.cancel.rawValue:
       cancel(frame: frame, id: id, channel: channel, webView: webView)
     default:
-      rejectRoutable(id: id, webView: webView)
+      rejectRoutable(id: id, channel: channel, webView: webView)
     }
   }
 
@@ -270,16 +279,16 @@ final class ChatStreamHandler: NSObject, WKScriptMessageHandler, URLSessionDataD
       let paramsData = params.data(using: .utf8),
       let paramsObject = try? JSONSerialization.jsonObject(with: paramsData),
       let values = paramsObject as? [String: Any],
-      exactGenerationParameterKeys(Set(values.keys)),
+      exactParameterKeys(Set(values.keys), channel: channel),
       let generationId = values["generationId"] as? String,
       values["lastEventId"] == nil || values["lastEventId"] is String
     else {
-      rejectRoutable(id: id, webView: webView)
+      rejectRoutable(id: id, channel: channel, webView: webView)
       return
     }
     let lastEventId = values["lastEventId"] as? String
     switch prepareUsingCurrentCustodyForConformance(
-      id: id, generationId: generationId, lastEventId: lastEventId)
+      id: id, generationId: generationId, lastEventId: lastEventId, channel: channel)
     {
     case .failure(let failure):
       emit(type: .error, id: id, channel: channel, valueName: "failure", value: failure, webView: webView)
@@ -301,7 +310,7 @@ final class ChatStreamHandler: NSObject, WKScriptMessageHandler, URLSessionDataD
       let grant = exactPositiveInteger(frame["credit"]),
       grant <= 1_000_000, item.credit <= 1_000_000 - grant
     else {
-      rejectRoutable(id: id, webView: webView)
+      rejectRoutable(id: id, channel: channel, webView: webView)
       return
     }
     item.credit += grant
@@ -320,26 +329,34 @@ final class ChatStreamHandler: NSObject, WKScriptMessageHandler, URLSessionDataD
       frame["reason"] == nil || safeReason(frame["reason"]),
       let item = sessions[id], item.channel == channel
     else {
-      rejectRoutable(id: id, webView: webView)
+      rejectRoutable(id: id, channel: channel, webView: webView)
       return
     }
     forget(item, cancelTask: true)
   }
 
-  private func rejectRoutable(id: String, webView: WKWebView?) {
+  private func rejectRoutable(
+    id: String,
+    channel: String = BridgeStreamContract.chatGenerationChannel,
+    webView: WKWebView?
+  ) {
     if let item = sessions[id] {
       fail(item, failure: "invalid-frame")
       return
     }
     emit(
-      type: .error, id: id, channel: BridgeStreamContract.chatGenerationChannel,
+      type: .error, id: id, channel: channel,
       valueName: "failure", value: "invalid-frame", webView: webView)
   }
 
-  private func exactGenerationParameterKeys(_ keys: Set<String>) -> Bool {
-    let required = BridgeStreamContract.chatGenerationRequiredParameterFields
-    let allowed = required.union(BridgeStreamContract.chatGenerationOptionalParameterFields)
-    return required.isSubset(of: keys) && keys.isSubset(of: allowed)
+  private func exactParameterKeys(_ keys: Set<String>, channel: String) -> Bool {
+    if channel == BridgeStreamContract.chatGenerationChannel {
+      let required = BridgeStreamContract.chatGenerationRequiredParameterFields
+      let allowed = required.union(BridgeStreamContract.chatGenerationOptionalParameterFields)
+      return required.isSubset(of: keys) && keys.isSubset(of: allowed)
+    }
+    let allowed = BridgeStreamContract.chatAgentRunParameterFields
+    return keys.contains("generationId") && keys.isSubset(of: allowed)
   }
 
   private func safeBridgeId(_ id: String) -> Bool {

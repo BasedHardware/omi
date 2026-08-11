@@ -39,12 +39,21 @@ export const BRIDGE_STREAM_SINK_FUNCTION = "__omiStreamFrame";
 /** The logical channel whose params are `ChatGenerationStreamParams`. */
 export const CHAT_GENERATION_STREAM_CHANNEL = "chat-generation-events";
 
+/** UI-safe agent work receipts for one Chat generation. */
+export const CHAT_AGENT_RUN_STREAM_CHANNEL = "chat-agent-run-events";
+
 /**
  * Host-owned generation identity and reconnect cursor. The host constructs
  * the fixed authenticated GET route; no origin, token, or caller-authored
  * headers cross into JavaScript.
  */
 export interface ChatGenerationStreamParams {
+  generationId: string;
+  lastEventId?: string;
+}
+
+/** Host-owned run identity and exact opaque replay cursor. */
+export interface ChatAgentRunStreamParams {
   generationId: string;
   lastEventId?: string;
 }

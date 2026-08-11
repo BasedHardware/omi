@@ -130,6 +130,26 @@ function emptyCancelledGeneration(): string {
   );
 }
 
+function agentRunEvent(
+  generationId: string,
+  eventId: string,
+  sequence: number,
+  kind: string,
+  safeSummary: string,
+  details: Readonly<Record<string, unknown>>,
+): string {
+  return sseEvent(eventId, kind, {
+    runId: generationId,
+    attemptId: "attempt-one",
+    eventId,
+    sequence,
+    createdAt: 1_786_442_400_000 + sequence,
+    kind,
+    safeSummary,
+    details,
+  });
+}
+
 class StoreTestStream implements BridgePayloadStream {
   cancelled = false;
 
@@ -277,6 +297,59 @@ test("POST admission drains the durable outbox while generation remains hanging"
     observationState: "streaming",
     failure: null,
   }]);
+});
+
+test("privacy-reduced agent activity persists in an append-only log and restores by generation", async () => {
+  const disk = new MemoryStore();
+  const env = new ManualEnv();
+  const http = new ScriptedHttp();
+  const scripts: { chunks: readonly string[]; hangs?: boolean }[] = [];
+  const streams = new StoreTestStreamPort(scripts);
+  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http, streams);
+
+  await store.send("show agent activity");
+  const clientMessageId = (await store.list())[0]!.id;
+  const generationId = `generation-${clientMessageId}`;
+  scripts.push(
+    { chunks: [successfulGeneration(clientMessageId)] },
+    { chunks: [
+      agentRunEvent(generationId, "opaque-accepted", 1, "run_accepted", "Run accepted", {
+        admissionId: "opaque-admission",
+      }) +
+      agentRunEvent(generationId, "opaque-capability", 2, "capability_receipt", "Local scripted adapter declared", {
+        tier: "deterministic-scripted", adapter: "local-scripted", deterministic: true,
+      }) +
+      agentRunEvent(generationId, "opaque-terminal", 3, "terminal", "Run complete", {
+        terminalOutcome: "completed", terminalCode: "completed", retryable: false, recoveryAction: null,
+      }),
+    ] },
+  );
+  http.respond(...successfulSend(clientMessageId, "show agent activity"));
+  await env.advance(10);
+  await drainMicrotasks();
+
+  const timelines = store.agentRunTimelines();
+  assert.equal(timelines.length, 1);
+  assert.equal(timelines[0]?.observationState, "complete");
+  assert.deepEqual(timelines[0]?.events.map((event) => event.kind), [
+    "run_accepted", "capability_receipt", "terminal",
+  ]);
+  assert.doesNotMatch(
+    JSON.stringify(timelines[0]?.events),
+    /opaque-accepted|opaque-admission|opaque-capability|opaque-terminal|attempt-one/,
+    "opaque transport and run identities never enter the UI event model",
+  );
+
+  const reopened = await ChatMessagesStore.open(
+    disk.openBridge("u"),
+    new ManualEnv(),
+    new ScriptedHttp(),
+  );
+  assert.deepEqual(
+    reopened.agentRunTimelines(),
+    timelines,
+    "safe timeline events restore from the append-only log without a whole-value rewrite",
+  );
 });
 
 test("observer failure durably leaves a non-streaming failed generation state", async () => {

@@ -20,6 +20,7 @@ import type {
   ChatMessageOp,
   ChatTerminalFrame,
   DeadLetter,
+  DurableLog,
   DurableKv,
   RecordId,
 } from "@omi-core/contracts";
@@ -31,9 +32,15 @@ import {
   fetchChatMessageIdSnapshot,
   fetchChatMessageReconcilePage,
   cancelChatGeneration,
+  observeAgentRun,
   observeChatGeneration,
+  parseStoredAgentRunUiEvent,
 } from "@omi-core/adapters-platform";
-import type { ChatGenerationObservation } from "@omi-core/adapters-platform";
+import type {
+  AgentRunObservation,
+  AgentRunUiEvent,
+  ChatGenerationObservation,
+} from "@omi-core/adapters-platform";
 import {
   buildCreateChatMessage,
   buildDeleteChatMessage,
@@ -67,11 +74,28 @@ export interface ChatHistoryWindow {
   readonly olderCursor: string | null;
 }
 
+export interface StoredChatAgentRunTimeline {
+  readonly generationId: string;
+  readonly clientMessageId: RecordId;
+  readonly events: readonly AgentRunUiEvent[];
+  readonly lastEventId: string | null;
+  readonly observationState: "observing" | "complete" | "failed";
+}
+
+interface StoredAgentRunLogEntry {
+  readonly generationId: string;
+  readonly clientMessageId: RecordId;
+  readonly eventId: string;
+  readonly event: AgentRunUiEvent;
+}
+
 export class ChatMessagesStore {
   private listeners = new Set<() => void>();
   private readonly refreshTracker: RefreshTracker;
   private readonly active = new Map<string, ActiveChatGeneration>();
   private readonly observations = new Map<string, ChatGenerationObservation>();
+  private readonly agentRuns = new Map<string, StoredChatAgentRunTimeline>();
+  private readonly agentObservations = new Map<string, AgentRunObservation>();
   private chatCapabilities: ChatCapabilitiesWire | null = null;
   private historyWindow: ChatHistoryWindow = { hasOlder: false, olderCursor: null };
 
@@ -81,6 +105,7 @@ export class ChatMessagesStore {
     private readonly outbox: Outbox,
     private readonly projection: Projection<ChatMessage>,
     private readonly generationKv: DurableKv,
+    private readonly agentRunLog: DurableLog,
     private readonly streamPort: BridgeStreamPort | null,
     hasSavedData: boolean,
   ) {
@@ -98,6 +123,7 @@ export class ChatMessagesStore {
       chatMessagesCodec,
     );
     const generationKv = await bridge.openKv("chat-generation-deliveries");
+    const agentRunLog = await bridge.openLog("chat-agent-run-events");
 
     let store: ChatMessagesStore;
     const transport = chatMessagesTransport(
@@ -111,6 +137,7 @@ export class ChatMessagesStore {
       outbox,
       projection,
       generationKv,
+      agentRunLog,
       streamPort ?? null,
       (await projection.read([])).length > 0,
     );
@@ -131,7 +158,9 @@ export class ChatMessagesStore {
       else await projection.upsertServerRows([next]);
       store.notify();
     };
+    await store.restoreAgentRuns();
     await store.restoreActiveGenerations();
+    await store.resumeTerminalAgentRuns();
     return store;
   }
 
@@ -161,6 +190,13 @@ export class ChatMessagesStore {
 
   activeGenerations(): readonly ActiveChatGeneration[] {
     return [...this.active.values()];
+  }
+
+  agentRunTimelines(): readonly StoredChatAgentRunTimeline[] {
+    return [...this.agentRuns.values()].map((timeline) => ({
+      ...timeline,
+      events: [...timeline.events],
+    }));
   }
 
   historyPage(): ChatHistoryWindow {
@@ -317,6 +353,7 @@ export class ChatMessagesStore {
     await this.persistActiveGenerations();
     this.notify();
     this.startObservation(state);
+    this.startAgentRunObservation(state.generationId, state.clientMessageId);
   }
 
   private async recordGenerationTerminal(
@@ -356,6 +393,81 @@ export class ChatMessagesStore {
     );
     this.observations.set(state.generationId, observation);
     void this.consumeObservation(state.generationId, observation);
+  }
+
+  private startAgentRunObservation(generationId: string, clientMessageId: RecordId): void {
+    if (this.streamPort === null || this.agentObservations.has(generationId)) return;
+    const existing = this.agentRuns.get(generationId);
+    if (existing?.observationState === "complete") return;
+    const observation = observeAgentRun(
+      this.streamPort,
+      generationId,
+      this.env,
+      existing?.lastEventId ?? undefined,
+    );
+    this.agentObservations.set(generationId, observation);
+    this.agentRuns.set(generationId, existing ?? {
+      generationId,
+      clientMessageId,
+      events: [],
+      lastEventId: null,
+      observationState: "observing",
+    });
+    void this.consumeAgentRunObservation(generationId, clientMessageId, observation);
+  }
+
+  private async consumeAgentRunObservation(
+    generationId: string,
+    clientMessageId: RecordId,
+    observation: AgentRunObservation,
+  ): Promise<void> {
+    try {
+      for await (const incoming of observation.events) {
+        if (this.agentObservations.get(generationId) !== observation) return;
+        const current = this.agentRuns.get(generationId) ?? {
+          generationId,
+          clientMessageId,
+          events: [],
+          lastEventId: null,
+          observationState: "observing" as const,
+        };
+        if (incoming.kind === "error") {
+          this.agentObservations.delete(generationId);
+          this.agentRuns.set(generationId, { ...current, observationState: "failed" });
+          this.notify();
+          return;
+        }
+        if (current.events.some((event) => event.sequence === incoming.event.sequence)) continue;
+        const latestSequence = current.events.at(-1)?.sequence ?? 0;
+        if (incoming.event.sequence <= latestSequence) {
+          throw new Error("agent-run sequence moved backwards");
+        }
+        const entry: StoredAgentRunLogEntry = {
+          generationId,
+          clientMessageId,
+          eventId: incoming.id,
+          event: incoming.event,
+        };
+        await this.agentRunLog.append(JSON.stringify(entry));
+        const terminal = incoming.event.kind === "terminal";
+        this.agentRuns.set(generationId, {
+          generationId,
+          clientMessageId,
+          events: [...current.events, incoming.event],
+          lastEventId: incoming.id,
+          observationState: terminal ? "complete" : "observing",
+        });
+        if (terminal) this.agentObservations.delete(generationId);
+        this.notify();
+        if (terminal) return;
+      }
+    } catch {
+      if (this.agentObservations.get(generationId) !== observation) return;
+      this.agentObservations.delete(generationId);
+      const current = this.agentRuns.get(generationId);
+      if (current !== undefined) this.agentRuns.set(generationId, { ...current, observationState: "failed" });
+      this.notify();
+    }
   }
 
   private async consumeObservation(
@@ -441,7 +553,10 @@ export class ChatMessagesStore {
         ) continue;
         const state = value as ActiveChatGeneration;
         this.active.set(state.generationId, state);
-        if (state.observationState === "streaming") this.startObservation(state);
+        if (state.observationState === "streaming") {
+          this.startObservation(state);
+          this.startAgentRunObservation(state.generationId, state.clientMessageId);
+        }
       }
     } catch {
       // Malformed advisory state never corrupts the canonical projection.
@@ -450,5 +565,47 @@ export class ChatMessagesStore {
 
   private persistActiveGenerations(): Promise<void> {
     return this.generationKv.set(ACTIVE_GENERATIONS_KEY, JSON.stringify([...this.active.values()]));
+  }
+
+  private async restoreAgentRuns(): Promise<void> {
+    const entries = await this.agentRunLog.scan(0);
+    for (const logEntry of entries) {
+      try {
+        const raw = JSON.parse(logEntry.payload) as unknown;
+        if (raw === null || typeof raw !== "object" || Array.isArray(raw)) continue;
+        const keys = Object.keys(raw).sort();
+        if (keys.join(",") !== "clientMessageId,event,eventId,generationId") continue;
+        const candidate = raw as Partial<StoredAgentRunLogEntry>;
+        if (typeof candidate.generationId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u.test(candidate.generationId)
+          || typeof candidate.clientMessageId !== "string"
+          || typeof candidate.eventId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u.test(candidate.eventId)) continue;
+        const event = parseStoredAgentRunUiEvent(candidate.event);
+        if (event === null) continue;
+        const current = this.agentRuns.get(candidate.generationId);
+        if (current?.events.some((stored) => stored.sequence === event.sequence)) continue;
+        const latestSequence = current?.events.at(-1)?.sequence ?? 0;
+        if (event.sequence <= latestSequence || current?.observationState === "complete") continue;
+        this.agentRuns.set(candidate.generationId, {
+          generationId: candidate.generationId,
+          clientMessageId: candidate.clientMessageId as RecordId,
+          events: [...(current?.events ?? []), event],
+          lastEventId: candidate.eventId,
+          observationState: event.kind === "terminal" ? "complete" : "observing",
+        });
+      } catch {
+        // A malformed advisory run record is skipped without touching Chat truth.
+      }
+    }
+  }
+
+  private async resumeTerminalAgentRuns(): Promise<void> {
+    if (this.streamPort === null) return;
+    const deliveries = (await this.generationDeliveries()).slice(-8);
+    for (const delivery of deliveries) {
+      const timeline = this.agentRuns.get(delivery.generationId);
+      if (timeline?.observationState !== "complete") {
+        this.startAgentRunObservation(delivery.generationId, delivery.clientMessageId);
+      }
+    }
   }
 }
