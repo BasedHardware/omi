@@ -37,13 +37,49 @@ test("signed-out is a chosen state with sign-in, never error or entitlement-abse
     const account = rendered.container.querySelector('[data-settings-account="signed-out"]');
     assert.ok(account, "signed-out renders its designed account presentation");
     assert.ok(textOf(rendered).includes(EN_MESSAGES["settings.notSignedIn"]));
-    assert.ok(rendered.container.querySelector('button.settings-sign-in[aria-label="' + EN_MESSAGES["settings.signIn"] + '"]'));
+    const signIn = rendered.container.querySelector('[role="button"].settings-sign-in[aria-label="' + EN_MESSAGES["settings.signIn"] + '"]');
+    assert.ok(signIn, "unavailable sign-in remains an explained keyboard focus target");
+    assert.equal(signIn.getAttribute("aria-disabled"), "true");
+    const explanationId = signIn.getAttribute("aria-describedby");
+    assert.equal(rendered.container.querySelector(`#${explanationId}`)?.textContent, EN_MESSAGES["settings.signInUnavailable"]);
+    assert.ok(textOf(rendered).includes(EN_MESSAGES["settings.signInUnavailable"]));
     assert.equal(rendered.container.querySelector('[data-settings-account="unavailable"]'), null);
     assert.equal(rendered.container.querySelector('[data-settings-plan="absent"]'), null);
     assert.equal(rendered.container.querySelector(".operation-error"), null);
     assert.equal(account.className.includes("is-error"), false);
     assert.equal(textOf(rendered).includes(EN_MESSAGES["lifecycle.unavailable"]), false);
     assert.equal(textOf(rendered).includes(EN_MESSAGES["settings.entitlementAbsentTitle"]), false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("signed-in identity hides blank account fields instead of rendering empty metadata", async () => {
+  // red-proof: unconditionally rendering the Email definition row exposes an
+  // empty stock field and makes this test fail.
+  const SettingsProduction = await loadProductionExport("SettingsProduction.tsx", "SettingsProduction");
+  const snapshot = {
+    identity: { displayName: "   ", email: "   " },
+    appearance: "system",
+    entitlement: null,
+  };
+  const store = {
+    async snapshot() { return snapshot; },
+    status() { return { refresh: { phase: "ready", hasSavedData: true }, queue: { phase: "idle", pendingCount: 0 } }; },
+    async deadLetters() { return []; },
+    subscribe() { return () => {}; },
+    async refresh() {},
+    async patch() {},
+    async signOut() {},
+    async discardDeadLetter() {},
+  };
+  const rendered = await renderComponent(SettingsProduction, { store, fixture: "blank-identity", locale: "en" });
+  try {
+    await rendered.act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    assert.ok(rendered.container.querySelector('[data-settings-account="signed-in"]'));
+    assert.ok(textOf(rendered).includes(EN_MESSAGES["settings.signedIn"]));
+    assert.equal(rendered.container.querySelector(".settings-identity-details"), null);
+    assert.equal(textOf(rendered).includes(EN_MESSAGES["settings.emailLabel"]), false);
   } finally {
     await rendered.cleanup();
   }
@@ -294,6 +330,8 @@ test("settings catalog keys used by the surface exist in the built i18n artifact
   const catalogSource = await readFile(i18nDistCatalog, "utf8");
   for (const key of [
     "settings.notSignedIn",
+    "settings.signedIn",
+    "settings.signInUnavailable",
     "settings.entitlementAbsentTitle",
     "settings.entitlementAbsentBody",
     "settings.unavailableTitle",

@@ -98,6 +98,33 @@
 .settings-signed-in {
   margin: 0;
   color: var(--content-primary);
+  font-weight: 600;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  min-height: var(--min-tap-target);
+}
+
+.settings-row-copy {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.settings-row-title {
+  color: var(--content-primary);
+  font-weight: 600;
+}
+
+.settings-row-description,
+.settings-disabled-explanation {
+  margin: 0;
+  color: var(--content-secondary);
+  font-size: var(--type-label-size);
 }
 
 .settings-identity-details dt,
@@ -119,7 +146,7 @@
 .settings-sign-in,
 .settings-upgrade,
 .settings-retry,
-.settings-appearance-control select {
+.settings-select-wrap select {
   min-height: var(--min-tap-target);
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border);
@@ -148,15 +175,54 @@
   font-size: var(--type-label-size);
 }
 
-.settings-appearance-control {
-  display: grid;
-  gap: var(--space-xs);
-  color: var(--content-secondary);
-  font-size: var(--type-label-size);
+.settings-select-wrap {
+  position: relative;
+  flex: 0 1 16rem;
+  min-width: 11rem;
 }
 
-.settings-appearance-control select {
+.settings-select-wrap::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: var(--space-md);
+  inset-block-start: 50%;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: translateY(-70%) rotate(45deg);
+  color: var(--content-secondary);
+  pointer-events: none;
+}
+
+.settings-select-wrap select {
   width: 100%;
+  padding-inline-end: calc(var(--space-xl) + var(--space-sm));
+  appearance: none;
+  cursor: pointer;
+}
+
+.settings-select-wrap select:disabled {
+  cursor: wait;
+}
+
+.settings-plan-details {
+  gap: 0;
+}
+
+.settings-fact-row {
+  padding-block: var(--space-sm);
+  border-block-start: 1px solid var(--border);
+}
+
+.settings-fact-row:last-child {
+  border-block-end: 1px solid var(--border);
+}
+
+.settings-fact-row dd {
+  text-align: end;
+  color: var(--content-primary);
+  font-weight: 600;
 }
 
 .settings-limit-notice {
@@ -196,8 +262,28 @@ html[data-platform="mobile"] .settings-sign-out,
 html[data-platform="mobile"] .settings-sign-in,
 html[data-platform="mobile"] .settings-upgrade,
 html[data-platform="mobile"] .settings-retry,
-html[data-platform="mobile"] .settings-appearance-control select {
+html[data-platform="mobile"] .settings-select-wrap,
+html[data-platform="mobile"] .settings-select-wrap select {
   width: 100%;
+}
+
+html[data-platform="mobile"] .settings-account-panel .production-disabled-control-wrap {
+  width: 100%;
+}
+
+html[data-platform="mobile"] .settings-row {
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+html[data-platform="mobile"] .settings-fact-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+html[data-platform="mobile"] .settings-fact-row dd {
+  overflow-wrap: anywhere;
 }
 
 html[data-platform="desktop"] .settings-header .settings-eyebrow,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
 import type { AppearanceSelection, EntitlementState, SettingsSnapshot } from "./settings-merge.js";
@@ -6,7 +6,7 @@ import { entitlementNotice, usageLabelArgs } from "./settings-merge.js";
 import type { ProductionSettingsStore } from "./ProductionSettingsStore.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionDisabledControl, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader } from "./ProductionPrimitives.js";
 import "./settings.css";
 
 type Locale = string;
@@ -66,6 +66,7 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
   const [savePhase, setSavePhase] = useState<SavePhase>("idle");
   const [signingOut, setSigningOut] = useState(false);
   const [signedOutNotice, setSignedOutNotice] = useState<string | null>(null);
+  const appearanceControlId = useId();
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
@@ -118,6 +119,8 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
   const canRouteUpgrade = typeof onUpgrade === "function";
   const phase = status.refresh.phase;
   const identity = snapshot?.identity ?? null;
+  const identityName = identity?.displayName.trim() ?? "";
+  const identityEmail = identity?.email.trim() ?? "";
   const entitlement = snapshot?.entitlement ?? null;
   const account = accountPresentation(phase, snapshot);
   const planNotice = entitlementNotice(entitlement, canRouteUpgrade);
@@ -199,23 +202,33 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
           ) : account === "signed-in" ? (
             identity ? (
               <div className="settings-account-panel" data-settings-account="signed-in">
-                <p className="settings-signed-in">{t(locale, "settings.signedInAs", { name: identity.displayName })}</p>
-                <dl className="settings-identity-details">
-                  <div>
-                    <dt>{t(locale, "settings.emailLabel")}</dt>
-                    <dd>{identity.email}</dd>
+                <div className="settings-row settings-account-row">
+                  <div className="settings-row-copy">
+                    <p className="settings-signed-in">
+                      {identityName
+                        ? t(locale, "settings.signedInAs", { name: identityName })
+                        : t(locale, "settings.signedIn")}
+                    </p>
+                    {identityEmail && (
+                      <dl className="settings-identity-details">
+                        <div>
+                          <dt>{t(locale, "settings.emailLabel")}</dt>
+                          <dd>{identityEmail}</dd>
+                        </div>
+                      </dl>
+                    )}
                   </div>
-                </dl>
-                <button
-                  type="button"
-                  className="settings-sign-out"
-                  disabled={signingOut}
-                  aria-busy={signingOut || undefined}
-                  onClick={() => void signOut()}
-                  aria-label={signingOut ? t(locale, "settings.signingOut") : t(locale, "settings.signOut")}
-                >
-                  {signingOut ? t(locale, "settings.signingOut") : t(locale, "settings.signOut")}
-                </button>
+                  <button
+                    type="button"
+                    className="settings-sign-out"
+                    disabled={signingOut}
+                    aria-busy={signingOut || undefined}
+                    onClick={() => void signOut()}
+                    aria-label={signingOut ? t(locale, "settings.signingOut") : t(locale, "settings.signOut")}
+                  >
+                    {signingOut ? t(locale, "settings.signingOut") : t(locale, "settings.signOut")}
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="settings-account-panel is-loading" data-settings-account="loading" role="status" aria-busy={true}>
@@ -226,9 +239,13 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
             <div className="settings-account-panel is-signed-out" data-settings-account="signed-out">
               <p className="settings-state-title">{t(locale, "settings.notSignedIn")}</p>
               <p className="settings-state-copy">{t(locale, "settings.signedOutHint")}</p>
-              <button type="button" className="settings-sign-in" disabled aria-label={t(locale, "settings.signIn")}>
-                {t(locale, "settings.signIn")}
-              </button>
+              <ProductionDisabledControl
+                label={t(locale, "settings.signIn")}
+                explanation={t(locale, "settings.signInUnavailable")}
+                className="settings-sign-in"
+                focusable={true}
+              />
+              <p className="settings-disabled-explanation">{t(locale, "settings.signInUnavailable")}</p>
             </div>
           ) : (
             <div className="settings-account-panel is-loading" data-settings-account="loading" role="status" aria-busy={true}>
@@ -243,20 +260,25 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
             data-appearance-scope="shell-local"
           >
             <h2 id="settings-appearance-heading">{t(locale, "settings.appearanceSection")}</h2>
-            <p className="settings-local-note">{t(locale, "settings.appearanceLocalNote")}</p>
-            <label className="settings-appearance-control">
-              <span>{t(locale, "appearance.title")}</span>
-              <select
-                aria-label={t(locale, "appearance.title")}
-                value={snapshot.appearance}
-                disabled={savePhase === "saving"}
-                onChange={(event) => void changeAppearance(event.target.value as AppearanceSelection)}
-              >
-                {APPEARANCE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{appearanceLabel(option, locale)}</option>
-                ))}
-              </select>
-            </label>
+            <div className="settings-row settings-appearance-row">
+              <label className="settings-row-copy" htmlFor={appearanceControlId}>
+                <span className="settings-row-title">{t(locale, "appearance.title")}</span>
+                <span className="settings-row-description">{t(locale, "settings.appearanceLocalNote")}</span>
+              </label>
+              <span className="settings-select-wrap">
+                <select
+                  id={appearanceControlId}
+                  aria-label={t(locale, "appearance.title")}
+                  value={snapshot.appearance}
+                  disabled={savePhase === "saving"}
+                  onChange={(event) => void changeAppearance(event.target.value as AppearanceSelection)}
+                >
+                  {APPEARANCE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{appearanceLabel(option, locale)}</option>
+                  ))}
+                </select>
+              </span>
+            </div>
           </section>
         )}
         {showPlan && entitlement && (
@@ -268,12 +290,12 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
           >
             <h2 id="settings-plan-heading">{t(locale, "settings.planSection")}</h2>
             <dl className="settings-plan-details">
-              <div>
+              <div className="settings-row settings-fact-row">
                 <dt>{t(locale, "settings.planLabel")}</dt>
                 <dd>{entitlement.planLabel}</dd>
               </div>
               {usage && (
-                <div>
+                <div className="settings-row settings-fact-row">
                   <dt>{t(locale, "settings.usageLabel")}</dt>
                   <dd>
                     {usage.limit !== undefined
