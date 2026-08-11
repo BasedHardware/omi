@@ -465,7 +465,7 @@ export const pairMemoryEvaluationResults = (
   return pair;
 };
 
-const assertVerifiedPair = (value: unknown): Readonly<MemoryEvaluationPair> => {
+export const assertVerifiedMemoryEvaluationPair = (value: unknown): Readonly<MemoryEvaluationPair> => {
   if (value === null || typeof value !== "object" || !verifiedPairs.has(value)) fail("unverified_pair");
   return value as Readonly<MemoryEvaluationPair>;
 };
@@ -553,7 +553,7 @@ export const defineMemoryShadowResultRepository = (
   ): Promise<MemoryEvaluationPairOutcome> {
     const context = assertAuthorizedLedgerWriteContext(contextValue);
     if (context.capability !== CAPABILITY) fail("capability_denied");
-    const pair = assertVerifiedPair(pairValue);
+    const pair = assertVerifiedMemoryEvaluationPair(pairValue);
     if (pair.owner_account_id !== context.account_id) fail("owner_mismatch");
     if (pair.account_epoch !== context.account_epoch) fail("epoch_mismatch");
     const raw = await implementation.recordPair(context, pair);
