@@ -347,7 +347,7 @@ def get_memories(
     service = MemoryService(db_client=db)
     allowed = {category.value for category in category_list} if category_list else None
     if allowed is None:
-        memories = service.read(uid, limit=limit, offset=offset)
+        memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)
         valid_memories = []
         for memory in memories:
             try:
@@ -364,7 +364,7 @@ def get_memories(
     max_scan = 5000
     while scan_offset < max_scan and len(matched) < target_end:
         batch_limit = min(500, max_scan - scan_offset)
-        batch = service.read(uid, limit=batch_limit, offset=scan_offset)
+        batch = service.read(uid, limit=batch_limit, offset=scan_offset, include_pending_processing=True)
         if not batch:
             break
         scan_offset += len(batch)

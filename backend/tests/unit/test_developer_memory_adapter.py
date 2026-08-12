@@ -83,7 +83,7 @@ def _enabled_rollout_doc(uid='u1'):
 def test_developer_route_reads_use_universal_service_without_legacy_fallback():
     contents = _developer_source()
     assert 'service = MemoryService(db_client=db)' in contents
-    assert 'memories = service.read(uid, limit=limit, offset=offset)' in contents
+    assert 'memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)' in contents
     assert 'MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))' in contents
     assert 'read_default_read_rollout' not in contents
     assert 'search_memory_default_developer_memories(' not in contents

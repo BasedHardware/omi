@@ -860,7 +860,16 @@ def append_resolution_commit(
             memory_service.refine(uid, str(target_id), arg_changes)
     if decision == 'reject':
         fact_id: Any = item.get('fact_id')
-        memory_service.delete(uid, str(fact_id))
+        try:
+            memory_service.delete(uid, str(fact_id))
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            status_reader = getattr(memory_service, '_canonical_status', None)
+            if not callable(status_reader) or status_reader(uid, str(fact_id)) != MemoryItemStatus.tombstoned:
+                raise
+            # Already tombstoned by a prior reject whose ledger commit failed.
+            # Treat as success so the retry can complete the ledger append.
     return memory_ledger.append_commit(
         uid,
         None,

@@ -127,8 +127,10 @@ def iter_user_data_export(uid: str) -> Iterator[str]:
     yield '  "memories": '
     # Export is an explicit Archive-capable operation. The universal service
     # merges canonical and historical physical formats, applies tombstone and
-    # override suppression, and returns every live logical memory once without
-    # materializing historical rows.
+    # override suppression, and returns every live logical memory once.  The
+    # returned list is fully materialized (bounded by the account size);
+    # historical rows are not retained, but the merged result is not streamed
+    # page-by-page.
     exported_memories = (
         memory.model_dump(mode='json') for memory in MemoryService().export_memories(uid, include_archive=True)
     )
