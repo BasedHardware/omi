@@ -23,7 +23,13 @@ from utils.account_cutover.access import (
 )
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
-from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
+from utils.byok import (
+    extract_byok_from_websocket,
+    set_byok_keys,
+    set_validated_byok_keys,
+    validate_byok_request,
+    validate_byok_websocket_keys,
+)
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 
@@ -358,12 +364,12 @@ async def get_current_user_uid_ws_listen(
 
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
-        byok_keys = extract_byok_from_websocket(websocket)
-        if byok_keys:
-            set_byok_keys(byok_keys)
-        error = await run_blocking(critical_executor, validate_byok_websocket, uid)
+        validated_byok_keys, error = await run_blocking(
+            critical_executor, validate_byok_websocket_keys, uid, extract_byok_from_websocket(websocket)
+        )
         if error:
             raise WebSocketException(code=4003, reason=error)
+        set_validated_byok_keys(validated_byok_keys, uid)
 
     return uid
 
