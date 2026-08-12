@@ -11,8 +11,8 @@ from utils.byok import (
     BYOK_HEADERS,
     extract_byok_from_websocket,
     get_byok_key,
-    set_byok_keys,
-    validate_byok_websocket,
+    set_validated_byok_keys,
+    validate_byok_websocket_keys,
 )
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
@@ -91,13 +91,12 @@ async def omni_relay(websocket: WebSocket):
 
     # BYOK: validate forwarded keys (same as /v4/listen). Keys then resolve via get_byok_key.
     byok = extract_byok_from_websocket(websocket)
-    if byok:
-        set_byok_keys(byok)
-        byok_err = await run_blocking(critical_executor, validate_byok_websocket, uid)
-        if byok_err:
-            logger.warning(f"omni relay BYOK invalid uid={uid}: {byok_err}")
-            await websocket.close(code=4003, reason=byok_err)
-            return
+    validated_byok, byok_err = await run_blocking(critical_executor, validate_byok_websocket_keys, uid, byok)
+    if byok_err:
+        logger.warning(f"omni relay BYOK invalid uid={uid}: {byok_err}")
+        await websocket.close(code=4003, reason=byok_err)
+        return
+    set_validated_byok_keys(validated_byok, uid)
 
     # Same desktop gate as /v4/listen: Operator/Architect + BYOK pass; un-entitled
     # desktop users past their trial are paywalled.
