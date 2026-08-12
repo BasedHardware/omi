@@ -1742,7 +1742,10 @@ async def mcp_authorize_consent(
             code_challenge,
             code_challenge_method,
         )
-        uid = cast(str, get_auth_provider().verify_token(firebase_id_token).uid)
+        # Identity-provider verification is a blocking network call; offload it to critical_executor
+        # so a slow Firebase/OIDC check can't stall the SSE/health event loop (cubic review PR 10887).
+        principal = await run_blocking(critical_executor, get_auth_provider().verify_token, firebase_id_token)
+        uid = cast(str, principal.uid)
     except auth_errors.InvalidToken:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)
     except Exception as e:
