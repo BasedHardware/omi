@@ -294,6 +294,7 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /value < 16/);
   assert.match(source, /distance > 6/);
   assert.match(source, /tablet status bar may draw a spinner/);
+  assert.match(source, /Wide iPad simulators retain a centered system home-indicator/);
   assert.match(source, /diagnostics.*replay-mismatch/);
   assert.match(source, /first\.raw\.png/);
   assert.match(source, /repeat\.raw\.png/);
