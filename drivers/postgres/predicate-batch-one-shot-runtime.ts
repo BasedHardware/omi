@@ -130,6 +130,7 @@ export const createPostgresPredicateBatchOneShotRuntime = (
       promotion: unsupportedAdapter("promotion"),
     },
     max_parent_rematerializations: options.max_parent_rematerializations,
+    ...(options.observability ? { worker_observability: options.observability } : {}),
   });
   const scheduler = definePredicateBatchWorkScheduler(acceptanceRepository, inputRepository);
   const dispatch = definePredicateBatchWorkDispatch({

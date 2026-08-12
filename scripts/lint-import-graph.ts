@@ -525,6 +525,7 @@ for (const file of files(root)) {
       && shown !== "drivers/postgres/authoritative-graph-snapshot.ts"
       && shown !== "drivers/postgres/durable-memory-work-acceptance.ts"
       && shown !== "drivers/postgres/durable-memory-work-execution.ts"
+      && shown !== "drivers/postgres/durable-memory-work-backlog.ts"
       && shown !== "drivers/postgres/durable-memory-work-result.ts"
       && shown !== "drivers/postgres/durable-memory-work-success.ts"
       && shown !== "drivers/postgres/formation-work-input.ts"

@@ -10,6 +10,8 @@ import {
   type RegisteredMemoryStrategy,
 } from "../../../core/consolidate/strategy-assignment";
 import type { CanonicalJson } from "../../../core/ledger";
+import type { OperationalTelemetryEmitter, WorkerOutcome } from
+  "../../../core/observability/operational-telemetry";
 import type { AuthorizedLedgerWriteContext } from "../auth/authorized-context";
 import {
   assertAuthoritativeLedgerAppend,
@@ -79,6 +81,12 @@ export interface DurableMemoryWorkRunnerDependencies {
     strategy: Readonly<RegisteredMemoryStrategy>,
   ) => Promise<DurableMemoryWorkMaterializeOutcome>;
   readonly max_parent_rematerializations: number;
+  readonly observability?: DurableMemoryWorkRunnerObservability;
+}
+
+export interface DurableMemoryWorkRunnerObservability {
+  readonly telemetry?: OperationalTelemetryEmitter;
+  readonly nowMilliseconds?: () => number;
 }
 
 export type DurableMemoryWorkRunStopCode =
@@ -149,6 +157,56 @@ const stopCodeFor = (kind: string): DurableMemoryWorkRunStopCode => {
   if (kind === "idempotency_conflict") return "idempotency_conflict";
   if (kind === "serialization_retryable") return "storage_retryable";
   return "authorization_or_context";
+};
+
+const safeNowMilliseconds = (clock: () => number): number | null => {
+  try {
+    const value = clock();
+    return Number.isSafeInteger(value) && value >= 0 ? value : null;
+  } catch {
+    return null;
+  }
+};
+
+const durationMilliseconds = (started: number | null, finished: number | null): number => {
+  if (started === null || finished === null || finished < started) return 0;
+  return Math.min(finished - started, 86_400_000);
+};
+
+const workerOutcome = (outcome: DurableMemoryWorkRunOutcome): WorkerOutcome => {
+  if (outcome.kind === "succeeded") return "success";
+  if (outcome.kind === "failure_recorded") {
+    return outcome.outcome.kind === "recorded" && outcome.outcome.job.state === "dead_letter"
+      ? "dead" : "retryable";
+  }
+  if (outcome.stop_code === "authorization_or_context") return "authorization_denied";
+  if (outcome.stop_code === "stale_lease") return "stale_lease";
+  if (outcome.stop_code === "storage_retryable") return "retryable";
+  return "failure";
+};
+
+const emitWorkerOutcome = (
+  observability: DurableMemoryWorkRunnerObservability,
+  job: Readonly<DurableMemoryWorkJob>,
+  outcome: DurableMemoryWorkRunOutcome,
+  started: number | null,
+): void => {
+  try {
+    const finished = safeNowMilliseconds(observability.nowMilliseconds ?? Date.now);
+    observability.telemetry?.emit({
+      version: "operational-telemetry-v1",
+      family: "worker",
+      work_kind: job.work_kind,
+      stage: "append",
+      outcome: workerOutcome(outcome),
+      duration_ms: durationMilliseconds(started, finished),
+      attempt: job.attempt,
+      producer_calls: outcome.producer_calls,
+      materialization_attempts: outcome.materialization_attempts,
+    });
+  } catch {
+    // Telemetry is observational and must not change the durable outcome.
+  }
 };
 
 const parseProduce = (value: unknown): DurableMemoryWorkProduceOutcome => {
@@ -251,144 +309,151 @@ export const defineDurableMemoryWorkRunner = (
       context: AuthorizedLedgerWriteContext,
       leasedJob: Readonly<DurableMemoryWorkJob>,
     ): Promise<DurableMemoryWorkRunOutcome> {
-      let producerCalls: 0 | 1 = 0;
-      let materializationAttempts = 0;
-      let resolvedStrategy: Readonly<RegisteredMemoryStrategy>;
-      try {
-        const candidate = await dependencies.resolve_strategy(leasedJob);
-        if (candidate === null) {
-          return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
-        }
-        resolvedStrategy = parseRegisteredMemoryStrategy(candidate);
-      } catch {
-        return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
-      }
-      if (resolvedStrategy.work_kind !== leasedJob.work_kind
-        || resolvedStrategy.execution_contract_digest !== leasedJob.execution_contract_digest) {
-        return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
-      }
-      const loaded = await dependencies.result_repository.load(context, { leased_job: leasedJob });
-      let staged: StagedDurableMemoryWorkResult;
-      if (loaded.kind === "found") {
-        staged = loaded.result;
-      } else if (loaded.kind === "missing") {
-        producerCalls = 1;
-        let rawProduced: unknown;
+      const started = safeNowMilliseconds(dependencies.observability?.nowMilliseconds ?? Date.now);
+      const outcome = await (async (): Promise<DurableMemoryWorkRunOutcome> => {
+        let producerCalls: 0 | 1 = 0;
+        let materializationAttempts = 0;
+        let resolvedStrategy: Readonly<RegisteredMemoryStrategy>;
         try {
-          rawProduced = await dependencies.produce(context, leasedJob, resolvedStrategy);
+          const candidate = await dependencies.resolve_strategy(leasedJob);
+          if (candidate === null) {
+            return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
+          }
+          resolvedStrategy = parseRegisteredMemoryStrategy(candidate);
         } catch {
           return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
         }
-        let produced: DurableMemoryWorkProduceOutcome;
-        try {
-          produced = parseProduce(rawProduced);
-        } catch {
-          return recordFailure(
-            context, leasedJob, "model_response_invalid", producerCalls, 0,
+        if (resolvedStrategy.work_kind !== leasedJob.work_kind
+          || resolvedStrategy.execution_contract_digest !== leasedJob.execution_contract_digest) {
+          return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
+        }
+        const loaded = await dependencies.result_repository.load(context, { leased_job: leasedJob });
+        let staged: StagedDurableMemoryWorkResult;
+        if (loaded.kind === "found") {
+          staged = loaded.result;
+        } else if (loaded.kind === "missing") {
+          producerCalls = 1;
+          let rawProduced: unknown;
+          try {
+            rawProduced = await dependencies.produce(context, leasedJob, resolvedStrategy);
+          } catch {
+            return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
+          }
+          let produced: DurableMemoryWorkProduceOutcome;
+          try {
+            produced = parseProduce(rawProduced);
+          } catch {
+            return recordFailure(
+              context, leasedJob, "model_response_invalid", producerCalls, 0,
+            );
+          }
+          if (produced.kind === "failed") {
+            return recordFailure(context, leasedJob, produced.error_code, producerCalls, 0);
+          }
+          if (produced.result_contract_version !== resolvedStrategy.coordinates.result_contract_version) {
+            return recordFailure(context, leasedJob, "model_response_invalid", producerCalls, 0);
+          }
+          const normalizedResultDigest = durableMemoryWorkNormalizedResultDigest(
+            produced.result_contract_version,
+            produced.normalized_result,
           );
-        }
-        if (produced.kind === "failed") {
-          return recordFailure(context, leasedJob, produced.error_code, producerCalls, 0);
-        }
-        if (produced.result_contract_version !== resolvedStrategy.coordinates.result_contract_version) {
-          return recordFailure(context, leasedJob, "model_response_invalid", producerCalls, 0);
-        }
-        const normalizedResultDigest = durableMemoryWorkNormalizedResultDigest(
-          produced.result_contract_version,
-          produced.normalized_result,
-        );
-        const stageBody = {
-          leased_job: leasedJob,
-          result_contract_version: produced.result_contract_version,
-          response_digest: produced.response_digest,
-          normalized_result_digest: normalizedResultDigest,
-          normalized_result: produced.normalized_result,
-        };
-        const stagedOutcome = await dependencies.result_repository.stage(context, {
-          ...stageBody,
-          request_digest: durableMemoryWorkResultStageRequestDigest(stageBody),
-        });
-        if (stagedOutcome.kind !== "staged" && stagedOutcome.kind !== "replayed") {
+          const stageBody = {
+            leased_job: leasedJob,
+            result_contract_version: produced.result_contract_version,
+            response_digest: produced.response_digest,
+            normalized_result_digest: normalizedResultDigest,
+            normalized_result: produced.normalized_result,
+          };
+          const stagedOutcome = await dependencies.result_repository.stage(context, {
+            ...stageBody,
+            request_digest: durableMemoryWorkResultStageRequestDigest(stageBody),
+          });
+          if (stagedOutcome.kind !== "staged" && stagedOutcome.kind !== "replayed") {
+            return Object.freeze({
+              kind: "stopped" as const,
+              stop_code: stopCodeFor(stagedOutcome.kind),
+              producer_calls: producerCalls,
+              materialization_attempts: 0,
+            });
+          }
+          staged = stagedOutcome.result;
+        } else {
           return Object.freeze({
             kind: "stopped" as const,
-            stop_code: stopCodeFor(stagedOutcome.kind),
+            stop_code: stopCodeFor(loaded.kind),
             producer_calls: producerCalls,
             materialization_attempts: 0,
           });
         }
-        staged = stagedOutcome.result;
-      } else {
-        return Object.freeze({
-          kind: "stopped" as const,
-          stop_code: stopCodeFor(loaded.kind),
-          producer_calls: producerCalls,
-          materialization_attempts: 0,
-        });
-      }
 
-      if (staged.result_contract_version !== resolvedStrategy.coordinates.result_contract_version) {
-        return recordFailure(context, leasedJob, "model_response_invalid", producerCalls, 0);
-      }
+        if (staged.result_contract_version !== resolvedStrategy.coordinates.result_contract_version) {
+          return recordFailure(context, leasedJob, "model_response_invalid", producerCalls, 0);
+        }
 
-      for (let attempt = 0; attempt < dependencies.max_parent_rematerializations; attempt += 1) {
-        materializationAttempts += 1;
-        let rawMaterialized: unknown;
-        try {
-          rawMaterialized = await dependencies.materialize(
-            context, leasedJob, staged, resolvedStrategy,
-          );
-        } catch {
-          return recordFailure(
-            context, leasedJob, "dependency_unavailable", producerCalls, materializationAttempts,
-          );
-        }
-        let materialized: DurableMemoryWorkMaterializeOutcome;
-        try {
-          materialized = parseMaterialize(rawMaterialized, context);
-        } catch {
-          return recordFailure(
-            context, leasedJob, "model_response_invalid", producerCalls, materializationAttempts,
-          );
-        }
-        if (materialized.kind === "failed") {
-          return recordFailure(
-            context, leasedJob, materialized.error_code, producerCalls, materializationAttempts,
-          );
-        }
-        const resultDigest = materialized.authoritative_append?.append_attempt.request_digest
-          ?? staged.normalized_result_digest;
-        const successBody: DurableMemoryWorkSuccessBody = {
-          leased_job: leasedJob,
-          result_kind: materialized.result_kind,
-          response_digest: staged.response_digest,
-          result_digest: resultDigest,
-          staged_result: staged,
-          authoritative_append: materialized.authoritative_append,
-        };
-        const outcome = await dependencies.success_repository.commit(context, {
-          ...successBody,
-          request_digest: durableMemoryWorkSuccessRequestDigest(successBody),
-        });
-        if (outcome.kind === "committed" || outcome.kind === "replayed") {
-          return Object.freeze({
-            kind: "succeeded" as const,
-            outcome,
-            producer_calls: producerCalls,
-            materialization_attempts: materializationAttempts,
+        for (let attempt = 0; attempt < dependencies.max_parent_rematerializations; attempt += 1) {
+          materializationAttempts += 1;
+          let rawMaterialized: unknown;
+          try {
+            rawMaterialized = await dependencies.materialize(
+              context, leasedJob, staged, resolvedStrategy,
+            );
+          } catch {
+            return recordFailure(
+              context, leasedJob, "dependency_unavailable", producerCalls, materializationAttempts,
+            );
+          }
+          let materialized: DurableMemoryWorkMaterializeOutcome;
+          try {
+            materialized = parseMaterialize(rawMaterialized, context);
+          } catch {
+            return recordFailure(
+              context, leasedJob, "model_response_invalid", producerCalls, materializationAttempts,
+            );
+          }
+          if (materialized.kind === "failed") {
+            return recordFailure(
+              context, leasedJob, materialized.error_code, producerCalls, materializationAttempts,
+            );
+          }
+          const resultDigest = materialized.authoritative_append?.append_attempt.request_digest
+            ?? staged.normalized_result_digest;
+          const successBody: DurableMemoryWorkSuccessBody = {
+            leased_job: leasedJob,
+            result_kind: materialized.result_kind,
+            response_digest: staged.response_digest,
+            result_digest: resultDigest,
+            staged_result: staged,
+            authoritative_append: materialized.authoritative_append,
+          };
+          const outcome = await dependencies.success_repository.commit(context, {
+            ...successBody,
+            request_digest: durableMemoryWorkSuccessRequestDigest(successBody),
           });
+          if (outcome.kind === "committed" || outcome.kind === "replayed") {
+            return Object.freeze({
+              kind: "succeeded" as const,
+              outcome,
+              producer_calls: producerCalls,
+              materialization_attempts: materializationAttempts,
+            });
+          }
+          if (outcome.kind !== "stale_parent") {
+            return Object.freeze({
+              kind: "stopped" as const,
+              stop_code: stopCodeFor(outcome.kind),
+              producer_calls: producerCalls,
+              materialization_attempts: materializationAttempts,
+            });
+          }
         }
-        if (outcome.kind !== "stale_parent") {
-          return Object.freeze({
-            kind: "stopped" as const,
-            stop_code: stopCodeFor(outcome.kind),
-            producer_calls: producerCalls,
-            materialization_attempts: materializationAttempts,
-          });
-        }
+        return recordFailure(
+          context, leasedJob, "serialization_retryable", producerCalls, materializationAttempts,
+        );
+      })();
+      if (dependencies.observability) {
+        emitWorkerOutcome(dependencies.observability, leasedJob, outcome, started);
       }
-      return recordFailure(
-        context, leasedJob, "serialization_retryable", producerCalls, materializationAttempts,
-      );
+      return outcome;
     },
   });
 };

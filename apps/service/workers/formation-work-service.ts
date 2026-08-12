@@ -15,6 +15,7 @@ import type { DurableMemoryWorkResultRepository } from "../stores/durable-memory
 import type { DurableMemoryWorkSuccessRepository } from "../stores/durable-memory-work-success-repository";
 import {
   defineDurableMemoryWorkRunner,
+  type DurableMemoryWorkRunnerObservability,
   type DurableMemoryWorkRunOutcome,
 } from "./durable-memory-work-runner";
 import {
@@ -41,6 +42,7 @@ export interface FormationWorkServiceDependencies {
   ) => Promise<RegisteredMemoryStrategy | null>;
   readonly formation: Omit<FormationWorkAdapterDependencies, "load_input">;
   readonly max_parent_rematerializations: number;
+  readonly worker_observability?: DurableMemoryWorkRunnerObservability;
 }
 
 export interface FormationWorkService {
@@ -91,6 +93,9 @@ export const defineFormationWorkService = (
     produce: adapter.produce,
     materialize: adapter.materialize,
     max_parent_rematerializations: dependencies.max_parent_rematerializations,
+    ...(dependencies.worker_observability
+      ? { observability: dependencies.worker_observability }
+      : {}),
   });
 
   return Object.freeze({

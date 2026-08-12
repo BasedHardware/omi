@@ -13,6 +13,10 @@ import {
   registerMemoryStrategy,
 } from "../../../core/consolidate/strategy-assignment";
 import { prepareDerivation, type AtomicGraphTransition } from "../../../core/ledger";
+import {
+  createOperationalTelemetryEmitter,
+  type OperationalTelemetryEvent,
+} from "../../../core/observability/operational-telemetry";
 import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-context-internal";
 import {
   authoritativeAppendRequestDigest,
@@ -164,6 +168,8 @@ describe("production-neutral durable memory work runner", () => {
     let stored: StagedDurableMemoryWorkResult | null = null;
     let modelCalls = 0;
     let materializations = 0;
+    const events: OperationalTelemetryEvent[] = [];
+    const ticks = [100, 107];
     const resultRepository = defineDurableMemoryWorkResultRepository({
       load: async () => stored === null ? { kind: "missing" } : { kind: "found", result: stored },
       stage: async (_authorized, request) => {
@@ -200,6 +206,10 @@ describe("production-neutral durable memory work runner", () => {
         };
       },
       max_parent_rematerializations: 3,
+      observability: {
+        telemetry: createOperationalTelemetryEmitter((event) => events.push(event)),
+        nowMilliseconds: () => ticks.shift() ?? 107,
+      },
     });
 
     await expect(runner.run(context(), leased())).resolves.toMatchObject({
@@ -211,6 +221,11 @@ describe("production-neutral durable memory work runner", () => {
     expect(modelCalls).toBe(1);
     expect(materializations).toBe(2);
     expect(stored).not.toBeNull();
+    expect(events).toEqual([{
+      version: "operational-telemetry-v1", family: "worker", work_kind: "promotion",
+      stage: "append", outcome: "success", duration_ms: 7, attempt: 1,
+      producer_calls: 1, materialization_attempts: 2,
+    }]);
     expect(Object.keys(runner)).toEqual(["run"]);
   });
 

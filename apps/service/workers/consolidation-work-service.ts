@@ -22,6 +22,7 @@ import type { DurableMemoryWorkSuccessRepository } from
   "../stores/durable-memory-work-success-repository";
 import {
   defineDurableMemoryWorkRunner,
+  type DurableMemoryWorkRunnerObservability,
   type DurableMemoryWorkMaterializeOutcome,
   type DurableMemoryWorkProduceOutcome,
   type DurableMemoryWorkRunOutcome,
@@ -67,6 +68,7 @@ export interface ConsolidationWorkServiceDependencies {
   ) => Promise<RegisteredMemoryStrategy | null>;
   readonly adapters: Readonly<Record<ConsolidationWorkKind, ConsolidationWorkAdapter>>;
   readonly max_parent_rematerializations: number;
+  readonly worker_observability?: DurableMemoryWorkRunnerObservability;
 }
 
 export type ConsolidationWorkDispatchStopCode =
@@ -235,6 +237,8 @@ export const defineConsolidationWorkService = (
   const dependencies = exactRecord(dependenciesValue, [
     "execution_repository", "result_repository", "success_repository",
     "resolve_strategy", "adapters", "max_parent_rematerializations",
+    ...(Object.prototype.hasOwnProperty.call(dependenciesValue, "worker_observability")
+      ? ["worker_observability"] : []),
   ], "invalid_dependencies");
   const maximum = dependencies["max_parent_rematerializations"];
   if (!Number.isSafeInteger(maximum) || (maximum as number) < 1
@@ -265,6 +269,9 @@ export const defineConsolidationWorkService = (
       produce: adapter.produce,
       materialize: adapter.materialize,
       max_parent_rematerializations: maximum as number,
+      ...(dependencies["worker_observability"]
+        ? { observability: dependencies["worker_observability"] as DurableMemoryWorkRunnerObservability }
+        : {}),
     })];
   })) as Record<ConsolidationWorkKind, ReturnType<typeof defineDurableMemoryWorkRunner>>;
 

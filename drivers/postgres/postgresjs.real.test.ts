@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 import postgres, { type Sql } from "postgres";
 
 import { createAuthorizedLedgerWriteContextIssuer } from "../../apps/service/auth/authorized-context-internal";
+import {
+  emitDurableMemoryWorkBacklogTelemetry,
+} from "../../apps/service/observability/durable-memory-work-backlog";
 import { authoritativeAppendRequestDigest, type AuthoritativeLedgerAppend } from "../../apps/service/stores/authoritative-ledger-repository";
 import {
   productProjectionWriteRequestDigest,
@@ -78,6 +81,10 @@ import {
   GROUNDED_MENTION_STRATEGY_VERSION,
 } from "../../core/extract/grounded";
 import { prepareDerivation, type AtomicGraphTransition } from "../../core/ledger";
+import {
+  createOperationalTelemetryEmitter,
+  type OperationalTelemetryEvent,
+} from "../../core/observability/operational-telemetry";
 import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
 import { buildContentSafeRecallTrace } from "../../core/retrieve/recall-integrity";
 import {
@@ -92,6 +99,7 @@ import {
 import { createPostgresAuthoritativeGraphSnapshotRepository } from "./authoritative-graph-snapshot";
 import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatement } from "./connection";
 import { createPostgresDurableMemoryWorkAcceptanceRepository } from "./durable-memory-work-acceptance";
+import { createPostgresDurableMemoryWorkBacklogSource } from "./durable-memory-work-backlog";
 import { createPostgresDurableMemoryWorkExecutionRepository } from "./durable-memory-work-execution";
 import { createPostgresDurableMemoryWorkResultRepository } from "./durable-memory-work-result";
 import { createPostgresDurableMemoryWorkSuccessRepository } from "./durable-memory-work-success";
@@ -1014,6 +1022,39 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       execution_max_attempts: 2, execution_lease_seconds: 2, execution_retry_delays: [1],
     }]);
 
+    const backlogEvents: OperationalTelemetryEvent[] = [];
+    const backlogTelemetry = createOperationalTelemetryEmitter((event) => {
+      backlogEvents.push(event);
+    });
+    const backlogSource = createPostgresDurableMemoryWorkBacklogSource({ pool: appRolePool });
+    await expect(emitDurableMemoryWorkBacklogTelemetry(
+      backlogSource, executionContext, backlogTelemetry,
+    )).resolves.toEqual({ kind: "available" });
+    expect(backlogEvents).toEqual([
+      {
+        version: "operational-telemetry-v1", family: "backlog", work_kind: "formation",
+        outcome: "available", ready: 1, leased: 0, retry_wait: 0, dead: 0,
+        oldest_ready_age_ms: expect.any(Number),
+      },
+      {
+        version: "operational-telemetry-v1", family: "backlog", work_kind: "promotion",
+        outcome: "available", ready: 0, leased: 0, retry_wait: 0, dead: 0,
+        oldest_ready_age_ms: null,
+      },
+      {
+        version: "operational-telemetry-v1", family: "backlog", work_kind: "identity_cluster",
+        outcome: "available", ready: 0, leased: 0, retry_wait: 0, dead: 0,
+        oldest_ready_age_ms: null,
+      },
+      {
+        version: "operational-telemetry-v1", family: "backlog", work_kind: "predicate_batch",
+        outcome: "available", ready: 0, leased: 0, retry_wait: 0, dead: 0,
+        oldest_ready_age_ms: null,
+      },
+    ]);
+    expect((backlogEvents[0] as { oldest_ready_age_ms: number }).oldest_ready_age_ms)
+      .toBeGreaterThanOrEqual(5_000);
+
     await expect(ownerSql.begin(async (transaction) => {
       await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
       await transaction.unsafe(`UPDATE omi_memory.memory_work_heads
@@ -1403,6 +1444,11 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       strategies: [runtimeStrategy],
       resolve_model: async () => runtimeModel,
       max_parent_rematerializations: 3,
+      observability: {
+        telemetry: createOperationalTelemetryEmitter((event) => {
+          backlogEvents.push(event);
+        }),
+      },
     });
     const runtimeIngestion = {
       snapshot: runtimeSnapshot,
@@ -1501,6 +1547,11 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       producer_calls: 0, materialization_attempts: 1,
     });
     expect(runtimeModelCalls).toBe(callsAfterStaging);
+    expect(backlogEvents.filter((event) => event.family === "worker")).toEqual([{
+      version: "operational-telemetry-v1", family: "worker", work_kind: "formation",
+      stage: "append", outcome: "success", duration_ms: expect.any(Number), attempt: 2,
+      producer_calls: 0, materialization_attempts: 1,
+    }]);
     const oneShotCommitted = await ownerSql.unsafe<{
       staged_results: number; successes: number; success_outbox: number;
       formation_outcomes: number; graph_sequence: string;
@@ -2025,6 +2076,17 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     await expect(executionRepository.load(executionContext, {
       job_id: acceptedRequest.accepted_work.job_id,
     })).resolves.toEqual({ kind: "authorization_denied", reason: "grant_inactive" });
+    const priorBacklogEventCount = backlogEvents.length;
+    await expect(emitDurableMemoryWorkBacklogTelemetry(
+      backlogSource, executionContext, backlogTelemetry,
+    )).resolves.toEqual({ kind: "unavailable" });
+    expect(backlogEvents.slice(priorBacklogEventCount)).toEqual(
+      ["formation", "promotion", "identity_cluster", "predicate_batch"].map((work_kind) => ({
+        version: "operational-telemetry-v1", family: "backlog", work_kind,
+        outcome: "unavailable", ready: null, leased: null, retry_wait: null, dead: null,
+        oldest_ready_age_ms: null,
+      })),
+    );
 
     await ownerSql.begin(async (transaction) => {
       await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions

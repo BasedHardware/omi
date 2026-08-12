@@ -106,10 +106,27 @@ a schema revision and cardinality/privacy review.
 
 ## Implementation ruling
 
-The first implementation wires service responses, write-fence decisions, and
-PostgreSQL transaction completion. The typed worker and backlog families remain
-inactive: this tree does not yet have a production PostgreSQL worker outcome or
-a coherent PostgreSQL backlog snapshot. An inactive producer is honest here;
-dispatch-time worker success or fabricated all-zero gauges would violate the
-semantic rules above. Their activation belongs with the durable worker and real
-PostgreSQL qualification slices.
+The first implementation wired service responses, write-fence decisions, and
+PostgreSQL transaction completion. The durable worker and coherent backlog
+producer points are now also implemented and qualified for the route-free
+PostgreSQL one-shot runtimes:
+
+- worker events are emitted only after the generic durable runner returns a
+  recorded success, failure, or closed stop outcome. Dispatch and model return
+  cannot emit worker success;
+- formation and predicate one-shot PostgreSQL compositions inject the same
+  optional content-safe emitter into their durable runners;
+- the backlog source revalidates an exact `memories.work.execute` context, then
+  aggregates all four work kinds from current work heads in one serializable
+  transaction using the database clock; and
+- a malformed, partial, failed, or authority-denied snapshot emits one
+  `unavailable` event per closed work kind with null measures. It never turns
+  absence into zero.
+
+The real PostgreSQL 18.4 gate proves one pending formation item appears as
+ready, a restarted formation run emits success only after durable commit, and a
+revoked execution grant yields unavailable backlog events. These producer
+points remain inert without an injected sink and explicit one-shot invocation.
+There is still no default exporter, scanner loop, route, dashboard, alert, or
+production activation. Sink backpressure and forecast-cohort usefulness remain
+part of the image/load gate.

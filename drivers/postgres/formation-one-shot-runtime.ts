@@ -109,6 +109,7 @@ export const createPostgresFormationOneShotRuntime = (
       load_current_parent: (context) => graphRepository.loadCurrentParent(context),
     },
     max_parent_rematerializations: options.max_parent_rematerializations,
+    ...(options.observability ? { worker_observability: options.observability } : {}),
   });
   const dispatch = defineFormationWorkDispatch({
     execution_repository: executionRepository,
