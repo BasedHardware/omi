@@ -30,7 +30,7 @@ steps:
       name: ai_clone_snapshot
     expect:
       ok: true
-      detail.enabled: "false"
+      result.detail.enabled: "false"
 
   - id: S3
     name: Logs clean
