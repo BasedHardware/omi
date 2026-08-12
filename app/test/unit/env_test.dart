@@ -69,10 +69,7 @@ void main() {
 
     test('mobile beta keeps OAuth on the production identity plane', () {
       expect(
-        Env.authApiBaseUrlForProfile(
-          AppEnvironmentProfile.mobileBeta,
-          servingApiBaseUrl: 'https://api.omiapi.com/',
-        ),
+        Env.authApiBaseUrlForProfile(AppEnvironmentProfile.mobileBeta, servingApiBaseUrl: 'https://api.omiapi.com/'),
         Env.productionApiBaseUrl,
       );
     });
@@ -86,23 +83,25 @@ void main() {
 
     test('local profile rejects a production Firebase project', () {
       expect(
-        () => Env.validateFirebaseProject(
-          projectId: 'based-hardware',
-          configuredProfile: AppEnvironmentProfile.localDev,
-        ),
+        () =>
+            Env.validateFirebaseProject(projectId: 'based-hardware', configuredProfile: AppEnvironmentProfile.localDev),
         throwsStateError,
       );
     });
 
     test('flavor defaults map to production and local profiles', () {
+      expect(AppEnvironmentProfile.forFlavor(productionFlavor: true), AppEnvironmentProfile.production);
+      expect(AppEnvironmentProfile.forFlavor(productionFlavor: false), AppEnvironmentProfile.localDev);
+    });
+
+    test('production iOS config keeps the production Google redirect client id', () {
+      final prodConfig = File('ios/Flutter/prodRelease.xcconfig').readAsStringSync();
+
       expect(
-        AppEnvironmentProfile.forFlavor(productionFlavor: true),
-        AppEnvironmentProfile.production,
+        prodConfig,
+        contains('GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as'),
       );
-      expect(
-        AppEnvironmentProfile.forFlavor(productionFlavor: false),
-        AppEnvironmentProfile.localDev,
-      );
+      expect(prodConfig, isNot(contains('GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.1031333818730-')));
     });
   });
 
@@ -218,9 +217,6 @@ void main() {
       mainSource.indexOf('validateApplicationStartupRouting();'),
       lessThan(mainSource.indexOf('ServiceManager.init()')),
     );
-    expect(
-      mainSource,
-      contains('Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);'),
-    );
+    expect(mainSource, contains('Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);'));
   });
 }

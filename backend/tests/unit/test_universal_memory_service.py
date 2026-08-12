@@ -11,9 +11,10 @@ from tests.unit.test_memory_service_parity import (
 
 
 class _Snapshot:
-    def __init__(self, payload=None, *, exists=True):
+    def __init__(self, payload=None, *, exists=True, reference=None):
         self._payload = payload
         self.exists = exists
+        self.reference = reference
 
     def to_dict(self):
         return self._payload
@@ -73,7 +74,16 @@ class _BatchStatusDb(_Db):
         self.get_all_calls.append([ref.path for ref in refs])
         for ref in refs:
             payload = self.docs.get(ref.path)
-            yield _Snapshot(payload, exists=payload is not None)
+            yield _Snapshot(payload, exists=payload is not None, reference=ref)
+
+
+class _ReversedBatchStatusDb(_BatchStatusDb):
+    def get_all(self, refs):
+        refs = list(refs)
+        self.get_all_calls.append([ref.path for ref in refs])
+        for ref in reversed(refs):
+            payload = self.docs.get(ref.path)
+            yield _Snapshot(payload, exists=payload is not None, reference=ref)
 
 
 def _memory(service_mod, memory_id, *, content=None):
@@ -173,6 +183,19 @@ def test_mixed_read_batches_canonical_suppression_status_lookups(service_mod, mo
         "users/uid-test/memory_historical_overrides/legacy-a",
         "users/uid-test/memory_historical_overrides/legacy-b",
     ]
+
+
+def test_mixed_read_maps_unordered_batch_snapshots_by_reference_path(service_mod):
+    db = _ReversedBatchStatusDb({'users/uid-test/memory_items/legacy-a': {'status': 'tombstoned'}})
+    service = service_mod.MemoryService(db_client=db)
+    service._canonical.read = MagicMock(return_value=[])
+    service._history.read = MagicMock(
+        return_value=[_historical(service_mod, 'legacy-a'), _historical(service_mod, 'legacy-b')]
+    )
+
+    result = service.read('uid-test', limit=10)
+
+    assert [memory.id for memory in result] == ['legacy-b']
 
 
 def test_mixed_read_fails_closed_for_malformed_present_canonical_identity(service_mod):

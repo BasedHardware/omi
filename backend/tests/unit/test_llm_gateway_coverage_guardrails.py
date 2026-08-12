@@ -73,8 +73,10 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('routers/omni_relay.py', 'GEMINI_API_KEY'),
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),
 }
-FAIL_CLOSED_DIRECT_EXCEPTION_FILES = {'routers/omni_relay.py'}
-ACKNOWLEDGED_DIRECT_EXCEPTION_FILES = {'utils/other/chat_file.py'}
+INVENTORIED_DIRECT_EXCEPTION_FILES = {
+    'utils/other/chat_file.py',
+    'routers/omni_relay.py',
+}
 
 
 def test_every_model_config_feature_has_inventory_and_gateway_lane():
@@ -171,18 +173,44 @@ def test_direct_provider_usage_stays_inside_approved_boundaries():
     assert stale_allowlist == []
 
 
-def test_direct_exception_files_are_inventoried_with_their_declared_gateway_policy():
+def test_direct_exception_files_follow_their_declared_gateway_policy():
     inventory = _load_inventory()
     inventory_paths = {_code_path_file(surface['code_path']) for surface in inventory['surfaces']}
 
-    assert FAIL_CLOSED_DIRECT_EXCEPTION_FILES | ACKNOWLEDGED_DIRECT_EXCEPTION_FILES <= inventory_paths
-    for rel_path in FAIL_CLOSED_DIRECT_EXCEPTION_FILES:
+    assert INVENTORIED_DIRECT_EXCEPTION_FILES <= inventory_paths
+    policies_by_file: dict[str, set[str]] = {path: set() for path in INVENTORIED_DIRECT_EXCEPTION_FILES}
+    for surface in inventory['surfaces']:
+        rel_path = _code_path_file(surface['code_path'])
+        if rel_path in policies_by_file:
+            policies_by_file[rel_path].add(_direct_exception_policy(surface['migration_status']))
+
+    assert all(len(policies) == 1 for policies in policies_by_file.values())
+    policy_by_file = {rel_path: next(iter(policies)) for rel_path, policies in policies_by_file.items()}
+    assert policy_by_file['utils/other/chat_file.py'] == 'acknowledged'
+    assert policy_by_file['routers/omni_relay.py'] == 'blocked'
+
+    for rel_path, policy in policy_by_file.items():
         source = (BACKEND_DIR / rel_path).read_text(encoding='utf-8')
-        assert 'raise_if_gateway_feature_mode_blocks_direct_model_surface' in source
-    for rel_path in ACKNOWLEDGED_DIRECT_EXCEPTION_FILES:
-        source = (BACKEND_DIR / rel_path).read_text(encoding='utf-8')
-        assert 'should_route_features_through_gateway' in source
-        assert 'record_direct_exception_surface' in source
+        if policy == 'acknowledged':
+            assert 'record_direct_exception_surface' in source
+            assert 'raise_if_gateway_feature_mode_blocks_direct_model_surface' not in source
+        elif policy == 'blocked':
+            assert 'raise_if_gateway_feature_mode_blocks_direct_model_surface' in source
+            assert 'record_direct_exception_surface' not in source
+        else:
+            raise AssertionError(f'unknown direct gateway policy {policy!r} for {rel_path}')
+
+
+def test_acknowledged_file_chat_surface_is_observed_without_a_gateway_block():
+    """Static regression guard for PR #11419's acknowledged file-chat direct surface.
+
+    Behavioral upload coverage lives in test_chat_file_gateway_surface.py; this tripwire
+    keeps the acknowledged implementation from regressing to the fail-closed gate.
+    """
+    source = (BACKEND_DIR / 'utils/other/chat_file.py').read_text(encoding='utf-8')
+
+    assert 'record_direct_exception_surface(surface=\'file_chat.openai_files_assistants_vision\')' in source
+    assert 'raise_if_gateway_feature_mode_blocks_direct_model_surface' not in source
 
 
 def _load_inventory() -> dict:
@@ -286,3 +314,11 @@ def _inventory_file_exists(code_path: str) -> bool:
 def _code_path_file(code_path: str) -> str:
     normalized = code_path.removeprefix('backend/')
     return normalized.split(':', 1)[0]
+
+
+def _direct_exception_policy(migration_status: str) -> str:
+    if migration_status.startswith('acknowledged_direct_'):
+        return 'acknowledged'
+    if 'blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway' in migration_status:
+        return 'blocked'
+    raise AssertionError(f'direct exception surface has no declared gateway policy: {migration_status!r}')

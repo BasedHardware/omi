@@ -745,18 +745,25 @@ class MemoryService:
                     snapshots = list(get_all(refs))
                 except Exception as exc:
                     raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
-                # A mock or an incompatible client may expose get_all but not
-                # return one snapshot per ref. Fall back rather than silently
-                # allowing a historical row through.
-                if len(snapshots) != len(refs):
+                snapshots_by_path: Dict[str, Any] = {}
+                for snapshot in snapshots:
+                    snapshot_path = getattr(getattr(snapshot, "reference", None), "path", None)
+                    if not isinstance(snapshot_path, str) or snapshot_path in snapshots_by_path:
+                        # Firestore does not promise result ordering and may
+                        # omit missing documents. A client that also omits
+                        # reference identity cannot be mapped safely.
+                        snapshots_by_path = {}
+                        break
+                    snapshots_by_path[snapshot_path] = snapshot
+                if snapshots and not snapshots_by_path:
                     return {
                         memory_id: status
                         for memory_id in normalized_ids
                         if (status := self._canonical_status(uid, memory_id))
                     }
                 for index, memory_id in enumerate(chunk):
-                    item_snapshot = snapshots[index]
-                    override_snapshot = snapshots[len(chunk) + index]
+                    item_snapshot = snapshots_by_path.get(item_refs[index].path)
+                    override_snapshot = snapshots_by_path.get(override_refs[index].path)
                     status = self._status_from_snapshot(item_snapshot)
                     if status is None:
                         status = self._status_from_snapshot(override_snapshot)
