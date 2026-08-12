@@ -3,19 +3,24 @@ from typing import Any
 
 from google.cloud import firestore
 
-from ._client import db
+from ._client import get_firestore_client
 
 LLM_OAUTH_PROVIDERS = frozenset({'chatgpt', 'grok'})
 
 
-def save_credential(uid: str, provider: str, credential: dict[str, Any]) -> None:
+def save_credential(uid: str, provider: str, credential: dict[str, Any], *, firestore_client: Any = None) -> None:
     if provider not in LLM_OAUTH_PROVIDERS:
         raise ValueError(f'Unsupported LLM OAuth provider: {provider}')
     from utils import encryption
 
     access_token = credential.get('access_token')
     refresh_token = credential.get('refresh_token')
-    if not isinstance(access_token, str) or not isinstance(refresh_token, str):
+    if (
+        not isinstance(access_token, str)
+        or not access_token.strip()
+        or not isinstance(refresh_token, str)
+        or not refresh_token.strip()
+    ):
         raise ValueError('LLM OAuth credential requires access and refresh tokens')
     stored = {
         'access_token': encryption.encrypt(access_token, uid),
@@ -24,7 +29,8 @@ def save_credential(uid: str, provider: str, credential: dict[str, Any]) -> None
         'account_id': credential.get('account_id'),
         'updated_at': datetime.now(timezone.utc),
     }
-    db.collection('users').document(uid).set(
+    client = firestore_client or get_firestore_client()
+    client.collection('users').document(uid).set(
         {
             'llm_oauth': {provider: stored},
             'llm_oauth_provider': provider,
@@ -34,8 +40,9 @@ def save_credential(uid: str, provider: str, credential: dict[str, Any]) -> None
     )
 
 
-def get_credential(uid: str, provider: str | None = None) -> dict[str, Any] | None:
-    data = db.collection('users').document(uid).get().to_dict() or {}
+def get_credential(uid: str, provider: str | None = None, *, firestore_client: Any = None) -> dict[str, Any] | None:
+    client = firestore_client or get_firestore_client()
+    data = client.collection('users').document(uid).get().to_dict() or {}
     selected_provider = provider or data.get('llm_oauth_provider')
     if selected_provider not in LLM_OAUTH_PROVIDERS:
         return None
@@ -57,8 +64,9 @@ def get_credential(uid: str, provider: str | None = None) -> dict[str, Any] | No
     }
 
 
-def get_status(uid: str) -> dict[str, Any]:
-    data = db.collection('users').document(uid).get().to_dict() or {}
+def get_status(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
+    client = firestore_client or get_firestore_client()
+    data = client.collection('users').document(uid).get().to_dict() or {}
     credentials = data.get('llm_oauth') or {}
     connected = [provider for provider in LLM_OAUTH_PROVIDERS if isinstance(credentials.get(provider), dict)]
     selected_provider = data.get('llm_oauth_provider')
@@ -68,10 +76,11 @@ def get_status(uid: str) -> dict[str, Any]:
     }
 
 
-def delete_credential(uid: str, provider: str) -> None:
+def delete_credential(uid: str, provider: str, *, firestore_client: Any = None) -> None:
     if provider not in LLM_OAUTH_PROVIDERS:
         raise ValueError(f'Unsupported LLM OAuth provider: {provider}')
-    user_ref = db.collection('users').document(uid)
+    client = firestore_client or get_firestore_client()
+    user_ref = client.collection('users').document(uid)
     data = user_ref.get().to_dict() or {}
     next_provider = next(
         (
