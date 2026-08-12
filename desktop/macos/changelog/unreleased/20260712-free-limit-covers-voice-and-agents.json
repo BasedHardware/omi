@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the free-plan monthly limit not applying to voice conversations, agents, and other AI features — all AI surfaces now share the same limit"
+}
