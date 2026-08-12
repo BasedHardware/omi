@@ -1,7 +1,8 @@
 import base64
 import json
+import threading
 import time
-from typing import Any
+from typing import Any, TypedDict
 
 import httpx
 
@@ -12,7 +13,17 @@ class LLMOAuthError(Exception):
     pass
 
 
-_PROVIDERS = {
+class ProviderConfiguration(TypedDict):
+    client_id: str
+    authorization_url: str
+    redirect_uri: str
+    scope: str
+    authorization_parameters: dict[str, str]
+    token_url: str
+    models_url: str
+
+
+_PROVIDERS: dict[str, ProviderConfiguration] = {
     'chatgpt': {
         'client_id': 'app_EMoamEEZ73f0CkXaXp7hrann',
         'authorization_url': 'https://auth.openai.com/oauth/authorize',
@@ -36,6 +47,8 @@ _PROVIDERS = {
         'models_url': 'https://api.x.ai/v1/models',
     },
 }
+_refresh_locks: dict[tuple[str, str], threading.Lock] = {}
+_refresh_locks_lock = threading.Lock()
 
 
 def supported_provider(provider: str) -> bool:
@@ -175,6 +188,11 @@ def exchange_authorization_code(provider: str, code: str, code_verifier: str, re
     return verify_credential(provider, _credential(provider, payload))
 
 
+def _refresh_lock(uid: str, provider: str) -> threading.Lock:
+    with _refresh_locks_lock:
+        return _refresh_locks.setdefault((uid, provider), threading.Lock())
+
+
 def get_credential(uid: str, provider: str | None = None) -> dict[str, Any] | None:
     credential = llm_oauth_db.get_credential(uid, provider)
     if credential is None:
@@ -185,33 +203,40 @@ def get_credential(uid: str, provider: str | None = None) -> dict[str, Any] | No
     credential_provider = credential.get('provider')
     if not isinstance(credential_provider, str) or credential_provider not in _PROVIDERS:
         raise LLMOAuthError('Provider session is invalid; reconnect it in Settings')
-    config = _PROVIDERS[credential_provider]
-    try:
-        response = httpx.post(
-            config['token_url'],
-            data={
-                'grant_type': 'refresh_token',
-                'client_id': config['client_id'],
-                'refresh_token': credential['refresh_token'],
-            },
-            timeout=15.0,
-        )
-    except httpx.HTTPError as error:
-        raise LLMOAuthError('Provider session could not refresh') from error
-    if response.status_code >= 400:
-        raise LLMOAuthError('Provider session expired; reconnect it in Settings')
-    try:
-        payload = response.json()
-    except ValueError as error:
-        raise LLMOAuthError('Provider returned an invalid refresh response') from error
-    if not isinstance(payload, dict):
-        raise LLMOAuthError('Provider returned an invalid refresh response')
-    refreshed = _credential(credential_provider, payload, credential['refresh_token'])
-    if isinstance(credential.get('model'), str):
-        refreshed['model'] = credential['model']
-    generation = credential.get('generation')
-    if not isinstance(generation, str) or not llm_oauth_db.save_refreshed_credential(
-        uid, credential_provider, refreshed, generation
-    ):
-        return None
-    return {'provider': credential_provider, **refreshed}
+    with _refresh_lock(uid, credential_provider):
+        latest = llm_oauth_db.get_credential(uid, credential_provider)
+        if latest is None:
+            return None
+        latest_expires_at = latest.get('expires_at')
+        if isinstance(latest_expires_at, int | float) and latest_expires_at > time.time() + 60:
+            return latest
+        config = _PROVIDERS[credential_provider]
+        try:
+            response = httpx.post(
+                config['token_url'],
+                data={
+                    'grant_type': 'refresh_token',
+                    'client_id': config['client_id'],
+                    'refresh_token': latest['refresh_token'],
+                },
+                timeout=15.0,
+            )
+        except httpx.HTTPError as error:
+            raise LLMOAuthError('Provider session could not refresh') from error
+        if response.status_code >= 400:
+            raise LLMOAuthError('Provider session expired; reconnect it in Settings')
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise LLMOAuthError('Provider returned an invalid refresh response') from error
+        if not isinstance(payload, dict):
+            raise LLMOAuthError('Provider returned an invalid refresh response')
+        refreshed = _credential(credential_provider, payload, latest['refresh_token'])
+        if isinstance(latest.get('model'), str):
+            refreshed['model'] = latest['model']
+        generation = latest.get('generation')
+        if not isinstance(generation, str) or not llm_oauth_db.save_refreshed_credential(
+            uid, credential_provider, refreshed, generation
+        ):
+            return None
+        return {'provider': credential_provider, **refreshed}

@@ -123,6 +123,22 @@ def test_refresh_does_not_restore_a_credential_disconnected_during_the_provider_
     save.assert_called_once()
 
 
+def test_refresh_rechecks_the_credential_after_waiting_for_another_refresh():
+    stale = {
+        'provider': 'grok',
+        'access_token': 'access-1',
+        'refresh_token': 'refresh-1',
+        'expires_at': 0,
+        'generation': 'generation-1',
+    }
+    fresh = {**stale, 'access_token': 'access-2', 'expires_at': 4_000_000_000}
+    with patch.object(oauth.llm_oauth_db, 'get_credential', side_effect=[stale, fresh]), patch.object(
+        oauth.httpx, 'post'
+    ) as post:
+        assert oauth.get_credential('user-1') == fresh
+    post.assert_not_called()
+
+
 def test_conditional_refresh_write_leaves_a_disconnected_credential_deleted():
     class Snapshot:
         def to_dict(self):
