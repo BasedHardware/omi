@@ -144,11 +144,15 @@ class GCSObjectStore:
 
     # --- metadata ---
     def get_metadata(self, bucket: str, key: str) -> Optional[Dict[str, Any]]:
+        from google.api_core.exceptions import NotFound as _GCSNotFound
+
         blob = self._blob(bucket, key)
         try:
             blob.reload()
-        except Exception:
-            return None
+        except _GCSNotFound:
+            return None  # genuinely absent -> no cache metadata
+        # A storage outage / auth error is NOT "missing metadata"; let it surface so callers and
+        # operators see the real failure instead of silently treating the object as uncached.
         return dict(blob.metadata or {})
 
     def set_metadata(self, bucket: str, key: str, metadata: Dict[str, Any]) -> None:
@@ -163,8 +167,13 @@ class GCSObjectStore:
         )
 
     def public_url(self, bucket: str, key: str) -> str:
-        # GCS public endpoint; the domain no longer hardcodes this — it derives from the adapter.
-        return f"https://storage.googleapis.com/{bucket}/{key}"
+        # Derive the base from the configured endpoint so a self-hosted GCS-mode deployment (fake-gcs
+        # / emulator via STORAGE_EMULATOR_HOST) returns reachable URLs instead of hard-coding the
+        # public Google host (cubic review PR 10887).
+        base = (
+            os.getenv("GCS_PUBLIC_ENDPOINT") or os.getenv("STORAGE_EMULATOR_HOST") or "https://storage.googleapis.com"
+        ).strip().rstrip("/")
+        return f"{base}/{bucket}/{key}"
 
 
 __all__ = ["GCSObjectStore"]
