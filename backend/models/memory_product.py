@@ -7,39 +7,10 @@ these fields.
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from models.memory_admin import ReadRolloutConsumerObservability
 from models.product_memory import MemoryItem
-
-
-class ProductMemorySearchItem(BaseModel):
-    """One product memory search result row.
-
-    This is the projection the read seam emits (``_product_memory_result`` in
-    ``utils.memory.memory_read_api`` and the equivalent universal projection in
-    ``MemoryService.default_product_search``) — not a raw ``MemoryItem``.
-    Unknown keys are preserved so a projection gaining a field does not silently
-    drop it from the wire.
-    """
-
-    model_config = ConfigDict(extra='allow')
-
-    memory_id: str = Field(description='Logical memory id.')
-    memory_layer: str = Field(description='Read layer that produced the row (always product_memory here).')
-    tier: str = Field(description='Memory tier value (short_term, long_term, archive).')
-    content: str = Field(description='Memory content text.')
-    lifecycle_status: str = Field(description='Lifecycle status of the underlying item.')
-    processing_state: str = Field(description='Processing state of the underlying item.')
-    confidence: Optional[float] = Field(default=None, description='Confidence score when the layer emits one.')
-    visibility: Optional[str] = Field(default=None, description='Visibility of the memory.')
-    visibility_source: str = Field(description='Which read seam decided the visibility value.')
-    source: Optional[str] = Field(default=None, description='Primary evidence source id, when present.')
-    date: str = Field(description='ISO-8601 timestamp of the last update.')
-    evidence: List[Dict[str, Any]] = Field(default_factory=list, description='Evidence payloads for the row.')
-    agent_use: str = Field(description='How an agent may use this row.')
-    access_reason: str = Field(description='Why this row was admitted by the access policy.')
-    superseded_by: Optional[str] = Field(default=None, description='Memory id that supersedes this row, if any.')
 
 
 class MemorySearchPolicyPayload(BaseModel):
@@ -55,7 +26,7 @@ class MemoryGlobalReadGateObservability(BaseModel):
     """Global memory read kill-switch observability attached to search responses."""
 
     source_path: str = Field(description='Firestore source path of the global read gate.')
-    read_decision: str = Field(description='Server read decision value (USE_MEMORY or DENY_MEMORY).')
+    read_decision: str = Field(description='Server read decision value (USE_MEMORY / SHADOW_ONLY / etc.).')
     fallback_reason: Optional[str] = Field(default=None, description='Fallback reason when reads are disabled.')
     reason: str = Field(description='Effective reason (fallback_reason when present, else the gate reason).')
 
@@ -77,6 +48,35 @@ class ProductRolloutObservability(ReadRolloutConsumerObservability):
     )
 
 
+class ProductMemorySearchItem(BaseModel):
+    """One row of a product memory search page.
+
+    This is the projection `utils.memory.memory_read_api._product_memory_result`
+    builds, not the authoritative `MemoryItem`. The projection is the product
+    read contract on purpose: it omits the storage-only and access-control fields
+    (`uid`, `version`, `sensitivity_labels`, `user_asserted`, ...) and adds the
+    per-row access accounting (`agent_use`, `access_reason`) a product caller
+    needs. Declaring `MemoryItem` here instead made every non-empty page fail
+    FastAPI response validation with a 500 (issue #11438).
+    """
+
+    memory_id: str = Field(description='Authoritative memory item id.')
+    memory_layer: str = Field(description='Always product_memory for this projection.')
+    tier: str = Field(description='Memory tier value (short_term / long_term / archive).')
+    content: str = Field(description='Memory content text.')
+    lifecycle_status: str = Field(description='Memory item status value.')
+    processing_state: str = Field(description='Memory item processing state value.')
+    confidence: Optional[float] = Field(default=None, description='Reserved; always null today.')
+    visibility: str = Field(description='Memory item visibility value.')
+    visibility_source: str = Field(description='Field the visibility value was read from.')
+    source: Optional[str] = Field(default=None, description='First evidence source id, when evidence exists.')
+    date: str = Field(description='ISO-8601 `updated_at` of the memory item.')
+    evidence: List[Dict[str, Any]] = Field(description='JSON-mode evidence payloads for this row.')
+    agent_use: str = Field(description='Access lane that produced the row (default vs explicit archive).')
+    access_reason: str = Field(description='Why this row was allowed through the access policy.')
+    superseded_by: Optional[str] = Field(default=None, description='Reserved; always null today.')
+
+
 class ProductMemorySearchResponse(BaseModel):
     """Default-visible product memory search response.
 
@@ -85,7 +85,9 @@ class ProductMemorySearchResponse(BaseModel):
 
     uid: str = Field(description='Authenticated user id.')
     query: str = Field(description='Search query string.')
-    items: List[ProductMemorySearchItem] = Field(description='Default-visible memory rows for the current page.')
+    items: List[ProductMemorySearchItem] = Field(
+        description='Default-visible memory search projections for the current page.'
+    )
     total_count: int = Field(description='Total default-visible items matching the query.')
     returned_count: int = Field(description='Number of items returned in this page.')
     limit: int = Field(description='Bounded page size used for this response.')
