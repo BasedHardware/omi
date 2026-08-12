@@ -6,10 +6,16 @@
 // payload starts with `think:` ("Checking action items", "Searching memories")
 // — those aren't part of the reply — and (b) encodes reply newlines as the
 // literal token `__CRLF__` so they survive single-line SSE framing.
+//
+// `error:` frames are status too, not content: backend/routers/chat.py streams
+// a typed `error: {json}` failure frame and then still emits the terminal
+// `done:`/fallback answer. Accumulating that JSON as reply text would put a raw
+// failure payload on screen — and, for AI Clone, into a contact's chat.
 
 /** Parse one SSE line into reply content, or null if it isn't reply content. */
 export function parseOmiSseLine(line: string): string | null {
   if (!line || line.startsWith('done:') || line.startsWith('message:')) return null
+  if (line.startsWith('error:')) return null
   const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
   if (content.startsWith('think:')) return null
   return content.replace(/__CRLF__/g, '\n')

@@ -13,6 +13,17 @@ describe('parseOmiSseLine', () => {
     expect(parseOmiSseLine('message: eyJmb28iOiJiYXIifQ==')).toBeNull()
   })
 
+  it('drops typed error: failure frames instead of staging them as reply text', () => {
+    // chat.py streams `error: {json}` and then still emits a terminal answer.
+    // Treating the failure payload as content would show raw JSON in chat — and
+    // let AI Clone send it to a contact as a drafted reply.
+    expect(parseOmiSseLine('error: {"code":"upstream_timeout"}')).toBeNull()
+    const acc = new OmiSseAccumulator()
+    acc.feed('error: {"code":"upstream_timeout"}\n')
+    acc.end()
+    expect(acc.text).toBe('')
+  })
+
   it('drops ephemeral think: status events', () => {
     expect(parseOmiSseLine('data: think: Searching memories')).toBeNull()
   })
