@@ -13,21 +13,74 @@ import SwiftUI
 
 @MainActor
 final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
+  private struct AlertRequest {
+    let title: String
+    let message: String
+  }
+
+  typealias SheetPresenter = (NSAlert, NSWindow, @escaping () -> Void) -> Void
+
+  private let windowProvider: () -> NSWindow?
+  private let sheetPresenter: SheetPresenter
+  private let activateApplication: () -> Void
+  private var pendingAlerts: [AlertRequest] = []
+  private var isPresentingAlert = false
+
+  init(
+    windowProvider: @escaping () -> NSWindow? = {
+      NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible })
+    },
+    sheetPresenter: @escaping SheetPresenter = { alert, window, completion in
+      alert.beginSheetModal(for: window) { _ in completion() }
+    },
+    activateApplication: @escaping () -> Void = {
+      NSApp.activate(ignoringOtherApps: true)
+    }
+  ) {
+    self.windowProvider = windowProvider
+    self.sheetPresenter = sheetPresenter
+    self.activateApplication = activateApplication
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(presentPendingAlertIfPossible),
+      name: NSApplication.didBecomeActiveNotification,
+      object: nil)
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(presentPendingAlertIfPossible),
+      name: NSWindow.didBecomeKeyNotification,
+      object: nil)
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+  }
+
   func present(title: String, message: String) {
-    guard
-      let window = NSApp.keyWindow ?? NSApp.mainWindow
-        ?? NSApp.windows.first(where: { $0.isVisible })
-    else {
-      log("Unable to present alert without a visible window")
+    pendingAlerts.append(.init(title: title, message: message))
+    presentPendingAlertIfPossible()
+  }
+
+  @objc private func presentPendingAlertIfPossible() {
+    guard !isPresentingAlert, let request = pendingAlerts.first else { return }
+    guard let window = windowProvider() else {
+      activateApplication()
       return
     }
 
+    pendingAlerts.removeFirst()
+    isPresentingAlert = true
     let alert = NSAlert()
-    alert.messageText = title
-    alert.informativeText = message
+    alert.messageText = request.title
+    alert.informativeText = request.message
     alert.alertStyle = .warning
     alert.addButton(withTitle: "OK")
-    alert.beginSheetModal(for: window)
+    sheetPresenter(alert, window) { [weak self] in
+      Task { @MainActor in
+        self?.isPresentingAlert = false
+        self?.presentPendingAlertIfPossible()
+      }
+    }
   }
 }
 
