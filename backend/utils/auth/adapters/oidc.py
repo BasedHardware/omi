@@ -64,7 +64,16 @@ class OIDCAuthProvider:
     def verify_token(self, bearer: str, *, check_revoked: bool = False) -> Principal:
         import jwt
 
-        audience = (os.getenv("OIDC_AUDIENCE") or "").strip() or None
+        audience = (os.getenv("OIDC_AUDIENCE") or "").strip()
+        if not audience:
+            # Fail-closed: without an expected audience the API would accept ANY token the
+            # issuer signed, including one minted for a different client in the same realm
+            # (cross-client token confusion). Require it explicitly (cubic review PR 10887).
+            # NOTE: Keycloak's default aud is "account" for every client — set OIDC_AUDIENCE to a
+            # dedicated audience added via a client Audience mapper for real cross-client isolation.
+            raise errors.AuthError(
+                "OIDC_AUDIENCE must be set: audience validation is required (fail-closed) to prevent cross-client token confusion"
+            )
         try:
             signing_key = _get_jwks_client().get_signing_key_from_jwt(bearer)
             decoded: Dict[str, Any] = jwt.decode(
@@ -73,7 +82,7 @@ class OIDCAuthProvider:
                 algorithms=["RS256"],
                 audience=audience,
                 issuer=_issuer(),
-                options={"verify_aud": audience is not None},
+                options={"verify_aud": True},
             )
         except jwt.ExpiredSignatureError as exc:
             raise errors.ExpiredToken(str(exc))
