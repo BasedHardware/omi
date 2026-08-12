@@ -21,6 +21,12 @@ test("dev-server keeps the producer endpoint inside the registered local composi
   expect(source).not.toMatch(/integration\/server|write-journey-door|qa-api-server/);
 });
 
+test("dev-server routes generation through the gateway or fails closed without one", () => {
+  expect(source).toContain("createGatewayChatGenerationSource");
+  expect(source).toContain("createGatewayRequiredChatGenerationSource");
+  expect(source).not.toContain("createScriptedChatGenerationSource");
+});
+
 test("producer evidence has one composition site: the registered local service", async () => {
   const root = new URL("../../../", import.meta.url);
   const callers: string[] = [];

@@ -404,6 +404,28 @@ export const createGatewayChatGenerationSource = (
   }, TRUSTED_CAPABILITY_TOKEN);
 };
 
+/**
+ * App-facing fail-closed source used when no gateway is configured. It never
+ * produces synthetic model output; hermetic scripted sources remain explicit
+ * test/scenario dependencies only.
+ */
+export const createGatewayRequiredChatGenerationSource = (): ChatGenerationSource => {
+  const source: ChatGenerationSource = Object.freeze({
+    start(input): ChatGenerationSourceRun {
+      let cancelled = false;
+      queueMicrotask(() => {
+        if (!cancelled) input.onError(gatewayFailure("generation_provider_failed"));
+      });
+      return Object.freeze({ cancel(): void { cancelled = true; } });
+    },
+  });
+  return registerTrustedChatGenerationSourceCapability(source, {
+    tier: "unknown",
+    adapter: "llm-gateway-required",
+    deterministic: false,
+  }, TRUSTED_CAPABILITY_TOKEN);
+};
+
 const DEFAULT_SCRIPT: readonly ScriptedChatGenerationStep[] = Object.freeze([
   Object.freeze({ delayMs: 25, text: "Local generation " }),
   Object.freeze({ delayMs: 40, text: "is connected." }),

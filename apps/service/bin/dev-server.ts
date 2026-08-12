@@ -3,7 +3,10 @@ import { Database } from "bun:sqlite";
 import { writeFileSync } from "node:fs";
 
 import { createLocalDevService } from "../app-facing";
-import { createGatewayChatGenerationSource } from "../chat/generation-source";
+import {
+  createGatewayChatGenerationSource,
+  createGatewayRequiredChatGenerationSource,
+} from "../chat/generation-source";
 import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
 import { isQaEvidenceRunId } from "../observability/producer-evidence";
 import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../qa/seed";
@@ -170,13 +173,13 @@ const main = (): void => {
       accountTimezone: config.accountTimezone,
       devSecretLabel: config.devSecretLabel,
       listenDefaultUnmetered: true,
-      ...(config.llmGateway === null ? {} : {
-        generationSource: createGatewayChatGenerationSource({
+      generationSource: config.llmGateway === null
+        ? createGatewayRequiredChatGenerationSource()
+        : createGatewayChatGenerationSource({
           gatewayUrl: config.llmGateway.url,
           laneId: config.llmGateway.laneId,
           serviceToken: config.llmGateway.token,
         }),
-      }),
     });
   } catch (error) {
     return fail(`failed to seed QA data: ${error instanceof Error ? error.message : "unknown error"}`);

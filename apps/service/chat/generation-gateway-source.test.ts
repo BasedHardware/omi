@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { createChatGenerationContextPacket } from "./generation-context";
 import {
   createGatewayChatGenerationSource,
+  createGatewayRequiredChatGenerationSource,
   readChatGenerationSourceCapability,
   type ChatGenerationSourceInput,
 } from "./generation-source";
@@ -169,6 +170,29 @@ describe("gateway chat generation source", () => {
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
     })).toThrow("invalid LLM gateway URL");
+  });
+
+  test("the app-facing no-gateway source fails instead of emitting a fake answer", async () => {
+    const source = createGatewayRequiredChatGenerationSource();
+    const deltas: string[] = [];
+    let completed = false;
+    let failed: unknown = null;
+
+    source.start(input({
+      onDelta: (text) => deltas.push(text),
+      onComplete: () => { completed = true; },
+      onError: (error) => { failed = error; },
+    }));
+    await Promise.resolve();
+
+    expect(deltas).toEqual([]);
+    expect(completed).toBe(false);
+    expect(failed).toEqual({ code: "generation_provider_failed", retryable: true });
+    expect(readChatGenerationSourceCapability(source)).toEqual({
+      tier: "unknown",
+      adapter: "llm-gateway-required",
+      deterministic: false,
+    });
   });
 
   test("detaches gateway configuration and fails closed before dropping attachment content", async () => {
