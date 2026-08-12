@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StepScaffold } from './StepScaffold'
+import {
+  trackPermissionDenied,
+  trackPermissionGranted,
+  trackPermissionRequested,
+  trackPermissionSkipped,
+  type WindowsPermission
+} from '../../lib/analytics'
 
 export type PermissionStatus = 'idle' | 'waiting' | 'granted' | 'denied'
 
@@ -27,6 +34,8 @@ type PermissionStepProps = {
   icon: React.ReactNode
   /** Label for the row inside the status card, e.g. "Microphone". */
   cardLabel: string
+  /** Closed analytics dimension shared with the macOS permission funnel. */
+  analyticsPermission: WindowsPermission
   statusText: Record<PermissionStatus, string>
   buttonLabel: Record<PermissionStatus, string>
   /**
@@ -82,6 +91,7 @@ export function PermissionStep({
   subtitle,
   icon,
   cardLabel,
+  analyticsPermission,
   statusText,
   buttonLabel,
   onActivate,
@@ -127,8 +137,9 @@ export function PermissionStep({
   const acceptGrant = useCallback((): void => {
     if (acceptedGrant.current) return
     acceptedGrant.current = true
+    trackPermissionGranted(analyticsPermission)
     cbs.current.onGranted?.()
-  }, [])
+  }, [analyticsPermission])
 
   const markGranted = useCallback(
     (route: GrantRoute): void => {
@@ -151,12 +162,14 @@ export function PermissionStep({
   )
 
   const handleActivate = async (): Promise<void> => {
+    trackPermissionRequested(analyticsPermission)
     setPermissionStatus('waiting')
     setError(null)
     try {
       await onActivate()
     } catch (e) {
       // Denied/blocked/failed — do NOT advance, do NOT claim granted.
+      trackPermissionDenied(analyticsPermission)
       setPermissionStatus('denied')
       setError(e instanceof Error ? e.message : String(e))
       return
@@ -169,6 +182,11 @@ export function PermissionStep({
   const handleContinue = (): void => {
     acceptGrant()
     cbs.current.onContinue()
+  }
+
+  const handleSkip = (): void => {
+    trackPermissionSkipped(analyticsPermission)
+    onSkip?.()
   }
 
   // Poll the real state (Mac's 1s Timer) and re-check on refocus (Mac's scenePhase ==
@@ -216,7 +234,7 @@ export function PermissionStep({
       subtitle={subtitle}
       align="left"
       aside={aside}
-      onSkip={skippable ? onSkip : undefined}
+      onSkip={skippable ? handleSkip : undefined}
     >
       <div className="flex w-full items-center justify-between rounded-xl bg-white/[0.06] px-5 py-4">
         <div className="flex items-center gap-3">

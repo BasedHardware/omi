@@ -2,18 +2,30 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 
-const signInWithProvider = vi.hoisted(() => vi.fn())
+const h = vi.hoisted(() => ({
+  signInWithProvider: vi.fn(),
+  trackSignInStarted: vi.fn(),
+  trackSignInCompleted: vi.fn(),
+  trackSignInFailed: vi.fn()
+}))
 
-vi.mock('../lib/firebase', () => ({ signInWithProvider }))
+vi.mock('../lib/firebase', () => ({ signInWithProvider: h.signInWithProvider }))
+vi.mock('../lib/analytics', () => ({
+  trackSignInStarted: h.trackSignInStarted,
+  trackSignInCompleted: h.trackSignInCompleted,
+  trackSignInFailed: h.trackSignInFailed
+}))
 
 import { Login } from './Login'
 
 beforeEach(() => {
-  signInWithProvider.mockReset().mockResolvedValue({ uid: 'test-user' })
+  vi.clearAllMocks()
+  h.signInWithProvider.mockResolvedValue({ uid: 'test-user' })
 })
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
 })
 
 describe('Login page', () => {
@@ -30,6 +42,22 @@ describe('Login page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }))
 
-    await waitFor(() => expect(signInWithProvider).toHaveBeenCalledWith('apple'))
+    await waitFor(() => expect(h.signInWithProvider).toHaveBeenCalledWith('apple'))
+    expect(h.trackSignInStarted).toHaveBeenCalledWith('apple')
+    expect(h.trackSignInCompleted).toHaveBeenCalledWith('apple')
+    expect(h.trackSignInFailed).not.toHaveBeenCalled()
+  })
+
+  it('records a bounded failure through the analytics boundary', async () => {
+    const error = new Error('Token exchange failed (500): private@example.com')
+    h.signInWithProvider.mockRejectedValue(error)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(<Login />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }))
+
+    await waitFor(() => expect(h.trackSignInFailed).toHaveBeenCalledWith('google', error))
+    expect(h.trackSignInStarted).toHaveBeenCalledWith('google')
+    expect(h.trackSignInCompleted).not.toHaveBeenCalled()
   })
 })

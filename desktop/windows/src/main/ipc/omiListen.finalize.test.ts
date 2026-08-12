@@ -51,6 +51,7 @@ const h = vi.hoisted(() => {
 
 vi.mock('ws', () => ({ default: h.FakeWebSocket }))
 vi.mock('electron', () => ({
+  app: { getVersion: () => '1.2.3' },
   ipcMain: {
     handle: (ch: string, fn: (...args: unknown[]) => void) => h.ipcHandlers.set(ch, fn),
     on: (ch: string, fn: (...args: unknown[]) => void) => h.ipcHandlers.set(ch, fn)

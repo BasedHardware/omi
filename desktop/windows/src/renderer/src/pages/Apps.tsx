@@ -36,6 +36,7 @@ import { worksExternally, setupUrl, isSetupCompleted, startSetupPolling } from '
 import { AppDetailSheet } from '../components/apps/AppDetailSheet'
 import { auth } from '../lib/firebase'
 import { getE2EUser } from '../lib/dev/e2eAuth'
+import { trackAppDetailViewed, trackAppDisabled, trackAppEnabled } from '../lib/analytics'
 
 // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
 // catalog at once. Users refine rather than scroll hundreds of cards.
@@ -447,44 +448,52 @@ export function Apps(): React.JSX.Element {
   // card "Setting up…", and poll `setup_completed_url` every 3s (≤100 ticks / 5 min).
   // On completion, enable again; on timeout, silently revert to Install (macOS does
   // the same — no error). Stable identity (empty deps): reads only setters/refs.
-  const beginSetupFlow = useCallback((a: AppCatalogItem): void => {
-    const uid = getCacheUid() ?? ''
-    const integration = a.external_integration ?? null
-    const url = setupUrl(integration, uid)
-    if (url) void window.omi.openExternalUrl(url)
-    const completedUrl = integration?.setup_completed_url
-    // No webhook to poll → macOS just opens the browser and leaves the app as
-    // Install (the user re-attempts after finishing in the browser). Nothing else.
-    if (!completedUrl) return
-    setSettingUp((s) => new Set(s).add(a.id))
-    const finish = (): void => {
-      pollCancels.current.delete(a.id)
-      setSettingUp((s) => {
-        const next = new Set(s)
-        next.delete(a.id)
-        return next
-      })
-    }
-    const cancel = startSetupPolling({
-      setupCompletedUrl: completedUrl,
-      uid,
-      check: isSetupCompleted,
-      onSuccess: () => {
-        finish()
-        void (async () => {
-          try {
-            await omiApi.post('/v1/apps/enable', null, { params: { app_id: a.id } })
-            setEnabled((s) => new Set(s).add(a.id))
-            toast(`${a.name} is set up`, { tone: 'success' })
-          } catch {
-            toast(`Couldn’t finish setting up ${a.name}`, { tone: 'error' })
-          }
-        })()
-      },
-      onTimeout: finish
-    })
-    pollCancels.current.set(a.id, cancel)
+  const recordEnabled = useCallback((a: AppCatalogItem): void => {
+    setEnabled((s) => new Set(s).add(a.id))
+    trackAppEnabled(a.id, a.category)
   }, [])
+
+  const beginSetupFlow = useCallback(
+    (a: AppCatalogItem): void => {
+      const uid = getCacheUid() ?? ''
+      const integration = a.external_integration ?? null
+      const url = setupUrl(integration, uid)
+      if (url) void window.omi.openExternalUrl(url)
+      const completedUrl = integration?.setup_completed_url
+      // No webhook to poll → macOS just opens the browser and leaves the app as
+      // Install (the user re-attempts after finishing in the browser). Nothing else.
+      if (!completedUrl) return
+      setSettingUp((s) => new Set(s).add(a.id))
+      const finish = (): void => {
+        pollCancels.current.delete(a.id)
+        setSettingUp((s) => {
+          const next = new Set(s)
+          next.delete(a.id)
+          return next
+        })
+      }
+      const cancel = startSetupPolling({
+        setupCompletedUrl: completedUrl,
+        uid,
+        check: isSetupCompleted,
+        onSuccess: () => {
+          finish()
+          void (async () => {
+            try {
+              await omiApi.post('/v1/apps/enable', null, { params: { app_id: a.id } })
+              recordEnabled(a)
+              toast(`${a.name} is set up`, { tone: 'success' })
+            } catch {
+              toast(`Couldn’t finish setting up ${a.name}`, { tone: 'error' })
+            }
+          })()
+        },
+        onTimeout: finish
+      })
+      pollCancels.current.set(a.id, cancel)
+    },
+    [recordEnabled]
+  )
 
   // Stable identity (empty deps) so memoized AppCards skip reconciliation while the
   // user types in search or toggles another app.
@@ -503,6 +512,7 @@ export function Apps(): React.JSX.Element {
         })
         try {
           await omiApi.post('/v1/apps/disable', null, { params: { app_id: a.id } })
+          trackAppDisabled(a.id, a.category)
         } catch (e) {
           console.error('Disable app failed:', e)
           setEnabled((s) => new Set(s).add(a.id))
@@ -526,7 +536,7 @@ export function Apps(): React.JSX.Element {
       setBusy((s) => new Set(s).add(a.id))
       try {
         await omiApi.post('/v1/apps/enable', null, { params: { app_id: a.id } })
-        setEnabled((s) => new Set(s).add(a.id))
+        recordEnabled(a)
       } catch (e) {
         if (worksExternally(a)) {
           beginSetupFlow(a)
@@ -552,8 +562,13 @@ export function Apps(): React.JSX.Element {
         })
       }
     },
-    [beginSetupFlow]
+    [beginSetupFlow, recordEnabled]
   )
+
+  const openDetail = useCallback((a: AppCatalogItem): void => {
+    trackAppDetailViewed(a.id, a.category)
+    setSelectedApp(a)
+  }, [])
 
   // Unique categories present across the catalog, sorted by their display name.
   const allCategories = useMemo(() => {
@@ -859,7 +874,7 @@ export function Apps(): React.JSX.Element {
                       busy={busy}
                       settingUp={settingUp}
                       onToggle={toggle}
-                      onOpen={setSelectedApp}
+                      onOpen={openDetail}
                     />
                     {view.apps.length > SEARCH_LIMIT && (
                       <p className="mt-3 text-center text-xs text-white/45">
@@ -908,7 +923,7 @@ export function Apps(): React.JSX.Element {
                       busy={busy}
                       settingUp={settingUp}
                       onToggle={toggle}
-                      onOpen={setSelectedApp}
+                      onOpen={openDetail}
                     />
                     {isExpanded && section.truncated && (
                       <p className="text-xs text-white/45">

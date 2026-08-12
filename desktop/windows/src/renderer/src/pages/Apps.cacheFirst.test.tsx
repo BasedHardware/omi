@@ -11,6 +11,11 @@ import { MemoryRouter } from 'react-router-dom'
 const getMock = vi.fn()
 vi.mock('../lib/apiClient', () => ({ omiApi: { get: (...a: unknown[]) => getMock(...a) } }))
 vi.mock('../lib/toast', () => ({ toast: vi.fn() }))
+vi.mock('../lib/analytics', () => ({
+  trackAppEnabled: vi.fn(),
+  trackAppDisabled: vi.fn(),
+  trackAppDetailViewed: vi.fn()
+}))
 
 const app = (id: string): unknown => ({ id, name: id, category: 'other' })
 

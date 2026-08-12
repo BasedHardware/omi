@@ -49,6 +49,10 @@ vi.mock('../lib/preferences', () => ({
   })
 }))
 vi.mock('../lib/voice/voiceController', () => ({ speakText: vi.fn(() => Promise.resolve()) }))
+vi.mock('../lib/analytics', () => ({
+  trackEvent: vi.fn(),
+  trackChatMessageSent: vi.fn()
+}))
 vi.mock('../lib/desktopChatMessages', () => ({
   saveDesktopMessage: vi.fn(async () => ({ id: 'srv', createdAt: 'now', created: true }))
 }))

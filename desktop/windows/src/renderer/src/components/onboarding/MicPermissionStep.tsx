@@ -81,6 +81,7 @@ export function MicPermissionStep({
       subtitle="This lets Omi transcribe meetings and voice notes"
       icon={<Mic className="h-5 w-5 text-white/60" />}
       cardLabel="Microphone"
+      analyticsPermission="microphone"
       statusText={{
         idle: 'Not granted yet',
         waiting: 'Waiting for Windows',

@@ -6,6 +6,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, fireEvent, screen, act } from '@testing-library/react'
 import { PermissionStep } from './PermissionStep'
 
+const analytics = vi.hoisted(() => ({
+  requested: vi.fn(),
+  granted: vi.fn(),
+  denied: vi.fn(),
+  skipped: vi.fn()
+}))
+
+vi.mock('../../lib/analytics', () => ({
+  trackPermissionRequested: analytics.requested,
+  trackPermissionGranted: analytics.granted,
+  trackPermissionDenied: analytics.denied,
+  trackPermissionSkipped: analytics.skipped
+}))
+
 // Distinct card vs button copy, so an assertion can tell which one it matched.
 const statusText = {
   idle: 'Idle',
@@ -31,6 +45,7 @@ const renderStep = (overrides: Overrides = {}): void => {
       title="Test permission"
       icon={<span />}
       cardLabel="Thing"
+      analyticsPermission="microphone"
       statusText={statusText}
       buttonLabel={buttonLabel}
       onActivate={async () => {}}
@@ -46,7 +61,10 @@ const tick = async (ms = 0): Promise<void> => {
   })
 }
 
-beforeEach(() => vi.useFakeTimers())
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.useFakeTimers()
+})
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
@@ -61,6 +79,8 @@ describe('PermissionStep', () => {
     await tick(350)
 
     expect(onContinue).toHaveBeenCalledTimes(1)
+    expect(analytics.requested).toHaveBeenCalledExactlyOnceWith('microphone')
+    expect(analytics.granted).toHaveBeenCalledExactlyOnceWith('microphone')
   })
 
   // A permission that was already granted before the step opened must be CONFIRMED, not
@@ -79,6 +99,7 @@ describe('PermissionStep', () => {
     fireEvent.click(screen.getByText('Continue'))
     expect(onGranted).toHaveBeenCalledTimes(1)
     expect(onContinue).toHaveBeenCalledTimes(1)
+    expect(analytics.granted).toHaveBeenCalledExactlyOnceWith('microphone')
   })
 
   it('fires the grant side effects exactly once, whichever route the user took', async () => {
@@ -138,6 +159,9 @@ describe('PermissionStep', () => {
     expect(checkGranted.mock.calls.length).toBe(callsAtDenial)
     expect(screen.queryByText('Granted')).toBeNull()
     expect(onContinue).not.toHaveBeenCalled()
+    expect(analytics.requested).toHaveBeenCalledExactlyOnceWith('microphone')
+    expect(analytics.denied).toHaveBeenCalledExactlyOnceWith('microphone')
+    expect(analytics.granted).not.toHaveBeenCalled()
   })
 
   // M1: the orphaned 350ms timer used to fire onContinue() *after* Skip had already
@@ -167,11 +191,16 @@ describe('PermissionStep', () => {
   // …but a DETECTED grant keeps Skip: it is the user's only way to decline something
   // that is already on (screen capture ships enabled).
   it('keeps Skip available on a detected grant', async () => {
-    renderStep({ onSkip: vi.fn(), checkGranted: async () => true })
+    const onSkip = vi.fn()
+    renderStep({ onSkip, checkGranted: async () => true })
     await tick(2000)
 
     expect(screen.getByText('Granted')).toBeTruthy()
     expect(screen.getByText('Skip')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Skip'))
+    expect(analytics.skipped).toHaveBeenCalledExactlyOnceWith('microphone')
+    expect(onSkip).toHaveBeenCalledOnce()
   })
 
   it('offers Back when the step supports it', async () => {

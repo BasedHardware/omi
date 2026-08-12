@@ -1,14 +1,12 @@
-import { useEffect, useState } from 'react'
-import {
-  getPreferences,
-  setPreferences,
-  completeOnboarding,
-  setPendingRoute
-} from '../lib/preferences'
+import { useEffect, useRef, useState } from 'react'
+import { getPreferences, setPreferences } from '../lib/preferences'
 import { clampOnboardingStep } from '../lib/onboardingProgress'
 import { syncLanguage, setDisplayName } from '../lib/userProfile'
 import { resolveLanguageCode, languageLabel } from '../lib/languages'
 import { trackHowDidYouHear } from '../lib/analytics'
+import { finishOnboardingToChat } from '../lib/onboardingCompletion'
+import { createOnboardingStepRecorder } from '../lib/onboardingStepTelemetry'
+import type { WindowsOnboardingStep } from '../lib/analytics'
 import { toast } from '../lib/toast'
 import { NameStep } from '../components/onboarding/NameStep'
 import { LanguageStep } from '../components/onboarding/LanguageStep'
@@ -39,6 +37,22 @@ import {
 } from '../lib/onboardingGraph'
 
 const TOTAL_STEPS = 14
+const STEP_NAMES: readonly WindowsOnboardingStep[] = [
+  'Name',
+  'Language',
+  'HowDidYouHear',
+  'Trust',
+  'BackgroundPrivacy',
+  'ScreenCaptureOptIn',
+  'BuildProfile',
+  'Microphone',
+  'Automation',
+  'ShortcutSetup',
+  'VoiceIntro',
+  'AskDemo',
+  'DataSources',
+  'Goal'
+]
 
 export function Onboarding(): React.JSX.Element {
   // Resume where the user left off if they quit mid-onboarding. Clamped in case
@@ -46,6 +60,7 @@ export function Onboarding(): React.JSX.Element {
   const [step, setStep] = useState(() =>
     clampOnboardingStep(getPreferences().onboardingStep, TOTAL_STEPS)
   )
+  const stepRecorder = useRef(createOnboardingStepRecorder())
   const prefs = getPreferences()
 
   // A FRESH onboarding start clears any prior local graph so the reveal begins
@@ -66,11 +81,18 @@ export function Onboarding(): React.JSX.Element {
   // onboarding completes (completeOnboarding) or is reset (resetOnboarding).
   useEffect(() => {
     setPreferences({ onboardingStep: step })
+    stepRecorder.current.beginStep(step)
   }, [step])
 
   const graph = useOnboardingGraph()
 
-  const next = (): void => setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1))
+  const advance = (skipped: boolean): void => {
+    const stepName = STEP_NAMES[step]
+    if (!stepName || !stepRecorder.current.record(step, stepName, skipped)) return
+    setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1))
+  }
+  const next = (): void => advance(false)
+  const skip = (): void => advance(true)
   const back = (): void => setStep((s) => Math.max(s - 1, 0))
 
   const handleName = (name: string): void => {
@@ -100,19 +122,20 @@ export function Onboarding(): React.JSX.Element {
     next()
   }
 
-  const finishToChat = (): void => {
-    setPendingRoute('/chat')
-    completeOnboarding()
-  }
-
   const handleGoal = (goal: string): void => {
+    if (!stepRecorder.current.record(step, 'Goal', false)) return
     setPreferences({ goal })
     // Best-effort sync to the Omi goals backend — never block onboarding on the
     // network or delay the transition into Chat.
     void createGoal(goal).catch(() => {
       toast('Saved locally — goal sync will retry later', { tone: 'warn' })
     })
-    finishToChat()
+    finishOnboardingToChat()
+  }
+
+  const skipGoal = (): void => {
+    if (!stepRecorder.current.record(step, 'Goal', true)) return
+    finishOnboardingToChat()
   }
 
   // App names already revealed in the brain map (id prefix `app_`), used to
@@ -176,7 +199,7 @@ export function Onboarding(): React.JSX.Element {
           totalSteps={TOTAL_STEPS}
           onContinue={next}
           onBack={back}
-          onSkip={next}
+          onSkip={skip}
         />
       )
     }
@@ -188,7 +211,7 @@ export function Onboarding(): React.JSX.Element {
           stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
-          onSkip={next}
+          onSkip={skip}
         />
       )
     }
@@ -199,7 +222,7 @@ export function Onboarding(): React.JSX.Element {
           totalSteps={TOTAL_STEPS}
           onContinue={next}
           onBack={back}
-          onSkip={next}
+          onSkip={skip}
         />
       )
     }
@@ -210,7 +233,7 @@ export function Onboarding(): React.JSX.Element {
           totalSteps={TOTAL_STEPS}
           onContinue={next}
           onBack={back}
-          onSkip={next}
+          onSkip={skip}
         />
       )
     }
@@ -222,20 +245,20 @@ export function Onboarding(): React.JSX.Element {
           stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
-          onSkip={next}
+          onSkip={skip}
         />
       )
     }
     if (step === 10) {
       return (
-        <VoiceIntroStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <VoiceIntroStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={skip} />
       )
     }
     if (step === 11) {
       // Ask demo: type a question in the bar → Omi's answer (Mac comparison)
       // reveals, then advances to the goal step.
       return (
-        <AskDemoStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <AskDemoStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={skip} />
       )
     }
     if (step === 12) {
@@ -247,7 +270,7 @@ export function Onboarding(): React.JSX.Element {
           stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
-          onSkip={next}
+          onSkip={skip}
         />
       )
     }
@@ -257,7 +280,7 @@ export function Onboarding(): React.JSX.Element {
         totalSteps={TOTAL_STEPS}
         apps={appNames}
         onContinue={handleGoal}
-        onSkip={finishToChat}
+        onSkip={skipGoal}
       />
     )
   }

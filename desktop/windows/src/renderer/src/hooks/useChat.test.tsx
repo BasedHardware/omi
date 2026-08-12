@@ -60,8 +60,10 @@ vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speak
 // Fallback/degrade telemetry — spied so the 429-retry tests assert the ops signal
 // without a real PostHog fetch (which would otherwise pollute the global.fetch mock).
 const trackEventSpy = vi.fn((_e: string, _p?: Record<string, unknown>) => {})
+const trackChatMessageSentSpy = vi.fn((_p: Record<string, unknown>) => {})
 vi.mock('../lib/analytics', () => ({
-  trackEvent: (e: string, p?: Record<string, unknown>) => trackEventSpy(e, p)
+  trackEvent: (e: string, p?: Record<string, unknown>) => trackEventSpy(e, p),
+  trackChatMessageSent: (p: Record<string, unknown>) => trackChatMessageSentSpy(p)
 }))
 // Shared-thread continuity is best-effort HTTP; stub it so recordVoiceTurn's
 // backend echo is hermetic (and assertable).
@@ -216,6 +218,35 @@ async function waitForStream(i: number): Promise<void> {
 const lastAssistant = (
   msgs: { role: string; content: string }[]
 ): { content: string } | undefined => [...msgs].reverse().find((m) => m.role === 'assistant')
+
+describe('useChat — shared chat-send telemetry', () => {
+  it('records one content-free event after an accepted voice send', async () => {
+    const { result } = renderHook(() => useChat())
+
+    await act(async () => {
+      const p = result.current.send('private meeting question', { fromVoice: true })
+      await waitForStream(0)
+      expect(trackChatMessageSentSpy).toHaveBeenCalledExactlyOnceWith({
+        messageLength: 24,
+        hasSelectedAppContext: false,
+        source: 'desktop_voice'
+      })
+      streams[0].push(`done: ${b64(JSON.stringify({ id: 'srv', text: 'answer' }))}\n\n`)
+      streams[0].close()
+      await p
+    })
+
+    expect(JSON.stringify(trackChatMessageSentSpy.mock.calls)).not.toContain('private meeting')
+  })
+
+  it('does not record a rejected empty send', async () => {
+    const { result } = renderHook(() => useChat())
+
+    await act(async () => result.current.send('   '))
+
+    expect(trackChatMessageSentSpy).not.toHaveBeenCalled()
+  })
+})
 
 describe('useChat — C4 done payload', () => {
   it('replaces streamed text with the citation-stripped final text and stores the server id + citations', async () => {

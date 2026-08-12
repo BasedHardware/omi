@@ -10,6 +10,11 @@ import { Apps } from './Apps'
 // a failed enable/disable raises a real error toast, the row reverts to its prior
 // state, and the button is never left stuck busy/disabled.
 
+const telemetry = vi.hoisted(() => ({
+  trackAppEnabled: vi.fn(),
+  trackAppDisabled: vi.fn(),
+  trackAppDetailViewed: vi.fn()
+}))
 const { getMock, postMock, toastMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
   postMock: vi.fn(),
@@ -22,6 +27,7 @@ vi.mock('../lib/apiClient', () => ({
   }
 }))
 vi.mock('../lib/toast', () => ({ toast: (...a: unknown[]) => toastMock(...a) }))
+vi.mock('../lib/analytics', () => telemetry)
 
 // A minimal catalog item; the grid only needs id/name/category to render a card.
 const app = (id: string, name: string): unknown => ({ id, name, category: 'other' })
@@ -29,7 +35,7 @@ const app = (id: string, name: string): unknown => ({ id, name, category: 'other
 // Seed a per-uid cold-start snapshot so the grid paints a real card synchronously
 // (default view renders `sections`, so the app must live inside a section). The
 // revalidating load() still runs; we let it fail so the seeded grid stays on screen.
-function seedGrid(): void {
+function seedGrid(isEnabled = false): void {
   localStorage.setItem('omi.lastSignedInUid', 'u1')
   const section = {
     capabilityId: 'popular',
@@ -45,7 +51,7 @@ function seedGrid(): void {
       sections: [section],
       allApps: [app('APP1', 'App One')],
       installedPool: [app('APP1', 'App One')],
-      enabled: []
+      enabled: isEnabled ? ['APP1'] : []
     })
   )
 }
@@ -54,6 +60,9 @@ beforeEach(() => {
   getMock.mockReset()
   postMock.mockReset()
   toastMock.mockReset()
+  telemetry.trackAppEnabled.mockReset()
+  telemetry.trackAppDisabled.mockReset()
+  telemetry.trackAppDetailViewed.mockReset()
   localStorage.clear()
   // Cache-first: a failed revalidation keeps the seeded grid on screen (the card
   // under test), rather than swapping in the full-page "Couldn't load apps".
@@ -77,6 +86,34 @@ function httpError(status: number, detail: string): unknown {
 }
 
 describe('Apps — enable/disable error surfacing (PR1)', () => {
+  it('records successful enable, disable, and detail actions without the app name', async () => {
+    seedGrid()
+    postMock.mockResolvedValue({ data: {} })
+    const first = render(
+      <MemoryRouter>
+        <Apps />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Install' }))
+    await waitFor(() =>
+      expect(telemetry.trackAppEnabled).toHaveBeenCalledExactlyOnceWith('APP1', 'other')
+    )
+    expect(JSON.stringify(telemetry.trackAppEnabled.mock.calls)).not.toContain('App One')
+    first.unmount()
+
+    seedGrid(true)
+    renderApps()
+    const installedButtons = await screen.findAllByRole('button', { name: 'Installed' })
+    fireEvent.click(installedButtons[installedButtons.length - 1])
+    await waitFor(() =>
+      expect(telemetry.trackAppDisabled).toHaveBeenCalledExactlyOnceWith('APP1', 'other')
+    )
+
+    fireEvent.click(screen.getByText('App One'))
+    expect(telemetry.trackAppDetailViewed).toHaveBeenCalledExactlyOnceWith('APP1', 'other')
+  })
+
   it('shows an error toast, reverts the row, and does not leave the button stuck busy when enable fails', async () => {
     seedGrid()
     postMock.mockRejectedValue(httpError(403, 'You are not authorized to enable this app'))

@@ -42,6 +42,10 @@ vi.mock('../lib/preferences', () => ({
   })
 }))
 vi.mock('../lib/voice/voiceController', () => ({ speakText: async () => {} }))
+vi.mock('../lib/analytics', () => ({
+  trackEvent: vi.fn(),
+  trackChatMessageSent: vi.fn()
+}))
 // INV-CHAT-1 shared-thread persistence — spied so we can assert the app_id + count.
 const saveSpy = vi.fn(async (_req: Record<string, unknown>) => ({
   id: 's',
