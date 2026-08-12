@@ -16,6 +16,8 @@ export const EN_MESSAGES = {
   "common.save": "Save",
   "common.search": "Search",
   "common.unknownError": "Something went wrong",
+  "destination.unavailable": "This destination is not available in this build yet.",
+  "destination.waitForSource": "Nothing is shown until its real data source is available.",
   "appearance.title": "Appearance",
   "appearance.default": "Platform default",
   "appearance.system": "System",

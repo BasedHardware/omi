@@ -39,6 +39,9 @@ test("an explicit route always beats the platform default", () => {
   assert.equal(route("tasks", null, "platform"), "tasks");
   assert.equal(route("conversations", null, "platform"), "conversations");
   assert.equal(route("folders", null, "platform"), "folders");
+  assert.equal(route("rewind", null, "platform"), "rewind");
+  assert.equal(route("apps", null, "platform"), "apps");
+  assert.equal(route("brain-map", null, "platform"), "brain-map");
   assert.equal(route("listen", null, "platform"), "listen");
   assert.equal(route("chat", null, "platform"), "chat");
   assert.equal(route("settings", null, "platform"), "settings");
@@ -64,6 +67,9 @@ test("every explicit destination resolves the same whatever the generation is", 
     assert.equal(route("home", null, generation), "home");
     assert.equal(route("listen", null, generation), "listen");
     assert.equal(route("folders", null, generation), "folders");
+    assert.equal(route("rewind", null, generation), "rewind");
+    assert.equal(route("apps", null, generation), "apps");
+    assert.equal(route("brain-map", null, generation), "brain-map");
     assert.equal(route("chat", null, generation), "chat");
     assert.equal(route("settings", null, generation), "settings");
   }
@@ -157,6 +163,7 @@ test("what actually rendered is observable from outside the bundle", async () =>
     'markRendered("tasks", null)',
     'markRendered("conversations", null)',
     'markRendered("folders", null)',
+    'markRendered(route, null)',
     'markRendered("listen", null)',
     'markRendered("chat", null)',
     'markRendered("settings", null)',

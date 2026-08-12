@@ -16,6 +16,9 @@ export type ProductionRouteName =
   | "conversations"
   | "folders"
   | "tasks"
+  | "rewind"
+  | "apps"
+  | "brain-map"
   | "listen"
   | "chat"
   | "settings"
@@ -52,6 +55,9 @@ export function resolveProductionRoute(input: ProductionRouteInput): ProductionR
       case "conversations":
       case "folders":
       case "tasks":
+      case "rewind":
+      case "apps":
+      case "brain-map":
       case "listen":
       case "chat":
       case "settings":

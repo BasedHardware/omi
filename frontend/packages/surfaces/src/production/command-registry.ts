@@ -6,6 +6,9 @@ export type ProductionRoute =
   | "conversations"
   | "folders"
   | "tasks"
+  | "rewind"
+  | "apps"
+  | "brain-map"
   | "chat"
   | "settings"
   | "listen";
@@ -17,6 +20,10 @@ export type ProductionCommandId =
   | "navigate-conversations"
   | "navigate-folders"
   | "navigate-tasks"
+  | "navigate-rewind"
+  | "navigate-apps"
+  | "navigate-brain-map"
+  | "navigate-back"
   | "navigate-chat"
   | "navigate-settings"
   | "navigate-listen"
@@ -70,12 +77,14 @@ const routeCommand = (
   id: ProductionCommandId,
   labelKey: MessageKey,
   route: ProductionRoute,
+  chord?: CommandChord,
 ): ProductionCommand => ({
   id,
   labelKey,
   routeScope: "global",
   textEntryPolicy: "ignore",
   repeatPolicy: "allow",
+  ...(chord ? { chord } : {}),
   isEnabled: () => true,
   invoke: (context) => context.navigate(route),
 });
@@ -106,13 +115,16 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       textEntryPolicy: "ignore",
       repeatPolicy: "ignore",
     }),
-    routeCommand("navigate-home", "nav.home", "home"),
-    routeCommand("navigate-memories", "nav.memories", "memories"),
-    routeCommand("navigate-conversations", "nav.conversations", "conversations"),
+    routeCommand("navigate-home", "nav.home", "home", { key: "1", modifier: true }),
+    routeCommand("navigate-conversations", "nav.conversations", "conversations", { key: "2", modifier: true }),
+    routeCommand("navigate-memories", "nav.memories", "memories", { key: "3", modifier: true }),
     routeCommand("navigate-folders", "nav.folders", "folders"),
-    routeCommand("navigate-tasks", "nav.tasks", "tasks"),
+    routeCommand("navigate-brain-map", "nav.brainMap", "brain-map"),
+    routeCommand("navigate-tasks", "nav.tasks", "tasks", { key: "4", modifier: true }),
+    routeCommand("navigate-rewind", "nav.rewind", "rewind", { key: "5", modifier: true }),
+    routeCommand("navigate-apps", "nav.apps", "apps", { key: "6", modifier: true }),
     routeCommand("navigate-chat", "chat.title", "chat"),
-    routeCommand("navigate-settings", "nav.settings", "settings"),
+    routeCommand("navigate-settings", "nav.settings", "settings", { key: ",", modifier: true }),
     routeCommand("navigate-listen", "listen.title", "listen"),
     handlerCommand({
       id: "focus-home-search",
@@ -187,6 +199,16 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       textEntryPolicy: "text-only",
       repeatPolicy: "ignore",
     }),
+    {
+      id: "navigate-back",
+      labelKey: "common.back",
+      chord: { key: "Escape" },
+      routeScope: "global",
+      textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
+      isEnabled: (context) => context.activeRoute !== "home",
+      invoke: (context) => context.navigate("home"),
+    },
     handlerCommand({
       id: "close-command-palette",
       labelKey: "common.close",

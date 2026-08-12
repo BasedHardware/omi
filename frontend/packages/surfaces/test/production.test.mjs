@@ -121,15 +121,15 @@ test("production controls share search and filter primitives and expose determin
   const conversations = await read("src/production/ConversationsProduction.tsx");
   const memories = await read("src/production/MemoriesProduction.tsx");
   const tasks = await read("src/production/TasksProduction.tsx");
-  const chrome = await read("src/production/ProductionChrome.tsx");
+  const settings = await read("src/production/SettingsProduction.tsx");
   const entry = await read("src/production/main.tsx");
   assert.match(primitives, /export function ProductionSearchField/);
   assert.match(primitives, /type="search"/);
   assert.match(primitives, /export function ProductionFilterChips/);
   for (const source of [conversations, memories, tasks]) assert.match(source, /<ProductionSearchField/);
   for (const source of [conversations, memories]) assert.match(source, /<ProductionFilterChips/);
-  assert.match(chrome, /<option value="system">/);
-  assert.match(chrome, /params\.set\("theme", selection\)/);
+  assert.match(settings, /APPEARANCE_OPTIONS[^\n]+"system"/);
+  assert.match(settings, /store\.patch\(\{ appearance: selection \}\)/);
   assert.match(entry, /themeNameFor\(platform, colorModeFor\(themeSelection\)\)/);
   assert.match(entry, /platform === "mobile" \? "dark" : "light"/);
   // red-proof: duplicating a route-local search field, removing the explicit
@@ -154,6 +154,10 @@ test("production chrome preserves QA context while clearing fixture selection", 
   assert.match(source, /params\.get\("platform"\)|location\.search/);
   assert.match(source, /href\("tasks"\)/);
   assert.match(source, /href\("home"\)/);
+  assert.match(source, /href\("rewind"\)/);
+  assert.match(source, /href\("apps"\)/);
+  assert.match(source, /href\("listen"\)/);
+  assert.match(source, /href\("settings"\)/);
   assert.match(source, /active === "home" \? "page"/);
   assert.match(source, /active === "tasks" \? "page"/);
   assert.match(source, /export function ProductionLibrarySegment/);

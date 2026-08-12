@@ -78,7 +78,7 @@ test("memory create and edit affordances execute keyboard-safe form behavior", a
   }
 });
 
-test("shared chrome renders the supported hierarchy without fake destinations", async () => {
+test("shared chrome mirrors the shipped destination hierarchy without fake content", async () => {
   const ProductionChrome = await loadProductionExport("ProductionChrome.tsx", "ProductionChrome");
   const rendered = await renderComponent(ProductionChrome, { locale: "en", active: "memories" });
   try {
@@ -93,13 +93,13 @@ test("shared chrome renders the supported hierarchy without fake destinations", 
     const activeLinks = links.filter((link) => link.getAttribute("aria-current") === "page");
     assert.ok(activeLinks.length > 0);
     assert.ok(activeLinks.every((link) => /Library|Conversations/.test(link.textContent ?? "")));
-    for (const unsupported of [EN_MESSAGES["nav.apps"], EN_MESSAGES["nav.rewind"], EN_MESSAGES["nav.brainMap"]]) {
-      assert.equal(links.some((link) => link.textContent?.includes(unsupported)), false);
+    for (const shipped of [EN_MESSAGES["nav.apps"], EN_MESSAGES["nav.rewind"]]) {
+      assert.equal(links.some((link) => link.textContent?.includes(shipped)), true);
     }
-    for (const parked of [EN_MESSAGES["nav.microphone"], EN_MESSAGES["nav.screenCapture"]]) {
-      const control = rendered.container.querySelector(`.nav-icon-control[title="${parked}"]`);
-      assert.equal(control?.getAttribute("aria-disabled"), "true", `${parked} remains a visibly parked hardware control`);
-    }
+    const microphone = rendered.container.querySelector(`a.nav-icon-control[title="${EN_MESSAGES["nav.microphone"]}"]`);
+    assert.ok(microphone?.getAttribute("href")?.includes("route=listen"));
+    const screen = rendered.container.querySelector(`button.nav-icon-control[title="${EN_MESSAGES["nav.screenCapture"]}"]`);
+    assert.equal(screen?.getAttribute("aria-disabled"), "true", "screen capture remains visibly parked");
   } finally {
     await rendered.cleanup();
   }
