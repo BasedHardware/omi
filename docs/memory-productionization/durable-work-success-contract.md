@@ -1,6 +1,6 @@
 # Atomic durable-work success contract
 
-Status: P3 pre-registration, 2026-08-11
+Status: P3 core contract and PostgreSQL atomic-success adapter implemented, 2026-08-12
 
 ## Purpose
 
@@ -58,7 +58,7 @@ state with the transaction clock.
 
 ## Structural PostgreSQL linkage
 
-The new inert migration:
+The inert schema and runtime migrations:
 
 1. expands the non-formation reason check without editing old bytes;
 2. adds a generated, closed `origin_code` to graph commits and an owner-scoped
@@ -74,7 +74,28 @@ point at promotion, and a predicate job cannot point at repair. A non-empty
 success cannot omit a graph commit; an empty success cannot smuggle one in.
 The follow-on result-staging migration additionally makes every success point to
 the exact owner-local staged normalized result and response digest. Every key
-and foreign key is account-scoped. The migrations grant nobody.
+and foreign key is account-scoped. The application role has no direct access to
+either sensitive stage or success table. Fixed `SECURITY DEFINER` functions
+require the transaction-local owner, `memories.work.execute` capability, and a
+current principal-owned lease. The read function returns the exact staged
+artifact only to the sealed adapter so it can independently reparse and hash it;
+it is never composed into a route, telemetry, outbox, or product response.
+
+## Implemented PostgreSQL transaction
+
+`createPostgresDurableMemoryWorkSuccessRepository` locks and validates the
+current work head, exact stage, and database lease under one authorized
+serializable transaction. For graph-bearing success it calls the same internal
+authoritative append primitive used by the standalone ledger adapter on that
+same checked-out connection. It then appends the succeeded work state, inserts
+the exact success linkage, advances the work head by compare-and-swap, and
+appends the deterministic success outbox event. Any error rolls back the graph
+attempt/commit/receipt/head, work state/head, success row, and outbox together.
+
+Exact terminal bytes replay without another graph append. Changed stage or
+result coordinates return an idempotency conflict. A graph receipt that exists
+without the matching terminal success is treated as storage inconsistency, not
+as a replay that could retroactively pretend the operations were atomic.
 
 ## Replay and failure
 
@@ -113,8 +134,10 @@ the commit. Raw SQL/provider errors and content never enter the outcome.
 
 ## Explicit exclusions
 
-- No real PostgreSQL semantics are claimed before the supported runtime gate.
-- No worker loop, result staging store, outbox delivery/ack, or service
+- PostgreSQL 18.4 application-role behavior, graph-bearing formation success,
+  exact replay, a two-connection same-request race, direct-table denial, and an
+  injected final-outbox rollback are qualified locally under Bun and Node.
+- No worker loop, outbox delivery/ack, service route, or production runtime
   composition is activated.
 - No provider/prompt selection, policy change, subject admission, bystander
   change, identity-authority change, or compose-voice change.

@@ -760,19 +760,17 @@ VALUES ($1, $2, $3, $4)
   }
 };
 
-const appendAuthorized = async (
-  pool: PostgresTransactionPool,
-  context: AuthorizedLedgerWriteContext,
+/**
+ * @internal Sealed same-transaction append primitive. Only the authoritative
+ * ledger adapter and the atomic durable-work success adapter may import it.
+ */
+export const appendAuthoritativeLedgerWithinTransaction = async (
+  connection: CheckedOutPostgresConnection,
+  authority: AuthorizedLedgerWriteContext,
   request: AuthoritativeLedgerAppend,
-  observability: PostgresTransactionObservability,
   qualificationOnly: boolean,
 ): Promise<AuthoritativeLedgerAppendOutcome> => {
   if (qualificationOnly) assertQualificationTransition(request);
-  try {
-    return await withAuthorizedSerializableConnectionTransaction(
-      pool,
-      context,
-      async ({ authority, connection }) => {
         const attempt = request.append_attempt;
         const derivation = request.transition.derivation;
         const commit = derivation.commit;
@@ -942,8 +940,27 @@ WHERE account_id = $1 AND account_epoch = $2 AND idempotency_key = $3
           ],
         });
         if (finalized.rowCount !== 1) throw new PostgresRepositoryError("persistence_failed");
-        return Object.freeze({ kind: "committed" as const, commit_id: commit.commit_id, sequence });
-      },
+  return Object.freeze({ kind: "committed" as const, commit_id: commit.commit_id, sequence });
+};
+
+const appendAuthorized = async (
+  pool: PostgresTransactionPool,
+  context: AuthorizedLedgerWriteContext,
+  request: AuthoritativeLedgerAppend,
+  observability: PostgresTransactionObservability,
+  qualificationOnly: boolean,
+): Promise<AuthoritativeLedgerAppendOutcome> => {
+  if (qualificationOnly) assertQualificationTransition(request);
+  try {
+    return await withAuthorizedSerializableConnectionTransaction(
+      pool,
+      context,
+      async ({ authority, connection }) => appendAuthoritativeLedgerWithinTransaction(
+        connection,
+        authority,
+        request,
+        qualificationOnly,
+      ),
       observability,
     );
   } catch (error) {

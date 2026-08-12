@@ -473,7 +473,7 @@ const durableWorkRunnerLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["']
 const consolidationWorkServiceImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/consolidation-work-service(?:\.ts)?["']/;
 const productProjectionMaterializerImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/product-projection-materialization(?:\.ts)?["']/;
 const productConflictCoreImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*core\/retrieve\/product-conflict(?:\.ts)?["']/;
-const authorizedPostgresConnectionCapability = /\b(?:withAuthorizedSerializableConnectionTransaction|AuthorizedPostgresConnectionTransaction)\b/;
+const authorizedPostgresConnectionCapability = /\b(?:withAuthorizedSerializableConnectionTransaction|AuthorizedPostgresConnectionTransaction|appendAuthoritativeLedgerWithinTransaction)\b/;
 
 /** Blank out comments so documentation of the fence does not trip the fence. */
 const withoutComments = (text: string): string => text
@@ -526,6 +526,7 @@ for (const file of files(root)) {
       && shown !== "drivers/postgres/durable-memory-work-acceptance.ts"
       && shown !== "drivers/postgres/durable-memory-work-execution.ts"
       && shown !== "drivers/postgres/durable-memory-work-result.ts"
+      && shown !== "drivers/postgres/durable-memory-work-success.ts"
       && authorizedPostgresConnectionCapability.test(code)) {
       failures.push(
         `${shown}: the authorized raw PostgreSQL connection capability is private to the sealed ledger adapters`,

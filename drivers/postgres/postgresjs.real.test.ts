@@ -16,7 +16,14 @@ import {
   durableMemoryWorkResultStageRequestDigest,
   type DurableMemoryWorkResultStageBody,
 } from "../../apps/service/stores/durable-memory-work-result-repository";
-import { formationCandidateManifestDigest } from "../../core/consolidate/formation-outcome";
+import {
+  durableMemoryWorkSuccessRequestDigest,
+  type DurableMemoryWorkSuccessBody,
+} from "../../apps/service/stores/durable-memory-work-success-repository";
+import {
+  formationCandidateManifestDigest,
+  parseFormationOutcomeEnvelope,
+} from "../../core/consolidate/formation-outcome";
 import {
   DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
   registerDurableMemoryWorkExecutionPolicy,
@@ -44,6 +51,7 @@ import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatemen
 import { createPostgresDurableMemoryWorkAcceptanceRepository } from "./durable-memory-work-acceptance";
 import { createPostgresDurableMemoryWorkExecutionRepository } from "./durable-memory-work-execution";
 import { createPostgresDurableMemoryWorkResultRepository } from "./durable-memory-work-result";
+import { createPostgresDurableMemoryWorkSuccessRepository } from "./durable-memory-work-success";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
@@ -56,7 +64,7 @@ const realTest = explicitTestUrl ? describe : describe.skip;
 const nonemptyAppend = (
   accountId: string,
   suffix: string,
-  parentCommit: string,
+  parentCommit: string | null,
 ): AuthoritativeLedgerAppend => {
   const event = {
     event_id: `event:${suffix}`, event_revision_id: `event:${suffix}:r1`,
@@ -158,7 +166,7 @@ const nonemptyAppend = (
 const formationAppend = (
   accountId: string,
   suffix: string,
-  parentCommit: string,
+  parentCommit: string | null,
 ): AuthoritativeLedgerAppend => {
   const base = nonemptyAppend(accountId, suffix, parentCommit);
   const provisional = base.transition.revisions.find((revision) => revision.kind === "claim");
@@ -969,6 +977,222 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       kind: "recovered",
       job: { state: "retryable_failed", outcome: { error_code: "worker_lost" } },
     });
+    await Bun.sleep(2_100);
+    const recoveredSecondLease = await executionRepository.leaseNext(executionContext, {
+      work_kinds: ["formation"],
+    });
+    if (recoveredSecondLease.kind !== "leased") {
+      throw new Error("qualification_missing_recovered_second_lease");
+    }
+    await expect(executionRepository.recordFailure(executionContext, {
+      job_id: recoveredSecondLease.job.job_id,
+      lease_fence: recoveredSecondLease.job.lease_fence,
+      error_code: "worker_lost",
+    })).resolves.toMatchObject({ kind: "recorded", job: { state: "dead_letter" } });
+
+    const successSuffix = `${suffix}:success`;
+    const successAcceptance = durableWorkAcceptanceRequest(accountId, successSuffix, now, 2, 1);
+    await expect(repository.accept(context, successAcceptance)).resolves.toMatchObject({
+      kind: "accepted", job: { state: "pending" },
+    });
+    const successLease = await executionRepository.leaseNext(executionContext, {
+      work_kinds: ["formation"],
+    });
+    expect(successLease).toMatchObject({
+      kind: "leased", job: { job_id: `job:formation:${successSuffix}`, attempt: 1 },
+    });
+    if (successLease.kind !== "leased") throw new Error("qualification_missing_success_lease");
+    const successNormalized = { claims: [{ candidate_ref: "candidate:success:1" }] };
+    const successContractVersion = "formation-result:v2";
+    const successNormalizedDigest = durableMemoryWorkNormalizedResultDigest(
+      successContractVersion, successNormalized,
+    );
+    const successStageBody: DurableMemoryWorkResultStageBody = {
+      leased_job: successLease.job,
+      result_contract_version: successContractVersion,
+      response_digest: "8".repeat(64),
+      normalized_result_digest: successNormalizedDigest,
+      normalized_result: successNormalized,
+    };
+    const successStage = await resultRepository.stage(executionContext, {
+      ...successStageBody,
+      request_digest: durableMemoryWorkResultStageRequestDigest(successStageBody),
+    });
+    expect(successStage).toMatchObject({ kind: "staged" });
+    if (successStage.kind !== "staged") throw new Error("qualification_missing_success_stage");
+    const baseSuccessAppend = formationAppend(accountId, successSuffix, null);
+    if (baseSuccessAppend.origin.kind !== "formation") {
+      throw new Error("qualification_success_origin_invalid");
+    }
+    const successOrigin = {
+      kind: "formation" as const,
+      outcome: parseFormationOutcomeEnvelope({
+        ...baseSuccessAppend.origin.outcome,
+        work_id: successLease.job.job_id,
+        input_frontier: successLease.job.input_frontier,
+        response_digest: successStage.result.response_digest,
+      }),
+    };
+    const successAppend: AuthoritativeLedgerAppend = {
+      transition: baseSuccessAppend.transition,
+      origin: successOrigin,
+      append_attempt: {
+        ...baseSuccessAppend.append_attempt,
+        expected_parent_commit: null,
+        request_digest: authoritativeAppendRequestDigest(
+          baseSuccessAppend.transition, successOrigin,
+        ),
+      },
+    };
+    const successBody: DurableMemoryWorkSuccessBody = {
+      leased_job: successLease.job,
+      result_kind: "successful",
+      response_digest: successStage.result.response_digest,
+      result_digest: successAppend.append_attempt.request_digest,
+      staged_result: successStage.result,
+      authoritative_append: successAppend,
+    };
+    const successRequest = {
+      ...successBody,
+      request_digest: durableMemoryWorkSuccessRequestDigest(successBody),
+    };
+    const successRepository = createPostgresDurableMemoryWorkSuccessRepository({
+      pool: appRolePool,
+    });
+    const successRacePhysicalPool = createPostgresJsTransactionPool({
+      connectionString: explicitTestUrl!, maxConnections: 2,
+    });
+    const successRaceRolePool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(
+        options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+        callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+      ) => successRacePhysicalPool.withTransaction(options, async (connection) => {
+        await connection.query({
+          name: "qualification.success_race_set_application_role",
+          text: "SET LOCAL ROLE omi_platform_application", values: [],
+        });
+        return callback(connection);
+      }),
+    });
+    try {
+      const raceRepository = createPostgresDurableMemoryWorkSuccessRepository({
+        pool: successRaceRolePool,
+      });
+      const raceOutcomes = await Promise.all([
+        raceRepository.commit(executionContext, successRequest),
+        raceRepository.commit(executionContext, successRequest),
+      ]);
+      expect(raceOutcomes.filter((outcome) => outcome.kind === "committed")).toHaveLength(1);
+      expect(raceOutcomes.filter((outcome) =>
+        outcome.kind === "replayed" || outcome.kind === "serialization_retryable"))
+        .toHaveLength(1);
+    } finally {
+      await successRacePhysicalPool.close();
+    }
+    await expect(successRepository.commit(executionContext, successRequest))
+      .resolves.toMatchObject({
+        kind: "replayed", job: { state: "succeeded" },
+        commit_id: successAppend.transition.derivation.commit.commit_id, sequence: 1,
+      });
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(`SELECT * FROM omi_memory.memory_work_success_results
+        WHERE account_id = $1`, [accountId]);
+    })).rejects.toMatchObject({ code: "42501" });
+    const successRows = await ownerSql.unsafe<{
+      successes: number; success_outbox: number; graph_sequence: string;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_work_success_results
+          WHERE account_id = $1) AS successes,
+        (SELECT count(*)::int FROM omi_memory.memory_work_outbox_events
+          WHERE account_id = $1 AND event_kind = 'memory_work_succeeded') AS success_outbox,
+        (SELECT sequence::text FROM omi_memory.memory_graph_heads
+          WHERE account_id = $1) AS graph_sequence
+    `, [accountId]);
+    expect([...successRows]).toEqual([{
+      successes: 1, success_outbox: 1, graph_sequence: "1",
+    }]);
+
+    const rollbackSuccessSuffix = `${suffix}:success-rollback`;
+    await expect(repository.accept(
+      context, durableWorkAcceptanceRequest(accountId, rollbackSuccessSuffix, now, 2, 1),
+    )).resolves.toMatchObject({ kind: "accepted", job: { state: "pending" } });
+    const rollbackSuccessLease = await executionRepository.leaseNext(executionContext, {
+      work_kinds: ["formation"],
+    });
+    if (rollbackSuccessLease.kind !== "leased") {
+      throw new Error("qualification_missing_rollback_success_lease");
+    }
+    const rollbackNormalized = { claims: [] };
+    const rollbackNormalizedDigest = durableMemoryWorkNormalizedResultDigest(
+      successContractVersion, rollbackNormalized,
+    );
+    const rollbackStageBody: DurableMemoryWorkResultStageBody = {
+      leased_job: rollbackSuccessLease.job,
+      result_contract_version: successContractVersion,
+      response_digest: "9".repeat(64),
+      normalized_result_digest: rollbackNormalizedDigest,
+      normalized_result: rollbackNormalized,
+    };
+    const rollbackStage = await resultRepository.stage(executionContext, {
+      ...rollbackStageBody,
+      request_digest: durableMemoryWorkResultStageRequestDigest(rollbackStageBody),
+    });
+    if (rollbackStage.kind !== "staged") throw new Error("qualification_missing_rollback_stage");
+    const rollbackSuccessBody: DurableMemoryWorkSuccessBody = {
+      leased_job: rollbackSuccessLease.job,
+      result_kind: "successful_empty",
+      response_digest: rollbackStage.result.response_digest,
+      result_digest: rollbackStage.result.normalized_result_digest,
+      staged_result: rollbackStage.result,
+      authoritative_append: null,
+    };
+    const rollbackSuccessRequest = {
+      ...rollbackSuccessBody,
+      request_digest: durableMemoryWorkSuccessRequestDigest(rollbackSuccessBody),
+    };
+    try {
+      await ownerSql.unsafe(`
+        CREATE OR REPLACE FUNCTION omi_memory.qualification_reject_work_success_outbox()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'qualification injected success rollback'; END
+        $$;
+        DROP TRIGGER IF EXISTS reject_work_success_outbox
+          ON omi_memory.memory_work_outbox_events;
+        CREATE TRIGGER reject_work_success_outbox
+        BEFORE INSERT ON omi_memory.memory_work_outbox_events
+        FOR EACH ROW WHEN (NEW.event_kind = 'memory_work_succeeded')
+        EXECUTE FUNCTION omi_memory.qualification_reject_work_success_outbox()
+      `, [], { prepare: false });
+      await expect(successRepository.commit(executionContext, rollbackSuccessRequest))
+        .rejects.toMatchObject({ code: "persistence_failed", message: "persistence_failed" });
+      const rolledBackSuccess = await ownerSql.unsafe<{
+        state: string; successes: number; success_outbox: number; graph_sequence: string;
+      }[]>(`
+        SELECT
+          (SELECT s.state FROM omi_memory.memory_work_heads AS h
+           JOIN omi_memory.memory_work_state_revisions AS s
+             ON s.account_id = h.account_id AND s.job_id = h.job_id
+            AND s.state_revision = h.state_revision
+           WHERE h.account_id = $1 AND h.job_id = $2) AS state,
+          (SELECT count(*)::int FROM omi_memory.memory_work_success_results
+           WHERE account_id = $1 AND job_id = $2) AS successes,
+          (SELECT count(*)::int FROM omi_memory.memory_work_outbox_events
+           WHERE account_id = $1 AND job_id = $2) AS success_outbox,
+          (SELECT sequence::text FROM omi_memory.memory_graph_heads
+           WHERE account_id = $1) AS graph_sequence
+      `, [accountId, rollbackSuccessLease.job.job_id]);
+      expect([...rolledBackSuccess]).toEqual([{
+        state: "leased", successes: 0, success_outbox: 0, graph_sequence: "1",
+      }]);
+    } finally {
+      await ownerSql.unsafe(`
+        DROP TRIGGER IF EXISTS reject_work_success_outbox
+          ON omi_memory.memory_work_outbox_events;
+        DROP FUNCTION IF EXISTS omi_memory.qualification_reject_work_success_outbox()
+      `, [], { prepare: false }).catch(() => undefined);
+    }
 
     const executionRows = await ownerSql.unsafe<{
       dead_letters: number; retryable_failures: number; outbox: number;
@@ -982,7 +1206,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           WHERE account_id = $1 AND event_kind = 'memory_work_dead_letter') AS outbox
     `, [accountId]);
     expect([...executionRows]).toEqual([{
-      dead_letters: 1, retryable_failures: 2, outbox: 1,
+      dead_letters: 2, retryable_failures: 2, outbox: 2,
     }]);
     for (const forbiddenSql of [
       "UPDATE omi_memory.memory_work_state_revisions SET state = 'pending' WHERE account_id = $1",

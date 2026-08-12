@@ -458,6 +458,17 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
       "GRANT EXECUTE ON FUNCTION omi_memory.read_durable_work_staged_result(text, text)",
     );
     expect(allSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT)[^;]*memory_work_staged_results/s);
+    expect(allSql).toContain("CREATE FUNCTION omi_memory.read_durable_work_success_bundle");
+    expect(allSql).toContain("CREATE FUNCTION omi_memory.insert_durable_work_success_result");
+    expect(allSql).toContain("s.state_digest = requested_leased_state_digest");
+    expect(allSql).toContain("s.worker_id = requested_worker_id");
+    expect(allSql).toContain("current_setting('omi.principal_id', true)");
+    expect(allSql).toContain(
+      "GRANT EXECUTE ON FUNCTION omi_memory.read_durable_work_success_bundle(text, text)",
+    );
+    expect(allSql).not.toMatch(
+      /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE)[^;]*memory_work_success_results/s,
+    );
   });
 
   test("binds accepted work to one authority strategy while shadows remain non-authoritative", () => {

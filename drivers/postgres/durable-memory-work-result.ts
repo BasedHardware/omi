@@ -169,7 +169,10 @@ const loadCurrentLease = async (
   return "eligible";
 };
 
-const stagedContentHash = (result: StagedDurableMemoryWorkResult): string =>
+/** @internal Shared by the atomic success adapter to verify the exact stage. */
+export const durableMemoryWorkStagedResultContentHash = (
+  result: StagedDurableMemoryWorkResult,
+): string =>
   sha256CanonicalContent({
     contract_version: "durable-memory-work-staged-result-content-v1",
     staged_result: result,
@@ -201,7 +204,7 @@ const parseRow = (row: StagedResultRow): Readonly<StagedDurableMemoryWorkResult>
   } catch {
     throw new PostgresRepositoryError("persistence_failed");
   }
-  if (row.content_hash !== stagedContentHash(result)) {
+  if (row.content_hash !== durableMemoryWorkStagedResultContentHash(result)) {
     throw new PostgresRepositoryError("persistence_failed");
   }
   return result;
@@ -306,7 +309,8 @@ SELECT omi_memory.insert_durable_work_staged_result(
             expected.produced_state_digest, expected.producer_worker_id,
             expected.result_contract_version, expected.response_digest,
             expected.normalized_result_digest, JSON.stringify(expected.normalized_result),
-            expected.stage_request_digest, stagedContentHash(expected),
+            expected.stage_request_digest,
+            durableMemoryWorkStagedResultContentHash(expected),
           ],
         });
         if (inserted.length !== 1 || inserted[0]?.inserted !== true
