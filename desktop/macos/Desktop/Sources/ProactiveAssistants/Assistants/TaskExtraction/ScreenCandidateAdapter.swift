@@ -16,7 +16,7 @@ enum ScreenCandidateReconciliation {
 
     let lhsTarget = canonicalTarget(in: lhsMetadata)
     let rhsTarget = canonicalTarget(in: rhsMetadata)
-    if let lhsTarget, let rhsTarget, lhsTarget != rhsTarget { return false }
+    if lhsTarget != rhsTarget { return false }
 
     let lhsTokens = semanticTokens(lhs.description)
     let rhsTokens = semanticTokens(rhs.description)

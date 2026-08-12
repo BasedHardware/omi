@@ -441,6 +441,31 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
       "different task identifiers must never be merged")
   }
 
+  func testCreateNeverMatchesTargetedUpdate() {
+    // A create capture (no target) must not reuse a prior targeted update
+    // candidate (duplicate_of/refines_task set). Target presence is part of
+    // the action identity.
+    let createRecord = canonicalOutboxRecord(
+      "Reply to Hermes M4 MBA about the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    var updateRecord = canonicalOutboxRecord(
+      "Reply to Hermes M4 MBA about the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    updateRecord.setMetadata([
+      "capture_kind": "direct_request",
+      "already_done": false,
+      "duplicate_of": "task-42",
+    ])
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(createRecord, updateRecord),
+      "a create (no target) must not match a targeted update (duplicate_of set)")
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(updateRecord, createRecord),
+      "a targeted update must not match a create (no target)")
+  }
+
   func testPendingCanonicalReceiptIsAlreadyCapturedNotCompletedWork() async throws {
     let candidateID = "candidate-pending-dedupe-\(UUID().uuidString)"
     let inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(

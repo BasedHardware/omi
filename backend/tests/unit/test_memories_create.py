@@ -240,3 +240,52 @@ class TestPolicyBoundaries:
         ]:
             _, window = RATE_POLICIES[name]
             assert window == 3600, f"{name} window is {window}, expected 3600"
+
+
+# ---------------------------------------------------------------------------
+# Integration memory lifecycle contract
+# ---------------------------------------------------------------------------
+
+CONVERSATIONS_MEMORIES_PATH = os.path.join(
+    os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'memories.py'
+)
+
+
+def _read_conversations_memories():
+    with open(CONVERSATIONS_MEMORIES_PATH, encoding='utf-8') as f:
+        return f.read()
+
+
+class TestIntegrationMemoryLifecycle:
+    """Integration and twitter memory paths must go through the canonical
+    required-processing workflow, not a raw write_batch that bypasses
+    tier/promotion/processor tracking."""
+
+    def test_integration_path_uses_create_external_memory_batch(self):
+        source = _read_conversations_memories()
+        # process_external_integration_memory must call create_external_memory_batch
+        match = re.search(
+            r'(def process_external_integration_memory\(.+?)(?=\ndef )', source, re.DOTALL
+        )
+        assert match, "process_external_integration_memory not found"
+        fn_body = match.group(1)
+        assert '.create_external_memory_batch(' in fn_body, (
+            "integration memory path must use create_external_memory_batch for required-processing lifecycle"
+        )
+        assert '.write_batch(' not in fn_body, (
+            "integration memory path must not use raw write_batch (skips required_processing_payload)"
+        )
+
+    def test_twitter_path_uses_create_external_memory_batch(self):
+        source = _read_conversations_memories()
+        match = re.search(
+            r'(def process_twitter_memories\(.+?)(?=\ndef |\Z)', source, re.DOTALL
+        )
+        assert match, "process_twitter_memories not found"
+        fn_body = match.group(1)
+        assert '.create_external_memory_batch(' in fn_body, (
+            "twitter memory path must use create_external_memory_batch for required-processing lifecycle"
+        )
+        assert '.write_batch(' not in fn_body, (
+            "twitter memory path must not use raw write_batch (skips required_processing_payload)"
+        )
