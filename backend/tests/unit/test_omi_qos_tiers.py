@@ -71,6 +71,13 @@ class _ChatGoogleGenerativeAI(_BaseChatModel):
         self.model = self.model_name
 
 
+class _ChatAnthropic(_BaseChatModel):
+    def __init__(self, **kwargs):
+        self._constructor_kwargs = dict(kwargs)
+        self.model_name = kwargs.get('model')
+        self.model = self.model_name
+
+
 class _OpenAIEmbeddings:
     def __init__(self, **_kwargs):
         pass
@@ -105,6 +112,7 @@ _install_module('langchain_core.language_models', BaseChatModel=_BaseChatModel)
 _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticOutputParser)
 _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
 _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
+_install_module('langchain_anthropic', ChatAnthropic=_ChatAnthropic)
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
 _install_module(
     'utils.byok',
@@ -172,6 +180,7 @@ def _clients_subprocess_script(assertion: str) -> str:
         "    'langchain_core.output_parsers',",
         "    'langchain_core.outputs',",
         "    'langchain_google_genai',",
+        "    'langchain_anthropic',",
         "    'langchain_openai',",
         "    'tiktoken',",
         "    'database',",
