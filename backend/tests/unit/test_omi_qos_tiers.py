@@ -110,6 +110,7 @@ _install_module(
     'utils.byok',
     get_byok_key=MagicMock(return_value=None),
     get_byok_llm_provider=MagicMock(return_value=None),
+    get_byok_oauth_credential=MagicMock(return_value=None),
     get_byok_uid=MagicMock(return_value=None),
 )
 
