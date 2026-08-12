@@ -5144,6 +5144,49 @@
         "title": "CandidateAction",
         "type": "string"
       },
+      "CandidateCompatibilityMetadata": {
+        "additionalProperties": false,
+        "description": "Released-client annotations retained outside the canonical task payload.\n\nStaged-task clients historically supplied these fields for presentation and\nordering. They are carried on the Candidate envelope so the compatibility\nprojection remains lossless without weakening the strict task contract.",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "relevance_score": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Score"
+          }
+        },
+        "title": "CandidateCompatibilityMetadata",
+        "type": "object"
+      },
       "CandidateCreate": {
         "description": "Strict request union; each wire arm contains only fields valid for that action.",
         "discriminator": {
@@ -5504,6 +5547,16 @@
             "minimum": 0.0,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "created_at": {
             "format": "date-time",
@@ -20265,6 +20318,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -20523,6 +20586,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -20613,6 +20686,16 @@
             "minimum": 0.0,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "evidence_refs": {
             "items": {
@@ -21199,6 +21282,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -21289,6 +21382,16 @@
             "minimum": 0.0,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "evidence_refs": {
             "items": {
@@ -23762,6 +23865,16 @@
             "minimum": 0.0,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "evidence_refs": {
             "items": {
