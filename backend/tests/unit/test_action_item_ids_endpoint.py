@@ -91,7 +91,10 @@ def test_list_action_item_ids_scopes_select_all_to_completion_bucket(monkeypatch
 
     monkeypatch.setattr(ai_mod.action_items_db, 'get_visible_action_item_ids', fake)
 
-    assert ai_mod.list_action_item_ids(completed=True, uid='user-9') == {'ids': ['done-1']}
+    assert ai_mod.list_action_item_ids(completed=True, uid='user-9') == {
+        'ids': ['done-1'],
+        'completed_scope': True,
+    }
     assert seen == {'uid': 'user-9', 'completed': True}
 
 

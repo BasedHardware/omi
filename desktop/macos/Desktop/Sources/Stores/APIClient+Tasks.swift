@@ -3,6 +3,12 @@ import Foundation
 /// Response wrapper for GET v1/action-items/ids (lightweight reconcile source).
 struct ActionItemIdsResponse: Decodable {
   let ids: [String]
+  let completedScope: Bool?
+
+  private enum CodingKeys: String, CodingKey {
+    case ids
+    case completedScope = "completed_scope"
+  }
 }
 
 /// One bounded page from the marker-scoped legacy task recovery endpoint.
@@ -193,6 +199,12 @@ extension APIClient {
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot
     )
+    if let completed, response.completedScope != completed {
+      // Older backend revisions ignore the unknown query parameter and return
+      // every account ID. Never treat that unscoped response as proof of the
+      // visible completion bucket: Select All feeds destructive bulk actions.
+      throw APIError.invalidResponse
+    }
     return response.ids
   }
 

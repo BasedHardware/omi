@@ -416,6 +416,7 @@ class TasksViewModel: ObservableObject {
         if oldScope != currentSelectionScope {
           clearMultiSelectionForScopeChange()
         }
+        completedSearchRequestGeneration = nil
         displayLimit = 100
         keyboardSelectedTaskId = nil
         isInlineCreating = false
@@ -432,6 +433,7 @@ class TasksViewModel: ObservableObject {
   @Published private(set) var isSearching = false
   @Published private(set) var searchResults: [TaskActionItem] = []
   var searchRequestGeneration: UInt64 = 0
+  var completedSearchRequestGeneration: UInt64?
 
   // UI-specific state
   @Published var showCompleted = false {
@@ -2378,9 +2380,7 @@ class TasksViewModel: ObservableObject {
     recomputeDisplayCaches()
   }
 
-  /// Perform search against SQLite database. The query and generation are
-  /// captured at request start so a slower earlier request cannot overwrite
-  /// the results for a newer search string.
+  /// Search SQLite while fencing results to the captured request generation.
   private func performSearch(
     query: String,
     includeDeleted: Bool,
@@ -2401,6 +2401,7 @@ class TasksViewModel: ObservableObject {
       let results = try await searchLoader(query, includeDeleted)
       guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
       searchResults = results
+      completedSearchRequestGeneration = generation
       log("TasksViewModel: Search found \(results.count) tasks for '\(query)'")
     } catch {
       guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
@@ -2426,7 +2427,6 @@ class TasksViewModel: ObservableObject {
     let sourceTasks: [TaskActionItem]
 
     if !normalizedSearchQuery.isEmpty {
-      // Searching: use search results from SQLite
       sourceTasks = searchResults
     } else if !filteredFromDatabase.isEmpty {
       // Non-status filters applied: use SQLite filtered results

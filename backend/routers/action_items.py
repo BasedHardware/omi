@@ -71,6 +71,7 @@ def _batch_mutation_response(result, *, locked_ids: Optional[set[str]] = None) -
 
 class ActionItemIdsResponse(BaseModel):
     ids: List[str]
+    completed_scope: Optional[bool] = None
 
 
 class BatchMutationResponse(BaseModel):
@@ -425,7 +426,10 @@ def list_action_item_ids(
     """
     if completed is None:
         return {"ids": action_items_db.get_action_item_ids(uid)}
-    return {"ids": action_items_db.get_visible_action_item_ids(uid, completed=completed)}
+    return {
+        "ids": action_items_db.get_visible_action_item_ids(uid, completed=completed),
+        "completed_scope": completed,
+    }
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])

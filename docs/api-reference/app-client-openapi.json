@@ -692,6 +692,17 @@
       },
       "ActionItemIdsResponse": {
         "properties": {
+          "completed_scope": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed Scope"
+          },
           "ids": {
             "items": {
               "type": "string"

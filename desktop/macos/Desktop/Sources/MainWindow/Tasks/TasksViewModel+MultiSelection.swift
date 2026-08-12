@@ -1,5 +1,9 @@
 import AppKit
 
+private enum TaskSelectionSnapshotError: Error {
+  case searchResultsNotReady
+}
+
 @MainActor
 extension TasksViewModel {
   func invalidateSelectionOperation() {
@@ -72,9 +76,16 @@ extension TasksViewModel {
 
   private func taskIDsForSelectionScope(_ scope: SelectionScope) async throws -> [String] {
     switch scope {
-    case .search:
+    case .search(let query):
       // Search already queries the complete local FTS result set and only caps
       // presentation afterward. Select the full result, not its first 100 rows.
+      guard
+        normalizedSearchQuery == query,
+        completedSearchRequestGeneration == searchRequestGeneration,
+        !isSearching
+      else {
+        throw TaskSelectionSnapshotError.searchResultsNotReady
+      }
       return allFilteredDisplayTasks.map(\.id)
     case .taskBucket(let completed):
       return try await selectionSnapshotLoader(completed)

@@ -246,4 +246,52 @@ final class TasksViewModelSelectAllTests: XCTestCase {
 
     XCTAssertEqual(viewModel.searchResults, [beta])
   }
+
+  func testSelectAllRejectsPriorSearchResultsWhileReplacementSearchIsLoading() async {
+    let replacementStarted = expectation(description: "replacement search starts")
+    var resumeReplacement: CheckedContinuation<[TaskActionItem], Never>?
+    let prior = TaskActionItem(id: "prior", description: "Prior", completed: false, createdAt: Date())
+    let replacement = TaskActionItem(
+      id: "replacement",
+      description: "Replacement",
+      completed: false,
+      createdAt: Date()
+    )
+    let viewModel = TasksViewModel(searchLoader: { query, _ in
+      if query == "prior" {
+        return [prior]
+      }
+      return await withCheckedContinuation { continuation in
+        resumeReplacement = continuation
+        replacementStarted.fulfill()
+      }
+    })
+
+    viewModel.searchText = "prior"
+    for _ in 0..<100 {
+      if viewModel.searchResults == [prior], !viewModel.isSearching { break }
+      await Task.yield()
+    }
+    XCTAssertEqual(viewModel.searchResults, [prior])
+    viewModel.toggleMultiSelectMode()
+
+    viewModel.searchText = "replacement"
+    await fulfillment(of: [replacementStarted], timeout: 1)
+    await viewModel.selectAllTasks()
+
+    XCTAssertTrue(viewModel.isMultiSelectMode)
+    XCTAssertTrue(viewModel.multiSelection.selectedIDs.isEmpty)
+    XCTAssertFalse(viewModel.allTasksInSelectionScopeSelected)
+    XCTAssertEqual(
+      viewModel.bulkTaskErrorMessage,
+      "Could not reach your complete task list. No additional tasks were selected. Please retry."
+    )
+
+    resumeReplacement?.resume(returning: [replacement])
+    for _ in 0..<100 {
+      if viewModel.searchResults == [replacement], !viewModel.isSearching { break }
+      await Task.yield()
+    }
+    XCTAssertEqual(viewModel.searchResults, [replacement])
+  }
 }

@@ -98,6 +98,7 @@ export interface ActionItemCreateRequest {
 }
 
 export interface ActionItemIdsResponse {
+  completed_scope?: boolean | null;
   ids: Array<string>;
 }
 
