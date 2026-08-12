@@ -272,11 +272,18 @@ older visible revision.
 Mocks and SQLite may exercise query planning and shared fixtures, but cannot satisfy the
 pool, lock, isolation, cancellation, backend-termination, or migration gates.
 
-The intended hermetic entrypoint is `bun run test:postgres`. It starts a loopback-only
-database of the ratified major from a pinned image, uses randomized test credentials and
-a temporary volume, never reads a production `DATABASE_URL`, and removes only its own
-resources. This host currently lacks a container runtime and PostgreSQL client, so this
-gate is not yet available.
+The hermetic entrypoint is `bun run test:postgres`. It starts a loopback-only database
+of the ratified major from a digest-pinned image, uses randomized synthetic credentials
+and an exactly labelled persistent volume, refuses ambient PostgreSQL selectors, and
+removes only its own resources. The developer setup, status, non-destructive teardown,
+restart, and destructive reset workflow is documented in
+`local-postgres-qualification.md`.
+
+The current executable corpus proves migration reapply, the real callback-scoped
+Postgres.js serializable transaction path, rollback-local cleanup, and Bun 1.3.14 versus
+Node 24.19.0 client parity. It is the foundation for, but does not yet satisfy, every
+authority, race, injected-failure, backend-termination, reconstruction, and SQLite
+semantic-parity case listed above.
 
 ## Activation blockers outside this slice
 
