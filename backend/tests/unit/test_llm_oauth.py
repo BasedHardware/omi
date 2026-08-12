@@ -1,4 +1,5 @@
 import base64
+import asyncio
 import json
 from unittest.mock import Mock, patch
 
@@ -29,13 +30,50 @@ def test_exchange_chatgpt_code_uses_pkce_and_extracts_account_id():
         'refresh_token': 'refresh-1',
         'expires_in': 3600,
     }
-    with patch.object(oauth.httpx, 'post', return_value=response) as post:
+    models = Mock(status_code=200)
+    models.json.return_value = {'models': [{'slug': 'gpt-5.4-mini'}]}
+    with patch.object(oauth.httpx, 'post', return_value=response) as post, patch.object(
+        oauth.httpx, 'get', return_value=models
+    ) as get:
         credential = oauth.exchange_authorization_code(
             'chatgpt', 'code-1', 'v' * 43, 'http://localhost:1455/auth/callback'
         )
     assert credential['account_id'] == 'acct-1'
     assert credential['refresh_token'] == 'refresh-1'
+    assert credential['model'] == 'gpt-5.4-mini'
     assert post.call_args.kwargs['data']['code_verifier'] == 'v' * 43
+    assert get.call_args.args[0].endswith('/models?client_version=0.142.5')
+    assert get.call_args.kwargs['headers']['chatgpt-account-id'] == 'acct-1'
+
+
+def test_exchange_rejects_a_token_without_provider_model_access():
+    token = Mock(status_code=200)
+    token.json.return_value = {'access_token': _token('acct-1'), 'refresh_token': 'refresh-1', 'expires_in': 3600}
+    models = Mock(status_code=403)
+    with patch.object(oauth.httpx, 'post', return_value=token), patch.object(oauth.httpx, 'get', return_value=models):
+        with pytest.raises(oauth.LLMOAuthError, match='model access'):
+            oauth.exchange_authorization_code('chatgpt', 'code-1', 'v' * 43, 'http://localhost:1455/auth/callback')
+
+
+def test_oauth_configuration_keeps_provider_connection_details_server_owned():
+    configuration = oauth.oauth_configuration('chatgpt')
+    assert configuration is not None
+    assert configuration['redirect_uri'] == 'http://localhost:1455/auth/callback'
+    assert configuration['authorization_parameters']['originator'] == 'omi'
+
+
+def test_connection_status_includes_the_server_owned_provider_configuration(monkeypatch):
+    from routers import llm_oauth
+
+    async def run_blocking(_executor, function, *args, **_kwargs):
+        return function(*args)
+
+    monkeypatch.setattr(llm_oauth, 'run_blocking', run_blocking)
+    monkeypatch.setattr(llm_oauth.llm_oauth_db, 'get_status', lambda _uid: {'connected': [], 'selected_provider': None})
+
+    status = asyncio.run(llm_oauth._status_response('user-1'))
+
+    assert status['configurations']['grok']['redirect_uri'] == 'http://127.0.0.1:56121/callback'
 
 
 def test_exchange_rejects_a_non_refreshable_provider_response():
@@ -203,6 +241,13 @@ def test_chatgpt_oauth_client_uses_the_codex_responses_surface():
     assert create_client.call_args.args[2]['base_url'] == 'https://chatgpt.com/backend-api/codex'
     assert create_client.call_args.args[2]['use_responses_api'] is True
     assert create_client.call_args.args[2]['default_headers']['chatgpt-account-id'] == 'acct-1'
+    assert create_client.call_args.args[2]['default_headers']['originator'] == 'codex_cli_rs'
+
+
+def test_chatgpt_oauth_client_uses_the_model_verified_at_connection_time():
+    with patch.object(clients, '_cached_openai_chat') as create_client:
+        _create_llm_oauth_client({'provider': 'chatgpt', 'access_token': _token('acct-1'), 'model': 'gpt-5.5'})
+    assert create_client.call_args.args[0] == 'gpt-5.5'
 
 
 def test_grok_oauth_client_uses_xai_surface():

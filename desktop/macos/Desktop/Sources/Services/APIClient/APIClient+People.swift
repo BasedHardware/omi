@@ -183,6 +183,38 @@ extension APIClient {
     )
   }
 
+  func llmOAuthConfiguration(_ provider: LLMOAuthProvider) async throws -> LLMOAuthConfiguration {
+    struct Configuration: Decodable {
+      let authorizationURL: String
+      let clientID: String
+      let redirectURI: String
+      let scope: String
+      let authorizationParameters: [String: String]
+
+      enum CodingKeys: String, CodingKey {
+        case authorizationURL = "authorization_url"
+        case clientID = "client_id"
+        case redirectURI = "redirect_uri"
+        case scope
+        case authorizationParameters = "authorization_parameters"
+      }
+    }
+    struct Response: Decodable {
+      let configurations: [String: Configuration]
+    }
+    let response: Response = try await get("v1/users/me/llm-oauth", includeBYOK: false)
+    guard let configuration = response.configurations[provider.rawValue] else {
+      throw APIError.invalidResponse
+    }
+    return LLMOAuthConfiguration(
+      authorizationURL: configuration.authorizationURL,
+      clientID: configuration.clientID,
+      redirectURI: configuration.redirectURI,
+      scope: configuration.scope,
+      authorizationParameters: configuration.authorizationParameters
+    )
+  }
+
   func disconnectLLMOAuth(_ provider: LLMOAuthProvider) async throws {
     try await delete("v1/users/me/llm-oauth/\(provider.rawValue)", includeBYOK: false)
   }
