@@ -11,9 +11,11 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, WebSocketExceptio
 from utils.byok import (
     BYOK_HEADERS,
     extract_byok_from_websocket,
+    extract_byok_llm_provider_from_websocket,
     get_byok_key,
     set_validated_byok_keys,
     validate_byok_websocket_keys,
+    set_byok_llm_provider,
 )
 from utils.async_tasks import drain_tasks
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -247,6 +249,7 @@ async def omni_relay(websocket: WebSocket):
 
     # BYOK: validate forwarded keys (same as /v4/listen). Keys then resolve via get_byok_key.
     byok = extract_byok_from_websocket(websocket)
+    set_byok_llm_provider(extract_byok_llm_provider_from_websocket(websocket))
     validated_byok, byok_err = await run_blocking(critical_executor, validate_byok_websocket_keys, uid, byok)
     if byok_err:
         logger.warning(f"omni relay BYOK invalid uid={uid}: {byok_err}")
