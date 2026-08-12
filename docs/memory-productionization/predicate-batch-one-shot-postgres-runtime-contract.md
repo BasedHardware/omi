@@ -31,7 +31,7 @@ already staged result and never repeats the model call.
 
 ## Qualification
 
-The pinned PostgreSQL 18.4 real-adapter test proves the successful-empty path:
+The pinned PostgreSQL 18.4 real-adapter test proves both terminal paths:
 
 1. the exact predicate batch is staged and accepted once;
 2. an injected failure after normalized result staging leaves one staged
@@ -40,11 +40,13 @@ The pinned PostgreSQL 18.4 real-adapter test proves the successful-empty path:
    additional model calls; and
 4. the recovered run commits exactly one success row and success outbox event,
    while preserving the graph sequence because the model returned no
-   assertions.
+   assertions; and
+5. a second exact batch over two already committed predicate revisions accepts
+   one role-checked alias assertion, commits its predicate-assertion revision,
+   and advances the graph head exactly once.
 
 Core adapter tests separately prove deterministic non-empty assertion planning,
-bounded parent rematerialization, and no second producer call. They do not yet
-constitute a real-PostgreSQL non-empty assertion-append qualification.
+bounded parent rematerialization, and no second producer call.
 
 The real suite also runs its PostgreSQL/Postgres.js parity corpus under pinned
 Bun 1.3.14 and Node 24.19.0. The local harness stops the managed runtime and

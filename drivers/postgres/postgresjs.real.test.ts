@@ -1290,6 +1290,18 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           },
           evidence: "e1",
           observed_speaker_slot_id: null,
+        }, {
+          relation: "operates",
+          arguments: [
+            { slot_id: "person", role: "person", surface: "Alice" },
+            { slot_id: "tool", role: "tool", surface: "Atlas" },
+          ],
+          polarity: "positive",
+          temporal_expression: {
+            kind: "absolute", granularity: "day", value: "2026-08-12",
+          },
+          evidence: "e1",
+          observed_speaker_slot_id: null,
         }],
       };
       if (request.strategy === "local-handle-durable-entity") return { decision: "abstain" };
@@ -1713,6 +1725,95 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       state: "succeeded", graph_sequence: "2",
     }]);
 
+    const assertionPredicates = [
+      predicateRevisionForObservation({
+        owner_account_id: accountId,
+        predicate_id: predicateIdForName("uses"),
+        display_name: "uses",
+        roles: ["person", "tool"],
+        lifecycle: "canonical",
+      }).predicate,
+      predicateRevisionForObservation({
+        owner_account_id: accountId,
+        predicate_id: predicateIdForName("operates"),
+        display_name: "operates",
+        roles: ["person", "tool"],
+        lifecycle: "canonical",
+      }).predicate,
+    ] as const;
+    let predicateAssertionModelCalls = 0;
+    const predicateAssertionRuntime = createPostgresPredicateBatchOneShotRuntime({
+      pool: appRolePool,
+      strategies: [predicateStrategy],
+      resolve_model: async () => new DeterministicFakeModel(() => {
+        predicateAssertionModelCalls += 1;
+        return { assertions: [{
+          predicate_id: assertionPredicates[0].predicate_id,
+          target_predicate_id: assertionPredicates[1].predicate_id,
+          slot_aliases: [
+            { from_slot_id: "person", to_slot_id: "person" },
+            { from_slot_id: "tool", to_slot_id: "tool" },
+          ],
+        }] };
+      }),
+      max_parent_rematerializations: 3,
+    });
+    const predicateAssertionAcceptance = await predicateAssertionRuntime.schedule(context, {
+      snapshot: {
+        ...predicateSnapshot,
+        input_frontier: "graph:predicate:qualification:assertion",
+        predicates: assertionPredicates,
+      },
+      strategy_assignment: predicateAssignment,
+      execution_policy: predicateRuntimePolicy,
+      accepted_at_event_time: now,
+      max_jobs_per_invocation: 1,
+    });
+    expect(predicateAssertionAcceptance).toMatchObject({
+      kind: "accepted", scheduled: [{ acceptance: "accepted" }],
+    });
+    const predicateAssertionJobId = predicateAssertionAcceptance.scheduled[0]?.job_id;
+    if (!predicateAssertionJobId) throw new Error("qualification_missing_predicate_assertion_job");
+    await expect(predicateAssertionRuntime.runNext(executionContext)).resolves.toMatchObject({
+      kind: "completed", result: "succeeded", leased: 1,
+      producer_calls: 1, materialization_attempts: 1,
+    });
+    expect(predicateAssertionModelCalls).toBe(1);
+    const predicateAssertionCommitted = await ownerSql.unsafe<{
+      assertions: number; successes: number; state: string; graph_sequence: string;
+      predicate_id: string; target_predicate_id: string;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_predicate_assertion_revisions AS a
+          JOIN omi_memory.memory_revisions AS r
+            ON r.account_id = a.account_id AND r.revision_id = a.revision_id
+          WHERE a.account_id = $1 AND r.commit_id = s.graph_commit_id) AS assertions,
+        (SELECT count(*)::int FROM omi_memory.memory_work_success_results
+          WHERE account_id = $1 AND job_id = $2) AS successes,
+        h.state,
+        gh.sequence::text AS graph_sequence,
+        a.predicate_id,
+        a.target_predicate_id
+      FROM omi_memory.memory_work_success_results AS s
+      JOIN omi_memory.memory_work_heads AS wh
+        ON wh.account_id = s.account_id AND wh.job_id = s.job_id
+      JOIN omi_memory.memory_work_state_revisions AS h
+        ON h.account_id = wh.account_id AND h.job_id = wh.job_id
+       AND h.state_revision = wh.state_revision
+      JOIN omi_memory.memory_graph_heads AS gh ON gh.account_id = s.account_id
+      JOIN omi_memory.memory_predicate_assertion_revisions AS a
+        ON a.account_id = s.account_id
+      JOIN omi_memory.memory_revisions AS ar
+        ON ar.account_id = a.account_id AND ar.revision_id = a.revision_id
+       AND ar.commit_id = s.graph_commit_id
+      WHERE s.account_id = $1 AND s.job_id = $2
+    `, [accountId, predicateAssertionJobId]);
+    expect([...predicateAssertionCommitted]).toEqual([{
+      assertions: 1, successes: 1, state: "succeeded", graph_sequence: "3",
+      predicate_id: assertionPredicates[0].predicate_id,
+      target_predicate_id: assertionPredicates[1].predicate_id,
+    }]);
+
     const rollbackSuccessSuffix = `${suffix}:success-rollback`;
     const rollbackSuccessAcceptance = durableWorkAcceptanceRequest(
       accountId, rollbackSuccessSuffix, now, 2, 1,
@@ -1787,7 +1888,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
            WHERE account_id = $1) AS graph_sequence
       `, [accountId, rollbackSuccessLease.job.job_id]);
       expect([...rolledBackSuccess]).toEqual([{
-        state: "leased", successes: 0, success_outbox: 0, graph_sequence: "2",
+        state: "leased", successes: 0, success_outbox: 0, graph_sequence: "3",
       }]);
     } finally {
       await ownerSql.unsafe(`
