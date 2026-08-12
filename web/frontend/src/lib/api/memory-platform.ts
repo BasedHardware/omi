@@ -16,11 +16,21 @@ export interface MemoryPlatformCapability {
   [key: string]: unknown;
 }
 
+/**
+ * Mirrors backend `ProductMemorySearchItem` — the product projection the search
+ * route actually returns, not the authoritative memory document. The row is
+ * keyed by `memory_id`, its timestamp is `date`, and its label is `tier`; there
+ * are no `id`, `created_at`, or `category` fields on the wire.
+ */
 export interface PlatformMemoryItem {
-  id?: string;
+  memory_id?: string;
   content?: string;
-  category?: string;
-  created_at?: string;
+  tier?: string;
+  date?: string;
+  memory_layer?: string;
+  lifecycle_status?: string;
+  agent_use?: string;
+  access_reason?: string;
 }
 
 /**

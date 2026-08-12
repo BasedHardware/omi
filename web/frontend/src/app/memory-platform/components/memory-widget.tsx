@@ -17,19 +17,19 @@ export const WIDGET_RESIZE_EVENT = 'omi.memory.embed.resize';
 
 const SAMPLE_MEMORIES: PlatformMemoryItem[] = [
   {
-    id: 'sample-1',
+    memory_id: 'sample-1',
     content: 'The next launch review is Thursday at 10:00 with the hardware team.',
-    category: 'manual',
+    tier: 'short_term',
   },
   {
-    id: 'sample-2',
+    memory_id: 'sample-2',
     content: 'Prefers async written updates over standups; reads them in the morning.',
-    category: 'core',
+    tier: 'long_term',
   },
   {
-    id: 'sample-3',
+    memory_id: 'sample-3',
     content: 'zkr replicas apply only backend-acknowledged records.',
-    category: 'system',
+    tier: 'long_term',
   },
 ];
 
@@ -163,13 +163,13 @@ export default function MemoryWidget({ demo = false }: MemoryWidgetProps) {
         <ul className="flex flex-col gap-2 pr-3">
           {visible.map((item, index) => (
             <li
-              key={item.id ?? index}
+              key={item.memory_id ?? index}
               className="rounded-lg border border-white/10 bg-white/[0.02] p-3"
             >
               <p className="text-[13px] leading-6 text-neutral-200">{item.content}</p>
-              {item.category ? (
+              {item.tier ? (
                 <span className="mt-2 inline-block font-mono text-[10px] uppercase tracking-[0.14em] text-neutral-500">
-                  {item.category}
+                  {item.tier.replace('_', ' ')}
                 </span>
               ) : null}
             </li>

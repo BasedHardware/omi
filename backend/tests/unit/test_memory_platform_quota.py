@@ -160,7 +160,7 @@ def test_web_search_client_type_matches_the_response_model():
     import re
     from pathlib import Path
 
-    from models.memory_product import ProductMemorySearchResponse
+    from models.memory_product import ProductMemorySearchItem, ProductMemorySearchResponse
 
     root = Path(__file__).resolve().parents[3]
     client = (root / 'web' / 'frontend' / 'src' / 'lib' / 'api' / 'memory-platform.ts').read_text(encoding='utf-8')
@@ -173,6 +173,18 @@ def test_web_search_client_type_matches_the_response_model():
     unknown = declared - model_fields
     assert not unknown, f'client declares fields the response model does not return: {sorted(unknown)}'
     assert 'items' in declared, 'the client must decode the results page from `items`'
+
+    # A row is a `ProductMemorySearchItem` projection, not the authoritative
+    # memory document: the client declared `id`/`category`/`created_at`, none of
+    # which exist on the wire, so every rendered row lost its key and its label.
+    item_body = re.search(r'export interface PlatformMemoryItem \{(.*?)\n\}', client, re.S)
+    assert item_body, 'PlatformMemoryItem interface not found in web/frontend/src/lib/api/memory-platform.ts'
+    declared_item_fields = set(re.findall(r'^\s*(\w+)\??:', item_body.group(1), re.M))
+    unknown_item_fields = declared_item_fields - set(ProductMemorySearchItem.model_fields)
+    assert (
+        not unknown_item_fields
+    ), f'client declares row fields the projection does not return: {sorted(unknown_item_fields)}'
+    assert 'memory_id' in declared_item_fields, 'a search row is identified by `memory_id`'
 
     # The consumer has to read the same field the interface declares.
     widget = (
