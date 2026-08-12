@@ -247,7 +247,7 @@ if not payload.get("ok"):
     raise SystemExit(f"bridge unhealthy: {payload}")
 actual = payload.get("bundleIdentifier")
 if actual != expected:
-    raise SystemExit(f"wrong bundle: expected {expected}, got {actual}")
+    raise SystemExit(f"wrong bundle on port: expected {expected}, got {actual}")
 if require_protocol == "--require-protocol":
     running = payload.get("agentRuntimeRunning")
     expected_proto = payload.get("agentRuntimeExpectedProtocolVersion")
