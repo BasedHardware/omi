@@ -1,6 +1,6 @@
 # Durable work result staging and replay contract
 
-Status: P3 pre-registration, 2026-08-11
+Status: P3 core contract and PostgreSQL staging adapter implemented, 2026-08-11
 
 ## Purpose
 
@@ -70,7 +70,30 @@ parent-bound append request digest as its result digest.
 A new checksummed migration stores the sensitive stage in an account-scoped
 table, links its producing attempt/fence to an actual leased state, and adds an
 exact staged-result foreign key to every success row. Earlier migration bytes
-do not change. The migration grants nobody.
+do not change. The application role receives no table privilege. It can access
+the stage only through fixed `SECURITY DEFINER` functions that require the
+transaction-local owner and `memories.work.execute` capability, and that prove
+the current non-expired lease belongs to the transaction-local principal. A
+later lease may read the immutable result produced by an earlier lease for the
+same accepted work; an insert must match the exact current lease, attempt,
+fence, state digest, and producer principal.
+
+## Implemented PostgreSQL slice
+
+`createPostgresDurableMemoryWorkResultRepository` is a sealed adapter over one
+authorized serializable transaction and one checked-out connection. It first
+revalidates the account, credential, grant, epoch, and database clock, then
+checks the exact current work head before calling either fixed result function.
+Loaded rows are strictly parsed and their content hash is recomputed before any
+normalized result is returned. Same-stage replay is byte-identical; changed
+bytes return an idempotency conflict rather than replacing memory content.
+
+The real PostgreSQL 18.4 qualification covers missing, stage, exact replay,
+later-lease reuse, direct sensitive-table denial, and wrong-principal function
+denial under the application role. The same migration and adapter corpus passes
+under Bun 1.3.14 and Node 24.19.0. The managed local runtime is stopped after the
+gate and its labelled synthetic volume is preserved for repeatable reapply
+tests.
 
 ## Pre-registered acceptance tests
 
@@ -90,7 +113,8 @@ do not change. The migration grants nobody.
    non-empty success still binds the graph append digest.
 6. Migration bytes are checksummed and static tests prove account scoping,
    immutable one-stage-per-job identity, exact leased-producer linkage, bounded
-   JSON, success-stage FK, and absence of grants.
+   JSON, success-stage FK, absence of sensitive table grants, and fixed
+   principal-bound function grants only.
 7. A hermetic worker-composition test proves stage hit means zero model calls;
    stage miss means one model call; stale parent rematerializes with no second
    model call; and restart/new lease reuses the same stage.
@@ -100,8 +124,11 @@ do not change. The migration grants nobody.
 
 ## Explicit exclusions
 
-- No real PostgreSQL behavior, pool, role, migration runner, service route,
-  scheduler, provider, or worker runtime is activated.
+- Real PostgreSQL migration, role, transaction, and adapter behavior is
+  qualified locally; no service route, scheduler, provider, polling worker, or
+  production runtime is activated.
+- Atomic success persistence is still a separate adapter. Staging alone does
+  not advance the graph head, complete a work item, or emit success outbox.
 - No raw provider response is persisted.
 - No exactly-once-provider-call claim exists before a provider-specific
   idempotency gate.

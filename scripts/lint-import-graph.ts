@@ -525,6 +525,7 @@ for (const file of files(root)) {
       && shown !== "drivers/postgres/authoritative-graph-snapshot.ts"
       && shown !== "drivers/postgres/durable-memory-work-acceptance.ts"
       && shown !== "drivers/postgres/durable-memory-work-execution.ts"
+      && shown !== "drivers/postgres/durable-memory-work-result.ts"
       && authorizedPostgresConnectionCapability.test(code)) {
       failures.push(
         `${shown}: the authorized raw PostgreSQL connection capability is private to the sealed ledger adapters`,

@@ -11,6 +11,11 @@ import {
   type DurableMemoryWorkAcceptanceRequest,
   type DurableMemoryWorkInputManifestEntry,
 } from "../../apps/service/stores/durable-memory-work-repository";
+import {
+  durableMemoryWorkNormalizedResultDigest,
+  durableMemoryWorkResultStageRequestDigest,
+  type DurableMemoryWorkResultStageBody,
+} from "../../apps/service/stores/durable-memory-work-result-repository";
 import { formationCandidateManifestDigest } from "../../core/consolidate/formation-outcome";
 import {
   DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
@@ -38,6 +43,7 @@ import { createPostgresAuthoritativeGraphSnapshotRepository } from "./authoritat
 import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatement } from "./connection";
 import { createPostgresDurableMemoryWorkAcceptanceRepository } from "./durable-memory-work-acceptance";
 import { createPostgresDurableMemoryWorkExecutionRepository } from "./durable-memory-work-execution";
+import { createPostgresDurableMemoryWorkResultRepository } from "./durable-memory-work-result";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
@@ -870,6 +876,49 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     }
     expect(firstLease.job.lease.expires_at_event_time
       - firstLease.job.lease.leased_at_event_time).toBe(2);
+    const resultRepository = createPostgresDurableMemoryWorkResultRepository({
+      pool: appRolePool,
+    });
+    const normalizedResult = { claims: [{ candidate_ref: "candidate:qualification:1" }] };
+    const resultContractVersion = "formation-result:v2";
+    const normalizedResultDigest = durableMemoryWorkNormalizedResultDigest(
+      resultContractVersion, normalizedResult,
+    );
+    const stageBody: DurableMemoryWorkResultStageBody = {
+      leased_job: firstLease.job,
+      result_contract_version: resultContractVersion,
+      response_digest: "7".repeat(64),
+      normalized_result_digest: normalizedResultDigest,
+      normalized_result: normalizedResult,
+    };
+    const stageRequest = {
+      ...stageBody,
+      request_digest: durableMemoryWorkResultStageRequestDigest(stageBody),
+    };
+    await expect(resultRepository.load(executionContext, { leased_job: firstLease.job }))
+      .resolves.toEqual({ kind: "missing" });
+    await expect(resultRepository.stage(executionContext, stageRequest))
+      .resolves.toMatchObject({
+        kind: "staged",
+        result: { produced_attempt: 1, normalized_result: normalizedResult },
+      });
+    await expect(resultRepository.stage(executionContext, stageRequest))
+      .resolves.toMatchObject({ kind: "replayed" });
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(`SELECT * FROM omi_memory.memory_work_staged_results
+        WHERE account_id = $1`, [accountId]);
+    })).rejects.toMatchObject({ code: "42501" });
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe("SELECT set_config('omi.account_id', $1, true)", [accountId]);
+      await transaction.unsafe("SELECT set_config('omi.capability', 'memories.work.execute', true)");
+      await transaction.unsafe("SELECT set_config('omi.principal_id', 'worker:other', true)");
+      await transaction.unsafe(
+        "SELECT * FROM omi_memory.read_durable_work_staged_result($1, $2)",
+        [accountId, firstLease.job.job_id],
+      );
+    })).rejects.toMatchObject({ code: "42501" });
     await expect(executionRepository.recordFailure(executionContext, {
       job_id: firstLease.job.job_id,
       lease_fence: firstLease.job.lease_fence,
@@ -887,6 +936,11 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       kind: "leased", job: { job_id: firstLease.job.job_id, attempt: 2, lease_fence: 2 },
     });
     if (secondLease.kind !== "leased") throw new Error("qualification_missing_second_lease");
+    await expect(resultRepository.load(executionContext, { leased_job: secondLease.job }))
+      .resolves.toMatchObject({
+        kind: "found",
+        result: { produced_attempt: 1, producer_worker_id: executionContext.principal_id },
+      });
     await expect(executionRepository.recordFailure(executionContext, {
       job_id: secondLease.job.job_id,
       lease_fence: secondLease.job.lease_fence,

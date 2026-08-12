@@ -11,7 +11,7 @@ describe("PostgreSQL migration manifest", () => {
   test("is an immutable, ordered, gap-free P2/P3/P4/P5 manifest", () => {
     expect(Object.isFrozen(POSTGRES_MIGRATIONS)).toBe(true);
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.version))
-      .toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+      .toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
     expect(new Set(POSTGRES_MIGRATIONS.map((migration) => migration.name)).size)
       .toBe(POSTGRES_MIGRATIONS.length);
     for (const migration of POSTGRES_MIGRATIONS) {

@@ -444,6 +444,20 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(allSql).toContain("result_digest = staged_result_digest");
     expect(allSql).toContain("Deliberately no application or worker grant");
     expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_work_staged_results/s);
+    expect(allSql).toContain("CREATE FUNCTION omi_memory.read_durable_work_staged_result");
+    expect(allSql).toContain("CREATE FUNCTION omi_memory.insert_durable_work_staged_result");
+    expect(allSql).toContain("SECURITY DEFINER");
+    expect(allSql).toContain("current_setting('omi.account_id', true)");
+    expect(allSql).toContain("current_setting('omi.capability', true)");
+    expect(allSql).toContain("current_setting('omi.principal_id', true)");
+    expect(allSql).toContain("IS DISTINCT FROM 'memories.work.execute'");
+    expect(allSql).toContain("s.state_revision = h.state_revision");
+    expect(allSql).toContain("s.lease_fence = requested_produced_lease_fence");
+    expect(allSql).toContain("s.lease_expires_at_event_time");
+    expect(allSql).toContain(
+      "GRANT EXECUTE ON FUNCTION omi_memory.read_durable_work_staged_result(text, text)",
+    );
+    expect(allSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT)[^;]*memory_work_staged_results/s);
   });
 
   test("binds accepted work to one authority strategy while shadows remain non-authoritative", () => {
