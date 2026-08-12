@@ -232,6 +232,25 @@ test("repository requires exact durable derivation input and output manifests", 
       request_digest: authoritativeAppendRequestDigest(graph, origin),
     },
   })).rejects.toThrow("absent or changed");
+
+  const overlap = prepareDerivation({
+    ...plan.derivation.commit,
+    attempt_id: "attempt:overlap", commit_id: "commit:overlap",
+    idempotency_key: "append:overlap",
+    input_revisions: [{ revision_id: "shared", content: { value: "before" } }],
+    output_revisions: [{ revision_id: "shared", content: { value: "after" } }],
+    versions: plan.derivation.commit.versions,
+    success_kind: "success",
+  });
+  const changedOverlap = structuredClone(plan);
+  changedOverlap.derivation = overlap;
+  await expect(implementation.append(context(), {
+    ...requestFor(changedOverlap),
+    append_attempt: {
+      idempotency_key: "append:overlap", expected_parent_commit: null,
+      request_digest: authoritativeAppendRequestDigest(changedOverlap, origin),
+    },
+  })).rejects.toThrow("disagree on shared revision bytes");
 });
 
 test("formation appends require outcome-to-transition accounting before an adapter runs", async () => {

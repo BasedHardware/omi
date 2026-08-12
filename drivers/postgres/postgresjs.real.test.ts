@@ -4,8 +4,13 @@ import postgres, { type Sql } from "postgres";
 
 import { createAuthorizedLedgerWriteContextIssuer } from "../../apps/service/auth/authorized-context-internal";
 import { authoritativeAppendRequestDigest, type AuthoritativeLedgerAppend } from "../../apps/service/stores/authoritative-ledger-repository";
+import { formationCandidateManifestDigest } from "../../core/consolidate/formation-outcome";
 import { prepareDerivation, type AtomicGraphTransition } from "../../core/ledger";
-import { createPostgresSuccessfulEmptyLedgerRepository } from "./authoritative-ledger-repository";
+import type { IdentityAuthorization, IdentityConstraint, ProvisionalClaim } from "../../core/schema";
+import {
+  createPostgresAuthoritativeLedgerRepository,
+  createPostgresSuccessfulEmptyLedgerRepository,
+} from "./authoritative-ledger-repository";
 import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatement } from "./connection";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
@@ -14,6 +19,354 @@ import { authorizationStateDigest, type AuthorityStateRow } from "./transaction"
 
 const explicitTestUrl = process.env["OMI_TEST_POSTGRES_URL"];
 const realTest = explicitTestUrl ? describe : describe.skip;
+
+const nonemptyAppend = (
+  accountId: string,
+  suffix: string,
+  parentCommit: string,
+): AuthoritativeLedgerAppend => {
+  const event = {
+    event_id: `event:${suffix}`, event_revision_id: `event:${suffix}:r1`,
+    owner_account_id: accountId, capture_session_id: `session:${suffix}`,
+    stream_id: `stream:${suffix}`, event_kind: "transcript",
+    payload_schema_ref: "schema:event:v1", schema_version: "schema:v1",
+    payload: { redacted: true }, event_time: "2026-08-11T20:00:00Z",
+    ingest_time: null, source_sequence: 1,
+    evidence_addressable_refs: [`evidence:${suffix}`], source_trust: "owner_attested",
+    policy_labels: [], canonical_redacted_hash: "5".repeat(64),
+  };
+  const evidence = {
+    evidence_id: `evidence:${suffix}`, event_revision_id: event.event_revision_id,
+    source_unit_ref: `unit:${suffix}`, range: { start: 0, end: 4 }, excerpt: "test",
+    source_identity_ref: {
+      namespace_instance_ref: `namespace:${suffix}`, local_key: `speaker:${suffix}`,
+      producer: { producer_ref: null, contract_ref: null },
+      asserted_identity: { domain: null, scope_ref: null },
+    },
+    speaker_rendering: null, source_local_mention_ref: null, state: "active" as const,
+    source_trust: "owner_attested", policy_labels: [],
+    source_independence_key: `root:${suffix}`,
+  };
+  const claim: ProvisionalClaim = {
+    claim_lineage_id: `lineage:${suffix}`, claim_revision_id: `claim:${suffix}`,
+    owner_account_id: accountId, predicate: "noted",
+    arguments: [{
+      slot_id: "subject", role: "subject",
+      value: { kind: "source_local_ref", ref: `speaker:${suffix}` },
+    }],
+    temporal_scope: {
+      observed_at: "2026-08-11T20:00:00Z", precision: "instant",
+      valid_time: {
+        typed_expression: {
+          kind: "absolute", granularity: "instant", value: "2026-08-11T20:00:00Z",
+        },
+        resolved_interval: {
+          kind: "instant", start: "2026-08-11T20:00:00Z",
+          end: "2026-08-11T20:00:00Z", timezone: "UTC", granularity: "instant",
+        },
+        derivation: { resolver_version: "qualification:v1", timezone: "UTC" },
+      },
+    },
+    evidence_refs: [evidence.evidence_id], policy_labels: [], source_language: "en",
+    scope: { locality: "source_local", scope_ref: `speaker:${suffix}` },
+    lifecycle: "provisional", ambiguity_markers: ["source_local"], context_packet: null,
+  };
+  const revisions: AtomicGraphTransition["revisions"] = [
+    { kind: "evidence", revision_id: `evidence:${suffix}:r1`, evidence },
+    { kind: "claim", revision_id: claim.claim_revision_id, claim, placement_status: "provisional_abstained" },
+    { kind: "event", revision_id: event.event_revision_id, event },
+  ];
+  const transition: AtomicGraphTransition = {
+    placement: {
+      offline_experiment: true, allocations: {},
+      results: [{
+        input_provisional_revision_id: claim.claim_revision_id,
+        disposition: "defer_review", operation: null,
+        re_resolution_trigger: "new_identity_evidence",
+      }],
+    },
+    derivation: prepareDerivation({
+      attempt_id: `attempt:graph:${suffix}`, commit_id: `commit:graph:${suffix}`,
+      owner_account_id: accountId, parent_commit: parentCommit,
+      idempotency_key: `append:graph:${suffix}`, input_revisions: [],
+      output_revisions: revisions.map((revision) => ({
+        revision_id: revision.revision_id,
+        content: revision.kind === "event" ? revision.event
+          : revision.kind === "evidence" ? revision.evidence
+            : revision.kind === "claim" ? revision.claim : {},
+      })),
+      versions: {
+        strategy_version: "qualification-graph-v1", model_version: "none",
+        prompt_version: "none", policy_version: "qualification-v1",
+        code_version: "qualification-v1", schema_version: "qualification-v1",
+        tokenizer_version: "none", tool_version: "qualification-v1",
+      },
+      success_kind: "success",
+    }),
+    revisions, adjacency: [],
+    artifacts: [{
+      artifact_id: `artifact:${suffix}`, kind: "abstention_set",
+      provisional_revision_id: claim.claim_revision_id,
+      canonical_claim_revision_id: null, margin: "low", risk_markers: ["low_margin"],
+      unit_boundary_decision: "abstain", scope_locality: null,
+    }],
+  };
+  const origin = { kind: "non_formation" as const, reason: "repair" as const };
+  return {
+    append_attempt: {
+      idempotency_key: transition.derivation.commit.idempotency_key,
+      expected_parent_commit: parentCommit,
+      request_digest: authoritativeAppendRequestDigest(transition, origin),
+    },
+    origin, transition,
+  };
+};
+
+const formationAppend = (
+  accountId: string,
+  suffix: string,
+  parentCommit: string,
+): AuthoritativeLedgerAppend => {
+  const base = nonemptyAppend(accountId, suffix, parentCommit);
+  const provisional = base.transition.revisions.find((revision) => revision.kind === "claim");
+  const evidence = base.transition.revisions.find((revision) => revision.kind === "evidence");
+  if (!provisional || provisional.kind !== "claim"
+    || !evidence || evidence.kind !== "evidence") throw new Error("invalid formation fixture");
+  const transition: AtomicGraphTransition = {
+    ...base.transition,
+    derivation: prepareDerivation({
+      attempt_id: base.transition.derivation.commit.attempt_id,
+      commit_id: base.transition.derivation.commit.commit_id,
+      owner_account_id: accountId,
+      parent_commit: parentCommit,
+      idempotency_key: base.transition.derivation.commit.idempotency_key,
+      input_revisions: [{
+        revision_id: `formation-input:${suffix}`,
+        content: { input_frontier: `frontier:${suffix}` },
+      }],
+      output_revisions: base.transition.revisions.map((revision) => ({
+        revision_id: revision.revision_id,
+        content: revision.kind === "event" ? revision.event
+          : revision.kind === "evidence" ? revision.evidence
+            : revision.kind === "claim" ? revision.claim : {},
+      })),
+      versions: base.transition.derivation.commit.versions,
+      success_kind: "success",
+    }),
+  };
+  const origin = {
+    kind: "formation" as const,
+    outcome: {
+      contract_version: "memory-formation-outcome-v2" as const,
+      owner_account_id: accountId,
+      work_id: `work:${suffix}`,
+      input_frontier: `frontier:${suffix}`,
+      response_digest: "6".repeat(64),
+      candidate_count: 1,
+      candidate_manifest_digest: formationCandidateManifestDigest(1),
+      coordinates: {
+        contract_version: "memory-formation-outcome-v2" as const,
+        strategy_version: "qualification-formation-v1",
+        model_version: "none", prompt_version: "none",
+        policy_version: "qualification-v1", code_version: "qualification-v1",
+        schema_version: "qualification-v1", tokenizer_version: "none",
+        tool_version: "qualification-v1", speaker_strategy_version: "none",
+        boundary_strategy_version: "qualification-v1",
+      },
+      extraction_outcomes: [{
+        kind: "accepted" as const, candidate_ref: "candidate:1",
+        claim_revision_id: provisional.revision_id,
+        evidence_ids: [evidence.evidence.evidence_id], repair_codes: [],
+      }],
+      placement_outcomes: [{
+        kind: "abstained" as const,
+        input_provisional_revision_id: provisional.revision_id,
+        boundary_decision: "abstain" as const,
+        reason_code: "subject_unresolved", reconsideration_trigger: null,
+      }],
+    },
+  };
+  return {
+    ...base, transition,
+    append_attempt: {
+      ...base.append_attempt,
+      request_digest: authoritativeAppendRequestDigest(transition, origin),
+    },
+    origin,
+  };
+};
+
+const identityAppend = (
+  accountId: string,
+  suffix: string,
+  parentCommit: string,
+): AuthoritativeLedgerAppend => {
+  const sourceIdentity = {
+    namespace_instance_ref: `namespace:${suffix}`, local_key: `speaker:${suffix}`,
+    producer: { producer_ref: null, contract_ref: null },
+    asserted_identity: { domain: null, scope_ref: null },
+  };
+  const entityId = `entity:${suffix}`;
+  const authorization: IdentityAuthorization = {
+    authorization_id: `authorization:${suffix}`, owner_account_id: accountId,
+    endpoints: [
+      { kind: "source_identity", source_identity_ref: sourceIdentity },
+      { kind: "entity", entity_id: entityId },
+    ],
+    relation: "same",
+    support: { kind: "owner_confirmation", confirmation_ref: `confirmation:${suffix}` },
+    standing_policy_ref: null,
+    namespace_scope: {
+      namespace_instance_ref: sourceIdentity.namespace_instance_ref,
+      identity_domain: null, scope_ref: null,
+    },
+    authority_policy_version: "identity-policy:v1", evaluated_frontier: 1,
+    actor_provenance: { actor_ref: accountId, producer_ref: null },
+    lifecycle: "active", superseded_by: null,
+  };
+  const event = {
+    event_id: `event:${suffix}`, event_revision_id: `event:${suffix}:r1`,
+    owner_account_id: accountId, capture_session_id: `session:${suffix}`,
+    stream_id: `stream:${suffix}`, event_kind: "transcript",
+    payload_schema_ref: "schema:event:v1", schema_version: "schema:v1",
+    payload: { redacted: true }, event_time: "2026-08-11T20:00:00Z",
+    ingest_time: null, source_sequence: 1,
+    evidence_addressable_refs: [`evidence:${suffix}`], source_trust: "owner_attested",
+    policy_labels: [], canonical_redacted_hash: "7".repeat(64),
+  };
+  const evidence = {
+    evidence_id: `evidence:${suffix}`, event_revision_id: event.event_revision_id,
+    source_unit_ref: `unit:${suffix}`, range: { start: 0, end: 5 }, excerpt: "Alice",
+    source_identity_ref: sourceIdentity, speaker_rendering: "Alice",
+    source_local_mention_ref: `mention:${suffix}`, state: "active" as const,
+    source_trust: "owner_attested", policy_labels: [],
+    source_independence_key: `root:${suffix}`,
+  };
+  const validTime = {
+    typed_expression: {
+      kind: "absolute" as const, granularity: "instant" as const,
+      value: "2026-08-11T20:00:00Z",
+    },
+    resolved_interval: {
+      kind: "instant" as const, start: "2026-08-11T20:00:00Z",
+      end: "2026-08-11T20:00:00Z", timezone: "UTC", granularity: "instant" as const,
+    },
+    derivation: { resolver_version: "qualification:v1", timezone: "UTC" },
+  };
+  const provisional: ProvisionalClaim = {
+    claim_lineage_id: `lineage:${suffix}:provisional`,
+    claim_revision_id: `claim:${suffix}:provisional`,
+    owner_account_id: accountId, predicate: "is_person",
+    arguments: [{
+      slot_id: "subject", role: "subject", surface: "Alice", span: { start: 0, end: 5 },
+      value: { kind: "entity_ref", ref: entityId },
+    }],
+    temporal_scope: {
+      observed_at: "2026-08-11T20:00:00Z", precision: "instant", valid_time: validTime,
+    },
+    evidence_refs: [evidence.evidence_id], policy_labels: [], source_language: "en",
+    scope: { locality: "durable", scope_ref: entityId }, lifecycle: "provisional",
+    ambiguity_markers: [], context_packet: null,
+  };
+  const canonical = {
+    ...provisional, claim_lineage_id: `lineage:${suffix}:canonical`,
+    claim_revision_id: `claim:${suffix}:canonical`, lifecycle: "canonical" as const,
+    canonical_claim_id: `canonical:${suffix}`,
+    source_provisional_revision_ids: [provisional.claim_revision_id],
+  };
+  delete (canonical as { ambiguity_markers?: unknown }).ambiguity_markers;
+  delete (canonical as { context_packet?: unknown }).context_packet;
+  const entity = {
+    entity_id: entityId, owner_account_id: accountId,
+    entity_revision_id: `${entityId}:r1`, handle: `alice:${suffix}`, labels: ["Alice"],
+  };
+  const mention = {
+    mention_id: `mention:${suffix}`, owner_account_id: accountId,
+    claim_revision_id: provisional.claim_revision_id, span: { start: 0, end: 5 },
+    evidence_id: evidence.evidence_id, source_identity_ref: sourceIdentity,
+    speaker_rendering: "Alice", slot_id: "subject", surface: "Alice",
+    antecedent_handle: null, resolution: "resolved" as const, entity_id: entityId,
+  };
+  const constraint: IdentityConstraint = {
+    constraint_id: `constraint:${suffix}`, owner_account_id: accountId,
+    endpoints: authorization.endpoints,
+    left_handle: `source:${suffix}`, right_handle: `alice:${suffix}`,
+    relation: "same", identity_authorization: authorization,
+    effective_at: 1, reversed_at: null,
+  };
+  const revisions: AtomicGraphTransition["revisions"] = [
+    { kind: "claim", revision_id: provisional.claim_revision_id, claim: provisional, placement_status: "consumed" },
+    { kind: "claim", revision_id: canonical.claim_revision_id, claim: canonical, placement_status: "canonical" },
+    { kind: "mention", revision_id: `mention:${suffix}:r1`, mention },
+    { kind: "identity_authorization", revision_id: `authorization:${suffix}:r1`, authorization },
+    { kind: "entity", revision_id: entity.entity_revision_id, entity },
+    { kind: "identity", revision_id: `constraint:${suffix}:r1`, constraint },
+    { kind: "event", revision_id: event.event_revision_id, event },
+    { kind: "evidence", revision_id: `evidence:${suffix}:r1`, evidence },
+  ];
+  const content = (revision: AtomicGraphTransition["revisions"][number]) =>
+    revision.kind === "claim" ? revision.claim
+      : revision.kind === "mention" ? revision.mention
+        : revision.kind === "identity_authorization" ? revision.authorization
+          : revision.kind === "entity" ? revision.entity
+            : revision.kind === "identity" ? revision.constraint
+              : revision.kind === "event" ? revision.event
+                : revision.kind === "evidence" ? revision.evidence : {};
+  const transition: AtomicGraphTransition = {
+    placement: {
+      offline_experiment: true,
+      allocations: { [provisional.claim_revision_id]: canonical.claim_revision_id },
+      results: [{
+        input_provisional_revision_id: provisional.claim_revision_id,
+        disposition: "admit",
+        operation: { kind: "identity_linkage", entity_id: entityId },
+      }],
+    },
+    derivation: prepareDerivation({
+      attempt_id: `attempt:identity:${suffix}`, commit_id: `commit:identity:${suffix}`,
+      owner_account_id: accountId, parent_commit: parentCommit,
+      idempotency_key: `append:identity:${suffix}`, input_revisions: [],
+      output_revisions: revisions.map((revision) => ({
+        revision_id: revision.revision_id, content: content(revision),
+      })),
+      versions: {
+        strategy_version: "qualification-identity-v1", model_version: "none",
+        prompt_version: "none", policy_version: "qualification-v1",
+        code_version: "qualification-v1", schema_version: "qualification-v1",
+        tokenizer_version: "none", tool_version: "qualification-v1",
+      },
+      success_kind: "success",
+    }),
+    revisions,
+    adjacency: [{
+      claim_revision_id: canonical.claim_revision_id,
+      entity_id: entityId, role_slot_id: "subject",
+    }],
+    artifacts: [{
+      artifact_id: `artifact:${suffix}`, kind: "auto_placement_log",
+      provisional_revision_id: provisional.claim_revision_id,
+      canonical_claim_revision_id: canonical.claim_revision_id,
+      margin: "high", risk_markers: [], unit_boundary_decision: "accept_ltm",
+      scope_locality: "durable",
+    }],
+    identity_authority_context: {
+      owner_confirmations: [{
+        confirmation_ref: `confirmation:${suffix}`, owner_account_id: accountId,
+        endpoints: authorization.endpoints, relation: "same",
+      }],
+      producer_assertions: [], standing_policies: [],
+    },
+  };
+  const origin = { kind: "non_formation" as const, reason: "identity_consolidation" as const };
+  return {
+    append_attempt: {
+      idempotency_key: transition.derivation.commit.idempotency_key,
+      expected_parent_commit: parentCommit,
+      request_digest: authoritativeAppendRequestDigest(transition, origin),
+    },
+    origin, transition,
+  };
+};
 
 realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
   let ownerSql: Sql<Record<string, never>>;
@@ -91,7 +444,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     );
   });
 
-  test("application-role successful-empty kernel commits, replays, conflicts, rejects stale parent, and rolls back", async () => {
+  test("application-role authority adapter commits empty, graph, and formation work with exact replay and rollback", async () => {
     const suffix = randomUUID();
     const accountId = `account:pg-kernel:${suffix}`;
     const principalId = `principal:pg-kernel:${suffix}`;
@@ -190,6 +543,62 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       authorization_state_digest: authorizationStateDigest(authorityRow),
     }, now);
 
+    const accountB = `account:pg-kernel-b:${suffix}`;
+    const principalB = `principal:pg-kernel-b:${suffix}`;
+    const credentialB = `credential:b:${suffix}`;
+    const grantB = `grant:b:${suffix}`;
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(
+        "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)", [accountB],
+      );
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+          (account_id, control_revision, account_generation, account_epoch,
+           lifecycle_state, deletion_epoch, observed_at, record_schema_version,
+           record_json, content_hash)
+        VALUES ($1, 17, 'new', 12, 'active', NULL, transaction_timestamp(),
+                'control-v1', '{}'::jsonb, $2)`, [accountB, controlHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+          (account_id, control_revision, activated_epoch, activation_control_revision)
+        VALUES ($1, 17, 12, 17)`, [accountB]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_credential_revisions
+          (account_id, principal_id, application_id, credential_id,
+           credential_generation, credential_kind, lifecycle,
+           authentication_strength, expires_at, record_schema_version,
+           record_json, content_hash)
+        VALUES ($1, $2, $3, $4, 4, 'firebase', 'active', 'firebase-id-token',
+                to_timestamp($5), 'credential-v1', '{}'::jsonb, $6)`,
+      [accountB, principalB, applicationId, credentialB, now + 7_200, credentialHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_credential_heads
+          (account_id, application_id, credential_id, credential_generation)
+        VALUES ($1, $2, $3, 4)`, [accountB, applicationId, credentialB]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 4, 'memories.write', $4, 9, 'active', true,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+      [accountB, applicationId, credentialB, grantB, grantHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version)
+        VALUES ($1, $2, $3, 4, 'memories.write', $4, 9)`,
+      [accountB, applicationId, credentialB, grantB]);
+    });
+    const authorityRowB: AuthorityStateRow = {
+      ...authorityRow, account_id: accountB, principal_id: principalB,
+      credential_id: credentialB, grant_id: grantB,
+    };
+    const contextB = createAuthorizedLedgerWriteContextIssuer().issue({
+      context_version: "authorized-ledger-write-context-v1",
+      principal_id: principalB, account_id: accountB, application_id: applicationId,
+      credential_id: credentialB, credential_generation: 4, capability: "memories.write",
+      grant_id: grantB, grant_version: 9, account_epoch: 12,
+      destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
+      authentication_strength: "firebase-id-token", issued_at_epoch_seconds: now - 60,
+      expires_at_epoch_seconds: now + 3_600,
+      authorization_state_digest: authorizationStateDigest(authorityRowB),
+    }, now);
+
     let lastRepositoryStatement = "none";
     let lastProviderCode = "none";
     let lastProviderConstraint = "none";
@@ -230,13 +639,18 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         }),
     });
     const repository = createPostgresSuccessfulEmptyLedgerRepository({ pool: appRolePool });
-    const append = (commitId: string, key: string, parent: string | null): AuthoritativeLedgerAppend => {
+    const append = (
+      commitId: string,
+      key: string,
+      parent: string | null,
+      ownerAccountId = accountId,
+    ): AuthoritativeLedgerAppend => {
       const transition: AtomicGraphTransition = {
         placement: { offline_experiment: true, allocations: {}, results: [] },
         derivation: prepareDerivation({
           attempt_id: `attempt:${commitId}`,
           commit_id: commitId,
-          owner_account_id: accountId,
+          owner_account_id: ownerAccountId,
           parent_commit: parent,
           idempotency_key: key,
           input_revisions: [],
@@ -291,6 +705,68 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     `, [accountId]);
     expect([...persisted]).toEqual([{ attempts: 1, commits: 1, receipts: 1, head_sequence: "1" }]);
 
+    const sameKeyOtherAccount = append(
+      `commit:${suffix}:account-b`, first.append_attempt.idempotency_key, null, accountB,
+    );
+    await expect(repository.append(contextB, sameKeyOtherAccount)).resolves.toEqual({
+      kind: "committed",
+      commit_id: sameKeyOtherAccount.transition.derivation.commit.commit_id,
+      sequence: 1,
+    });
+    const isolatedReceipts = await ownerSql.unsafe<{ account_id: string; count: number }[]>(`
+      SELECT account_id, count(*)::int AS count
+      FROM omi_memory.memory_idempotency_receipts
+      WHERE account_id IN ($1, $2) AND idempotency_key = $3
+      GROUP BY account_id ORDER BY account_id
+    `, [accountId, accountB, first.append_attempt.idempotency_key]);
+    expect(isolatedReceipts).toHaveLength(2);
+    expect([...isolatedReceipts]).toEqual(expect.arrayContaining([
+      { account_id: accountId, count: 1 },
+      { account_id: accountB, count: 1 },
+    ]));
+
+    const racePhysicalPool = createPostgresJsTransactionPool({
+      connectionString: explicitTestUrl!, maxConnections: 2,
+    });
+    const raceRolePool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(
+        options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+        callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+      ) => racePhysicalPool.withTransaction(options, async (connection) => {
+        await connection.query({
+          name: "qualification.race_set_application_role",
+          text: "SET LOCAL ROLE omi_platform_application", values: [],
+        });
+        return callback(connection);
+      }),
+    });
+    try {
+      const raceRepository = createPostgresSuccessfulEmptyLedgerRepository({ pool: raceRolePool });
+      const raceParent = sameKeyOtherAccount.transition.derivation.commit.commit_id;
+      const contenders = [
+        append(`commit:${suffix}:race-a`, `append:${suffix}:race-a`, raceParent, accountB),
+        append(`commit:${suffix}:race-b`, `append:${suffix}:race-b`, raceParent, accountB),
+      ];
+      const outcomes = await Promise.all(contenders.map((contender) =>
+        raceRepository.append(contextB, contender)));
+      expect(outcomes.filter((outcome) => outcome.kind === "committed")).toHaveLength(1);
+      expect(outcomes.filter((outcome) =>
+        outcome.kind === "stale_parent" || outcome.kind === "serialization_retryable"))
+        .toHaveLength(1);
+      const raceRows = await ownerSql.unsafe<{
+        attempts: number; commits: number; receipts: number; head_sequence: string;
+      }[]>(`
+        SELECT
+          (SELECT count(*)::int FROM omi_memory.memory_derivation_attempts WHERE account_id = $1) AS attempts,
+          (SELECT count(*)::int FROM omi_memory.memory_derivation_commits WHERE account_id = $1) AS commits,
+          (SELECT count(*)::int FROM omi_memory.memory_idempotency_receipts WHERE account_id = $1) AS receipts,
+          (SELECT sequence::text FROM omi_memory.memory_graph_heads WHERE account_id = $1) AS head_sequence
+      `, [accountB]);
+      expect([...raceRows]).toEqual([{ attempts: 2, commits: 2, receipts: 2, head_sequence: "2" }]);
+    } finally {
+      await racePhysicalPool.close();
+    }
+
     for (const forbiddenSql of [
       "CREATE TABLE omi_memory.qualification_forbidden (id integer)",
       "DELETE FROM omi_memory.memory_derivation_attempts WHERE account_id = $1",
@@ -301,6 +777,120 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         await transaction.unsafe(forbiddenSql, forbiddenSql.includes("$1") ? [accountId] : []);
       })).rejects.toMatchObject({ code: "42501" });
     }
+
+    const graphRepository = createPostgresAuthoritativeLedgerRepository({ pool: appRolePool });
+    const graph = nonemptyAppend(
+      accountId, suffix, first.transition.derivation.commit.commit_id,
+    );
+    await expect(graphRepository.append(context, graph)).resolves.toEqual({
+      kind: "committed", commit_id: graph.transition.derivation.commit.commit_id, sequence: 2,
+    });
+    await expect(graphRepository.append(context, graph)).resolves.toEqual({
+      kind: "replayed", commit_id: graph.transition.derivation.commit.commit_id, sequence: 2,
+    });
+    const graphRows = await ownerSql.unsafe<{
+      revisions: number; events: number; evidence: number; claims: number;
+      consumed: number; artifacts: number; head_sequence: string;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_revisions WHERE account_id = $1) AS revisions,
+        (SELECT count(*)::int FROM omi_memory.memory_event_revisions WHERE account_id = $1) AS events,
+        (SELECT count(*)::int FROM omi_memory.memory_evidence_revisions WHERE account_id = $1) AS evidence,
+        (SELECT count(*)::int FROM omi_memory.memory_claim_revisions WHERE account_id = $1) AS claims,
+        (SELECT count(*)::int FROM omi_memory.memory_consumed_markers WHERE account_id = $1) AS consumed,
+        (SELECT count(*)::int FROM omi_memory.memory_placement_artifacts WHERE account_id = $1) AS artifacts,
+        (SELECT sequence::text FROM omi_memory.memory_graph_heads WHERE account_id = $1) AS head_sequence
+    `, [accountId]);
+    expect([...graphRows]).toEqual([{
+      revisions: 3, events: 1, evidence: 1, claims: 1,
+      consumed: 1, artifacts: 1, head_sequence: "2",
+    }]);
+
+    const formation = formationAppend(
+      accountId, `${suffix}:formation`, graph.transition.derivation.commit.commit_id,
+    );
+    await expect(graphRepository.append(context, formation)).resolves.toEqual({
+      kind: "committed",
+      commit_id: formation.transition.derivation.commit.commit_id,
+      sequence: 3,
+    });
+    await expect(graphRepository.append(context, formation)).resolves.toEqual({
+      kind: "replayed",
+      commit_id: formation.transition.derivation.commit.commit_id,
+      sequence: 3,
+    });
+    const formationRows = await ownerSql.unsafe<{
+      inputs: number; outcomes: number; extractions: number; evidence: number; placements: number;
+      head_sequence: string;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_derivation_inputs WHERE account_id = $1) AS inputs,
+        (SELECT count(*)::int FROM omi_memory.memory_formation_outcomes WHERE account_id = $1) AS outcomes,
+        (SELECT count(*)::int FROM omi_memory.memory_formation_extraction_outcomes WHERE account_id = $1) AS extractions,
+        (SELECT count(*)::int FROM omi_memory.memory_formation_extraction_evidence WHERE account_id = $1) AS evidence,
+        (SELECT count(*)::int FROM omi_memory.memory_formation_placement_outcomes WHERE account_id = $1) AS placements,
+        (SELECT sequence::text FROM omi_memory.memory_graph_heads WHERE account_id = $1) AS head_sequence
+    `, [accountId]);
+    expect([...formationRows]).toEqual([{
+      inputs: 1, outcomes: 1, extractions: 1, evidence: 1, placements: 1,
+      head_sequence: "3",
+    }]);
+
+    const identity = identityAppend(
+      accountId, `${suffix}:identity`, formation.transition.derivation.commit.commit_id,
+    );
+    await expect(graphRepository.append(context, identity)).resolves.toEqual({
+      kind: "committed",
+      commit_id: identity.transition.derivation.commit.commit_id,
+      sequence: 4,
+    });
+    await expect(graphRepository.append(context, identity)).resolves.toEqual({
+      kind: "replayed",
+      commit_id: identity.transition.derivation.commit.commit_id,
+      sequence: 4,
+    });
+    const identityRows = await ownerSql.unsafe<{
+      authorizations: number; authorization_endpoints: number; mentions: number;
+      identities: number; identity_endpoints: number; adjacency: number;
+      claim_sources: number; head_sequence: string;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_identity_authorization_revisions WHERE account_id = $1) AS authorizations,
+        (SELECT count(*)::int FROM omi_memory.memory_identity_authorization_entity_endpoints WHERE account_id = $1) AS authorization_endpoints,
+        (SELECT count(*)::int FROM omi_memory.memory_mention_revisions WHERE account_id = $1) AS mentions,
+        (SELECT count(*)::int FROM omi_memory.memory_identity_revisions WHERE account_id = $1) AS identities,
+        (SELECT count(*)::int FROM omi_memory.memory_identity_constraint_entity_endpoints WHERE account_id = $1) AS identity_endpoints,
+        (SELECT count(*)::int FROM omi_memory.memory_generated_adjacency WHERE account_id = $1) AS adjacency,
+        (SELECT count(*)::int FROM omi_memory.memory_claim_source_provisionals WHERE account_id = $1) AS claim_sources,
+        (SELECT sequence::text FROM omi_memory.memory_graph_heads WHERE account_id = $1) AS head_sequence
+    `, [accountId]);
+    expect([...identityRows]).toEqual([{
+      authorizations: 1, authorization_endpoints: 1, mentions: 1,
+      identities: 1, identity_endpoints: 1, adjacency: 1,
+      claim_sources: 1, head_sequence: "4",
+    }]);
+
+    await pool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read write" },
+      async (connection) => {
+        const cleared = await connection.query<{
+          account_id: string | null; principal_id: string | null;
+          grant_id: string | null; current_user: string;
+        }>({
+          name: "qualification.authority_locals_cleared",
+          text: `SELECT
+              nullif(current_setting('omi.account_id', true), '') AS account_id,
+              nullif(current_setting('omi.principal_id', true), '') AS principal_id,
+              nullif(current_setting('omi.grant_id', true), '') AS grant_id,
+              current_user`,
+          values: [],
+        });
+        expect(cleared).toEqual([{
+          account_id: null, principal_id: null, grant_id: null,
+          current_user: new URL(explicitTestUrl!).username,
+        }]);
+      },
+    );
 
     try {
       await ownerSql.unsafe(`
@@ -316,7 +906,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       const rollback = append(
         `commit:${suffix}:rollback`,
         `append:${suffix}:rollback`,
-        first.transition.derivation.commit.commit_id,
+        identity.transition.derivation.commit.commit_id,
       );
       await expect(repository.append(context, rollback)).rejects.toMatchObject({ code: "persistence_failed" });
       const rolledBack = await ownerSql.unsafe<{ attempts: number; commits: number; receipts: number; head_sequence: string }[]>(`
@@ -326,7 +916,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           (SELECT count(*)::int FROM omi_memory.memory_idempotency_receipts WHERE account_id = $1) AS receipts,
           (SELECT sequence::text FROM omi_memory.memory_graph_heads WHERE account_id = $1) AS head_sequence
       `, [accountId]);
-      expect([...rolledBack]).toEqual([{ attempts: 1, commits: 1, receipts: 1, head_sequence: "1" }]);
+      expect([...rolledBack]).toEqual([{ attempts: 4, commits: 4, receipts: 4, head_sequence: "4" }]);
     } finally {
       await ownerSql.unsafe(`
         DROP TRIGGER IF EXISTS reject_kernel_commit ON omi_memory.memory_derivation_commits;

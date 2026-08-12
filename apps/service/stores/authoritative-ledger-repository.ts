@@ -256,10 +256,14 @@ const assertDerivationManifests = (transition: AtomicGraphTransition): void => {
     || attempt.output_digest !== outputDigest) {
     fail("derivation digests do not match their manifests");
   }
-  const manifestById = new Map([...attempt.input_revisions, ...attempt.output_revisions]
+  const manifestById = new Map(attempt.input_revisions
     .map((item) => [item.revision_id, item] as const));
-  if (manifestById.size !== attempt.input_revisions.length + attempt.output_revisions.length) {
-    fail("derivation input and output revision ids must be disjoint");
+  for (const output of attempt.output_revisions) {
+    const input = manifestById.get(output.revision_id);
+    if (input && input.content_hash !== output.content_hash) {
+      fail("derivation input and output manifests disagree on shared revision bytes");
+    }
+    manifestById.set(output.revision_id, output);
   }
   const graphById = new Map(transition.revisions.map((revision) => [revision.revision_id, revision] as const));
   if (graphById.size !== transition.revisions.length

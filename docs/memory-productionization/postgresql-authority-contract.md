@@ -1,7 +1,7 @@
 # PostgreSQL memory authority contract
 
-Status: P2 pre-registration plus an inert, qualification-only successful-empty
-transaction kernel, 2026-08-11
+Status: P2 pre-registration plus an inert graph/formation/identity append adapter,
+2026-08-11
 
 ## Decision boundary
 
@@ -12,12 +12,14 @@ data-disposition policy.
 
 The current tree now contains inert, checksummed migration files, a sealed service
 repository contract, Postgres.js 3.4.9, a migration runner, a hermetic PostgreSQL 18.4
-container harness, and a transaction-time authority revalidation boundary. A narrowly
-named successful-empty repository kernel has been exercised against the real database
-under the application role. It proves authority-before-replay, exact receipt replay and
-conflict, graph-head compare-and-swap, atomic rollback, and transaction-local context
-for an empty non-formation append only. SQLite remains the offline/QA reference. This
-is not a translation of SQLite tables and not a production authority claim.
+container harness, and a transaction-time authority revalidation boundary. The narrowly
+named successful-empty repository kernel remains available, and an inert full append
+adapter has now been exercised against the real database under the application role for
+nonempty event/evidence/claim graphs, total formation outcomes, and identity
+authorization/mention/constraint/adjacency writes. The real gate also covers exact
+replay, cross-account key isolation, one-head races, atomic rollback, revocation before
+replay, and transaction-local context cleanup. SQLite remains the offline/QA reference.
+This is not a production authority or activation claim.
 
 One identifier choice remains outside this unit:
 
@@ -41,11 +43,15 @@ The planned slice has four parts:
 4. shared SQLite/PostgreSQL invariant fixtures plus PostgreSQL-only concurrency,
    pooling, and crash tests.
 
-The checked-in repository contract, transaction revalidation boundary, and
-successful-empty qualification kernel are inert. There is no full PostgreSQL ledger
-implementation to wire yet: graph-bearing, formation, identity-witness, liveness, and
-reconstruction paths fail closed or remain unimplemented. A later unit may add exactly
-one canonical service composition only after the complete adapter and gate exist. The existing synchronous `LedgerPort.findCommitByIdempotencyKey` is
+The checked-in repository contract, transaction revalidation boundary, successful-empty
+kernel, and full append adapter are inert. The adapter persists every current graph
+revision and artifact kind plus total formation accounting, and verifies durable
+committed witnesses and the active identity-authorization head before reserving a
+receipt. Liveness fences still require their separately sealed maintenance operation;
+PostgreSQL reconstruction is unimplemented; and a backend terminated during a Bun +
+Postgres.js transaction rolls back atomically but leaves the size-one pool unable to
+recover promptly. Those remain activation blockers. A later unit may add exactly one
+canonical service composition only after the complete gate exists. The existing synchronous `LedgerPort.findCommitByIdempotencyKey` is
 not a production PostgreSQL seam and is not widened or faked. Model preflight will use
 an asynchronous authorized lookup owned by the new repository.
 
