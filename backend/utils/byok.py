@@ -148,6 +148,13 @@ def set_byok_keys(keys: Dict[str, str]):
     _byok_validated_ctx.set(False)
 
 
+def set_validated_byok_keys(keys: Dict[str, str], uid: str) -> None:
+    """Install already-validated BYOK keys in the current request context."""
+    _byok_ctx.set({k: v for k, v in keys.items() if v})
+    _byok_validated_ctx.set(True)
+    set_byok_uid(uid)
+
+
 def extract_byok_from_websocket(websocket: WebSocket) -> Dict[str, str]:
     """Read BYOK headers from a WebSocket's initial upgrade request.
 
@@ -192,7 +199,7 @@ class BYOKMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
-def _check_byok_validity(uid: str) -> Optional[str]:
+def _validated_byok_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[str, str], Optional[str]]:
     """Core validation: Firestore BYOK state is source of truth.
 
     Returns an error message string on failure, or ``None`` on success.
@@ -208,9 +215,8 @@ def _check_byok_validity(uid: str) -> Optional[str]:
     # Fast path: no BYOK headers on this request → nothing to validate.
     # Avoids hitting Firestore/cache for the vast majority of requests
     # (mobile, non-BYOK desktop).
-    request_keys = _byok_ctx.get() or {}
     if not request_keys:
-        return None
+        return {}, None
 
     import database.users as users_db
 
@@ -228,9 +234,7 @@ def _check_byok_validity(uid: str) -> Optional[str]:
     if not is_active:
         # Non-enrolled user — silently discard any BYOK headers so downstream
         # code always uses Omi's own keys.
-        if _byok_ctx.get():
-            _byok_ctx.set(None)
-        return None
+        return {}, None
 
     # BYOK-active user with headers present — validate every enrolled
     # provider fingerprint.
@@ -248,14 +252,21 @@ def _check_byok_validity(uid: str) -> Optional[str]:
             hmac.compare_digest(peppered_fingerprint(request_fp), stored_fp)
             or hmac.compare_digest(request_fp, stored_fp)
         ):
-            return f"BYOK key fingerprint mismatch for provider: {provider}"
+            return {}, f"BYOK key fingerprint mismatch for provider: {provider}"
 
     # A header for a provider the user never enrolled has no stored fingerprint, so the
     # loop above never sees it and it would reach the provider clients unvalidated. Drop
     # it, mirroring the non-enrolled-user path above: anything we cannot verify must not
     # be used, and downstream falls back to Omi's own key for that provider.
-    _byok_ctx.set({p: key for p, key in request_keys.items() if stored_fingerprints.get(p)})
+    return {p: key for p, key in request_keys.items() if stored_fingerprints.get(p)}, None
 
+
+def _check_byok_validity(uid: str) -> Optional[str]:
+    """Validate current context keys and retain only the enrolled capabilities."""
+    validated_keys, error = _validated_byok_keys(uid, _byok_ctx.get() or {})
+    if error:
+        return error
+    _byok_ctx.set(validated_keys)
     return None
 
 
@@ -287,3 +298,11 @@ def validate_byok_websocket(uid: str) -> Optional[str]:
         _byok_validated_ctx.set(True)
         set_byok_uid(uid)
     return error
+
+
+def validate_byok_websocket_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[str, str], Optional[str]]:
+    """Validate WebSocket BYOK keys without mutating worker-local ContextVars."""
+    validated_keys, error = _validated_byok_keys(uid, request_keys)
+    if error:
+        logger.warning('BYOK WS validation failed uid=%s: %s', uid, error)
+    return validated_keys, error
