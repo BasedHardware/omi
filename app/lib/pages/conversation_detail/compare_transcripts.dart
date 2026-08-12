@@ -138,7 +138,9 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
                             //     ? const SizedBox(height: 16)
                             //     : const SizedBox(height: 0),
                             TranscriptWidget(
-                              segments: transcripts?.whisperx ?? [],
+                              segments: (transcripts?.prerecorded.isNotEmpty ?? false)
+                                  ? transcripts!.prerecorded
+                                  : transcripts?.whisperx ?? [],
                               horizontalMargin: false,
                               topMargin: false,
                               canDisplaySeconds: true,
