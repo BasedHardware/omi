@@ -3,6 +3,7 @@
 // wrapper so the answer reads as the user texting back, not an assistant.
 // Main-process code: the renderer supplies the Firebase ID token.
 import { OmiSseAccumulator } from '../../shared/omiSse'
+import { recordFallback as defaultRecordFallback, type RecordFallback } from '../observability/fallback'
 
 export type ReplyTranscriptLine = { sender: string; text: string; fromMe: boolean }
 
@@ -79,8 +80,10 @@ export async function generateReply(args: {
   firebaseToken: string
   ctx: ReplyContext
   fetchImpl?: typeof fetch
+  recordFallback?: RecordFallback
 }): Promise<ReplyResult> {
   const doFetch = args.fetchImpl ?? fetch
+  const record = args.recordFallback ?? defaultRecordFallback
   const prompt = buildPersonaPrompt(args.ctx)
   let res: Response
   try {
@@ -102,12 +105,19 @@ export async function generateReply(args: {
   let raw = ''
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    const chunk = decoder.decode(value, { stream: true })
-    raw += chunk
-    acc.feed(chunk)
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const chunk = decoder.decode(value, { stream: true })
+      raw += chunk
+      acc.feed(chunk)
+    }
+  } catch (e) {
+    // A connection that dies mid-stream is the same class of failure as one
+    // that never opened: return it as a result so the responder can surface a
+    // failed reply instead of only logging an unhandled rejection.
+    return { ok: false, error: 'network', detail: (e as Error).message }
   }
   acc.end()
 
@@ -121,7 +131,18 @@ export async function generateReply(args: {
   const fallback = args.desktopApiBase
     ? await completionsFallback(doFetch, args.desktopApiBase, args.firebaseToken, prompt)
     : null
-  if (fallback) return { ok: true, text: fallback }
+  if (fallback) {
+    // Memory-grounded chat → ungrounded completions is a correctness-affecting
+    // provider switch, so it goes through the shared emitter (AGENTS.md).
+    record({
+      component: 'backend_fetch',
+      from: 'omi_chat_grounded',
+      to: 'desktop_completions',
+      reason: 'empty_response',
+      outcome: 'degraded'
+    })
+    return { ok: true, text: fallback }
+  }
   return { ok: false, error: 'empty', detail: notice ?? undefined }
 }
 

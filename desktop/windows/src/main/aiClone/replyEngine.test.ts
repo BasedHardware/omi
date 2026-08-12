@@ -127,6 +127,49 @@ describe('generateReply', () => {
     expect(fetchImpl.mock.calls[1][0]).toBe('https://desktop.test/v2/chat/completions')
   })
 
+  it('records the grounded → ungrounded provider switch through the shared emitter', async () => {
+    const notice = Buffer.from(JSON.stringify({ text: 'Limit reached.' })).toString('base64')
+    const fetchImpl = vi.fn().mockImplementation((url: string) =>
+      String(url).includes('/v2/messages')
+        ? Promise.resolve(new Response(`done: ${notice}\n`, { status: 200 }))
+        : Promise.resolve(
+            new Response(JSON.stringify({ choices: [{ message: { content: 'sure!' } }] }), {
+              status: 200
+            })
+          )
+    )
+    const recordFallback = vi.fn()
+    await generateReply({
+      apiBase: 'a',
+      desktopApiBase: 'b',
+      firebaseToken: 't',
+      ctx,
+      fetchImpl,
+      recordFallback
+    })
+    expect(recordFallback).toHaveBeenCalledWith({
+      component: 'backend_fetch',
+      from: 'omi_chat_grounded',
+      to: 'desktop_completions',
+      reason: 'empty_response',
+      outcome: 'degraded'
+    })
+  })
+
+  it('returns a network result when the stream dies mid-body', async () => {
+    // Previously this rejected out of generateReply, so the responder logged an
+    // unhandled failure instead of recording a failed reply for the user.
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: At Omi,\n'))
+        controller.error(new Error('connection reset'))
+      }
+    })
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(body, { status: 200 }))
+    const r = await generateReply({ apiBase: 'a', firebaseToken: 't', ctx, fetchImpl })
+    expect(r).toEqual({ ok: false, error: 'network', detail: 'connection reset' })
+  })
+
   it('surfaces the service notice when the fallback also fails (never sends it)', async () => {
     const notice = Buffer.from(JSON.stringify({ text: 'Limit reached.' })).toString('base64')
     const fetchImpl = vi.fn().mockImplementation((url: string) =>
