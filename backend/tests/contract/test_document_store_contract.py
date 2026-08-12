@@ -361,6 +361,18 @@ def test_run_transaction_create_succeeds_then_conflicts(store, uid):
     assert store.get(path).to_dict() == {"description": "restored"}  # first write preserved
 
 
+def test_query_not_equal_filter_on_present_field(store, uid):
+    # `!=` on a present field must work on every backend: migration 004 discovers conversations with
+    # non-empty action_items via ('structured.action_items', '!=', []), and Mongo lacked the operator
+    # so the on-prem migration found nothing (cubic review PR 10887). (`!=` on a MISSING field diverges
+    # across backends — Firestore excludes it, Mongo $ne includes it — so this only covers present fields.)
+    base = f"users/{uid}/conversations"
+    store.set(f"{base}/c1", {"structured": {"action_items": []}})
+    store.set(f"{base}/c2", {"structured": {"action_items": ["do-x"]}})
+    rows = store.query(base, filters=[("structured.action_items", "!=", [])])
+    assert {doc.id for doc in rows} == {"c2"}
+
+
 def test_query_projection_returns_only_requested_fields(store, uid):
     store.set(f"users/{uid}/people/p1", {"name": "Ada", "secret": "hidden", "n": 1})
     (doc,) = store.query(f"users/{uid}/people", fields=["name"])

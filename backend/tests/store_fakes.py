@@ -23,6 +23,7 @@ from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, Arra
 
 _OPS = {
     "==": lambda a, b: a == b,
+    "!=": lambda a, b: a != b,
     "in": lambda a, b: a in b,
     "<": lambda a, b: a < b,
     "<=": lambda a, b: a <= b,
