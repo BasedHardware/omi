@@ -1,0 +1,25 @@
+name: omi-onprem
+# Omi self-host — SEED (dev-posture + OIDC auth). Same non-hermetic posture as compose.dev.yaml (the
+# backend reaches HOST inference via host.docker.internal for LLM/embeddings), but the backend runs
+# with AUTH_BACKEND=oidc + LOCAL_DEVELOPMENT=false so multiple REAL Keycloak users can drive the API as
+# app clients would — used to seed conversations (deploy/onprem/seed/seed_meld_users.py). NOT hermetic:
+# do not use for the ADR-0001 proof (that is compose.prod.yaml).
+#
+# Bring up the auth profile (keycloak + kc-proxy https + api-proxy) and chat (llm_gateway + qdrant):
+#   ./gen-dev-certs.sh                                           # once: TLS certs for the proxies
+#   docker compose -f compose.seed.yaml --profile auth --profile chat up -d
+#   deploy/onprem/seed/seed_meld_users.py --meld-csv train_sent_emo.csv --per-user 20
+#
+# backend.env.seed carries the OIDC + host-inference wiring (issuer must equal the token's `iss` =
+# KC_HOSTNAME, default https://localhost:8443/realms/omi).
+include:
+  - compose.base.yaml
+services:
+  backend:
+    env_file:
+      - ./backend.env.base
+      - ./backend.env.seed
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8080"

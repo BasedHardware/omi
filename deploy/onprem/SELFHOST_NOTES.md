@@ -773,8 +773,56 @@ Proven flow (logs verbatim):
    the JSON and **shows the notification** (same dispatch as FCM). Payload received matches the sent
    `{notification:{title,body}, data, tag, priority, is_background}`.
 
+## Data seed (5 users, MELD/Friends, via the backend REST API)
+
+Populate a realistic multi-user dataset by driving the **backend HTTP API as real app users would**
+(OIDC-authenticated, on-device-transcription path) — no raw DB writes. Every conversation goes through
+`POST /v1/conversations/from-segments`, so the full product pipeline runs (structured summary + action
+items + memories + knowledge graph + Qdrant vectors). Seeder: `deploy/onprem/seed/seed_meld_users.py`.
+
+Why MELD (Friends): multi-party dialogue with NAMED, recurring speakers (Ross, Rachel, Monica, …), which
+maps 1:1 onto Omi's identified-person model (segment `person_id` → `Person(name)`). MELD is **not
+committed** (TV-derived, research-use only) — the seeder's header shows how to download `train_sent_emo.csv`.
+
+Dedicated declarative config (per ADR-0043, layered over the common base):
+- `compose.seed.yaml` — dev-posture (backend reaches HOST inference via `host.docker.internal`) **plus**
+  real OIDC auth (`AUTH_BACKEND=oidc`, `LOCAL_DEVELOPMENT=false`) so multiple Keycloak users drive the API.
+- `backend.env.seed(.example)` — OIDC issuer/JWKS + admin-API client (user-name resolution) +
+  `STORAGE_BACKEND=mongo` (real on-prem store, no Google) + Qdrant + host embeddings (`bge-m3`).
+
+Prerequisites:
+- Keycloak realm `omi` up with a public direct-access client (`omi-test`) **and** a confidential
+  service-account client (`omi-backend-admin`, realm-management `view-users` role) for `OIDC_ADMIN_*`
+  (resolves the user's display name used in memory attribution).
+- Backend reachable at `--api-url`, validating the same issuer's JWKS. Mongo (`STORAGE_BACKEND=mongo`).
+- Operator LLM (chat, e.g. `qwen2.5:14b` via the gateway) + a 1024-dim embeddings model (`bge-m3`).
+- **`OLLAMA_NUM_PARALLEL=1`** is NOT required, but on a single small GPU concurrent chat + embeddings
+  can `cudaMalloc`-OOM; the seeder paces one conversation at a time (`api_wait_enriched`) to stay serial.
+
+Run (bring up auth + chat + mongo, then seed):
+```
+./gen-dev-certs.sh                                                     # once: TLS for the proxies
+docker compose -f compose.seed.yaml --profile auth --profile chat up -d
+deploy/onprem/seed/seed_meld_users.py --meld-csv train_sent_emo.csv \
+    --api-url http://localhost:8000 --kc-url https://<LAN_IP>:<KC_HTTPS_PORT> --per-user 20
+```
+Each user gets a fact-rich "profile" conversation first (explicit personal facts → real memories; MELD
+banter alone yields almost none), then their MELD dialogues (other named speakers become identified People).
+
+Produces (validated live on real Mongo, `--per-user 4`): conversations + memories (all users) + action
+items + People + knowledge graph + Qdrant vectors (`omi_ns1` conv, `omi_ns2` memory, `omi_ns4` action).
+Memories are encrypted at rest. RAG payoff verified end-to-end (`/v2/messages` retrieves a seeded memory
+via `search_memories_tool` and answers from it).
+
+Gotcha — **never wipe Qdrant with `curl -X DELETE` while the backend is running**: the adapter caches
+which collections exist (`utils/vector/adapters/qdrant.py::_ensured`, per-process, not invalidated on an
+external delete), so subsequent upserts hit a 404 and are swallowed by the fire-and-forget postprocess →
+vectors silently missing. To reset cleanly: `docker compose -f compose.seed.yaml down` (or restart the
+backend container) so the cache is empty, then re-seed.
+
 ## Git notes
 
 Work happens on the `fullonprem` branch (ADR-0013). `backend.env` is ignored (`*.env`); the
-committed files are the `backend.env.*.example`, the `compose.{base,prod,dev}.yaml`, the Dockerfiles and this file. Until
-the remotes are reconciled to a fork, `git push` is unavailable: commits stay local.
+committed files are the `backend.env.*.example`, the `compose.{base,prod,dev,seed}.yaml`, the Dockerfiles and this file.
+Remotes are reconciled (fork-based): `git push` targets `origin` (fork `abunet/omi`); `upstream`
+(`BasedHardware/omi`) is integrated inbound only. Push only after explicit sign-off.
