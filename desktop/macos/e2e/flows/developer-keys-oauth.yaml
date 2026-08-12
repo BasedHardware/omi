@@ -1,0 +1,34 @@
+version: 2
+name: developer-keys-oauth
+tier: manual
+description: Developer-key OAuth provider selection and browser authorization handoff.
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/Providers/LLMOAuthConnector.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+People.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Open the Developer API Keys section
+    do: "Open Settings, select Advanced, and scroll to Developer API Keys. Verify the Language model provider menu is visible."
+    expect:
+      text_visible:
+        - Developer API Keys
+        - Language model
+
+  - id: S2
+    name: Select ChatGPT OAuth
+    do: "Choose ChatGPT from the Language model provider menu. Verify the ChatGPT account card explains that it uses OAuth and offers Connect ChatGPT."
+    expect:
+      text_visible:
+        - ChatGPT account
+        - Connect ChatGPT
+
+  - id: S3
+    name: Hand off authorization to the browser
+    do: "Click Connect ChatGPT. Verify the browser opens the provider authorization page and the app shows an in-progress indicator. Cancel authorization in the browser and verify the app returns to a reconnectable state rather than remaining busy."
+    expect:
+      text_visible:
+        - Connect ChatGPT
