@@ -7,14 +7,13 @@ from google.cloud import firestore
 
 import database.redis_db as redis_db
 from database._client import get_firestore_client
-from database.read_boundary import parse_snapshot_strict
+from database.api_key_rotation import ApiKeyRotationKind, rotate_api_key_secret
 from database.api_key_metadata import (
     MCP_API_KEY_AUTH_CONTEXT_VERSION,
     ApiKeyAuthLookupResult,
     ApiKeyAuthRepair,
     ApiKeyCacheReadMode,
     ApiKeyMetadataRepair,
-    ApiKeyNotFoundError,
     ApiKeyRevocationUnavailableError,
     ApiKeyValidationError,
     api_key_scopes_need_repair,
@@ -237,61 +236,20 @@ def rotate_mcp_key(user_id: str, key_id: str) -> Tuple[str, McpApiKey]:
     time, and the key's memory grant are carried over unchanged; only the
     credential changes.
     """
-    firestore_client = _db()
-    key_ref = firestore_client.collection("mcp_api_keys").document(key_id)
-    key_doc = key_ref.get()
-    if not getattr(key_doc, "exists", False):
-        raise ApiKeyNotFoundError("MCP API key not found")
-    raw: object = key_doc.to_dict()
-    key_data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-    if key_data.get("user_id") != user_id:
-        raise ApiKeyNotFoundError("MCP API key not found")
-
-    previous_hashed_key = key_data.get("hashed_key")
-    if not is_valid_api_key_hash(previous_hashed_key):
-        raise ApiKeyRevocationUnavailableError("MCP API key credential metadata is invalid")
-    try:
-        fenced = redis_db.mark_api_key_hash_retired_strict(previous_hashed_key)
-    except Exception as exc:
-        raise ApiKeyRevocationUnavailableError("MCP API key rotation fence failed") from exc
-    if fenced is not True:
-        raise ApiKeyRevocationUnavailableError("MCP API key rotation fence was not confirmed")
-    try:
-        cache_deleted = redis_db.delete_cached_mcp_api_key_strict(previous_hashed_key)
-    except Exception as exc:
-        raise ApiKeyRevocationUnavailableError("MCP API key cache invalidation failed") from exc
-    if cache_deleted is not True:
-        raise ApiKeyRevocationUnavailableError("MCP API key cache invalidation was not confirmed")
-
-    raw_key, hashed_key, key_prefix = generate_api_key()
-    now = datetime.now(timezone.utc)
-    app_id = normalize_api_key_app_id(key_data.get("app_id"), default=MCP_DEFAULT_APP_ID)
-    scopes = normalize_mcp_scopes(key_data.get("scopes"))
-    key_ref.update(
-        {
-            "id": key_id,
-            "hashed_key": hashed_key,
-            "key_prefix": key_prefix,
-            "app_id": app_id,
-            "scopes": scopes,
-            "rotated_at": now,
-            "last_used_at": None,
-        }
-    )
-
-    projection = project_api_key_metadata(
-        document_id=key_id,
-        raw={**key_data, "key_prefix": key_prefix, "id": key_id},
-        snapshot_create_time=getattr(key_doc, "create_time", None),
+    kind = ApiKeyRotationKind(
+        label="MCP API key",
+        collection="mcp_api_keys",
+        firestore_client=_db(),
+        model=McpApiKey,
         key_kind="mcp",
+        retire_hash=lambda hashed: redis_db.mark_api_key_hash_retired_strict(hashed),
+        delete_cached=lambda hashed: redis_db.delete_cached_mcp_api_key_strict(hashed),
+        generate=lambda: generate_api_key(),
+        resolve_app_id=lambda key_data: normalize_api_key_app_id(key_data.get("app_id"), default=MCP_DEFAULT_APP_ID),
+        normalize_scopes=normalize_mcp_scopes,
+        projects_app_id=True,
     )
-    projected = projection.metadata
-    projected["app_id"] = app_id
-    projected["scopes"] = scopes
-    projected["last_used_at"] = None
-    # Credential rotation is correctness-critical, so the repaired projection
-    # goes through the strict shared read boundary rather than a direct parse.
-    return raw_key, parse_snapshot_strict(McpApiKey, key_doc, payload_from_snapshot=lambda _snapshot: projected)
+    return rotate_api_key_secret(kind, user_id, key_id)
 
 
 def get_mcp_keys_for_user_with_repair_info(

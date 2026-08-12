@@ -4,14 +4,13 @@ from typing import Any, List, Optional, Tuple, cast
 
 import database.redis_db as redis_db
 from database._client import get_firestore_client
-from database.read_boundary import parse_snapshot_strict
+from database.api_key_rotation import ApiKeyRotationKind, rotate_api_key_secret
 from database.api_key_metadata import (
     DEV_API_KEY_AUTH_CONTEXT_VERSION,
     ApiKeyAuthLookupResult,
     ApiKeyAuthRepair,
     ApiKeyCacheReadMode,
     ApiKeyMetadataRepair,
-    ApiKeyNotFoundError,
     ApiKeyRevocationUnavailableError,
     ApiKeyValidationError,
     api_key_scopes_need_repair,
@@ -128,59 +127,19 @@ def rotate_dev_key(user_id: str, key_id: str) -> Tuple[str, DevApiKey]:
     time, and the key's memory grant are carried over unchanged; only the
     credential changes.
     """
-    firestore_client = _db()
-    key_ref = firestore_client.collection("dev_api_keys").document(key_id)
-    key_doc = key_ref.get()
-    if not getattr(key_doc, "exists", False):
-        raise ApiKeyNotFoundError("Developer API key not found")
-    raw: object = key_doc.to_dict()
-    key_data: dict[str, Any] = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
-    if key_data.get("user_id") != user_id:
-        raise ApiKeyNotFoundError("Developer API key not found")
-
-    previous_hashed_key = key_data.get("hashed_key")
-    if not is_valid_api_key_hash(previous_hashed_key):
-        raise ApiKeyRevocationUnavailableError("Developer API key credential metadata is invalid")
-    try:
-        fenced = redis_db.mark_api_key_hash_retired_strict(previous_hashed_key)
-    except Exception as exc:
-        raise ApiKeyRevocationUnavailableError("Developer API key rotation fence failed") from exc
-    if fenced is not True:
-        raise ApiKeyRevocationUnavailableError("Developer API key rotation fence was not confirmed")
-    try:
-        cache_deleted = redis_db.delete_cached_dev_api_key_strict(previous_hashed_key)
-    except Exception as exc:
-        raise ApiKeyRevocationUnavailableError("Developer API key cache invalidation failed") from exc
-    if cache_deleted is not True:
-        raise ApiKeyRevocationUnavailableError("Developer API key cache invalidation was not confirmed")
-
-    raw_key, hashed_key, key_prefix = generate_dev_api_key()
-    now = datetime.now(timezone.utc)
-    scopes = _normalize_dev_scopes(key_data.get("scopes"))
-    key_ref.update(
-        {
-            "id": key_id,
-            "hashed_key": hashed_key,
-            "key_prefix": key_prefix,
-            "app_id": DEV_API_KEY_APP_ID,
-            "scopes": scopes,
-            "rotated_at": now,
-            "last_used_at": None,
-        }
-    )
-
-    projection = project_api_key_metadata(
-        document_id=key_id,
-        raw={**key_data, "key_prefix": key_prefix, "id": key_id},
-        snapshot_create_time=getattr(key_doc, "create_time", None),
+    kind = ApiKeyRotationKind(
+        label="Developer API key",
+        collection="dev_api_keys",
+        firestore_client=_db(),
+        model=DevApiKey,
         key_kind="dev",
+        retire_hash=lambda hashed: redis_db.mark_api_key_hash_retired_strict(hashed),
+        delete_cached=lambda hashed: redis_db.delete_cached_dev_api_key_strict(hashed),
+        generate=lambda: generate_dev_api_key(),
+        resolve_app_id=lambda _key_data: DEV_API_KEY_APP_ID,
+        normalize_scopes=_normalize_dev_scopes,
     )
-    projected = projection.metadata
-    projected["scopes"] = scopes
-    projected["last_used_at"] = None
-    # Credential rotation is correctness-critical, so the repaired projection
-    # goes through the strict shared read boundary rather than a direct parse.
-    return raw_key, parse_snapshot_strict(DevApiKey, key_doc, payload_from_snapshot=lambda _snapshot: projected)
+    return rotate_api_key_secret(kind, user_id, key_id)
 
 
 def get_dev_keys_for_user_with_repair_info(
