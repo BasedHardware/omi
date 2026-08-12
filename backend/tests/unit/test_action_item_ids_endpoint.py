@@ -167,9 +167,7 @@ def test_batch_delete_preflight_chunks_large_id_lists(monkeypatch):
 
     # 1,200 IDs should be split into 3 chunks: 500 + 500 + 200
     big_ids = [f'task-{i}' for i in range(1200)]
-    result = ai_mod.batch_delete_action_items(
-        ai_mod.BatchDeleteActionItemsRequest(ids=big_ids), uid='user-9'
-    )
+    result = ai_mod.batch_delete_action_items(ai_mod.BatchDeleteActionItemsRequest(ids=big_ids), uid='user-9')
 
     assert len(preflight_chunks) == 3
     assert len(preflight_chunks[0]) == 500
