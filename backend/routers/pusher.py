@@ -490,6 +490,7 @@ async def _websocket_util_trigger(
                     conversation_id = res.get('conversation_id')
                     language = res.get('language', 'en')
                     byok_keys = res.get('byok_keys') or None
+                    byok_llm_provider = res.get('byok_llm_provider')
                     finalization_job_id = res.get('finalization_job_id')
                     dispatch_generation = res.get('dispatch_generation')
                     if conversation_id is not None and not isinstance(conversation_id, str):
@@ -501,6 +502,8 @@ async def _websocket_util_trigger(
                         or not all(isinstance(key, str) and isinstance(value, str) for key, value in byok_keys.items())
                     ):
                         raise ValueError('byok_keys must be an object')
+                    if byok_llm_provider is not None and byok_llm_provider not in {'chatgpt', 'grok'}:
+                        raise ValueError('byok_llm_provider must be a supported OAuth provider')
                     if finalization_job_id is not None and not isinstance(finalization_job_id, str):
                         raise ValueError('finalization_job_id must be a string')
                     if dispatch_generation is not None and (
@@ -520,6 +523,7 @@ async def _websocket_util_trigger(
                                 language,
                                 websocket,
                                 byok_keys,
+                                byok_llm_provider,
                                 finalization_job_id if isinstance(finalization_job_id, str) else None,
                                 dispatch_generation if isinstance(dispatch_generation, int) else None,
                             ),

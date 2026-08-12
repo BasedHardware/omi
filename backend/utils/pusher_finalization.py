@@ -7,7 +7,7 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 
 from database import conversation_finalization_jobs as finalization_jobs_db
 from services.conversation_finalization import final_attempt_failed
-from utils.byok import set_byok_keys, set_byok_uid
+from utils.byok import set_byok_keys, set_byok_llm_provider, set_byok_uid
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.finalizer import (
@@ -27,6 +27,7 @@ async def process_conversation_task(
     language: str,
     websocket: WebSocket,
     byok_keys: Optional[Dict[str, str]] = None,
+    byok_llm_provider: Optional[str] = None,
     finalization_job_id: Optional[str] = None,
     dispatch_generation: Optional[int] = None,
 ) -> None:
@@ -38,6 +39,9 @@ async def process_conversation_task(
     """
     if byok_keys:
         set_byok_keys(byok_keys)
+        set_byok_uid(uid)
+    if byok_llm_provider in {'chatgpt', 'grok'}:
+        set_byok_llm_provider(byok_llm_provider)
         set_byok_uid(uid)
 
     async def send_result(result: Dict[str, Any]) -> None:
@@ -123,7 +127,7 @@ async def process_conversation_task(
             finalization_jobs_db.claim_finalization_job,
             job_id,
             generation,
-            allow_byok=bool(byok_keys),
+            allow_byok=bool(byok_keys) or byok_llm_provider in {'chatgpt', 'grok'},
             expected_uid=uid,
             expected_conversation_id=conversation_id,
         )
