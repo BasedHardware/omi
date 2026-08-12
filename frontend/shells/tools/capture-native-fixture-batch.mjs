@@ -540,15 +540,22 @@ function buildIos(manifest, outRoot, batchId) {
   // it inside the already-isolated scratch HOME, then perform the build. This
   // keeps generated output under the declared core authority without changing
   // the operator's global Flutter configuration.
-  runCommand(commandSpec(flutter, ["config", `--build-dir=${relativeBuildDir}`], flutterAppRoot, env, 30), "iOS scratch build directory");
-  runCommand(commandSpec(flutter, ["build", "ios", "--simulator", "--debug", ...defines], flutterAppRoot, env, 600), "iOS one-time build");
-  const bundle = path.join(buildDir, "ios/iphonesimulator/Runner.app");
-  if (!existsSync(bundle)) fail("iOS build did not produce Runner.app");
-  const bundleId = "me.omi.proto.omiWebviewProto";
-  const sourceStamp = path.join(appRoot, "app/assets/surfaces/omi-ios-shell-build-stamp.json");
-  const stamp = path.join(buildDir, "omi-ios-shell-build-stamp.json");
-  if (existsSync(sourceStamp)) copyFileSync(sourceStamp, stamp);
-  return { shell: "ios", buildDir, app: bundle, bundleId, env, batchId, stamp, installedDevices: new Set(), frozenDevices: new Set(), appearanceByDevice: new Map(), geometryByDevice: new Map() };
+  try {
+    runCommand(commandSpec(flutter, ["config", `--build-dir=${relativeBuildDir}`], flutterAppRoot, env, 30), "iOS scratch build directory");
+    runCommand(commandSpec(flutter, ["build", "ios", "--simulator", "--debug", ...defines], flutterAppRoot, env, 600), "iOS one-time build");
+    const bundle = path.join(buildDir, "ios/iphonesimulator/Runner.app");
+    if (!existsSync(bundle)) fail("iOS build did not produce Runner.app");
+    const bundleId = "me.omi.proto.omiWebviewProto";
+    const sourceStamp = path.join(appRoot, "app/assets/surfaces/omi-ios-shell-build-stamp.json");
+    const stamp = path.join(buildDir, "omi-ios-shell-build-stamp.json");
+    if (existsSync(sourceStamp)) copyFileSync(sourceStamp, stamp);
+    return { shell: "ios", buildDir, app: bundle, bundleId, env, batchId, stamp, installedDevices: new Set(), frozenDevices: new Set(), appearanceByDevice: new Map(), geometryByDevice: new Map() };
+  } finally {
+    const ephemeral = path.join(flutterAppRoot, "ios/Flutter/ephemeral");
+    if (existsSync(ephemeral) && !lstatSync(ephemeral).isSymbolicLink()) {
+      rmSync(ephemeral, { recursive: true, force: true });
+    }
+  }
 }
 
 function artifactDescriptor(artifact) {
