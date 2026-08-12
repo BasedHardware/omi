@@ -15,36 +15,17 @@ enum LLMOAuthProvider: String, CaseIterable {
     }
   }
 
-  var redirectURI: String {
-    switch self {
-    case .chatgpt: return "http://localhost:1455/auth/callback"
-    case .grok: return "http://127.0.0.1:56121/callback"
-    }
-  }
+}
 
-  fileprivate var authorizationEndpoint: String {
-    switch self {
-    case .chatgpt: return "https://auth.openai.com/oauth/authorize"
-    case .grok: return "https://auth.x.ai/oauth2/authorize"
-    }
-  }
+struct LLMOAuthConfiguration: Sendable {
+  let authorizationURL: String
+  let clientID: String
+  let redirectURI: String
+  let scope: String
+  let authorizationParameters: [String: String]
 
-  fileprivate var clientID: String {
-    switch self {
-    case .chatgpt: return "app_EMoamEEZ73f0CkXaXp7hrann"
-    case .grok: return "b1a00492-073a-47ea-816f-4c329264a828"
-    }
-  }
-
-  fileprivate var scope: String {
-    switch self {
-    case .chatgpt: return "openid profile email offline_access"
-    case .grok: return "openid profile email offline_access grok-cli:access api:access"
-    }
-  }
-
-  fileprivate func authorizationItems(verifier: String, state: String, challenge: String) -> [URLQueryItem] {
-    var items = [
+  func authorizationItems(state: String, challenge: String) -> [URLQueryItem] {
+    [
       URLQueryItem(name: "client_id", value: clientID),
       URLQueryItem(name: "response_type", value: "code"),
       URLQueryItem(name: "redirect_uri", value: redirectURI),
@@ -52,15 +33,7 @@ enum LLMOAuthProvider: String, CaseIterable {
       URLQueryItem(name: "code_challenge", value: challenge),
       URLQueryItem(name: "code_challenge_method", value: "S256"),
       URLQueryItem(name: "state", value: state),
-    ]
-    if self == .chatgpt {
-      items += [
-        URLQueryItem(name: "id_token_add_organizations", value: "true"),
-        URLQueryItem(name: "codex_cli_simplified_flow", value: "true"),
-        URLQueryItem(name: "originator", value: "omi"),
-      ]
-    }
-    return items
+    ] + authorizationParameters.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
   }
 }
 
@@ -90,12 +63,13 @@ final class LLMOAuthConnector: @unchecked Sendable {
     guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
       throw AuthError.userChangedDuringRequest
     }
-    let listener = try CallbackListener(provider: provider, expectedState: state)
+    let configuration = try await APIClient.shared.llmOAuthConfiguration(provider)
+    let listener = try CallbackListener(redirectURI: configuration.redirectURI, expectedState: state)
     defer { listener.cancel() }
-    guard var components = URLComponents(string: provider.authorizationEndpoint) else {
+    guard var components = URLComponents(string: configuration.authorizationURL) else {
       throw Error.invalidAuthorizationURL
     }
-    components.queryItems = provider.authorizationItems(verifier: verifier, state: state, challenge: challenge)
+    components.queryItems = configuration.authorizationItems(state: state, challenge: challenge)
     guard let url = components.url else { throw Error.invalidAuthorizationURL }
     async let callback = listener.waitForCallback(timeout: 240)
     await Task.yield()
@@ -110,7 +84,7 @@ final class LLMOAuthConnector: @unchecked Sendable {
       provider: provider,
       code: code,
       codeVerifier: verifier,
-      redirectURI: provider.redirectURI,
+      redirectURI: configuration.redirectURI,
       authorizationSnapshot: authorizationSnapshot
     )
     UserDefaults.standard.set(true, forKey: provider.connectionStorageKey)
@@ -141,9 +115,11 @@ final class LLMOAuthConnector: @unchecked Sendable {
     private var continuation: CheckedContinuation<[String: String], Swift.Error>?
     private var completedResult: Result<[String: String], Swift.Error>?
 
-    init(provider: LLMOAuthProvider, expectedState: String) throws {
+    init(redirectURI: String, expectedState: String) throws {
       self.expectedState = expectedState
-      let port = provider == .chatgpt ? UInt16(1455) : UInt16(56121)
+      guard let port = URL(string: redirectURI)?.port.flatMap(UInt16.init) else {
+        throw Error.callbackUnavailable
+      }
       guard let endpointPort = NWEndpoint.Port(rawValue: port) else { throw Error.callbackUnavailable }
       do {
         listener = try NWListener(using: .tcp, on: endpointPort)
