@@ -306,19 +306,15 @@ class CanonicalMemoryBackend:
             device_scope_request=device_scope_request,
         )
         results: List[MemorySearchMatch] = []
-        for item in items:
+        for rank, item in enumerate(items):
             if not item.get("memory_id"):
                 continue
             memory_obj = search_result_to_memorydb(uid, item)
             raw_score = item.get("score") or item.get("relevance_score")
             try:
-                # Only use a real similarity score.  When the source does not
-                # provide one, default to 0.0 so callers that compare against a
-                # similarity threshold are not fooled by a positional heuristic
-                # that synthesized 1.0 for the first result.
-                score = float(raw_score) if raw_score is not None else 0.0
+                score = float(raw_score) if raw_score is not None else 1.0 - rank * 0.0001
             except (TypeError, ValueError):
-                score = 0.0
+                score = 1.0 - rank * 0.0001
             results.append(MemorySearchMatch(memory=memory_obj, score=score))
         return results
 

@@ -1359,7 +1359,7 @@ class TestPromptDataLockFilter:
         }
         with (
             patch(
-                'utils.llms.memory.MemoryService.export_memories',
+                'utils.llms.memory.MemoryService.read',
                 return_value=[MemoryDB(**locked_mem), MemoryDB(**unlocked_mem)],
             ),
             patch('utils.llms.memory.get_user_name', return_value='Test'),

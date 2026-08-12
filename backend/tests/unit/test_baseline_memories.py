@@ -143,7 +143,7 @@ class TestBaselineMemoryInjection:
         from models.memories import MemoryDB
 
         service = MagicMock()
-        service.export_memories.return_value = [MemoryDB.model_validate(item) for item in raw]
+        service.read.return_value = [MemoryDB.model_validate(item) for item in raw]
         return service
 
     def test_baseline_memory_lands_in_first_bucket(self, mem_module):
