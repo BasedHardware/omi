@@ -69,7 +69,11 @@ data with this workflow.
 ## Current qualification boundary
 
 Passing this entrypoint proves the pinned server/client/runtime scaffold, migration
-reapply, callback-scoped serializable transaction behavior, rollback-local cleanup, and
-Bun/Node client parity. It does not by itself activate PostgreSQL for production. The
-full authority, crash, race, replay, lifecycle, projection, load, and recovery gates in
-the PostgreSQL authority contract remain required.
+reapply, callback-scoped serializable transaction behavior, rollback-local cleanup,
+application-role graph/formation/identity/liveness append and reconstruction, shared
+SQLite/PostgreSQL snapshot parity, one-head race behavior, and Bun/Node client parity.
+The real corpus also kills a size-one pool backend at a query-quiescent pre-commit
+checkpoint after its first write, proves observer-visible rollback, and proves the next
+transaction reconnects with cleared local state. It does not by itself activate
+PostgreSQL for production. Arbitrary in-flight cancellation, product-projection rebuild,
+load/recovery, and the remaining gates in the PostgreSQL authority contract still apply.

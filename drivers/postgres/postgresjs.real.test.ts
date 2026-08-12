@@ -448,6 +448,70 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     );
   });
 
+  test("backend termination rolls back the first write and the size-one pool reconnects", async () => {
+    const killedAccount = `account:terminated:${randomUUID()}`;
+    let killedBackend: number | undefined;
+
+    let terminationError: unknown;
+    try {
+      await pool.withTransaction(
+        { isolationLevel: "serializable", accessMode: "read write" },
+        async (connection) => {
+          const backend = await connection.query<{ backend_pid: number }>({
+            name: "qualification.termination_backend",
+            text: "SELECT pg_backend_pid() AS backend_pid",
+            values: [],
+          });
+          killedBackend = backend[0]?.backend_pid;
+          if (killedBackend === undefined) throw new Error("missing_termination_backend");
+          await connection.execute({
+            name: "qualification.termination_first_write",
+            text: "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)",
+            values: [killedAccount],
+          });
+          const terminated = await ownerSql.unsafe<{ terminated: boolean }[]>(
+            "SELECT pg_terminate_backend($1) AS terminated",
+            [killedBackend],
+          );
+          expect(terminated[0]?.terminated).toBe(true);
+          // This is the named pre-commit checkpoint: no query is in flight while
+          // Postgres.js observes the socket close. The pool must refuse COMMIT on
+          // the lost lease and reconnect its size-one slot for the next request.
+          await Bun.sleep(100);
+        },
+      );
+    } catch (error) {
+      terminationError = error;
+    }
+    expect(["57P01", "CONNECTION_CLOSED", "CONNECTION_DESTROYED"]).toContain(
+      terminationError && typeof terminationError === "object"
+        ? Reflect.get(terminationError, "code") : null,
+    );
+
+    const rolledBack = await ownerSql.unsafe<{ count: number }[]>(
+      "SELECT count(*)::int AS count FROM omi_memory.platform_accounts WHERE account_id = $1",
+      [killedAccount],
+    );
+    expect([...rolledBack]).toEqual([{ count: 0 }]);
+
+    await pool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read write" },
+      async (connection) => {
+        const recovered = await connection.query<{
+          backend_pid: number; local_account: string | null;
+        }>({
+          name: "qualification.termination_recovered_pool",
+          text: `SELECT pg_backend_pid() AS backend_pid,
+                        nullif(current_setting('omi.account_id', true), '') AS local_account`,
+          values: [],
+        });
+        if (killedBackend === undefined) throw new Error("missing_termination_backend");
+        expect(recovered[0]?.backend_pid).not.toBe(killedBackend);
+        expect(recovered[0]?.local_account).toBeNull();
+      },
+    );
+  }, 30_000);
+
   test("application-role authority adapter commits empty, graph, and formation work with exact replay and rollback", async () => {
     const suffix = randomUUID();
     const accountId = `account:pg-kernel:${suffix}`;

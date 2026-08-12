@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { describe, expect, test } from "bun:test";
-import type { Sql, TransactionSql } from "postgres";
+import type { ReservedSql, Sql } from "postgres";
 
 import { REAL_POSTGRES_ACTIVATION, type CheckedOutPostgresConnection } from "./connection";
 import {
@@ -27,19 +27,17 @@ describe("Postgres.js transaction adapter", () => {
 
   test("starts one serializable transaction on the callback-scoped connection", async () => {
     const calls: string[] = [];
-    const transaction = {
+    const reserved = {
       unsafe: async (text: string) => {
         calls.push(text);
         const rows = [{ backend_pid: 42 }];
         Object.defineProperty(rows, "count", { value: 1 });
         return rows;
       },
-    } as unknown as TransactionSql<Record<string, never>>;
+      release: () => { calls.push("release"); },
+    } as unknown as ReservedSql<Record<string, never>>;
     const sql = {
-      begin: async (options: string, callback: (sql: TransactionSql<Record<string, never>>) => Promise<unknown>) => {
-        calls.push(options);
-        return callback(transaction);
-      },
+      reserve: async () => reserved,
       end: async () => { calls.push("end"); },
     } as unknown as Sql<Record<string, never>>;
     const pool = bindPostgresJsTransactionPool(sql);
@@ -62,19 +60,24 @@ describe("Postgres.js transaction adapter", () => {
     expect(result).toBe("committed");
     expect(seen).toBeDefined();
     expect(calls).toEqual([
-      "isolation level serializable read write",
+      "begin isolation level serializable read write",
       "select pg_backend_pid() as backend_pid",
       "update example set value = $1",
+      "commit",
+      "release",
     ]);
     await pool.close();
     expect(calls.at(-1)).toBe("end");
   });
 
   test("propagates transaction callback failure and rejects ambient construction", async () => {
-    let transactions = 0;
+    const calls: string[] = [];
+    const reserved = {
+      unsafe: async (text: string) => { calls.push(text); return []; },
+      release: () => { calls.push("release"); },
+    } as unknown as ReservedSql<Record<string, never>>;
     const sql = {
-      begin: async (_options: string, callback: (sql: TransactionSql<Record<string, never>>) => Promise<unknown>) =>
-        (transactions += 1, callback({} as TransactionSql<Record<string, never>>)),
+      reserve: async () => reserved,
       end: async () => undefined,
     } as unknown as Sql<Record<string, never>>;
     const pool = bindPostgresJsTransactionPool(sql);
@@ -83,8 +86,73 @@ describe("Postgres.js transaction adapter", () => {
       { isolationLevel: "serializable", accessMode: "read write" },
       async () => { throw new Error("callback failed"); },
     )).rejects.toThrow("callback failed");
-    expect(transactions).toBe(1);
+    expect(calls).toEqual([
+      "begin isolation level serializable read write",
+      "rollback",
+      "release",
+    ]);
     expect(() => createPostgresJsTransactionPool({ connectionString: "" }))
       .toThrow("invalid_postgres_connection_string");
+  });
+
+  test("does not release a terminated lease and uses the next reservation", async () => {
+    const released: string[] = [];
+    const terminated = Object.assign(new Error("provider body must remain opaque"), { code: "57P01" });
+    const first = {
+      unsafe: async (text: string) => {
+        if (text === "select 1") throw terminated;
+        return [];
+      },
+      release: () => { released.push("first"); },
+    } as unknown as ReservedSql<Record<string, never>>;
+    const second = {
+      unsafe: async () => [],
+      release: () => { released.push("second"); },
+    } as unknown as ReservedSql<Record<string, never>>;
+    const reservations = [first, second];
+    const sql = {
+      reserve: async () => reservations.shift()!,
+      end: async () => undefined,
+    } as unknown as Sql<Record<string, never>>;
+    const pool = bindPostgresJsTransactionPool(sql);
+
+    await expect(pool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read write" },
+      (connection) => connection.query({ name: "test.terminated", text: "select 1", values: [] }),
+    )).rejects.toMatchObject({ code: "57P01" });
+    await expect(pool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read write" },
+      async () => "recovered",
+    )).resolves.toBe("recovered");
+    expect(released).toEqual(["second"]);
+  });
+
+  test("refuses commit when a size-one lease closes at the pre-commit checkpoint", async () => {
+    let generation = 0;
+    const calls: string[] = [];
+    const reservations = ["first", "second"].map((name) => ({
+      unsafe: async (text: string) => { calls.push(`${name}:${text}`); return []; },
+      release: () => { calls.push(`${name}:release`); },
+    } as unknown as ReservedSql<Record<string, never>>));
+    const sql = {
+      reserve: async () => reservations.shift()!,
+      end: async () => undefined,
+    } as unknown as Sql<Record<string, never>>;
+    const pool = bindPostgresJsTransactionPool(sql, { leaseGeneration: () => generation });
+
+    await expect(pool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read write" },
+      async () => { generation += 1; },
+    )).rejects.toMatchObject({ code: "CONNECTION_DESTROYED" });
+    await expect(pool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read write" },
+      async () => "reconnected",
+    )).resolves.toBe("reconnected");
+    expect(calls).toEqual([
+      "first:begin isolation level serializable read write",
+      "second:begin isolation level serializable read write",
+      "second:commit",
+      "second:release",
+    ]);
   });
 });

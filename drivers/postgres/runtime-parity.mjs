@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 
 import postgres from "postgres";
 
@@ -25,7 +26,11 @@ if (packageMetadata.version !== expectedPostgresJsVersion) {
   throw new Error("postgres_runtime_parity_client_version_mismatch");
 }
 
-const sql = postgres(connectionString, { max: 1, prepare: true });
+let closeGeneration = 0;
+const sql = postgres(connectionString, {
+  max: 1, prepare: true, onclose: () => { closeGeneration += 1; },
+});
+const observer = postgres(connectionString, { max: 1, prepare: true });
 try {
   const version = await sql.unsafe("SHOW server_version_num");
   if (Number(version[0]?.server_version_num) !== expectedServerVersion) {
@@ -52,10 +57,44 @@ try {
       throw new Error("postgres_runtime_parity_transaction_mismatch");
     }
   });
+
+  const terminatedAccount = `account:runtime-termination:${expectedRuntime}:${randomUUID()}`;
+  const reserved = await sql.reserve();
+  const startingCloseGeneration = closeGeneration;
+  let terminatedBackend;
+  try {
+    await reserved.unsafe("begin isolation level serializable read write");
+    const rows = await reserved.unsafe("SELECT pg_backend_pid() AS backend_pid");
+    terminatedBackend = rows[0]?.backend_pid;
+    await reserved.unsafe(
+      "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)",
+      [terminatedAccount],
+    );
+    await observer.unsafe("SELECT pg_terminate_backend($1)", [terminatedBackend]);
+    for (let attempt = 0; attempt < 100 && closeGeneration === startingCloseGeneration; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  } catch {
+    // The runtime gate below uses the close generation and observer state, not
+    // provider text or the timing-dependent choice of 57P01 vs CONNECTION_CLOSED.
+  }
+  if (closeGeneration === startingCloseGeneration) {
+    throw new Error("postgres_runtime_parity_termination_not_observed");
+  }
+  const rolledBack = await observer.unsafe(
+    "SELECT count(*)::int AS count FROM omi_memory.platform_accounts WHERE account_id = $1",
+    [terminatedAccount],
+  );
+  const recovered = await sql.unsafe("SELECT pg_backend_pid() AS backend_pid");
+  if (rolledBack[0]?.count !== 0 || recovered[0]?.backend_pid === terminatedBackend) {
+    throw new Error("postgres_runtime_parity_termination_recovery_mismatch");
+  }
   process.stdout.write(`${JSON.stringify({
     status: "passed", runtime: expectedRuntime,
     postgres: expectedServerVersion, postgresJs: expectedPostgresJsVersion,
+    backendTermination: "reconnected",
   })}\n`);
 } finally {
+  await observer.end({ timeout: 5 });
   await sql.end({ timeout: 5 });
 }

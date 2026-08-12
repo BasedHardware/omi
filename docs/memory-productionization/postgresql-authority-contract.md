@@ -296,9 +296,13 @@ The current executable corpus proves migration reapply, the real callback-scoped
 Postgres.js serializable transaction path, rollback-local cleanup, graph/formation/
 identity writes, exact liveness replay with a commit-linked fence and incremented
 frontier, deterministic graph reconstruction through a fresh application-role pool,
-and Bun 1.3.14 versus Node 24.19.0 client parity. Backend termination under Bun plus
-Postgres.js, complete injected-failure coverage, product-projection reconstruction, and
-full SQLite semantic parity remain open.
+the shared SQLite/PostgreSQL graph-snapshot digest, and Bun 1.3.14 versus Node 24.19.0
+client parity. It also terminates a size-one pool's checked-out backend at a named,
+query-quiescent pre-commit checkpoint after the first write: a separate connection sees
+no commit, the dead lease is not committed or returned to the open queue, and the next
+transaction reconnects with cleared local authority state under both runtimes. Arbitrary
+in-flight query cancellation, complete injected-failure coverage, and product-projection
+reconstruction remain open.
 
 ## Activation blockers outside this slice
 
