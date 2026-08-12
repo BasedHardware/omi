@@ -219,6 +219,48 @@ const graphRevisionContent = (revision: AtomicGraphTransition["revisions"][numbe
                   : revision.kind === "identity_authorization" ? revision.authorization
                     : revision.support) as unknown as CanonicalJson;
 
+const assertLivenessAccounting = (
+  transition: AtomicGraphTransition,
+  origin: AuthoritativeAppendOrigin,
+): void => {
+  const fences = transition.liveness_fences ?? [];
+  const isManualLiveness = origin.kind === "non_formation" && origin.reason === "manual_liveness";
+  if (!isManualLiveness) {
+    if (fences.length !== 0) fail("only manual_liveness work may carry claim liveness fences");
+    return;
+  }
+  if (fences.length === 0) fail("manual_liveness work requires at least one claim liveness fence");
+  const sortedFenceKeys = fences.map((fence) => `${fence.claim_revision_id}\u0000${fence.cause}`);
+  if (!sameStrings(sortedFenceKeys, [...sortedFenceKeys].sort())) {
+    fail("manual_liveness fences must use deterministic order");
+  }
+  if (transition.revisions.length !== 0 || transition.adjacency.length !== 0
+    || transition.artifacts.length !== 0 || transition.placement.results.length !== 0
+    || Object.keys(transition.placement.allocations).length !== 0
+    || transition.identity_authority_context !== undefined
+    || transition.derived_identity_support !== undefined
+    || transition.derivation.commit.success_kind !== "success"
+    || transition.derivation.commit.output_revisions.length !== 0) {
+    fail("manual_liveness work may only mutate liveness fences");
+  }
+  const targetIds = [...new Set(fences.map((fence) => fence.claim_revision_id))].sort();
+  const witnesses = transition.committed_revisions ?? [];
+  const witnessIds = witnesses.map((revision) => revision.revision_id).sort();
+  if (witnesses.some((revision) => revision.kind !== "claim")
+    || !sameStrings(targetIds, witnessIds)
+    || !sameStrings(targetIds, [...transition.derivation.commit.input_revision_ids].sort())) {
+    fail("manual_liveness work requires exact committed claim witnesses and derivation inputs");
+  }
+  const inputById = new Map(transition.derivation.commit.input_revisions
+    .map((revision) => [revision.revision_id, revision] as const));
+  for (const witness of witnesses) {
+    const input = inputById.get(witness.revision_id);
+    if (!input || input.content_hash !== sha256CanonicalRedacted(graphRevisionContent(witness))) {
+      fail("manual_liveness claim witness differs from its derivation input");
+    }
+  }
+};
+
 const sameStrings = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
@@ -334,6 +376,7 @@ export const assertAuthoritativeLedgerAppend = (
     assertFormationTransitionAccounting(outcome, transition);
     assertDerivationManifests(transition);
     const normalizedOrigin = Object.freeze({ kind: "formation" as const, outcome });
+    assertLivenessAccounting(transition, normalizedOrigin);
     if (authoritativeAppendRequestDigest(transition, normalizedOrigin) !== requestDigest) {
       fail("request digest does not match the transition and formation outcome");
     }
@@ -349,6 +392,7 @@ export const assertAuthoritativeLedgerAppend = (
       fail("origin.reason is unsupported");
     }
     const normalizedOrigin = Object.freeze({ kind: "non_formation" as const, reason: reason as NonFormationAppendReason });
+    assertLivenessAccounting(transition, normalizedOrigin);
     assertDerivationManifests(transition);
     if (authoritativeAppendRequestDigest(transition, normalizedOrigin) !== requestDigest) {
       fail("request digest does not match the transition and non-formation origin");

@@ -61,3 +61,20 @@ test("S5a source-local roles do not require or satisfy durable adjacency", () =>
   transition.adjacency = [];
   expect(() => validateAtomicGraphTransition(transition)).not.toThrow();
 });
+
+test("D35 liveness fences require unique owner-local claim witnesses", () => {
+  const claim = canonicalClaim([{ slot_id: "subject", role: "subject", value: { kind: "source_local_ref", ref: "capture:synthetic:subject" } } as never]);
+  const transition = ledgerValidationTransition(claim as never);
+  transition.adjacency = [];
+  transition.liveness_fences = [{ claim_revision_id: claim.claim_revision_id, cause: "purged" }];
+  expect(() => validateAtomicGraphTransition(transition)).not.toThrow();
+
+  transition.liveness_fences = [
+    { claim_revision_id: claim.claim_revision_id, cause: "purged" },
+    { claim_revision_id: claim.claim_revision_id, cause: "purged" },
+  ];
+  expect(() => validateAtomicGraphTransition(transition)).toThrow("duplicate claim liveness fence");
+
+  transition.liveness_fences = [{ claim_revision_id: "claim:missing", cause: "forgotten" }];
+  expect(() => validateAtomicGraphTransition(transition)).toThrow("lacks an owner-local claim witness");
+});

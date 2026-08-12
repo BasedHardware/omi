@@ -79,4 +79,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0012-firebase-credential-bindings.sql",
     sha256: "4f1fc55e079f0c58e424c4cd6bf9b85a7d420b6627997cf1a9bf960723649b26",
   }),
+  Object.freeze({
+    version: 13,
+    name: "atomic-liveness-frontier",
+    fileName: "0013-atomic-liveness-frontier.sql",
+    sha256: "faa364231f4003bb4be4e939a47a3862c5f109a3fce6d3c5fb32dc5e2fa63673",
+  }),
 ]);

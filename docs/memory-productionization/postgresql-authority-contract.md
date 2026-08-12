@@ -1,6 +1,6 @@
 # PostgreSQL memory authority contract
 
-Status: P2 pre-registration plus an inert graph/formation/identity append adapter,
+Status: P2 pre-registration plus an inert graph/formation/identity/liveness append adapter,
 2026-08-11
 
 ## Decision boundary
@@ -47,8 +47,10 @@ The checked-in repository contract, transaction revalidation boundary, successfu
 kernel, and full append adapter are inert. The adapter persists every current graph
 revision and artifact kind plus total formation accounting, and verifies durable
 committed witnesses and the active identity-authorization head before reserving a
-receipt. Liveness fences still require their separately sealed maintenance operation;
-an inert owner-internal reconstruction adapter now rebuilds a deterministic
+receipt. Claim purge/forget is now an exact `manual_liveness` transition: it requires
+committed claim witnesses and derivation inputs, writes a commit-linked closed-code
+fence, and advances the same graph frontier atomically. The old SQLite side-write API
+has been removed. An inert owner-internal reconstruction adapter now rebuilds a deterministic
 `GraphSnapshot` from checksummed authoritative rows through a fresh application-role
 pool, but product-projection rebuild and a separately ratified read/rebuild capability
 remain unimplemented; and a backend terminated during a Bun + Postgres.js transaction
@@ -291,10 +293,12 @@ restart, and destructive reset workflow is documented in
 `local-postgres-qualification.md`.
 
 The current executable corpus proves migration reapply, the real callback-scoped
-Postgres.js serializable transaction path, rollback-local cleanup, and Bun 1.3.14 versus
-Node 24.19.0 client parity. It is the foundation for, but does not yet satisfy, every
-authority, race, injected-failure, backend-termination, reconstruction, and SQLite
-semantic-parity case listed above.
+Postgres.js serializable transaction path, rollback-local cleanup, graph/formation/
+identity writes, exact liveness replay with a commit-linked fence and incremented
+frontier, deterministic graph reconstruction through a fresh application-role pool,
+and Bun 1.3.14 versus Node 24.19.0 client parity. Backend termination under Bun plus
+Postgres.js, complete injected-failure coverage, product-projection reconstruction, and
+full SQLite semantic parity remain open.
 
 ## Activation blockers outside this slice
 

@@ -406,7 +406,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
 
     const first = await runPostgresMigrations(ownerSql);
     const second = await runPostgresMigrations(ownerSql);
-    expect([...first.appliedVersions, ...first.skippedVersions]).toEqual(
+    expect([...first.appliedVersions, ...first.skippedVersions].sort((left, right) => left - right)).toEqual(
       POSTGRES_MIGRATIONS.map((entry) => entry.version),
     );
     expect(second.appliedVersions).toEqual([]);
@@ -871,6 +871,52 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       claim_sources: 1, head_sequence: "4",
     }]);
 
+    const livenessWitness = identity.transition.revisions.find(
+      (revision) => revision.kind === "claim" && revision.placement_status === "canonical",
+    )!;
+    if (livenessWitness.kind !== "claim") throw new Error("missing liveness claim witness");
+    const livenessTransition: AtomicGraphTransition = {
+      placement: { offline_experiment: true, allocations: {}, results: [] },
+      derivation: prepareDerivation({
+        attempt_id: `attempt:liveness:${suffix}`, commit_id: `commit:liveness:${suffix}`,
+        owner_account_id: accountId,
+        parent_commit: identity.transition.derivation.commit.commit_id,
+        idempotency_key: `append:liveness:${suffix}`,
+        input_revisions: [{ revision_id: livenessWitness.revision_id, content: livenessWitness.claim }],
+        output_revisions: [], versions: identity.transition.derivation.commit.versions,
+        success_kind: "success",
+      }),
+      revisions: [], adjacency: [], artifacts: [], committed_revisions: [livenessWitness],
+      liveness_fences: [{ claim_revision_id: livenessWitness.revision_id, cause: "purged" }],
+    };
+    const livenessOrigin = { kind: "non_formation" as const, reason: "manual_liveness" as const };
+    const liveness: AuthoritativeLedgerAppend = {
+      append_attempt: {
+        idempotency_key: livenessTransition.derivation.commit.idempotency_key,
+        expected_parent_commit: livenessTransition.derivation.commit.parent_commit,
+        request_digest: authoritativeAppendRequestDigest(livenessTransition, livenessOrigin),
+      },
+      origin: livenessOrigin, transition: livenessTransition,
+    };
+    await expect(graphRepository.append(context, liveness)).resolves.toEqual({
+      kind: "committed", commit_id: livenessTransition.derivation.commit.commit_id, sequence: 5,
+    });
+    await expect(graphRepository.append(context, liveness)).resolves.toEqual({
+      kind: "replayed", commit_id: livenessTransition.derivation.commit.commit_id, sequence: 5,
+    });
+    const livenessRows = await ownerSql.unsafe<{
+      claim_revision_id: string; cause: string; commit_id: string; head_sequence: string;
+    }[]>(`
+      SELECT f.claim_revision_id, f.cause, f.commit_id, h.sequence::text AS head_sequence
+      FROM omi_memory.memory_claim_liveness_fences AS f
+      JOIN omi_memory.memory_graph_heads AS h ON h.account_id = f.account_id
+      WHERE f.account_id = $1
+    `, [accountId]);
+    expect([...livenessRows]).toEqual([{
+      claim_revision_id: livenessWitness.revision_id, cause: "purged",
+      commit_id: livenessTransition.derivation.commit.commit_id, head_sequence: "5",
+    }]);
+
     const snapshotPhysicalPool = createPostgresJsTransactionPool({
       connectionString: explicitTestUrl!, maxConnections: 1,
     });
@@ -891,7 +937,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         pool: snapshotRolePool,
       }).load(context);
       expect(reconstructed.owner_account_id).toBe(accountId);
-      expect(reconstructed.graph_generation).toBe(4);
+      expect(reconstructed.graph_generation).toBe(5);
       expect(reconstructed.claims.map((row) => row.revision_id)).toEqual(expect.arrayContaining([
         graph.transition.revisions.find((row) => row.kind === "claim")?.revision_id,
         identity.transition.revisions.find((row) => row.kind === "claim")?.revision_id,
@@ -906,6 +952,10 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       expect(reconstructed.adjacency).toHaveLength(1);
       expect(reconstructed.source_local_roles).toHaveLength(2);
       expect(reconstructed.placement_artifacts).toHaveLength(3);
+      expect(reconstructed.liveness_causes).toEqual({
+        purged_claim_revision_ids: [livenessWitness.revision_id],
+        forgotten_claim_revision_ids: [],
+      });
       expect(JSON.stringify(await createPostgresAuthoritativeGraphSnapshotRepository({
         pool: snapshotRolePool,
       }).load(context))).toBe(JSON.stringify(reconstructed));
@@ -949,7 +999,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       const rollback = append(
         `commit:${suffix}:rollback`,
         `append:${suffix}:rollback`,
-        identity.transition.derivation.commit.commit_id,
+        livenessTransition.derivation.commit.commit_id,
       );
       await expect(repository.append(context, rollback)).rejects.toMatchObject({ code: "persistence_failed" });
       const rolledBack = await ownerSql.unsafe<{ attempts: number; commits: number; receipts: number; head_sequence: string }[]>(`
@@ -959,7 +1009,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           (SELECT count(*)::int FROM omi_memory.memory_idempotency_receipts WHERE account_id = $1) AS receipts,
           (SELECT sequence::text FROM omi_memory.memory_graph_heads WHERE account_id = $1) AS head_sequence
       `, [accountId]);
-      expect([...rolledBack]).toEqual([{ attempts: 4, commits: 4, receipts: 4, head_sequence: "4" }]);
+      expect([...rolledBack]).toEqual([{ attempts: 5, commits: 5, receipts: 5, head_sequence: "5" }]);
     } finally {
       await ownerSql.unsafe(`
         DROP TRIGGER IF EXISTS reject_kernel_commit ON omi_memory.memory_derivation_commits;

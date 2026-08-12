@@ -6,6 +6,7 @@ import {
   GraphTransitionValidationError,
   validateAtomicGraphTransition,
   type AtomicGraphTransition,
+  type ClaimLivenessFenceCause,
   type ClaimRevision,
   type EntityRevision,
   type EvidenceRevision,
@@ -27,8 +28,8 @@ import type { IdentityConstraint } from "../../core/schema";
 
 export class IdempotencyConflictError extends Error {}
 export class GraphHeadConflictError extends Error {}
-export type LivenessFenceCause = "purged" | "forgotten";
-export type CrashPoint = "after_authorization" | "after_constraint" | "after_claims" | "after_adjacency" | "after_consumed_markers" | "after_ledger";
+export type LivenessFenceCause = ClaimLivenessFenceCause;
+export type CrashPoint = "after_authorization" | "after_constraint" | "after_claims" | "after_adjacency" | "after_consumed_markers" | "after_liveness" | "after_ledger";
 
 const revisionContent = (revision: GraphRevision) => revision.kind === "claim" ? revision.claim : revision.kind === "entity" ? revision.entity : revision.kind === "predicate" ? revision.predicate : revision.kind === "predicate_assertion" ? revision.assertion : revision.kind === "identity" ? revision.constraint : revision.kind === "event" ? revision.event : revision.kind === "evidence" ? revision.evidence : revision.kind === "mention" ? revision.mention : revision.kind === "identity_authorization" ? revision.authorization : revision.support;
 
@@ -134,6 +135,7 @@ export class SqliteLedger implements LedgerPort {
       CREATE TABLE IF NOT EXISTS claim_liveness_fences (
         owner_account_id TEXT NOT NULL, claim_revision_id TEXT NOT NULL,
         cause TEXT NOT NULL CHECK (cause IN ('purged', 'forgotten')),
+        commit_id TEXT NOT NULL,
         PRIMARY KEY (owner_account_id, claim_revision_id, cause)
       );
       /* Append-only D48 overlays.  They retain old rows for audit but make them
@@ -151,6 +153,12 @@ export class SqliteLedger implements LedgerPort {
         FOREIGN KEY (claim_revision_id) REFERENCES claim_revisions(revision_id)
       );
     `);
+    const livenessColumns = this.db.query("PRAGMA table_info(claim_liveness_fences)").all() as { name: string }[];
+    if (!livenessColumns.some((column) => column.name === "commit_id")) {
+      // Research ledgers may contain pre-frontier D35 rows. Preserve them for
+      // audit, but every new fence is written only by an atomic transition.
+      this.db.exec("ALTER TABLE claim_liveness_fences ADD COLUMN commit_id TEXT;");
+    }
   }
 
   async appendTransitionPlan(plan: AtomicGraphTransition): Promise<{ commit_id: string; sequence: number; idempotent: boolean }> {
@@ -200,19 +208,6 @@ export class SqliteLedger implements LedgerPort {
 
   async repairTransitionPlan(plan: AtomicGraphTransition): Promise<{ commit_id: string; sequence: number; idempotent: boolean }> {
     return this.append(plan);
-  }
-
-  /** Monotone D35 erasure: there is intentionally no API to remove a fence. */
-  recordLivenessFence(ownerAccountId: string, claimRevisionId: string, cause: LivenessFenceCause): void {
-    this.db.query("INSERT OR IGNORE INTO claim_liveness_fences VALUES (?, ?, ?)").run(ownerAccountId, claimRevisionId, cause);
-  }
-
-  purgeClaim(ownerAccountId: string, claimRevisionId: string): void {
-    this.recordLivenessFence(ownerAccountId, claimRevisionId, "purged");
-  }
-
-  forgetClaim(ownerAccountId: string, claimRevisionId: string): void {
-    this.recordLivenessFence(ownerAccountId, claimRevisionId, "forgotten");
   }
 
   /**
@@ -310,6 +305,12 @@ export class SqliteLedger implements LedgerPort {
         else this.db.query("INSERT INTO placement_artifacts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(artifact.artifact_id, commit.owner_account_id, artifact.kind, artifact.provisional_revision_id, artifact.canonical_claim_revision_id, artifact.margin, JSON.stringify(artifact.risk_markers), artifact.unit_boundary_decision, artifact.scope_locality, commit.commit_id);
       }
       if (crashAt === "after_consumed_markers") throw new Error("injected crash after consumed markers");
+      for (const fence of plan.liveness_fences ?? []) {
+        const inserted = this.db.query("INSERT OR IGNORE INTO claim_liveness_fences (owner_account_id, claim_revision_id, cause, commit_id) VALUES (?, ?, ?, ?)")
+          .run(commit.owner_account_id, fence.claim_revision_id, fence.cause, commit.commit_id);
+        if (inserted.changes !== 1) throw new GraphTransitionValidationError(`claim liveness fence already exists: ${fence.claim_revision_id}:${fence.cause}`);
+      }
+      if (crashAt === "after_liveness") throw new Error("injected crash after liveness");
       const committed = { ...commit, sequence };
       this.db.query("INSERT INTO derivation_attempts VALUES (?, ?, ?, ?, ?)").run(plan.derivation.attempt.attempt_id, commit.commit_id, commit.owner_account_id, commit.input_version_digest, canonicalizeRedacted(plan.derivation.attempt as never));
       this.db.query("INSERT INTO derivation_commits VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(commit.commit_id, commit.owner_account_id, commit.parent_commit, sequence, commit.idempotency_key, commit.input_digest, commit.input_version_digest, commit.output_digest, commit.success_kind, canonicalizeRedacted(committed as never));

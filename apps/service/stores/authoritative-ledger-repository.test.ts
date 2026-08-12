@@ -50,6 +50,34 @@ const transition = (): AtomicGraphTransition => ({
   artifacts: [],
 });
 
+const livenessTransition = (): AtomicGraphTransition => {
+  const claim = {
+    claim_lineage_id: "lineage:live", claim_revision_id: "claim:live",
+    owner_account_id: "account:alice", predicate: "noted", arguments: [],
+    temporal_scope: { observed_at: "2026-01-01T00:00:00Z", precision: "instant" },
+    evidence_refs: [], policy_labels: [], source_language: "en",
+    scope: { locality: "source_local", scope_ref: null }, lifecycle: "provisional",
+    ambiguity_markers: ["source_local"], context_packet: null,
+  } as never;
+  const witness = {
+    kind: "claim" as const, revision_id: "claim:live", claim,
+    placement_status: "provisional_abstained" as const,
+  };
+  return {
+    placement: { offline_experiment: true, allocations: {}, results: [] },
+    derivation: prepareDerivation({
+      attempt_id: "attempt:liveness", commit_id: "commit:liveness",
+      owner_account_id: "account:alice", parent_commit: "commit:prior",
+      idempotency_key: "append:liveness",
+      input_revisions: [{ revision_id: witness.revision_id, content: claim }],
+      output_revisions: [], versions: transition().derivation.commit.versions,
+      success_kind: "success",
+    }),
+    revisions: [], adjacency: [], artifacts: [], committed_revisions: [witness],
+    liveness_fences: [{ claim_revision_id: witness.revision_id, cause: "purged" }],
+  };
+};
+
 const formationOutcome = (overrides: Record<string, unknown> = {}) => ({
   contract_version: "memory-formation-outcome-v2",
   owner_account_id: "account:alice",
@@ -129,6 +157,37 @@ test("durable job graph origins are closed, honest, and request-identity-bearing
   }
   expect(seen).toEqual([...reasons]);
   expect(digests.size).toBe(reasons.length);
+});
+
+test("manual liveness is an exact claim-witnessed frontier transition", async () => {
+  let calls = 0;
+  const repository = defineAuthoritativeLedgerRepository(async (_authorized, request) => {
+    calls += 1;
+    return { kind: "committed", commit_id: request.transition.derivation.commit.commit_id, sequence: 2 };
+  });
+  const plan = livenessTransition();
+  const origin = { kind: "non_formation" as const, reason: "manual_liveness" as const };
+  const append = (candidate: AtomicGraphTransition, candidateOrigin = origin) => repository.append(context(), {
+    append_attempt: {
+      idempotency_key: candidate.derivation.commit.idempotency_key,
+      expected_parent_commit: candidate.derivation.commit.parent_commit,
+      request_digest: authoritativeAppendRequestDigest(candidate, candidateOrigin),
+    },
+    origin: candidateOrigin, transition: candidate,
+  });
+  await expect(append(plan)).resolves.toMatchObject({ kind: "committed", sequence: 2 });
+
+  const missingWitness = structuredClone(plan);
+  missingWitness.committed_revisions = [];
+  await expect(append(missingWitness)).rejects.toThrow("transition is invalid");
+
+  const empty = structuredClone(plan);
+  empty.liveness_fences = [];
+  await expect(append(empty)).rejects.toThrow("requires at least one claim liveness fence");
+
+  const wrongOrigin = { kind: "non_formation" as const, reason: "repair" as const };
+  await expect(append(plan, wrongOrigin)).rejects.toThrow("only manual_liveness work");
+  expect(calls).toBe(1);
 });
 
 test("repository rejects missing accounting, owner substitution, and a changed request digest before the adapter", async () => {

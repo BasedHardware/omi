@@ -116,6 +116,7 @@ const assertQualificationTransition = (request: AuthoritativeLedgerAppend): void
     || transition.revisions.length !== 0
     || transition.adjacency.length !== 0
     || transition.artifacts.length !== 0
+    || (transition.liveness_fences?.length ?? 0) !== 0
     || transition.placement.results.length !== 0
     || Object.keys(transition.placement.allocations).length !== 0
     || transition.committed_revisions !== undefined
@@ -744,6 +745,21 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
   }
 };
 
+const persistLivenessFences = async (
+  connection: CheckedOutPostgresConnection,
+  accountId: string,
+  commitId: string,
+  transition: AtomicGraphTransition,
+): Promise<void> => {
+  for (const fence of transition.liveness_fences ?? []) {
+    await executeRequired(connection, "ledger.liveness_fence_insert", `
+INSERT INTO omi_memory.memory_claim_liveness_fences
+  (account_id, claim_revision_id, cause, commit_id)
+VALUES ($1, $2, $3, $4)
+`, [accountId, fence.claim_revision_id, fence.cause, commitId]);
+  }
+};
+
 const appendAuthorized = async (
   pool: PostgresTransactionPool,
   context: AuthorizedLedgerWriteContext,
@@ -887,6 +903,9 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
             commit.versions.schema_version, request.transition,
           );
           await persistClaimRelationsAndArtifacts(
+            connection, authority.account_id, commit.commit_id, request.transition,
+          );
+          await persistLivenessFences(
             connection, authority.account_id, commit.commit_id, request.transition,
           );
           await persistFormationOutcome(

@@ -152,6 +152,13 @@ export interface CandidateDerivationArtifact {
 }
 export type TransitionArtifact = PlacementArtifact | CandidateDerivationArtifact;
 
+/** Monotone retrieval eligibility changes. There is intentionally no inverse cause. */
+export type ClaimLivenessFenceCause = "purged" | "forgotten";
+export interface ClaimLivenessFence {
+  readonly claim_revision_id: string;
+  readonly cause: ClaimLivenessFenceCause;
+}
+
 /** T9's typed persistence input: T7 allocation plus the already-validated immutable payloads. */
 export interface AtomicGraphTransition {
   placement: AllocatedPlacementPlan;
@@ -178,6 +185,12 @@ export interface AtomicGraphTransition {
    * by the new transition.
    */
   committed_revisions?: readonly GraphRevision[];
+  /**
+   * Liveness changes share the append receipt and graph-head advance.  Keeping
+   * them inside this transition prevents a purge/forget from becoming visible
+   * without changing the frontier used by projections and caches.
+   */
+  liveness_fences?: readonly ClaimLivenessFence[];
 }
 
 export class GraphTransitionValidationError extends Error {}
@@ -185,6 +198,9 @@ export class GraphTransitionValidationError extends Error {}
 /** Pure guard for the D13 claim-to-generated-adjacency invariant before any I/O begins. */
 export const validateAtomicGraphTransition = (transition: AtomicGraphTransition): void => {
   if (!Array.isArray(transition.artifacts)) throw new GraphTransitionValidationError("transition must provide placement artifacts");
+  if (transition.liveness_fences !== undefined && !Array.isArray(transition.liveness_fences)) {
+    throw new GraphTransitionValidationError("transition liveness fences must be an array");
+  }
   const revisionIds = new Set<string>();
   for (const revision of transition.revisions) {
     if (revisionIds.has(revision.revision_id)) throw new GraphTransitionValidationError(`duplicate revision id: ${revision.revision_id}`);
@@ -195,6 +211,24 @@ export const validateAtomicGraphTransition = (transition: AtomicGraphTransition)
     if (revision.kind === "predicate_assertion" && !validateStrict(PredicateAssertionSchema, revision.assertion)) throw new GraphTransitionValidationError(`invalid predicate assertion: ${revision.revision_id}`);
     if (revision.kind === "mention" && !validateStrict(MentionSchema, revision.mention)) throw new GraphTransitionValidationError(`invalid persisted mention: ${revision.revision_id}`);
     if (revision.kind === "identity_authorization" && !validateStrict(IdentityAuthorizationSchema, revision.authorization)) throw new GraphTransitionValidationError(`invalid identity authorization: ${revision.revision_id}`);
+  }
+  const livenessKeys = new Set<string>();
+  const livenessClaims = [...transition.revisions, ...(transition.committed_revisions ?? [])]
+    .filter((revision): revision is ClaimRevision => revision.kind === "claim");
+  for (const fence of transition.liveness_fences ?? []) {
+    if (fence === null || typeof fence !== "object"
+      || Object.keys(fence).length !== 2
+      || typeof fence.claim_revision_id !== "string" || fence.claim_revision_id.length === 0
+      || (fence.cause !== "purged" && fence.cause !== "forgotten")) {
+      throw new GraphTransitionValidationError("invalid claim liveness fence");
+    }
+    const key = `${fence.claim_revision_id}\u0000${fence.cause}`;
+    if (livenessKeys.has(key)) throw new GraphTransitionValidationError(`duplicate claim liveness fence: ${fence.claim_revision_id}:${fence.cause}`);
+    livenessKeys.add(key);
+    const claim = livenessClaims.find((revision) => revision.revision_id === fence.claim_revision_id);
+    if (!claim || claim.claim.owner_account_id !== transition.derivation.commit.owner_account_id) {
+      throw new GraphTransitionValidationError(`claim liveness fence lacks an owner-local claim witness: ${fence.claim_revision_id}`);
+    }
   }
   const dispositionIds = new Set(transition.placement.results.map((result) => result.input_provisional_revision_id));
   for (const result of transition.placement.results) if (!revisionIds.has(result.input_provisional_revision_id)) throw new GraphTransitionValidationError(`missing provisional revision for disposition: ${result.input_provisional_revision_id}`);

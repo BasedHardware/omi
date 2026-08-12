@@ -269,6 +269,9 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     const liveness = tables.find((table) => table.name === "memory_claim_liveness_fences")!;
     expect(liveness.body).toContain("cause IN ('purged', 'forgotten')");
     expect((allSql.match(/cause IN \('purged', 'forgotten'\)/g) ?? []).length).toBe(1);
+    expect(allSql).toContain("ALTER COLUMN commit_id SET NOT NULL");
+    expect(allSql).toContain("memory_claim_liveness_fences_commit_fk");
+    expect(allSql).toContain("FOREIGN KEY (account_id, commit_id)");
 
     const support = tables.find((table) => table.name === "memory_identity_support")!;
     expect(support.body).toContain("FOREIGN KEY (account_id, claim_revision_id)");

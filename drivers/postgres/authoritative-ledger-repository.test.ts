@@ -171,6 +171,35 @@ const graphRequest = (): AuthoritativeLedgerAppend => {
   };
 };
 
+const livenessRequest = (): { request: AuthoritativeLedgerAppend; claim: AtomicGraphTransition["revisions"][number] } => {
+  const claim = graphPlan().revisions.find((revision) => revision.kind === "claim")!;
+  const transition: AtomicGraphTransition = {
+    placement: { offline_experiment: true, allocations: {}, results: [] },
+    derivation: prepareDerivation({
+      attempt_id: "attempt:liveness", commit_id: "commit:liveness",
+      owner_account_id: "account:alice", parent_commit: "commit:graph",
+      idempotency_key: "append:liveness",
+      input_revisions: [{ revision_id: claim.revision_id, content: claim.kind === "claim" ? claim.claim : {} }],
+      output_revisions: [], versions: plan().derivation.attempt.versions,
+      success_kind: "success",
+    }),
+    revisions: [], adjacency: [], artifacts: [], committed_revisions: [claim],
+    liveness_fences: [{ claim_revision_id: claim.revision_id, cause: "purged" }],
+  };
+  const origin = { kind: "non_formation" as const, reason: "manual_liveness" as const };
+  return {
+    claim,
+    request: {
+      append_attempt: {
+        idempotency_key: transition.derivation.commit.idempotency_key,
+        expected_parent_commit: transition.derivation.commit.parent_commit,
+        request_digest: authoritativeAppendRequestDigest(transition, origin),
+      },
+      origin, transition,
+    },
+  };
+};
+
 const identityRequest = (): AuthoritativeLedgerAppend => {
   const sourceIdentity = {
     namespace_instance_ref: "namespace:identity", local_key: "alice",
@@ -615,6 +644,25 @@ test("full inert adapter persists a nonempty graph in dependency order", async (
   expect(names).toContain("ledger.placement_artifact_insert");
   expect(names.at(-2)).toBe("ledger.head_advance");
   expect(names.at(-1)).toBe("ledger.receipt_finalize");
+});
+
+test("full inert adapter persists claim liveness before advancing the graph head", async () => {
+  const fixture = livenessRequest();
+  const connection = new FakeConnection();
+  connection.head = { commit_id: "commit:graph", sequence: "1" };
+  connection.witness = {
+    content_hash: sha256CanonicalRedacted(
+      fixture.claim.kind === "claim" ? fixture.claim.claim as never : {},
+    ),
+    lifecycle: null, head_revision_id: null,
+  };
+  await expect(createPostgresAuthoritativeLedgerRepository({ pool: new FakePool(connection) })
+    .append(context(), fixture.request)).resolves.toEqual({
+      kind: "committed", commit_id: "commit:liveness", sequence: 2,
+    });
+  const names = connection.statements.map((statement) => statement.name);
+  expect(names).toContain("ledger.liveness_fence_insert");
+  expect(names.indexOf("ledger.liveness_fence_insert")).toBeLessThan(names.indexOf("ledger.head_advance"));
 });
 
 test("full inert adapter covers identity authority, mention lineage, and adjacency", async () => {

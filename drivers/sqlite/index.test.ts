@@ -294,10 +294,28 @@ test("G2 SQLite adversarial D35: a purge fence survives reconstructing the ledge
   const evidenceCommit = prepareDerivation({ attempt_id: "attempt:purge:evidence", commit_id: "commit:purge:evidence", owner_account_id: "owner-1", parent_commit: "commit:key-1", idempotency_key: "key:purge:evidence", input_revisions: [], output_revisions: [{ revision_id: "event:purge:r1", content: event }, { revision_id: "e-1:active", content: evidence }], versions, success_kind: "success" });
   ledger.append({ placement: { offline_experiment: true, allocations: {}, results: [] }, derivation: evidenceCommit, revisions: [{ kind: "event", revision_id: "event:purge:r1", event }, { kind: "evidence", revision_id: "e-1:active", evidence }], adjacency: [], artifacts: [] });
   expect(ledger.retrieve({ owner_account_id: "owner-1", kind: "entity", entity_id: "entity:alice" }).claims.map((item) => item.revision_id)).toEqual(["c-1"]);
-  ledger.purgeClaim("owner-1", "c-1");
+  const claimWitness = transition().revisions.find((revision) => revision.kind === "claim" && revision.revision_id === "c-1")!;
+  const liveness = {
+    placement: { offline_experiment: true, allocations: {}, results: [] },
+    derivation: prepareDerivation({
+      attempt_id: "attempt:purge", commit_id: "commit:purge", owner_account_id: "owner-1",
+      parent_commit: "commit:purge:evidence", idempotency_key: "key:purge",
+      input_revisions: [{ revision_id: claimWitness.revision_id, content: canonical }],
+      output_revisions: [], versions, success_kind: "success",
+    }),
+    revisions: [], adjacency: [], artifacts: [], committed_revisions: [claimWitness],
+    liveness_fences: [{ claim_revision_id: "c-1", cause: "purged" as const }],
+  } satisfies AtomicGraphTransition;
+  expect(ledger.snapshot("owner-1").graph_generation).toBe(2);
+  expect(() => ledger.append(liveness, "after_liveness")).toThrow("injected crash after liveness");
+  expect(ledger.snapshot("owner-1").graph_generation).toBe(2);
+  expect(ledger.snapshot("owner-1").liveness_causes?.purged_claim_revision_ids).toEqual([]);
+  expect(ledger.append(liveness)).toEqual({ commit_id: "commit:purge", sequence: 3, idempotent: false });
+  expect(ledger.append(liveness)).toEqual({ commit_id: "commit:purge", sequence: 3, idempotent: true });
   expect(ledger.retrieve({ owner_account_id: "owner-1", kind: "entity", entity_id: "entity:alice" }).claims).toEqual([]);
 
   const rebuilt = new SqliteLedger(db);
+  expect(rebuilt.snapshot("owner-1").graph_generation).toBe(3);
   expect(rebuilt.snapshot("owner-1").liveness_causes).toEqual({ purged_claim_revision_ids: ["c-1"], forgotten_claim_revision_ids: [] });
   expect(rebuilt.retrieve({ owner_account_id: "owner-1", kind: "entity", entity_id: "entity:alice" })).toEqual({ claims: [], absence: { kind: "query_gap", message: "no cited memory matched" } });
 });
