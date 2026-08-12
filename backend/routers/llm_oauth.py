@@ -33,7 +33,7 @@ class StatusResponse(BaseModel):
 
 @router.get('/v1/users/me/llm-oauth', tags=['v1'], response_model=StatusResponse)
 async def get_status(uid: str = Depends(auth.get_current_user_uid)):
-    await run_blocking(critical_executor, enforce_rate_limit, uid, 'llm_oauth:exchange', fail_closed=True)
+    await run_blocking(critical_executor, enforce_rate_limit, uid, 'llm_oauth:status', fail_closed=True)
     return await run_blocking(db_executor, llm_oauth_db.get_status, uid)
 
 

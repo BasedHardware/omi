@@ -203,6 +203,8 @@ final class APIKeyService: ObservableObject {
     // NOTE: Do NOT unset FIREBASE_API_KEY — it's needed for the next sign-in
     // (auth bootstrap requires Firebase key before backend is reachable)
     unsetenv("GOOGLE_CALENDAR_API_KEY")
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.chatGPTLLMOAuthConnected.rawValue)
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.grokLLMOAuthConnected.rawValue)
   }
 
   /// Push effective keys into the process environment for backward compatibility.

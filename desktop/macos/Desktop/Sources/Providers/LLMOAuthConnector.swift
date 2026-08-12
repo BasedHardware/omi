@@ -103,7 +103,9 @@ final class LLMOAuthConnector: @unchecked Sendable {
       throw Error.invalidAuthorizationURL
     }
     let values = try await callback
-    guard values["state"] == state, let code = values["code"] else { throw Error.invalidCallback }
+    guard values["state"] == state, values["error"] == nil, let code = values["code"] else {
+      throw Error.invalidCallback
+    }
     try await APIClient.shared.completeLLMOAuth(
       provider: provider,
       code: code,
@@ -190,8 +192,12 @@ final class LLMOAuthConnector: @unchecked Sendable {
         let response =
           "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n\(html)"
         connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
-        if values["state"] == self.expectedState, values["code"] != nil {
-          self.finish(.success(values))
+        if values["state"] == self.expectedState {
+          if values["code"] != nil {
+            self.finish(.success(values))
+          } else if values["error"] != nil {
+            self.finish(.failure(Error.invalidCallback))
+          }
         }
       }
     }
