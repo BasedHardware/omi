@@ -360,7 +360,11 @@ services:
       - --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER:-admin}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-admin}
+      # No silent default: an unset password must fail the stack, never bootstrap a
+      # publicly-reachable Keycloak admin with the trivial admin/admin credential. Dev
+      # sets it explicitly in .env.dev (admin is a conscious local choice); prod must
+      # supply a strong operator secret.
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:?KC_ADMIN_PASSWORD must be set (no default admin/admin bootstrap)}
     volumes:
       - ./keycloak/omi-realm.example.json:/opt/keycloak/data/import/omi-realm.json:ro
     # http-only behind kc-proxy; no published ports (the backend + the proxy reach it via
