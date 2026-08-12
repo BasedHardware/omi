@@ -520,7 +520,7 @@ def get_public_shared_conversation_bounded(
     firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
     """Read only public-chat fields and decode the transcript within fixed bounds."""
-    client = firestore_client if firestore_client is not None else db
+    client = firestore_client if firestore_client is not None else get_firestore_client()
     conversation_ref = (
         client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     )
@@ -769,7 +769,7 @@ def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, fire
     failing closed avoids a possible duplicate and must never interrupt the
     underlying conversation extraction.
     """
-    client = firestore_client if firestore_client is not None else db
+    client = firestore_client if firestore_client is not None else get_firestore_client()
     marker_ref = (
         client.collection('users')
         .document(uid)
