@@ -13,6 +13,10 @@ import {
 } from "../../apps/service/stores/durable-memory-work-repository";
 import { formationCandidateManifestDigest } from "../../core/consolidate/formation-outcome";
 import {
+  DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+  registerDurableMemoryWorkExecutionPolicy,
+} from "../../core/consolidate/execution-policy";
+import {
   MEMORY_STRATEGY_VERSION,
   createMemoryStrategyAssigner,
   defineMemoryStrategyAssignmentPolicy,
@@ -394,6 +398,7 @@ const durableWorkAcceptanceRequest = (
   accountId: string,
   suffix: string,
   acceptedAtEventTime: number,
+  leaseDurationSeconds = 30,
 ): DurableMemoryWorkAcceptanceRequest => {
   const strategy = registerMemoryStrategy({
     version: MEMORY_STRATEGY_VERSION,
@@ -435,9 +440,21 @@ const durableWorkAcceptanceRequest = (
     accepted_at_event_time: acceptedAtEventTime, max_attempts: 2,
   };
   const pending = acceptDurableMemoryWork(accepted);
+  const executionPolicy = registerDurableMemoryWorkExecutionPolicy({
+    version: DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+    policy_id: "execution-policy:qualification:formation:v1",
+    work_kind: "formation",
+    execution_contract_digest: assignment.authority.execution_contract_digest,
+    max_attempts: 2,
+    lease_duration_seconds: leaseDurationSeconds,
+    retry_delays_seconds: [10],
+  });
   return Object.freeze({
     accepted_work: accepted, input_manifest: inputs, strategy_assignment: assignment,
-    request_digest: durableMemoryWorkAcceptanceRequestDigest(pending, inputs, assignment),
+    execution_policy: executionPolicy,
+    request_digest: durableMemoryWorkAcceptanceRequestDigest(
+      pending, inputs, assignment, executionPolicy,
+    ),
   });
 };
 
@@ -654,6 +671,8 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       authorization_state_digest: authorizationStateDigest(authorityRow),
     }, now);
     let lastWorkAcceptanceStatement = "none";
+    let lastWorkAcceptanceProviderCode = "none";
+    let lastWorkAcceptanceConstraint = "none";
     const appRolePool: PostgresTransactionPool = Object.freeze({
       withTransaction: async <Result>(
         options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
@@ -675,7 +694,40 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           },
           execute: async (statement: SqlStatement) => {
             lastWorkAcceptanceStatement = statement.name;
-            return connection.execute(statement);
+            try {
+              if (statement.name === "work.execution_policy.insert") {
+                const validation = await connection.query<{
+                  valid: boolean; kind: string; count: number; item_kind: string;
+                  item_text: string; integer_shape: boolean; in_range: boolean;
+                }>({
+                  name: "qualification.execution_policy_shape",
+                  text: `SELECT
+                           omi_memory.valid_memory_work_retry_delays(
+                             ($1::text)::jsonb, $2::integer
+                           ) AS valid,
+                           jsonb_typeof(($1::text)::jsonb) AS kind,
+                           jsonb_array_length(($1::text)::jsonb) AS count,
+                           jsonb_typeof(value) AS item_kind,
+                           value::text AS item_text,
+                           value::text ~ '^[0-9]+$' AS integer_shape,
+                           value::text::integer BETWEEN 1 AND 86400 AS in_range
+                         FROM jsonb_array_elements(($1::text)::jsonb)`,
+                  values: [statement.values[8]!, Number(statement.values[6]) - 1],
+                });
+                expect(validation).toEqual([{
+                  valid: true, kind: "array", count: 1, item_kind: "number",
+                  item_text: "10", integer_shape: true, in_range: true,
+                }]);
+              }
+              return await connection.execute(statement);
+            } catch (error) {
+              const code = error && typeof error === "object" ? Reflect.get(error, "code") : null;
+              const constraint = error && typeof error === "object"
+                ? Reflect.get(error, "constraint_name") : null;
+              lastWorkAcceptanceProviderCode = typeof code === "string" ? code : "unknown";
+              lastWorkAcceptanceConstraint = typeof constraint === "string" ? constraint : "unknown";
+              throw error;
+            }
           },
         }));
       }),
@@ -690,7 +742,10 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error
         ? String(Reflect.get(error, "code")) : "assertion_or_unknown";
-      throw new Error(`work_acceptance_failure_at:${lastWorkAcceptanceStatement}:${code}`);
+      throw new Error(
+        `work_acceptance_failure_at:${lastWorkAcceptanceStatement}:${lastWorkAcceptanceProviderCode}`
+        + `:${lastWorkAcceptanceConstraint}:${code}`,
+      );
     }
     await expect(repository.accept(context, acceptedRequest)).resolves.toMatchObject({
       kind: "replayed", job: { state: "pending" },
@@ -698,31 +753,47 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     await expect(repository.accept(
       context, durableWorkAcceptanceRequest(accountId, suffix, now + 1),
     )).resolves.toEqual({ kind: "idempotency_conflict" });
+    await expect(repository.accept(
+      context, durableWorkAcceptanceRequest(accountId, `${suffix}:policy-drift`, now, 31),
+    )).resolves.toEqual({ kind: "idempotency_conflict" });
 
     const persisted = await ownerSql.unsafe<{
-      definitions: number; policies: number; bundles: number; acceptances: number;
+      definitions: number; policies: number; bundles: number; execution_policies: number;
+      acceptances: number;
       inputs: number; states: number; heads: number; state: string; state_revision: string;
+      execution_max_attempts: number; execution_lease_seconds: number;
+      execution_retry_delays: unknown;
     }[]>(`
       SELECT
         (SELECT count(*)::int FROM omi_memory.memory_strategy_definitions WHERE account_id = $1) AS definitions,
         (SELECT count(*)::int FROM omi_memory.memory_strategy_assignment_policies WHERE account_id = $1) AS policies,
         (SELECT count(*)::int FROM omi_memory.memory_strategy_assignment_bundles WHERE account_id = $1) AS bundles,
+        (SELECT count(*)::int FROM omi_memory.memory_work_execution_policies WHERE account_id = $1) AS execution_policies,
         (SELECT count(*)::int FROM omi_memory.memory_work_acceptances WHERE account_id = $1) AS acceptances,
         (SELECT count(*)::int FROM omi_memory.memory_work_input_manifest WHERE account_id = $1) AS inputs,
         (SELECT count(*)::int FROM omi_memory.memory_work_state_revisions WHERE account_id = $1) AS states,
         (SELECT count(*)::int FROM omi_memory.memory_work_heads WHERE account_id = $1) AS heads,
         (SELECT state FROM omi_memory.memory_work_state_revisions WHERE account_id = $1) AS state,
-        (SELECT state_revision::text FROM omi_memory.memory_work_heads WHERE account_id = $1) AS state_revision
+        (SELECT state_revision::text FROM omi_memory.memory_work_heads WHERE account_id = $1) AS state_revision,
+        (SELECT max_attempts FROM omi_memory.memory_work_execution_policies WHERE account_id = $1) AS execution_max_attempts,
+        (SELECT lease_duration_seconds FROM omi_memory.memory_work_execution_policies WHERE account_id = $1) AS execution_lease_seconds,
+        (SELECT retry_delays_seconds FROM omi_memory.memory_work_execution_policies WHERE account_id = $1) AS execution_retry_delays
     `, [accountId]);
     expect([...persisted]).toEqual([{
-      definitions: 1, policies: 1, bundles: 1, acceptances: 1,
+      definitions: 1, policies: 1, bundles: 1, execution_policies: 1, acceptances: 1,
       inputs: 2, states: 1, heads: 1, state: "pending", state_revision: "0",
+      execution_max_attempts: 2, execution_lease_seconds: 30, execution_retry_delays: [10],
     }]);
 
     await expect(ownerSql.begin(async (transaction) => {
       await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
       await transaction.unsafe(`UPDATE omi_memory.memory_work_heads
         SET state_revision = state_revision WHERE account_id = $1`, [accountId]);
+    })).rejects.toMatchObject({ code: "42501" });
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(`UPDATE omi_memory.memory_work_execution_policies
+        SET lease_duration_seconds = 31 WHERE account_id = $1`, [accountId]);
     })).rejects.toMatchObject({ code: "42501" });
 
     const rollbackSuffix = `${suffix}:rollback`;

@@ -6,6 +6,10 @@ import {
   defineMemoryStrategyAssignmentPolicy,
   registerMemoryStrategy,
 } from "../../../core/consolidate/strategy-assignment";
+import {
+  DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+  registerDurableMemoryWorkExecutionPolicy,
+} from "../../../core/consolidate/execution-policy";
 import type { Evidence, L1Event } from "../../../core/schema";
 import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-context-internal";
 import { defineDurableMemoryWorkAcceptanceRepository } from "../stores/durable-memory-work-repository";
@@ -69,6 +73,17 @@ const assignment = (workId = "job:formation:one") =>
     owner_account_id: "account:alice", unit_ref: workId, policy, strategies: [strategy],
   });
 
+const executionPolicy = (maxAttempts = 3, contract = strategy.execution_contract_digest) =>
+  registerDurableMemoryWorkExecutionPolicy({
+    version: DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+    policy_id: "execution-policy:formation:v1",
+    work_kind: "formation",
+    execution_contract_digest: contract,
+    max_attempts: maxAttempts,
+    lease_duration_seconds: 20,
+    retry_delays_seconds: Array.from({ length: maxAttempts - 1 }, () => 10),
+  });
+
 const event: L1Event = {
   event_id: "event:one", event_revision_id: "event:one:r1",
   owner_account_id: "account:alice", capture_session_id: "session:one",
@@ -130,7 +145,7 @@ describe("formation work ingestion", () => {
     const ingestion = defineFormationWorkIngestion(repository);
     const request = {
       snapshot: snapshot(), strategy_assignment: assignment(),
-      accepted_at_event_time: 100, max_attempts: 3,
+      execution_policy: executionPolicy(), accepted_at_event_time: 100,
     };
     await expect(ingestion.accept(context(), request)).resolves.toMatchObject({
       kind: "accepted", job: { state: "pending", attempt: 0 },
@@ -156,7 +171,10 @@ describe("formation work ingestion", () => {
         : { kind: "idempotency_conflict" };
     });
     const ingestion = defineFormationWorkIngestion(repository);
-    const base = { strategy_assignment: assignment(), accepted_at_event_time: 100, max_attempts: 3 };
+    const base = {
+      strategy_assignment: assignment(), execution_policy: executionPolicy(),
+      accepted_at_event_time: 100,
+    };
     await ingestion.accept(context(), { ...base, snapshot: snapshot() });
     await expect(ingestion.accept(context(), {
       ...base, snapshot: snapshot("Mallory uses Atlas"),
@@ -174,11 +192,13 @@ describe("formation work ingestion", () => {
     );
     const base = {
       snapshot: snapshot(), strategy_assignment: assignment(),
-      accepted_at_event_time: 100, max_attempts: 3,
+      execution_policy: executionPolicy(), accepted_at_event_time: 100,
     };
     await expect(ingestion.accept(context("memories.work.execute"), base)).rejects.toThrow("capability_denied");
     await expect(ingestion.accept(context("memories.work.accept", "account:bob"), base)).rejects.toThrow("coordinate_mismatch");
-    await expect(ingestion.accept(context(), { ...base, max_attempts: 0 })).rejects.toThrow("invalid_schedule");
+    await expect(ingestion.accept(context(), {
+      ...base, execution_policy: executionPolicy(2, digest("f")),
+    })).rejects.toThrow("execution_policy_mismatch");
     await expect(ingestion.accept(context(), {
       ...base, strategy_assignment: structuredClone(base.strategy_assignment),
     })).rejects.toThrow("unminted_assignment");

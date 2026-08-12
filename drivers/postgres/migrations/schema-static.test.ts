@@ -97,6 +97,7 @@ const expectedTables = [
   "memory_product_redirect_successors",
   "memory_product_redirects",
   "memory_work_acceptances",
+  "memory_work_execution_policies",
   "memory_work_heads",
   "memory_work_input_manifest",
   "memory_work_outbox_events",
@@ -343,8 +344,9 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(updateGrants[1]).toContain("omi_memory.memory_idempotency_receipts");
     expect(grants.join("\n")).not.toContain("omi_memory.platform_schema_migrations TO omi_platform_application");
     const workGrants = grants.filter((grant) => /omi_memory\.memory_work_/.test(grant));
-    expect(workGrants).toHaveLength(4);
+    expect(workGrants).toHaveLength(5);
     expect(workGrants.join("\n")).toContain("memory_work_acceptances");
+    expect(workGrants.join("\n")).toContain("memory_work_execution_policies");
     expect(workGrants.join("\n")).toContain("memory_work_input_manifest");
     expect(workGrants.join("\n")).toContain("memory_work_state_revisions");
     expect(workGrants.join("\n")).toContain("memory_work_heads");
@@ -361,6 +363,16 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(acceptance.body).toContain("max_attempts BETWEEN 1 AND 100");
     expect(acceptance.body).toContain("lifecycle_state = 'active'");
     expect(acceptance.body).toContain("deletion_epoch IS NULL");
+
+    const executionPolicy = tables.find(
+      (table) => table.name === "memory_work_execution_policies",
+    )!;
+    expect(executionPolicy.body).toContain("durable-memory-work-execution-policy-v1");
+    expect(executionPolicy.body).toContain("lease_duration_seconds BETWEEN 1 AND 3600");
+    expect(executionPolicy.body).toContain("retry_delays_seconds jsonb NOT NULL");
+    expect(allSql).toContain("memory_work_acceptances_execution_policy_required");
+    expect(allSql).toContain("memory_work_acceptances_execution_policy_fk");
+    expect(allSql).toContain("NOT VALID");
 
     const state = tables.find((table) => table.name === "memory_work_state_revisions")!;
     expect(state.body).toContain("'pending', 'leased', 'retryable_failed', 'succeeded', 'dead_letter'");

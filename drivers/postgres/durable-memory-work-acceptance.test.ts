@@ -18,6 +18,10 @@ import {
   acceptDurableMemoryWork,
   type AcceptedDurableMemoryWork,
 } from "../../core/consolidate/state-machine";
+import {
+  DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+  registerDurableMemoryWorkExecutionPolicy,
+} from "../../core/consolidate/execution-policy";
 import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
 import type {
   CheckedOutPostgresConnection,
@@ -96,9 +100,21 @@ const request = (acceptedAtEventTime = 100): DurableMemoryWorkAcceptanceRequest 
     accepted_at_event_time: acceptedAtEventTime, max_attempts: 2,
   };
   const pending = acceptDurableMemoryWork(accepted);
+  const executionPolicy = registerDurableMemoryWorkExecutionPolicy({
+    version: DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+    policy_id: "execution-policy:formation:qualification:v1",
+    work_kind: "formation",
+    execution_contract_digest: strategyAssignment.authority.execution_contract_digest,
+    max_attempts: 2,
+    lease_duration_seconds: 30,
+    retry_delays_seconds: [10],
+  });
   return Object.freeze({
     accepted_work: accepted, input_manifest: inputs, strategy_assignment: strategyAssignment,
-    request_digest: durableMemoryWorkAcceptanceRequestDigest(pending, inputs, strategyAssignment),
+    execution_policy: executionPolicy,
+    request_digest: durableMemoryWorkAcceptanceRequestDigest(
+      pending, inputs, strategyAssignment, executionPolicy,
+    ),
   });
 };
 
@@ -158,7 +174,9 @@ class FakeConnection implements CheckedOutPostgresConnection {
   async execute(statement: SqlStatement): Promise<{ rowCount: number }> {
     this.statements.push(statement);
     if (this.failAt === statement.name) throw { code: "XX000", message: "private transcript" };
-    if (statement.name.endsWith(".insert") && statement.name.startsWith("work.strategy_")) {
+    if (statement.name.endsWith(".insert")
+      && (statement.name.startsWith("work.strategy_")
+        || statement.name === "work.execution_policy.insert")) {
       this.immutableHashes.set(statement.name.slice(0, -".insert".length), String(statement.values.at(-1)));
     } else if (statement.name === "work.acceptance.insert") {
       this.acceptanceHash = String(statement.values[12]);
@@ -210,6 +228,7 @@ describe("PostgreSQL durable work acceptance", () => {
     expect(connection.statements.map((statement) => statement.name)).toEqual(expect.arrayContaining([
       "authority.lock_and_revalidate", "work.strategy_definition.insert",
       "work.strategy_policy.insert", "work.strategy_bundle.insert",
+      "work.execution_policy.insert",
       "work.acceptance.insert", "work.acceptance.state_insert", "work.acceptance.head_insert",
     ]));
 

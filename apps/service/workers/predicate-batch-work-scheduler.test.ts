@@ -4,6 +4,10 @@ import { planPredicateAlignmentQuestions } from "../../../core/consolidate/relat
 import { predicateIdForName, predicateRevisionForObservation } from "../../../core/consolidate/predicate-identity";
 import { leaseDurableMemoryWork } from "../../../core/consolidate/state-machine";
 import {
+  DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+  registerDurableMemoryWorkExecutionPolicy,
+} from "../../../core/consolidate/execution-policy";
+import {
   MEMORY_STRATEGY_VERSION,
   createMemoryStrategyAssigner,
   defineMemoryStrategyAssignmentPolicy,
@@ -100,6 +104,17 @@ const assignment = (scope: "account" | "work" = "account") => assigner.assign({
   strategies: [strategy],
 });
 
+const executionPolicy = (contract = strategy.execution_contract_digest) =>
+  registerDurableMemoryWorkExecutionPolicy({
+    version: DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+    policy_id: "execution-policy:predicate:v1",
+    work_kind: "predicate_batch",
+    execution_contract_digest: contract,
+    max_attempts: 3,
+    lease_duration_seconds: 20,
+    retry_delays_seconds: [10, 30],
+  });
+
 const predicate = (name: string): Predicate => predicateRevisionForObservation({
   owner_account_id: owner,
   predicate_id: predicateIdForName(name),
@@ -126,8 +141,8 @@ const snapshot = (
 const request = (input = snapshot(), overrides: Record<string, unknown> = {}) => ({
   snapshot: input,
   strategy_assignment: assignment(),
+  execution_policy: executionPolicy(),
   accepted_at_event_time: 100,
-  max_attempts: 3,
   max_jobs_per_invocation: 64,
   ...overrides,
 });

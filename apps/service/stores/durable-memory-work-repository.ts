@@ -13,6 +13,10 @@ import {
   assertMintedMemoryStrategyAssignment,
   type MemoryStrategyAssignmentBundle,
 } from "../../../core/consolidate/strategy-assignment";
+import {
+  parseRegisteredDurableMemoryWorkExecutionPolicy,
+  type RegisteredDurableMemoryWorkExecutionPolicy,
+} from "../../../core/consolidate/execution-policy";
 import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
 import {
   assertAuthorizedLedgerWriteContext,
@@ -63,6 +67,7 @@ export interface DurableMemoryWorkAcceptanceRequest {
   readonly accepted_work: AcceptedDurableMemoryWork;
   readonly input_manifest: readonly DurableMemoryWorkInputManifestEntry[];
   readonly strategy_assignment: Readonly<MemoryStrategyAssignmentBundle>;
+  readonly execution_policy: Readonly<RegisteredDurableMemoryWorkExecutionPolicy>;
   readonly request_digest: string;
 }
 
@@ -257,11 +262,13 @@ export const durableMemoryWorkAcceptanceRequestDigest = (
   pendingJob: DurableMemoryWorkJob,
   manifest: readonly DurableMemoryWorkInputManifestEntry[],
   strategyAssignment: Readonly<MemoryStrategyAssignmentBundle>,
+  executionPolicy: Readonly<RegisteredDurableMemoryWorkExecutionPolicy>,
 ): string => sha256CanonicalContent({
-  contract_version: "durable-memory-work-acceptance-repository-v2",
+  contract_version: "durable-memory-work-acceptance-repository-v3",
   pending_job: parseDurableMemoryWorkJob(pendingJob),
   input_manifest: normalizeManifest(manifest),
   strategy_assignment: assertMintedMemoryStrategyAssignment(strategyAssignment),
+  execution_policy: parseRegisteredDurableMemoryWorkExecutionPolicy(executionPolicy),
 });
 
 export const assertDurableMemoryWorkAcceptanceRequest = (
@@ -271,7 +278,7 @@ export const assertDurableMemoryWorkAcceptanceRequest = (
   const context = assertAuthorizedLedgerWriteContext(contextValue);
   if (context.capability !== ACCEPT_CAPABILITY) fail("capability_denied");
   const root = exactRecord(value, [
-    "accepted_work", "input_manifest", "strategy_assignment", "request_digest",
+    "accepted_work", "input_manifest", "strategy_assignment", "execution_policy", "request_digest",
   ], "invalid_acceptance");
   let pendingJob: Readonly<DurableMemoryWorkJob>;
   try {
@@ -292,8 +299,23 @@ export const assertDurableMemoryWorkAcceptanceRequest = (
   if (strategyAssignment.authority.execution_contract_digest !== pendingJob.execution_contract_digest) {
     fail("assignment_execution_contract_mismatch");
   }
+  let executionPolicy: Readonly<RegisteredDurableMemoryWorkExecutionPolicy>;
+  try {
+    executionPolicy = parseRegisteredDurableMemoryWorkExecutionPolicy(root["execution_policy"]);
+  } catch {
+    return fail("invalid_execution_policy");
+  }
+  if (executionPolicy.work_kind !== pendingJob.work_kind) fail("execution_policy_work_kind_mismatch");
+  if (executionPolicy.execution_contract_digest !== pendingJob.execution_contract_digest) {
+    fail("execution_policy_contract_mismatch");
+  }
+  if (executionPolicy.max_attempts !== pendingJob.max_attempts) {
+    fail("execution_policy_attempts_mismatch");
+  }
   const requestDigest = digest(root["request_digest"], "invalid_acceptance");
-  if (durableMemoryWorkAcceptanceRequestDigest(pendingJob, manifest, strategyAssignment) !== requestDigest) {
+  if (durableMemoryWorkAcceptanceRequestDigest(
+    pendingJob, manifest, strategyAssignment, executionPolicy,
+  ) !== requestDigest) {
     fail("request_digest_mismatch");
   }
   return Object.freeze({
@@ -313,6 +335,7 @@ export const assertDurableMemoryWorkAcceptanceRequest = (
     }),
     input_manifest: manifest,
     strategy_assignment: strategyAssignment,
+    execution_policy: executionPolicy,
     request_digest: requestDigest,
     pending_job: pendingJob,
     state_digest: durableMemoryWorkStateDigest(pendingJob),

@@ -13,6 +13,10 @@ import {
   registerMemoryStrategy,
 } from "../../../core/consolidate/strategy-assignment";
 import {
+  DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+  registerDurableMemoryWorkExecutionPolicy,
+} from "../../../core/consolidate/execution-policy";
+import {
   GROUNDED_EXTRACTION_PROMPT_VERSION,
   GROUNDED_MENTION_STRATEGY_VERSION,
 } from "../../../core/extract/grounded";
@@ -79,6 +83,16 @@ const policy = defineMemoryStrategyAssignmentPolicy({
   key_version: "assignment-key:v1", authority_strategy_id: strategy.strategy_id,
   shadow_candidates: [],
 }, [strategy]);
+
+const executionPolicy = registerDurableMemoryWorkExecutionPolicy({
+  version: DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+  policy_id: "execution-policy:formation:v1",
+  work_kind: "formation",
+  execution_contract_digest: strategy.execution_contract_digest,
+  max_attempts: 3,
+  lease_duration_seconds: 20,
+  retry_delays_seconds: [10, 30],
+});
 
 const event: L1Event = {
   event_id: "event:one", event_revision_id: "event:one:r1",
@@ -172,7 +186,7 @@ describe("formation work service composition", () => {
     });
     await expect(service.accept(context("memories.work.accept"), {
       snapshot: input, strategy_assignment: assignment,
-      accepted_at_event_time: 100, max_attempts: 3,
+      execution_policy: executionPolicy, accepted_at_event_time: 100,
     })).resolves.toMatchObject({ kind: "accepted", job: { work_kind: "formation" } });
     expect(accepts).toBe(1);
     expect(Object.keys(service)).toEqual(["accept", "run"]);

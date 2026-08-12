@@ -1,4 +1,5 @@
 import type { MemoryStrategyAssignmentBundle } from "../../core/consolidate/strategy-assignment";
+import type { RegisteredDurableMemoryWorkExecutionPolicy } from "../../core/consolidate/execution-policy";
 import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
 import {
   defineDurableMemoryWorkAcceptanceRepository,
@@ -200,6 +201,32 @@ ON CONFLICT (account_id, assignment_bundle_id, shadow_ordinal) DO NOTHING
   }
 };
 
+const persistExecutionPolicy = async (
+  connection: CheckedOutPostgresConnection,
+  accountId: string,
+  policy: Readonly<RegisteredDurableMemoryWorkExecutionPolicy>,
+): Promise<void> => insertImmutableAndVerify(
+  connection,
+  "work.execution_policy",
+  `
+INSERT INTO omi_memory.memory_work_execution_policies
+  (account_id, policy_id, policy_version, policy_digest, work_kind,
+   execution_contract_digest, max_attempts, lease_duration_seconds,
+   retry_delays_seconds, content_hash)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ($9::text)::jsonb, $10)
+ON CONFLICT (account_id, policy_id) DO NOTHING
+`, [
+    accountId, policy.policy_id, policy.version, policy.policy_digest,
+    policy.work_kind, policy.execution_contract_digest, policy.max_attempts,
+    policy.lease_duration_seconds, JSON.stringify(policy.retry_delays_seconds),
+    policy.policy_digest,
+  ],
+  `SELECT content_hash FROM omi_memory.memory_work_execution_policies
+   WHERE account_id = $1 AND policy_id = $2`,
+  [accountId, policy.policy_id],
+  policy.policy_digest,
+);
+
 const verifyReplay = async (
   connection: CheckedOutPostgresConnection,
   context: AuthorizedLedgerWriteContext,
@@ -265,6 +292,7 @@ const accept = async (
         }
 
         await persistStrategyAssignment(connection, request.strategy_assignment);
+        await persistExecutionPolicy(connection, authority.account_id, request.execution_policy);
         const job = request.pending_job;
         await executeRequired(connection, "work.acceptance.insert", `
 INSERT INTO omi_memory.memory_work_acceptances
@@ -273,9 +301,10 @@ INSERT INTO omi_memory.memory_work_acceptances
    work_kind, input_frontier, input_digest, execution_contract_digest,
    accepted_at_event_time, max_attempts, content_hash,
    assignment_bundle_id, assignment_bundle_digest,
-   authority_assignment_id, authority_strategy_id)
+   authority_assignment_id, authority_strategy_id,
+   execution_policy_id, execution_policy_digest)
 VALUES ($1, $2, $3, $4, $5, $6, 'active', NULL, 'new',
-        $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 `, [
           authority.account_id, job.job_id, job.version, job.accepted_work_digest,
           authority.account_epoch, lockedControlRevision, job.work_kind, job.input_frontier,
@@ -285,6 +314,8 @@ VALUES ($1, $2, $3, $4, $5, $6, 'active', NULL, 'new',
           request.strategy_assignment.assignment_bundle_digest,
           request.strategy_assignment.authority.assignment_id,
           request.strategy_assignment.authority.strategy_id,
+          request.execution_policy.policy_id,
+          request.execution_policy.policy_digest,
         ]);
         for (let ordinal = 0; ordinal < request.input_manifest.length; ordinal += 1) {
           const input = request.input_manifest[ordinal]!;

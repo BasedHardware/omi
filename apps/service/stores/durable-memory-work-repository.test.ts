@@ -11,6 +11,10 @@ import {
 } from "../../../core/consolidate/state-machine";
 import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
 import {
+  DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+  registerDurableMemoryWorkExecutionPolicy,
+} from "../../../core/consolidate/execution-policy";
+import {
   MEMORY_STRATEGY_VERSION,
   createMemoryStrategyAssigner,
   defineMemoryStrategyAssignmentPolicy,
@@ -113,17 +117,29 @@ const accepted = (
   ...overrides,
 });
 
+const executionPolicy = (work = accepted()) => registerDurableMemoryWorkExecutionPolicy({
+  version: DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+  policy_id: `execution-policy:${work.work_kind}:v1`,
+  work_kind: work.work_kind,
+  execution_contract_digest: work.execution_contract_digest,
+  max_attempts: work.max_attempts,
+  lease_duration_seconds: 30,
+  retry_delays_seconds: Array.from({ length: work.max_attempts - 1 }, () => 10),
+});
+
 const acceptanceRequest = (
   work = accepted(),
   inputs = manifest(),
 ): DurableMemoryWorkAcceptanceRequest => {
   const pending = acceptDurableMemoryWork(work);
   const assignment = strategyAssignment(work.owner_account_id, work.work_kind);
+  const policy = executionPolicy(work);
   return {
     accepted_work: work,
     input_manifest: inputs,
     strategy_assignment: assignment,
-    request_digest: durableMemoryWorkAcceptanceRequestDigest(pending, inputs, assignment),
+    execution_policy: policy,
+    request_digest: durableMemoryWorkAcceptanceRequestDigest(pending, inputs, assignment, policy),
   };
 };
 
@@ -154,9 +170,9 @@ describe("durable work acceptance repository", () => {
     expect(durableMemoryWorkInputManifestDigest(forward))
       .toBe(durableMemoryWorkInputManifestDigest(reversed));
     expect(durableMemoryWorkAcceptanceRequestDigest(
-      acceptDurableMemoryWork(accepted({}, forward)), forward, strategyAssignment(),
+      acceptDurableMemoryWork(accepted({}, forward)), forward, strategyAssignment(), executionPolicy(),
     )).toBe(durableMemoryWorkAcceptanceRequestDigest(
-      acceptDurableMemoryWork(accepted({}, reversed)), reversed, strategyAssignment(),
+      acceptDurableMemoryWork(accepted({}, reversed)), reversed, strategyAssignment(), executionPolicy(),
     ));
     const changed = forward.map((item) => item.input_kind === "evidence_revision"
       ? { ...item, input_digest: digest("d") }
@@ -189,6 +205,7 @@ describe("durable work acceptance repository", () => {
       accepted_work: accepted(),
       input_manifest: duplicate,
       strategy_assignment: strategyAssignment(),
+      execution_policy: executionPolicy(),
       request_digest: digest("0"),
     })).rejects.toThrow("invalid_manifest");
 
@@ -243,6 +260,17 @@ describe("durable work acceptance repository", () => {
     await expect(repository.accept(context("memories.work.accept"), acceptanceRequest(
       accepted({ execution_contract_digest: digest("f") }),
     ))).rejects.toThrow("assignment_execution_contract_mismatch");
+
+    await expect(repository.accept(context("memories.work.accept"), {
+      ...request,
+      execution_policy: executionPolicy(accepted({ max_attempts: 3 })),
+      request_digest: digest("0"),
+    })).rejects.toThrow("execution_policy_attempts_mismatch");
+    await expect(repository.accept(context("memories.work.accept"), {
+      ...request,
+      execution_policy: executionPolicy(accepted({ execution_contract_digest: digest("f") })),
+      request_digest: digest("0"),
+    })).rejects.toThrow("execution_policy_contract_mismatch");
     expect(calls).toBe(0);
   });
 

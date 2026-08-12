@@ -91,4 +91,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0014-durable-work-acceptance-runtime.sql",
     sha256: "9ea369e8bbe082673b626449133fdf755156aff3eb09af8e4a2165b7013b6271",
   }),
+  Object.freeze({
+    version: 15,
+    name: "durable-work-execution-policies",
+    fileName: "0015-durable-work-execution-policies.sql",
+    sha256: "e2c6b52b397f95d47552e91b4987edba0740484ece49d10181f99891929356d4",
+  }),
 ]);

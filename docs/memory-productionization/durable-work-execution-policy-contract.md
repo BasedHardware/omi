@@ -1,6 +1,6 @@
 # Durable memory work execution policy contract
 
-Status: P3 production-neutral contract, 2026-08-11
+Status: P3 persisted acceptance binding, 2026-08-11
 
 ## Purpose
 
@@ -9,8 +9,11 @@ execution contract. A worker may not guess these values from an environment
 variable, request parameter, process default, or provider behavior.
 
 This unit defines that policy without choosing or activating a production
-value. A later acceptance migration binds one registered policy to each
-accepted work item before the PostgreSQL lease adapter is allowed to run.
+value. Migration 0015 and the acceptance adapter now bind one registered
+policy to each new accepted work item before the PostgreSQL lease adapter is
+allowed to run. Historical qualification rows remain explicitly
+legacy/unbound; PostgreSQL enforces the new check and account-scoped foreign
+key on every later insert without inventing a policy for old data.
 
 ## Exact policy
 
@@ -28,7 +31,7 @@ an explicitly empty retry schedule.
 
 ## Worker use
 
-The future database adapter loads the policy named by accepted work under the
+The future lease database adapter loads the policy named by accepted work under the
 same locked account/epoch/strategy coordinates. It obtains event time from the
 database, calculates lease expiry and next eligibility from this policy, and
 persists the resulting pure state transition atomically. The failed attempt is
@@ -38,11 +41,14 @@ no delay and becomes dead work.
 ## Explicit exclusions
 
 - no production timing value or default is selected;
-- no PostgreSQL table, grant, lease operation, worker, scheduler, route, model,
-  credential, or runtime composition is added;
+- one append-only PostgreSQL policy table and its acceptance foreign key are
+  added; the application has only SELECT and INSERT on that table;
+- no lease operation, worker, scheduler, route, model, credential, or runtime
+  composition is added;
 - no subject, identity, bystander/privacy, compose-voice, or data-disposition
   behavior changes;
-- no claim that accepted work is yet bound to this policy in persistence.
+- no production policy values are selected and no historical rows are
+  backfilled with guessed timing.
 
 ## Acceptance tests
 
@@ -54,5 +60,11 @@ no delay and becomes dead work.
    malformed tokens, and forged digests.
 4. Retry lookup is total only for attempts 1 through the declared budget and
    returns null exactly at exhaustion.
-5. Focused/full tests, import lint, strict changed-source TypeScript, and diff
-   checks pass before the unit is recorded.
+5. Acceptance rejects a policy whose work kind, strategy contract, or attempt
+   budget differs from the exact pending work and includes the full policy in
+   its idempotency digest.
+6. PostgreSQL persists and replays the immutable policy under the application
+   role, rejects same-id policy drift, denies mutation, and rolls it back with
+   the accepted work on failure.
+7. Focused/full tests, contract QA, import lint, real PostgreSQL Bun/Node
+   parity, and diff checks pass before the unit is recorded.

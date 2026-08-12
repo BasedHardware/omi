@@ -15,6 +15,10 @@ import {
   type MemoryStrategyAssignmentBundle,
   type RegisteredMemoryStrategy,
 } from "../../../core/consolidate/strategy-assignment";
+import {
+  parseRegisteredDurableMemoryWorkExecutionPolicy,
+  type RegisteredDurableMemoryWorkExecutionPolicy,
+} from "../../../core/consolidate/execution-policy";
 import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
 import { PredicateSchema, type Predicate } from "../../../core/schema";
 import { validateStrict } from "../../../core/schema/json";
@@ -61,8 +65,8 @@ export interface PredicateBatchSchedulingSnapshot {
 export interface PredicateBatchWorkSchedulingRequest {
   readonly snapshot: PredicateBatchSchedulingSnapshot;
   readonly strategy_assignment: Readonly<MemoryStrategyAssignmentBundle>;
+  readonly execution_policy: Readonly<RegisteredDurableMemoryWorkExecutionPolicy>;
   readonly accepted_at_event_time: number;
-  readonly max_attempts: number;
   readonly max_jobs_per_invocation: number;
 }
 
@@ -225,13 +229,13 @@ export const definePredicateBatchWorkScheduler = (
     const context = assertAuthorizedLedgerWriteContext(contextValue);
     if (context.capability !== "memories.work.accept") fail("capability_denied");
     const request = exactRecord(requestValue, [
-      "snapshot", "strategy_assignment", "accepted_at_event_time",
-      "max_attempts", "max_jobs_per_invocation",
+      "snapshot", "strategy_assignment", "execution_policy", "accepted_at_event_time",
+      "max_jobs_per_invocation",
     ], "invalid_request");
     const snapshot = parsePredicateBatchSchedulingSnapshot(request["snapshot"]);
     const assignment = assertMintedMemoryStrategyAssignment(request["strategy_assignment"]);
+    const executionPolicy = parseRegisteredDurableMemoryWorkExecutionPolicy(request["execution_policy"]);
     const acceptedAt = nonnegative(request["accepted_at_event_time"], "invalid_schedule");
-    const maxAttempts = positive(request["max_attempts"], 100, "invalid_schedule");
     const maxJobs = positive(
       request["max_jobs_per_invocation"], MAX_PREDICATE_JOBS_PER_SCHEDULING_CALL, "invalid_schedule",
     );
@@ -240,6 +244,10 @@ export const definePredicateBatchWorkScheduler = (
       || assignment.work_kind !== "predicate_batch"
       || assignment.unit_kind !== "account"
       || assignment.authority.mode !== "authority") fail("coordinate_mismatch");
+    if (executionPolicy.work_kind !== "predicate_batch"
+      || executionPolicy.execution_contract_digest !== assignment.authority.execution_contract_digest) {
+      fail("execution_policy_mismatch");
+    }
     const strategy = authorityStrategy(assignment);
     if (strategy.work_kind !== "predicate_batch"
       || strategy.coordinates.result_contract_version !== DURABLE_MEMORY_GRAPH_PLAN_VERSION) {
@@ -294,7 +302,7 @@ export const definePredicateBatchWorkScheduler = (
         input_digest: durableMemoryWorkInputManifestDigest(manifest),
         execution_contract_digest: assignment.authority.execution_contract_digest,
         accepted_at_event_time: acceptedAt,
-        max_attempts: maxAttempts,
+        max_attempts: executionPolicy.max_attempts,
       };
       const pending = acceptDurableMemoryWork(acceptedWork);
       let outcome: DurableMemoryWorkAcceptanceOutcome;
@@ -303,7 +311,10 @@ export const definePredicateBatchWorkScheduler = (
           accepted_work: acceptedWork,
           input_manifest: manifest,
           strategy_assignment: assignment,
-          request_digest: durableMemoryWorkAcceptanceRequestDigest(pending, manifest, assignment),
+          execution_policy: executionPolicy,
+          request_digest: durableMemoryWorkAcceptanceRequestDigest(
+            pending, manifest, assignment, executionPolicy,
+          ),
         });
       } catch {
         return Object.freeze({
