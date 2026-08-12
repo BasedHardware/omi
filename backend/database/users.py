@@ -275,18 +275,30 @@ def is_byok_active(uid: str) -> bool:
     return age <= BYOK_HEARTBEAT_TTL_SECONDS
 
 
-def set_byok_active(uid: str, fingerprints: dict):
-    user_ref = db.collection('users').document(uid)
-    user_ref.set(
+@transactional
+def _set_byok_active_transaction(transaction, user_ref, fingerprints: dict):
+    snapshot = user_ref.get(transaction=transaction)
+    data = snapshot.to_dict() or {}
+    byok = data.get('byok') or {}
+    existing_fingerprints = byok.get('fingerprints') or {}
+    merged_fingerprints = dict(existing_fingerprints) if isinstance(existing_fingerprints, dict) else {}
+    merged_fingerprints.update(fingerprints)
+    transaction.set(
+        user_ref,
         {
             'byok': {
                 'active': True,
-                'fingerprints': fingerprints,
+                'fingerprints': merged_fingerprints,
                 'last_seen_at': datetime.now(timezone.utc),
             }
         },
         merge=True,
     )
+
+
+def set_byok_active(uid: str, fingerprints: dict):
+    user_ref = db.collection('users').document(uid)
+    _set_byok_active_transaction(db.transaction(), user_ref, fingerprints)
 
 
 def clear_byok_active(uid: str):
