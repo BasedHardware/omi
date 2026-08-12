@@ -26,7 +26,7 @@ export type ChatDelivery =
       readonly generationId: string;
       /** The admitted human message this generation belongs to. */
       readonly clientMessageId: string;
-      readonly source: "observer" | "provider";
+      readonly source: "observer" | "provider" | "transport";
       readonly retryable: boolean;
     };
 

@@ -835,6 +835,40 @@ test("observer and provider failures render as non-streaming assistant failures"
   }
 });
 
+test("unsupported native streaming renders bounded recovery guidance instead of an active run", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  domain.rows = [row("unsupported-human", "human", "Question")];
+  domain.active = [{
+    generationId: "unsupported-generation",
+    clientMessageId: "unsupported-human",
+    text: "",
+    lastEventId: null,
+    observationState: "failed",
+    failure: "stream-unavailable",
+  }];
+  const rendered = await renderComponent(ChatProduction, {
+    store: createProductionChatStore(domain),
+  });
+  try {
+    const failed = rendered.container.querySelector(".chat-message.is-failed");
+    assert.ok(failed);
+    assert.equal(failed.getAttribute("aria-busy"), null);
+    assert.equal(rendered.container.querySelector(".chat-message.is-streaming"), null);
+    const recovery = failed.querySelector('[data-recovery="unsupported-stream"]');
+    assert.ok(recovery, "unsupported native transport has an app-facing recovery state");
+    assert.equal(recovery.textContent.includes(EN_MESSAGES["chat.liveUpdatesUnavailable"]), true);
+    assert.equal(recovery.textContent.includes(EN_MESSAGES["chat.liveUpdatesUnavailableHint"]), true);
+    assert.equal(recovery.querySelector("button"), null, "the UI does not invent a retry action the shell cannot perform");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("empty cancellation retains the human without fabricating a stopped assistant bubble", async () => {
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const createProductionChatStore = await loadProductionExport(
