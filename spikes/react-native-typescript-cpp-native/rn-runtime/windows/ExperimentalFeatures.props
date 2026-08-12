@@ -9,6 +9,7 @@
   -->
 
   <PropertyGroup Label="Microsoft.ReactNative Experimental Features">
+    <DefaultPlatformToolset>v143</DefaultPlatformToolset>
     <!--
       Enables default usage of Hermes.
 
