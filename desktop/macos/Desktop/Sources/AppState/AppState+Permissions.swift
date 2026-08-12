@@ -13,33 +13,41 @@ import SwiftUI
 
 @MainActor
 final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
-  private struct AlertRequest {
+  private struct AlertRequest: Equatable {
     let title: String
     let message: String
   }
 
   typealias SheetPresenter = (NSAlert, NSWindow, @escaping () -> Void) -> Void
 
-  private let windowProvider: () -> NSWindow?
+  private let shellWindowProvider: () -> NSWindow?
   private let sheetPresenter: SheetPresenter
-  private let activateApplication: () -> Void
+  private let revealMainWindow: () -> Void
   private var pendingAlerts: [AlertRequest] = []
+  private var activeAlert: AlertRequest?
   private var isPresentingAlert = false
+  private var isRevealingMainWindow = false
 
   init(
-    windowProvider: @escaping () -> NSWindow? = {
-      NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible })
+    shellWindowProvider: @escaping () -> NSWindow? = {
+      guard let window = ShellSummon.shellWindow(), window.isVisible, !window.isMiniaturized else { return nil }
+      return window
     },
     sheetPresenter: @escaping SheetPresenter = { alert, window, completion in
       alert.beginSheetModal(for: window) { _ in completion() }
     },
-    activateApplication: @escaping () -> Void = {
-      NSApp.activate(ignoringOtherApps: true)
+    revealMainWindow: @escaping () -> Void = {
+      if let appDelegate = AppDelegate.summonWindowTarget() {
+        appDelegate.openMainAppWindow()
+      } else {
+        NSApp.activate(ignoringOtherApps: true)
+        ShellSummon.summon()
+      }
     }
   ) {
-    self.windowProvider = windowProvider
+    self.shellWindowProvider = shellWindowProvider
     self.sheetPresenter = sheetPresenter
-    self.activateApplication = activateApplication
+    self.revealMainWindow = revealMainWindow
     NotificationCenter.default.addObserver(
       self,
       selector: #selector(presentPendingAlertIfPossible),
@@ -57,19 +65,22 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
   }
 
   func present(title: String, message: String) {
-    pendingAlerts.append(.init(title: title, message: message))
+    let request = AlertRequest(title: title, message: message)
+    guard activeAlert != request, !pendingAlerts.contains(request) else { return }
+    pendingAlerts.append(request)
     presentPendingAlertIfPossible()
   }
 
   @objc private func presentPendingAlertIfPossible() {
-    guard !isPresentingAlert, let request = pendingAlerts.first else { return }
-    guard let window = windowProvider() else {
-      activateApplication()
+    guard !isPresentingAlert, !isRevealingMainWindow, let request = pendingAlerts.first else { return }
+    guard let window = shellWindowProvider() else {
+      revealMainWindowIfNeeded()
       return
     }
 
     pendingAlerts.removeFirst()
     isPresentingAlert = true
+    activeAlert = request
     let alert = NSAlert()
     alert.messageText = request.title
     alert.informativeText = request.message
@@ -78,9 +89,19 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     sheetPresenter(alert, window) { [weak self] in
       Task { @MainActor in
         self?.isPresentingAlert = false
+        self?.activeAlert = nil
         self?.presentPendingAlertIfPossible()
       }
     }
+  }
+
+  private func revealMainWindowIfNeeded() {
+    guard !isRevealingMainWindow else { return }
+    isRevealingMainWindow = true
+    revealMainWindow()
+    isRevealingMainWindow = false
+    guard shellWindowProvider() != nil else { return }
+    presentPendingAlertIfPossible()
   }
 }
 

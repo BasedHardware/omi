@@ -20,21 +20,83 @@ final class AppStateAlertPresentationTests: XCTestCase {
       ])
   }
 
-  func testSheetPresenterDefersAlertUntilAWindowBecomesVisible() {
+  func testSheetPresenterRevealsTheMainWindowThenPresentsTheAlert() {
     let windowSource = WindowSource()
     let recorder = SheetPresentationRecorder()
+    let window = NSWindow()
+    var revealCount = 0
     let presenter = AppKitSheetAlertPresenter(
-      windowProvider: { windowSource.window },
+      shellWindowProvider: { windowSource.window },
       sheetPresenter: recorder.present,
-      activateApplication: {})
+      revealMainWindow: {
+        revealCount += 1
+        windowSource.window = window
+      })
 
     presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
 
+    XCTAssertEqual(revealCount, 1)
+    XCTAssertEqual(
+      recorder.presentations,
+      [.init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window)])
+  }
+
+  func testSheetPresenterRetainsAlertUntilTheMainWindowBecomesAvailable() {
+    let windowSource = WindowSource()
+    let recorder = SheetPresentationRecorder()
+    var revealCount = 0
+    let presenter = AppKitSheetAlertPresenter(
+      shellWindowProvider: { windowSource.window },
+      sheetPresenter: recorder.present,
+      revealMainWindow: { revealCount += 1 })
+
+    presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
+
+    XCTAssertEqual(revealCount, 1)
     XCTAssertTrue(recorder.presentations.isEmpty)
 
     let window = NSWindow()
     windowSource.window = window
     NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+
+    XCTAssertEqual(
+      recorder.presentations,
+      [.init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window)])
+  }
+
+  func testSheetPresenterCoalescesMatchingPendingAlerts() {
+    let windowSource = WindowSource()
+    let recorder = SheetPresentationRecorder()
+    var revealCount = 0
+    let presenter = AppKitSheetAlertPresenter(
+      shellWindowProvider: { windowSource.window },
+      sheetPresenter: recorder.present,
+      revealMainWindow: { revealCount += 1 })
+
+    presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
+    presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
+
+    XCTAssertEqual(revealCount, 1)
+
+    let window = NSWindow()
+    windowSource.window = window
+    NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+
+    XCTAssertEqual(
+      recorder.presentations,
+      [.init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window)])
+  }
+
+  func testSheetPresenterCoalescesMatchingActiveAlerts() {
+    let window = NSWindow()
+    let recorder = SheetPresentationRecorder()
+    let presenter = AppKitSheetAlertPresenter(
+      shellWindowProvider: { window },
+      sheetPresenter: recorder.present,
+      revealMainWindow: {})
+
+    presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
+    presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
 
     XCTAssertEqual(
       recorder.presentations,
