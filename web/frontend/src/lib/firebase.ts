@@ -1,6 +1,7 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from 'firebase/app';
 import {
+  connectAuthEmulator,
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
@@ -8,6 +9,7 @@ import {
   onAuthStateChanged,
   User,
 } from 'firebase/auth';
+import { resolveAuthEmulatorUrl } from './firebase-auth-emulator.mjs';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -25,6 +27,17 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase Auth and get a reference to the service
 export const auth = getAuth(app);
+
+// Local development only. `resolveAuthEmulatorUrl` refuses production builds and
+// non-loopback hosts, so a leaked env var cannot redirect real sign-in.
+const authEmulatorUrl = resolveAuthEmulatorUrl({
+  NODE_ENV: process.env.NODE_ENV,
+  NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST:
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST,
+});
+if (authEmulatorUrl) {
+  connectAuthEmulator(auth, authEmulatorUrl, { disableWarnings: false });
+}
 
 // Initialize Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
