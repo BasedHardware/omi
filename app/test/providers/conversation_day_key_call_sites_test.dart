@@ -19,13 +19,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// hour sweep keeps them honest in whatever timezone the suite runs in: a single
 /// pinned hour only trips the bug at some UTC offsets.
 ServerConversation _conversationAt(DateTime startedAt) => ServerConversation(
-  id: 'c1',
-  startedAt: startedAt,
-  // Later than startedAt, so the last hour of the sweep still spans UTC midnight.
-  createdAt: startedAt.add(const Duration(minutes: 45)),
-  structured: Structured('Title', 'Overview'),
-  status: ConversationStatus.completed,
-);
+      id: 'c1',
+      startedAt: startedAt,
+      // Later than startedAt, so the last hour of the sweep still spans UTC midnight.
+      createdAt: startedAt.add(const Duration(minutes: 45)),
+      structured: Structured('Title', 'Overview'),
+      status: ConversationStatus.completed,
+    );
 
 ConversationProvider _providerWith(List<ServerConversation> conversations) {
   final provider = ConversationProvider(

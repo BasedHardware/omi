@@ -164,8 +164,7 @@ void main() {
       expect(
         provider.memories,
         isEmpty,
-        reason:
-            'loadMemories must filter out the pending-deletion memory even '
+        reason: 'loadMemories must filter out the pending-deletion memory even '
             'when the server response still contains it',
       );
     });
@@ -217,8 +216,7 @@ void main() {
       expect(
         provider.memories.where((m) => m.id == 'mem-7'),
         isEmpty,
-        reason:
-            'loadMemories must re-check _pendingDeletionId at apply time '
+        reason: 'loadMemories must re-check _pendingDeletionId at apply time '
             'and suppress items deleted after the snapshot was taken',
       );
     });
@@ -239,7 +237,8 @@ void main() {
         String? conversationId,
         DateTime? startDate,
         DateTime? endDate,
-      }) async => const ActionItemsResponse(actionItems: []);
+      }) async =>
+          const ActionItemsResponse(actionItems: []);
     }
 
     test('deleteActionItem removes item optimistically and tracks pending deletion', () async {
@@ -259,15 +258,15 @@ void main() {
       final deleted = _item('task-2', description: 'should not reappear');
 
       final provider = newProvider(
-        fetcher:
-            ({
-              int limit = 100,
-              int offset = 0,
-              bool? completed,
-              String? conversationId,
-              DateTime? startDate,
-              DateTime? endDate,
-            }) async => ActionItemsResponse(actionItems: [deleted]),
+        fetcher: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+        }) async =>
+            ActionItemsResponse(actionItems: [deleted]),
       );
 
       // Let the constructor's _preload() settle so it doesn't race with
@@ -280,8 +279,7 @@ void main() {
       expect(
         provider.actionItems.where((i) => i.id == 'task-2'),
         isEmpty,
-        reason:
-            'fetchActionItems must filter out the pending-deletion item even '
+        reason: 'fetchActionItems must filter out the pending-deletion item even '
             'when the server response still contains it',
       );
     });
@@ -291,22 +289,21 @@ void main() {
 
       var staleMode = false;
       final provider = newProvider(
-        fetcher:
-            ({
-              int limit = 100,
-              int offset = 0,
-              bool? completed,
-              String? conversationId,
-              DateTime? startDate,
-              DateTime? endDate,
-            }) async {
-              // In stale mode the server still returns the deleted item; once
-              // cleared, the server response omits it.
-              if (staleMode) {
-                return ActionItemsResponse(actionItems: [deleted]);
-              }
-              return const ActionItemsResponse(actionItems: []);
-            },
+        fetcher: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+        }) async {
+          // In stale mode the server still returns the deleted item; once
+          // cleared, the server response omits it.
+          if (staleMode) {
+            return ActionItemsResponse(actionItems: [deleted]);
+          }
+          return const ActionItemsResponse(actionItems: []);
+        },
       );
 
       // Let the constructor's _preload() settle so it doesn't consume our
@@ -331,21 +328,20 @@ void main() {
       final deleted = _item('task-4');
 
       final provider = newProvider(
-        fetcher:
-            ({
-              int limit = 100,
-              int offset = 0,
-              bool? completed,
-              String? conversationId,
-              DateTime? startDate,
-              DateTime? endDate,
-            }) async {
-              if (offset == 0) {
-                return ActionItemsResponse(actionItems: [deleted], hasMore: true);
-              }
-              // Page 2 still returns the deleted item (stale read).
-              return ActionItemsResponse(actionItems: [deleted]);
-            },
+        fetcher: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+        }) async {
+          if (offset == 0) {
+            return ActionItemsResponse(actionItems: [deleted], hasMore: true);
+          }
+          // Page 2 still returns the deleted item (stale read).
+          return ActionItemsResponse(actionItems: [deleted]);
+        },
       );
 
       // Initial load

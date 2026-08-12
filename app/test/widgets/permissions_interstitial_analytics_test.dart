@@ -48,18 +48,18 @@ void main() {
     final provider = OnboardingProvider();
 
     Widget app() => ChangeNotifierProvider.value(
-      value: provider,
-      child: const MaterialApp(
-        localizationsDelegates: [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: PermissionsInterstitialPage(),
-      ),
-    );
+          value: provider,
+          child: const MaterialApp(
+            localizationsDelegates: [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: PermissionsInterstitialPage(),
+          ),
+        );
 
     await tester.pumpWidget(app());
     provider.setLoading(true);

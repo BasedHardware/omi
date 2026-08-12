@@ -205,12 +205,12 @@ void main() {
     final service = _service(gateway, <_Event>[]);
 
     Future<http.Response> execute() => refreshAndReplayAfter401(
-      firstResponse: http.Response('', 401),
-      statusCode: (value) => value.statusCode,
-      replay: () async => http.Response('', 401),
-      expireTerminalSession: true,
-      authService: service,
-    );
+          firstResponse: http.Response('', 401),
+          statusCode: (value) => value.statusCode,
+          replay: () async => http.Response('', 401),
+          expireTerminalSession: true,
+          authService: service,
+        );
 
     final first = execute();
     final second = execute();
@@ -228,15 +228,15 @@ List<_Event> _request401Events(List<_Event> events) =>
 RefreshedAuthToken _token(String? token) => RefreshedAuthToken(token: token, expirationTime: DateTime.now());
 
 AuthService _service(_Gateway gateway, List<_Event> telemetry) => AuthService.forTesting(
-  tokenGateway: gateway,
-  refreshDelay: (_) async {},
-  recordTelemetry: (name, properties) => telemetry.add(_Event(name, properties)),
-  telemetryContextProvider: () => const {
-    'platform': 'ios',
-    'app_version': '1.2.3+456',
-    'release_channel': 'testflight',
-  },
-);
+      tokenGateway: gateway,
+      refreshDelay: (_) async {},
+      recordTelemetry: (name, properties) => telemetry.add(_Event(name, properties)),
+      telemetryContextProvider: () => const {
+        'platform': 'ios',
+        'app_version': '1.2.3+456',
+        'release_channel': 'testflight',
+      },
+    );
 
 final class _Gateway implements AuthTokenGateway {
   _Gateway({this.results = const [], this.error, this.refreshCompleter});

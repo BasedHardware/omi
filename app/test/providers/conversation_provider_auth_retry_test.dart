@@ -144,7 +144,7 @@ void main() {
 }
 
 ServerConversation _conversation(String id) => ServerConversation(
-  id: id,
-  createdAt: DateTime.utc(2026),
-  structured: Structured('Old account', 'Must not reappear'),
-);
+      id: id,
+      createdAt: DateTime.utc(2026),
+      structured: Structured('Old account', 'Must not reappear'),
+    );
