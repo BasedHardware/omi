@@ -801,6 +801,15 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
     launched = true;
     runCommand(commandSpec("xcrun", ["simctl", "launch", `--stdout=${stdoutPath}`, `--stderr=${stderrPath}`, coordinate.device.udid, artifact.bundleId, `--omi-capture-query=${coordinate.surface_query}`, `--omi-capture-run-id=${coordinate.run_id}`, `--omi-capture-nonce=${readinessNonce}`], coreRoot, artifact.env, 30), `${coordinate.run_id}: launch capture app`);
     waitForIosReadiness(coordinate, artifact, markerPath, readinessNonce, waitSeconds);
+    // CoreSimulator can report DOM readiness one compositor frame before its
+    // text/glyph surfaces settle. Capture and discard that first native frame
+    // so both the retained image and a later strict replay begin at the same
+    // compositor phase. This remains a real device screenshot; it is not a
+    // browser render or a substituted fixture artifact.
+    const warmupOutput = `${output}.warmup.png`;
+    rmSync(warmupOutput, { force: true });
+    runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", warmupOutput], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: settle simulator compositor`);
+    rmSync(warmupOutput, { force: true });
     runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", output], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: simulator screenshot`);
   } finally {
     if (launched) terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: cleanup app`);
