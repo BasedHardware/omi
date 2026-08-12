@@ -5,6 +5,7 @@ import {
   type FormationOutcomeEnvelope,
 } from "../../../core/consolidate/formation-outcome";
 import {
+  canonicalizeRedacted,
   sha256CanonicalRedacted,
   validateAtomicGraphTransition,
   type AtomicGraphTransition,
@@ -206,6 +207,85 @@ const assertFormationTransitionAccounting = (
   }
 };
 
+const graphRevisionContent = (revision: AtomicGraphTransition["revisions"][number]): CanonicalJson =>
+  (revision.kind === "claim" ? revision.claim
+    : revision.kind === "entity" ? revision.entity
+      : revision.kind === "predicate" ? revision.predicate
+        : revision.kind === "predicate_assertion" ? revision.assertion
+          : revision.kind === "identity" ? revision.constraint
+            : revision.kind === "event" ? revision.event
+              : revision.kind === "evidence" ? revision.evidence
+                : revision.kind === "mention" ? revision.mention
+                  : revision.kind === "identity_authorization" ? revision.authorization
+                    : revision.support) as unknown as CanonicalJson;
+
+const sameStrings = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+/**
+ * PostgreSQL persists each derivation input and generic graph revision as its
+ * own row.  The sealed port therefore requires the complete hashed manifests;
+ * a digest alone is not enough to reconstruct or audit those rows.
+ */
+const assertDerivationManifests = (transition: AtomicGraphTransition): void => {
+  const { attempt, commit } = transition.derivation;
+  if (!sameStrings(attempt.input_revision_ids, attempt.input_revisions.map((item) => item.revision_id))
+    || !sameStrings(attempt.output_revision_ids, attempt.output_revisions.map((item) => item.revision_id))) {
+    fail("derivation manifests do not match their revision ids");
+  }
+  for (const revision of [...attempt.input_revisions, ...attempt.output_revisions]) {
+    if (revision.content_hash !== sha256CanonicalRedacted(revision.content)) {
+      fail("derivation manifest content hash is invalid");
+    }
+  }
+  const inputDigest = sha256CanonicalRedacted({
+    input_revision_ids: attempt.input_revision_ids,
+    input_content_hashes: attempt.input_revisions.map((item) => item.content_hash),
+  });
+  const inputVersionDigest = sha256CanonicalRedacted({
+    input_revision_ids: attempt.input_revision_ids,
+    input_content_hashes: attempt.input_revisions.map((item) => item.content_hash),
+    versions: attempt.versions as unknown as CanonicalJson,
+  });
+  const outputDigest = sha256CanonicalRedacted({
+    output_revision_ids: attempt.output_revision_ids,
+    output_content_hashes: attempt.output_revisions.map((item) => item.content_hash),
+  });
+  if (attempt.input_digest !== inputDigest
+    || attempt.input_version_digest !== inputVersionDigest
+    || attempt.output_digest !== outputDigest) {
+    fail("derivation digests do not match their manifests");
+  }
+  const manifestById = new Map([...attempt.input_revisions, ...attempt.output_revisions]
+    .map((item) => [item.revision_id, item] as const));
+  if (manifestById.size !== attempt.input_revisions.length + attempt.output_revisions.length) {
+    fail("derivation input and output revision ids must be disjoint");
+  }
+  const graphById = new Map(transition.revisions.map((revision) => [revision.revision_id, revision] as const));
+  if (graphById.size !== transition.revisions.length
+    || attempt.output_revisions.some((item) => !graphById.has(item.revision_id))) {
+    fail("derivation outputs do not exactly name persisted graph revisions");
+  }
+  for (const [revisionId, graphRevision] of graphById) {
+    const manifested = manifestById.get(revisionId);
+    if (!manifested
+      || manifested.content_hash !== sha256CanonicalRedacted(graphRevisionContent(graphRevision))) {
+      fail("persisted graph revision is absent or changed in the derivation manifests");
+    }
+  }
+  const shared = [
+    "attempt_id", "owner_account_id", "input_revision_ids", "input_revisions",
+    "input_digest", "input_version_digest", "output_revision_ids", "output_revisions",
+    "output_digest", "success_kind", "versions",
+  ] as const;
+  for (const field of shared) {
+    if (canonicalizeRedacted(attempt[field] as unknown as CanonicalJson)
+      !== canonicalizeRedacted(commit[field] as unknown as CanonicalJson)) {
+      fail("derivation attempt and commit disagree");
+    }
+  }
+};
+
 /**
  * Validates the boundary shape before an adapter can borrow a database client.
  * The PostgreSQL adapter rechecks all authority rows and transaction-local state;
@@ -248,6 +328,7 @@ export const assertAuthoritativeLedgerAppend = (
     const outcome = parseFormationOutcomeEnvelope(origin["outcome"]);
     if (outcome.owner_account_id !== authorized.account_id) fail("formation outcome owner does not match the authorized account");
     assertFormationTransitionAccounting(outcome, transition);
+    assertDerivationManifests(transition);
     const normalizedOrigin = Object.freeze({ kind: "formation" as const, outcome });
     if (authoritativeAppendRequestDigest(transition, normalizedOrigin) !== requestDigest) {
       fail("request digest does not match the transition and formation outcome");
@@ -264,6 +345,7 @@ export const assertAuthoritativeLedgerAppend = (
       fail("origin.reason is unsupported");
     }
     const normalizedOrigin = Object.freeze({ kind: "non_formation" as const, reason: reason as NonFormationAppendReason });
+    assertDerivationManifests(transition);
     if (authoritativeAppendRequestDigest(transition, normalizedOrigin) !== requestDigest) {
       fail("request digest does not match the transition and non-formation origin");
     }

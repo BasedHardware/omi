@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-context-internal";
 import { formationCandidateManifestDigest, parseFormationOutcomeEnvelope } from "../../../core/consolidate/formation-outcome";
-import { prepareDerivation, type AtomicGraphTransition } from "../../../core/ledger";
+import { prepareDerivation, sha256CanonicalRedacted, type AtomicGraphTransition } from "../../../core/ledger";
 import {
   authoritativeAppendRequestDigest,
   defineAuthoritativeLedgerRepository,
@@ -183,6 +183,55 @@ test("repository rejects sparse, decorated, and accessor-bearing transition arra
   Object.defineProperty(accessor.revisions, "length", { value: 1 });
   await expect(repository.append(context(), requestFor(accessor))).rejects.toThrow("own data elements");
   expect(calls).toBe(0);
+});
+
+test("repository requires exact durable derivation input and output manifests", async () => {
+  const plan = transition();
+  const origin = { kind: "non_formation" as const, reason: "repair" as const };
+  const requestFor = (candidate: AtomicGraphTransition) => ({
+    append_attempt: {
+      idempotency_key: candidate.derivation.commit.idempotency_key,
+      expected_parent_commit: candidate.derivation.commit.parent_commit,
+      request_digest: "0".repeat(64),
+    },
+    origin,
+    transition: candidate,
+  });
+  const implementation = defineAuthoritativeLedgerRepository(async () => ({
+    kind: "committed", commit_id: "unreachable", sequence: 1,
+  }));
+
+  const changedInput = structuredClone(plan);
+  (changedInput.derivation.attempt.input_revisions as unknown as unknown[]).push({
+    revision_id: "injected", content: {}, content_hash: sha256CanonicalRedacted({}),
+  });
+  await expect(implementation.append(context(), requestFor(changedInput)))
+    .rejects.toThrow("manifests do not match");
+
+  const changedCommit = structuredClone(plan);
+  changedCommit.derivation.commit.input_digest = "f".repeat(64);
+  await expect(implementation.append(context(), requestFor(changedCommit)))
+    .rejects.toThrow("attempt and commit disagree");
+
+  const graph = structuredClone(plan);
+  graph.revisions = [{
+    kind: "entity", revision_id: "entity:unmanifested:r1",
+    entity: {
+      entity_id: "entity:unmanifested", entity_revision_id: "entity:unmanifested:r1",
+      owner_account_id: "account:alice", handle: "unmanifested", labels: [],
+    },
+  }];
+  graph.derivation.attempt.output_revision_ids = [];
+  graph.derivation.attempt.output_revisions = [];
+  graph.derivation.commit.output_revision_ids = [];
+  graph.derivation.commit.output_revisions = [];
+  await expect(implementation.append(context(), {
+    ...requestFor(graph),
+    append_attempt: {
+      ...requestFor(graph).append_attempt,
+      request_digest: authoritativeAppendRequestDigest(graph, origin),
+    },
+  })).rejects.toThrow("absent or changed");
 });
 
 test("formation appends require outcome-to-transition accounting before an adapter runs", async () => {
