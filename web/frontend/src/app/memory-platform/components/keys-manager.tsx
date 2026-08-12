@@ -44,6 +44,10 @@ export default function KeysManager() {
   const { user, loading, getToken } = useSessionToken();
   const [keys, setKeys] = useState<McpApiKey[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // A create failure has to be reported inside the dialog. The dialog stays open
+  // on failure and its overlay covers the page, so a page-level message is
+  // dimmed out behind it and the user only sees a button that did nothing.
+  const [createError, setCreateError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
@@ -78,6 +82,7 @@ export default function KeysManager() {
     const token = await getToken();
     if (!token || !name.trim()) return;
     setBusy(true);
+    setCreateError(null);
     try {
       const created = await createMcpKey(token, name.trim(), scopes);
       setRevealSource('created');
@@ -87,7 +92,7 @@ export default function KeysManager() {
       setScopes(DEFAULT_MCP_SCOPES);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create the key.');
+      setCreateError(err instanceof Error ? err.message : 'Could not create the key.');
     } finally {
       setBusy(false);
     }
@@ -224,7 +229,13 @@ export default function KeysManager() {
         </table>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) setCreateError(null);
+        }}
+      >
         <DialogContent className="dark border-white/10 bg-[#0d0d0d] text-neutral-100">
           <DialogHeader>
             <DialogTitle>Create MCP key</DialogTitle>
@@ -267,6 +278,11 @@ export default function KeysManager() {
               </p>
             </fieldset>
           </div>
+          {createError ? (
+            <p role="alert" className="text-xs text-[#ff806a]">
+              {createError}
+            </p>
+          ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
               Cancel
