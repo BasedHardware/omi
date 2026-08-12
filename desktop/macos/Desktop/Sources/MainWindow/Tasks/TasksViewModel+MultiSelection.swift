@@ -180,34 +180,54 @@ extension TasksViewModel {
       return
     }
     switch outcome {
-    case .localFailure:
+    case .localFailure(let remoteDeletedIDs):
+      if !remoteDeletedIDs.isEmpty {
+        for id in remoteDeletedIDs {
+          chatCoordinator?.purgeState(for: id)
+        }
+        mutateMultiSelection { state in
+          state.removeSelectedIDs(remoteDeletedIDs)
+        }
+        authoritativeSelectionTaskIDs.subtract(remoteDeletedIDs)
+        selectedAllScopeTaskIDs.subtract(remoteDeletedIDs)
+      }
       recomputeDisplayCaches()
-      bulkTaskErrorMessage =
-        "The tasks could not be deleted from this Mac. Nothing was deleted from your account. Please retry."
+      if remoteDeletedIDs.isEmpty {
+        bulkTaskErrorMessage =
+          "The tasks could not be deleted from this Mac. Nothing was deleted from your account. Please retry."
+      } else {
+        bulkTaskErrorMessage =
+          "The tasks were deleted from your account, but this Mac could not finish updating its local cache. "
+          + "Refresh Tasks to reconcile it."
+      }
       return
     case .remoteFailure(let confirmedIDs):
-      for id in orderedIDs {
+      for id in confirmedIDs {
         chatCoordinator?.purgeState(for: id)
       }
-      let localOnlyIDs = Set(
-        orderedIDs.filter { ActionItemTaskIdentity(surfacedId: $0).isLocalOnly }
-      )
-      let settledIDs = confirmedIDs.union(localOnlyIDs)
-      if !settledIDs.isEmpty {
+      if !confirmedIDs.isEmpty {
         mutateMultiSelection { state in
-          state.removeSelectedIDs(settledIDs)
+          state.removeSelectedIDs(confirmedIDs)
         }
-        authoritativeSelectionTaskIDs.subtract(settledIDs)
-        selectedAllScopeTaskIDs.subtract(settledIDs)
+        authoritativeSelectionTaskIDs.subtract(confirmedIDs)
+        selectedAllScopeTaskIDs.subtract(confirmedIDs)
         if selectedAllScopeTaskIDs.isEmpty {
           selectedAllScope = nil
         }
       }
-      bulkTaskErrorMessage =
-        "The tasks were removed from this Mac, but could not be deleted from your account. "
-        + "They remain selected so you can retry."
+      recomputeDisplayCaches()
+      if confirmedIDs.isEmpty {
+        bulkTaskErrorMessage =
+          "The selected tasks could not be deleted from your account. Nothing was removed from this Mac. "
+          + "Locked tasks require a paid plan; otherwise, check your connection and retry."
+      } else {
+        bulkTaskErrorMessage =
+          "Some tasks were deleted, but the remaining selected tasks could not be deleted from your account. "
+          + "They remain selected so you can retry."
+      }
       return
     case .ownerChanged:
+      recomputeDisplayCaches()
       return
     case .deletedEverywhere:
       for id in orderedIDs {

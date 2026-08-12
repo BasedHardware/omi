@@ -163,11 +163,52 @@ final class TasksViewModelSelectAllTests: XCTestCase {
     // This fences the old request without exiting the mode. Its completion
     // must not leave the busy flag stuck after the generation changes.
     viewModel.toggleTaskSelection(second)
-    resumeDelete?.resume(returning: .localFailure)
+    resumeDelete?.resume(returning: .localFailure(remoteDeletedIDs: []))
     await deleteTask.value
 
     XCTAssertFalse(viewModel.bulkDeleteInFlight)
     XCTAssertTrue(viewModel.displayTasks.contains(where: { $0.id == first.id }))
+  }
+
+  func testRejectedBulkDeleteRestoresOptimisticRowsAndKeepsSelection() async {
+    let viewModel = TasksViewModel(
+      bulkDeleteOperation: { _ in .remoteFailure(confirmedIDs: []) },
+      bulkDeleteConfirmation: { _ in true }
+    )
+    let first = TaskActionItem(id: "first", description: "First", completed: false, createdAt: Date())
+    let second = TaskActionItem(id: "second", description: "Second", completed: false, createdAt: Date())
+    viewModel.store.incompleteTasks = [first, second]
+    viewModel.recomputeDisplayCaches()
+    viewModel.toggleMultiSelectMode()
+    viewModel.toggleTaskSelection(first)
+    viewModel.toggleTaskSelection(second)
+
+    await viewModel.deleteSelectedTasks()
+
+    XCTAssertEqual(Set(viewModel.displayTasks.map(\.id)), Set([first.id, second.id]))
+    XCTAssertEqual(Set(viewModel.multiSelection.selectedIDs(in: nil)), Set([first.id, second.id]))
+    XCTAssertEqual(
+      viewModel.bulkTaskErrorMessage,
+      "The selected tasks could not be deleted from your account. Nothing was removed from this Mac. "
+        + "Locked tasks require a paid plan; otherwise, check your connection and retry."
+    )
+  }
+
+  func testOwnerChangedBulkDeleteRestoresOptimisticRows() async {
+    let viewModel = TasksViewModel(
+      bulkDeleteOperation: { _ in .ownerChanged },
+      bulkDeleteConfirmation: { _ in true }
+    )
+    let task = TaskActionItem(id: "task", description: "Task", completed: false, createdAt: Date())
+    viewModel.store.incompleteTasks = [task]
+    viewModel.recomputeDisplayCaches()
+    viewModel.toggleMultiSelectMode()
+    viewModel.toggleTaskSelection(task)
+
+    await viewModel.deleteSelectedTasks()
+
+    XCTAssertEqual(viewModel.displayTasks.map(\.id), [task.id])
+    XCTAssertEqual(viewModel.multiSelection.selectedIDs(in: nil), [task.id])
   }
 
   func testSearchResultsFromOlderQueryCannotOverwriteNewerQuery() async {
