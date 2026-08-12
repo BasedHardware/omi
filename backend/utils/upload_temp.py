@@ -65,4 +65,6 @@ def temp_upload_path(directory: str, filename: Optional[str]) -> Iterator[str]:
         except FileNotFoundError:
             pass
         except OSError as e:
-            logger.warning('Could not remove temp upload %s: %s', path, e)
+            # The path embeds the UID (speech uploads) and the raw client-supplied
+            # filename; logging it would leak PII/control characters into logs.
+            logger.warning('Could not remove temp upload file: %s', e)
