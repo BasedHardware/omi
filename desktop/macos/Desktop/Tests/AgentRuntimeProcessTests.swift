@@ -1220,6 +1220,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openrouter)], "sk-agent-openrouter")
     XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .deepgram)], "sk-agent-deepgram")
+    XCTAssertNil(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openai)])
+    XCTAssertNil(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .anthropic)])
+    XCTAssertNil(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .gemini)])
     XCTAssertTrue(result.suppressedProviders.isEmpty)
   }
 
