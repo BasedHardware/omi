@@ -11,6 +11,26 @@ import SwiftUI
 /// cannot add storage to it; the value is meaningful only to `notePermissionGrants` below.
 @MainActor private var lastGrantedPermissionCount: Int?
 
+@MainActor
+final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
+  func present(title: String, message: String) {
+    guard
+      let window = NSApp.keyWindow ?? NSApp.mainWindow
+        ?? NSApp.windows.first(where: { $0.isVisible })
+    else {
+      log("Unable to present alert without a visible window")
+      return
+    }
+
+    let alert = NSAlert()
+    alert.messageText = title
+    alert.informativeText = message
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: "OK")
+    alert.beginSheetModal(for: window)
+  }
+}
+
 /// The AppKit lookups the accessibility probe depends on, read once on the main
 /// actor and handed to the probe as plain values so the expensive cross-process
 /// AX round trips can run off it.
@@ -879,12 +899,7 @@ extension AppState {
   }
 
   func showAlert(title: String, message: String) {
-    let alert = NSAlert()
-    alert.messageText = title
-    alert.informativeText = message
-    alert.alertStyle = .warning
-    alert.addButton(withTitle: "OK")
-    alert.runModal()
+    alertPresenter.present(title: title, message: message)
   }
 
   // MARK: - Transcription
