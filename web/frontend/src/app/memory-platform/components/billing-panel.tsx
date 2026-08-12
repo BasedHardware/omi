@@ -52,8 +52,8 @@ export default function BillingPanel() {
       failed.length === 0
         ? null
         : failed[0].reason instanceof Error
-        ? failed[0].reason.message
-        : 'Could not load billing.',
+          ? failed[0].reason.message
+          : 'Could not load billing.',
     );
     // Quota lives on a different service than payments: a failure here must not
     // blank out the plan and usage the user can already see.
@@ -156,12 +156,12 @@ export default function BillingPanel() {
           {quotaUnavailable
             ? 'Could not read your platform-API quota right now. Search and ingest remain bounded by their per-request limits.'
             : included === null
-            ? `${
-                quota?.plan ?? 'Your plan'
-              } includes uncapped requests on /v1/memory/platform.`
-            : `${
-                quota?.remaining ?? 0
-              } of ${included} requests remaining on /v1/memory/platform this month.`}
+              ? `${
+                  quota?.plan ?? 'Your plan'
+                } includes uncapped requests on /v1/memory/platform.`
+              : `${
+                  quota?.remaining ?? 0
+                } of ${included} requests remaining on /v1/memory/platform this month.`}
         </p>
       </div>
 
