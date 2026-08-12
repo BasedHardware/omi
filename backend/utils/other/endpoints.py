@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, Optional, TypeVar, cast
 from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
 from starlette.websockets import WebSocket
-from utils.auth import get_auth_provider
+from utils.auth import get_auth_provider, auth_backend_name
 from utils.auth import errors as auth_errors
 import logging
 import redis as redis_pkg
@@ -140,7 +140,13 @@ def verify_token(token: str) -> str:
             or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
             or os.getenv('FIREBASE_AUTH_CREDENTIALS_PATH')
         )
-        if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
+        # The uid-123 dev bypass is a Firebase emulator/harness convenience keyed on
+        # "no Firebase credential present". An OIDC deployment never has a Firebase
+        # credential, so without this backend gate a misconfigured LOCAL_DEVELOPMENT=true
+        # self-host running AUTH_BACKEND=oidc would grant every invalid-token request the
+        # same uid '123'. Restrict the fallback to the Firebase backend so OIDC always
+        # rejects invalid tokens.
+        if auth_backend_name() == 'firebase' and os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'
         raise
 

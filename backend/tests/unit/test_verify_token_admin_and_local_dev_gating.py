@@ -165,8 +165,23 @@ def test_local_development_returns_uid_123_without_real_credentials(monkeypatch)
     _clear_admin_env(monkeypatch)
     _clear_local_dev_env(monkeypatch)
     monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
+    monkeypatch.setattr('utils.other.endpoints.auth_backend_name', lambda: 'firebase')
 
     assert verify_token('any-invalid-token') == '123'
+
+
+def test_local_development_does_not_fall_through_for_oidc_backend(monkeypatch):
+    # The uid-123 dev bypass is Firebase-specific (keyed on "no Firebase credential").
+    # An OIDC deployment with LOCAL_DEVELOPMENT=true has no Firebase credential either,
+    # so without the backend gate it would grant every invalid-token request the same
+    # uid. OIDC must reject invalid tokens regardless of LOCAL_DEVELOPMENT.
+    _clear_admin_env(monkeypatch)
+    _clear_local_dev_env(monkeypatch)
+    monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
+    monkeypatch.setattr('utils.other.endpoints.auth_backend_name', lambda: 'oidc')
+
+    with pytest.raises(auth_errors.InvalidToken):
+        verify_token('any-invalid-token')
 
 
 def test_local_development_inert_when_service_account_json_is_set(monkeypatch):
