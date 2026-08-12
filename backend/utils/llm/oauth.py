@@ -5,7 +5,7 @@ from typing import Any
 
 import httpx
 
-from database import users as users_db
+from database import llm_oauth as llm_oauth_db
 
 
 class LLMOAuthError(Exception):
@@ -91,7 +91,7 @@ def exchange_authorization_code(provider: str, code: str, code_verifier: str, re
 
 
 def get_credential(uid: str, provider: str | None = None) -> dict[str, Any] | None:
-    credential = users_db.get_llm_oauth_credential(uid, provider)
+    credential = llm_oauth_db.get_credential(uid, provider)
     if credential is None:
         return None
     expires_at = credential.get('expires_at')
@@ -120,5 +120,5 @@ def get_credential(uid: str, provider: str | None = None) -> dict[str, Any] | No
     if not isinstance(payload, dict):
         raise LLMOAuthError('Provider returned an invalid refresh response')
     refreshed = _credential(provider, payload, credential['refresh_token'])
-    users_db.save_llm_oauth_credential(uid, provider, refreshed)
+    llm_oauth_db.save_credential(uid, provider, refreshed)
     return {'provider': provider, **refreshed}

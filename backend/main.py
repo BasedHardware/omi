@@ -93,6 +93,7 @@ from routers import (
     frame_requests,
     referrals,
     desktop_tts_updates,
+    llm_oauth,
     scores,
     stt,
     tts,
@@ -214,6 +215,7 @@ app.include_router(csat.router)
 app.include_router(feedback_admin.router)
 app.include_router(email_preferences.router)
 app.include_router(desktop_prompts.router)
+app.include_router(llm_oauth.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 
