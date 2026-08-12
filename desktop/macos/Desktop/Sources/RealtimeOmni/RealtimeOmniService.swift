@@ -340,7 +340,7 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     r.setValue(authHeader, forHTTPHeaderField: "Authorization")
     // Forward BYOK keys so BYOK users connect with their own provider key
     // (the backend validates them and uses them upstream — same as /v4/listen).
-    for (provider, entry) in APIKeyService.byokSnapshot {
+    for (provider, entry) in APIKeyService.activeBYOKSnapshot {
       r.setValue(entry.key, forHTTPHeaderField: provider.headerName)
     }
     return r
