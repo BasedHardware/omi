@@ -49,6 +49,22 @@ final class StreamingPCMPlaybackQueue<Buffer: AnyObject> {
   }
 }
 
+final class DeferredConfigurationRecovery {
+  private var isPending = false
+
+  func schedule(
+    onMainQueue: (@escaping () -> Void) -> Void,
+    action: @escaping () -> Void
+  ) {
+    guard !isPending else { return }
+    isPending = true
+    onMainQueue { [weak self] in
+      action()
+      self?.isPending = false
+    }
+  }
+}
+
 /// Plays streamed mono PCM16 audio incrementally (OpenAI Realtime / Gemini Live
 /// output is 24 kHz). Feed chunks with `enqueue(_:)`; they play back-to-back in
 /// arrival order. Used by `RealtimeHubController` to play the realtime model's
@@ -62,6 +78,7 @@ final class StreamingPCMPlayer: @unchecked Sendable {
   private let format: AVAudioFormat
   private var configObserver: NSObjectProtocol?
   private let playbackQueue = StreamingPCMPlaybackQueue<AVAudioPCMBuffer>()
+  private let configurationRecovery = DeferredConfigurationRecovery()
   private(set) var playbackEpoch = 0
   var onPlaybackScheduled: ((Int) -> Void)?
   var onPlaybackIdle: ((Int) -> Void)?
@@ -95,15 +112,11 @@ final class StreamingPCMPlayer: @unchecked Sendable {
       forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
     ) { [weak self] _ in
       guard let self = self else { return }
-      log("StreamingPCMPlayer: audio config changed — rebuilding engine")
-      let buffersToReplay = self.playbackQueue.buffersToReplayAfterConfigurationChange()
-      self.player.stop()
-      self.engine.stop()
-      self.engine.disconnectNodeOutput(self.player)
-      self.engine.connect(self.player, to: self.engine.mainMixerNode, format: self.format)
-      _ = self.ensureRunning()
-      for buffer in buffersToReplay {
-        self.schedule(buffer)
+      self.configurationRecovery.schedule(
+        onMainQueue: { action in DispatchQueue.main.async(execute: action) }
+      ) { [weak self] in
+        guard let self = self else { return }
+        self.rebuildAfterConfigurationChange()
       }
     }
   }
@@ -135,6 +148,19 @@ final class StreamingPCMPlayer: @unchecked Sendable {
       player.play()
     }
     return player.isPlaying
+  }
+
+  private func rebuildAfterConfigurationChange() {
+    log("StreamingPCMPlayer: audio config changed — rebuilding engine")
+    let buffersToReplay = playbackQueue.buffersToReplayAfterConfigurationChange()
+    player.stop()
+    engine.stop()
+    engine.disconnectNodeOutput(player)
+    engine.connect(player, to: engine.mainMixerNode, format: format)
+    _ = ensureRunning()
+    for buffer in buffersToReplay {
+      schedule(buffer)
+    }
   }
 
   /// `data` = little-endian Int16 PCM, mono, at the configured sample rate.

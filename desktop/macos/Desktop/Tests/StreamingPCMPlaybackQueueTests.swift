@@ -85,6 +85,44 @@ final class StreamingPCMPlaybackQueueTests: XCTestCase {
     XCTAssertEqual(queue.scheduledBuffers.count, 1)
     XCTAssertTrue(queue.scheduledBuffers[0] === second)
   }
+
+  func testConfigurationRecoveryDefersAndCoalescesNotificationWork() {
+    let recovery = DeferredConfigurationRecovery()
+    var pendingActions: [() -> Void] = []
+    var recoveryCount = 0
+
+    recovery.schedule(
+      onMainQueue: { pendingActions.append($0) },
+      action: {
+        recoveryCount += 1
+        recovery.schedule(
+          onMainQueue: { pendingActions.append($0) },
+          action: { recoveryCount += 1 }
+        )
+      }
+    )
+    recovery.schedule(
+      onMainQueue: { pendingActions.append($0) },
+      action: { recoveryCount += 1 }
+    )
+
+    XCTAssertEqual(recoveryCount, 0)
+    XCTAssertEqual(pendingActions.count, 1)
+
+    pendingActions.removeFirst()()
+
+    XCTAssertEqual(recoveryCount, 1)
+    XCTAssertTrue(pendingActions.isEmpty)
+
+    recovery.schedule(
+      onMainQueue: { pendingActions.append($0) },
+      action: { recoveryCount += 1 }
+    )
+
+    XCTAssertEqual(pendingActions.count, 1)
+    pendingActions.removeFirst()()
+    XCTAssertEqual(recoveryCount, 2)
+  }
 }
 
 final class StreamingPCMPlayerLevelTests: XCTestCase {
