@@ -144,6 +144,15 @@ sequenceDiagram
     end
 ```
 
+### Speech-profile onboarding handshake
+
+Question-based speech-profile sessions connect with `onboarding=enabled`. After
+the mobile listener is subscribed, it sends `{"type":"start_onboarding"}`. The
+backend answers with question index `0` and treats duplicate start messages as
+no-ops, so the first prompt cannot be emitted before the client is able to
+consume it. Subsequent answers or `{"type":"skip_question"}` advance the same
+server-owned question index.
+
 ### Live STT observability
 
 For backend-provider `/v4/listen` sessions, `omi_live_stt_accepted_total`
