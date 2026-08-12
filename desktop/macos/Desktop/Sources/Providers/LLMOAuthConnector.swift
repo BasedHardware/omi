@@ -89,7 +89,9 @@ final class LLMOAuthConnector: @unchecked Sendable {
     let verifier = Self.randomURLSafe(length: 64)
     let state = Self.randomURLSafe(length: 24)
     let challenge = Self.codeChallenge(for: verifier)
-    var components = URLComponents(string: provider.authorizationEndpoint)!
+    guard var components = URLComponents(string: provider.authorizationEndpoint) else {
+      throw Error.invalidAuthorizationURL
+    }
     components.queryItems = provider.authorizationItems(verifier: verifier, state: state, challenge: challenge)
     guard let url = components.url else { throw Error.invalidAuthorizationURL }
     _ = await MainActor.run { NSWorkspace.shared.open(url) }
