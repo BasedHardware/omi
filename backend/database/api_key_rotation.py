@@ -9,7 +9,7 @@ type supplies only the parts that genuinely differ, as a `ApiKeyRotationKind`.
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional, Tuple, Type, cast
+from typing import Any, Callable, Dict, Tuple, Type, cast
 
 from pydantic import BaseModel
 
@@ -42,7 +42,7 @@ class ApiKeyRotationKind:
     delete_cached: Callable[[str], Any]
     generate: Callable[[], Tuple[str, str, str]]
     resolve_app_id: Callable[[Dict[str, Any]], str]
-    normalize_scopes: Callable[[object], Optional[list[str]]]
+    normalize_scopes: Callable[..., Any]
     projects_app_id: bool = False
 
 
@@ -72,13 +72,13 @@ def rotate_api_key_secret(kind: ApiKeyRotationKind, user_id: str, key_id: str) -
     if not is_valid_api_key_hash(previous_hashed_key):
         raise ApiKeyRevocationUnavailableError(f"{kind.label} credential metadata is invalid")
     try:
-        fenced = kind.retire_hash(cast(str, previous_hashed_key))
+        fenced = kind.retire_hash(previous_hashed_key)
     except Exception as exc:
         raise ApiKeyRevocationUnavailableError(f"{kind.label} rotation fence failed") from exc
     if fenced is not True:
         raise ApiKeyRevocationUnavailableError(f"{kind.label} rotation fence was not confirmed")
     try:
-        cache_deleted = kind.delete_cached(cast(str, previous_hashed_key))
+        cache_deleted = kind.delete_cached(previous_hashed_key)
     except Exception as exc:
         raise ApiKeyRevocationUnavailableError(f"{kind.label} cache invalidation failed") from exc
     if cache_deleted is not True:
