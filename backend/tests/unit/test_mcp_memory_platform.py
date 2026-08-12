@@ -1,4 +1,5 @@
-from utils.mcp_memory_platform import build_memory_platform_payload, build_mcp_memory_platform_payload
+from utils.memory.platform import build_memory_platform_capability
+from utils.mcp_memory_platform import build_mcp_memory_platform_payload
 
 
 def test_memory_platform_payload_identifies_backend_authority():
@@ -24,7 +25,7 @@ def test_memory_platform_payload_identifies_zkr_as_non_authoritative_mirror():
 
 
 def test_mcp_adapter_matches_the_api_payload_and_declares_both_surfaces():
-    api_payload = build_memory_platform_payload()
+    api_payload = build_memory_platform_capability().model_dump(mode='json')
     mcp_payload = build_mcp_memory_platform_payload()
 
     assert mcp_payload == api_payload
