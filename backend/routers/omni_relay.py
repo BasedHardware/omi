@@ -113,7 +113,7 @@ async def omni_relay(websocket: WebSocket):
     # BYOK-enrolled — mirrors enforce_chat_quota's rule; a deepgram-only (or
     # forged) BYOK header must not skip the gate while _upstream falls back to
     # Omi's platform key.
-    byok_serves_session = bool(byok and byok.get(provider)) and await run_blocking(
+    byok_serves_session = bool(validated_byok.get(provider)) and await run_blocking(
         db_executor, users_db.is_byok_active, uid
     )
     if not byok_serves_session:
