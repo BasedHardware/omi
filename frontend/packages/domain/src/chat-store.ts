@@ -35,6 +35,7 @@ import {
   observeAgentRun,
   observeChatGeneration,
   parseStoredAgentRunUiEvent,
+  wireToChatMessage,
 } from "@omi-core/adapters-platform";
 import type {
   AgentRunObservation,
@@ -89,6 +90,62 @@ interface StoredAgentRunLogEntry {
   readonly event: AgentRunUiEvent;
 }
 
+const STORED_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(value).sort().join(",") === [...keys].sort().join(",");
+}
+
+function parseStoredGenerationDelivery(value: unknown): StoredChatGenerationDelivery | null {
+  if (!isPlainRecord(value) || !hasExactKeys(value, ["generationId", "clientMessageId", "terminal"])) {
+    return null;
+  }
+  if (
+    typeof value["generationId"] !== "string" || !STORED_TOKEN.test(value["generationId"]) ||
+    typeof value["clientMessageId"] !== "string" || !STORED_TOKEN.test(value["clientMessageId"])
+  ) return null;
+  const terminal = value["terminal"];
+  if (!isPlainRecord(terminal) || typeof terminal["kind"] !== "string") return null;
+
+  let parsedTerminal: ChatTerminalFrame;
+  if (terminal["kind"] === "failed") {
+    if (!hasExactKeys(terminal, ["kind", "error"]) || !isPlainRecord(terminal["error"])) return null;
+    const error = terminal["error"];
+    if (
+      !hasExactKeys(error, ["code", "retryable"]) ||
+      typeof error["code"] !== "string" || !STORED_TOKEN.test(error["code"]) ||
+      typeof error["retryable"] !== "boolean"
+    ) return null;
+    parsedTerminal = { kind: "failed", error: { code: error["code"], retryable: error["retryable"] } };
+  } else if (terminal["kind"] === "done" || terminal["kind"] === "cancelled") {
+    if (!hasExactKeys(terminal, ["kind", "message"])) return null;
+    if (terminal["kind"] === "cancelled" && terminal["message"] === null) {
+      parsedTerminal = { kind: "cancelled", message: null };
+    } else {
+      const message = wireToChatMessage(terminal["message"]);
+      if (message === null || message.sender !== "ai") return null;
+      if (terminal["kind"] === "done" && message.generationOutcome === "completed") {
+        parsedTerminal = { kind: "done", message };
+      } else if (terminal["kind"] === "cancelled" && message.generationOutcome === "cancelled") {
+        parsedTerminal = { kind: "cancelled", message };
+      } else {
+        return null;
+      }
+    }
+  } else {
+    return null;
+  }
+  return {
+    generationId: value["generationId"],
+    clientMessageId: value["clientMessageId"] as RecordId,
+    terminal: parsedTerminal,
+  };
+}
+
 export class ChatMessagesStore {
   private listeners = new Set<() => void>();
   private readonly refreshTracker: RefreshTracker;
@@ -106,6 +163,7 @@ export class ChatMessagesStore {
     private readonly outbox: Outbox,
     private readonly projection: Projection<ChatMessage>,
     private readonly generationKv: DurableKv,
+    private readonly generationDeliveryLog: DurableLog,
     private readonly agentRunLog: DurableLog,
     private readonly streamPort: BridgeStreamPort | null,
     hasSavedData: boolean,
@@ -124,6 +182,7 @@ export class ChatMessagesStore {
       chatMessagesCodec,
     );
     const generationKv = await bridge.openKv("chat-generation-deliveries");
+    const generationDeliveryLog = await bridge.openLog("chat-generation-terminal-deliveries");
     const agentRunLog = await bridge.openLog("chat-agent-run-events");
 
     let store: ChatMessagesStore;
@@ -138,6 +197,7 @@ export class ChatMessagesStore {
       outbox,
       projection,
       generationKv,
+      generationDeliveryLog,
       agentRunLog,
       streamPort ?? null,
       (await projection.read([])).length > 0,
@@ -224,14 +284,32 @@ export class ChatMessagesStore {
 
   /** Durable assistant outcomes, separate from confirmed human admissions. */
   async generationDeliveries(): Promise<readonly StoredChatGenerationDelivery[]> {
+    const deliveries = new Map<string, StoredChatGenerationDelivery>();
     const raw = await this.generationKv.get(GENERATION_DELIVERIES_KEY);
-    if (raw === null) return [];
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      return Array.isArray(parsed) ? parsed as StoredChatGenerationDelivery[] : [];
-    } catch {
-      return [];
+    if (raw !== null) {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) {
+          for (const value of parsed) {
+            const delivery = parseStoredGenerationDelivery(value);
+            if (delivery !== null) deliveries.set(delivery.generationId, delivery);
+          }
+        }
+      } catch {
+        // A malformed legacy whole-value snapshot is ignored. New writes use
+        // the append-only log below, so one corrupt legacy value cannot poison
+        // future terminal outcomes.
+      }
     }
+    for (const entry of await this.generationDeliveryLog.scan(0)) {
+      try {
+        const delivery = parseStoredGenerationDelivery(JSON.parse(entry.payload) as unknown);
+        if (delivery !== null) deliveries.set(delivery.generationId, delivery);
+      } catch {
+        // One malformed append is isolated from every other generation.
+      }
+    }
+    return [...deliveries.values()];
   }
 
   async discardDeadLetter(opId: string): Promise<void> {
@@ -362,16 +440,14 @@ export class ChatMessagesStore {
     clientMessageId: RecordId,
     terminal: ChatTerminalFrame,
   ): Promise<void> {
-    const existing = await this.generationDeliveries();
     const next: StoredChatGenerationDelivery = {
       generationId,
       clientMessageId,
       terminal,
     };
-    await this.generationKv.set(
-      GENERATION_DELIVERIES_KEY,
-      JSON.stringify([...existing.filter((item) => item.generationId !== generationId), next]),
-    );
+    // Per-generation terminal records are append-only. A whole-value KV
+    // read/modify/write loses one generation when two streams finish together.
+    await this.generationDeliveryLog.append(JSON.stringify(next));
     if (terminal.kind === "done") {
       await this.projection.upsertServerRows([terminal.message]);
     } else if (terminal.kind === "cancelled" && terminal.message !== null) {
