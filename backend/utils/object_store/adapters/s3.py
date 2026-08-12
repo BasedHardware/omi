@@ -11,6 +11,7 @@ Env: ``S3_ENDPOINT`` (e.g. http://rustfs:9000), ``S3_ACCESS_KEY``, ``S3_SECRET_K
 from __future__ import annotations
 
 import io
+import tempfile
 import os
 import threading
 from typing import IO, Any, Dict, List, Optional
@@ -47,24 +48,33 @@ def _public_base() -> str:
     return ((os.getenv("S3_PUBLIC_ENDPOINT") or os.getenv("S3_ENDPOINT") or "").strip()).rstrip("/")
 
 
-class _S3Writer(io.BytesIO):
-    """Buffered streaming writer: bytes written here are uploaded on context exit (S3 has no blob.open)."""
+# Bytes buffered by the streaming writer spill to disk past this size, so a large audio batch is
+# never held entirely in process memory before the upload starts (upload_fileobj streams it in
+# multipart chunks from the spooled file).
+_SPOOL_MAX_BYTES = 16 * 1024 * 1024
+
+
+class _S3Writer(tempfile.SpooledTemporaryFile):
+    """Buffered streaming writer (S3 has no blob.open): bytes spill to disk past _SPOOL_MAX_BYTES and
+    upload via multipart-capable upload_fileobj on context exit, keeping memory bounded."""
 
     def __init__(self, bucket: str, key: str, content_type: Optional[str]):
-        super().__init__()
+        super().__init__(max_size=_SPOOL_MAX_BYTES, mode="w+b")
         self._bucket, self._key, self._content_type = bucket, key, content_type
 
     def __enter__(self) -> "_S3Writer":
         return self
 
     def __exit__(self, *exc: Any) -> None:
-        if exc[0] is None:
-            extra: Dict[str, Any] = {}
-            if self._content_type:
-                extra["ContentType"] = self._content_type
-            self.seek(0)
-            _s3().upload_fileobj(self, self._bucket, self._key, ExtraArgs=extra or None)
-        super().close()
+        try:
+            if exc[0] is None:
+                extra: Dict[str, Any] = {}
+                if self._content_type:
+                    extra["ContentType"] = self._content_type
+                self.seek(0)
+                _s3().upload_fileobj(self, self._bucket, self._key, ExtraArgs=extra or None)
+        finally:
+            super().close()
 
 
 class S3ObjectStore:
@@ -82,17 +92,30 @@ class S3ObjectStore:
         metadata: Optional[Dict[str, Any]] = None,
         public: bool = False,
     ) -> None:
-        kwargs: Dict[str, Any] = {"Bucket": bucket, "Key": key}
-        kwargs["Body"] = bytes(data) if isinstance(data, (bytes, bytearray)) else data.read()
+        if isinstance(data, (bytes, bytearray)):
+            kwargs: Dict[str, Any] = {"Bucket": bucket, "Key": key, "Body": bytes(data)}
+            if content_type:
+                kwargs["ContentType"] = content_type
+            if cache_control:
+                kwargs["CacheControl"] = cache_control
+            if metadata is not None:
+                kwargs["Metadata"] = {str(k): str(v) for k, v in metadata.items()}
+            if public:
+                kwargs["ACL"] = "public-read"
+            _s3().put_object(**kwargs)
+            return
+        # A stream: upload_fileobj streams it in multipart chunks (bounded memory) instead of
+        # reading the whole object into RAM (data.read()) before the request even starts.
+        extra: Dict[str, Any] = {}
         if content_type:
-            kwargs["ContentType"] = content_type
+            extra["ContentType"] = content_type
         if cache_control:
-            kwargs["CacheControl"] = cache_control
+            extra["CacheControl"] = cache_control
         if metadata is not None:
-            kwargs["Metadata"] = {str(k): str(v) for k, v in metadata.items()}
+            extra["Metadata"] = {str(k): str(v) for k, v in metadata.items()}
         if public:
-            kwargs["ACL"] = "public-read"
-        _s3().put_object(**kwargs)
+            extra["ACL"] = "public-read"
+        _s3().upload_fileobj(data, bucket, key, ExtraArgs=extra or None)
 
     def put_from_file(
         self,
