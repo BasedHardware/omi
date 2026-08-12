@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import postgres, { type Sql } from "postgres";
 
@@ -6,6 +7,7 @@ import { createAuthorizedLedgerWriteContextIssuer } from "../../apps/service/aut
 import { authoritativeAppendRequestDigest, type AuthoritativeLedgerAppend } from "../../apps/service/stores/authoritative-ledger-repository";
 import { formationCandidateManifestDigest } from "../../core/consolidate/formation-outcome";
 import { prepareDerivation, type AtomicGraphTransition } from "../../core/ledger";
+import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
 import type { IdentityAuthorization, IdentityConstraint, ProvisionalClaim } from "../../core/schema";
 import {
   createPostgresAuthoritativeLedgerRepository,
@@ -17,6 +19,7 @@ import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
 import { authorizationStateDigest, type AuthorityStateRow } from "./transaction";
+import { SqliteLedger } from "../sqlite";
 
 const explicitTestUrl = process.env["OMI_TEST_POSTGRES_URL"];
 const realTest = explicitTestUrl ? describe : describe.skip;
@@ -956,6 +959,21 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         purged_claim_revision_ids: [livenessWitness.revision_id],
         forgotten_claim_revision_ids: [],
       });
+      const sqliteDatabase = new Database(":memory:");
+      try {
+        const sqlite = new SqliteLedger(sqliteDatabase);
+        for (const sharedTransition of [
+          first.transition,
+          graph.transition,
+          formation.transition,
+          identity.transition,
+          liveness.transition,
+        ]) sqlite.append(sharedTransition);
+        expect(sha256CanonicalContent(sqlite.snapshot(accountId)))
+          .toBe(sha256CanonicalContent(reconstructed));
+      } finally {
+        sqliteDatabase.close();
+      }
       expect(JSON.stringify(await createPostgresAuthoritativeGraphSnapshotRepository({
         pool: snapshotRolePool,
       }).load(context))).toBe(JSON.stringify(reconstructed));
