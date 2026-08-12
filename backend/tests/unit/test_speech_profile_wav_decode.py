@@ -83,7 +83,7 @@ finally:
     sys.modules.update(_saved)
 
 from fastapi import HTTPException  # noqa: E402  (import after the finder block)
-from utils.stt.vad import VADEmptyError  # noqa: E402  (import after the finder block)
+import utils.stt.vad as _vad  # noqa: E402  (import after the finder block)
 
 
 class _FakeDecodeError(Exception):
@@ -139,8 +139,10 @@ class TestUploadProfileWavDecodeGuard:
 
         with patch.object(mod, "os") as mock_os, patch("builtins.open", MagicMock()), patch.object(
             mod, "AudioSegment"
-        ) as mock_aseg, patch.object(mod, "VADEmptyError", VADEmptyError), patch.object(
-            mod, "apply_vad_for_speech_profile", side_effect=VADEmptyError("Audio is empty")
+        ) as mock_aseg, patch.object(mod, "VADEmptyError", _vad.VADEmptyError), patch.object(
+            mod, "apply_vad_for_speech_profile", _vad.apply_vad_for_speech_profile
+        ), patch.object(
+            _vad, "vad_is_empty", return_value=[]
         ) as mock_vad, patch.object(
             mod, "upload_profile_audio"
         ) as mock_upload:
