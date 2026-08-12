@@ -60,11 +60,7 @@ def get_prompt_data(uid: str) -> Tuple[Optional[str], List[MemoryDB], List[Memor
     # TODO: cache this
     existing_memories = [
         memory.model_dump(mode='python')
-        for memory in MemoryService(db_client=firestore_db).export_memories(
-            uid,
-            include_archive=False,
-            page_size=1000,
-        )[:1000]
+        for memory in MemoryService(db_client=firestore_db).read(uid, limit=1000)
         if not getattr(memory, 'is_locked', False)
     ]
 

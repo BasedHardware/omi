@@ -27,9 +27,14 @@ enum InsightSQLPrivacy {
   }
 
   private static let clauseKeywords: Set<String> = [
-    "as", "cross", "full", "group", "having", "inner", "join", "left", "limit", "natural", "on",
+    "as", "cross", "except", "full", "group", "having", "inner", "intersect", "join", "left", "limit", "natural", "on",
     "order", "outer", "right", "union", "using", "where", "window",
   ]
+
+  /// Tables derived from the screenshots table whose data is also subject to
+  /// the excluded-app predicate.  The FTS virtual table exposes OCR text that
+  /// would otherwise bypass the ``screenshots`` rewrite.
+  private static let screenshotDerivedTables: Set<String> = ["screenshots_fts"]
 
   static func filtered(_ query: String, excludedApps: Set<String>) -> String {
     guard !excludedApps.isEmpty else { return query }
@@ -63,7 +68,14 @@ enum InsightSQLPrivacy {
 
       let table = tokens[significant[tablePosition]]
       guard isIdentifier(table), table.closed else { return failClosedQuery }
-      guard unquotedIdentifier(table.raw).lowercased() == "screenshots" else {
+      let tableName = unquotedIdentifier(table.raw).lowercased()
+      guard tableName == "screenshots" else {
+        // screenshot-derived tables (e.g. screenshots_fts) expose the same OCR
+        // data and cannot be safely rewritten with a simple subquery. Fail
+        // closed so excluded-app content is never reachable.
+        if screenshotDerivedTables.contains(tableName) {
+          return failClosedQuery
+        }
         position += 1
         continue
       }

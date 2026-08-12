@@ -63,4 +63,23 @@ final class InsightSQLPrivacyTests: XCTestCase {
       InsightSQLPrivacy.filtered("SELECT * FROM `screenshots`(1)", excludedApps: ["Secrets"]),
       "SELECT 1 WHERE 0")
   }
+
+  func testCompoundKeywordsAreNotConsumedAsAliases() {
+    for compound in ["INTERSECT", "EXCEPT"] {
+      let query = "SELECT * FROM screenshots \(compound) SELECT * FROM screenshots"
+      let filtered = InsightSQLPrivacy.filtered(query, excludedApps: ["Secrets"])
+      XCTAssertTrue(
+        filtered.contains(compound),
+        "\(compound) was consumed as an alias: \(filtered)")
+      XCTAssertTrue(filtered.contains("appName NOT IN ('Secrets')"))
+    }
+  }
+
+  func testScreenshotsFtsFailsClosed() {
+    XCTAssertEqual(
+      InsightSQLPrivacy.filtered(
+        "SELECT * FROM screenshots_fts WHERE screenshots_fts MATCH 'deadline'",
+        excludedApps: ["Secrets"]),
+      "SELECT 1 WHERE 0")
+  }
 }
