@@ -237,17 +237,24 @@ final class APIKeyService: ObservableObject {
     nonEmptyStatic(UserDefaults.standard.string(forKey: provider.storageKey))
   }
 
-  /// True when the user has supplied keys for all four BYOK providers.
+  /// True when the user has supplied a selected LLM key.
   /// The subscription-bypass gate: when this is true, the user is on the free
-  /// plan and we attach their keys to every backend request.
+  /// plan and we attach their selected LLM key to every backend request.
   nonisolated static var isByokActive: Bool {
     selectedBYOKLLMProvider != nil
   }
 
   nonisolated static var selectedBYOKLLMProvider: BYOKProvider? {
-    let requested =
-      BYOKLLMProvider(rawValue: UserDefaults.standard.string(forKey: .byokLLMProvider) ?? "openrouter")
-      ?? .openrouter
+    let requested: BYOKLLMProvider
+    if let stored = UserDefaults.standard.string(forKey: .byokLLMProvider),
+      let selected = BYOKLLMProvider(rawValue: stored)
+    {
+      requested = selected
+    } else if let legacy = BYOKLLMProvider.allCases.first(where: { byokKey($0.provider) != nil }) {
+      requested = legacy
+    } else {
+      requested = .openrouter
+    }
     return byokKey(requested.provider) == nil ? nil : requested.provider
   }
 
