@@ -77,7 +77,7 @@ steps:
 
   - id: S4B
     name: Verify silent microphone failure alert
-    do: "If the active microphone returns no audio until Omi exhausts capture recovery, verify recording stops and 'Microphone Isn't Capturing Audio' appears with an OK action while the window remains responsive."
+    do: "If the active microphone returns no audio until Omi exhausts capture recovery, verify recording stops and 'Microphone Isn't Capturing Audio' appears with an OK action while the window remains responsive. Repeat with the main shell hidden: Omi should reveal its main window and present the same non-blocking alert instead of losing it or attaching it to the floating bar."
     expect:
       interactive_count: { min: 1 }
 
