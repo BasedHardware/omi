@@ -16,6 +16,7 @@ import Foundation
 
 /// Keys that participate in the BYOK free-plan flow.
 enum BYOKProvider: String, CaseIterable {
+  case openrouter
   case openai
   case anthropic
   case gemini
@@ -23,6 +24,7 @@ enum BYOKProvider: String, CaseIterable {
 
   var storageKey: String {
     switch self {
+    case .openrouter: return "dev_openrouter_api_key"
     case .openai: return "dev_openai_api_key"
     case .anthropic: return "dev_anthropic_api_key"
     case .gemini: return "dev_gemini_api_key"
@@ -32,6 +34,7 @@ enum BYOKProvider: String, CaseIterable {
 
   var headerName: String {
     switch self {
+    case .openrouter: return "X-BYOK-OpenRouter"
     case .openai: return "X-BYOK-OpenAI"
     case .anthropic: return "X-BYOK-Anthropic"
     case .gemini: return "X-BYOK-Gemini"
@@ -41,10 +44,38 @@ enum BYOKProvider: String, CaseIterable {
 
   var displayName: String {
     switch self {
+    case .openrouter: return "OpenRouter"
     case .openai: return "OpenAI"
     case .anthropic: return "Anthropic"
     case .gemini: return "Gemini"
     case .deepgram: return "Deepgram"
+    }
+  }
+}
+
+enum BYOKLLMProvider: String, CaseIterable, Identifiable {
+  case openrouter
+  case openai
+  case gemini
+  case anthropic
+
+  var id: String { rawValue }
+
+  var displayName: String {
+    switch self {
+    case .openrouter: return "OpenRouter"
+    case .openai: return "OpenAI Direct"
+    case .gemini: return "Gemini"
+    case .anthropic: return "Anthropic"
+    }
+  }
+
+  var provider: BYOKProvider {
+    switch self {
+    case .openrouter: return .openrouter
+    case .openai: return .openai
+    case .gemini: return .gemini
+    case .anthropic: return .anthropic
     }
   }
 }
@@ -210,7 +241,14 @@ final class APIKeyService: ObservableObject {
   /// The subscription-bypass gate: when this is true, the user is on the free
   /// plan and we attach their keys to every backend request.
   nonisolated static var isByokActive: Bool {
-    BYOKProvider.allCases.allSatisfy { byokKey($0) != nil }
+    selectedBYOKLLMProvider != nil
+  }
+
+  nonisolated static var selectedBYOKLLMProvider: BYOKProvider? {
+    let requested =
+      BYOKLLMProvider(rawValue: UserDefaults.standard.string(forKey: .byokLLMProvider) ?? "openrouter")
+      ?? .openrouter
+    return byokKey(requested.provider) == nil ? nil : requested.provider
   }
 
   /// SHA-256 fingerprint of a key, used by the backend to detect when the
@@ -229,5 +267,16 @@ final class APIKeyService: ObservableObject {
       }
     }
     return out
+  }
+
+  nonisolated static var activeBYOKSnapshot: [BYOKProvider: (key: String, fingerprint: String)] {
+    var snapshot: [BYOKProvider: (String, String)] = [:]
+    if let provider = selectedBYOKLLMProvider, let key = byokKey(provider) {
+      snapshot[provider] = (key, byokFingerprint(key))
+    }
+    if let key = byokKey(.deepgram) {
+      snapshot[.deepgram] = (key, byokFingerprint(key))
+    }
+    return snapshot
   }
 }

@@ -1164,6 +1164,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
   @MainActor
   func testUsableByokEnvironmentSuppressesAllKeysWhenOneProviderIsKnownBad() {
+    let savedSelectedProvider = UserDefaults.standard.string(forKey: .byokLLMProvider)
     let savedKeys = Dictionary(
       uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
         (provider, UserDefaults.standard.string(forKey: provider.storageKey))
@@ -1177,11 +1178,17 @@ final class AgentRuntimeProcessTests: XCTestCase {
         }
       }
       CredentialHealthManager.shared.reset()
+      if let savedSelectedProvider {
+        UserDefaults.standard.set(savedSelectedProvider, forKey: .byokLLMProvider)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+      }
     }
 
     for provider in BYOKProvider.allCases {
       UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
     }
+    UserDefaults.standard.set(BYOKLLMProvider.openai.rawValue, forKey: .byokLLMProvider)
     let openAIKey = APIKeyService.byokKey(.openai)!
     CredentialHealthManager.shared.recordProviderFailure(
       .providerAuthFailed(provider: .openai, mode: .byok),
@@ -1198,6 +1205,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
   @MainActor
   func testUsableByokEnvironmentIncludesAllKeysWhenAllProvidersAreUsable() {
+    let savedSelectedProvider = UserDefaults.standard.string(forKey: .byokLLMProvider)
     let savedKeys = Dictionary(
       uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
         (provider, UserDefaults.standard.string(forKey: provider.storageKey))
@@ -1211,17 +1219,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
         }
       }
       CredentialHealthManager.shared.reset()
+      if let savedSelectedProvider {
+        UserDefaults.standard.set(savedSelectedProvider, forKey: .byokLLMProvider)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+      }
     }
 
     for provider in BYOKProvider.allCases {
       UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
     }
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
 
     let result = AgentRuntimeProcess.usableBYOKEnvironment()
 
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openai)], "sk-agent-openai")
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .anthropic)], "sk-agent-anthropic")
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .gemini)], "sk-agent-gemini")
+    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openrouter)], "sk-agent-openrouter")
     XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .deepgram)], "sk-agent-deepgram")
     XCTAssertTrue(result.suppressedProviders.isEmpty)
   }
