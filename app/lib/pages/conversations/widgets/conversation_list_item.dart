@@ -167,35 +167,35 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 );
               });
 
-            final seek = searchMomentSeekFromSnippets(
-              snippets: widget.conversation.matchSnippets,
-              searchQuery: searchQuery,
-            );
+              final seek = searchMomentSeekFromSnippets(
+                snippets: widget.conversation.matchSnippets,
+                searchQuery: searchQuery,
+              );
 
-            final resultFuture = routeToPage(
-              context,
-              ConversationDetailPage(
-                conversation: widget.conversation,
-                isFromOnboarding: widget.isFromOnboarding,
-                initialTabIndex: seek != null ? 0 : 1,
-                initialSeekStart: seek?.start,
-                initialSeekEnd: seek?.end,
-              ),
-            );
-            var result = await resultFuture;
-            if (context.mounted) {
-              // Don't upsert if the conversation was deleted while on the detail page
-              if (result is Map && result['deleted'] == true) return;
-              bool stillExists = provider.conversations.any((c) => c.id == widget.conversation.id);
-              if (stillExists) {
-                String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
-                if (startingTitle != newTitle) {
-                  widget.conversation.structured.title = newTitle;
-                  provider.upsertConversation(widget.conversation);
+              final resultFuture = routeToPage(
+                context,
+                ConversationDetailPage(
+                  conversation: widget.conversation,
+                  isFromOnboarding: widget.isFromOnboarding,
+                  initialTabIndex: seek != null ? 0 : 1,
+                  initialSeekStart: seek?.start,
+                  initialSeekEnd: seek?.end,
+                ),
+              );
+              var result = await resultFuture;
+              if (context.mounted) {
+                // Don't upsert if the conversation was deleted while on the detail page
+                if (result is Map && result['deleted'] == true) return;
+                bool stillExists = provider.conversations.any((c) => c.id == widget.conversation.id);
+                if (stillExists) {
+                  String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
+                  if (startingTitle != newTitle) {
+                    widget.conversation.structured.title = newTitle;
+                    provider.upsertConversation(widget.conversation);
+                  }
                 }
               }
-            }
-          },
+            },
             onLongPress: () {
               // Enter selection mode on long press
               if (!isSelectionMode && !isMerging) {
