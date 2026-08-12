@@ -1,9 +1,9 @@
 # Finalized query grounding and provenance contract
 
-Status: P5 contract, legacy compatibility gate, inert PostgreSQL schema, sealed
-repository, production-neutral producer/source/paired-coordinator kernels, and
-single composition root, 2026-08-11; no concrete PostgreSQL adapter, route,
-grant, or runtime activation landed
+Status: P5 contract, legacy compatibility gate, sealed repository,
+production-neutral producer/source/paired-coordinator kernels, single
+composition root, and real PostgreSQL atomic result-plus-grounding adapter,
+2026-08-12; no graph-query input adapter, route, model runtime, or activation
 
 ## Purpose
 
@@ -17,9 +17,11 @@ This is evaluation infrastructure first. It does not approve query-bearing
 product recall, compose voice, `subject:*` admission, bystander policy, or a
 strategy default.
 
-## Current seam and why an adapter cannot be wired mechanically
+## Current seam and remaining production input gap
 
-The canonical tree has the pieces, but no producer currently owns all of them:
+The canonical producer now owns the exact result and grounding finalization,
+and the PostgreSQL adapter atomically persists assignment, result, and artifact.
+The remaining unimplemented input is the authorized query-bearing graph source:
 
 - `memory-read-evaluation-result-v1` requires exact ordered assertions, grounded
   `tr1_` citations, a branded recall trace, and an authorized copied input;
@@ -35,12 +37,13 @@ The canonical tree has the pieces, but no producer currently owns all of them:
   serves synthesized pages rather than query answers; and
 - the current provenance-source implementation has hermetic fixtures only.
 
-The inert artifact schema and repository boundary now make total closure,
-result-coordinate equality, immutable replay, and one atomic adapter call
-mechanical. The exported materializer is a structural validator, not authority
-to invent subject classes. Nothing composes it with query execution yet; the
-future authorized producer must derive the rows inside the exact projected
-attempt described below.
+The artifact schema and repository boundary make total closure,
+result-coordinate equality, immutable replay, and one atomic PostgreSQL call
+mechanical. The grounding stage carries the exact validated evaluation stage
+request so a fresh process can persist the strategy assignment, sensitive
+result, and artifact together. The exported materializer remains a structural
+validator, not authority to invent subject classes. No PostgreSQL query-input
+record, graph-source composition, model credential, route, or traffic exists.
 
 Therefore the production source must be built at a new query-bearing evaluation
 composition that combines the application-read authorization discipline with
@@ -128,7 +131,7 @@ with a one-to-one foreign key to the exact evaluation result and immutable
 digests for the result, input, strategy, projection, response, rows, and whole
 artifact. No application or product worker receives a grant.
 
-The repository operation must stage result and artifact in one transaction.
+The repository operation stages assignment, result, and artifact in one transaction.
 A separate best-effort insert is invalid: a crash could leave a result that can
 never be audited, or provenance for a result that never committed. A retry must
 distinguish exact replay from changed bytes without another model call.
@@ -164,9 +167,11 @@ compose-voice default decision.
 1. **Finalizer contract:** return the final entailed assertions instead of
    discarding them; bind reader-scoped citations and policy classes inside one
    authorized projected attempt. No route.
-2. **Isolated persistence:** add the inert checksummed artifact schema and a
-   sealed atomic result-plus-grounding repository operation. No grant or real
-   database claim until the ratified PostgreSQL gate exists.
+2. **Isolated persistence (landed):** checksummed schema plus a sealed atomic
+   assignment/result/grounding operation. The real PostgreSQL 18.4 gate proves
+   exact replay, JSON round trip, application-role isolation, rollback after an
+   injected grounding failure, revocation-before-replay, and update/delete
+   denial. This is persistence qualification only, not runtime activation.
 3. **Offline evaluation composition:** combine authorized copied input,
    strategy assignment, coherent authorization revalidation, query retrieval,
    compose/entailment, result/artifact staging, pairing, and repeats. One model

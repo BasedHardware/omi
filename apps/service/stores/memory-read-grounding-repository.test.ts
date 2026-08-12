@@ -112,15 +112,16 @@ const result = async (): Promise<Readonly<MemoryEvaluationResult>> => {
     ...body,
     request_digest: memoryEvaluationStageRequestDigest(context(), body),
   };
-  return materializeMemoryEvaluationResult(context(), request);
+  return { evaluationResult: materializeMemoryEvaluationResult(context(), request), stageRequest: request };
 };
 
 const artifact = async () => {
-  const evaluationResult = await result();
+  const { evaluationResult, stageRequest } = await result();
   const ref = (evaluationResult.normalized_result as { recall_trace: { stages: { grounded: string[] } } })
     .recall_trace.stages.grounded[0]! as `tr1_${string}`;
   return {
     evaluationResult,
+    stageRequest,
     artifact: materializeFinalizedMemoryReadGrounding({
       evaluation_result: evaluationResult,
       projection_authorization_digest: hex("c"),
@@ -148,7 +149,7 @@ describe("finalized memory read grounding repository", () => {
       },
     });
     const fixture = await artifact();
-    const staged = await repository.stage(context(), fixture.evaluationResult, fixture.artifact);
+    const staged = await repository.stage(context(), fixture.evaluationResult, fixture.artifact, fixture.stageRequest);
     expect(staged).toMatchObject({ kind: "staged", artifact: { grounded_reference_count: 1 } });
     expect(receivedResult).toBe(fixture.evaluationResult);
     expect(await repository.load(context(), fixture.evaluationResult)).toEqual({
@@ -180,12 +181,19 @@ describe("finalized memory read grounding repository", () => {
       projection_authorization_digest: "not-a-digest", reader_projection_digest: hex("d"), projected_content_digest: hex("e"),
       rows: fixture.artifact.rows,
     })).toThrow("invalid_projection_coordinate");
-    await expect(repository.stage(context("memories.work.execute"), fixture.evaluationResult, fixture.artifact))
+    await expect(repository.stage(context("memories.work.execute"), fixture.evaluationResult, fixture.artifact, fixture.stageRequest))
       .rejects.toThrow("capability_denied");
-    await expect(repository.stage(context(CAPABILITY, "account:bob"), fixture.evaluationResult, fixture.artifact))
+    await expect(repository.stage(context(CAPABILITY, "account:bob"), fixture.evaluationResult, fixture.artifact, fixture.stageRequest))
       .rejects.toThrow("authority_mismatch");
-    await expect(repository.stage(context(), fixture.evaluationResult, { ...fixture.artifact } as never))
+    await expect(repository.stage(context(), fixture.evaluationResult, { ...fixture.artifact } as never, fixture.stageRequest))
       .rejects.toThrow("unverified_artifact");
+    const { request_digest: _requestDigest, ...changedBody } = {
+      ...fixture.stageRequest, response_digest: hex("f"),
+    };
+    await expect(repository.stage(context(), fixture.evaluationResult, fixture.artifact, {
+      ...changedBody,
+      request_digest: memoryEvaluationStageRequestDigest(context(), changedBody),
+    })).rejects.toThrow("stage_request_result_mismatch");
     expect(calls).toBe(0);
   });
 
@@ -195,7 +203,7 @@ describe("finalized memory read grounding repository", () => {
       stage: async () => { throw new Error("secret database error"); },
       load: async () => { throw new Error("secret database error"); },
     });
-    await expect(unavailable.stage(context(), fixture.evaluationResult, fixture.artifact))
+    await expect(unavailable.stage(context(), fixture.evaluationResult, fixture.artifact, fixture.stageRequest))
       .resolves.toEqual({ kind: "source_unavailable" });
     await expect(unavailable.load(context(), fixture.evaluationResult))
       .resolves.toEqual({ kind: "source_unavailable" });
@@ -204,7 +212,7 @@ describe("finalized memory read grounding repository", () => {
       stage: async () => ({ kind: "replayed", artifact: { ...fixture.artifact, projected_content_digest: hex("f") } }),
       load: async () => ({ kind: "missing" }),
     });
-    await expect(forged.stage(context(), fixture.evaluationResult, fixture.artifact))
+    await expect(forged.stage(context(), fixture.evaluationResult, fixture.artifact, fixture.stageRequest))
       .rejects.toThrow("artifact_digest_mismatch");
   });
 });

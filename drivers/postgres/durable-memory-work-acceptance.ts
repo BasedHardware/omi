@@ -70,7 +70,8 @@ const insertImmutableAndVerify = async (
   }
 };
 
-const persistStrategyAssignment = async (
+/** @internal Shared immutable strategy registry persistence for PostgreSQL adapters. */
+export const persistPostgresMemoryStrategyAssignment = async (
   connection: CheckedOutPostgresConnection,
   bundle: Readonly<MemoryStrategyAssignmentBundle>,
 ): Promise<void> => {
@@ -291,7 +292,7 @@ const accept = async (
           return Object.freeze({ kind: "replayed" as const, job: request.pending_job });
         }
 
-        await persistStrategyAssignment(connection, request.strategy_assignment);
+        await persistPostgresMemoryStrategyAssignment(connection, request.strategy_assignment);
         await persistExecutionPolicy(connection, authority.account_id, request.execution_policy);
         const job = request.pending_job;
         await executeRequired(connection, "work.acceptance.insert", `

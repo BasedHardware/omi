@@ -1,7 +1,8 @@
 # Query-evaluation composition-root contract
 
-Status: P5 preregistration plus production-neutral composition root,
-2026-08-11; concrete adapters and activation absent
+Status: P5 production-neutral composition root plus real PostgreSQL
+result/pair/grounding adapters, 2026-08-12; graph-query input adapter and
+activation absent
 
 ## Purpose
 
@@ -116,7 +117,9 @@ occupied fixed-port dev-server test remained excluded.
 
 ## Explicit exclusions
 
-- no concrete PostgreSQL graph/result/grounding/pair adapter or migration;
+- no concrete PostgreSQL graph-query input adapter or query-input migration;
+- result, pair, and atomic result-plus-grounding PostgreSQL adapters are landed
+  and real-database qualified but remain route-free and inactive;
 - no production codec root, model credential, API-key scheduler, worker, route,
   grant, cache, Listen mapping, deployment, or traffic;
 - no statistics, contamination conclusion, blind sheet, human grading request,

@@ -576,7 +576,15 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
       expect(table.body).not.toMatch(/graph_commit|projection_revision|memory_work_success/i);
     }
     expect(allSql).toContain("Deliberately no application, worker, evaluator, or migration-runner grant");
-    expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_strategy_(?:evaluation|shadow_results)/s);
+    const experimentRuntime = migrationSql.find((entry) => entry.version === 23)!.sql;
+    for (const table of [
+      "memory_strategy_evaluation_baselines",
+      "memory_strategy_shadow_results",
+      "memory_strategy_evaluation_pairs",
+    ]) {
+      expect(experimentRuntime).toContain(`GRANT SELECT, INSERT ON omi_memory.${table}`);
+    }
+    expect(experimentRuntime).not.toMatch(/GRANT[^;]*\b(?:UPDATE|DELETE|TRUNCATE)\b/s);
   });
 
   test("widens retrieval and composition only inside the isolated experiment plane", () => {
@@ -620,7 +628,14 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(baseline.body).toContain("memory_strategy_evaluation_baselines");
     expect(candidate.body).toContain("memory_strategy_shadow_results");
     expect(allSql).toContain("A grounding artifact cannot authorize a graph/product/read result or memory work");
-    expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_strategy_(?:baseline|candidate)_read_groundings/s);
+    const experimentRuntime = migrationSql.find((entry) => entry.version === 23)!.sql;
+    for (const table of [
+      "memory_strategy_baseline_read_groundings",
+      "memory_strategy_candidate_read_groundings",
+    ]) {
+      expect(experimentRuntime).toContain(`GRANT SELECT, INSERT ON omi_memory.${table}`);
+    }
+    expect(experimentRuntime).not.toMatch(/GRANT[^;]*\b(?:UPDATE|DELETE|TRUNCATE)\b/s);
   });
 
   test("persists P4 product state with only the sealed writer's append grants", () => {

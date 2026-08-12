@@ -1,6 +1,7 @@
 # Shadow result and offline replay contract
 
-Status: P5 pre-registration, 2026-08-11
+Status: P5 contract plus real PostgreSQL result/pair adapter qualification,
+2026-08-12; graph-query input, model runtime, route, and activation absent
 
 ## Purpose
 
@@ -57,9 +58,18 @@ result digest, and request digest before calling an adapter. Same bytes replay;
 different bytes at the same coordinate conflict. No success, append, projection,
 read, query, route, SQL, clock, model, or logging capability is exposed.
 
-An inert checksummed migration adds account-scoped baseline, candidate, and pair
-tables plus the minimum composite key required to reference selected shadow
-assignments exactly. It grants nobody and activates no runtime.
+Checksummed migrations add account-scoped baseline, candidate, and pair tables
+plus the minimum composite key required to reference selected shadow assignments
+exactly. Migration 23 grants the application role only `SELECT, INSERT` on
+those isolated relations. The sealed adapter revalidates the exact
+`memories.experiments.shadow` authority before lookup or replay. It activates
+no route, model runner, query source, graph/product authority, default, or
+traffic.
+
+The PostgreSQL 18.4 application-role gate stages baseline and candidate rows,
+round-trips normalized JSON, records and replays the opaque pair, rejects
+updates/deletes, and denies a replay after grant revocation. Bun 1.3.14 and the
+pinned Node 24 control both pass the same migration/runtime corpus.
 
 ## Pre-registered acceptance tests
 
@@ -79,7 +89,8 @@ assignments exactly. It grants nobody and activates no runtime.
    source content.
 6. Migration/static tests prove exact authority-baseline and selected-shadow
    foreign keys, account scope on every key, no relation from evaluation tables
-   into graph/projection/read authority, bounded JSON, and no grants.
+   into graph/projection/read authority, bounded JSON, and append-only isolated
+   application-role grants.
 7. Focused/full tests, contract QA, import lint, strict changed-file TypeScript
    filter, bundle parse/build, and `git diff --check` pass before recording the
    unit.

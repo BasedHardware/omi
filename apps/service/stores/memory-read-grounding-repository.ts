@@ -8,7 +8,9 @@ import {
 } from "../auth/authorized-context";
 import {
   assertVerifiedMemoryEvaluationResult,
+  materializeMemoryEvaluationResult,
   type MemoryEvaluationResult,
+  type MemoryEvaluationStageRequest,
 } from "./memory-shadow-result-repository";
 import { parseMemoryReadEvaluationResult } from "../workers/memory-read-evaluation-result";
 
@@ -83,6 +85,7 @@ export interface MemoryReadGroundingRepository {
     context: AuthorizedLedgerWriteContext,
     result: Readonly<MemoryEvaluationResult>,
     artifact: FinalizedMemoryReadGroundingArtifact,
+    request: MemoryEvaluationStageRequest,
   ): Promise<MemoryReadGroundingStageOutcome>;
   load(
     context: AuthorizedLedgerWriteContext,
@@ -95,6 +98,7 @@ export interface MemoryReadGroundingRepositoryImplementation {
     context: AuthorizedLedgerWriteContext,
     result: Readonly<MemoryEvaluationResult>,
     artifact: Readonly<FinalizedMemoryReadGroundingArtifact>,
+    request: Readonly<MemoryEvaluationStageRequest>,
   ): Promise<unknown>;
   load(
     context: AuthorizedLedgerWriteContext,
@@ -329,11 +333,15 @@ export const defineMemoryReadGroundingRepository = (
   implementation: MemoryReadGroundingRepositoryImplementation,
 ): MemoryReadGroundingRepository => Object.freeze({
   [PORT]: true as const,
-  async stage(contextValue, resultValue, artifactValue) {
+  async stage(contextValue, resultValue, artifactValue, requestValue) {
     const [context, result] = authority(contextValue, resultValue);
     const artifact = verifiedArtifact(result, artifactValue);
+    const requestResult = materializeMemoryEvaluationResult(context, requestValue);
+    if (sha256CanonicalContent(requestResult) !== sha256CanonicalContent(result)) {
+      fail("stage_request_result_mismatch");
+    }
     let raw: unknown;
-    try { raw = await implementation.stage(context, result, artifact); }
+    try { raw = await implementation.stage(context, result, artifact, requestValue); }
     catch { return Object.freeze({ kind: "source_unavailable" as const }); }
     const common = commonOutcome(raw);
     if (common) return common;

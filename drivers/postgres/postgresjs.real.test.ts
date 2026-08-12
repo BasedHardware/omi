@@ -10,6 +10,15 @@ import {
   type ProductProjectionPayload,
   type ProductProjectionWriteBody,
 } from "../../apps/service/stores/product-projection-repository";
+import { defineMemoryEvaluationEvidenceSource } from "../../apps/service/stores/memory-evaluation-evidence-source";
+import { materializeFinalizedMemoryReadGrounding } from "../../apps/service/stores/memory-read-grounding-repository";
+import {
+  materializeMemoryEvaluationResult,
+  memoryEvaluationStageRequestDigest,
+  pairMemoryEvaluationResults,
+  type MemoryEvaluationRole,
+  type MemoryEvaluationStageRequest,
+} from "../../apps/service/stores/memory-shadow-result-repository";
 import {
   durableMemoryWorkAcceptanceRequestDigest,
   durableMemoryWorkInputManifestDigest,
@@ -29,6 +38,7 @@ import {
   formationWorkInputStageRequestDigest,
 } from "../../apps/service/workers/formation-work-input-repository";
 import { DURABLE_MEMORY_GRAPH_PLAN_VERSION } from "../../apps/service/workers/durable-memory-graph-plan";
+import { buildMemoryReadEvaluationResult } from "../../apps/service/workers/memory-read-evaluation-result";
 import {
   PREDICATE_BATCH_SCHEDULING_SNAPSHOT_VERSION,
   definePredicateBatchWorkScheduler,
@@ -69,6 +79,7 @@ import {
 } from "../../core/extract/grounded";
 import { prepareDerivation, type AtomicGraphTransition } from "../../core/ledger";
 import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
+import { buildContentSafeRecallTrace } from "../../core/retrieve/recall-integrity";
 import {
   birthProductProposition,
   buildProductProjectionRevision,
@@ -91,6 +102,10 @@ import { createPostgresFirebaseAuthorizedLedgerRuntime } from "./firebase-author
 import { createPostgresPredicateBatchWorkInputRepository } from "./predicate-batch-work-input";
 import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
 import { createPostgresProductProjectionWriteRepository } from "./product-projection-repository";
+import {
+  createPostgresMemoryReadGroundingRepository,
+  createPostgresMemoryShadowResultRepository,
+} from "./memory-experiment-repository";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
@@ -3084,6 +3099,299 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     for (const forbiddenSql of [
       "UPDATE omi_memory.memory_product_propositions SET origin = 'native' WHERE account_id = $1",
       "DELETE FROM omi_memory.memory_product_projection_payloads WHERE account_id = $1",
+    ]) {
+      await expect(ownerSql.begin(async (transaction) => {
+        await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+        await transaction.unsafe(forbiddenSql, [accountId]);
+      })).rejects.toMatchObject({ code: "42501" });
+    }
+  }, 120_000);
+
+  test("application-role experiment results, pairs, and grounding are isolated, replayable, and authority-fenced", async () => {
+    const suffix = randomUUID();
+    const accountId = `account:experiment:${suffix}`;
+    const principalId = `principal:experiment:${suffix}`;
+    const applicationId = "app:qualification-experiment";
+    const credentialId = `credential:experiment:${suffix}`;
+    const grantId = `grant:experiment:${suffix}`;
+    const controlHash = "1".repeat(64);
+    const credentialHash = "2".repeat(64);
+    const grantHash = "3".repeat(64);
+    const now = Math.floor(Date.now() / 1_000);
+
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)", [accountId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+          (account_id, control_revision, account_generation, account_epoch,
+           lifecycle_state, deletion_epoch, observed_at, record_schema_version,
+           record_json, content_hash)
+        VALUES ($1, 17, 'new', 12, 'active', NULL, transaction_timestamp(),
+                'control-v1', '{}'::jsonb, $2)`, [accountId, controlHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+          (account_id, control_revision, activated_epoch, activation_control_revision)
+        VALUES ($1, 17, 12, 17)`, [accountId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_credential_revisions
+          (account_id, principal_id, application_id, credential_id,
+           credential_generation, credential_kind, lifecycle,
+           authentication_strength, expires_at, record_schema_version,
+           record_json, content_hash)
+        VALUES ($1, $2, $3, $4, 4, 'firebase', 'active', 'service-workload',
+                to_timestamp($5), 'credential-v1', '{}'::jsonb, $6)`,
+      [accountId, principalId, applicationId, credentialId, now + 7_200, credentialHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_credential_heads
+          (account_id, application_id, credential_id, credential_generation)
+        VALUES ($1, $2, $3, 4)`, [accountId, applicationId, credentialId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 4, 'memories.experiments.shadow', $4, 1, 'active', true,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+      [accountId, applicationId, credentialId, grantId, grantHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version)
+        VALUES ($1, $2, $3, 4, 'memories.experiments.shadow', $4, 1)`,
+      [accountId, applicationId, credentialId, grantId]);
+    });
+
+    const authority: AuthorityStateRow = {
+      account_id: accountId, principal_id: principalId, application_id: applicationId,
+      credential_id: credentialId, credential_generation: 4,
+      capability: "memories.experiments.shadow", grant_id: grantId, grant_version: 1,
+      account_epoch: 12, control_conflict_reason: null, control_conflict_at_revision: null,
+      destination_activation_epoch: 12, destination_activation_revision: 17,
+      lifecycle_state: "active", deletion_epoch: null, account_generation: "new",
+      credential_lifecycle: "active", grant_lifecycle: "active", grant_enabled: true,
+      authentication_strength: "service-workload", credential_expires_at_epoch_seconds: now + 7_200,
+      control_revision: 17, control_content_hash: controlHash,
+      credential_content_hash: credentialHash, grant_content_hash: grantHash,
+      db_now_epoch_seconds: now,
+    };
+    const context = createAuthorizedLedgerWriteContextIssuer().issue({
+      context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
+      account_id: accountId, application_id: applicationId, credential_id: credentialId,
+      credential_generation: 4, capability: "memories.experiments.shadow",
+      grant_id: grantId, grant_version: 1, account_epoch: 12,
+      destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
+      authentication_strength: "service-workload", issued_at_epoch_seconds: now - 60,
+      expires_at_epoch_seconds: now + 3_600,
+      authorization_state_digest: authorizationStateDigest(authority),
+    }, now);
+
+    let backendPid: number | undefined;
+    const appRolePool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(
+        options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+        callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+      ) => pool.withTransaction(options, async (connection) => {
+        await connection.query({
+          name: "qualification.experiment_set_role",
+          text: "SET LOCAL ROLE omi_platform_application", values: [],
+        });
+        const role = await connection.query<{ current_user: string; backend_pid: number }>({
+          name: "qualification.experiment_assert_role",
+          text: "SELECT current_user, pg_backend_pid() AS backend_pid", values: [],
+        });
+        expect(role[0]?.current_user).toBe("omi_platform_application");
+        if (backendPid === undefined) backendPid = role[0]?.backend_pid;
+        expect(role[0]?.backend_pid).toBe(backendPid);
+        return callback(connection);
+      }),
+    });
+
+    const strategy = (id: string, version: string) => registerMemoryStrategy({
+      version: MEMORY_STRATEGY_VERSION, strategy_id: id, work_kind: "retrieval",
+      coordinates: {
+        strategy_version: version, model_version: "deepseek:v4-flash",
+        prompt_version: "prompt:qualification:v1", policy_version: "policy:v1",
+        code_version: "code:v1", schema_version: "schema:v1", tokenizer_version: "tokenizer:v1",
+        tool_version: "none", result_contract_version: "memory-read-evaluation-result-v1",
+        speaker_strategy_version: "none", boundary_strategy_version: "none",
+      },
+    });
+    const baselineStrategy = strategy(`strategy:baseline:${suffix}`, "retrieval:baseline:v1");
+    const candidateStrategy = strategy(`strategy:candidate:${suffix}`, "retrieval:candidate:v1");
+    const policy = defineMemoryStrategyAssignmentPolicy({
+      policy_id: `policy:retrieval:${suffix}`, work_kind: "retrieval", unit_kind: "session",
+      key_version: "assignment-key:v1", authority_strategy_id: baselineStrategy.strategy_id,
+      shadow_candidates: [{ strategy_id: candidateStrategy.strategy_id, basis_points: 10_000 }],
+    }, [baselineStrategy, candidateStrategy]);
+    const assignment = createMemoryStrategyAssigner(new Uint8Array(32).fill(5)).assign({
+      owner_account_id: accountId, unit_ref: `session:${suffix}`,
+      policy, strategies: [baselineStrategy, candidateStrategy],
+    });
+    const source = defineMemoryEvaluationEvidenceSource(async (authorized, request) => ({
+      kind: "found", owner_account_id: authorized.account_id, account_epoch: authorized.account_epoch,
+      source_kind: request.source_kind, source_ref: request.source_ref,
+      input_frontier: request.input_frontier, payload: { query: "Where do I work?" },
+    }));
+    const copied = await source.load(context, {
+      source_kind: "authorized_graph_snapshot", source_ref: `source:${suffix}`,
+      input_frontier: `frontier:${suffix}`,
+    });
+    if (copied.kind !== "found") throw new Error("qualification copied input unavailable");
+    const evidenceRef = `tr1_${sha256CanonicalContent({ suffix, evidence: 1 })}` as const;
+
+    const stageRequest = (role: MemoryEvaluationRole): MemoryEvaluationStageRequest => {
+      const selected = role === "baseline" ? assignment.authority : assignment.shadows[0]!;
+      const selectedStrategy = role === "baseline" ? baselineStrategy : candidateStrategy;
+      const trace = buildContentSafeRecallTrace({
+        version: "recall-trace-v1", traceRef: `tr1_${sha256CanonicalContent({ suffix, role })}`,
+        strategyVersion: selectedStrategy.coordinates.strategy_version,
+        projectionFreshness: "fresh", outcome: "grounded", latencyMs: 1,
+        tokenCounts: { input: 1, output: 1 },
+        stages: {
+          eligible: [evidenceRef], selected: [evidenceRef], hydrated: [evidenceRef],
+          policyEligible: [evidenceRef], cited: [evidenceRef], grounded: [evidenceRef],
+        },
+      });
+      const normalized = buildMemoryReadEvaluationResult(context, {
+        assignment_bundle: assignment, assignment_id: selected.assignment_id,
+        copied_input: copied.copied_input, evaluation_role: role, repeat_ordinal: 0,
+        query_text: "Where do I work?", answer_text: "You work at Omi.", absence: null,
+        assertions: [{ ordinal: 0, text: "You work at Omi.", citations: [evidenceRef] }],
+        recall_trace: trace,
+      });
+      const body = {
+        assignment_bundle: assignment, assignment_id: selected.assignment_id,
+        account_epoch: 12, evaluation_role: role, evaluation_mode: "offline_replay" as const,
+        evaluation_run_id: `mer1_${sha256CanonicalContent({ suffix, run: 1 })}`,
+        input_frontier: `frontier:${suffix}`, input_digest: copied.copied_input.input_digest,
+        repeat_ordinal: 0, result_contract_version: normalized.version,
+        response_digest: sha256CanonicalContent({ role, normalized }),
+        normalized_result_digest: durableMemoryWorkNormalizedResultDigest(normalized.version, normalized),
+        normalized_result: normalized,
+      };
+      return { ...body, request_digest: memoryEvaluationStageRequestDigest(context, body) };
+    };
+
+    const results = createPostgresMemoryShadowResultRepository({ pool: appRolePool });
+    const groundings = createPostgresMemoryReadGroundingRepository({ pool: appRolePool });
+    const baselineRequest = stageRequest("baseline");
+    const candidateRequest = stageRequest("candidate");
+    const baselineResult = materializeMemoryEvaluationResult(context, baselineRequest);
+    const candidateResult = materializeMemoryEvaluationResult(context, candidateRequest);
+    for (const [selected, selectedRequest] of [
+      [baselineResult, baselineRequest],
+      [candidateResult, candidateRequest],
+    ] as const) {
+      const artifact = materializeFinalizedMemoryReadGrounding({
+        evaluation_result: selected, projection_authorization_digest: "4".repeat(64),
+        reader_projection_digest: "5".repeat(64), projected_content_digest: "6".repeat(64),
+        rows: [{ trace_ref: evidenceRef, contributing_subject_classes: ["owner"] }],
+      });
+      await expect(groundings.stage(context, selected, artifact, selectedRequest)).resolves.toEqual({ kind: "staged", artifact });
+      await expect(groundings.load(context, selected)).resolves.toEqual({ kind: "found", artifact });
+    }
+    await expect(results.stage(context, baselineRequest)).resolves.toEqual({
+      kind: "replayed", result: baselineResult,
+    });
+    await expect(results.load(context, {
+      assignment_bundle: assignment, assignment_id: assignment.authority.assignment_id,
+      account_epoch: 12, evaluation_role: "baseline", evaluation_mode: "offline_replay",
+      evaluation_run_id: baselineRequest.evaluation_run_id,
+      input_frontier: baselineRequest.input_frontier, input_digest: baselineRequest.input_digest,
+      repeat_ordinal: 0,
+    })).resolves.toEqual({ kind: "found", result: baselineResult });
+    const pair = pairMemoryEvaluationResults(baselineResult, candidateResult);
+    await expect(results.recordPair(context, pair)).resolves.toEqual({ kind: "recorded", pair });
+    await expect(results.recordPair(context, pair)).resolves.toEqual({ kind: "replayed", pair });
+
+    const persisted = await ownerSql.unsafe<{
+      baselines: number; candidates: number; pairs: number; baseline_groundings: number;
+      candidate_groundings: number; pair_json_columns: number;
+    }[]>(`SELECT
+      (SELECT count(*)::int FROM omi_memory.memory_strategy_evaluation_baselines WHERE account_id = $1) AS baselines,
+      (SELECT count(*)::int FROM omi_memory.memory_strategy_shadow_results WHERE account_id = $1) AS candidates,
+      (SELECT count(*)::int FROM omi_memory.memory_strategy_evaluation_pairs WHERE account_id = $1) AS pairs,
+      (SELECT count(*)::int FROM omi_memory.memory_strategy_baseline_read_groundings WHERE account_id = $1) AS baseline_groundings,
+      (SELECT count(*)::int FROM omi_memory.memory_strategy_candidate_read_groundings WHERE account_id = $1) AS candidate_groundings,
+      (SELECT count(*)::int FROM information_schema.columns
+       WHERE table_schema = 'omi_memory' AND table_name = 'memory_strategy_evaluation_pairs'
+         AND data_type IN ('json', 'jsonb')) AS pair_json_columns`, [accountId]);
+    expect([...persisted]).toEqual([{
+      baselines: 1, candidates: 1, pairs: 1,
+      baseline_groundings: 1, candidate_groundings: 1, pair_json_columns: 0,
+    }]);
+
+    const rollbackPolicy = defineMemoryStrategyAssignmentPolicy({
+      policy_id: `policy:rollback:${suffix}`, work_kind: "retrieval", unit_kind: "session",
+      key_version: "assignment-key:v1", authority_strategy_id: baselineStrategy.strategy_id,
+      shadow_candidates: [{ strategy_id: candidateStrategy.strategy_id, basis_points: 10_000 }],
+    }, [baselineStrategy, candidateStrategy]);
+    const rollbackAssignment = createMemoryStrategyAssigner(new Uint8Array(32).fill(7)).assign({
+      owner_account_id: accountId, unit_ref: `session:rollback:${suffix}`,
+      policy: rollbackPolicy, strategies: [baselineStrategy, candidateStrategy],
+    });
+    const rollbackBody = {
+      ...baselineRequest, assignment_bundle: rollbackAssignment,
+      assignment_id: rollbackAssignment.authority.assignment_id,
+      evaluation_run_id: `mer1_${sha256CanonicalContent({ suffix, run: "rollback" })}`,
+    };
+    const { request_digest: _oldRollbackDigest, ...rollbackRequestBody } = rollbackBody;
+    const rollbackRequest: MemoryEvaluationStageRequest = {
+      ...rollbackRequestBody,
+      request_digest: memoryEvaluationStageRequestDigest(context, rollbackRequestBody),
+    };
+    const rollbackResult = materializeMemoryEvaluationResult(context, rollbackRequest);
+    const rollbackArtifact = materializeFinalizedMemoryReadGrounding({
+      evaluation_result: rollbackResult, projection_authorization_digest: "4".repeat(64),
+      reader_projection_digest: "5".repeat(64), projected_content_digest: "6".repeat(64),
+      rows: [{ trace_ref: evidenceRef, contributing_subject_classes: ["owner"] }],
+    });
+    try {
+      await ownerSql.unsafe(`
+        CREATE OR REPLACE FUNCTION omi_memory.qualification_reject_experiment_grounding()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'qualification injected experiment rollback'; END
+        $$;
+        DROP TRIGGER IF EXISTS reject_experiment_grounding ON omi_memory.memory_strategy_baseline_read_groundings;
+        CREATE TRIGGER reject_experiment_grounding
+        AFTER INSERT ON omi_memory.memory_strategy_baseline_read_groundings
+        FOR EACH ROW EXECUTE FUNCTION omi_memory.qualification_reject_experiment_grounding()
+      `, [], { prepare: false });
+      await expect(groundings.stage(
+        context, rollbackResult, rollbackArtifact, rollbackRequest,
+      )).resolves.toEqual({ kind: "source_unavailable" });
+      const rolledBack = await ownerSql.unsafe<{ bundles: number; results: number; groundings: number }[]>(`SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_strategy_assignment_bundles
+          WHERE account_id = $1 AND assignment_bundle_id = $2) AS bundles,
+        (SELECT count(*)::int FROM omi_memory.memory_strategy_evaluation_baselines
+          WHERE account_id = $1 AND evaluation_run_id = $3) AS results,
+        (SELECT count(*)::int FROM omi_memory.memory_strategy_baseline_read_groundings
+          WHERE account_id = $1 AND evaluation_result_id = $4) AS groundings`,
+      [accountId, rollbackAssignment.assignment_bundle_id, rollbackRequest.evaluation_run_id,
+        rollbackResult.evaluation_result_id]);
+      expect([...rolledBack]).toEqual([{ bundles: 0, results: 0, groundings: 0 }]);
+    } finally {
+      await ownerSql.unsafe(`
+        DROP TRIGGER IF EXISTS reject_experiment_grounding ON omi_memory.memory_strategy_baseline_read_groundings;
+        DROP FUNCTION IF EXISTS omi_memory.qualification_reject_experiment_grounding()
+      `, [], { prepare: false }).catch(() => undefined);
+    }
+
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 4, 'memories.experiments.shadow', $4, 2, 'revoked', false,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+      [accountId, applicationId, credentialId, grantId, "7".repeat(64)]);
+      await transaction.unsafe(`UPDATE omi_memory.application_grant_heads
+        SET grant_version = 2, updated_at = transaction_timestamp()
+        WHERE account_id = $1 AND application_id = $2 AND credential_id = $3
+          AND credential_generation = 4 AND capability = 'memories.experiments.shadow'`,
+      [accountId, applicationId, credentialId]);
+    });
+    await expect(results.stage(context, baselineRequest)).resolves.toEqual({
+      kind: "authorization_denied", reason: "grant_inactive",
+    });
+
+    for (const forbiddenSql of [
+      "UPDATE omi_memory.memory_strategy_evaluation_baselines SET result_version = result_version WHERE account_id = $1",
+      "DELETE FROM omi_memory.memory_strategy_evaluation_pairs WHERE account_id = $1",
     ]) {
       await expect(ownerSql.begin(async (transaction) => {
         await transaction.unsafe("SET LOCAL ROLE omi_platform_application");

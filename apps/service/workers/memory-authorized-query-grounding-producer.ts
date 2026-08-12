@@ -39,6 +39,7 @@ import {
   type MemoryEvaluationResult,
   type MemoryEvaluationRole,
   type MemoryEvaluationStageBody,
+  type MemoryEvaluationStageRequest,
   type MemoryShadowResultRepository,
 } from "../stores/memory-shadow-result-repository";
 import {
@@ -490,6 +491,7 @@ export const defineMemoryAuthorizedQueryGroundingProducer = (
       }
 
       let result: Readonly<MemoryEvaluationResult>;
+      let resultStageRequest: Readonly<MemoryEvaluationStageRequest>;
       let read;
       try {
         read = buildMemoryReadEvaluationResult(context, {
@@ -515,10 +517,11 @@ export const defineMemoryAuthorizedQueryGroundingProducer = (
           normalized_result_digest: durableMemoryWorkNormalizedResultDigest(read.version, read as never),
           normalized_result: read as never,
         };
-        result = materializeMemoryEvaluationResult(context, {
+        resultStageRequest = Object.freeze({
           ...body,
           request_digest: memoryEvaluationStageRequestDigest(context, body),
         });
+        result = materializeMemoryEvaluationResult(context, resultStageRequest);
       } catch {
         return stop("invalid_result", modelCalls);
       }
@@ -549,7 +552,7 @@ export const defineMemoryAuthorizedQueryGroundingProducer = (
       }
 
       let staged;
-      try { staged = await groundingRepository.stage(context, result, artifact); }
+      try { staged = await groundingRepository.stage(context, result, artifact, resultStageRequest!); }
       catch { return stop("storage_unavailable", modelCalls); }
       if (staged.kind !== "staged" && staged.kind !== "replayed") {
         return stop(storageStop(staged.kind), modelCalls);
