@@ -25,6 +25,8 @@ from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
 from utils.byok import (
     extract_byok_from_websocket,
+    extract_byok_llm_provider_from_websocket,
+    set_byok_llm_provider,
     set_validated_byok_keys,
     validate_byok_request,
     validate_byok_websocket_keys,
@@ -366,6 +368,7 @@ async def get_current_user_uid_ws_listen(
         validated_byok_keys, error = await run_blocking(
             critical_executor, validate_byok_websocket_keys, uid, extract_byok_from_websocket(websocket)
         )
+        set_byok_llm_provider(extract_byok_llm_provider_from_websocket(websocket))
         if error:
             raise WebSocketException(code=4003, reason=error)
         set_validated_byok_keys(validated_byok_keys, uid)

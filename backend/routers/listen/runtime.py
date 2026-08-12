@@ -24,7 +24,11 @@ from models.users import PlanType
 from utils.analytics import billable_transcription_seconds, record_usage
 from utils.apps import is_audio_bytes_app_enabled
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
-from utils.byok import get_byok_keys
+from utils.byok import (
+    extract_byok_llm_provider_from_websocket,
+    get_byok_keys,
+    set_byok_llm_provider,
+)
 from utils.client_device import resolve_client_device_from_headers
 from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
 from utils.fair_use import (
@@ -244,6 +248,7 @@ class ListenSessionRuntime:
         if not self.request.uid:
             await self.request.websocket.close(code=1008, reason='Bad uid')
             return False
+        set_byok_llm_provider(extract_byok_llm_provider_from_websocket(self.request.websocket))
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(
                 FreemiumThresholdReachedEvent(remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT).to_json()
