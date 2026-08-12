@@ -1180,6 +1180,11 @@ def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional
                 snapshot = tx.get(f'{_sessions_path(uid)}/{message_session_id}')
                 if snapshot.exists:
                     session_data_by_id[message_session_id] = snapshot.to_dict() or {}
+            # Read the target messages into the transaction read-set too, so a concurrent update or
+            # recreation of any of them aborts+retries this cleanup instead of silently deleting a
+            # message a concurrent writer just changed (restores the removed last_update_time guard).
+            for path in message_paths:
+                tx.get(path)
             # Writes: delete the messages, then apply the inverse session-metadata updates.
             for path in message_paths:
                 tx.delete(path)
