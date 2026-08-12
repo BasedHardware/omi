@@ -91,7 +91,7 @@ struct TaskLocalContextEvent: Equatable, Sendable {
     subject: TaskContextSubject? = nil,
     occurredAt: Date = Date()
   ) -> TaskLocalContextEvent? {
-    let normalizedTitle = ContextDetection.normalizeWindowTitle(windowTitle) ?? "untitled"
+    let normalizedTitle = ContextDetection.normalizeWindowTitle(windowTitle, appName: appName) ?? "untitled"
     return normalized(
       kind: .appWindow,
       rawReference: "\(appName)\n\(normalizedTitle)",
