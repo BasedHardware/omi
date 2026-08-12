@@ -357,7 +357,11 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(workGrants.join("\n")).toContain("memory_work_heads");
     expect(workGrants.join("\n")).toContain("INSERT ON omi_memory.memory_work_outbox_events");
     expect(workGrants.join("\n")).not.toMatch(/DELETE|memory_work_(?:staged_results|success_results)/);
-    expect(grants.join("\n")).not.toMatch(/omi_memory\.memory_(?:product_|legacy_proposition|migration_item)/);
+    const grantsBeforeProductWriter = migrationSql
+      .filter((migration) => migration.version < 22)
+      .flatMap((migration) => migration.sql.match(/GRANT[\s\S]*?;/g) ?? []);
+    expect(grantsBeforeProductWriter.join("\n"))
+      .not.toMatch(/omi_memory\.memory_(?:product_|legacy_proposition|migration_item)/);
   });
 
   test("persists only closed, fenced, content-safe P3 work and outbox coordinates", () => {
@@ -619,7 +623,7 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_strategy_(?:baseline|candidate)_read_groundings/s);
   });
 
-  test("persists P4 proposition identity, history, citations, redirects, and disposable grouping without grants", () => {
+  test("persists P4 product state with only the sealed writer's append grants", () => {
     const mapping = tables.find((table) => table.name === "memory_legacy_proposition_mappings")!;
     expect(mapping.body).toContain("PRIMARY KEY (account_id, legacy_source_id)");
     expect(mapping.body).toContain("allocation_contract = 'random_opaque_v1'");
@@ -693,7 +697,18 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(allSql).toContain("product-projection runtime idempotency substrate");
     expect(allSql).toContain("Deliberately no application, projector, reader, worker, or migration-copier");
 
-    expect(allSql).toContain("Deliberately no application, migration-copier, projector, or worker grant");
-    expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_(?:product_|legacy_proposition|migration_item)/s);
+    const baseProductSql = migrationSql.find((migration) => migration.version === 5)!.sql;
+    expect(baseProductSql).toContain("Deliberately no application, migration-copier, projector, or worker grant");
+    expect(baseProductSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_(?:product_|legacy_proposition|migration_item)/s);
+    const writerGrantSql = migrationSql.find((migration) => migration.version === 22)!.sql;
+    expect(writerGrantSql).toContain("P4 inert projector-writer grants");
+    for (const table of tables.filter((candidate) => candidate.name.startsWith("memory_product_"))) {
+      expect(writerGrantSql).toContain(
+        `GRANT SELECT, INSERT ON omi_memory.${table.name} TO omi_platform_application;`,
+      );
+    }
+    const writerGrantStatements = writerGrantSql.replace(/^--.*$/gm, "");
+    expect(writerGrantStatements).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE|CREATE|ALTER|DROP)\b/);
+    expect(writerGrantSql).not.toMatch(/memory_(?:legacy_proposition|migration_item)/);
   });
 });

@@ -1,12 +1,14 @@
 # Product projection repository contract
 
-Status: P4 service-boundary pre-registration, 2026-08-11
+Status: P4 service boundary plus inert PostgreSQL projector writer implemented and
+qualified locally, 2026-08-12. Authorized product reads and runtime composition
+remain gated and unimplemented.
 
 ## Purpose
 
 This contract freezes the service seam between the pure product-projection core
-and a later PostgreSQL adapter. It adds no database client, SQL execution,
-worker, route, grant, migration copier, or runtime default.
+and its PostgreSQL adapter. It adds no worker, route, migration copier, product
+read composition, or runtime default.
 
 The repository has named product operations only. It never lends a connection,
 accepts SQL, mints authority, or accepts a raw account id as read authority.
@@ -65,12 +67,39 @@ consumer renders the result.
 
 - Legacy mapping/tombstone operations are absent. They require a separately
   ratified migration-copier authority and cannot borrow app or projector grants.
-- The port does not activate `0005-product-memory-projections.sql` or grant any
-  role access.
+- The writer is inert outside explicit construction. Migrations 0021 and 0022
+  add account-scoped immutable receipts and exact application-role
+  `SELECT, INSERT` grants for the sealed adapter. They grant no update, delete,
+  truncate, DDL, legacy-migration, route, or default-composition authority.
 - It does not change `/v1/memories`, MCP, chat composition, `subject:*`,
   bystander/privacy policy, or compose voice.
-- It does not claim real PostgreSQL, pool, crash, replay, load, or recovery
-  qualification.
+- It does not claim product read authorization, migration-copy behavior,
+  workload capacity, backup/restore, deployment, or recovery qualification.
+
+## Implemented PostgreSQL writer
+
+`drivers/postgres/product-projection-repository.ts` implements the sealed
+named-operation write port. Every call runs on one serializable checked-out
+connection, re-locks the exact `memories.project` authority before receipt
+lookup, and requires the requested graph commit and sequence to remain the
+current owner-local graph head before mutation.
+
+The adapter persists proposition birth, later membership, projection payload
+and complete citation closure, redirect edges, and disposable grouping through
+fixed account-bound statements. Exact immutable replay is recorded in
+`memory_product_operation_receipts`; changed bytes for the same operation
+identity conflict. Projection metadata, JSON payload, citations, evidence
+references, and receipt commit atomically. Redirect validation loads only the
+bounded owner-local proposition and redirect graph and refuses dangling or
+cyclic work. Legacy mapping births remain outside projector authority.
+
+The pinned PostgreSQL 18.4 qualification runs the adapter as
+`omi_platform_application`. It proves application-role execution, one physical
+lease, birth and projection commit, replay/conflict, exact row counts, injected
+post-receipt rollback with zero partial rows, stale-graph refusal, grant
+revocation before replay, forbidden update/delete, migration reapply, and the
+pinned Bun 1.3.14 plus Node 24.19.0 parity corpus. The managed runtime stops at
+the end and preserves only the labelled synthetic test volume.
 
 ## Pre-registered acceptance tests
 

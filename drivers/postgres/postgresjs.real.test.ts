@@ -6,6 +6,11 @@ import postgres, { type Sql } from "postgres";
 import { createAuthorizedLedgerWriteContextIssuer } from "../../apps/service/auth/authorized-context-internal";
 import { authoritativeAppendRequestDigest, type AuthoritativeLedgerAppend } from "../../apps/service/stores/authoritative-ledger-repository";
 import {
+  productProjectionWriteRequestDigest,
+  type ProductProjectionPayload,
+  type ProductProjectionWriteBody,
+} from "../../apps/service/stores/product-projection-repository";
+import {
   durableMemoryWorkAcceptanceRequestDigest,
   durableMemoryWorkInputManifestDigest,
   type DurableMemoryWorkAcceptanceRequest,
@@ -64,6 +69,10 @@ import {
 } from "../../core/extract/grounded";
 import { prepareDerivation, type AtomicGraphTransition } from "../../core/ledger";
 import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
+import {
+  birthProductProposition,
+  buildProductProjectionRevision,
+} from "../../core/retrieve/product-projection";
 import type { IdentityAuthorization, IdentityConstraint, Predicate, ProvisionalClaim } from "../../core/schema";
 import {
   createPostgresAuthoritativeLedgerRepository,
@@ -81,6 +90,7 @@ import { createPostgresFirebaseAuthorizedGraphSnapshotRuntime } from "./firebase
 import { createPostgresFirebaseAuthorizedLedgerRuntime } from "./firebase-authorized-ledger-runtime";
 import { createPostgresPredicateBatchWorkInputRepository } from "./predicate-batch-work-input";
 import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
+import { createPostgresProductProjectionWriteRepository } from "./product-projection-repository";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
@@ -90,6 +100,13 @@ import { DeterministicFakeModel, type ModelInvokeRequest } from "../model/port";
 
 const explicitTestUrl = process.env["OMI_TEST_POSTGRES_URL"];
 const realTest = explicitTestUrl ? describe : describe.skip;
+
+const productRequest = <Body extends ProductProjectionWriteBody>(
+  body: Body,
+): Body & { request_digest: string } => ({
+  ...body,
+  request_digest: productProjectionWriteRequestDigest(body),
+});
 
 const nonemptyAppend = (
   accountId: string,
@@ -2755,5 +2772,323 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     await expect(repository.append(context, first)).resolves.toEqual({
       kind: "authorization_denied", reason: "grant_inactive",
     });
+  }, 120_000);
+
+  test("application-role product projection writer is atomic, replayable, graph-fenced, and authority-fenced", async () => {
+    const suffix = randomUUID();
+    const accountId = `account:product:${suffix}`;
+    const principalId = `principal:product:${suffix}`;
+    const applicationId = "app:qualification-product";
+    const credentialId = `credential:product:${suffix}`;
+    const writeGrantId = `grant:product-write:${suffix}`;
+    const projectGrantId = `grant:product-project:${suffix}`;
+    const controlHash = "1".repeat(64);
+    const credentialHash = "2".repeat(64);
+    const writeGrantHash = "3".repeat(64);
+    const projectGrantHash = "4".repeat(64);
+    const now = Math.floor(Date.now() / 1_000);
+
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(
+        "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)", [accountId],
+      );
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+          (account_id, control_revision, account_generation, account_epoch,
+           lifecycle_state, deletion_epoch, observed_at, record_schema_version,
+           record_json, content_hash)
+        VALUES ($1, 17, 'new', 12, 'active', NULL, transaction_timestamp(),
+                'control-v1', '{}'::jsonb, $2)`, [accountId, controlHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+          (account_id, control_revision, activated_epoch, activation_control_revision)
+        VALUES ($1, 17, 12, 17)`, [accountId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_credential_revisions
+          (account_id, principal_id, application_id, credential_id,
+           credential_generation, credential_kind, lifecycle,
+           authentication_strength, expires_at, record_schema_version,
+           record_json, content_hash)
+        VALUES ($1, $2, $3, $4, 4, 'firebase', 'active', 'service-workload',
+                to_timestamp($5), 'credential-v1', '{}'::jsonb, $6)`,
+      [accountId, principalId, applicationId, credentialId, now + 7_200, credentialHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_credential_heads
+          (account_id, application_id, credential_id, credential_generation)
+        VALUES ($1, $2, $3, 4)`, [accountId, applicationId, credentialId]);
+      for (const [capability, grantId, grantHash] of [
+        ["memories.write", writeGrantId, writeGrantHash],
+        ["memories.project", projectGrantId, projectGrantHash],
+      ] as const) {
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version, lifecycle, enabled, scopes,
+             record_schema_version, record_json, content_hash)
+          VALUES ($1, $2, $3, 4, $4, $5, 1, 'active', true,
+                  '[]'::jsonb, 'grant-v1', '{}'::jsonb, $6)`,
+        [accountId, applicationId, credentialId, capability, grantId, grantHash]);
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version)
+          VALUES ($1, $2, $3, 4, $4, $5, 1)`,
+        [accountId, applicationId, credentialId, capability, grantId]);
+      }
+    });
+
+    const authority = (
+      capability: "memories.write" | "memories.project",
+      grantId: string,
+      grantHash: string,
+    ): AuthorityStateRow => ({
+      account_id: accountId, principal_id: principalId, application_id: applicationId,
+      credential_id: credentialId, credential_generation: 4, capability,
+      grant_id: grantId, grant_version: 1, account_epoch: 12,
+      control_conflict_reason: null, control_conflict_at_revision: null,
+      destination_activation_epoch: 12, destination_activation_revision: 17,
+      lifecycle_state: "active", deletion_epoch: null, account_generation: "new",
+      credential_lifecycle: "active", grant_lifecycle: "active", grant_enabled: true,
+      authentication_strength: "service-workload",
+      credential_expires_at_epoch_seconds: now + 7_200, control_revision: 17,
+      control_content_hash: controlHash, credential_content_hash: credentialHash,
+      grant_content_hash: grantHash, db_now_epoch_seconds: now,
+    });
+    const authorized = (row: AuthorityStateRow) => createAuthorizedLedgerWriteContextIssuer().issue({
+      context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
+      account_id: accountId, application_id: applicationId, credential_id: credentialId,
+      credential_generation: 4, capability: row.capability, grant_id: row.grant_id,
+      grant_version: row.grant_version, account_epoch: 12,
+      destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
+      authentication_strength: "service-workload", issued_at_epoch_seconds: now - 60,
+      expires_at_epoch_seconds: now + 3_600,
+      authorization_state_digest: authorizationStateDigest(row),
+    }, now);
+    const writeContext = authorized(authority("memories.write", writeGrantId, writeGrantHash));
+    const projectContext = authorized(authority("memories.project", projectGrantId, projectGrantHash));
+
+    let productBackend: number | undefined;
+    let productStatement = "none";
+    let productProviderCode = "none";
+    let productConstraint = "none";
+    const appRolePool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(
+        options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+        callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+      ) => pool.withTransaction(options, async (connection) => {
+        await connection.query({
+          name: "qualification.product_set_role",
+          text: "SET LOCAL ROLE omi_platform_application", values: [],
+        });
+        const role = await connection.query<{ current_user: string; backend_pid: number }>({
+          name: "qualification.product_assert_role",
+          text: "SELECT current_user, pg_backend_pid() AS backend_pid", values: [],
+        });
+        expect(role[0]?.current_user).toBe("omi_platform_application");
+        if (productBackend === undefined) productBackend = role[0]?.backend_pid;
+        expect(role[0]?.backend_pid).toBe(productBackend);
+        return callback(Object.freeze({
+          connectionIdentity: connection.connectionIdentity,
+          query: async <Row extends Record<string, unknown>>(statement: SqlStatement) => {
+            productStatement = statement.name;
+            try {
+              return await connection.query<Row>(statement);
+            } catch (error) {
+              const code = error && typeof error === "object" ? Reflect.get(error, "code") : null;
+              const constraint = error && typeof error === "object"
+                ? Reflect.get(error, "constraint_name") : null;
+              productProviderCode = typeof code === "string" ? code : "unknown";
+              productConstraint = typeof constraint === "string" ? constraint : "unknown";
+              throw error;
+            }
+          },
+          execute: async (statement: SqlStatement) => {
+            productStatement = statement.name;
+            try {
+              return await connection.execute(statement);
+            } catch (error) {
+              const code = error && typeof error === "object" ? Reflect.get(error, "code") : null;
+              const constraint = error && typeof error === "object"
+                ? Reflect.get(error, "constraint_name") : null;
+              productProviderCode = typeof code === "string" ? code : "unknown";
+              productConstraint = typeof constraint === "string" ? constraint : "unknown";
+              throw error;
+            }
+          },
+        }));
+      }),
+    });
+
+    const ledger = createPostgresAuthoritativeLedgerRepository({ pool: appRolePool });
+    const graph = nonemptyAppend(accountId, `product-${suffix}`, null);
+    await expect(ledger.append(writeContext, graph)).resolves.toMatchObject({
+      kind: "committed", sequence: 1,
+    });
+    const claimRevision = graph.transition.revisions.find((revision) => revision.kind === "claim");
+    const evidenceRevision = graph.transition.revisions.find((revision) => revision.kind === "evidence");
+    if (!claimRevision || claimRevision.kind !== "claim"
+      || !evidenceRevision || evidenceRevision.kind !== "evidence") {
+      throw new Error("invalid product qualification graph");
+    }
+    const graphCoordinate = {
+      owner_account_id: accountId, graph_frontier: `frontier:product:${suffix}`,
+      graph_commit_id: graph.transition.derivation.commit.commit_id,
+      graph_commit_sequence: 1,
+    };
+    const born = birthProductProposition({
+      owner_account_id: accountId, proposition_id: `proposition:${suffix}:one`,
+      birth_claim_lineage_id: claimRevision.claim.claim_lineage_id, origin: "native",
+      graph_frontier: graphCoordinate.graph_frontier, input_digest: "5".repeat(64),
+      result_digest: "6".repeat(64), created_at_event_time: 10,
+    });
+    const projector = createPostgresProductProjectionWriteRepository({ pool: appRolePool });
+    const birth = productRequest({
+      operation: "birth" as const, graph: graphCoordinate,
+      identity: born.identity, membership: born.membership,
+    });
+    try {
+      expect(await projector.append(projectContext, birth)).toEqual({ kind: "appended" });
+    } catch (error) {
+      throw new Error(
+        `product qualification failed at ${productStatement} code ${productProviderCode} constraint ${productConstraint}`,
+        { cause: error },
+      );
+    }
+    await expect(projector.append(projectContext, birth)).resolves.toEqual({ kind: "replayed" });
+
+    const changedBirth = birthProductProposition({
+      owner_account_id: accountId, proposition_id: born.identity.proposition_id,
+      birth_claim_lineage_id: claimRevision.claim.claim_lineage_id, origin: "native",
+      graph_frontier: graphCoordinate.graph_frontier, input_digest: "5".repeat(64),
+      result_digest: "7".repeat(64), created_at_event_time: 11,
+    });
+    await expect(projector.append(projectContext, productRequest({
+      operation: "birth", graph: graphCoordinate,
+      identity: changedBirth.identity, membership: changedBirth.membership,
+    }))).resolves.toEqual({ kind: "idempotency_conflict" });
+
+    const renderedContent = Object.freeze({ title: "A cited product memory", language: "en" });
+    const renderedContentDigest = sha256CanonicalContent(renderedContent);
+    const projection = buildProductProjectionRevision({
+      identity: born.identity, membership: born.membership, projection_sequence: 1,
+      graph_frontier: graphCoordinate.graph_frontier,
+      renderer_contract_digest: "8".repeat(64), rendered_content_digest: renderedContentDigest,
+      citations: [{
+        claim_lineage_id: claimRevision.claim.claim_lineage_id,
+        claim_revision_id: claimRevision.revision_id,
+        evidence_refs: [evidenceRevision.evidence.evidence_id],
+      }],
+      created_at_event_time: 20,
+    });
+    const payload: ProductProjectionPayload = {
+      owner_account_id: accountId, projection_revision_id: projection.projection_revision_id,
+      rendered_content_digest: renderedContentDigest,
+      payload_contract_version: "product-rendered-content-v1",
+      rendered_content: renderedContent,
+    };
+    const projectionWrite = productRequest({
+      operation: "projection" as const, graph: graphCoordinate,
+      identity: born.identity, membership: born.membership, projection, payload,
+    });
+    try {
+      expect(await projector.append(projectContext, projectionWrite)).toEqual({ kind: "appended" });
+    } catch (error) {
+      throw new Error(
+        `product qualification failed at ${productStatement} code ${productProviderCode} constraint ${productConstraint}`,
+        { cause: error },
+      );
+    }
+
+    const persisted = await ownerSql.unsafe<{
+      propositions: number; memberships: number; projections: number; payloads: number;
+      citations: number; evidence_refs: number; receipts: number;
+    }[]>(`SELECT
+      (SELECT count(*)::int FROM omi_memory.memory_product_propositions WHERE account_id = $1) AS propositions,
+      (SELECT count(*)::int FROM omi_memory.memory_product_membership_revisions WHERE account_id = $1) AS memberships,
+      (SELECT count(*)::int FROM omi_memory.memory_product_projection_revisions WHERE account_id = $1) AS projections,
+      (SELECT count(*)::int FROM omi_memory.memory_product_projection_payloads WHERE account_id = $1) AS payloads,
+      (SELECT count(*)::int FROM omi_memory.memory_product_projection_citations WHERE account_id = $1) AS citations,
+      (SELECT count(*)::int FROM omi_memory.memory_product_projection_citation_evidence_refs WHERE account_id = $1) AS evidence_refs,
+      (SELECT count(*)::int FROM omi_memory.memory_product_operation_receipts WHERE account_id = $1) AS receipts`,
+    [accountId]);
+    expect([...persisted]).toEqual([{
+      propositions: 1, memberships: 1, projections: 1, payloads: 1,
+      citations: 1, evidence_refs: 1, receipts: 2,
+    }]);
+
+    const rollbackBorn = birthProductProposition({
+      owner_account_id: accountId, proposition_id: `proposition:${suffix}:rollback`,
+      birth_claim_lineage_id: claimRevision.claim.claim_lineage_id, origin: "native",
+      graph_frontier: graphCoordinate.graph_frontier, input_digest: "9".repeat(64),
+      result_digest: "a".repeat(64), created_at_event_time: 30,
+    });
+    try {
+      await ownerSql.unsafe(`
+        CREATE OR REPLACE FUNCTION omi_memory.qualification_reject_product_receipt()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'qualification injected product rollback'; END
+        $$;
+        DROP TRIGGER IF EXISTS reject_product_receipt ON omi_memory.memory_product_operation_receipts;
+        CREATE TRIGGER reject_product_receipt
+        AFTER INSERT ON omi_memory.memory_product_operation_receipts
+        FOR EACH ROW EXECUTE FUNCTION omi_memory.qualification_reject_product_receipt()
+      `, [], { prepare: false });
+      await expect(projector.append(projectContext, productRequest({
+        operation: "birth", graph: graphCoordinate,
+        identity: rollbackBorn.identity, membership: rollbackBorn.membership,
+      }))).rejects.toMatchObject({ code: "persistence_failed", message: "persistence_failed" });
+      const rolledBack = await ownerSql.unsafe<{ propositions: number; receipts: number }[]>(`
+        SELECT
+          (SELECT count(*)::int FROM omi_memory.memory_product_propositions
+            WHERE account_id = $1 AND proposition_id = $2) AS propositions,
+          (SELECT count(*)::int FROM omi_memory.memory_product_operation_receipts
+            WHERE account_id = $1 AND operation_identity = $2) AS receipts
+      `, [accountId, rollbackBorn.identity.proposition_id]);
+      expect([...rolledBack]).toEqual([{ propositions: 0, receipts: 0 }]);
+    } finally {
+      await ownerSql.unsafe(`
+        DROP TRIGGER IF EXISTS reject_product_receipt ON omi_memory.memory_product_operation_receipts;
+        DROP FUNCTION IF EXISTS omi_memory.qualification_reject_product_receipt()
+      `, [], { prepare: false }).catch(() => undefined);
+    }
+
+    const laterGraph = nonemptyAppend(
+      accountId, `product-later-${suffix}`, graph.transition.derivation.commit.commit_id,
+    );
+    await expect(ledger.append(writeContext, laterGraph)).resolves.toMatchObject({
+      kind: "committed", sequence: 2,
+    });
+    const staleBorn = birthProductProposition({
+      owner_account_id: accountId, proposition_id: `proposition:${suffix}:stale`,
+      birth_claim_lineage_id: claimRevision.claim.claim_lineage_id, origin: "native",
+      graph_frontier: graphCoordinate.graph_frontier, input_digest: "b".repeat(64),
+      result_digest: "c".repeat(64), created_at_event_time: 40,
+    });
+    await expect(projector.append(projectContext, productRequest({
+      operation: "birth", graph: graphCoordinate,
+      identity: staleBorn.identity, membership: staleBorn.membership,
+    }))).resolves.toEqual({ kind: "stale_graph" });
+
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 4, 'memories.project', $4, 2, 'revoked', false,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+      [accountId, applicationId, credentialId, projectGrantId, "d".repeat(64)]);
+      await transaction.unsafe(`UPDATE omi_memory.application_grant_heads
+        SET grant_version = 2, updated_at = transaction_timestamp()
+        WHERE account_id = $1 AND application_id = $2 AND credential_id = $3
+          AND credential_generation = 4 AND capability = 'memories.project'`,
+      [accountId, applicationId, credentialId]);
+    });
+    await expect(projector.append(projectContext, birth)).resolves.toEqual({
+      kind: "authorization_denied", reason: "grant_inactive",
+    });
+
+    for (const forbiddenSql of [
+      "UPDATE omi_memory.memory_product_propositions SET origin = 'native' WHERE account_id = $1",
+      "DELETE FROM omi_memory.memory_product_projection_payloads WHERE account_id = $1",
+    ]) {
+      await expect(ownerSql.begin(async (transaction) => {
+        await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+        await transaction.unsafe(forbiddenSql, [accountId]);
+      })).rejects.toMatchObject({ code: "42501" });
+    }
   }, 120_000);
 });

@@ -289,7 +289,8 @@ export const assertProductProjectionWriteRequest = (
     const membership = ownerMembership(root["membership"], context.account_id);
     assertIdentityMembership(identity, membership, graph);
     if (operation === "birth") {
-      if (membership.cause !== "birth" || membership.revision_sequence !== 1
+      if (identity.origin !== "native"
+        || membership.cause !== "birth" || membership.revision_sequence !== 1
         || membership.member_claim_lineage_ids.length !== 1
         || membership.member_claim_lineage_ids[0] !== identity.birth_claim_lineage_id) fail("invalid_birth");
       body = Object.freeze({ operation, graph, identity, membership });

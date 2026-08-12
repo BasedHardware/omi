@@ -149,6 +149,20 @@ describe("sealed projector write repository", () => {
     expect("execute" in repository).toBe(false);
   });
 
+  test("legacy mapping births remain outside projector authority", async () => {
+    const fixture = productFixture();
+    let calls = 0;
+    const repository = defineProductProjectionWriteRepository(async () => {
+      calls += 1;
+      return { kind: "appended" };
+    });
+    const identity = { ...fixture.born.identity, origin: "legacy_mapping" as const };
+    await expect(repository.append(context(), request({
+      operation: "birth", graph: fixture.graph, identity, membership: fixture.born.membership,
+    }))).rejects.toThrow("invalid_birth");
+    expect(calls).toBe(0);
+  });
+
   test("projection writes bind graph, membership, citations, payload, and request digest", async () => {
     const fixture = productFixture();
     let calls = 0;
