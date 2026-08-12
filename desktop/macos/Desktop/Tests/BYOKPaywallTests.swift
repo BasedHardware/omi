@@ -70,6 +70,15 @@ import XCTest
     }
   }
 
+  func testClearingSessionStateClearsOAuthByokActivation() {
+    UserDefaults.standard.set(BYOKLLMProvider.chatgpt.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set(true, forKey: .chatGPTLLMOAuthConnected)
+
+    APIKeyService.shared.clear()
+
+    XCTAssertFalse(APIKeyService.isByokActive)
+  }
+
   func testBuildHeadersAttachSelectedLLMByokKey() async throws {
     clearAllBYOKKeys()
     UserDefaults.standard.set("sk-test-openai", forKey: BYOKProvider.openai.storageKey)
