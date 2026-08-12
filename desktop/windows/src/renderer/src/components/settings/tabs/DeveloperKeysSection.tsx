@@ -16,24 +16,42 @@ import { dismissUsageLimit } from '../../../lib/usageLimit'
 import { fetchSubscription, fetchChatQuota } from '../../../lib/billing'
 import {
   BYOK_PROVIDERS,
+  isByokActive,
   type ByokProvider,
   type ByokValidationResults
 } from '../../../../../shared/byok'
 
 /** Field metadata per provider — titles/subtitles verbatim from the macOS view. */
 const PROVIDERS: { id: ByokProvider; title: string; subtitle: string; displayName: string }[] = [
+  {
+    id: 'openrouter',
+    title: 'OpenRouter API Key',
+    subtitle: 'For OpenRouter models.',
+    displayName: 'OpenRouter'
+  },
   { id: 'openai', title: 'OpenAI API Key', subtitle: 'For GPT calls.', displayName: 'OpenAI' },
-  { id: 'anthropic', title: 'Anthropic API Key', subtitle: 'For chat (Claude).', displayName: 'Anthropic' },
+  {
+    id: 'anthropic',
+    title: 'Anthropic API Key',
+    subtitle: 'For chat (Claude).',
+    displayName: 'Anthropic'
+  },
   {
     id: 'gemini',
     title: 'Gemini API Key',
     subtitle: 'For proactive AI (memory, tasks, insights, focus).',
     displayName: 'Gemini'
   },
-  { id: 'deepgram', title: 'Deepgram API Key', subtitle: 'For live transcription.', displayName: 'Deepgram' }
+  {
+    id: 'deepgram',
+    title: 'Deepgram API Key',
+    subtitle: 'For live transcription.',
+    displayName: 'Deepgram'
+  }
 ]
 
 const emptyKeys = (): Record<ByokProvider, string> => ({
+  openrouter: '',
   openai: '',
   anthropic: '',
   gemini: '',
@@ -50,6 +68,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
   const [checking, setChecking] = useState(false)
   const [activationError, setActivationError] = useState<string | null>(null)
   const [reveal, setReveal] = useState<Record<ByokProvider, boolean>>({
+    openrouter: false,
     openai: false,
     anthropic: false,
     gemini: false,
@@ -75,7 +94,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
     }
   }, [])
 
-  const hasAll = BYOK_PROVIDERS.every((p) => keys[p].trim().length > 0)
+  const hasAll = isByokActive(keys)
   const hasAnyKey = BYOK_PROVIDERS.some((p) => keys[p].trim().length > 0)
 
   // Persist the current key set, then reconcile backend activation. Runs
@@ -85,7 +104,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
     await Promise.all(BYOK_PROVIDERS.map((p) => window.omi.byokSet(p, cur[p].trim())))
     // Live-validate only when the full set is present (matches the enroll IPC's
     // own gate); a partial set just deactivates with no per-provider network.
-    const willValidate = BYOK_PROVIDERS.every((p) => cur[p].trim().length > 0)
+    const willValidate = isByokActive(cur)
     setChecking(willValidate)
     setActivationError(null)
     const token = await auth.currentUser?.getIdToken().catch(() => undefined)
@@ -165,7 +184,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
           <div className="mt-0.5 text-sm text-text-tertiary">
             {hasAll
               ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this PC."
-              : 'Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. Keys stay on this PC — we never store them on our servers.'}
+              : 'Add an LLM key to switch to the free plan. OpenRouter is preferred when configured; Deepgram is optional and only powers transcription. Keys stay on this PC — we never store them on our servers.'}
           </div>
         </div>
       </div>
@@ -229,7 +248,10 @@ export function DeveloperKeysSection(): React.JSX.Element {
 
       {hasAnyKey && (
         <div className="mt-5 flex justify-center">
-          <button onClick={() => void clearAll()} className="text-sm font-medium text-red-400 hover:text-red-300">
+          <button
+            onClick={() => void clearAll()}
+            className="text-sm font-medium text-red-400 hover:text-red-300"
+          >
             Clear All Custom Keys
           </button>
         </div>

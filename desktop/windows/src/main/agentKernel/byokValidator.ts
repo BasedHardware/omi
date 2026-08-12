@@ -35,7 +35,15 @@ function providerRequest(
 ): { url: string; headers: Record<string, string> } {
   switch (provider) {
     case 'openai':
-      return { url: 'https://api.openai.com/v1/models', headers: { Authorization: `Bearer ${key}` } }
+      return {
+        url: 'https://api.openai.com/v1/models',
+        headers: { Authorization: `Bearer ${key}` }
+      }
+    case 'openrouter':
+      return {
+        url: 'https://openrouter.ai/api/v1/models',
+        headers: { Authorization: `Bearer ${key}` }
+      }
     case 'anthropic':
       return {
         url: 'https://api.anthropic.com/v1/models?limit=1',
@@ -101,7 +109,7 @@ export async function validateAllByokKeys(
   fetchImpl: FetchLike = globalThis.fetch as unknown as FetchLike
 ): Promise<ByokValidationResults> {
   const entries = await Promise.all(
-    BYOK_PROVIDERS.map(
+    BYOK_PROVIDERS.filter((provider) => Boolean(keys[provider]?.trim())).map(
       async (provider): Promise<[ByokProvider, ByokKeyValidation]> => [
         provider,
         await validateProviderKey(provider, keys[provider] ?? '', fetchImpl)

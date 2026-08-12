@@ -2814,19 +2814,19 @@ actor AgentRuntimeProcess {
 
     var candidateValues: [String: String] = [:]
     var suppressedProviders: [BYOKProvider] = []
-    for provider in BYOKProvider.allCases {
-      guard let key = APIKeyService.byokKey(provider) else { continue }
-      let fingerprint = APIKeyService.byokFingerprint(key)
-      if CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: fingerprint) {
-        candidateValues[byokEnvironmentKey(for: provider)] = key
+    for (provider, entry) in APIKeyService.activeBYOKSnapshot {
+      if CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: entry.fingerprint) {
+        candidateValues[byokEnvironmentKey(for: provider)] = entry.key
       } else {
         suppressedProviders.append(provider)
       }
     }
-    guard suppressedProviders.isEmpty, candidateValues.count == BYOKProvider.allCases.count else {
+    guard let selectedProvider = APIKeyService.selectedBYOKLLMProvider,
+      candidateValues[byokEnvironmentKey(for: selectedProvider)] != nil
+    else {
       return ([:], suppressedProviders)
     }
-    return (candidateValues, [])
+    return (candidateValues, suppressedProviders)
   }
 
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {

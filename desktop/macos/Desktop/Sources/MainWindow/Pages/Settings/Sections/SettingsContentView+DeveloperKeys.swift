@@ -51,28 +51,29 @@ extension SettingsContentView {
     VStack(spacing: OmiSpacing.xl) {
       byokStatusBanner
 
-      developerKeyField(
-        provider: .openai,
-        title: "OpenAI API Key",
-        subtitle: "For GPT calls.",
-        settingId: "advanced.devkeys.openai",
-        value: $devOpenAIKey
-      )
+      settingsCard(settingId: "advanced.devkeys.llm") {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          Text("Language model")
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(Ink.primary)
+          Text("Choose the provider that powers chat, memory, and insights. OpenRouter is selected by default.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+          Picker("LLM provider", selection: $devBYOKLLMProvider) {
+            ForEach(BYOKLLMProvider.allCases) { provider in
+              Text(provider.displayName).tag(provider.rawValue)
+            }
+          }
+          .pickerStyle(.menu)
+        }
+      }
 
       developerKeyField(
-        provider: .anthropic,
-        title: "Anthropic API Key",
-        subtitle: "For chat (Claude).",
-        settingId: "advanced.devkeys.anthropic",
-        value: $devAnthropicKey
-      )
-
-      developerKeyField(
-        provider: .gemini,
-        title: "Gemini API Key",
-        subtitle: "For proactive AI (memory, tasks, insights, focus).",
-        settingId: "advanced.devkeys.gemini",
-        value: $devGeminiKey
+        provider: selectedBYOKLLMProvider.provider,
+        title: "\(selectedBYOKLLMProvider.displayName) API Key",
+        subtitle: selectedBYOKLLMSubtitle,
+        settingId: "advanced.devkeys.llm-key",
+        value: selectedBYOKLLMKey
       )
 
       developerKeyField(
@@ -82,10 +83,6 @@ extension SettingsContentView {
         settingId: "advanced.devkeys.deepgram",
         value: $devDeepgramKey
       )
-
-      if let byokIncompleteHint {
-        byokWarningCard(byokIncompleteHint, settingId: "advanced.devkeys.incomplete")
-      }
 
       if let byokActivationError {
         byokWarningCard(byokActivationError, settingId: "advanced.devkeys.error")
@@ -120,11 +117,29 @@ extension SettingsContentView {
   /// without a secret sitting in a view-diff identity.
   var byokKeySetFingerprint: String {
     APIKeyService.byokFingerprint(
-      [devOpenAIKey, devAnthropicKey, devGeminiKey, devDeepgramKey].joined(separator: "\u{1}"))
+      [devBYOKLLMProvider, selectedBYOKLLMKey.wrappedValue, devDeepgramKey].joined(separator: "\u{1}"))
   }
 
-  var byokIncompleteHint: String? {
-    byokMissingKeysHint([devOpenAIKey, devAnthropicKey, devGeminiKey, devDeepgramKey])
+  var selectedBYOKLLMProvider: BYOKLLMProvider {
+    BYOKLLMProvider(rawValue: devBYOKLLMProvider) ?? .openrouter
+  }
+
+  var selectedBYOKLLMKey: Binding<String> {
+    switch selectedBYOKLLMProvider {
+    case .openrouter: return $devOpenRouterKey
+    case .openai: return $devOpenAIKey
+    case .gemini: return $devGeminiKey
+    case .anthropic: return $devAnthropicKey
+    }
+  }
+
+  var selectedBYOKLLMSubtitle: String {
+    switch selectedBYOKLLMProvider {
+    case .openrouter: return "Routes supported models through your OpenRouter account."
+    case .openai: return "Uses your OpenAI API key directly."
+    case .gemini: return "Uses Gemini 2.5 Flash Lite directly."
+    case .anthropic: return "Uses your Anthropic API key directly."
+    }
   }
 
   func byokWarningCard(_ text: String, settingId: String) -> some View {
@@ -140,13 +155,12 @@ extension SettingsContentView {
   }
 
   var hasAnyBYOKKey: Bool {
-    !devOpenAIKey.isEmpty || !devAnthropicKey.isEmpty || !devGeminiKey.isEmpty
+    !devOpenRouterKey.isEmpty || !devOpenAIKey.isEmpty || !devAnthropicKey.isEmpty || !devGeminiKey.isEmpty
       || !devDeepgramKey.isEmpty
   }
 
   var hasAllBYOKKeys: Bool {
-    !devOpenAIKey.isEmpty && !devAnthropicKey.isEmpty && !devGeminiKey.isEmpty
-      && !devDeepgramKey.isEmpty
+    APIKeyService.isByokActive
   }
 
   @ViewBuilder
@@ -162,7 +176,7 @@ extension SettingsContentView {
           Text(
             hasAllBYOKKeys
               ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
-              : "Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. Keys stay on this Mac — we never store them on our servers."
+              : "Choose a language model provider, then add its key. Deepgram is optional and only powers transcription. Keys stay on this Mac — we never store them on our servers."
           )
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
@@ -174,6 +188,7 @@ extension SettingsContentView {
 
   func clearAllBYOKKeys() {
     devOpenAIKey = ""
+    devOpenRouterKey = ""
     devAnthropicKey = ""
     devGeminiKey = ""
     devDeepgramKey = ""
@@ -197,8 +212,15 @@ extension SettingsContentView {
 
   @MainActor
   func refreshBYOKActivation() async {
+    guard !selectedBYOKLLMKey.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      if hasAnyBYOKKey {
+        try? await APIClient.shared.deactivateBYOK()
+        await FloatingBarUsageLimiter.shared.fetchPlan()
+      }
+      return
+    }
     let action = BYOKReconciliation.action(
-      forKeys: [devOpenAIKey, devAnthropicKey, devGeminiKey, devDeepgramKey],
+      forKeys: [selectedBYOKLLMKey.wrappedValue],
       hasCheckedStatuses: !byokKeyStatuses.isEmpty,
       hasActivationError: byokActivationError != nil
     )
@@ -218,23 +240,26 @@ extension SettingsContentView {
       // The badge state the UI has always been able to draw but never reached:
       // say a provider is being checked while it is being checked.
       var checking: [BYOKProvider: BYOKValidator.Status] = [:]
-      for provider in BYOKProvider.allCases { checking[provider] = .checking }
+      for provider in APIKeyService.activeBYOKSnapshot.keys { checking[provider] = .checking }
       byokKeyStatuses = checking
 
       // Validate before flipping the backend flag — otherwise we'd put the
       // user on the free plan with dead keys and every chat would 401.
-      let snapshot = APIKeyService.byokSnapshot.reduce(into: [BYOKProvider: String]()) {
+      let snapshot = APIKeyService.activeBYOKSnapshot.reduce(into: [BYOKProvider: String]()) {
         acc, entry in acc[entry.key] = entry.value.key
       }
       let results = await BYOKValidator.validateAll(snapshot)
       guard !Task.isCancelled else { return }
-      let allOk = results.allSatisfy {
-        if case .ok = $0.value { return true }
-        return false
-      }
-      if allOk {
-        let fingerprints = APIKeyService.byokSnapshot.reduce(into: [String: String]()) {
-          acc, entry in acc[entry.key.rawValue] = entry.value.fingerprint
+      let selectedLLMValid =
+        results[selectedBYOKLLMProvider.provider].map {
+          if case .ok = $0 { return true }
+          return false
+        } ?? false
+      if selectedLLMValid {
+        let fingerprints = APIKeyService.activeBYOKSnapshot.reduce(into: [String: String]()) { acc, entry in
+          if let status = results[entry.key], case .ok = status {
+            acc[entry.key.rawValue] = entry.value.fingerprint
+          }
         }
         try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
         await FloatingBarUsageLimiter.shared.fetchPlan()
@@ -257,7 +282,7 @@ extension SettingsContentView {
         await MainActor.run {
           byokKeyStatuses = results
           byokActivationError =
-            "Rejected by provider: \(names). Free plan stays off until all 4 keys authenticate."
+            "Rejected by provider: \(names). Free plan stays off until the selected language model authenticates."
         }
       }
 

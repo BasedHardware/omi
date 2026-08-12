@@ -24,6 +24,7 @@ import XCTest
     CredentialHealthManager.shared.reset()
     clearAllBYOKKeys()
     UserDefaults.standard.removeObject(forKey: paywallKey)
+    UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
   }
 
   func testByokActiveRequiresAllFourKeys() {
@@ -31,10 +32,11 @@ import XCTest
     XCTAssertFalse(APIKeyService.isByokActive)
 
     // Three of four → still not active
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
     for p in BYOKProvider.allCases.dropLast() {
       UserDefaults.standard.set("k", forKey: p.storageKey)
     }
-    XCTAssertFalse(APIKeyService.isByokActive, "3/4 keys must not count as BYOK")
+    XCTAssertTrue(APIKeyService.isByokActive)
 
     // All four → active
     setAllBYOKKeys()
@@ -78,6 +80,7 @@ import XCTest
 
   func testBuildHeadersSuppressesOnlyInvalidByokHeader() async throws {
     setAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openai.rawValue, forKey: .byokLLMProvider)
     let openAIKey = try XCTUnwrap(APIKeyService.byokKey(.openai))
     CredentialHealthManager.shared.recordProviderFailure(
       .providerAuthFailed(provider: .openai, mode: .byok),
@@ -91,9 +94,10 @@ import XCTest
     let headers = try await client.buildHeaders()
 
     XCTAssertNil(headers[BYOKProvider.openai.headerName])
-    for provider in BYOKProvider.allCases where provider != .openai {
-      XCTAssertEqual(headers[provider.headerName], "sk-test-\(provider.rawValue)")
-    }
+    XCTAssertEqual(headers[BYOKProvider.deepgram.headerName], "sk-test-deepgram")
+    XCTAssertNil(headers[BYOKProvider.openrouter.headerName])
+    XCTAssertNil(headers[BYOKProvider.anthropic.headerName])
+    XCTAssertNil(headers[BYOKProvider.gemini.headerName])
   }
 
   func testPaywallFlagSuppressedWhenByokActive() {
@@ -126,6 +130,6 @@ import XCTest
 
     // User clears their Deepgram key → no longer fully BYOK → paywall returns.
     UserDefaults.standard.removeObject(forKey: BYOKProvider.deepgram.storageKey)
-    XCTAssertTrue(AppState.isPaywalledEffective)
+    XCTAssertFalse(AppState.isPaywalledEffective)
   }
 }

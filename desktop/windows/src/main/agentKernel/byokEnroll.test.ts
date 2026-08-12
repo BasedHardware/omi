@@ -17,11 +17,15 @@ function validatorFetch(statusFor: (url: string) => number = () => 200): FetchLi
 }
 
 /** Backend fetch stub that records calls and returns a fixed ok/status. */
-function backendStub(ok = true, status = 200): {
+function backendStub(
+  ok = true,
+  status = 200
+): {
   fetch: BackendFetch
   calls: { url: string; method: string; headers: Record<string, string>; body?: string }[]
 } {
-  const calls: { url: string; method: string; headers: Record<string, string>; body?: string }[] = []
+  const calls: { url: string; method: string; headers: Record<string, string>; body?: string }[] =
+    []
   const fetch: BackendFetch = async (url, init) => {
     calls.push({ url, method: init.method, headers: init.headers, body: init.body })
     return { ok, status }
@@ -72,14 +76,14 @@ describe('enrollByok', () => {
     expect(backend.calls[0].headers.Authorization).toBe('Bearer tok')
   })
 
-  it('does not validate and DELETEs (deactivates) when the set is not full', async () => {
+  it('does not validate and DELETEs when no LLM key is configured', async () => {
     const backend = backendStub()
     let validatorCalled = false
     const validate: FetchLike = async () => {
       validatorCalled = true
       return { status: 200 }
     }
-    const partial: ByokKeys = { openai: 'a', anthropic: 'b', gemini: 'c' }
+    const partial: ByokKeys = { deepgram: 'd' }
     const result = await enrollByok({
       keys: partial,
       apiBase: 'https://api.omi.me',
@@ -94,7 +98,7 @@ describe('enrollByok', () => {
     expect(backend.calls[0].method).toBe('DELETE')
   })
 
-  it('DELETEs and reports the rejecting provider when one key is rejected', async () => {
+  it('enrolls healthy LLM capabilities when an optional provider is rejected', async () => {
     const backend = backendStub()
     const result = await enrollByok({
       keys: fullKeys,
@@ -103,11 +107,12 @@ describe('enrollByok', () => {
       validateFetch: validatorFetch((url) => (url.includes('anthropic') ? 401 : 200)),
       backendFetch: backend.fetch
     })
-    expect(result.active).toBe(false)
+    expect(result.active).toBe(true)
     expect(result.results.anthropic).toMatchObject({ ok: false, kind: 'rejected' })
     expect(result.results.openai?.ok).toBe(true)
     expect(backend.calls).toHaveLength(1)
-    expect(backend.calls[0].method).toBe('DELETE')
+    expect(backend.calls[0].method).toBe('POST')
+    expect(JSON.parse(backend.calls[0].body as string).fingerprints.anthropic).toBeUndefined()
   })
 
   it('reports a backendError (not active) when keys validate but the enroll POST fails', async () => {
