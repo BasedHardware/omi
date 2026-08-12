@@ -48,9 +48,12 @@ kernel, and full append adapter are inert. The adapter persists every current gr
 revision and artifact kind plus total formation accounting, and verifies durable
 committed witnesses and the active identity-authorization head before reserving a
 receipt. Liveness fences still require their separately sealed maintenance operation;
-PostgreSQL reconstruction is unimplemented; and a backend terminated during a Bun +
-Postgres.js transaction rolls back atomically but leaves the size-one pool unable to
-recover promptly. Those remain activation blockers. A later unit may add exactly one
+an inert owner-internal reconstruction adapter now rebuilds a deterministic
+`GraphSnapshot` from checksummed authoritative rows through a fresh application-role
+pool, but product-projection rebuild and a separately ratified read/rebuild capability
+remain unimplemented; and a backend terminated during a Bun + Postgres.js transaction
+rolls back atomically but leaves the size-one pool unable to recover promptly. Those
+remain activation blockers. A later unit may add exactly one
 canonical service composition only after the complete gate exists. The existing synchronous `LedgerPort.findCommitByIdempotencyKey` is
 not a production PostgreSQL seam and is not widened or faked. Model preflight will use
 an asynchronous authorized lookup owned by the new repository.

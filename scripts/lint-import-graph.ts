@@ -522,9 +522,10 @@ for (const file of files(root)) {
     if (shown !== "scripts/lint-import-graph.ts"
       && shown !== "drivers/postgres/transaction.ts"
       && shown !== "drivers/postgres/authoritative-ledger-repository.ts"
+      && shown !== "drivers/postgres/authoritative-graph-snapshot.ts"
       && authorizedPostgresConnectionCapability.test(code)) {
       failures.push(
-        `${shown}: the authorized raw PostgreSQL connection capability is private to the sealed ledger adapter`,
+        `${shown}: the authorized raw PostgreSQL connection capability is private to the sealed ledger adapters`,
       );
     }
     if (!queryEvaluationInternalImporters.has(shown) && queryEvaluationLowLevelImport.test(code)) {

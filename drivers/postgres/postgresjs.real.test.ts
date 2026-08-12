@@ -11,6 +11,7 @@ import {
   createPostgresAuthoritativeLedgerRepository,
   createPostgresSuccessfulEmptyLedgerRepository,
 } from "./authoritative-ledger-repository";
+import { createPostgresAuthoritativeGraphSnapshotRepository } from "./authoritative-graph-snapshot";
 import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatement } from "./connection";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
@@ -869,6 +870,48 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       identities: 1, identity_endpoints: 1, adjacency: 1,
       claim_sources: 1, head_sequence: "4",
     }]);
+
+    const snapshotPhysicalPool = createPostgresJsTransactionPool({
+      connectionString: explicitTestUrl!, maxConnections: 1,
+    });
+    const snapshotRolePool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(
+        options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+        callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+      ) => snapshotPhysicalPool.withTransaction(options, async (connection) => {
+        await connection.query({
+          name: "qualification.snapshot_set_application_role",
+          text: "SET LOCAL ROLE omi_platform_application", values: [],
+        });
+        return callback(connection);
+      }),
+    });
+    try {
+      const reconstructed = await createPostgresAuthoritativeGraphSnapshotRepository({
+        pool: snapshotRolePool,
+      }).load(context);
+      expect(reconstructed.owner_account_id).toBe(accountId);
+      expect(reconstructed.graph_generation).toBe(4);
+      expect(reconstructed.claims.map((row) => row.revision_id)).toEqual(expect.arrayContaining([
+        graph.transition.revisions.find((row) => row.kind === "claim")?.revision_id,
+        identity.transition.revisions.find((row) => row.kind === "claim")?.revision_id,
+      ]));
+      expect(reconstructed.claims).toHaveLength(4);
+      expect(reconstructed.events).toHaveLength(3);
+      expect(reconstructed.evidence).toHaveLength(3);
+      expect(reconstructed.entities).toHaveLength(1);
+      expect(reconstructed.identity_authorizations).toHaveLength(1);
+      expect(reconstructed.identity_constraints).toHaveLength(1);
+      expect(reconstructed.mentions).toHaveLength(1);
+      expect(reconstructed.adjacency).toHaveLength(1);
+      expect(reconstructed.source_local_roles).toHaveLength(2);
+      expect(reconstructed.placement_artifacts).toHaveLength(3);
+      expect(JSON.stringify(await createPostgresAuthoritativeGraphSnapshotRepository({
+        pool: snapshotRolePool,
+      }).load(context))).toBe(JSON.stringify(reconstructed));
+    } finally {
+      await snapshotPhysicalPool.close();
+    }
 
     await pool.withTransaction(
       { isolationLevel: "serializable", accessMode: "read write" },
