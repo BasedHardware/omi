@@ -476,9 +476,13 @@ def list_pending_consolidation_items(
         cursor_time, cursor_memory_id = start_after
         if not cursor_memory_id.strip():
             raise ValueError("consolidation query cursor memory_id must not be blank")
+        # The neutral keyset cursor is {value, id}: the order-by field value plus the document id
+        # (memory_items are keyed by memory_id). The adapter appends the __name__/_id tie-break, so a
+        # single-field order_by paginates deterministically; the previous {captured_at, memory_id}
+        # shape (+ a duplicate memory_id order) made both real adapters KeyError on resume.
         query_start_after = {
-            "captured_at": _coerce_aware_utc(cursor_time),
-            "memory_id": cursor_memory_id,
+            "value": _coerce_aware_utc(cursor_time),
+            "id": cursor_memory_id,
         }
     snapshots = get_document_store().query(
         MemoryCollections(uid=uid).memory_items,
@@ -488,7 +492,7 @@ def list_pending_consolidation_items(
             ("processing_state", "==", ProcessingState.processed.value),
             ("source_state", "==", SourceState.active.value),
         ],
-        order_by=[("captured_at", "asc"), ("memory_id", "asc")],
+        order_by=[("captured_at", "asc")],
         limit=effective_limit,
         start_after=query_start_after,
     )

@@ -66,16 +66,16 @@ class _RecordingStore:
             rows = [row for row in rows if _nested_value(row[1], field_path) == expected]
 
         order_fields = [field for field, _direction in (order_by or [])]
-        for field_path in reversed(order_fields):
-            rows.sort(key=lambda row: _nested_value(row[1], field_path))
+        primary = order_fields[0] if order_fields else None
+        if primary is not None:
+            # Single-field order_by with an implicit full-path (__name__/_id) tie-break, mirroring
+            # the real adapters and FakeDocumentStore.
+            rows.sort(key=lambda row: (_nested_value(row[1], primary), row[0]))
 
         if start_after is not None:
-            cursor = tuple(start_after[field_path] for field_path in order_fields)
-            rows = [
-                row
-                for row in rows
-                if tuple(_nested_value(row[1], field_path) for field_path in order_fields) > cursor
-            ]
+            # Neutral keyset cursor {value, id}: primary field value + full doc-path tie-break.
+            cursor = (start_after["value"], f"{collection}/{start_after['id']}")
+            rows = [row for row in rows if (_nested_value(row[1], primary), row[0]) > cursor]
 
         if limit is not None:
             rows = rows[:limit]
@@ -144,7 +144,8 @@ def test_consolidation_query_filters_orders_and_limits_before_streaming(monkeypa
     assert [item.memory_id for item in pending] == ["eligible-a", "eligible-b"]
     assert store.stream_limit == 2
     assert store.streamed_count == 2
-    assert store.order_fields == ["captured_at", "memory_id"]
+    # Single-field order_by; the adapter appends the __name__/_id tie-break for a stable keyset.
+    assert store.order_fields == ["captured_at"]
     assert ("tier", "==", MemoryLayer.short_term.value) in store.filters
     assert ("status", "==", MemoryItemStatus.active.value) in store.filters
     assert ("processing_state", "==", ProcessingState.processed.value) in store.filters
