@@ -2816,6 +2816,14 @@ export interface ProgressExtractUpdateResponse {
   reasoning?: string;
 }
 
+export interface ProviderConfiguration {
+  authorization_parameters: Record<string, string>;
+  authorization_url: string;
+  client_id: string;
+  redirect_uri: string;
+  scope: string;
+}
+
 export interface PublicFairUseCaseStatusResponse {
   case_ref: string;
   created_at?: string | null;
@@ -3994,6 +4002,7 @@ export interface WrappedStatusResponse {
 }
 
 export interface routers__llm_oauth__StatusResponse {
+  configurations: Record<string, ProviderConfiguration>;
   connected: Array<string>;
   selected_provider: string | null;
 }
@@ -4410,6 +4419,7 @@ export interface OmiApiSchemas {
   "ProgressExtractRequest": ProgressExtractRequest;
   "ProgressExtractResponse": ProgressExtractResponse;
   "ProgressExtractUpdateResponse": ProgressExtractUpdateResponse;
+  "ProviderConfiguration": ProviderConfiguration;
   "PublicFairUseCaseStatusResponse": PublicFairUseCaseStatusResponse;
   "QuestionCardSpec": QuestionCardSpec;
   "QuestionOption": QuestionOption;
