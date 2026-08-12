@@ -1,8 +1,8 @@
 # Disposable Feasibility Spike: TypeScript-First React Native Architecture with Narrow C++ Boundary
 
-**Location**: `spikes/react-native-typescript-cpp-native/`  
-**Branch**: `spike/react-native-typescript-cpp-native`  
-**Framework Decision**: **Bare React Native + TypeScript**  
+**Location**: `spikes/react-native-typescript-cpp-native/`
+**Branch**: `spike/react-native-typescript-cpp-native`
+**Framework Decision**: **Bare React Native + TypeScript**
 **Spike Outcome**: **PARTIAL — Omi-v4 relay parity and local TypeScript/native-boundary feasibility validated; physical BLE, real RN TurboModule execution, iOS runtime, background lifecycle, and ASR remain unvalidated**
 
 ---
@@ -226,7 +226,7 @@ node --experimental-strip-types ts/benchmark/run-benchmark.ts
 
 ### Benchmark Matrix — Actual Local Results
 
-> **Platform**: darwin arm64 · **Node**: v22.23.1 · **Date**: 2026-08-08  
+> **Platform**: darwin arm64 · **Node**: v22.23.1 · **Date**: 2026-08-08
 > **Iterations**: 10,000 (warmup: 1,000) · **Unit**: µs/op (lower is better)
 
 | Adapter | 16B | 64B | 256B | 1024B |
@@ -293,7 +293,7 @@ open https://crepuscularity.tsc.hk
 
 ## 8. Framework Decision & Conclusion
 
-**Decision**: **Bare React Native + TypeScript**  
+**Decision**: **Bare React Native + TypeScript**
 **Conclusion**: **PARTIAL — local boundary shape validated; real RN/web/ASR runtime unvalidated**
 
 The local benchmark shows no meaningful difference between the three simulated adapter shapes at this synthetic boundary. It does not measure React Native, browser, Moonshine, or real C++ module runtime performance. The TypeScript-first architecture with a narrow C++ native-function boundary remains the recommended PoC direction.
