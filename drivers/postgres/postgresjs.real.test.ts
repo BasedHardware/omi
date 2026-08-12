@@ -3120,9 +3120,11 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const applicationId = "app:qualification-experiment";
     const credentialId = `credential:experiment:${suffix}`;
     const grantId = `grant:experiment:${suffix}`;
+    const writeGrantId = `grant:experiment-write:${suffix}`;
     const controlHash = "1".repeat(64);
     const credentialHash = "2".repeat(64);
     const grantHash = "3".repeat(64);
+    const writeGrantHash = "4".repeat(64);
     const now = Math.floor(Date.now() / 1_000);
 
     await ownerSql.begin(async (transaction) => {
@@ -3147,33 +3149,44 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       await transaction.unsafe(`INSERT INTO omi_memory.application_credential_heads
           (account_id, application_id, credential_id, credential_generation)
         VALUES ($1, $2, $3, 4)`, [accountId, applicationId, credentialId]);
-      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
-          (account_id, application_id, credential_id, credential_generation,
-           capability, grant_id, grant_version, lifecycle, enabled, scopes,
-           record_schema_version, record_json, content_hash)
-        VALUES ($1, $2, $3, 4, 'memories.experiments.shadow', $4, 1, 'active', true,
-                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
-      [accountId, applicationId, credentialId, grantId, grantHash]);
-      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
-          (account_id, application_id, credential_id, credential_generation,
-           capability, grant_id, grant_version)
-        VALUES ($1, $2, $3, 4, 'memories.experiments.shadow', $4, 1)`,
-      [accountId, applicationId, credentialId, grantId]);
+      for (const [capability, selectedGrantId, selectedGrantHash] of [
+        ["memories.experiments.shadow", grantId, grantHash],
+        ["memories.write", writeGrantId, writeGrantHash],
+      ] as const) {
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version, lifecycle, enabled, scopes,
+             record_schema_version, record_json, content_hash)
+          VALUES ($1, $2, $3, 4, $4, $5, 1, 'active', true,
+                  '[]'::jsonb, 'grant-v1', '{}'::jsonb, $6)`,
+        [accountId, applicationId, credentialId, capability, selectedGrantId, selectedGrantHash]);
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version)
+          VALUES ($1, $2, $3, 4, $4, $5, 1)`,
+        [accountId, applicationId, credentialId, capability, selectedGrantId]);
+      }
     });
 
-    const authority: AuthorityStateRow = {
+    const authority = (
+      capability: "memories.experiments.shadow" | "memories.write",
+      selectedGrantId: string,
+      selectedGrantHash: string,
+    ): AuthorityStateRow => ({
       account_id: accountId, principal_id: principalId, application_id: applicationId,
       credential_id: credentialId, credential_generation: 4,
-      capability: "memories.experiments.shadow", grant_id: grantId, grant_version: 1,
+      capability, grant_id: selectedGrantId, grant_version: 1,
       account_epoch: 12, control_conflict_reason: null, control_conflict_at_revision: null,
       destination_activation_epoch: 12, destination_activation_revision: 17,
       lifecycle_state: "active", deletion_epoch: null, account_generation: "new",
       credential_lifecycle: "active", grant_lifecycle: "active", grant_enabled: true,
       authentication_strength: "service-workload", credential_expires_at_epoch_seconds: now + 7_200,
       control_revision: 17, control_content_hash: controlHash,
-      credential_content_hash: credentialHash, grant_content_hash: grantHash,
+      credential_content_hash: credentialHash, grant_content_hash: selectedGrantHash,
       db_now_epoch_seconds: now,
-    };
+    });
+    const shadowAuthority = authority("memories.experiments.shadow", grantId, grantHash);
+    const writeAuthority = authority("memories.write", writeGrantId, writeGrantHash);
     const context = createAuthorizedLedgerWriteContextIssuer().issue({
       context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
       account_id: accountId, application_id: applicationId, credential_id: credentialId,
@@ -3182,7 +3195,17 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
       authentication_strength: "service-workload", issued_at_epoch_seconds: now - 60,
       expires_at_epoch_seconds: now + 3_600,
-      authorization_state_digest: authorizationStateDigest(authority),
+      authorization_state_digest: authorizationStateDigest(shadowAuthority),
+    }, now);
+    const writeContext = createAuthorizedLedgerWriteContextIssuer().issue({
+      context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
+      account_id: accountId, application_id: applicationId, credential_id: credentialId,
+      credential_generation: 4, capability: "memories.write",
+      grant_id: writeGrantId, grant_version: 1, account_epoch: 12,
+      destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
+      authentication_strength: "service-workload", issued_at_epoch_seconds: now - 60,
+      expires_at_epoch_seconds: now + 3_600,
+      authorization_state_digest: authorizationStateDigest(writeAuthority),
     }, now);
 
     let backendPid: number | undefined;
@@ -3274,11 +3297,54 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
 
     const results = createPostgresMemoryShadowResultRepository({ pool: appRolePool });
     const groundings = createPostgresMemoryReadGroundingRepository({ pool: appRolePool });
+    const ledger = createPostgresAuthoritativeLedgerRepository({ pool: appRolePool });
+    const sourceGraph = nonemptyAppend(accountId, `${suffix}:query-source`, null);
+    await expect(ledger.append(writeContext, sourceGraph)).resolves.toEqual({
+      kind: "committed", commit_id: sourceGraph.transition.derivation.commit.commit_id, sequence: 1,
+    });
+    const canonicalGraph = identityAppend(
+      accountId, `${suffix}:query-canonical`, sourceGraph.transition.derivation.commit.commit_id,
+    );
+    await expect(ledger.append(writeContext, canonicalGraph)).resolves.toEqual({
+      kind: "committed", commit_id: canonicalGraph.transition.derivation.commit.commit_id, sequence: 2,
+    });
     const graphRepository = createPostgresAuthoritativeGraphSnapshotRepository({ pool: appRolePool });
     const graphSnapshot = await graphRepository.load(context);
+    let queryModelCalls = 0;
+    const queryCandidateRefs: string[] = [];
     const queryRuntime = createPostgresMemoryQueryEvaluationOneShotRuntime({
       pool: appRolePool, codec_root_secret: new Uint8Array(32).fill(8),
-      produce: async () => { throw new Error("empty_projection_must_not_call_model"); },
+      produce: async (request) => {
+        queryModelCalls += 1;
+        expect(request.candidates).toHaveLength(1);
+        expect(request.candidates[0]?.text).toBe("Alice");
+        const cited = request.candidates[0]!.trace_ref;
+        queryCandidateRefs.push(cited);
+        return {
+          kind: "produced" as const,
+          response_digest: sha256CanonicalContent({
+            qualification: "postgres-nonempty-query-v1",
+            strategy_id: request.strategy.strategy_id,
+            repeat_ordinal: request.repeat_ordinal,
+          }),
+          answer_text: "Alice is remembered.", absence: null,
+          assertions: [{ ordinal: 0, text: "Alice is remembered.", citations: [cited] }],
+          recall_trace: buildContentSafeRecallTrace({
+            version: "recall-trace-v1",
+            traceRef: `tr1_${sha256CanonicalContent({
+              qualification: "postgres-nonempty-query-trace-v1",
+              strategy_id: request.strategy.strategy_id,
+            })}`,
+            strategyVersion: request.strategy.coordinates.strategy_version,
+            projectionFreshness: "fresh", outcome: "grounded", latencyMs: 1,
+            tokenCounts: { input: 1, output: 1 },
+            stages: {
+              eligible: [cited], selected: [cited], hydrated: [cited],
+              policyEligible: [cited], cited: [cited], grounded: [cited],
+            },
+          }),
+        };
+      },
     });
     const stagedQueryInput = await queryRuntime.stageInput(context, {
       input_ref: `mqir1_${sha256CanonicalContent({ suffix, query: 1 })}`,
@@ -3314,10 +3380,28 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     });
     const firstQueryRun = await queryRuntime.run(context, queryRunRequest);
     expect(firstQueryRun).toMatchObject({
-      kind: "completed", observed_model_calls: 0, staged_results: 2,
+      kind: "completed", observed_model_calls: 2, staged_results: 2,
       replayed_results: 0, recorded_pairs: 1, replayed_pairs: 0,
     });
     expect(firstQueryRun.pair_receipts).toHaveLength(1);
+    expect(queryModelCalls).toBe(2);
+    expect(new Set(queryCandidateRefs).size).toBe(1);
+    const [queryCandidateRef] = queryCandidateRefs;
+    const persistedGroundings = await ownerSql.unsafe<{
+      grounded_reference_count: number; rows_json: unknown;
+    }[]>(`SELECT grounded_reference_count, rows_json
+      FROM omi_memory.memory_strategy_baseline_read_groundings WHERE account_id = $1
+      UNION ALL
+      SELECT grounded_reference_count, rows_json
+      FROM omi_memory.memory_strategy_candidate_read_groundings WHERE account_id = $1`, [accountId]);
+    expect([...persistedGroundings]).toHaveLength(2);
+    for (const persisted of persistedGroundings) {
+      expect(persisted.grounded_reference_count).toBe(1);
+      expect(persisted.rows_json).toEqual([{
+        trace_ref: queryCandidateRef,
+        contributing_subject_classes: ["generic"],
+      }]);
+    }
     const restartedQueryRuntime = createPostgresMemoryQueryEvaluationOneShotRuntime({
       pool: appRolePool, codec_root_secret: new Uint8Array(32).fill(8),
       produce: async () => { throw new Error("replay_must_not_call_model"); },
@@ -3327,6 +3411,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       kind: "completed", observed_model_calls: 0, staged_results: 0,
       replayed_results: 2, recorded_pairs: 0, replayed_pairs: 1,
     });
+    expect(queryModelCalls).toBe(2);
     expect(replayedQueryRun.pair_receipts).toEqual(firstQueryRun.pair_receipts);
     const baselineRequest = stageRequest("baseline");
     const candidateRequest = stageRequest("candidate");

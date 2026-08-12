@@ -31,17 +31,19 @@ revalidation before atomic result-plus-grounding persistence. Complete stored
 results and grounding replay without invoking the model; incomplete
 persistence remains a closed stop rather than regeneration.
 
-The pinned PostgreSQL 18.4 real test stages one empty authorized projection,
-runs its baseline and selected shadow to deterministic query gaps with zero
-model calls, persists and pairs both arms, then reconstructs the complete
-runtime and replays the same pair with zero model calls. It also retains the
-query-input restart, grant-revocation, immutable privilege, migration reapply,
-and Bun 1.3.14/Node 24.19.0 parity gates.
+The pinned PostgreSQL 18.4 real test appends a nonempty canonical graph through
+the application-role authority adapter, stages the exact authorized projection,
+and runs its baseline and selected shadow through an injected deterministic
+producer. Both arms receive one opaque candidate, cite it in one assertion, and
+persist grounding with the source-derived `generic` subject class. A newly
+constructed runtime then replays the same pair and grounding with zero model
+calls. The gate also retains query-input restart, grant-revocation, immutable
+privilege, migration reapply, and Bun 1.3.14/Node 24.19.0 parity evidence.
 
 ## Explicit exclusions
 
 - no production codec root or model credential;
-- no fresh nonempty assertion-local model evidence or blind grading;
+- no external-model answer-quality evidence or blind grading;
 - no route, scheduler, continuous worker, Listen/Chat integration, deployment,
   traffic, promotion, or cohort action;
 - no subject-tier, bystander/privacy, identity-authority, compose-voice, or
