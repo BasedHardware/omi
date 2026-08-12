@@ -46,19 +46,19 @@ class _ConversationListItemState extends State<ConversationListItem> {
   bool isNew = false;
 
   int _visualSignature(ServerConversation conversation) => Object.hash(
-    conversation.structured.title,
-    conversation.structured.emoji,
-    conversation.structured.category,
-    conversation.status,
-    conversation.discarded,
-    conversation.starred,
-    conversation.folderId,
-    conversation.visibility,
-    conversation.startedAt,
-    conversation.finishedAt,
-    conversation.photos.length,
-    conversation.transcriptSegments.length,
-  );
+        conversation.structured.title,
+        conversation.structured.emoji,
+        conversation.structured.category,
+        conversation.status,
+        conversation.discarded,
+        conversation.starred,
+        conversation.folderId,
+        conversation.visibility,
+        conversation.startedAt,
+        conversation.finishedAt,
+        conversation.photos.length,
+        conversation.transcriptSegments.length,
+      );
 
   @override
   void dispose() {
@@ -85,304 +85,298 @@ class _ConversationListItemState extends State<ConversationListItem> {
     }
 
     return RepaintBoundary(
-      child:
-          Selector<
-            ConversationProvider,
-            ({int visualSignature, bool isSelectionMode, bool isSelected, bool isMerging, bool isEligible})
-          >(
-            selector: (context, provider) => (
-              // ServerConversation is mutable. Select the visible primitive fields
-              // instead of object identity so star/title/status updates are not lost.
-              visualSignature: _visualSignature(widget.conversation),
-              isSelectionMode: provider.isSelectionModeActive,
-              isSelected: provider.isConversationSelected(widget.conversation.id),
-              isMerging: provider.isConversationMerging(widget.conversation.id),
-              isEligible: provider.isConversationEligibleForMerge(widget.conversation.id),
-            ),
-            builder: (context, rowState, child) {
-              final provider = context.read<ConversationProvider>();
-              final isSelectionMode = rowState.isSelectionMode;
-              final isSelected = rowState.isSelected;
-              final isMerging = rowState.isMerging;
-              final isEligible = rowState.isEligible;
+      child: Selector<ConversationProvider,
+          ({int visualSignature, bool isSelectionMode, bool isSelected, bool isMerging, bool isEligible})>(
+        selector: (context, provider) => (
+          // ServerConversation is mutable. Select the visible primitive fields
+          // instead of object identity so star/title/status updates are not lost.
+          visualSignature: _visualSignature(widget.conversation),
+          isSelectionMode: provider.isSelectionModeActive,
+          isSelected: provider.isConversationSelected(widget.conversation.id),
+          isMerging: provider.isConversationMerging(widget.conversation.id),
+          isEligible: provider.isConversationEligibleForMerge(widget.conversation.id),
+        ),
+        builder: (context, rowState, child) {
+          final provider = context.read<ConversationProvider>();
+          final isSelectionMode = rowState.isSelectionMode;
+          final isSelected = rowState.isSelected;
+          final isMerging = rowState.isMerging;
+          final isEligible = rowState.isEligible;
 
-              return GestureDetector(
-                onTap: () async {
-                  // If in selection mode, toggle selection only if eligible
-                  if (isSelectionMode) {
-                    if (!isEligible) {
-                      // Show feedback that this conversation cannot be merged
-                      HapticFeedback.lightImpact();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(context.l10n.conversationCannotBeMerged),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                      return;
-                    }
-                    HapticFeedback.selectionClick();
-                    provider.toggleConversationSelection(widget.conversation.id);
-                    return;
-                  }
-
-                  if (widget.conversation.isLocked) {
-                    if (!context.read<UsageProvider>().showSubscriptionUI) return;
-                    PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
-                    routeToPage(context, const UsagePage(showUpgradeDialog: true));
-                    return;
-                  }
-                  HapticFeedback.selectionClick();
-                  // The detail page seeds its provider from the supplied conversation
-                  // after its first frame. Notifying that provider before pushing the
-                  // route delayed visible navigation and rebuilt listeners behind it.
-                  final startingTitle = widget.conversation.structured.title;
-
-                  final searchQuery = provider.previousQuery;
-                  final hoursSinceConversation = DateTime.now().difference(widget.conversation.createdAt).inHours;
-                  final resultFuture = routeToPage(
-                    context,
-                    ConversationDetailPage(
-                      conversation: widget.conversation,
-                      isFromOnboarding: widget.isFromOnboarding,
+          return GestureDetector(
+            onTap: () async {
+              // If in selection mode, toggle selection only if eligible
+              if (isSelectionMode) {
+                if (!isEligible) {
+                  // Show feedback that this conversation cannot be merged
+                  HapticFeedback.lightImpact();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(context.l10n.conversationCannotBeMerged),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    provider.onConversationTap(widget.conversation.id);
-                    unawaited(
-                      SchedulerBinding.instance.scheduleTask<void>(() {
-                        if (!mounted) return;
-                        if (searchQuery.isNotEmpty) {
-                          PlatformManager.instance.analytics.conversationOpenedFromSearch(
-                            conversation: widget.conversation,
-                            searchQuery: searchQuery,
-                            conversationIndexInResults: widget.conversationIdx,
-                          );
-                        } else {
-                          PlatformManager.instance.analytics.conversationListItemClickedWithTimeDifference(
-                            conversation: widget.conversation,
-                            conversationIndex: widget.conversationIdx,
-                            hoursSinceConversation: hoursSinceConversation,
-                          );
-                        }
-                      }, Priority.idle),
-                    );
-                  });
+                  return;
+                }
+                HapticFeedback.selectionClick();
+                provider.toggleConversationSelection(widget.conversation.id);
+                return;
+              }
 
-                  var result = await resultFuture;
-                  if (context.mounted) {
-                    // Don't upsert if the conversation was deleted while on the detail page
-                    if (result is Map && result['deleted'] == true) return;
-                    bool stillExists = provider.conversations.any((c) => c.id == widget.conversation.id);
-                    if (stillExists) {
-                      String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
-                      if (startingTitle != newTitle) {
-                        widget.conversation.structured.title = newTitle;
-                        provider.upsertConversation(widget.conversation);
-                      }
+              if (widget.conversation.isLocked) {
+                if (!context.read<UsageProvider>().showSubscriptionUI) return;
+                PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
+                routeToPage(context, const UsagePage(showUpgradeDialog: true));
+                return;
+              }
+              HapticFeedback.selectionClick();
+              // The detail page seeds its provider from the supplied conversation
+              // after its first frame. Notifying that provider before pushing the
+              // route delayed visible navigation and rebuilt listeners behind it.
+              final startingTitle = widget.conversation.structured.title;
+
+              final searchQuery = provider.previousQuery;
+              final hoursSinceConversation = DateTime.now().difference(widget.conversation.createdAt).inHours;
+              final resultFuture = routeToPage(
+                context,
+                ConversationDetailPage(
+                  conversation: widget.conversation,
+                  isFromOnboarding: widget.isFromOnboarding,
+                ),
+              );
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                provider.onConversationTap(widget.conversation.id);
+                unawaited(
+                  SchedulerBinding.instance.scheduleTask<void>(() {
+                    if (!mounted) return;
+                    if (searchQuery.isNotEmpty) {
+                      PlatformManager.instance.analytics.conversationOpenedFromSearch(
+                        conversation: widget.conversation,
+                        searchQuery: searchQuery,
+                        conversationIndexInResults: widget.conversationIdx,
+                      );
+                    } else {
+                      PlatformManager.instance.analytics.conversationListItemClickedWithTimeDifference(
+                        conversation: widget.conversation,
+                        conversationIndex: widget.conversationIdx,
+                        hoursSinceConversation: hoursSinceConversation,
+                      );
                     }
+                  }, Priority.idle),
+                );
+              });
+
+              var result = await resultFuture;
+              if (context.mounted) {
+                // Don't upsert if the conversation was deleted while on the detail page
+                if (result is Map && result['deleted'] == true) return;
+                bool stillExists = provider.conversations.any((c) => c.id == widget.conversation.id);
+                if (stillExists) {
+                  String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
+                  if (startingTitle != newTitle) {
+                    widget.conversation.structured.title = newTitle;
+                    provider.upsertConversation(widget.conversation);
                   }
-                },
-                onLongPress: () {
-                  // Enter selection mode on long press
-                  if (!isSelectionMode && !isMerging) {
-                    HapticFeedback.mediumImpact();
-                    provider.enterSelectionMode();
-                    provider.toggleConversationSelection(widget.conversation.id);
-                  }
-                },
-                child: Stack(
-                  children: [
-                    Padding(
+                }
+              }
+            },
+            onLongPress: () {
+              // Enter selection mode on long press
+              if (!isSelectionMode && !isMerging) {
+                HapticFeedback.mediumImpact();
+                provider.enterSelectionMode();
+                provider.toggleConversationSelection(widget.conversation.id);
+              }
+            },
+            child: Stack(
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(
+                    top: 12,
+                    left: widget.isFromOnboarding ? 0 : 16,
+                    right: widget.isFromOnboarding ? 0 : 16,
+                  ),
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 200),
+                    opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: double.maxFinite,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Colors.deepPurple.withValues(alpha: 0.3)
+                            : (isSelectionMode && !isEligible)
+                                ? Colors.grey.shade800
+                                : const Color(0xFF1F1F25),
+                        borderRadius: BorderRadius.circular(24.0),
+                        border: isSelected
+                            ? Border.all(color: Colors.deepPurple, width: 2)
+                            : (isSelectionMode && !isEligible)
+                                ? Border.all(color: Colors.grey.shade600, width: 1)
+                                : null,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24.0),
+                        child: Dismissible(
+                          // Keep the dismissible state stable when the conversation provider
+                          // refreshes. A UniqueKey here recreated every row during unrelated
+                          // notifications, forcing extra layout/paint work while scrolling.
+                          key: ValueKey('conversation_dismissible_${widget.conversation.id}'),
+                          direction: isSelectionMode || isMerging ? DismissDirection.none : DismissDirection.endToStart,
+                          background: Container(
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.only(right: 20.0),
+                            color: Colors.red,
+                            child: const Icon(Icons.delete, color: Colors.white),
+                          ),
+                          confirmDismiss: (direction) async {
+                            HapticFeedback.mediumImpact();
+                            bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
+
+                            if (!showDeleteConfirmation) return Future.value(true);
+
+                            final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+
+                            if (connectivityProvider.isConnected) {
+                              bool dontShow = false;
+                              return await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) {
+                                  return StatefulBuilder(
+                                    builder: (context, setState) {
+                                      final checkbox = GestureDetector(
+                                        onTap: () => setState(() => dontShow = !dontShow),
+                                        child: Row(
+                                          children: [
+                                            SizedBox(
+                                              width: 24,
+                                              height: 24,
+                                              child: Checkbox(
+                                                value: dontShow,
+                                                onChanged: (v) => setState(() => dontShow = v ?? false),
+                                                activeColor: Colors.deepPurple,
+                                                checkColor: Colors.white,
+                                                side: const BorderSide(color: Colors.white54),
+                                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Flexible(
+                                              child: Text(
+                                                context.l10n.dontShowAgain,
+                                                style: const TextStyle(fontSize: 14),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      final content = Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(context.l10n.deleteConversationMessage),
+                                          const SizedBox(height: 16),
+                                          PlatformService.isApple
+                                              ? Material(color: Colors.transparent, child: checkbox)
+                                              : checkbox,
+                                        ],
+                                      );
+                                      final actions = [
+                                        TextButton(
+                                          onPressed: () => Navigator.of(ctx).pop(false),
+                                          child: Text(
+                                            context.l10n.cancel,
+                                            style: const TextStyle(color: Colors.white),
+                                          ),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            if (dontShow) {
+                                              SharedPreferencesUtil().showConversationDeleteConfirmation = false;
+                                            }
+                                            Navigator.of(ctx).pop(true);
+                                          },
+                                          child: Text(
+                                            context.l10n.confirm,
+                                            style: const TextStyle(color: Colors.red),
+                                          ),
+                                        ),
+                                      ];
+                                      if (PlatformService.isApple) {
+                                        return CupertinoAlertDialog(
+                                          title: Text(context.l10n.deleteConversationTitle),
+                                          content: content,
+                                          actions: actions,
+                                        );
+                                      }
+                                      return AlertDialog(
+                                        title: Text(context.l10n.deleteConversationTitle),
+                                        content: content,
+                                        actions: actions,
+                                      );
+                                    },
+                                  );
+                                },
+                              );
+                            } else {
+                              return showDialog(
+                                builder: (c) => getDialog(
+                                  context,
+                                  () => Navigator.pop(context),
+                                  () => Navigator.pop(context),
+                                  context.l10n.unableToDeleteConversation,
+                                  context.l10n.pleaseCheckInternetConnectionAndTryAgain,
+                                  singleButton: true,
+                                  okButtonText: context.l10n.ok,
+                                ),
+                                context: context,
+                              );
+                            }
+                          },
+                          onDismissed: (direction) async {
+                            var conversation = widget.conversation;
+                            PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
+                            provider.deleteConversationLocally(conversation, widget.date);
+                          },
+                          child: Padding(
+                            padding: PlatformService.isMobile
+                                ? const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 20)
+                                : const EdgeInsetsDirectional.all(16),
+                            child: PlatformService.isMobile
+                                ? _buildMobileLayout(context)
+                                : Column(
+                                    mainAxisSize: MainAxisSize.max,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _getConversationHeader(),
+                                      const SizedBox(height: 16),
+                                      _buildConversationBody(context),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Merging overlay covering the full card
+                if (isMerging)
+                  Positioned.fill(
+                    child: Padding(
                       padding: EdgeInsets.only(
                         top: 12,
                         left: widget.isFromOnboarding ? 0 : 16,
                         right: widget.isFromOnboarding ? 0 : 16,
                       ),
-                      child: AnimatedOpacity(
-                        duration: const Duration(milliseconds: 200),
-                        opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: double.maxFinite,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Colors.deepPurple.withValues(alpha: 0.3)
-                                : (isSelectionMode && !isEligible)
-                                ? Colors.grey.shade800
-                                : const Color(0xFF1F1F25),
-                            borderRadius: BorderRadius.circular(24.0),
-                            border: isSelected
-                                ? Border.all(color: Colors.deepPurple, width: 2)
-                                : (isSelectionMode && !isEligible)
-                                ? Border.all(color: Colors.grey.shade600, width: 1)
-                                : null,
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(24.0),
-                            child: Dismissible(
-                              // Keep the dismissible state stable when the conversation provider
-                              // refreshes. A UniqueKey here recreated every row during unrelated
-                              // notifications, forcing extra layout/paint work while scrolling.
-                              key: ValueKey('conversation_dismissible_${widget.conversation.id}'),
-                              direction: isSelectionMode || isMerging
-                                  ? DismissDirection.none
-                                  : DismissDirection.endToStart,
-                              background: Container(
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 20.0),
-                                color: Colors.red,
-                                child: const Icon(Icons.delete, color: Colors.white),
-                              ),
-                              confirmDismiss: (direction) async {
-                                HapticFeedback.mediumImpact();
-                                bool showDeleteConfirmation =
-                                    SharedPreferencesUtil().showConversationDeleteConfirmation;
-
-                                if (!showDeleteConfirmation) return Future.value(true);
-
-                                final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-
-                                if (connectivityProvider.isConnected) {
-                                  bool dontShow = false;
-                                  return await showDialog<bool>(
-                                    context: context,
-                                    builder: (ctx) {
-                                      return StatefulBuilder(
-                                        builder: (context, setState) {
-                                          final checkbox = GestureDetector(
-                                            onTap: () => setState(() => dontShow = !dontShow),
-                                            child: Row(
-                                              children: [
-                                                SizedBox(
-                                                  width: 24,
-                                                  height: 24,
-                                                  child: Checkbox(
-                                                    value: dontShow,
-                                                    onChanged: (v) => setState(() => dontShow = v ?? false),
-                                                    activeColor: Colors.deepPurple,
-                                                    checkColor: Colors.white,
-                                                    side: const BorderSide(color: Colors.white54),
-                                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Flexible(
-                                                  child: Text(
-                                                    context.l10n.dontShowAgain,
-                                                    style: const TextStyle(fontSize: 14),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                          final content = Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(context.l10n.deleteConversationMessage),
-                                              const SizedBox(height: 16),
-                                              PlatformService.isApple
-                                                  ? Material(color: Colors.transparent, child: checkbox)
-                                                  : checkbox,
-                                            ],
-                                          );
-                                          final actions = [
-                                            TextButton(
-                                              onPressed: () => Navigator.of(ctx).pop(false),
-                                              child: Text(
-                                                context.l10n.cancel,
-                                                style: const TextStyle(color: Colors.white),
-                                              ),
-                                            ),
-                                            TextButton(
-                                              onPressed: () {
-                                                if (dontShow) {
-                                                  SharedPreferencesUtil().showConversationDeleteConfirmation = false;
-                                                }
-                                                Navigator.of(ctx).pop(true);
-                                              },
-                                              child: Text(
-                                                context.l10n.confirm,
-                                                style: const TextStyle(color: Colors.red),
-                                              ),
-                                            ),
-                                          ];
-                                          if (PlatformService.isApple) {
-                                            return CupertinoAlertDialog(
-                                              title: Text(context.l10n.deleteConversationTitle),
-                                              content: content,
-                                              actions: actions,
-                                            );
-                                          }
-                                          return AlertDialog(
-                                            title: Text(context.l10n.deleteConversationTitle),
-                                            content: content,
-                                            actions: actions,
-                                          );
-                                        },
-                                      );
-                                    },
-                                  );
-                                } else {
-                                  return showDialog(
-                                    builder: (c) => getDialog(
-                                      context,
-                                      () => Navigator.pop(context),
-                                      () => Navigator.pop(context),
-                                      context.l10n.unableToDeleteConversation,
-                                      context.l10n.pleaseCheckInternetConnectionAndTryAgain,
-                                      singleButton: true,
-                                      okButtonText: context.l10n.ok,
-                                    ),
-                                    context: context,
-                                  );
-                                }
-                              },
-                              onDismissed: (direction) async {
-                                var conversation = widget.conversation;
-                                PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
-                                provider.deleteConversationLocally(conversation, widget.date);
-                              },
-                              child: Padding(
-                                padding: PlatformService.isMobile
-                                    ? const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 20)
-                                    : const EdgeInsetsDirectional.all(16),
-                                child: PlatformService.isMobile
-                                    ? _buildMobileLayout(context)
-                                    : Column(
-                                        mainAxisSize: MainAxisSize.max,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          _getConversationHeader(),
-                                          const SizedBox(height: 16),
-                                          _buildConversationBody(context),
-                                        ],
-                                      ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                      child: _buildMergingOverlay(),
                     ),
-                    // Merging overlay covering the full card
-                    if (isMerging)
-                      Positioned.fill(
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                            top: 12,
-                            left: widget.isFromOnboarding ? 0 : 16,
-                            right: widget.isFromOnboarding ? 0 : 16,
-                          ),
-                          child: _buildMergingOverlay(),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            },
-          ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 

@@ -62,9 +62,8 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
       TextSpan(
         text: text.substring(index, index + searchQuery.length),
         style: TextStyle(
-          backgroundColor: isCurrentResult
-              ? Colors.orange.withValues(alpha: 0.9)
-              : Colors.deepPurple.withValues(alpha: 0.6),
+          backgroundColor:
+              isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
@@ -897,15 +896,15 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                     ],
                   )
                 : _isEditing
-                ? _buildEditor(context, content)
-                : GestureDetector(
-                    onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
-                    child: ConversationMarkdownWidget(
-                      content: content,
-                      searchQuery: widget.searchQuery,
-                      currentResultIndex: widget.currentResultIndex,
-                    ),
-                  ),
+                    ? _buildEditor(context, content)
+                    : GestureDetector(
+                        onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+                        child: ConversationMarkdownWidget(
+                          content: content,
+                          searchQuery: widget.searchQuery,
+                          currentResultIndex: widget.currentResultIndex,
+                        ),
+                      ),
           ),
 
           // App info in a more subtle format below the content - only show if content is not empty
@@ -1096,9 +1095,8 @@ class GetAppsWidgets extends StatelessWidget {
                 canStartEditing: canStartEditing,
                 onEditStarted: onEditStarted == null ? null : () => onEditStarted!(summarizedApp.appId),
                 onEditCancelled: onEditCancelled == null ? null : () => onEditCancelled!(summarizedApp.appId),
-                onSaveSummary: onSaveSummary == null
-                    ? null
-                    : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
+                onSaveSummary:
+                    onSaveSummary == null ? null : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
                 asSliver: true,
               ),
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
