@@ -275,17 +275,36 @@ struct LiveTranscriptView: View {
     return "\(segments.count)-\(last.id)-\(last.text.count)"
   }
 
+  private var settledSegments: [SpeakerSegment] {
+    LiveTranscriptRenderPlan.settledSegments(from: segments)
+  }
+
+  private var liveSegment: SpeakerSegment? {
+    LiveTranscriptRenderPlan.liveSegment(from: segments)
+  }
+
   var body: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
-          ForEach(segments) { segment in
+        LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
+          ForEach(settledSegments) { segment in
             LiveSegmentView(
               segment: segment,
               formatTime: formatTime,
               personName: speakerNames[segment.speaker],
               onSpeakerTapped: !segment.isUser ? { onSpeakerTapped?(segment) } : nil
             )
+            .equatable()
+          }
+
+          if let liveSegment {
+            LiveSegmentView(
+              segment: liveSegment,
+              formatTime: formatTime,
+              personName: speakerNames[liveSegment.speaker],
+              onSpeakerTapped: !liveSegment.isUser ? { onSpeakerTapped?(liveSegment) } : nil
+            )
+            .equatable()
           }
 
           // Stable bottom anchor that never changes ID
@@ -295,6 +314,7 @@ struct LiveTranscriptView: View {
         }
         .padding(OmiSpacing.lg)
       }
+      .textSelection(.disabled)
       .defaultScrollAnchor(.bottom)
       .onChange(of: scrollTrigger) { _, _ in
         proxy.scrollTo("transcript-bottom", anchor: .bottom)
@@ -303,8 +323,38 @@ struct LiveTranscriptView: View {
   }
 }
 
+enum LiveTranscriptRenderPlan {
+  static func settledSegments(from segments: [SpeakerSegment]) -> [SpeakerSegment] {
+    Array(segments.dropLast())
+  }
+
+  static func liveSegment(from segments: [SpeakerSegment]) -> SpeakerSegment? {
+    segments.last
+  }
+
+  static func canReuseSegmentLayout(
+    previous: SpeakerSegment,
+    next: SpeakerSegment,
+    previousSpeakerName: String?,
+    nextSpeakerName: String?,
+    previousHasTapAction: Bool,
+    nextHasTapAction: Bool
+  ) -> Bool {
+    previous.id == next.id
+      && previous.speaker == next.speaker
+      && previous.text == next.text
+      && previous.start == next.start
+      && previous.end == next.end
+      && previous.isUser == next.isUser
+      && previous.personId == next.personId
+      && previous.translations.map { ($0.lang, $0.text) } == next.translations.map { ($0.lang, $0.text) }
+      && previousSpeakerName == nextSpeakerName
+      && previousHasTapAction == nextHasTapAction
+  }
+}
+
 /// Individual segment view for live transcript
-private struct LiveSegmentView: View {
+private struct LiveSegmentView: View, Equatable {
   let segment: SpeakerSegment
   let formatTime: (Double) -> String
   var personName: String? = nil
@@ -324,6 +374,17 @@ private struct LiveSegmentView: View {
 
   private var bubbleColor: Color {
     isUser ? PageGlass.speakerTints[0] : Ink.rowFillHover
+  }
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    LiveTranscriptRenderPlan.canReuseSegmentLayout(
+      previous: lhs.segment,
+      next: rhs.segment,
+      previousSpeakerName: lhs.personName,
+      nextSpeakerName: rhs.personName,
+      previousHasTapAction: lhs.onSpeakerTapped != nil,
+      nextHasTapAction: rhs.onSpeakerTapped != nil
+    )
   }
 
   var body: some View {
@@ -391,7 +452,6 @@ private struct LiveSegmentView: View {
       Text(segment.text)
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.primary)
-        .textSelection(.enabled)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .background(
@@ -406,7 +466,6 @@ private struct LiveSegmentView: View {
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
             .italic()
-            .textSelection(.enabled)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.xs)
             .background(
