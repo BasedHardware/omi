@@ -80,33 +80,14 @@ backend/
     prompts.py            #   LLM prompt templates for memory extraction, categorization, etc.
     translation.py        #   Multi-language translation coordination
     speaker_identification.py  # Speaker diarization + person matching against speech profiles
+  #   Per-subservice internals: backend/docs/subservice-internals.md
   pusher/                 # Subservice: real-time data distribution hub (separate Docker)
-                          #   - Receives audio + transcripts from backend-listen via binary WebSocket protocol
-                          #   - Routes transcripts to integrations/webhooks in 1s batches
-                          #   - Streams audio to ML services and developer webhooks (4s accumulation)
-                          #   - Runs LLM-powered conversation analysis (memories, action items, insights)
-                          #   - Batches + uploads audio to private cloud storage (60s batches, 3 retries)
-                          #   - Queues speaker sample extraction (120s age minimum)
-                          #   - 5 concurrent background tasks per WebSocket connection
   llm_gateway/            # Subservice: internal Omi-managed LLM auto-lane gateway
   diarizer/              # Subservice: speaker audio analysis (separate Docker, GPU/CUDA)
-                          #   - POST /v1/diarization — speaker boundary detection (pyannote/speaker-diarization)
-                          #   - POST /v1/embedding — speaker vector extraction (pyannote/embedding)
-                          #   - POST /v2/embedding — alt speaker vectors (wespeaker-voxceleb-resnet34-LM)
   agent-proxy/           # Subservice: WebSocket bridge between mobile app and user's agent VM
-                          #   - Firebase auth → Firestore VM lookup → GCE lifecycle (start/reset/health)
-                          #   - Bidirectional message pump with keepalive (120s)
-                          #   - Chat history injection (last 10 messages on first query)
-                          #   - Optional AES-256-GCM message encryption
   nllb_translation/      # Subservice: self-hosted NLLB translation (separate Docker, GPU/CUDA)
-                          #   - POST /v1/translate — batch sentence translation (NLLB-200 + CTranslate2)
-                          #   - Prometheus metrics at /metrics, health at /health, readiness at /ready
-                          #   - Fallback to Gemini 2.5 Flash-Lite when NLLB is unavailable
   modal/                 # Serverless GPU services (deployed on Modal) + Cloud Run Jobs
-                          #   - Speaker identification: matches segments to speech profiles (SpeechBrain, T4 GPU)
-                          #   - VAD: voice activity detection (pyannote/voice-activity-detection)
-                          #   - notifications-job: hourly push notifications + X sync (Cloud Run Job)
-                          #   - memory-maintenance-job: canonical ST→LT maintenance (Cloud Run Job)
+                          #   Per-subservice internals: backend/docs/subservice-internals.md
   tests/unit/            # 50+ unit tests (no external service deps)
   tests/integration/     # Integration tests (need Redis, Firebase, API keys)
   scripts/run-unit-ci.sh # Full CI unit-test contract
@@ -242,15 +223,7 @@ Pre-mock heavy deps before importing the module under test. Use `patch.object(ta
 
 Do not confuse these gates — a green live gauntlet does **not** prove hermetic
 pipeline invariants, and hermetic tests do **not** prove deployed-backend continuity.
-
-| Gate | What it covers | What it does **not** cover |
-| --- | --- | --- |
-| **Hermetic pipeline E2E** (`testing/e2e/test_canonical_memory_pipeline.py`) | capture→consolidate→promote→read, archive excluded from default reads, surface default-access matrix, projection fail-closed without legacy bleed | Deployed revision identity, prod IAM/index deltas, live LLM consolidation |
-| **Gauntlet `--self-check`** | Required files, `canonical_memory_pipeline` workflow registration, suite/nonce wiring in `memory-continuity-gauntlet.py` | Any memory write or HTTP probe |
-| **Live gauntlet** (`memory-continuity-gauntlet.sh` with `ADMIN_KEY` + reachable backend) | Structural `/v3/memories` probes per suite on a running backend | Full Gate 2 synthetic matrix or Gate 3 prod activation |
-| **Gate 2 dev-cloud proof** (`v3_dev_cloud_proof.py` + deployed branch revision) | Multi-user synthetic matrix, indexes, IAM, auth, rollback on dev-cloud | Local hermetic fakes; not production activation |
-| **Gate 3 production proof** (`docs/rollout/memory-v3-proof-order.md`) | Prod-specific deltas after Gate 2 GO + independent review | Substitute for hermetic pipeline E2E or gauntlet self-check |
-
+Gate-by-gate coverage matrix: `backend/docs/memory-continuity-gates.md`.
 CI runs `python3 backend/scripts/memory-continuity-gauntlet.py --self-check` only.
 Live suites record `NOT_RUN` when credentials/backend are unavailable — never fake `GO`.
 
