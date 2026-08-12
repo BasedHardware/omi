@@ -204,6 +204,14 @@ final class AICloneService: ObservableObject {
     }
   }
 
+  /// App-launch entry point: reconnect and start listening when the user left
+  /// the clone enabled. Silent no-op otherwise, so a disabled or unconfigured
+  /// clone makes no network calls at launch.
+  func resumeIfEnabled() {
+    guard configuration.enabled, hasAccessToken, !connectionState.isConnected else { return }
+    Task { await connect() }
+  }
+
   func setEnabled(_ enabled: Bool) {
     configuration.enabled = enabled
     store.save(configuration)
@@ -298,9 +306,8 @@ final class AICloneService: ObservableObject {
     }
     guard var next = inboundQueue.submit(inbound, chatID: chatID) else { return }
     while true {
-      let currentMode = configuration.mode(for: chatID)
-      if currentMode != .off {
-        await processInbound(next, chatID: chatID, mode: currentMode)
+      if configuration.mode(for: chatID) != .off {
+        await processInbound(next, chatID: chatID)
       }
       guard let pending = inboundQueue.complete(chatID: chatID) else { return }
       next = pending
@@ -321,26 +328,55 @@ final class AICloneService: ObservableObject {
     return true
   }
 
+  /// Undoes `claimInbound` when the message never reached a terminal action, so
+  /// a later redelivery of the same message can be retried.
+  func releaseInbound(_ id: String) {
+    guard processedInboundMessageIDs.remove(id) != nil else { return }
+    processedInboundOrder.removeAll { $0 == id }
+  }
+
+  /// Beeper's message page order is documented only as "sorted by timestamp" —
+  /// the direction is not guaranteed across versions, and both the reply prompt
+  /// (`threadLines`) and the benchmark require oldest-first input. Sort
+  /// explicitly when every message carries a parseable timestamp; otherwise
+  /// leave the page untouched rather than inventing an order.
+  nonisolated static func oldestFirst(_ messages: [BeeperMessage]) -> [BeeperMessage] {
+    var dated: [(offset: Int, date: Date, message: BeeperMessage)] = []
+    dated.reserveCapacity(messages.count)
+    for (offset, message) in messages.enumerated() {
+      guard let stamp = message.timestamp, let date = parseTimestamp(stamp) else { return messages }
+      dated.append((offset, date, message))
+    }
+    return
+      dated
+      .sorted { lhs, rhs in
+        lhs.date == rhs.date ? lhs.offset < rhs.offset : lhs.date < rhs.date
+      }
+      .map(\.message)
+  }
+
+  nonisolated static func parseTimestamp(_ value: String) -> Date? {
+    let isoFractional = ISO8601DateFormatter()
+    isoFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return isoFractional.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+  }
+
   /// The newest event entry worth replying to: text-like, sent by someone
   /// else, and not older than the listening session (history backfill and
   /// edits of old messages must never trigger the clone).
   nonisolated static func latestActionableInbound(entries: [BeeperMessage], since: Date) -> BeeperMessage? {
-    let iso = ISO8601DateFormatter()
-    let isoFractional = ISO8601DateFormatter()
-    isoFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return entries.last { message in
       guard message.isSender != true, message.isDeleted != true, message.isTextLike,
         let text = message.text, !text.isEmpty
       else { return false }
-      guard let stamp = message.timestamp else { return false }
-      guard let date = isoFractional.date(from: stamp) ?? iso.date(from: stamp) else { return false }
+      guard let stamp = message.timestamp, let date = parseTimestamp(stamp) else { return false }
       return date >= since.addingTimeInterval(-5)
     }
   }
 
   // MARK: Reply pipeline
 
-  private func processInbound(_ inbound: BeeperMessage, chatID: String, mode: AICloneChatMode) async {
+  private func processInbound(_ inbound: BeeperMessage, chatID: String) async {
     let chat = chats.first { $0.id == chatID }
     let chatTitle = chat?.title ?? "Chat"
     let network = chat?.network ?? "Beeper"
@@ -352,10 +388,19 @@ final class AICloneService: ObservableObject {
         chat: chat,
         chatTitle: chatTitle,
         network: network,
-        thread: thread.items)
+        thread: Self.oldestFirst(thread.items))
       let decision = try await replyEngine.decide(context: context)
+      // Grounding and the model take several round-trips; the user may have
+      // turned the clone off or moved this chat to Off while they ran. Re-read
+      // the policy so a verdict is never acted on under stale authority.
+      let currentMode = configuration.mode(for: chatID)
+      guard !Task.isCancelled, configuration.enabled, currentMode != .off else {
+        log("AIClone: policy changed while replying; discarding the verdict")
+        releaseInbound(inbound.id)
+        return
+      }
       let outcome = decision.plannedOutcome(
-        mode: mode,
+        mode: currentMode,
         autoConfidenceThreshold: configuration.autoSendConfidenceThreshold,
         inboundText: inbound.text ?? "")
       log(
@@ -371,6 +416,11 @@ final class AICloneService: ObservableObject {
         client: client)
     } catch {
       log("AIClone: reply pipeline failed for chat: \(error)")
+      // The claim is only durable once the message reached a terminal action.
+      // A transient failure (Beeper closed, backend hiccup) must not retire the
+      // id, or the redelivered `message.upserted` would be dropped as a
+      // duplicate and the message skipped forever.
+      releaseInbound(inbound.id)
       recordActivity(
         chatID: chatID, chatTitle: chatTitle, network: network,
         inbound: inbound, replyText: nil, outcome: .failed, confidence: nil)
@@ -463,9 +513,11 @@ final class AICloneService: ObservableObject {
   // MARK: Approvals
 
   func approve(_ approval: AIClonePendingApproval, editedText: String? = nil) async {
-    pendingApprovals.removeAll { $0.id == approval.id }
     let text = (editedText ?? approval.replyText).trimmingCharacters(in: .whitespacesAndNewlines)
+    // An empty edit is not "discard this reply" — keep it waiting instead of
+    // silently dropping the user's pending approval.
     guard !text.isEmpty else { return }
+    pendingApprovals.removeAll { $0.id == approval.id }
     do {
       let client = try client()
       _ = try await client.sendMessage(chatID: approval.chatID, text: text)
@@ -475,6 +527,11 @@ final class AICloneService: ObservableObject {
         outcome: .sentAfterApproval, confidence: approval.confidence)
     } catch {
       log("AIClone: approved send failed: \(error)")
+      // Beeper was closed or rejected the send — put the (edited) reply back in
+      // the queue so the user can retry instead of losing what they wrote.
+      var restored = approval
+      restored.replyText = text
+      pendingApprovals.append(restored)
       recordActivity(
         chatID: approval.chatID, chatTitle: approval.chatTitle, network: approval.network,
         inboundPreview: approval.inboundPreview, replyText: text,
@@ -490,10 +547,10 @@ final class AICloneService: ObservableObject {
       outcome: .stayedSilent, confidence: approval.confidence)
   }
 
-  /// Clears the activity log and any pending approvals. Chat modes and the
-  /// Beeper connection are untouched.
+  /// Clears the activity log only. Pending approvals are unsent work the user
+  /// still has to decide on, so a log-clearing button must never discard them;
+  /// chat modes and the Beeper connection are untouched too.
   func clearActivity() {
-    pendingApprovals.removeAll()
     configuration.activityLog.removeAll()
     store.save(configuration)
     objectWillChange.send()
@@ -513,7 +570,7 @@ final class AICloneService: ObservableObject {
       let benchmark = AICloneBenchmark(engine: replyEngine)
       let result = try await benchmark.run(
         chat: chat,
-        history: history.items,
+        history: Self.oldestFirst(history.items),
         personaName: persona?.name ?? "the user",
         personaPrompt: persona?.personaPrompt ?? "",
         memoryFacts: facts,
@@ -543,6 +600,12 @@ final class AICloneService: ObservableObject {
     cachedMemoryFacts = memories.map(\.content)
     memoryFactsFetchedAt = Date()
     return cachedMemoryFacts
+  }
+
+  /// Test seam: stage an approval exactly as the reply pipeline would, so the
+  /// approve/skip lifecycle is exercisable without a live Beeper event.
+  func enqueueApprovalForTesting(_ approval: AIClonePendingApproval) {
+    pendingApprovals.append(approval)
   }
 
   /// Test seam: refresh the persona/memory grounding without waiting on TTLs.
