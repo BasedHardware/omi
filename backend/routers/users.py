@@ -125,6 +125,7 @@ from utils.other.storage import (
 )
 from utils.webhooks import webhook_first_time_setup
 from utils.byok import has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
+from utils.llm.oauth import LLMOAuthError, exchange_authorization_code, supported_provider
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1104,6 +1105,63 @@ class BYOKActivateRequest(BaseModel):
 
 class BYOKActiveResponse(BaseModel):
     active: bool
+
+
+class LLMOAuthCompletionRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    code: str = Field(min_length=1, max_length=4096)
+    code_verifier: str = Field(min_length=43, max_length=128)
+    redirect_uri: str
+
+
+class LLMOAuthStatusResponse(BaseModel):
+    connected: List[str]
+    selected_provider: Optional[str]
+
+
+_LLM_OAUTH_REDIRECT_URIS = {
+    'chatgpt': 'http://localhost:1455/auth/callback',
+    'grok': 'http://127.0.0.1:56121/callback',
+}
+
+
+@router.get('/v1/users/me/llm-oauth', tags=['v1'], response_model=LLMOAuthStatusResponse)
+def get_llm_oauth_status_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    return users_db.get_llm_oauth_status(uid)
+
+
+@router.post('/v1/users/me/llm-oauth/{provider}', tags=['v1'], response_model=LLMOAuthStatusResponse)
+async def complete_llm_oauth_endpoint(
+    provider: str,
+    data: LLMOAuthCompletionRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    if not supported_provider(provider) or data.redirect_uri != _LLM_OAUTH_REDIRECT_URIS.get(provider):
+        raise HTTPException(status_code=400, detail='Unsupported LLM OAuth provider or redirect URI')
+    try:
+        credential = await run_blocking(
+            llm_executor,
+            exchange_authorization_code,
+            provider,
+            data.code,
+            data.code_verifier,
+            data.redirect_uri,
+        )
+        await run_blocking(db_executor, users_db.save_llm_oauth_credential, uid, provider, credential)
+    except LLMOAuthError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    invalidate_byok_state_cache(uid)
+    return await run_blocking(db_executor, users_db.get_llm_oauth_status, uid)
+
+
+@router.delete('/v1/users/me/llm-oauth/{provider}', tags=['v1'], response_model=LLMOAuthStatusResponse)
+async def delete_llm_oauth_endpoint(provider: str, uid: str = Depends(auth.get_current_user_uid)):
+    if not supported_provider(provider):
+        raise HTTPException(status_code=404, detail='Unsupported LLM OAuth provider')
+    await run_blocking(db_executor, users_db.delete_llm_oauth_credential, uid, provider)
+    invalidate_byok_state_cache(uid)
+    return await run_blocking(db_executor, users_db.get_llm_oauth_status, uid)
 
 
 @router.post('/v1/users/me/byok-active', tags=['v1'], response_model=BYOKActiveResponse)
