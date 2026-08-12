@@ -17001,6 +17001,42 @@
         "title": "ProgressExtractUpdateResponse",
         "type": "object"
       },
+      "ProviderConfiguration": {
+        "properties": {
+          "authorization_parameters": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Authorization Parameters",
+            "type": "object"
+          },
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          },
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "redirect_uri": {
+            "title": "Redirect Uri",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_url",
+          "client_id",
+          "redirect_uri",
+          "scope",
+          "authorization_parameters"
+        ],
+        "title": "ProviderConfiguration",
+        "type": "object"
+      },
       "PublicFairUseCaseStatusResponse": {
         "properties": {
           "case_ref": {
@@ -24224,6 +24260,13 @@
       },
       "routers__llm_oauth__StatusResponse": {
         "properties": {
+          "configurations": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProviderConfiguration"
+            },
+            "title": "Configurations",
+            "type": "object"
+          },
           "connected": {
             "items": {
               "type": "string"
@@ -24245,7 +24288,8 @@
         },
         "required": [
           "connected",
-          "selected_provider"
+          "selected_provider",
+          "configurations"
         ],
         "title": "StatusResponse",
         "type": "object"
