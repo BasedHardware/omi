@@ -37,7 +37,12 @@ enum ContextTitleNormalizer {
   }
 
   static func identityKey(appName: String, windowTitle: String?) -> String {
-    "\(appName.lowercased())::\((normalize(windowTitle, appName: appName) ?? "").lowercased())"
+    // Use the normalized title so that cosmetic noise (timestamps, counts,
+    // progress glyphs) does not fragment identity.  A nil-normalized title
+    // produces an app-only key with an empty title segment, which is the
+    // correct representation for title-less windows.
+    let normalized = normalize(windowTitle, appName: appName) ?? ""
+    return "\(appName.lowercased())::\(normalized.lowercased())"
   }
 
   /// Exact pre-flag TaskAssistant dedupe semantics, centralized here so the

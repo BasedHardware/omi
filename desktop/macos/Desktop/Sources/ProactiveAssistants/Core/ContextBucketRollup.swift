@@ -380,16 +380,29 @@ enum ContextBucketPurger {
           arguments: [bucketID])
         try db.execute(
           sql: "DELETE FROM proactive_deliveries WHERE bucketID = ?", arguments: [bucketID])
-        try db.execute(
-          sql: """
-            UPDATE context_buckets
-            SET notifyWorthiness = COALESCE(
-              (SELECT MAX(notifyWorthiness) FROM bucket_facts
-               WHERE bucket_facts.bucketID = context_buckets.id AND validityState = 'validated'), 0),
-              updatedAt = ?
-            WHERE id = ?
-            """,
-          arguments: [now, bucketID])
+        // Recompute visit metadata from surviving completed visits so the
+        // bucket no longer reports deleted activity as recent or count it.
+        let survivingCount = try (Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM context_visits WHERE bucketID = ? AND outcome = 'completed'",
+          arguments: [bucketID]) ?? 0)
+        if survivingCount == 0 {
+          try db.execute(
+            sql: "DELETE FROM context_buckets WHERE id = ?", arguments: [bucketID])
+        } else {
+          try db.execute(
+            sql: """
+              UPDATE context_buckets
+              SET visitCount = ?,
+                  lastVisitedAt = (SELECT MAX(completedAt) FROM context_visits WHERE bucketID = ? AND outcome = 'completed'),
+                  notifyWorthiness = COALESCE(
+                    (SELECT MAX(notifyWorthiness) FROM bucket_facts
+                     WHERE bucket_facts.bucketID = context_buckets.id AND validityState = 'validated'), 0),
+                  updatedAt = ?
+              WHERE id = ?
+              """,
+            arguments: [survivingCount, bucketID, now, bucketID])
+        }
       }
     }
     if try db.tableExists("ocr_texts"), try db.tableExists("ocr_occurrences") {

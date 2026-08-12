@@ -89,8 +89,8 @@ struct SuggestedTasksSection: View {
                 await onCanonicalChange()
               },
               onLater: { await store.later(candidateID: candidate.id) },
-              onDismiss: {
-                await store.dismiss(candidateID: candidate.id, reason: nil)
+              onDismiss: { reason in
+                await store.dismiss(candidateID: candidate.id, reason: reason)
               }
             )
             .id("suggested-\(candidate.id)")
@@ -124,9 +124,11 @@ private struct SuggestedCandidateCard: View {
   let isBusy: Bool
   let onDoNow: (String?) async -> Void
   let onLater: () async -> Void
-  let onDismiss: () async -> Void
+  let onDismiss: (OmiAPI.TaskIntelligenceFeedbackReason?) async -> Void
 
   @State private var title: String
+  @State private var showDismissReasons = false
+  @State private var selectedDismissReason = false
 
   init(
     candidate: SuggestedCandidate,
@@ -185,9 +187,13 @@ private struct SuggestedCandidateCard: View {
         .accessibilityIdentifier("suggested-later-\(candidate.id)")
 
         Button("Dismiss") {
-          Task { await onDismiss() }
+          selectedDismissReason = false
+          showDismissReasons = true
         }
         .buttonStyle(.bordered)
+        .popover(isPresented: $showDismissReasons, arrowEdge: .bottom) {
+          dismissReasons
+        }
         .accessibilityIdentifier("suggested-dismiss-\(candidate.id)")
 
         Spacer()
@@ -207,6 +213,45 @@ private struct SuggestedCandidateCard: View {
     .onChange(of: candidate.title) { _, updated in
       if !isBusy { title = updated }
     }
+    .onChange(of: showDismissReasons) { wasShowing, isShowing in
+      guard wasShowing, !isShowing, !selectedDismissReason else { return }
+      Task { await onDismiss(nil) }
+    }
+  }
+
+  private var dismissReasons: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text("Optional reason")
+        .scaledFont(size: 12, weight: .semibold)
+        .foregroundColor(Ink.primary)
+      Text("Close this menu to dismiss without a reason.")
+        .scaledFont(size: 10)
+        .foregroundColor(Ink.secondary)
+
+      ForEach(dismissReasonChoices, id: \.label) { choice in
+        Button(choice.label) {
+          selectedDismissReason = true
+          let reasonRaw = choice.reason.rawValue
+          Task {
+            await onDismiss(OmiAPI.TaskIntelligenceFeedbackReason(rawValue: reasonRaw))
+          }
+          showDismissReasons = false
+        }
+        .buttonStyle(.bordered)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("suggested-reason-\(choice.reason.rawValue)-\(candidate.id)")
+      }
+    }
+    .padding(12)
+    .frame(width: 230)
+  }
+
+  private var dismissReasonChoices: [(label: String, reason: OmiAPI.TaskIntelligenceFeedbackReason)] {
+    [
+      ("Already handled", .already_handled),
+      ("Not mine", .not_mine),
+      ("Not useful", .not_useful),
+    ]
   }
 }
 

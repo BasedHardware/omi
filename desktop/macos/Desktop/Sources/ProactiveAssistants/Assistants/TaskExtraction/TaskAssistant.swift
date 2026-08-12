@@ -1578,7 +1578,9 @@ actor TaskAssistant: ProactiveAssistant {
       let canonicalCandidateDescriptions =
         try await StagedTaskStorage.shared.getRecentCanonicalCandidateDescriptions(limit: 30)
       var seen = Set<String>()
-      let distinctDescriptions = (stagedTasks.map { $0.description } + canonicalCandidateDescriptions)
+      // Prioritize canonical candidates so they are never crowded out by
+      // legacy staged-task descriptions within the 30-item limit.
+      let distinctDescriptions = (canonicalCandidateDescriptions + stagedTasks.map { $0.description })
         .filter { seen.insert($0.lowercased()).inserted }
       stagedTaskDescriptions = Array(distinctDescriptions.prefix(30))
     } catch {
