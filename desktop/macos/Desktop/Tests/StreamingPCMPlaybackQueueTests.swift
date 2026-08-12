@@ -105,7 +105,7 @@ final class StreamingPCMPlaybackQueueTests: XCTestCase {
     pendingActions.runFirst()
 
     XCTAssertEqual(recoveryCount, 1)
-    XCTAssertTrue(pendingActions.isEmpty)
+    XCTAssertEqual(pendingActions.count, 0)
 
     recovery.schedule { recoveryCount += 1 }
 
