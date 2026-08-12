@@ -498,7 +498,7 @@ class TestDesktopMessagesWireCompat:
     """Verify message field names match cross-platform expectations."""
 
     def test_save_message_writes_expected_fields(self):
-        """save_message writes plugin_id, chat_session_id, type='text', from_external_integration=False."""
+        """save_message writes app_id, chat_session_id, type='text', from_external_integration=False."""
         mock_doc_ref = MagicMock()
         mock_session_ref = MagicMock()
         mock_session_ref.get.return_value.exists = True
@@ -521,7 +521,6 @@ class TestDesktopMessagesWireCompat:
 
         # Verify the doc written to Firestore
         set_call = mock_doc_ref.set.call_args[0][0]
-        assert set_call['plugin_id'] == 'my-app'
         assert set_call['app_id'] == 'my-app'
         assert set_call['chat_session_id'] == 'session-123'
         assert set_call['type'] == 'text'
@@ -541,7 +540,7 @@ class TestSessionScopedQueries:
         field_filter_stub.FieldFilter.reset_mock()
 
     def test_get_messages_session_scoped_filters_by_session_not_plugin(self):
-        """get_messages with chat_session_id should filter by chat_session_id, NOT plugin_id."""
+        """get_messages with chat_session_id should filter by chat_session_id, NOT app_id."""
         mock_query = MagicMock()
         mock_query.where.return_value = mock_query
         mock_query.order_by.return_value = mock_query
@@ -555,10 +554,10 @@ class TestSessionScopedQueries:
 
         fields = self._get_field_filter_fields()
         assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
-        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id is given: {fields}"
+        assert 'app_id' not in fields, f"app_id should NOT be filtered when session_id is given: {fields}"
 
-    def test_get_messages_app_scoped_filters_by_plugin_id(self):
-        """get_messages without chat_session_id should filter by plugin_id."""
+    def test_get_messages_app_scoped_filters_by_app_id(self):
+        """get_messages without chat_session_id should filter by app_id."""
         mock_query = MagicMock()
         mock_query.where.return_value = mock_query
         mock_query.order_by.return_value = mock_query
@@ -571,11 +570,11 @@ class TestSessionScopedQueries:
             chat_db.get_messages('uid', app_id='my-app')
 
         fields = self._get_field_filter_fields()
-        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
+        assert 'app_id' in fields, f"Expected app_id filter, got: {fields}"
         assert 'chat_session_id' not in fields, f"chat_session_id should NOT be filtered in app-scoped mode: {fields}"
 
     def test_delete_messages_session_scoped_filters_by_session_not_plugin(self):
-        """delete_messages with session_id should filter by chat_session_id, NOT plugin_id."""
+        """delete_messages with session_id should filter by chat_session_id, NOT app_id."""
         mock_col = MagicMock()
         mock_query = MagicMock()
         mock_col.where.return_value = mock_query
@@ -588,10 +587,10 @@ class TestSessionScopedQueries:
 
         fields = self._get_field_filter_fields()
         assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
-        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id is given: {fields}"
+        assert 'app_id' not in fields, f"app_id should NOT be filtered when session_id is given: {fields}"
 
-    def test_delete_messages_app_scoped_filters_by_plugin_id(self):
-        """delete_messages without session_id should filter by plugin_id."""
+    def test_delete_messages_app_scoped_filters_by_app_id(self):
+        """delete_messages without session_id should filter by app_id."""
         mock_col = MagicMock()
         mock_query = MagicMock()
         mock_col.where.return_value = mock_query
@@ -603,7 +602,7 @@ class TestSessionScopedQueries:
             chat_db.delete_messages('uid', app_id='my-app')
 
         fields = self._get_field_filter_fields()
-        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
+        assert 'app_id' in fields, f"Expected app_id filter, got: {fields}"
         assert 'chat_session_id' not in fields, f"chat_session_id should NOT be filtered in app-scoped mode: {fields}"
 
 
@@ -660,7 +659,7 @@ class TestMessageReconcileKeyset:
             )
 
     @staticmethod
-    def message(document_id, created_at, *, reported=False, plugin_id=None):
+    def message(document_id, created_at, *, reported=False, app_id=None):
         return TestMessageReconcileKeyset.FakeDocument(
             document_id,
             {
@@ -669,8 +668,7 @@ class TestMessageReconcileKeyset:
                 'sender': 'human',
                 'type': 'text',
                 'created_at': created_at,
-                'plugin_id': plugin_id,
-                'app_id': plugin_id,
+                'app_id': app_id,
                 'reported': reported,
             },
         )
@@ -728,7 +726,7 @@ class TestMessageReconcileKeyset:
         now = datetime.now(timezone.utc)
         collection = self.FakeCollection(
             [
-                self.message('other-app', now, plugin_id='other'),
+                self.message('other-app', now, app_id='other'),
             ]
         )
         with self.patched_db(collection):
@@ -758,8 +756,8 @@ class TestGetChatSessionsQuery:
 
         mock_col.order_by.assert_called_once_with('updated_at', direction='DESCENDING')
 
-    def test_filters_by_plugin_id_field(self):
-        """get_chat_sessions should filter by plugin_id == app_id."""
+    def test_filters_by_app_id_field(self):
+        """get_chat_sessions should filter by app_id == app_id."""
         mock_col = MagicMock()
         mock_query = MagicMock()
         mock_col.order_by.return_value = mock_query
@@ -773,8 +771,8 @@ class TestGetChatSessionsQuery:
             chat_db.get_chat_sessions('uid', app_id='test-app')
 
         fields = [call.args[0] for call in field_filter_stub.FieldFilter.call_args_list if call.args]
-        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
-        assert 'app_id' not in fields, f"Should use plugin_id, not app_id as filter field: {fields}"
+        assert 'app_id' in fields, f"Expected app_id filter, got: {fields}"
+        assert 'chat_session_id' not in fields, f"Should use app_id, not chat_session_id as filter field: {fields}"
 
 
 class TestCreateChatSession:
@@ -796,8 +794,8 @@ class TestCreateChatSession:
         assert result['preview'] is None
         mock_doc_ref.set.assert_called_once()
 
-    def test_plugin_id_matches_app_id(self):
-        """create_chat_session sets both plugin_id and app_id to the given app_id."""
+    def test_create_chat_session_sets_app_id(self):
+        """create_chat_session sets app_id to the given app_id."""
         mock_doc_ref = MagicMock()
 
         with patch.object(chat_db, 'db') as patched_db:
@@ -806,7 +804,6 @@ class TestCreateChatSession:
             )
             result = chat_db.create_chat_session('uid', app_id='my-plugin')
 
-        assert result['plugin_id'] == 'my-plugin'
         assert result['app_id'] == 'my-plugin'
 
     def test_custom_title(self):
@@ -1011,7 +1008,6 @@ class TestSaveMessageSessionBehavior:
             'text': 'Agent started.',
             'sender': 'ai',
             'app_id': None,
-            'plugin_id': None,
             'metadata': '{"content_blocks":[{"type":"agent_spawn"}]}',
             'message_source': 'desktop_chat',
             'chat_session_id': 'session-1',
@@ -1056,7 +1052,6 @@ class TestSaveMessageSessionBehavior:
             'text': 'original',
             'sender': 'ai',
             'app_id': None,
-            'plugin_id': None,
             'metadata': None,
             'message_source': 'desktop_chat',
             'chat_session_id': 'session-1',
@@ -1091,7 +1086,6 @@ class TestSaveMessageSessionBehavior:
             'text': 'newest',
             'sender': 'ai',
             'app_id': None,
-            'plugin_id': None,
             'metadata': '{"resources":[{"id":"new"}]}',
             'message_source': 'desktop_chat',
             'chat_session_id': 'session-1',
@@ -1128,7 +1122,6 @@ class TestSaveMessageSessionBehavior:
             'text': 'original',
             'sender': 'ai',
             'app_id': None,
-            'plugin_id': None,
             'metadata': None,
             'message_source': 'desktop_chat',
             'chat_session_id': 'session-1',
@@ -1232,7 +1225,6 @@ class TestSaveMessageSessionBehavior:
             'text': 'hello',
             'sender': 'human',
             'app_id': 'different-app',
-            'plugin_id': 'different-app',
             'metadata': None,
             'message_source': 'desktop_chat',
             'chat_session_id': 'session-1',
@@ -1263,7 +1255,6 @@ class TestSaveMessageSessionBehavior:
             'text': 'hello',
             'sender': 'human',
             'app_id': None,
-            'plugin_id': None,
             'metadata': None,
             'message_source': 'desktop_chat',
             'chat_session_id': 'winner-session',
@@ -2529,7 +2520,7 @@ class TestSessionScopedPrecedence:
 
         fields = self._get_field_filter_fields()
         assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
-        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id present: {fields}"
+        assert 'app_id' not in fields, f"app_id should NOT be filtered when session_id present: {fields}"
 
     def test_delete_messages_session_id_ignores_app_id(self):
         """When both app_id and session_id are provided, only session filter is applied."""
@@ -2549,7 +2540,7 @@ class TestSessionScopedPrecedence:
 
         fields = self._get_field_filter_fields()
         assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
-        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id present: {fields}"
+        assert 'app_id' not in fields, f"app_id should NOT be filtered when session_id present: {fields}"
 
 
 # ============================================================================
