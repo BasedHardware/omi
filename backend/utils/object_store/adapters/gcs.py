@@ -108,6 +108,19 @@ class GCSObjectStore:
         except NotFound:
             raise ObjectNotFound(bucket, key)
 
+    def get_bytes_current(self, bucket: str, key: str) -> bytes:
+        from google.api_core.exceptions import NotFound
+
+        blob = self._blob(bucket, key)
+        try:
+            # Resolve the current generation via the authenticated metadata API, then pin the download
+            # to it — a CDN/edge-cached predecessor (public max-age objects) can never satisfy the
+            # generation precondition, so the read is guaranteed to be the most current object.
+            blob.reload()
+            return blob.download_as_bytes(if_generation_match=blob.generation)
+        except NotFound:
+            raise ObjectNotFound(bucket, key)
+
     def download_to(self, bucket: str, key: str, dst_path: str) -> None:
         from google.api_core.exceptions import NotFound
 

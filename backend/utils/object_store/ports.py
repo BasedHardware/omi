@@ -70,6 +70,15 @@ class ObjectStore(Protocol):
     # --- reads (get_bytes/download_to raise errors.ObjectNotFound on a missing key) ---
     def get_bytes(self, bucket: str, key: str) -> bytes: ...
 
+    def get_bytes_current(self, bucket: str, key: str) -> bytes:
+        """Read the authoritative current object, defeating any CDN/edge cache.
+
+        GCS objects can be served with an implicit ``public, max-age`` header, so a plain read may
+        return a cached predecessor. This pins the read to the object's current generation. An
+        authenticated S3 GetObject is already strongly consistent and current, so S3 delegates.
+        """
+        ...
+
     def download_to(self, bucket: str, key: str, dst_path: str) -> None: ...
 
     def exists(self, bucket: str, key: str) -> bool: ...

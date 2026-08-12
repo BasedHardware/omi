@@ -167,7 +167,9 @@ def _read_gcs_uri(uri: str) -> bytes:
     bucket_name, _, blob_name = uri[5:].partition("/")
     if not bucket_name or not blob_name:
         raise ValueError("Agent VM release URI must contain a bucket and object")
-    return get_object_store().get_bytes(bucket_name, blob_name)
+    # Pin the release read to the object's current generation: public GCS objects carry an implicit
+    # cache header, so a plain read could let a CDN-cached predecessor drive a rollout.
+    return get_object_store().get_bytes_current(bucket_name, blob_name)
 
 
 def load_active_release() -> tuple[AgentVmRelease, dict[str, Any]]:

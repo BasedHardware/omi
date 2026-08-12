@@ -97,6 +97,10 @@ class FakeObjectStore:
         except KeyError:
             raise ObjectNotFound(bucket, key)
 
+    def get_bytes_current(self, bucket: str, key: str) -> bytes:
+        # No CDN/edge in the in-memory fake: the current read is the plain read.
+        return self.get_bytes(bucket, key)
+
     def download_to(self, bucket: str, key: str, dst_path: str) -> None:
         with open(dst_path, "wb") as fh:
             fh.write(self.get_bytes(bucket, key))

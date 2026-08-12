@@ -140,6 +140,12 @@ class S3ObjectStore:
         return _S3Writer(bucket, key, content_type)
 
     # --- reads ---
+    def get_bytes_current(self, bucket: str, key: str) -> bytes:
+        # An authenticated S3 GetObject is strongly consistent and always the current object (no CDN
+        # edge in the read path), so there is no stale-generation to defeat: the current read is the
+        # plain GET.
+        return self.get_bytes(bucket, key)
+
     def get_bytes(self, bucket: str, key: str) -> bytes:
         from botocore.exceptions import ClientError
 
