@@ -90,8 +90,8 @@ def test_explicit_integration_memories_keep_required_processing_contract():
     """Explicit integration writes must wrap required_processing_payload."""
     src = (_BACKEND / "utils" / "conversations" / "memories.py").read_text(encoding="utf-8")
     assert "required_processing_payload" in src
-    assert 'extractor_id == "external_integration_explicit"' in src
-    assert 'source_surface=f"integration:{app_id}"' in src
+    assert 'extractor_id="external_integration_explicit"' in src
+    assert 'consumer=f"integration:{app_id}"' in src
 
 
 def test_merge_failure_tombstones_merged_target_contract():
