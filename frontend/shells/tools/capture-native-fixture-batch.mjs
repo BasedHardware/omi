@@ -1051,18 +1051,33 @@ function main() {
       if (coordinate.shell === "macos") captureMac(coordinate, artifacts.macos, output, timeoutSeconds);
       else captureIos(coordinate, artifacts.ios, output, waitSeconds, timeoutSeconds);
       if (!existsSync(output)) fail(`${coordinate.run_id}: native capture did not write a PNG`);
+      const replayFirstRaw = args.replay_proof && records.length === 0 && coordinate.shell === "ios" ? `${output}.first.raw.png` : null;
+      if (replayFirstRaw) copyFileSync(output, replayFirstRaw);
       if (coordinate.shell === "ios") canonicalizeScreenshot(output);
       const image = validateImage(output, coordinate);
       if (args.replay_proof && records.length === 0) {
         const repeatOutput = `${output}.repeat.png`;
+        const repeatRaw = coordinate.shell === "ios" ? `${output}.repeat.raw.png` : null;
         rmSync(repeatOutput, { force: true });
+        if (repeatRaw) rmSync(repeatRaw, { force: true });
         if (coordinate.shell === "macos") captureMac(coordinate, artifacts.macos, repeatOutput, timeoutSeconds);
         else captureIos(coordinate, artifacts.ios, repeatOutput, waitSeconds, timeoutSeconds);
+        if (repeatRaw) copyFileSync(repeatOutput, repeatRaw);
         if (coordinate.shell === "ios") canonicalizeScreenshot(repeatOutput);
         const repeatImage = validateImage(repeatOutput, coordinate);
+        if (repeatImage.sha256 !== image.sha256) {
+          const diagnostics = path.join(outRoot, "diagnostics", "replay-mismatch", coordinate.run_id);
+          mkdirSync(diagnostics, { recursive: true });
+          copyFileSync(output, path.join(diagnostics, "first.canonical.png"));
+          copyFileSync(repeatOutput, path.join(diagnostics, "repeat.canonical.png"));
+          if (replayFirstRaw) copyFileSync(replayFirstRaw, path.join(diagnostics, "first.raw.png"));
+          if (repeatRaw) copyFileSync(repeatRaw, path.join(diagnostics, "repeat.raw.png"));
+          fail(`${coordinate.run_id}: consecutive capture bytes differ under --replay-proof; preserved diagnostics at ${authorityRelative(diagnostics)}`);
+        }
         rmSync(repeatOutput, { force: true });
-        if (repeatImage.sha256 !== image.sha256) fail(`${coordinate.run_id}: consecutive capture bytes differ under --replay-proof`);
+        if (repeatRaw) rmSync(repeatRaw, { force: true });
       }
+      if (replayFirstRaw) rmSync(replayFirstRaw, { force: true });
       const record = {
         schema: "omi.polish.native-fixture-coordinate/v1",
         coordinate_index: manifest.coordinates.findIndex((entry) => entry.run_id === coordinate.run_id),
@@ -1104,6 +1119,9 @@ function main() {
     } catch (error) {
       rmSync(output, { force: true });
       rmSync(sidecar, { force: true });
+      rmSync(`${output}.first.raw.png`, { force: true });
+      rmSync(`${output}.repeat.png`, { force: true });
+      rmSync(`${output}.repeat.raw.png`, { force: true });
       throw error;
     }
     }

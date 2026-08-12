@@ -286,6 +286,9 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /elapsedSeconds/);
   assert.match(source, /canonicalizeScreenshot/);
   assert.match(source, /image\.rgba\[offset\] < 16/);
+  assert.match(source, /diagnostics.*replay-mismatch/);
+  assert.match(source, /first\.raw\.png/);
+  assert.match(source, /repeat\.raw\.png/);
   assert.match(source, /validAccessibilities = new Set\(\["none"\]\)/);
   assert.doesNotMatch(source, /const env = \{ \.\.\.process\.env \}/);
   assert.doesNotMatch(source, /OMI_API_TOKEN/);
