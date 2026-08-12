@@ -190,6 +190,10 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   // comparison would make simulator time and animation bytes silently drift.
   const source = readFileSync(producer, "utf8");
   const appDelegate = readFileSync(path.join(root, "shells/ios/app/ios/Runner/AppDelegate.swift"), "utf8");
+  const sceneDelegate = readFileSync(path.join(root, "shells/ios/app/ios/Runner/SceneDelegate.swift"), "utf8");
+  const captureController = readFileSync(path.join(root, "shells/ios/app/ios/Runner/CaptureFlutterViewController.swift"), "utf8");
+  const mainStoryboard = readFileSync(path.join(root, "shells/ios/app/ios/Runner/Base.lproj/Main.storyboard"), "utf8");
+  const iosProject = readFileSync(path.join(root, "shells/ios/app/ios/Runner.xcodeproj/project.pbxproj"), "utf8");
   const dartHost = readFileSync(path.join(root, "shells/ios/app/lib/main.dart"), "utf8");
   assert.match(source, /const maxCoordinates = 1236/);
   assert.match(source, /OMI_SURFACE_PORT = "5290"/);
@@ -230,6 +234,8 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /marker\.nonce === nonce/);
   assert.match(source, /marker\.polish_state === coordinate\.state/);
   assert.match(source, /fixturePolicy\[coordinate\.domain\]/);
+  assert.match(source, /settle simulator compositor/);
+  assert.match(source, /warmup\.png/);
   assert.match(appDelegate, /name: "omi\/capture-launch"/);
   assert.match(appDelegate, /capture-ready-invalid/);
   assert.match(appDelegate, /capture-ready-write-failed/);
@@ -239,6 +245,12 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(dartHost, /dataset\.polishState/);
   assert.match(dartHost, /page-finished callback precedes React's typed fixture root/);
   assert.match(appDelegate, /NATIVE_CAPTURE_READY run_id=%@ route=%@ fixture=%@ state=%@/);
+  assert.match(sceneDelegate, /--omi-capture-query=/);
+  assert.match(sceneDelegate, /setNeedsUpdateOfHomeIndicatorAutoHidden/);
+  assert.match(captureController, /prefersHomeIndicatorAutoHidden/);
+  assert.match(captureController, /--omi-capture-query=/);
+  assert.match(mainStoryboard, /customClass="CaptureFlutterViewController"/);
+  assert.match(iosProject, /CaptureFlutterViewController\.swift in Sources/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /elapsedSeconds/);
   assert.match(source, /canonicalizeScreenshot/);
