@@ -3,7 +3,7 @@ import type { Conversation, Memory } from "@omi-core/contracts";
 import { formatDate, formatNumber, t } from "@omi-core/i18n";
 import type { RefreshStatus, StoreStatus } from "@omi-core/domain";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, type ProductionAnnouncementScheduler, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { ProductionIcon } from "./ProductionIcon.js";
 import { presentMemoryContent } from "./memory-presentation.js";
 import { combineHomeRefreshStatuses, homeSurfacePresentation } from "./home-presentation.js";
@@ -67,13 +67,14 @@ function readCombinedStatus(sources: HomeSearchSources): RefreshStatus {
   );
 }
 
-export function HomeProduction({ sources, source, locale = "en", onReady, initialLastSuccessAt = null, now }: {
+export function HomeProduction({ sources, source, locale = "en", onReady, initialLastSuccessAt = null, now, announcementScheduler }: {
   sources: HomeSearchSources;
   source?: SurfaceDataSource;
   locale?: Locale;
   onReady?: () => void;
   initialLastSuccessAt?: number | null;
   now?: () => number;
+  announcementScheduler?: ProductionAnnouncementScheduler;
 }): React.JSX.Element {
   const [rows, setRows] = useState<HomeRows>(EMPTY_ROWS);
   const [query, setQuery] = useState("");
@@ -189,7 +190,10 @@ export function HomeProduction({ sources, source, locale = "en", onReady, initia
             nextAction={refreshFailed && canRetry ? t(locale, "common.retry") : null}
             retry={refreshFailed && canRetry ? { onRetry: retry } : null}
           />
-          <ProductionLiveAnnouncement message={t(locale, filtering ? "home.matchCount" : "home.loadedCount", { count: formatNumber(results.length, locale) })} />
+          <ProductionLiveAnnouncement
+            message={t(locale, filtering ? "home.matchCount" : "home.loadedCount", { count: formatNumber(results.length, locale) })}
+            {...(announcementScheduler ? { scheduler: announcementScheduler } : {})}
+          />
           <header className="home-results-header">
             <div className="home-kind-filter" role="group" aria-label={t(locale, "common.search")}>
               {(["all", "conversation", "memory"] as const).map((value) => <button type="button" key={value} aria-pressed={kind === value} onClick={() => setKind(value)}>

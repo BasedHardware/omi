@@ -259,6 +259,59 @@ test("HomeProduction renders a merged searchable spine with clear, filter, and k
   }
 });
 
+test("Home keeps result rows non-live and debounces only concise count changes", async () => {
+  const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
+  const fixtureMemoryStore = await loadProductionExport("memory-fixtures.ts", "fixtureStore");
+  const fixtureConversationStore = await loadProductionExport("conversation-fixtures.ts", "fixtureConversationStore");
+  let nextTimer = 0;
+  const callbacks = new Map();
+  const scheduler = {
+    setTimeout(callback) { const id = ++nextTimer; callbacks.set(id, callback); return id; },
+    clearTimeout(id) { callbacks.delete(id); },
+  };
+  const rendered = await renderComponent(HomeProduction, {
+    sources: {
+      memories: fixtureMemoryStore("normal"),
+      conversations: fixtureConversationStore("normal"),
+    },
+    announcementScheduler: scheduler,
+  });
+
+  try {
+    const panel = rendered.container.querySelector(".home-results-panel");
+    const rows = rendered.container.querySelector(".home-result-spine");
+    assert.equal(panel?.getAttribute("aria-live"), null);
+    assert.equal(rows?.getAttribute("aria-live"), null);
+    assert.equal(rows?.getAttribute("role"), null, "the changing result list is never a live region");
+    assert.equal(callbacks.size, 1, "initial results keep one concise debounced count");
+    const initialAnnouncement = callbacks.values().next().value;
+    callbacks.clear();
+    await rendered.act(async () => initialAnnouncement());
+    const live = rendered.container.querySelector('[data-live-region="true"]');
+    assert.equal(live?.getAttribute("aria-atomic"), "true");
+    assert.match(live?.textContent ?? "", /loaded/iu);
+
+    const input = rendered.container.querySelector('input[type="search"]');
+    const setter = Object.getOwnPropertyDescriptor(rendered.window.HTMLInputElement.prototype, "value")?.set;
+    assert.ok(input && setter);
+    await rendered.act(async () => {
+      setter.call(input, "morning review");
+      input.dispatchEvent(new rendered.window.Event("input", { bubbles: true }));
+    });
+    assert.equal(callbacks.size, 1, "a changed result count schedules one replacement announcement");
+    assert.match(live?.textContent ?? "", /loaded/iu, "old count remains until the debounce fires");
+    const filteredAnnouncement = callbacks.values().next().value;
+    callbacks.clear();
+    await rendered.act(async () => filteredAnnouncement());
+    assert.match(live?.textContent ?? "", /match/iu);
+    assert.equal(live?.textContent?.includes("Keep the morning review short"), false, "result content is never reread");
+  } finally {
+    await rendered.cleanup();
+  }
+  // red-proof: move aria-live to .home-results-panel/.home-result-spine or
+  // announce row text; the non-live and content-exclusion assertions fail.
+});
+
 test("home renders each of the five refresh states distinguishably", async () => {
   const phases = [
     "initial-loading",

@@ -156,6 +156,9 @@ test("each capture state renders state-specific copy, glyph, and interpolated me
       const announcement = rendered.container.querySelector('[data-live-region="true"]');
       assert.ok(announcement, "capture state has one deduplicated live announcement");
       assert.equal(announcement.getAttribute("role"), "status");
+      const assertive = rendered.container.querySelector('[role="alert"]');
+      if (loud) assert.equal(assertive?.textContent, EN_MESSAGES[titleKey], `${capture.kind} is assertive once`);
+      else assert.equal(assertive, null, `${capture.kind} stays polite`);
       assert.ok(panel.querySelector(`.listen-state-glyph.is-${capture.kind}`), `${capture.kind} renders its designed state glyph`);
       const title = panel.querySelector(".listen-state-title")?.textContent;
       assert.equal(title, EN_MESSAGES[titleKey]);
