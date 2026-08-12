@@ -12,6 +12,14 @@ enum AppEnvironmentProfile {
     usesFirebaseAuthEmulator: true,
     allowsProductionData: false,
   ),
+  localProd(
+    name: 'local_prod',
+    defaultApiBaseUrl: 'http://127.0.0.1:8000/',
+    firebaseProjectId: 'based-hardware',
+    authCallbackScheme: 'omi',
+    usesFirebaseAuthEmulator: false,
+    allowsProductionData: true,
+  ),
   mobileBeta(
     name: 'mobile_beta',
     defaultApiBaseUrl: 'https://api.omiapi.com/',

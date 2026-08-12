@@ -1,11 +1,11 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2156,
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1835
+"desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2156,
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1930
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Chat-first capability wiring remains with onboarding's shared chat surface so rollout state cannot diverge across entry points. Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Onboarding adopts the async-arriving auth name, cancels the local file import task in deinit, and carries the sharpened goal/task prompts on top of the terminal-scan-state helper. Onboarding serializes Calendar and Gmail's shared Safe Storage access and binds local-file import writes to the active owner. Passive onboarding now defers Gmail/Calendar reads until an explicit Apps/Settings action and reports that state in the source rows. Explicit onboarding connector reads now propagate the user-initiated consent boundary to Gmail and Calendar."
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Onboarding adopts the async-arriving auth name, cancels the local file import task in deinit, and carries the sharpened goal/task prompts on top of the terminal-scan-state helper. Onboarding serializes Calendar and Gmail's shared Safe Storage access and binds local-file import writes to the active owner. Passive onboarding now defers Gmail/Calendar reads until an explicit Apps/Settings action and reports that state in the source rows. Explicit onboarding connector reads now propagate the user-initiated consent boundary to Gmail and Calendar. Gmail account selection: pick which browser profile Omi reads email from during onboarding; cancel path and post-probe recheck keep the gmail insight task from stalling. Gmail account probe failures fail closed, cancellation resumes onboarding without leaving the shared selection continuation suspended, and reads remain bound to the selected profile."
   },
   "threshold": 1500
 }

@@ -24,11 +24,10 @@ struct SettingsPage: View {
     Group {
       if let page = selectedSection.presentedPage {
         // A section that presents a whole established page mounts it directly. Not inside the
-        // shared scroll view: `PermissionsPage` owns a `ScrollView` of its own and `HelpPage` is a
-        // web view that has to fill the pane, so nesting either one inside this page's scroller
-        // gives the pane two scrollbars and collapses the web view to nothing. Both already draw
-        // their own pane heading and `SettingsGlassMetrics.pane*` padding, so the shared header is
-        // skipped too rather than stacked on top of theirs.
+        // shared scroll view: `PermissionsPage` owns a `ScrollView` of its own, so nesting it
+        // inside this page's scroller gives the pane two scrollbars. It already draws its own pane
+        // heading and `SettingsGlassMetrics.pane*` padding, so the shared header is skipped too
+        // rather than stacked on top of its own.
         presentedPage(page)
       } else {
         sectionScrollView
@@ -68,8 +67,6 @@ struct SettingsPage: View {
     switch page {
     case .permissions:
       PermissionsPage(appState: appState)
-    case .help:
-      HelpPage()
     default:
       EmptyView()
     }
@@ -410,26 +407,24 @@ struct SettingsContentView: View {
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
     case about = "About"
-    /// The two established pages that had no door. Both were only ever written by the sidebar the
-    /// glass shell stopped rendering, so `PermissionsPage` and `HelpPage` kept working with nothing
-    /// on screen that reached them. They are sections rather than a new pill because they were
-    /// already dressed as settings panes — both lay themselves out in `SettingsGlassMetrics.pane*`
-    /// padding and the settings card corner — and because the bar's gear already promises
-    /// "permissions, capture, account". See `presentedPage`.
+    /// The established page that had no door. It was only ever written by the sidebar the glass
+    /// shell stopped rendering, so `PermissionsPage` kept working with nothing on screen that
+    /// reached it. It is a section rather than a new pill because it was already dressed as a
+    /// settings pane — it lays itself out in `SettingsGlassMetrics.pane*` padding and the settings
+    /// card corner — and because the bar's gear already promises "permissions, capture, account".
+    /// See `presentedPage`.
     case permissions = "Permissions"
-    case help = "Help"
 
     /// The established page this section presents *whole*, instead of a column of settings rows.
     ///
     /// This is the value `ShellDestination.unreachable()` checks, and the reason a row here is a
     /// door rather than a second version of the page (INV-NAV-1): the section mounts the same
-    /// `PermissionsPage` / `HelpPage` the shell's own route does, never a trimmed copy of it.
-    /// `SettingsPage` reads it to skip the shared scroll view and pane heading, which those two
-    /// pages already carry themselves.
+    /// `PermissionsPage` the shell's own route does, never a trimmed copy of it. `SettingsPage`
+    /// reads it to skip the shared scroll view and pane heading, which that page already carries
+    /// itself.
     var presentedPage: ShellDestination? {
       switch self {
       case .permissions: return .permissions
-      case .help: return .help
       default: return nil
       }
     }
@@ -532,6 +527,10 @@ struct SettingsContentView: View {
   @State var gmailMemoriesSaved: Int = 0
   @State var gmailReadError: String?
   @State var gmailLastFetched: Date?
+  @State var gmailReadGeneration = 0
+  @State var gmailAccounts: [GmailAccountOption] = []
+  @State var isProbingGmailAccounts: Bool = false
+  @State var showingGmailAccountPicker: Bool = false
 
   // Calendar Sync states
   @State var calendarEvents: [CalendarEvent] = []
@@ -657,7 +656,7 @@ struct SettingsContentView: View {
           advancedSection
         case .about:
           aboutSection
-        case .permissions, .help:
+        case .permissions:
           // Presenting sections never reach here — `SettingsPage` mounts the whole page they
           // present before it builds this pane. Listed explicitly rather than under a `default`
           // so a new section still has to say what it renders.

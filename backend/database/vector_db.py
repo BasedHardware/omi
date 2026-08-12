@@ -165,6 +165,7 @@ def query_vectors(
     starts_at: Optional[int] = None,
     ends_at: Optional[int] = None,
     k: int = 5,
+    query_vector: Optional[List[float]] = None,
 ) -> List[str]:
     if index is None:
         return []
@@ -177,7 +178,7 @@ def query_vectors(
     if created_at is not None:
         filter_data['created_at'] = created_at
 
-    xq = embeddings.embed_query(query)
+    xq = query_vector if query_vector is not None else embeddings.embed_query(query)
     xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")
     matches: List[Any] = xc['matches']
     return [item['id'].replace(f'{uid}-', '') for item in matches]
@@ -1038,7 +1039,9 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> No
     if not action_item_ids:
         return
     vector_ids = [f'{uid}-ai-{aid}' for aid in action_item_ids]
-    index.delete(ids=vector_ids, namespace=ACTION_ITEMS_NAMESPACE)
+    # Chunk to stay within Pinecone's per-delete id limit (1,000).
+    for i in range(0, len(vector_ids), 1000):
+        index.delete(ids=vector_ids[i : i + 1000], namespace=ACTION_ITEMS_NAMESPACE)
     logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
 
 
@@ -1160,16 +1163,22 @@ def search_transcript_chunks(
     limit: int = 20,
     starts_at: Optional[int] = None,
     ends_at: Optional[int] = None,
+    query_vector: Optional[List[float]] = None,
 ) -> List[Dict[str, Any]]:
     """Semantic search over transcript chunks. Returns chunk references
     [{conversation_id, chunk_index, created_at, score}] — hydrate text from
     Firestore (utils.conversations.transcript_chunks.hydrate_chunk_texts)."""
     if index is None:
         return []
-    vector = embeddings.embed_query(query)
     filter_data: Dict[str, Any] = {'uid': uid}
-    if starts_at is not None and ends_at is not None:
-        filter_data['created_at'] = {'$gte': int(starts_at), '$lte': int(ends_at)}
+    # Same one-sided / invalid-range rules as summary vector search (_created_at_filter).
+    created_at = _created_at_filter(starts_at, ends_at)
+    if (starts_at is not None or ends_at is not None) and created_at is None:
+        logger.warning('Skipping transcript chunk search with invalid date filter')
+        return []
+    if created_at is not None:
+        filter_data['created_at'] = created_at
+    vector = query_vector if query_vector is not None else embeddings.embed_query(query)
     xc = index.query(
         vector=vector,
         top_k=limit,

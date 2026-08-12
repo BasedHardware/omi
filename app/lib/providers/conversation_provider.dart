@@ -15,13 +15,15 @@ import 'package:omi/utils/logger.dart';
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
 typedef DailySummariesChecker = Future<bool> Function();
-typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
-  String query, {
-  int? page,
-  int? limit,
-  required bool includeDiscarded,
-  String? speakerId,
-});
+typedef ConversationSearchFetcher =
+    Future<(List<ServerConversation>, int, int)> Function(
+      String query, {
+      int? page,
+      int? limit,
+      required bool includeDiscarded,
+      String? speakerId,
+    });
+typedef ConversationDetailsFetcher = Future<ServerConversation?> Function(String conversationId);
 
 /// Day-bucket key for a conversation timestamp, in the viewer's **local** timezone.
 ///
@@ -98,15 +100,18 @@ class ConversationProvider extends ChangeNotifier {
   final ConversationSearchFetcher _conversationSearchFetcher;
   final bool Function() _isSignedIn;
 
+  @visibleForTesting
+  ConversationDetailsFetcher? conversationDetailsFetcherOverride;
+
   ConversationProvider({
     ConversationListFetcher? conversationListFetcher,
     DailySummariesChecker? dailySummariesChecker,
     ConversationSearchFetcher? conversationSearchFetcher,
     bool Function()? isSignedIn,
-  })  : _conversationListFetcher = conversationListFetcher,
-        _dailySummariesChecker = dailySummariesChecker,
-        _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
-        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
+  }) : _conversationListFetcher = conversationListFetcher,
+       _dailySummariesChecker = dailySummariesChecker,
+       _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
+       _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
     _setupMergeListener();
     _loadSettings();
   }
@@ -159,19 +164,13 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future updateSearchedConvoDetails(String id, DateTime date, int idx) async {
-    var convo = await getConversationById(id);
+  Future<void> updateSearchedConvoDetails(String id) async {
+    final convo = await (conversationDetailsFetcherOverride?.call(id) ?? getConversationById(id));
     if (convo != null) {
-      updateSpecificGroupedConvo(convo, date, idx);
+      updateConversationInSortedList(convo);
+    } else {
+      notifyListeners();
     }
-    notifyListeners();
-  }
-
-  void updateSpecificGroupedConvo(ServerConversation convo, DateTime date, int idx) {
-    final group = groupedConversations[date];
-    if (group == null || idx < 0 || idx >= group.length) return;
-    group[idx] = convo;
-    notifyListeners();
   }
 
   Future<void> searchConversations(String query, {bool showShimmer = false}) async {
@@ -264,9 +263,30 @@ class ConversationProvider extends ChangeNotifier {
   void onConversationTap(String conversationId) {
     final idx = conversations.indexWhere((c) => c.id == conversationId);
     if (idx == -1) return;
+    var changed = false;
     if (conversations[idx].isNew) {
       conversations[idx].isNew = false;
-      groupConversationsByDate();
+      changed = true;
+    }
+    for (final conversation in searchedConversations) {
+      if (conversation.id == conversationId && conversation.isNew) {
+        conversation.isNew = false;
+        changed = true;
+      }
+    }
+    for (final group in groupedConversations.values) {
+      for (final conversation in group) {
+        if (conversation.id == conversationId && conversation.isNew) {
+          conversation.isNew = false;
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      // A sync refresh can replace the grouped object while the canonical
+      // list still holds the old instance. Update every view by ID without
+      // rebuilding and sorting the entire list on a tap.
+      notifyListeners();
     }
   }
 
@@ -344,8 +364,9 @@ class ConversationProvider extends ChangeNotifier {
   Future<bool> checkHasDailySummaries() async {
     if (!_isSignedIn()) return false;
     final generation = _sessionGeneration;
-    final hasSummaries = await (_dailySummariesChecker?.call() ??
-        getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
+    final hasSummaries =
+        await (_dailySummariesChecker?.call() ??
+            getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
     hasDailySummaries = hasSummaries;
     notifyListeners();
@@ -428,8 +449,10 @@ class ConversationProvider extends ChangeNotifier {
     // can be missed (socket drop, app backgrounded on Android), and unlike
     // fetchConversations this path never rebuilt processingConversations — so a
     // stale card stayed pinned at the top of the list indefinitely.
-    final resolvedIds =
-        newConversations.where((c) => c.status != ConversationStatus.processing).map((c) => c.id).toSet();
+    final resolvedIds = newConversations
+        .where((c) => c.status != ConversationStatus.processing)
+        .map((c) => c.id)
+        .toSet();
     if (resolvedIds.isNotEmpty) {
       processingConversations.removeWhere((c) => resolvedIds.contains(c.id));
     }
@@ -787,12 +810,18 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void updateConversationInSortedList(ServerConversation conversation) {
-    var effectiveDate = conversation.startedAt ?? conversation.createdAt;
-    var date = conversationLocalDayKey(effectiveDate);
-    if (groupedConversations.containsKey(date)) {
-      int idx = groupedConversations[date]!.indexWhere((element) => element.id == conversation.id);
-      if (idx != -1) {
-        groupedConversations[date]![idx] = conversation;
+    final canonicalIndex = conversations.indexWhere((element) => element.id == conversation.id);
+    if (canonicalIndex != -1) {
+      conversations[canonicalIndex] = conversation;
+    }
+    final searchedIndex = searchedConversations.indexWhere((element) => element.id == conversation.id);
+    if (searchedIndex != -1) {
+      searchedConversations[searchedIndex] = conversation;
+    }
+    for (final group in groupedConversations.values) {
+      final groupedIndex = group.indexWhere((element) => element.id == conversation.id);
+      if (groupedIndex != -1) {
+        group[groupedIndex] = conversation;
       }
     }
     notifyListeners();
@@ -981,8 +1010,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-            (item) => item.description == actionItemDescription,
-          );
+        (item) => item.description == actionItemDescription,
+      );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -995,8 +1024,8 @@ class ConversationProvider extends ChangeNotifier {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-              (item) => item.description == actionItemDescription,
-            );
+          (item) => item.description == actionItemDescription,
+        );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }

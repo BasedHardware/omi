@@ -6,8 +6,10 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
 import 'package:omi/pages/home/widgets/daily_summary_card.dart';
@@ -113,6 +115,21 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               // big "get started" options so the home page doesn't feel
               // empty for new users.
               if (_nonDiscardedConversationCount(convoProvider) >= 3) ...[
+                SliverToBoxAdapter(
+                  child: _buildSectionHeader(
+                    context,
+                    context.l10n.conversations,
+                    onViewAll: () {
+                      // Reset the daily-summaries flag so the conversations tab
+                      // actually shows conversations (it persists from Daily
+                      // Recaps' View All otherwise).
+                      if (convoProvider.showDailySummaries) convoProvider.toggleDailySummaries();
+                      context.read<HomeProvider>().setIndex(1);
+                    },
+                  ),
+                ),
+                HomeConversationsPreview(conversationProvider: convoProvider),
+
                 // Mind Map section — only shown for users with enough activity.
                 SliverToBoxAdapter(
                   child: _buildSectionHeader(
@@ -422,6 +439,71 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The filtered recent-conversation preview shown on Home for established users.
+///
+/// This consumes [ConversationProvider.groupedConversations], which already
+/// carries the conversations page's discarded/short/starred/date filters.
+class HomeConversationsPreview extends StatelessWidget {
+  final ConversationProvider conversationProvider;
+
+  const HomeConversationsPreview({super.key, required this.conversationProvider});
+
+  @override
+  Widget build(BuildContext context) {
+    if (conversationProvider.isLoadingConversations && conversationProvider.conversations.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: List.generate(
+              2,
+              (_) => Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: ShimmerWithTimeout(
+                  baseColor: AppStyles.backgroundSecondary,
+                  highlightColor: AppStyles.backgroundTertiary,
+                  child: Container(
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: AppStyles.backgroundSecondary,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final sortedDates = conversationProvider.groupedConversations.keys.toList()..sort((a, b) => b.compareTo(a));
+    final recent = <ServerConversation>[];
+    for (final date in sortedDates) {
+      final list = conversationProvider.groupedConversations[date] ?? const [];
+      for (final conversation in list) {
+        recent.add(conversation);
+        if (recent.length >= 3) break;
+      }
+      if (recent.length >= 3) break;
+    }
+    if (recent.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(childCount: recent.length, (context, index) {
+        final conversation = recent[index];
+        final date = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
+        return ConversationListItem(
+          key: ValueKey(conversation.id),
+          conversation: conversation,
+          date: date,
+          conversationIdx: index,
+        );
+      }),
     );
   }
 }

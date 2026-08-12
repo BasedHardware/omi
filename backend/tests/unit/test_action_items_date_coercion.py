@@ -1,15 +1,15 @@
-"""Regression test: a malformed ISO date string must not 500 an action-item write.
+"""Regression: action-item write path must never hand Firestore a tz-naive datetime.
 
-database.action_items._prepare_action_item_for_write normalizes created_at / updated_at /
-due_at / completed_at ISO strings to datetimes. These fields arrive as strings from tool-
-and LLM-created action items (not only from validated API models), so a single malformed
-value used to raise ValueError('Invalid isoformat string') out of create_action_item /
-update_action_item and 500 the request. The write path now drops a malformed date (with a
-warning) and keeps the rest of the item, mirroring the tolerant date handling on the read
-path and in _coerce_utc_datetime.
+``_prepare_action_item_for_write`` normalizes created_at / updated_at / due_at /
+completed_at. Extraction models (``ExtractedActionItem`` / ``structured.ActionItem``)
+use plain ``datetime``, so LLM due dates often arrive as date-only ISO strings or
+tz-naive datetimes. Firestore rejects naive datetimes; a failed batch create on the
+fire-and-forget postprocess path silently drops extracted tasks.
+
+Mirrors ``api_key_metadata._coerce_utc_datetime`` and ``mcp_action_items.parse_due_at``.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database.action_items import _prepare_action_item_for_write
 
@@ -21,19 +21,35 @@ def test_malformed_due_at_is_dropped_not_raised():
     assert out["description"] == "x"
 
 
-def test_valid_iso_string_is_parsed():
+def test_valid_iso_string_is_parsed_as_utc():
     out = _prepare_action_item_for_write({"description": "x", "due_at": "2024-01-01T00:00:00Z"}, partial=True)
 
     assert isinstance(out["due_at"], datetime)
-    assert out["due_at"].year == 2024
-    assert out["due_at"].tzinfo is not None
+    assert out["due_at"] == datetime(2024, 1, 1, tzinfo=timezone.utc)
 
 
-def test_datetime_value_passes_through_unchanged():
-    dt = datetime(2024, 5, 6, 7, 8, 9)
-    out = _prepare_action_item_for_write({"description": "x", "due_at": dt}, partial=True)
+def test_date_only_iso_string_gets_utc():
+    """fromisoformat('YYYY-MM-DD') returns naive; must attach UTC before Firestore."""
+    out = _prepare_action_item_for_write({"description": "x", "due_at": "2024-01-01"}, partial=True)
 
-    assert out["due_at"] is dt
+    assert out["due_at"] == datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+
+def test_naive_datetime_gets_utc():
+    naive = datetime(2024, 5, 6, 7, 8, 9)
+    out = _prepare_action_item_for_write({"description": "x", "due_at": naive}, partial=True)
+
+    assert out["due_at"] == datetime(2024, 5, 6, 7, 8, 9, tzinfo=timezone.utc)
+
+
+def test_aware_datetime_normalized_to_utc():
+    from datetime import timedelta
+
+    plus_five = timezone(timedelta(hours=5))
+    local = datetime(2024, 5, 6, 12, 0, tzinfo=plus_five)
+    out = _prepare_action_item_for_write({"description": "x", "due_at": local}, partial=True)
+
+    assert out["due_at"] == datetime(2024, 5, 6, 7, 0, tzinfo=timezone.utc)
 
 
 def test_one_malformed_field_does_not_drop_the_others():
@@ -43,4 +59,38 @@ def test_one_malformed_field_does_not_drop_the_others():
     )
 
     assert "created_at" not in out  # malformed dropped
-    assert isinstance(out["due_at"], datetime)  # sibling good value preserved
+    assert out["due_at"] == datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+
+def test_overflow_on_utc_normalization_is_dropped_not_raised():
+    """Boundary aware values can raise OverflowError in astimezone(UTC).
+
+    A parseable datetime whose offset conversion leaves Python's datetime range
+    must drop that field (same as a malformed string) so a batch write still
+    succeeds for sibling items — David's #11138 blocker.
+    """
+    from datetime import timedelta
+
+    # year=1 00:00 at +14h → UTC is before datetime.min
+    boundary = datetime(1, 1, 1, 0, 0, 0, tzinfo=timezone(timedelta(hours=14)))
+    out = _prepare_action_item_for_write(
+        {
+            "description": "x",
+            "due_at": boundary,
+            "created_at": "2024-01-01T00:00:00Z",
+        },
+        partial=True,
+    )
+
+    assert "due_at" not in out
+    assert out["created_at"] == datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+
+def test_overflow_iso_string_on_utc_normalization_is_dropped():
+    out = _prepare_action_item_for_write(
+        {"description": "x", "due_at": "0001-01-01T00:00:00+14:00"},
+        partial=True,
+    )
+
+    assert "due_at" not in out
+    assert out["description"] == "x"
