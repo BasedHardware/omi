@@ -1,0 +1,34 @@
+require_relative '../node_modules/react-native-macos/scripts/react_native_pods'
+
+prepare_react_native_project!
+
+target 'RnRuntime-macOS' do
+  platform :macos, '14.0'
+  use_native_modules!
+
+  # Flags change depending on the env values.
+  flags = get_default_flags()
+
+  use_react_native!(
+    :path => '../node_modules/react-native-macos',
+    :hermes_enabled => false,
+    :fabric_enabled => ENV['RCT_NEW_ARCH_ENABLED'] == '1',
+    # An absolute path to your application root.
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  post_install do |installer|
+    react_native_post_install(installer)
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |configuration|
+        configuration.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '14.0'
+      end
+
+      if target.name == 'fmt'
+        target.build_configurations.each do |configuration|
+          configuration.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+        end
+      end
+    end
+  end
+end

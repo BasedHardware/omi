@@ -14,6 +14,7 @@
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		A1B2C3D4E5F60718293A4B5C /* OmiCppBoundary.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5D /* OmiCppBoundary.mm */; };
 		A1B2C3D4E5F60718293A4B5E /* omi_native_boundary.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5F /* omi_native_boundary.cpp */; };
+		B3D4E5F60718293A4B5C6D7E /* OmiNativeModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3D4E5F60718293A4B5C6D7F /* OmiNativeModule.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,8 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = RnRuntime/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5D /* OmiCppBoundary.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = OmiCppBoundary.mm; path = RnRuntime/OmiCppBoundary.mm; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5F /* omi_native_boundary.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_native_boundary.cpp; path = ../../cpp/src/omi_native_boundary.cpp; sourceTree = "<group>"; };
+		B3D4E5F60718293A4B5C6D7F /* OmiNativeModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = OmiNativeModule.mm; path = RnRuntime/OmiNativeModule.mm; sourceTree = "<group>"; };
+		B3D4E5F60718293A4B5C6D80 /* OmiNativeModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OmiNativeModule.h; path = RnRuntime/OmiNativeModule.h; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -52,6 +55,8 @@
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 				A1B2C3D4E5F60718293A4B5D /* OmiCppBoundary.mm */,
+				B3D4E5F60718293A4B5C6D7F /* OmiNativeModule.mm */,
+				B3D4E5F60718293A4B5C6D80 /* OmiNativeModule.h */,
 				A1B2C3D4E5F60718293A4B5F /* omi_native_boundary.cpp */,
 			);
 			name = RnRuntime;
@@ -254,6 +259,7 @@
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* OmiCppBoundary.mm in Sources */,
+				B3D4E5F60718293A4B5C6D7E /* OmiNativeModule.mm in Sources */,
 				A1B2C3D4E5F60718293A4B5E /* omi_native_boundary.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

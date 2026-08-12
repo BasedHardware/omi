@@ -113,6 +113,10 @@ web/app/public/firebase-messaging-sw.js
 !app/ios/Podfile.lock
 !mcp/uv.lock
 *.lock
+!spikes/react-native-typescript-cpp-native/rn-runtime/bun.lock
+!spikes/react-native-typescript-cpp-native/rn-runtime/Gemfile.lock
+!spikes/react-native-typescript-cpp-native/rn-runtime/ios/Podfile.lock
+!spikes/react-native-typescript-cpp-native/rn-runtime/macos/Podfile.lock
 *.log
 *.swo
 *.swp
