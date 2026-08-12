@@ -1,6 +1,9 @@
 // Memory-footprint control: the same window, rendered natively (AppKit table of
 // 60 rows + a text field), so the webview cost can be measured as a delta.
 // Build: swiftc -O -framework AppKit -o <out>/NativeBaseline probes/native-window-baseline.swift
+// The probe is background-only by default. Pass --headed explicitly for an
+// operator-driven visual inspection; automated measurements must not steal the
+// user's foreground application or keyboard focus.
 import AppKit
 
 @MainActor
@@ -23,9 +26,16 @@ final class Delegate: NSObject, NSApplicationDelegate, NSTableViewDataSource {
       styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
     window.title = "Native Baseline"
     window.contentView = stack
-    window.center()
-    window.makeKeyAndOrderFront(nil)
-    NSApp.activate(ignoringOtherApps: true)
+    if CommandLine.arguments.dropFirst().contains("--headed") {
+      NSApp.setActivationPolicy(.regular)
+      window.center()
+      window.makeKeyAndOrderFront(nil)
+      NSApp.activate(ignoringOtherApps: true)
+    } else {
+      NSApp.setActivationPolicy(.accessory)
+      window.setFrameOrigin(NSPoint(x: -30000, y: -30000))
+      window.orderBack(nil)
+    }
   }
   func numberOfRows(in tableView: NSTableView) -> Int { 60 }
   func tableView(_ t: NSTableView, objectValueFor c: NSTableColumn?, row: Int) -> Any? {
@@ -37,7 +47,8 @@ MainActor.assumeIsolated {
   let app = NSApplication.shared
   let d = Delegate()
   app.delegate = d
-  app.setActivationPolicy(.regular)
+  let headed = CommandLine.arguments.dropFirst().contains("--headed")
+  app.setActivationPolicy(headed ? .regular : .accessory)
   objc_setAssociatedObject(app, "omi.delegate", d, .OBJC_ASSOCIATION_RETAIN)
   app.run()
 }

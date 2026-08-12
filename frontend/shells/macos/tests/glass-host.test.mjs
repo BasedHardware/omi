@@ -78,3 +78,19 @@ test("scratch shell opens at the deterministic comparison frame", async () => {
   // red-proof: removing the post-content-view size lock restores the observed
   // 296 x 278 stale frame and breaks screenshot parity.
 });
+
+test("native fixture helpers cannot take focus unless headed mode is explicit", async () => {
+  const shell = await read("shell/Sources/OmiShell/main.swift");
+  const baseline = await read("probes/native-window-baseline.swift");
+
+  assert.match(shell, /let headed = env\["OMI_HEADED"\] == "1" && !semanticWindow/);
+  assert.match(shell, /NSApp\.setActivationPolicy\(\.accessory\)/);
+  assert.match(shell, /window\.setFrameOrigin\(NSPoint\(x: -30000, y: -30000\)\)/);
+  assert.match(shell, /window\.orderBack\(nil\)/);
+
+  assert.match(baseline, /contains\("--headed"\)/);
+  assert.match(baseline, /headed \? \.regular : \.accessory/);
+  assert.match(baseline, /window\.setFrameOrigin\(NSPoint\(x: -30000, y: -30000\)\)/);
+  assert.match(baseline, /window\.orderBack\(nil\)/);
+  assert.match(baseline, /if CommandLine\.arguments\.dropFirst\(\)\.contains\("--headed"\)/);
+});
