@@ -51,7 +51,12 @@ function pngCrc(bytes) {
 
 function fixturePng(width, height) {
   const rows = Buffer.alloc(height * (width * 4 + 1), 0);
-  for (let row = 0; row < height; row += 1) rows[row * (width * 4 + 1)] = 0;
+  for (let row = 0; row < height; row += 1) {
+    const rowStart = row * (width * 4 + 1);
+    rows[rowStart] = 0;
+    for (let column = 0; column < width; column += 1) rows[rowStart + 1 + column * 4 + 3] = 255;
+  }
+  rows[1] = 255;
   const chunk = (type, body) => {
     const kind = Buffer.from(type);
     const payload = Buffer.concat([kind, body]);
@@ -59,6 +64,24 @@ function fixturePng(width, height) {
     out.writeUInt32BE(body.length, 0);
     payload.copy(out, 4);
     out.writeUInt32BE(pngCrc(payload), 8 + body.length);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 6;
+  return Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n", "binary"), chunk("IHDR", header), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+}
+
+function uniformFixturePng(width, height) {
+  const rows = Buffer.alloc(height * (width * 4 + 1), 0);
+  for (let row = 0; row < height; row += 1) {
+    const rowStart = row * (width * 4 + 1);
+    for (let column = 0; column < width; column += 1) rows[rowStart + 1 + column * 4 + 3] = 255;
+  }
+  const chunk = (type, body) => {
+    const kind = Buffer.from(type);
+    const payload = Buffer.concat([kind, body]);
+    const out = Buffer.alloc(12 + body.length);
+    out.writeUInt32BE(body.length, 0); payload.copy(out, 4); out.writeUInt32BE(pngCrc(payload), 8 + body.length);
     return out;
   };
   const header = Buffer.alloc(13);
@@ -74,7 +97,7 @@ function canonical(value) {
 
 function inputEntriesForFake(manifestPath, appPath) {
   const files = [...new Set([manifestPath, producer, ...walk(appPath)])];
-  const entries = files.map((file) => ({ key: `core:${path.relative(root, file)}`, sha256: sha256(readFileSync(file)), size: statSync(file).size, mode: statSync(file).mode & 0o777 })).sort((left, right) => left.key.localeCompare(right.key));
+  const entries = files.map((file) => ({ key: `core:${path.relative(root, file)}`, sha256: sha256(readFileSync(file)), size: statSync(file).size, mode: statSync(file).mode & 0o777 })).sort((left, right) => left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
   const tree = sha256(canonical(entries));
   return { id: `input-v1-${tree}`, entries, tree_sha256: tree };
 }
@@ -277,7 +300,8 @@ test("one manifest-scoped prepared app can capture a later coordinate determinis
     const resources = path.join(app, "Contents/Resources");
     mkdirSync(path.dirname(executable), { recursive: true });
     mkdirSync(resources, { recursive: true });
-    writeFileSync(path.join(resources, "fake.png"), fixturePng(960, 671));
+    const fakeImage = path.join(resources, "fake.png");
+    writeFileSync(fakeImage, uniformFixturePng(960, 671));
     writeFileSync(path.join(resources, "omi-build-stamp.json"), "{\"fixture\":true}\n");
     writeFileSync(executable, "#!/bin/sh\ncp \"$(dirname \"$0\")/../Resources/fake.png\" \"$OMI_SNAPSHOT_PATH\"\n");
     chmodSync(executable, 0o755);
@@ -289,6 +313,12 @@ test("one manifest-scoped prepared app can capture a later coordinate determinis
     };
     descriptor.input_set = inputEntriesForFake(matrix, app);
     mkdirSync(outRoot, { recursive: true });
+    writeFileSync(preparedPath, JSON.stringify(descriptor, null, 2));
+    const uniform = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "1", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60"], { encoding: "utf8" });
+    assert.notEqual(uniform.status, 0);
+    assert.match(uniform.stderr, /uniform framebuffer and cannot prove rendered UI/);
+    writeFileSync(fakeImage, fixturePng(960, 671));
+    descriptor.input_set = inputEntriesForFake(matrix, app);
     writeFileSync(preparedPath, JSON.stringify(descriptor, null, 2));
     const run = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "1", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60", "--replay-proof"], { encoding: "utf8" });
     assert.equal(run.status, 0, run.stderr);
