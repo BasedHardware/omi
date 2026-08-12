@@ -1,6 +1,7 @@
 # Probabilistic multimodal attribution belief contract
 
-Status: ratified architecture; implementation and activation pending
+Status: ratified architecture; pure belief kernel and injected calibration seam
+implemented; persistence, modality adapters, calibration, and activation pending
 
 Decision: David, 2026-08-12 America/New_York
 
@@ -89,6 +90,19 @@ belief contract is implemented and qualified. Existing typed identity authorizat
 not weakened or reinterpreted as a probability in place. The new belief layer is additive,
 versioned, and initially shadow-only. Legacy evidence is not rewritten; it may receive new
 attribution hypotheses only as separately versioned derivations with original provenance.
+
+## Current inert implementation
+
+`core/consolidate/attribution-belief.ts` implements the plane-agnostic immutable belief
+record. `core/consolidate/attribution-calibration.ts` validates and groups factors by their
+independence coordinate before exactly one injected calibrator call, strictly validates a
+complete integer-micro distribution, and returns only the belief plus content-safe request,
+response, result, strategy, and revision receipts. The request exposes an owner-scope digest
+and opaque coordinates rather than owner identity or observation text.
+
+This seam does not select a calibrator, weighting function, threshold, model, modality,
+storage plane, presentation rule, or action policy. It has no driver, persistence adapter,
+worker, route, or composition and therefore cannot change product memory.
 
 ## Acceptance boundary
 

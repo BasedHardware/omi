@@ -33,7 +33,7 @@ const baseInput = (patch: Partial<BuildAttributionBeliefRevisionInput> = {}): Bu
     about_ref: ref("about1", "a"),
     observation_ref: ref("obsref1", "b"),
     observation_content_digest: digest("c"),
-    graph_frontier: "frontier:7",
+    graph_frontier: digest("7"),
     hypotheses: [
       { kind: "owner", target_ref: null, probability_micros: 700_000 },
       { kind: "unknown", target_ref: null, probability_micros: 300_000 },
@@ -170,7 +170,7 @@ describe("probabilistic attribution belief revisions", () => {
         { kind: "owner", target_ref: null, probability_micros: 200_000 },
         { kind: "unknown", target_ref: null, probability_micros: 800_000 },
       ],
-      graph_frontier: "frontier:8",
+      graph_frontier: digest("8"),
       created_at_event_time: 11,
       previous_revision: previous,
     }));
@@ -194,7 +194,7 @@ describe("probabilistic attribution belief revisions", () => {
       buildAttributionBeliefRevision(baseInput({ owner_account_id: "owner-b" })),
       buildAttributionBeliefRevision(baseInput({ observation_ref: ref("obsref1", "8") })),
       buildAttributionBeliefRevision(baseInput({ observation_content_digest: digest("8") })),
-      buildAttributionBeliefRevision(baseInput({ graph_frontier: "frontier:8" })),
+      buildAttributionBeliefRevision(baseInput({ graph_frontier: digest("8") })),
       buildAttributionBeliefRevision(baseInput({ calibration_contract_digest: digest("8") })),
       buildAttributionBeliefRevision(baseInput({ created_at_event_time: 11 })),
     ]) expect(changed.belief_revision_id).not.toBe(base.belief_revision_id);
@@ -237,7 +237,7 @@ describe("probabilistic attribution belief revisions", () => {
     const input = baseInput();
     expectCode("invalid_attribution_belief", () => buildAttributionBeliefRevision(new Proxy(input, {}) as never));
     const getter = { ...input } as Record<string, unknown>;
-    Object.defineProperty(getter, "graph_frontier", { enumerable: true, get: () => "frontier:7" });
+    Object.defineProperty(getter, "graph_frontier", { enumerable: true, get: () => digest("7") });
     expectCode("invalid_attribution_belief", () => buildAttributionBeliefRevision(getter as never));
     expectCode("invalid_attribution_belief", () => buildAttributionBeliefRevision(Object.assign(Object.create(null), input)));
     const sparse = [input.hypotheses[0], , input.hypotheses[1]];

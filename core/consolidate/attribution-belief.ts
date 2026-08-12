@@ -348,7 +348,7 @@ const parseFields = (
     about_ref: aboutRef,
     observation_ref: matched(row["observation_ref"], OBSERVATION_REF, code),
     observation_content_digest: digest(row["observation_content_digest"], code),
-    graph_frontier: token(row["graph_frontier"], code),
+    graph_frontier: digest(row["graph_frontier"], code),
     hypotheses: parsedHypotheses,
     evidence_factors: factors(
       row["evidence_factors"],
@@ -409,7 +409,7 @@ export const buildAttributionBeliefRevision = (
     about_ref: aboutRef,
     observation_ref: matched(row["observation_ref"], OBSERVATION_REF, code),
     observation_content_digest: digest(row["observation_content_digest"], code),
-    graph_frontier: token(row["graph_frontier"], code),
+    graph_frontier: digest(row["graph_frontier"], code),
     hypotheses: parsedHypotheses,
     evidence_factors: factors(
       row["evidence_factors"],
