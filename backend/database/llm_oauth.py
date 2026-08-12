@@ -42,14 +42,23 @@ def save_credential(uid: str, provider: str, credential: dict[str, Any], *, fire
         raise ValueError(f'Unsupported LLM OAuth provider: {provider}')
     stored = _stored_credential(uid, credential, uuid4().hex)
     client = firestore_client or get_firestore_client()
-    client.collection('users').document(uid).set(
-        {
-            'llm_oauth': {provider: stored},
-            'llm_oauth_provider': provider,
-            'byok': {'active': True, 'last_seen_at': datetime.now(timezone.utc)},
-        },
-        merge=True,
-    )
+    user_ref = client.collection('users').document(uid)
+    transaction = client.transaction()
+
+    @_typed_transactional
+    def apply(write_transaction):
+        user_ref.get(transaction=write_transaction)
+        write_transaction.set(
+            user_ref,
+            {
+                'llm_oauth': {provider: stored},
+                'llm_oauth_provider': provider,
+                'byok': {'active': True, 'last_seen_at': datetime.now(timezone.utc)},
+            },
+            merge=True,
+        )
+
+    apply(transaction)
 
 
 def get_credential(uid: str, provider: str | None = None, *, firestore_client: Any = None) -> dict[str, Any] | None:
@@ -125,19 +134,25 @@ def delete_credential(uid: str, provider: str, *, firestore_client: Any = None) 
         raise ValueError(f'Unsupported LLM OAuth provider: {provider}')
     client = firestore_client or get_firestore_client()
     user_ref = client.collection('users').document(uid)
-    data = user_ref.get().to_dict() or {}
-    next_provider = next(
-        (
-            candidate
-            for candidate in LLM_OAUTH_PROVIDERS
-            if candidate != provider and isinstance((data.get('llm_oauth') or {}).get(candidate), dict)
-        ),
-        None,
-    )
-    update: dict[str, Any] = {f'llm_oauth.{provider}': firestore.DELETE_FIELD}
-    if data.get('llm_oauth_provider') == provider:
-        update['llm_oauth_provider'] = next_provider
-    if next_provider is None and not (data.get('byok') or {}).get('fingerprints'):
-        update['byok.active'] = False
-        update['byok.last_seen_at'] = datetime.now(timezone.utc)
-    user_ref.update(update)
+    transaction = client.transaction()
+
+    @_typed_transactional
+    def apply(write_transaction):
+        data = user_ref.get(transaction=write_transaction).to_dict() or {}
+        next_provider = next(
+            (
+                candidate
+                for candidate in LLM_OAUTH_PROVIDERS
+                if candidate != provider and isinstance((data.get('llm_oauth') or {}).get(candidate), dict)
+            ),
+            None,
+        )
+        update: dict[str, Any] = {f'llm_oauth.{provider}': firestore.DELETE_FIELD}
+        if data.get('llm_oauth_provider') == provider:
+            update['llm_oauth_provider'] = next_provider
+        if next_provider is None and not (data.get('byok') or {}).get('fingerprints'):
+            update['byok.active'] = False
+            update['byok.last_seen_at'] = datetime.now(timezone.utc)
+        write_transaction.update(user_ref, update)
+
+    apply(transaction)

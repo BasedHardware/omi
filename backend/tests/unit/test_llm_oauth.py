@@ -124,6 +124,63 @@ def test_conditional_refresh_write_leaves_a_disconnected_credential_deleted():
     assert client.transaction_instance.updates == []
 
 
+def test_oauth_connect_and_disconnect_write_through_firestore_transactions():
+    class Snapshot:
+        def __init__(self, data):
+            self.data = data
+
+        def to_dict(self):
+            return self.data
+
+    class UserRef:
+        def __init__(self, data):
+            self.data = data
+            self.reads = 0
+
+        def get(self, transaction):
+            self.reads += 1
+            return Snapshot(self.data)
+
+    class Transaction:
+        def __init__(self):
+            self.sets: list[dict] = []
+            self.updates: list[dict] = []
+
+        def set(self, _ref, values, merge):
+            assert merge
+            self.sets.append(values)
+
+        def update(self, _ref, values):
+            self.updates.append(values)
+
+    class Client:
+        def __init__(self, data):
+            self.user_ref = UserRef(data)
+            self.transaction_instances: list[Transaction] = []
+
+        def collection(self, _name):
+            return self
+
+        def document(self, _uid):
+            return self.user_ref
+
+        def transaction(self):
+            transaction = Transaction()
+            self.transaction_instances.append(transaction)
+            return transaction
+
+    credential = {'access_token': 'access-2', 'refresh_token': 'refresh-2', 'expires_at': 4_000_000_000}
+    client = Client({'llm_oauth': {'chatgpt': {'generation': 'generation-1'}}, 'llm_oauth_provider': 'chatgpt'})
+    with patch.object(llm_oauth_db, 'transactional', side_effect=lambda apply: apply), patch.object(
+        encryption, 'encrypt', side_effect=lambda value, _uid: f'encrypted:{value}'
+    ):
+        llm_oauth_db.save_credential('user-1', 'grok', credential, firestore_client=client)
+        llm_oauth_db.delete_credential('user-1', 'chatgpt', firestore_client=client)
+    assert client.user_ref.reads == 2
+    assert client.transaction_instances[0].sets[0]['llm_oauth_provider'] == 'grok'
+    assert 'llm_oauth.chatgpt' in client.transaction_instances[1].updates[0]
+
+
 def test_unexpired_credential_does_not_refresh():
     stored = {
         'provider': 'grok',
