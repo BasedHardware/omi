@@ -12,7 +12,7 @@ import database.user_usage as user_usage_db
 from database import redis_db
 from database.announcements import compare_versions
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
-from utils.byok import get_byok_llm_provider, has_byok_keys, has_validated_byok_keys
+from utils.byok import get_byok_key, get_byok_keys, get_byok_llm_provider, has_byok_keys, has_validated_byok_keys
 from utils.log_sanitizer import sanitize
 from utils.observability.fallback import record_fallback
 import logging
