@@ -51,7 +51,7 @@ import XCTest
     XCTAssertEqual(APIKeyService.selectedBYOKLLMProvider, .openai)
   }
 
-  func testBuildHeadersDoesNotAttachPartialByokKeys() async throws {
+  func testBuildHeadersAttachSelectedLLMByokKey() async throws {
     clearAllBYOKKeys()
     UserDefaults.standard.set("sk-test-openai", forKey: BYOKProvider.openai.storageKey)
 
@@ -59,7 +59,7 @@ import XCTest
     await client.setTestAuthHeader("Bearer test-token")
     let headers = try await client.buildHeaders()
 
-    XCTAssertNil(headers[BYOKProvider.openai.headerName])
+    XCTAssertEqual(headers[BYOKProvider.openai.headerName], "sk-test-openai")
   }
 
   func testBuildHeadersCanExplicitlyExcludeByokKeys() async throws {
