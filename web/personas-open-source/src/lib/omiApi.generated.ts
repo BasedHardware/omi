@@ -9949,7 +9949,7 @@ export async function refresh_app_manifest_v1_apps__app_id__refresh_manifest_pos
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function reject_app_v1_apps__app_id__reject_post(path: { app_id: string }, query: { uid: string }, header: { secret_key: string }, body: RejectAppRequest, init?: OmiApiClientInit): Promise<AppMutationResponse> {
+export async function reject_app_v1_apps__app_id__reject_post(path: { app_id: string }, query: { uid: string }, header: { secret_key: string }, body?: RejectAppRequest, init?: OmiApiClientInit): Promise<AppMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/apps/${path.app_id}/reject`;
   const _params = query ? Object.entries(query)
