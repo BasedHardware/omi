@@ -15,6 +15,7 @@ vi.mock('../pages/Rewind', () => ({ Rewind: () => null }))
 vi.mock('../pages/Insights', () => ({ Insights: () => null }))
 vi.mock('../pages/LiveConversation', () => ({ LiveConversation: () => null }))
 vi.mock('../pages/KnowledgeGraph', () => ({ KnowledgeGraph: () => null }))
+vi.mock('../pages/AiClone', () => ({ AiClone: () => null }))
 
 import {
   resolveRoute,

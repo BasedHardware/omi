@@ -55,17 +55,26 @@ export function AiClone(): React.JSX.Element {
     })
   }, [])
 
-  // If the clone resumed enabled after an app restart, main has no Firebase
-  // token yet — supply one as soon as auth is available so the first incoming
-  // message isn't dropped. Keyed off onAuthStateChanged (not mount) because
-  // this page mounts before Firebase finishes restoring the session.
+  // Keep main's Firebase credential bound to whoever is signed in *now*. Token
+  // presence is not enough: on sign-out or an account switch main would keep
+  // replying as — and grounded in the memories of — the previous user until the
+  // 30-minute refresh fired. Clear on sign-out, (re)bind on every user change.
   useEffect(() => {
+    let boundUid: string | null = null
     return onAuthStateChanged(auth, (u) => {
-      if (!u) return
+      if (!u) {
+        boundUid = null
+        void window.omi.aiCloneProvideAuthToken({ token: '' })
+        return
+      }
+      if (u.uid === boundUid) return
+      boundUid = u.uid
+      // Retire the previous account's credential first, then bind the new one —
+      // but only while the clone is on, so a disabled feature never holds one.
+      void window.omi.aiCloneProvideAuthToken({ token: '' })
       void window.omi.aiCloneGetState().then((s) => {
-        if (s.enabled && !s.authTokenPresent) {
-          void buildAuth().then((a) => a && window.omi.aiCloneProvideAuthToken(a))
-        }
+        if (!s.enabled) return
+        void buildAuth().then((a) => a && window.omi.aiCloneProvideAuthToken(a))
       })
     })
   }, [])
@@ -134,7 +143,14 @@ export function AiClone(): React.JSX.Element {
 
   const setMode = async (chat: AiCloneChat, mode: AiCloneChatMode): Promise<void> => {
     setChats((cs) => (cs ?? []).map((c) => (c.id === chat.id ? { ...c, mode } : c)))
-    await window.omi.aiCloneSetChatMode(chat.id, mode)
+    try {
+      await window.omi.aiCloneSetChatMode(chat.id, mode)
+    } catch {
+      // The optimistic control would otherwise keep showing a mode main never
+      // saved — reload the authoritative list instead of lying about it.
+      toast('Could not change this chat', { tone: 'error' })
+      void refreshChats()
+    }
   }
 
   if (!state) {
@@ -204,9 +220,11 @@ function ConnectCard(props: {
             </div>
             <p className="mt-0.5 text-xs leading-relaxed text-white/55">
               {state.beeperConnected
-                ? state.beeperReachable
-                  ? 'Connected — listening for new messages.'
-                  : 'Token saved, but Beeper Desktop isn’t reachable. Open Beeper Desktop.'
+                ? !state.enabled
+                  ? 'Connected. Omi is not reading your chats — turn on “Respond on my behalf” below.'
+                  : state.beeperReachable
+                    ? 'Connected — listening for new messages.'
+                    : 'Token saved, but Beeper Desktop isn’t reachable. Open Beeper Desktop.'
                 : 'Beeper bundles WhatsApp, Telegram, Signal and more into one inbox on this PC. Omi connects to it locally — messages never leave your machine on the way in.'}
             </p>
             {state.error && <p className="mt-1 text-xs text-red-400/90">{state.error}</p>}
