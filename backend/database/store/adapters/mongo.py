@@ -150,6 +150,9 @@ class _MongoTransaction:
     def update(self, path: str, data: Dict[str, Any]) -> None:
         self._store._update(path, data, session=self._session)
 
+    def create(self, path: str, data: Dict[str, Any]) -> None:
+        self._store._create(path, data, session=self._session)
+
     def delete(self, path: str) -> None:
         self._store._delete(path, session=self._session)
 
@@ -223,16 +226,21 @@ class MongoDocumentStore:
         self._update(path, data)
 
     def create(self, path: str, data: Dict[str, Any]) -> None:
+        self._create(path, data)
+
+    def _create(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
         collection_name, parent, key = _doc_meta(path)
         plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
         document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": _now(), "d": plain}
         try:
-            self._db[collection_name].insert_one(document)
+            self._db[collection_name].insert_one(document, session=session)
         except DuplicateKeyError as exc:
             raise AlreadyExists(path) from exc
         transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
         if transforms:
-            self._db[collection_name].update_one({"_id": path}, _build_update_ops(transforms))
+            self._db[collection_name].update_one(
+                {"_id": path}, _build_update_ops(transforms), session=session
+            )
 
     def delete(self, path: str) -> None:
         self._delete(path)

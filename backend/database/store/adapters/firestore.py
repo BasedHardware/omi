@@ -156,6 +156,11 @@ class _FirestoreTransaction:
         except _FirestoreNotFound as exc:
             raise NotFound(path) from exc
 
+    def create(self, path: str, data: Dict[str, Any]) -> None:
+        # Firestore buffers the write with an exists=False precondition; the conflict surfaces at
+        # commit (mapped to the neutral AlreadyExists in run_transaction), not from this call.
+        self._transaction.create(self._client.document(path), _translate(data))
+
     def delete(self, path: str) -> None:
         self._transaction.delete(self._client.document(path))
 
@@ -307,7 +312,12 @@ class FirestoreDocumentStore:
             return fn(_FirestoreTransaction(transaction, client))
 
         # run_transactional restarts on an expired-transaction 400; @transactional retries contention.
-        return run_transactional(client, _runner, attempts=attempts)
+        # A tx.create() precondition failure surfaces here at commit — map it to the neutral
+        # AlreadyExists so callers (e.g. create-if-absent restore) can catch a backend-agnostic error.
+        try:
+            return run_transactional(client, _runner, attempts=attempts)
+        except (_FirestoreAlreadyExists, _FirestoreConflict) as exc:
+            raise AlreadyExists(str(exc)) from exc
 
     def batch(self) -> _FirestoreBatch:
         return _FirestoreBatch(self._client)

@@ -344,6 +344,23 @@ def test_create_succeeds_then_conflicts(store, uid):
     assert store.get(f"users/{uid}").to_dict() == {"name": "Ada"}  # first write is preserved
 
 
+def test_run_transaction_create_succeeds_then_conflicts(store, uid):
+    # tx.create is part of the neutral Transaction contract. A create-if-absent restore path called
+    # it and crashed with AttributeError because the adapters' transaction handles lacked create
+    # (cubic review PR 10887). Both backends must support it with create-if-absent semantics.
+    path = f"users/{uid}/action_items/a1"
+
+    def create_one(tx):
+        tx.create(path, {"description": "restored"})
+
+    store.run_transaction(create_one)
+    assert store.get(path).to_dict() == {"description": "restored"}
+
+    with pytest.raises(AlreadyExists):
+        store.run_transaction(create_one)  # the second create-if-absent conflicts
+    assert store.get(path).to_dict() == {"description": "restored"}  # first write preserved
+
+
 def test_query_projection_returns_only_requested_fields(store, uid):
     store.set(f"users/{uid}/people/p1", {"name": "Ada", "secret": "hidden", "n": 1})
     (doc,) = store.query(f"users/{uid}/people", fields=["name"])
