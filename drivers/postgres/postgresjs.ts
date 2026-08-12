@@ -28,6 +28,12 @@ interface PostgresJsBindingOptions {
   readonly leaseGeneration?: () => number;
 }
 
+interface CancellableQuery<Rows> extends PromiseLike<Rows> {
+  cancel(): void;
+}
+
+type TrackQuery = <Rows>(query: CancellableQuery<Rows>) => Promise<Rows>;
+
 const boundedInteger = (
   value: number | undefined,
   fallback: number,
@@ -48,27 +54,28 @@ class PostgresJsCheckedOutConnection implements CheckedOutPostgresConnection {
     readonly connectionIdentity: object,
     private readonly sql: ReservedSql<Record<string, never>>,
     private readonly assertLeaseHealthy: () => void,
+    private readonly trackQuery: TrackQuery,
   ) {}
 
   async query<Row extends Record<string, unknown>>(
     statement: SqlStatement,
   ): Promise<readonly Row[]> {
     this.assertLeaseHealthy();
-    const rows = await this.sql.unsafe<Row[]>(
+    const rows = await this.trackQuery(this.sql.unsafe<Row[]>(
       statement.text,
       statement.values.map(parameter),
       { prepare: true },
-    );
+    ));
     return Object.freeze([...rows]);
   }
 
   async execute(statement: SqlStatement): Promise<SqlMutationResult> {
     this.assertLeaseHealthy();
-    const result = await this.sql.unsafe(
+    const result = await this.trackQuery(this.sql.unsafe(
       statement.text,
       statement.values.map(parameter),
       { prepare: true },
-    );
+    ));
     return Object.freeze({ rowCount: result.count });
   }
 }
@@ -115,6 +122,10 @@ export const bindPostgresJsTransactionPool = (
     if (options.isolationLevel !== "serializable" || options.accessMode !== "read write") {
       throw new TypeError("invalid_postgres_transaction_options");
     }
+    if (options.signal !== undefined && !(options.signal instanceof AbortSignal)) {
+      throw new TypeError("invalid_postgres_transaction_signal");
+    }
+    if (options.signal?.aborted) throw options.signal.reason;
     const reserved = await sql.reserve();
     const leaseGeneration = binding.leaseGeneration?.();
     const assertLeaseHealthy = (): void => {
@@ -124,22 +135,34 @@ export const bindPostgresJsTransactionPool = (
     };
     const identity = Object.freeze({ lease: Symbol("postgresjs-reserved-connection") });
     let leaseDestroyed = false;
+    let activeQuery: { cancel(): void } | null = null;
+    const abort = (): void => { activeQuery?.cancel(); };
+    options.signal?.addEventListener("abort", abort, { once: true });
+    const run = async <Rows>(
+      query: CancellableQuery<Rows>,
+    ): Promise<Rows> => {
+      activeQuery = query;
+      try { return await query; }
+      finally { if (activeQuery === query) activeQuery = null; }
+    };
     try {
-      await reserved.unsafe("begin isolation level serializable read write");
+      await run(reserved.unsafe("begin isolation level serializable read write"));
       try {
         const value = await callback(new PostgresJsCheckedOutConnection(
           identity,
           reserved,
           assertLeaseHealthy,
+          run,
         ));
         assertLeaseHealthy();
-        await reserved.unsafe("commit");
+        if (options.signal?.aborted) throw options.signal.reason;
+        await run(reserved.unsafe("commit"));
         return value;
       } catch (error) {
         leaseDestroyed = destroysConnectionLease(error);
         if (!leaseDestroyed) {
           try {
-            await reserved.unsafe("rollback");
+            await run(reserved.unsafe("rollback"));
           } catch (rollbackError) {
             leaseDestroyed = destroysConnectionLease(rollbackError);
           }
@@ -150,6 +173,7 @@ export const bindPostgresJsTransactionPool = (
       leaseDestroyed ||= destroysConnectionLease(error);
       throw error;
     } finally {
+      options.signal?.removeEventListener("abort", abort);
       if (!leaseDestroyed) reserved.release();
     }
   },

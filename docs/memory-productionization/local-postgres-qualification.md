@@ -76,6 +76,8 @@ It also covers append-only product projection writes and isolated read-experimen
 inputs, exact graph-source reload, result pairing, and finalized grounding persistence.
 The real corpus also kills a size-one pool backend at a query-quiescent pre-commit
 checkpoint after its first write, proves observer-visible rollback, and proves the next
-transaction reconnects with cleared local state. It does not by itself activate
-PostgreSQL for production. Arbitrary in-flight cancellation, product-projection rebuild,
+transaction reconnects with cleared local state. It also cancels an in-flight
+`pg_sleep` through an explicit `AbortSignal`, rolls the transaction back, and proves the
+same physical backend is safely reusable with cleared transaction-local authority. It
+does not by itself activate PostgreSQL for production. Product-projection rebuild,
 load/recovery, and the remaining gates in the PostgreSQL authority contract still apply.

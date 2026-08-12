@@ -723,6 +723,48 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     );
   }, 30_000);
 
+  test("request cancellation rolls back and clears transaction-local authority before pool reuse", async () => {
+    const controller = new AbortController();
+    let cancelledBackend: number | undefined;
+    const pending = pool.withTransaction(
+      {
+        isolationLevel: "serializable", accessMode: "read write",
+        signal: controller.signal,
+      },
+      async (connection) => {
+        const backend = await connection.query<{ backend_pid: number }>({
+          name: "qualification.cancellation_backend",
+          text: `SELECT pg_backend_pid() AS backend_pid,
+                        set_config('omi.account_id', $1, true) AS local_account`,
+          values: ["account:cancelled"],
+        });
+        cancelledBackend = backend[0]?.backend_pid;
+        setTimeout(() => controller.abort(new Error("qualification_cancelled")), 50);
+        await connection.query({
+          name: "qualification.cancellation_sleep",
+          text: "SELECT pg_sleep(30)", values: [],
+        });
+      },
+    );
+    await expect(pending).rejects.toMatchObject({ code: "57014" });
+
+    await pool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read write" },
+      async (connection) => {
+        const recovered = await connection.query<{
+          backend_pid: number; local_account: string | null;
+        }>({
+          name: "qualification.cancellation_reuse",
+          text: `SELECT pg_backend_pid() AS backend_pid,
+                        nullif(current_setting('omi.account_id', true), '') AS local_account`,
+          values: [],
+        });
+        expect(recovered[0]?.backend_pid).toBe(cancelledBackend);
+        expect(recovered[0]?.local_account).toBeNull();
+      },
+    );
+  }, 30_000);
+
   test("application role accepts exact durable work before inference and revalidates authority before replay", async () => {
     const suffix = randomUUID();
     const accountId = `account:work-acceptance:${suffix}`;

@@ -301,7 +301,9 @@ client parity. It also terminates a size-one pool's checked-out backend at a nam
 query-quiescent pre-commit checkpoint after the first write: a separate connection sees
 no commit, the dead lease is not committed or returned to the open queue, and the next
 transaction reconnects with cleared local authority state under both runtimes. Arbitrary
-in-flight query cancellation, complete injected-failure coverage, and product-projection
+in-flight query cancellation is now also qualified: an explicit abort cancels the active
+Postgres.js query, rolls back, and returns the same physical backend only after its local
+authority state is cleared. Complete injected-failure coverage and product-projection
 reconstruction remain open.
 
 ## Activation blockers outside this slice
