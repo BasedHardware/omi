@@ -51,11 +51,16 @@ def _make_chat_client(stream_impl):
     graph.execute_persona_chat_stream = MagicMock()
 
     sys.modules.pop('routers.chat', None)
-    module = harness.load_real_module('routers.chat', BACKEND_DIR / 'routers' / 'chat.py')
+    sys.modules.pop('routers.chat_generation', None)
+    chat_module = harness.load_real_module('routers.chat', BACKEND_DIR / 'routers' / 'chat.py')
+    generation_module = harness.load_real_module(
+        'routers.chat_generation', BACKEND_DIR / 'routers' / 'chat_generation.py'
+    )
 
     app = FastAPI()
-    app.include_router(module.router)
-    return TestClient(app, raise_server_exceptions=False), module, saved
+    app.include_router(chat_module.router)
+    app.include_router(generation_module.router)
+    return TestClient(app, raise_server_exceptions=False), chat_module, generation_module, saved
 
 
 def _answering_stream(recorded):
@@ -83,7 +88,7 @@ def _failing_stream():
 
 def test_generate_reply_does_not_write_any_turn_to_chat_history():
     recorded = {}
-    client, module, saved = _make_chat_client(_answering_stream(recorded))
+    client, chat_module, generation_module, saved = _make_chat_client(_answering_stream(recorded))
     try:
         response = client.post(
             '/v2/chat/generate-reply',
@@ -98,12 +103,12 @@ def test_generate_reply_does_not_write_any_turn_to_chat_history():
         assert response.json()['text'] == 'drafted reply'
 
         # The real property: nothing about this generation touched chat state.
-        module.chat_db.add_message.assert_not_called()
-        module.chat_db.add_message_to_chat_session.assert_not_called()
-        module.chat_db.get_chat_session.assert_not_called()
-        module.chat_db.add_files_to_chat_session.assert_not_called()
-        module.llm_usage_db.record_chat_quota_question.assert_not_called()
-        module.llm_executor.submit.assert_not_called()
+        chat_module.chat_db.add_message.assert_not_called()
+        chat_module.chat_db.add_message_to_chat_session.assert_not_called()
+        chat_module.chat_db.get_chat_session.assert_not_called()
+        chat_module.chat_db.add_files_to_chat_session.assert_not_called()
+        chat_module.llm_usage_db.record_chat_quota_question.assert_not_called()
+        chat_module.llm_executor.submit.assert_not_called()
 
         # Generation still runs through the shared chat path, with no session identity.
         assert recorded['uid'] == 'test-uid'
@@ -117,16 +122,16 @@ def test_generate_reply_does_not_write_any_turn_to_chat_history():
 
 
 def test_generate_reply_never_returns_a_staged_error_answer_as_reply_text():
-    client, module, saved = _make_chat_client(_failing_stream())
+    client, chat_module, generation_module, saved = _make_chat_client(_failing_stream())
     try:
         response = client.post('/v2/chat/generate-reply', json={'text': 'Draft a reply'})
 
         assert response.status_code == 502
         assert response.json()['detail'] == {'error': 'setup_timeout'}
         assert 'Sorry' not in response.text
-        module.chat_db.add_message.assert_not_called()
-        module.record_fallback.assert_called_once()
-        assert module.record_fallback.call_args.kwargs['outcome'] == 'exhausted'
+        chat_module.chat_db.add_message.assert_not_called()
+        generation_module.record_fallback.assert_called_once()
+        assert generation_module.record_fallback.call_args.kwargs['outcome'] == 'exhausted'
     finally:
         harness.cleanup(saved)
 
@@ -134,12 +139,12 @@ def test_generate_reply_never_returns_a_staged_error_answer_as_reply_text():
 def test_v2_messages_still_persists_the_human_turn():
     """Legacy principal: the existing chat endpoint keeps its persisting behavior."""
     recorded = {}
-    client, module, saved = _make_chat_client(_answering_stream(recorded))
+    client, chat_module, generation_module, saved = _make_chat_client(_answering_stream(recorded))
     try:
         response = client.post('/v2/messages', json={'text': 'hello', 'file_ids': []})
 
         assert response.status_code == 200
-        assert module.chat_db.add_message.call_count >= 1
-        module.llm_usage_db.record_chat_quota_question.assert_called_once()
+        assert chat_module.chat_db.add_message.call_count >= 1
+        chat_module.llm_usage_db.record_chat_quota_question.assert_called_once()
     finally:
         harness.cleanup(saved)
