@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { describe, expect, test } from "bun:test";
-import type { ReservedSql, Sql, TransactionSql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 
 import { REAL_POSTGRES_ACTIVATION, type CheckedOutPostgresConnection } from "./connection";
 import {
@@ -25,7 +25,7 @@ describe("Postgres.js transaction adapter", () => {
     });
   });
 
-  test("reserves one connection, starts one serializable transaction, and always releases", async () => {
+  test("starts one serializable transaction on the callback-scoped connection", async () => {
     const calls: string[] = [];
     const transaction = {
       unsafe: async (text: string) => {
@@ -35,15 +35,11 @@ describe("Postgres.js transaction adapter", () => {
         return rows;
       },
     } as unknown as TransactionSql<Record<string, never>>;
-    const reserved = {
+    const sql = {
       begin: async (options: string, callback: (sql: TransactionSql<Record<string, never>>) => Promise<unknown>) => {
         calls.push(options);
         return callback(transaction);
       },
-      release: () => { calls.push("release"); },
-    } as unknown as ReservedSql<Record<string, never>>;
-    const sql = {
-      reserve: async () => reserved,
       end: async () => { calls.push("end"); },
     } as unknown as Sql<Record<string, never>>;
     const pool = bindPostgresJsTransactionPool(sql);
@@ -69,21 +65,16 @@ describe("Postgres.js transaction adapter", () => {
       "isolation level serializable read write",
       "select pg_backend_pid() as backend_pid",
       "update example set value = $1",
-      "release",
     ]);
     await pool.close();
     expect(calls.at(-1)).toBe("end");
   });
 
-  test("releases the reserved connection after callback failure and rejects ambient construction", async () => {
-    let releases = 0;
-    const reserved = {
-      begin: async (_options: string, callback: (sql: TransactionSql<Record<string, never>>) => Promise<unknown>) =>
-        callback({} as TransactionSql<Record<string, never>>),
-      release: () => { releases += 1; },
-    } as unknown as ReservedSql<Record<string, never>>;
+  test("propagates transaction callback failure and rejects ambient construction", async () => {
+    let transactions = 0;
     const sql = {
-      reserve: async () => reserved,
+      begin: async (_options: string, callback: (sql: TransactionSql<Record<string, never>>) => Promise<unknown>) =>
+        (transactions += 1, callback({} as TransactionSql<Record<string, never>>)),
       end: async () => undefined,
     } as unknown as Sql<Record<string, never>>;
     const pool = bindPostgresJsTransactionPool(sql);
@@ -92,7 +83,7 @@ describe("Postgres.js transaction adapter", () => {
       { isolationLevel: "serializable", accessMode: "read write" },
       async () => { throw new Error("callback failed"); },
     )).rejects.toThrow("callback failed");
-    expect(releases).toBe(1);
+    expect(transactions).toBe(1);
     expect(() => createPostgresJsTransactionPool({ connectionString: "" }))
       .toThrow("invalid_postgres_connection_string");
   });

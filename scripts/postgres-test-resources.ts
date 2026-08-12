@@ -83,7 +83,13 @@ export const verifyOwnedContainerConfiguration = (
   if (mount.stdout !== `volume|${state.volumeName}|/var/lib/postgresql`) {
     return fail("postgres_test_container_configuration_mismatch");
   }
-  const image = run(["docker", "image", "inspect", "--format", "{{.Os}}/{{.Architecture}}", state.image]);
+  // The containerd image store keeps the pinned multi-architecture index as the
+  // visible image object. Select the frozen child platform explicitly so the
+  // check proves the executable manifest rather than inspecting the index.
+  const image = run([
+    "docker", "image", "inspect", "--platform", "linux/amd64",
+    "--format", "{{.Os}}/{{.Architecture}}", state.image,
+  ]);
   if (image.stdout !== "linux/amd64") return fail("postgres_test_container_configuration_mismatch");
   const pgdata = run(["docker", "exec", state.containerName, "printenv", "PGDATA"]);
   if (pgdata.stdout !== "/var/lib/postgresql/18/docker") {

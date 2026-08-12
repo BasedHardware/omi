@@ -67,7 +67,7 @@ class PostgresJsCheckedOutConnection implements CheckedOutPostgresConnection {
 
 /**
  * Binds the existing driver-neutral transaction port to Postgres.js.
- * `reserve()` supplies one physical pool lease; `begin()` scopes SET LOCAL and
+ * Postgres.js `begin()` itself reserves one physical pool lease and scopes
  * rollback/commit to that exact lease. No transaction SQL escapes the callback.
  */
 export const bindPostgresJsTransactionPool = (
@@ -80,16 +80,11 @@ export const bindPostgresJsTransactionPool = (
     if (options.isolationLevel !== "serializable" || options.accessMode !== "read write") {
       throw new TypeError("invalid_postgres_transaction_options");
     }
-    const reserved = await sql.reserve();
     const identity = Object.freeze({ lease: Symbol("postgresjs-reserved-connection") });
-    try {
-      const wrapped = await reserved.begin("isolation level serializable read write", async (transaction) => ({
-        value: await callback(new PostgresJsCheckedOutConnection(identity, transaction)),
-      }));
-      return wrapped.value;
-    } finally {
-      reserved.release();
-    }
+    const wrapped = await sql.begin("isolation level serializable read write", async (transaction) => ({
+      value: await callback(new PostgresJsCheckedOutConnection(identity, transaction)),
+    }));
+    return wrapped.value;
   },
   async close(): Promise<void> {
     await sql.end({ timeout: 5 });

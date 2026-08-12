@@ -40,7 +40,9 @@ describe("executable PostgreSQL resource lifecycle", () => {
   });
 
   test("verifies digest, platform, loopback, exact volume target, and PGDATA before use", () => {
+    const calls: string[][] = [];
     const run: PostgresTestCommandRunner = (args) => {
+      calls.push([...args]);
       if (args[1] === "inspect" && args.some((arg) => arg.includes(".Config.Image}}|{{.Platform"))) {
         return { exitCode: 0, stdout: `${state.instanceId}|${state.projectKey}|${state.image}|linux`, stderr: "" };
       }
@@ -55,6 +57,10 @@ describe("executable PostgreSQL resource lifecycle", () => {
       return { exitCode: 1, stdout: "", stderr: "unexpected" };
     };
     expect(() => verifyOwnedContainerConfiguration(run, state)).not.toThrow();
+    expect(calls).toContainEqual([
+      "docker", "image", "inspect", "--platform", "linux/amd64",
+      "--format", "{{.Os}}/{{.Architecture}}", state.image,
+    ]);
     expect(() => verifyOwnedContainerConfiguration((args) => {
       const result = run(args);
       return args[1] === "inspect" && args.some((arg) => arg.includes(".HostConfig.PortBindings"))

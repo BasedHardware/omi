@@ -337,7 +337,10 @@ const runParityContainer = (
     return closedError("postgres_parity_container_create_failed");
   }
   try {
-    const imagePlatform = docker(["image", "inspect", "--format", "{{.Os}}/{{.Architecture}}", image]);
+    const imagePlatform = docker([
+      "image", "inspect", "--platform", "linux/amd64",
+      "--format", "{{.Os}}/{{.Architecture}}", image,
+    ]);
     if (imagePlatform.stdout !== "linux/amd64") return closedError("postgres_parity_image_platform_mismatch");
     if (docker(["cp", `${corpus}/.`, `${name}:/workspace`]).exitCode !== 0) {
       return closedError("postgres_parity_corpus_copy_failed");
