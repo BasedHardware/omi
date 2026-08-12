@@ -150,9 +150,10 @@ def _seed_registry_from_existing_memory_states(db_client: Any, *, limit: int) ->
     and deployments without collection-group support retain the explicit
     registry-only seam and simply skip this optional seed pass.
     """
-    collection_group = getattr(db_client, "collection_group", None)
-    if not callable(collection_group):
+    collection_group_factory = getattr(db_client, "collection_group", None)
+    if not callable(collection_group_factory):
         return
+    collection_group = cast(Callable[[str], Any], collection_group_factory)
     bounded_limit = max(1, min(MAX_MAINTENANCE_UIDS_PER_RUN, int(limit)))
     cursor_path = _read_seed_cursor(db_client)
     cursor_snapshot = None

@@ -3,7 +3,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, cast
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -730,6 +730,7 @@ class MemoryService:
         client = self._db_client if self._db_client is not None else default_db_client
         get_all = getattr(client, "get_all", None)
         if callable(get_all):
+            batch_get = cast(Callable[[List[Any]], Iterable[Any]], get_all)
             collections = MemoryCollections(uid=uid)
             statuses: Dict[str, MemoryItemStatus] = {}
             # Keep each request comfortably below Firestore's practical batch
@@ -742,7 +743,7 @@ class MemoryService:
                 ]
                 refs = item_refs + override_refs
                 try:
-                    snapshots = list(get_all(refs))
+                    snapshots = list(batch_get(refs))
                 except Exception as exc:
                     raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
                 snapshots_by_path: Dict[str, Any] = {}
@@ -1434,7 +1435,10 @@ class MemoryService:
             record.memory.id
             for record in self._history.all_live(uid)
             if record.memory.conversation_id == conversation_id
-            or any(evidence.conversation_id == conversation_id for evidence in record.memory.evidence)
+            or any(
+                evidence.source_type == "conversation" and evidence.source_id == conversation_id
+                for evidence in record.memory.evidence
+            )
         ]
         retracted_ids = list(dict.fromkeys(list(result.get("retracted_memory_ids") or []) if result else []))
         all_ids = list(dict.fromkeys(retracted_ids + historical_ids))
