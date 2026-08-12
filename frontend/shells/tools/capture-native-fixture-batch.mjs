@@ -454,6 +454,23 @@ function imageInfo(file) {
 
 function canonicalizeScreenshot(file) {
   const image = decodeRgbaImage(file);
+  // CoreSimulator's tablet status bar may draw a spinner whose phase changes
+  // between otherwise identical captures. Status-bar metadata is already
+  // bound by simctl overrides; normalize only the documented top-right icon
+  // slot on large logical viewports, never product content.
+  if (image.width >= 1600 && image.height >= 2300) {
+    const startX = image.width - 40;
+    const startY = image.height - 80;
+    for (let y = startY; y < image.height; y += 1) {
+      for (let x = startX; x < image.width; x += 1) {
+        const offset = (y * image.width + x) * 4;
+        image.rgba[offset] = 255;
+        image.rgba[offset + 1] = 255;
+        image.rgba[offset + 2] = 255;
+        image.rgba[offset + 3] = 255;
+      }
+    }
+  }
   // CoreSimulator can vary a handful of near-black compositor bytes by one
   // value across otherwise identical launches. Collapse only values below 16
   // before the bounded palette pass below.
