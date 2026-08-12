@@ -1,3 +1,5 @@
+import importlib
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -70,6 +72,31 @@ def test_create_app_loads_environment_before_building_cors(monkeypatch):
 
     monkeypatch.setattr(desktop_backend, 'load_backend_env', load_env)
     client = _test_client(monkeypatch, desktop_backend.create_app())
+
+    with client:
+        response = client.options(
+            '/',
+            headers={
+                'Origin': 'https://app.example',
+                'Access-Control-Request-Method': 'GET',
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers['access-control-allow-origin'] == 'https://app.example'
+
+
+def test_module_level_app_loads_environment_before_building_cors(monkeypatch):
+    import utils.env_loader as env_loader
+
+    monkeypatch.delenv('CORS_ALLOWED_ORIGINS', raising=False)
+
+    def load_env(path=None):
+        monkeypatch.setenv('CORS_ALLOWED_ORIGINS', 'https://app.example')
+
+    monkeypatch.setattr(env_loader, 'load_backend_env', load_env)
+    reloaded = importlib.reload(desktop_backend)
+    client = _test_client(monkeypatch, reloaded.app)
 
     with client:
         response = client.options(

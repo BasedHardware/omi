@@ -69,6 +69,11 @@ def _cors_allowed_origins_from_env() -> list[str]:
 
 def _build_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
+    # Explicit, default-deny CORS: desktop backend traffic is Bearer-token
+    # authenticated, so no cross-origin browser caller needs to be allowed by
+    # default. CORS_ALLOWED_ORIGINS lets an operator opt a specific web frontend
+    # in (comma-separated exact origins — never "*", and never combined with
+    # allow_credentials, which would leak authenticated responses).
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_cors_allowed_origins_from_env(),
@@ -93,4 +98,9 @@ def create_app() -> FastAPI:
     return _build_app()
 
 
+# Load staged backend env before constructing the app so CORS origins are
+# populated before CORSMiddleware is installed. This keeps the module-level `app`
+# entrypoint (used by desktop/macos/run.sh, the dev harness, and docs) consistent
+# with the factory entrypoint used by Cloud Run/Docker.
+load_backend_env()
 app = _build_app()
