@@ -68,9 +68,6 @@ class MemoryPlatformIngestResponse(BaseModel):
     status: Literal["created"] = "created"
 
 
-MemoryPlatformContract = MemoryPlatformCapability
-
-
 __all__ = [
     "ApplyControlPath",
     "FirestoreStoreKind",
@@ -78,7 +75,6 @@ __all__ = [
     "MemoryCanonicalStore",
     "MemoryItemsCollection",
     "MemoryPlatformCapability",
-    "MemoryPlatformContract",
     "MemoryPlatformIngestResponse",
     "MemoryPlatformQuota",
     "MemorySurfaceNames",
