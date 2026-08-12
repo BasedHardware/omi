@@ -17,6 +17,7 @@ class _FakeSyncs {
   int syncWalCalls = 0;
   SyncLocalFilesResponse? nextSyncResult;
   Completer<SyncLocalFilesResponse?>? hangSyncWal;
+  Object? nextError;
 
   _FakeSyncs(this.wals);
 
@@ -33,6 +34,7 @@ class _FakeSyncs {
 
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     syncWalCalls++;
+    if (nextError case final error?) throw error;
     final hang = hangSyncWal;
     if (hang != null) return hang.future;
     final result = nextSyncResult ?? SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
@@ -128,9 +130,51 @@ void main() {
     await provider.syncWal(wal);
 
     expect(provider.syncState.hasError, isTrue);
-    expect(provider.syncError, contains('Upload failed'));
+    expect(provider.syncError, contains('remain pending'));
+    expect(provider.syncError, isNot(contains('connection')));
     // Still wakes — successful HTTP return with partial failures may include uploads.
     expect(wakes, [WakeTrigger.cooldownElapsed]);
+    provider.dispose();
+  });
+
+  test('server upload failure keeps its retry classification without blaming connectivity', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..nextError = Exception('Server is temporarily unavailable');
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: false,
+    );
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
+    expect(provider.syncError, contains('Server is temporarily unavailable'));
+    expect(provider.syncError, contains('phone audio file'));
+    expect(provider.syncError, isNot(contains('connection')));
+    provider.dispose();
+  });
+
+  test('generic upload failure says the recording remains pending without blaming connectivity', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..nextError = Exception('Upload failed unexpectedly');
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: false,
+    );
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
+    expect(provider.syncError, contains('remains pending'));
+    expect(provider.syncError, isNot(contains('connection')));
     provider.dispose();
   });
 

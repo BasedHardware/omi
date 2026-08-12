@@ -589,7 +589,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       }
 
       if ((result?.localUploadFailures ?? 0) > 0) {
-        _updateSyncState(_syncState.toError(message: 'Upload failed. Check your connection and try again'));
+        _updateSyncState(
+          _syncState.toError(
+            message: 'Some recordings could not be uploaded or processed. They remain pending and will retry.',
+          ),
+        );
       }
       return result;
     } catch (e) {
@@ -621,7 +625,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } else if (baseMessage.toLowerCase().contains('temporarily unavailable')) {
       baseMessage = 'Server is temporarily unavailable. Try again later';
     } else if (baseMessage.toLowerCase().contains('upload failed')) {
-      baseMessage = 'Upload failed. Check your connection and try again';
+      baseMessage = 'Omi could not upload or process this recording. It remains pending; try again';
     }
 
     if (wal != null) {
