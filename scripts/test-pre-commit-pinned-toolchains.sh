@@ -31,6 +31,9 @@ cat >"$REPO/web/frontend/package-lock.json" <<LOCK
     },
     "node_modules/prettier": {
       "version": "2.8.8"
+    },
+    "node_modules/prettier-plugin-tailwindcss": {
+      "version": "0.3.0"
     }
   }
 }
@@ -68,10 +71,20 @@ make_prettier_lock() {
     },
     "node_modules/prettier": {
       "version": "$version"
+    },
+    "node_modules/prettier-plugin-tailwindcss": {
+      "version": "0.3.0"
     }
   }
 }
 LOCK
+}
+
+make_prettier_plugin() {
+  target_dir="$1"
+  version="${2:-0.3.0}"
+  mkdir -p "$target_dir/node_modules/prettier-plugin-tailwindcss"
+  printf '{"name": "prettier-plugin-tailwindcss", "version": "%s"}\n' "$version" >"$target_dir/node_modules/prettier-plugin-tailwindcss/package.json"
 }
 
 make_flutter_stub() {
@@ -129,8 +142,18 @@ test "$(cat "$REPO/web/frontend/src/a.ts")" = "const a = {b:1}"
 
 # --- Prettier: the pinned version formats ---
 make_prettier_stub "$REPO/web/frontend" 2.8.8
+make_prettier_plugin "$REPO/web/frontend" 0.3.0
 run_hook >/dev/null
 grep -q 'PRETTIER_2.8.8_FORMATTED' "$REPO/web/frontend/src/a.ts"
+git -C "$REPO" reset -q --hard
+
+# --- Prettier: a stale plugin must still be refused when prettier matches ---
+printf 'const a = {b:1}\n' >"$REPO/web/frontend/src/a.ts"
+git -C "$REPO" add web/frontend/src/a.ts
+make_prettier_stub "$REPO/web/frontend" 2.8.8
+make_prettier_plugin "$REPO/web/frontend" 0.2.0
+expect_refusal "prettier plugin version mismatch"
+test "$(cat "$REPO/web/frontend/src/a.ts")" = "const a = {b:1}"
 git -C "$REPO" reset -q --hard
 
 # --- Dart: no flutter on PATH must refuse ---
@@ -159,12 +182,15 @@ run_hook OMI_SKIP_WEB_FORMAT=1 OMI_SKIP_DART_FORMAT=1 >/dev/null
 test "$(cat "$REPO/web/frontend/src/a.ts")" = "const c = {d:1}"
 test "$(cat "$REPO/app/lib/main.dart")" = "void main() {   }"
 
+git -C "$REPO" reset -q --hard
+
 # --- Web/app and web/admin now pin prettier, so they format like web/frontend ---
 for webdir in web/app web/admin; do
   mkdir -p "$REPO/$webdir/src"
   printf '{\n  "devDependencies": {\n    "prettier": "^2.8.8",\n    "prettier-plugin-tailwindcss": "^0.3.0"\n  }\n}\n' >"$REPO/$webdir/package.json"
   make_prettier_lock "$REPO/$webdir" 2.8.8
   make_prettier_stub "$REPO/$webdir" 2.8.8
+  make_prettier_plugin "$REPO/$webdir" 0.3.0
   printf 'const %s = {b:1}\n' "$(basename "$webdir")" >"$REPO/$webdir/src/a.ts"
   git -C "$REPO" add -A
   run_hook >/dev/null
