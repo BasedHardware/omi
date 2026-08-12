@@ -7,6 +7,7 @@ from database import llm_oauth as llm_oauth_db
 from utils.byok import invalidate_byok_state_cache
 from utils.executors import critical_executor, db_executor, llm_executor, run_blocking
 from utils.other.endpoints import enforce_rate_limit
+from utils.subscription import clear_trial_paywall_cache
 from utils.llm.oauth import LLMOAuthError, exchange_authorization_code, oauth_configuration, supported_provider
 from utils.other import endpoints as auth
 
@@ -74,6 +75,7 @@ async def complete(
     except LLMOAuthError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     invalidate_byok_state_cache(uid)
+    clear_trial_paywall_cache(uid)
     return await _status_response(uid)
 
 
@@ -84,4 +86,5 @@ async def delete(provider: str, uid: str = Depends(auth.get_current_user_uid)):
     await run_blocking(critical_executor, enforce_rate_limit, uid, 'llm_oauth:exchange', fail_closed=True)
     await run_blocking(db_executor, llm_oauth_db.delete_credential, uid, provider)
     invalidate_byok_state_cache(uid)
+    clear_trial_paywall_cache(uid)
     return await _status_response(uid)
