@@ -10,25 +10,44 @@ const POSTHOG_HOST = 'https://us.i.posthog.com'
 const POSTHOG_KEY =
   (import.meta.env.VITE_POSTHOG_KEY as string) || 'phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y'
 
+let appVersionPromise: Promise<string | null> | null = null
+
+function getAppVersion(): Promise<string | null> {
+  if (appVersionPromise) return appVersionPromise
+  appVersionPromise =
+    typeof window !== 'undefined' && window.omi?.getAppVersion
+      ? window.omi
+          .getAppVersion()
+          .then(({ version }) => version || null)
+          .catch(() => null)
+      : Promise.resolve(null)
+  return appVersionPromise
+}
+
 export function trackEvent(event: string, properties: Record<string, unknown> = {}): void {
   const distinctId = auth.currentUser?.uid ?? 'anonymous'
-  void fetch(`${POSTHOG_HOST}/i/v0/e/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: POSTHOG_KEY,
-      event,
-      distinct_id: distinctId,
-      properties: {
-        ...properties,
-        $lib: 'omi-windows',
-        $os: 'Windows',
-        platform: 'windows'
-      }
+  // Calls register on one cached version promise, so capture order stays stable
+  // while context resolves without serializing the independent network requests.
+  void getAppVersion().then((appVersion) =>
+    fetch(`${POSTHOG_HOST}/i/v0/e/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: POSTHOG_KEY,
+        event,
+        distinct_id: distinctId,
+        properties: {
+          ...properties,
+          $lib: 'omi-windows',
+          $os: 'Windows',
+          platform: 'windows',
+          ...(appVersion ? { app_version: appVersion } : {})
+        }
+      })
+    }).catch(() => {
+      // Analytics is best-effort — swallow network/auth failures silently.
     })
-  }).catch(() => {
-    // Analytics is best-effort — swallow network/auth failures silently.
-  })
+  )
 }
 
 // Same event name + property shape the desktop app's AnalyticsManager sends.

@@ -13,6 +13,11 @@ type Call = {
 const calls: Call[] = []
 const stop = vi.fn()
 const finalizeHandle = vi.fn()
+const trackEvent = vi.fn()
+
+vi.mock('../lib/analytics', () => ({
+  trackEvent: (...args: unknown[]) => trackEvent(...args)
+}))
 
 // Preserve the module's real exports (liveRescue's isRetryableDropError now
 // calls the real isQuotaExhaustedMessage from this module) and mock only
@@ -35,10 +40,10 @@ vi.mock('../lib/transcriptionClient', async (importOriginal) => {
   }
 })
 
-vi.mock('../lib/liveConversation', () => ({
-  isConversationBoundary: () => false,
-  onFinalizeRequest: () => () => {}
-}))
+vi.mock('../lib/liveConversation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/liveConversation')>()
+  return { ...actual, onFinalizeRequest: () => () => {} }
+})
 
 vi.mock('../lib/retentionRules', () => ({
   transcriptWordCount: (t: string) => (t.trim() ? t.trim().split(/\s+/).length : 0)
@@ -96,6 +101,7 @@ beforeEach(() => {
   calls.length = 0
   storeSegments.length = 0
   stop.mockClear()
+  trackEvent.mockClear()
   syncLocalConversation.mockClear()
   insertLocalConversation.mockClear()
   notifyConversationsChanged.mockClear()
@@ -119,6 +125,34 @@ describe('startLiveMicSession', () => {
     expect(latest().source).toBe('mic')
     expect(latest().mode).toBe('conversation')
     expect(latest().clientConversationId).toBeTruthy()
+    expect(trackEvent).toHaveBeenCalledWith('Transcription Started', {
+      source: 'desktop_mic',
+      provider: 'omi'
+    })
+    ctrl.stop()
+  })
+
+  it('emits exactly one successful terminal lifecycle for a backend boundary', async () => {
+    const ctrl = startLiveMicSession()
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    latest().cb.onEvent?.({ type: 'memory_creating', raw: {} })
+
+    const terminal = trackEvent.mock.calls.filter(([event]) => event === 'Transcription Ended')
+    expect(terminal).toEqual([
+      [
+        'Transcription Ended',
+        {
+          source: 'desktop_mic',
+          provider: 'omi',
+          outcome: 'completed',
+          duration_seconds: 5,
+          retry_count: 0
+        }
+      ]
+    ])
+    expect(trackEvent.mock.calls.filter(([event]) => event === 'Transcription Error')).toEqual([])
     ctrl.stop()
   })
 
@@ -178,6 +212,63 @@ describe('startLiveMicSession', () => {
     await vi.advanceTimersByTimeAsync(60_000)
     expect(calls).toHaveLength(1)
     expect(insertLocalConversation).not.toHaveBeenCalled()
+    expect(trackEvent.mock.calls.filter(([event]) => event === 'Transcription Error')).toEqual([
+      [
+        'Transcription Error',
+        {
+          source: 'desktop_mic',
+          provider: 'omi',
+          outcome: 'failed',
+          error_class: 'quota',
+          retry_count: 0
+        }
+      ]
+    ])
+    expect(trackEvent.mock.calls.filter(([event]) => event === 'Transcription Ended')).toEqual([
+      [
+        'Transcription Ended',
+        {
+          source: 'desktop_mic',
+          provider: 'omi',
+          outcome: 'failed',
+          duration_seconds: 0,
+          retry_count: 0
+        }
+      ]
+    ])
+    // Repeated delivery of the same terminal callback must not duplicate either event.
+    latest().cb.onError(new Error('Omi transcription stopped: quota is used up (1008)'))
+    expect(trackEvent.mock.calls.filter(([event]) => event === 'Transcription Error')).toHaveLength(
+      1
+    )
+    expect(trackEvent.mock.calls.filter(([event]) => event === 'Transcription Ended')).toHaveLength(
+      1
+    )
+    ctrl.stop()
+  })
+
+  it('reports bounded retry exhaustion without exposing the raw error', async () => {
+    const ctrl = startLiveMicSession()
+    await vi.advanceTimersByTimeAsync(0)
+    for (let i = 0; i < MAX_RECONNECT_ATTEMPTS; i++) {
+      latest().cb.onError(new Error('secret socket failure for customer@example.com'))
+      await vi.advanceTimersByTimeAsync(32_000)
+    }
+    latest().cb.onError(new Error('secret socket failure for customer@example.com'))
+
+    expect(trackEvent.mock.calls.filter(([event]) => event === 'Transcription Error')).toEqual([
+      [
+        'Transcription Error',
+        {
+          source: 'desktop_mic',
+          provider: 'omi',
+          outcome: 'failed',
+          error_class: 'network',
+          retry_count: MAX_RECONNECT_ATTEMPTS
+        }
+      ]
+    ])
+    expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('customer@example.com')
     ctrl.stop()
   })
 
@@ -205,8 +296,23 @@ describe('startLiveMicSession', () => {
     ctrl.stop()
     expect(isLiveMicSessionActive()).toBe(false)
     expect(getLiveMicSessionHealth()).toBe('inactive')
+    expect(trackEvent.mock.calls.filter(([event]) => event === 'Transcription Ended')).toEqual([
+      [
+        'Transcription Ended',
+        {
+          source: 'desktop_mic',
+          provider: 'omi',
+          outcome: 'cancelled',
+          duration_seconds: 0,
+          retry_count: 0
+        }
+      ]
+    ])
     ctrl.stop() // idempotent — must not drive the count negative
     expect(isLiveMicSessionActive()).toBe(false)
+    expect(trackEvent.mock.calls.filter(([event]) => event === 'Transcription Ended')).toHaveLength(
+      1
+    )
   })
 
   it('reports terminal startup failure to delegated meeting readiness', async () => {
