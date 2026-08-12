@@ -374,6 +374,7 @@ class RewindSettings: ObservableObject {
   nonisolated(unsafe) static let shared = RewindSettings()
 
   private let defaults = UserDefaults.standard
+  private static let pendingContextBucketPurgesKey = "rewindPendingContextBucketPurges"
   static let batteryCaptureIntervalMultiplier = 3.0
 
   /// Default apps that should be excluded from screen capture for privacy
@@ -441,6 +442,10 @@ class RewindSettings: ObservableObject {
 
   @Published var excludedApps: Set<String> {
     didSet {
+      for appName in oldValue.symmetricDifference(excludedApps) {
+        RewindCaptureExclusionGeneration.setExcluded(
+          appName, excluded: excludedApps.contains(appName))
+      }
       let array = Array(excludedApps)
       defaults.set(array, forKey: "rewindExcludedApps")
     }
@@ -470,6 +475,18 @@ class RewindSettings: ObservableObject {
     } else {
       self.excludedApps = Self.defaultExcludedApps
     }
+    RewindCaptureExclusionGeneration.setInitialExcludedApps(self.excludedApps)
+
+    // A purge is local and deterministic, but file cleanup can fail transiently
+    // (for example while RewindStorage is still initializing).  Retry durable
+    // work from the next launch instead of silently leaving excluded pixels on
+    // disk.  This does not alter capture cadence or retention behavior.
+    let pending = Set(defaults.stringArray(forKey: Self.pendingContextBucketPurgesKey) ?? [])
+    if !pending.isEmpty {
+      Task { @MainActor in
+        await Self.retryPendingContextBucketPurges(pending)
+      }
+    }
   }
 
   /// Check if an app is excluded from screen capture
@@ -482,11 +499,52 @@ class RewindSettings: ObservableObject {
   }
 
   /// Add an app to the exclusion list
+  @MainActor
   func excludeApp(_ appName: String) {
     excludedApps.insert(appName)
     // If re-excluding a default app, stop tracking it as removed
     if Self.defaultExcludedApps.contains(appName) {
       removedDefaults.remove(appName)
+    }
+    guard ContextBucketsFeature.isEnabled else { return }
+    // Persist the retry marker before scheduling async storage work.
+    markPendingContextBucketPurge(appName)
+    Task { @MainActor in
+      do {
+        _ = try await ContextBucketStore.shared.purgeExcludedApp(appName)
+        Self.clearPendingContextBucketPurge(appName)
+      } catch {
+        logError("RewindSettings: purge-on-exclude failed", error: error)
+      }
+    }
+  }
+
+  private func markPendingContextBucketPurge(_ appName: String) {
+    var pending = Set(defaults.stringArray(forKey: Self.pendingContextBucketPurgesKey) ?? [])
+    pending.insert(appName)
+    defaults.set(Array(pending).sorted(), forKey: Self.pendingContextBucketPurgesKey)
+  }
+
+  private static func clearPendingContextBucketPurge(_ appName: String) {
+    let defaults = UserDefaults.standard
+    var pending = Set(defaults.stringArray(forKey: pendingContextBucketPurgesKey) ?? [])
+    pending.remove(appName)
+    if pending.isEmpty {
+      defaults.removeObject(forKey: pendingContextBucketPurgesKey)
+    } else {
+      defaults.set(Array(pending).sorted(), forKey: pendingContextBucketPurgesKey)
+    }
+  }
+
+  private static func retryPendingContextBucketPurges(_ pending: Set<String>) async {
+    guard await MainActor.run(body: { ContextBucketsFeature.isEnabled }) else { return }
+    for appName in pending {
+      do {
+        _ = try await ContextBucketStore.shared.purgeExcludedApp(appName)
+        clearPendingContextBucketPurge(appName)
+      } catch {
+        logError("RewindSettings: deferred purge-on-exclude failed", error: error)
+      }
     }
   }
 
@@ -496,6 +554,13 @@ class RewindSettings: ObservableObject {
     // Track removal of default apps so they don't get re-added on next launch
     if Self.defaultExcludedApps.contains(appName) {
       removedDefaults.insert(appName)
+    }
+    // A flag-off caller may have recorded the crash-safe marker before the
+    // asynchronous feature check ran.  Do not leave inert test/legacy markers;
+    // retain a real flag-on marker so a failed purge is still retried.
+    Task { @MainActor in
+      guard !ContextBucketsFeature.isEnabled else { return }
+      Self.clearPendingContextBucketPurge(appName)
     }
   }
 

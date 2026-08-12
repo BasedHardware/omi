@@ -91,7 +91,7 @@ struct TaskLocalContextEvent: Equatable, Sendable {
     subject: TaskContextSubject? = nil,
     occurredAt: Date = Date()
   ) -> TaskLocalContextEvent? {
-    let normalizedTitle = ContextDetection.normalizeWindowTitle(windowTitle) ?? "untitled"
+    let normalizedTitle = ContextDetection.normalizeWindowTitle(windowTitle, appName: appName) ?? "untitled"
     return normalized(
       kind: .appWindow,
       rawReference: "\(appName)\n\(normalizedTitle)",
@@ -887,7 +887,12 @@ actor TaskContextualResurfacingService {
     )
   }
 
-  func observe(_ event: TaskLocalContextEvent) {
+  func observe(_ event: TaskLocalContextEvent) async {
+    if await MainActor.run(body: { ContextBucketsFeature.isEnabled }) {
+      // ContextProactivityEngine owns flag-on resurfacing and the delivery ledger.
+      // The legacy observer must not run a parallel lookup or notification path.
+      return
+    }
     ensureOwnerChangeObserver()
     guard let lease = captureOwnerLease() else {
       resetOwnerState()

@@ -1,0 +1,82 @@
+version: 2
+name: context-buckets-dogfood
+tier: manual
+description: >
+  Flag-on dogfood of the real context-bucket lifecycle: context identity, visit rollup,
+  privacy purge, unified director delivery, candidate graduation, and task resurfacing.
+  Run it after the facade is deployed to the dev-beta backend with a normal signed-in
+  dogfood account and a named non-production bundle. It does not seed eligibility or
+  substitute model responses through the automation bridge, and it is not a CI gate.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+RewindCapture.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/CandidateSink.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketRollup.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketSchema.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketStore.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketsFeature.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDeliveryAuthority.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDetection.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextSubjectBindingService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextTitleNormalizer.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextVisitCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/InsightSQLPrivacy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/TaskContextualResurfacingService.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindCaptureExclusion.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer+CaptureExclusion.swift
+preconditions:
+  - signed_in_dogfood_account
+  - context_buckets_feature_enabled
+  - screen_recording_enabled
+  - notifications_enabled
+
+steps:
+  - id: S1
+    name: Create and revisit distinct numbered contexts
+    do: >
+      Open two documents in the same app whose titles differ only by a meaningful number
+      (for example "Issue (123)" and "Issue (456)"). Spend at least ten seconds in each,
+      switch to a third app between visits, then revisit both documents. Confirm the app
+      remains responsive and the two documents do not share context-specific details.
+
+  - id: S2
+    name: Exercise rollup and the unified director
+    do: >
+      Work in one revisited context long enough to create a concrete, timely fact, then
+      switch away and back. If the director chooses to notify, confirm the card describes
+      that context, contains no text from the other numbered document, and is delivered at
+      most once for the visit. Silence is valid when no fact is notification-worthy.
+
+  - id: S3
+    name: Exercise task binding and candidate graduation
+    do: >
+      In the same context, create or complete a task whose wording is visible on screen,
+      then leave and revisit the context. Confirm any resurfaced task or graduated candidate
+      is attributed to the same signed-in account and context. Queued or dismissed cards
+      must not be recorded as delivered or graduate a candidate before presentation.
+
+  - id: S4
+    name: Verify excluded-app privacy
+    do: >
+      Add the current app to the excluded-app list, wait for purge to finish, and ask an
+      Insight question that would otherwise retrieve its screen text. Confirm no excluded
+      OCR text, image, video frame, frozen bucket narrative, or notification is returned.
+      Remove the exclusion only after this check.
+
+  - id: S5
+    name: Verify account and sleep boundaries
+    do: >
+      Begin another context transition, then lock and unlock the Mac and sign out before a
+      pending director result can present. Sign back in and confirm no notification, task
+      binding, delivery, or candidate from the prior authorization session appears.
+
+  - id: S6
+    name: Logs are clean
+    log.expect:
+      absent:
+        - "ContextBucketRollup:"
+        - "ContextProactivityEngine:"
+        - "ContextVisitCoordinator:"
+        - "DesktopAutomationBridge: failed"

@@ -2484,6 +2484,11 @@ enum VoiceOwnerBoundDispatch<Value: Sendable>: Sendable {
   case dispatched(Value)
 }
 
+enum TypedOwnerBoundDispatch<Value: Sendable>: Sendable {
+  case rejectedOwnerChange
+  case dispatched(Value)
+}
+
 enum OwnerBoundNotificationPresentationResult: Equatable {
   case rejectedOwnerChange
   case windowUnavailable
@@ -2500,6 +2505,7 @@ class FloatingControlBarManager {
   private static let kAskOmiEnabled = "askOmiBarEnabled"
   private static let kSnoozedUntil = "floatingBar_snoozedUntil"
   private static let recentNotificationReuseInterval: TimeInterval = 60
+  private static let durableProvenanceReuseInterval: TimeInterval = 30 * 24 * 60 * 60
   static let snoozeTwoHoursDuration: TimeInterval = 2 * 60 * 60
 
   struct NotificationProjectionSnapshot: Equatable {
@@ -2549,6 +2555,16 @@ class FloatingControlBarManager {
     return .dispatched(await dispatch())
   }
 
+  static func performOwnerBoundTypedDispatch<Value: Sendable>(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    dispatch: () async -> Value
+  ) async -> TypedOwnerBoundDispatch<Value> {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      return .rejectedOwnerChange
+    }
+    return .dispatched(await dispatch())
+  }
+
   private struct StoredNotificationMessage {
     let ownerID: String
     let context: FloatingBarNotificationContext?
@@ -2564,6 +2580,11 @@ class FloatingControlBarManager {
   private struct PendingNotificationContext {
     let message: ChatMessage
     let context: FloatingBarNotificationContext?
+  }
+
+  private struct NotificationPresentationCallbacks {
+    let onPresented: () -> Void
+    let onDropped: () -> Void
   }
 
   var window: FloatingControlBarWindow?
@@ -2656,6 +2677,8 @@ class FloatingControlBarManager {
   private var mostRecentNotificationKey: OwnerNotificationKey?
   private var ownerChangeCancellable: AnyCancellable?
   private var pendingNotificationContext: PendingNotificationContext?
+  private var notificationAuthorizationSnapshots: [UUID: RuntimeOwnerAuthorizationSnapshot] = [:]
+  private var notificationPresentationCallbacks: [UUID: NotificationPresentationCallbacks] = [:]
   private var activeQueryGeneration: Int = 0
   private var selectedFloatingModel: String {
     let selected = ShortcutSettings.shared.selectedModel
@@ -2707,7 +2730,14 @@ class FloatingControlBarManager {
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
     Self.recordQueuedInsightOutcomes(pendingNotifications, reason: .snoozed)
+    let droppedCallbacks = pendingNotifications.compactMap {
+      notificationAuthorizationSnapshots.removeValue(forKey: $0.id)
+      return notificationPresentationCallbacks.removeValue(forKey: $0.id)
+    }
     pendingNotifications.removeAll()
+    for callback in droppedCallbacks {
+      callback.onDropped()
+    }
     if let window, window.state.currentNotification != nil {
       window.dismissNotification(animated: false)
     }
@@ -2757,6 +2787,12 @@ class FloatingControlBarManager {
     pendingNotifications.removeAll()
     pendingNotificationJournalWrites.removeAll()
     storedNotificationMessages.removeAll()
+    notificationAuthorizationSnapshots.removeAll()
+    let droppedCallbacks = notificationPresentationCallbacks.values.map(\.onDropped)
+    notificationPresentationCallbacks.removeAll()
+    for callback in droppedCallbacks {
+      callback()
+    }
     mostRecentNotificationKey = nil
     pendingNotificationContext = nil
     if window?.state.currentNotification != nil {
@@ -2775,14 +2811,27 @@ class FloatingControlBarManager {
   @MainActor
   static func performOwnerBoundNotificationAdmission<Value>(
     ownerID: String,
+    authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     currentOwnerID: @escaping @MainActor () -> String? = {
       RuntimeOwnerIdentity.currentOwnerId()
     },
     record: @MainActor () async -> Value?
   ) async -> Value? {
     guard !ownerID.isEmpty, currentOwnerID() == ownerID else { return nil }
+    let authorizationSnapshot =
+      suppliedAuthorizationSnapshot
+      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
+    if let authorizationSnapshot {
+      guard
+        authorizationSnapshot.ownerID == ownerID,
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+      else { return nil }
+    }
     guard let value = await record() else { return nil }
     guard currentOwnerID() == ownerID else { return nil }
+    if let authorizationSnapshot {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return nil }
+    }
     return value
   }
 
@@ -3225,9 +3274,17 @@ class FloatingControlBarManager {
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
-    screenshotData: Data? = nil
+    screenshotData: Data? = nil,
+    authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    onPresented: (() -> Void)? = nil,
+    onDropped: (() -> Void)? = nil
   ) -> OwnerBoundNotificationPresentationResult {
-    guard !ownerID.isEmpty, RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+    guard !ownerID.isEmpty,
+      let authorizationSnapshot = suppliedAuthorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID),
+      authorizationSnapshot.ownerID == ownerID,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else {
       log("FloatingControlBarManager: rejecting notification from stale runtime owner")
       return .rejectedOwnerChange
     }
@@ -3253,13 +3310,23 @@ class FloatingControlBarManager {
       )
       return .suppressed
     }
+    notificationAuthorizationSnapshots[notification.id] = authorizationSnapshot
 
     if !window.state.showingAIConversation {
       persistNotificationMessageIfNeeded(notification)
     }
 
     if window.state.currentNotification != nil || window.state.showingAIConversation {
-      Self.appendAdviceNotification(notification, to: &pendingNotifications)
+      if let onPresented {
+        notificationPresentationCallbacks[notification.id] = NotificationPresentationCallbacks(
+          onPresented: onPresented,
+          onDropped: onDropped ?? {}
+        )
+      }
+      if let evicted = Self.appendAdviceNotification(notification, to: &pendingNotifications) {
+        notificationAuthorizationSnapshots.removeValue(forKey: evicted.id)
+        notificationPresentationCallbacks.removeValue(forKey: evicted.id)?.onDropped()
+      }
       return .queued
     }
 
@@ -3276,11 +3343,22 @@ class FloatingControlBarManager {
   func flushQueuedNotificationsIfPossible() {
     guard let window, window.state.currentNotification == nil, !window.state.showingAIConversation
     else { return }
-    if let nextNotification = Self.dequeueCurrentOwnerAdviceNotification(
-      from: &pendingNotifications,
-      currentOwnerID: RuntimeOwnerIdentity.currentOwnerId()
-    ) {
+    while !pendingNotifications.isEmpty {
+      let nextNotification = pendingNotifications.removeFirst()
+      guard
+        let authorizationSnapshot = notificationAuthorizationSnapshots[nextNotification.id],
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        nextNotification.ownerID == authorizationSnapshot.ownerID
+      else {
+        notificationPresentationCallbacks.removeValue(forKey: nextNotification.id)?.onDropped()
+        notificationAuthorizationSnapshots.removeValue(forKey: nextNotification.id)
+        log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
+        Self.recordInsightDeliveryOutcome(
+          for: nextNotification, outcome: .suppressed, reason: .staleOwner)
+        continue
+      }
       presentNotification(nextNotification, in: window)
+      return
     }
   }
   /// Detach the floating UI from any in-flight chat streaming.
@@ -3845,7 +3923,13 @@ class FloatingControlBarManager {
   }
 
   private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
-    guard notification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
+    guard
+      let authorizationSnapshot = notificationAuthorizationSnapshots[notification.id],
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      notification.ownerID == authorizationSnapshot.ownerID
+    else {
+      notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
+      notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
       log("FloatingControlBarManager: refusing to present stale-owner notification")
       Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .staleOwner)
       return
@@ -3879,6 +3963,8 @@ class FloatingControlBarManager {
     }
 
     window.showNotification(notification)
+    let callbacks = notificationPresentationCallbacks.removeValue(forKey: notification.id)
+    callbacks?.onPresented()
     if let suggestionIdentity = notification.suggestionTelemetryIdentity {
       AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(.delivered, identity: suggestionIdentity)
     }
@@ -3903,6 +3989,10 @@ class FloatingControlBarManager {
 
     let dismissedNotification = window.state.currentNotification
     window.dismissNotification()
+    if let dismissedNotification {
+      notificationPresentationCallbacks.removeValue(forKey: dismissedNotification.id)?.onDropped()
+      notificationAuthorizationSnapshots.removeValue(forKey: dismissedNotification.id)
+    }
 
     if trackDismissal, let dismissedNotification {
       AnalyticsManager.shared.notificationDismissed(
@@ -3915,10 +4005,20 @@ class FloatingControlBarManager {
     }
 
     if !window.state.showingAIConversation {
-      if let nextNotification = Self.dequeueCurrentOwnerAdviceNotification(
-        from: &pendingNotifications,
-        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId()
-      ) {
+      while !pendingNotifications.isEmpty {
+        let nextNotification = pendingNotifications.removeFirst()
+        guard
+          let authorizationSnapshot = notificationAuthorizationSnapshots[nextNotification.id],
+          RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+          nextNotification.ownerID == authorizationSnapshot.ownerID
+        else {
+          notificationPresentationCallbacks.removeValue(forKey: nextNotification.id)?.onDropped()
+          notificationAuthorizationSnapshots.removeValue(forKey: nextNotification.id)
+          log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
+          Self.recordInsightDeliveryOutcome(
+            for: nextNotification, outcome: .suppressed, reason: .staleOwner)
+          continue
+        }
         presentNotification(nextNotification, in: window)
         return
       }
@@ -3948,6 +4048,7 @@ class FloatingControlBarManager {
     let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
     let messageText = bodyText.isEmpty ? notification.title : bodyText
     let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(id: notification.id)
+    guard let authorizationSnapshot = notificationAuthorizationSnapshots[notification.id] else { return }
     pendingNotificationJournalWrites.insert(key)
     Task { @MainActor [weak self, weak provider] in
       guard let self else { return }
@@ -3956,7 +4057,8 @@ class FloatingControlBarManager {
         return
       }
       let storedMessage = await Self.performOwnerBoundNotificationAdmission(
-        ownerID: ownerID
+        ownerID: ownerID,
+        authorizationSnapshot: authorizationSnapshot
       ) {
         let recorded = await provider.recordJournalExchange(
           surface: surface,
@@ -4116,6 +4218,7 @@ class FloatingControlBarManager {
 
   private func observeAgentCompletionContext(pillID: UUID, runId: String?) {
     guard AuthService.shared.isSignedIn else { return }
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     let stableReference = runId.flatMap { $0.isEmpty ? nil : $0 } ?? pillID.uuidString
     let subject: TaskContextSubject? =
       runId
@@ -4132,8 +4235,14 @@ class FloatingControlBarManager {
         subject: subject
       )
     else { return }
-    let matched = TaskContextSubjectMatcher.shared.resolve(event)
-    Task { await TaskContextualResurfacingService.shared.observe(matched) }
+    Task {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+      let matched = await ContextSubjectBindingService.shared.resolve(
+        event,
+        authorizationSnapshot: authorizationSnapshot)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+      await TaskContextualResurfacingService.shared.observe(matched)
+    }
   }
 
   private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
@@ -4161,7 +4270,7 @@ class FloatingControlBarManager {
       key.ownerID == ownerID,
       let stored = storedNotificationMessages[key],
       stored.ownerID == ownerID,
-      Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval,
+      Date().timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context),
       let provider = historyChatProvider,
       let message = provider.messages.last(where: { $0.clientTurnId == stored.messageClientTurnId })
     else { return nil }
@@ -4177,7 +4286,7 @@ class FloatingControlBarManager {
     let key = OwnerNotificationKey(ownerID: ownerID, notificationID: notificationID)
     guard let stored = storedNotificationMessages[key],
       stored.ownerID == ownerID,
-      Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval,
+      Date().timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context),
       let provider = historyChatProvider,
       let notificationMessage = provider.messages.last(where: {
         $0.clientTurnId == stored.messageClientTurnId
@@ -4240,7 +4349,7 @@ class FloatingControlBarManager {
   private func purgeExpiredNotificationMessages() {
     let now = Date()
     storedNotificationMessages = storedNotificationMessages.filter { _, stored in
-      now.timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval
+      now.timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context)
     }
 
     if let mostRecentNotificationKey,
@@ -4348,6 +4457,8 @@ class FloatingControlBarManager {
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
         ?? true
     else { return }
+    let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    guard let authorizationSnapshot else { return }
 
     // QueryTracer: `pre_llm` brackets everything between query submission and
     // the ChatProvider call (screenshot capture, usage checks, filler audio).
@@ -4461,9 +4572,13 @@ class FloatingControlBarManager {
         }
       }
 
-    let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
+    let notificationContextSuffix = await notificationContextSuffixIfNeeded(
+      for: message,
+      authorizationSnapshot: authorizationSnapshot)
     currentTracer?.end("pre_llm")
     guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      isActiveQueryGeneration(generation),
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
         ?? true
     else { return }
@@ -4493,24 +4608,31 @@ class FloatingControlBarManager {
       guard case .dispatched(let response) = outcome else { return }
       providerResponse = response
     } else {
-      providerResponse = await provider.sendMessage(
-        message,
-        model: selectedFloatingModel,
-        systemPromptSuffix: notificationContextSuffix,
-        systemPromptStyle: .floating,
-        surfaceRef: provider.mainChatSurfaceReference(),
-        imageData: screenshotData,
-        turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice)),
-        clientTurnId: clientTurnId,
-        onAccepted: { [weak barWindow] in
-          barWindow?.state.clearSubmittedAIDraftIfUnchanged(message)
-        },
-        onJournalFinalized: { accepted in
-          journalAccepted = accepted
-        }
-      )
+      let outcome = await Self.performOwnerBoundTypedDispatch(
+        authorizationSnapshot: authorizationSnapshot
+      ) {
+        await provider.sendMessage(
+          message,
+          model: selectedFloatingModel,
+          systemPromptSuffix: notificationContextSuffix,
+          systemPromptStyle: .floating,
+          surfaceRef: provider.mainChatSurfaceReference(),
+          imageData: screenshotData,
+          turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice)),
+          clientTurnId: clientTurnId,
+          onAccepted: { [weak barWindow] in
+            barWindow?.state.clearSubmittedAIDraftIfUnchanged(message)
+          },
+          onJournalFinalized: { accepted in
+            journalAccepted = accepted
+          }
+        )
+      }
+      guard case .dispatched(let response) = outcome else { return }
+      providerResponse = response
     }
     guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
         ?? true
     else { return }
@@ -4714,15 +4836,27 @@ class FloatingControlBarManager {
     chatCancellable = nil
   }
 
-  private func notificationContextSuffixIfNeeded(for message: String) -> String? {
+  private func notificationContextSuffixIfNeeded(
+    for message: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async -> String? {
     guard let pendingNotificationContext else { return nil }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return nil }
 
     let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedMessage.isEmpty else { return nil }
 
+    let durableProvenance: String? =
+      if let ref = pendingNotificationContext.context?.provenanceRef {
+        await ContextBucketStore.shared.deliveryProvenance(id: ref)
+      } else {
+        nil
+      }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return nil }
     return notificationContextSuffix(
       message: pendingNotificationContext.message,
-      context: pendingNotificationContext.context
+      context: pendingNotificationContext.context,
+      durableProvenance: durableProvenance
     )
   }
 
@@ -4730,7 +4864,8 @@ class FloatingControlBarManager {
   /// Shared by the tap path and the voice path so both describe a card identically.
   private func notificationContextSuffix(
     message: ChatMessage,
-    context: FloatingBarNotificationContext?
+    context: FloatingBarNotificationContext?,
+    durableProvenance: String? = nil
   ) -> String {
     var provenanceLines: [String] = []
     if let context {
@@ -4757,6 +4892,12 @@ class FloatingControlBarManager {
       if let detail = context.detail, !detail.isEmpty {
         provenanceLines.append("detail: \(detail)")
       }
+      if let provenanceRef = context.provenanceRef, !provenanceRef.isEmpty {
+        provenanceLines.append("provenance_ref: proactive_deliveries/\(provenanceRef)")
+      }
+    }
+    if let durableProvenance, !durableProvenance.isEmpty {
+      provenanceLines.append("resolved_delivery_provenance: \(durableProvenance)")
     }
 
     let provenanceBlock = provenanceLines.isEmpty ? "" : "\n\n" + provenanceLines.joined(separator: "\n")
@@ -4788,6 +4929,12 @@ class FloatingControlBarManager {
     \(body)\(provenance)
     </floating_bar_notification_context>
     """
+  }
+
+  private static func reuseInterval(for context: FloatingBarNotificationContext?) -> TimeInterval {
+    context?.provenanceRef?.isEmpty == false
+      ? durableProvenanceReuseInterval
+      : recentNotificationReuseInterval
   }
 
   func clearPendingNotificationContext() {

@@ -52,6 +52,8 @@ model_config_features:
     structured_output:
       - chat_extraction
       - conv_app_select
+      - desktop_proactive_extraction
+      - desktop_proactive_reasoning
       - external_structure
       - proactive_notification
       - translation

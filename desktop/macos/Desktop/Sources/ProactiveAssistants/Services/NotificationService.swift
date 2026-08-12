@@ -542,6 +542,36 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
   }
 
+  /// Presentation-only seam for the flag-on context director. Policy, budget,
+  /// quiet hours, snooze, and paywall were already decided by the durable ledger
+  /// authority, so this method must not re-run legacy frequency gates.
+  @discardableResult
+  func presentContextDirectorNotification(
+    ownerID: String,
+    title: String,
+    message: String,
+    context: FloatingBarNotificationContext,
+    onPresented: (() -> Void)? = nil,
+    onDropped: (() -> Void)? = nil
+  ) -> OwnerBoundNotificationPresentationResult {
+    guard !ownerID.isEmpty,
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled,
+      FloatingControlBarManager.shared.isEnabled
+    else { return .rejectedOwnerChange }
+    return FloatingControlBarManager.shared.showNotification(
+      ownerID: ownerID,
+      title: title,
+      message: message,
+      assistantId: "context-director",
+      sound: .default,
+      context: context,
+      authorizationSnapshot: authorizationSnapshot,
+      onPresented: onPresented,
+      onDropped: onDropped)
+  }
+
   /// The only delivery path for contextual task interruptions. Unlike the
   /// generic functional-notification API, this path exposes no bypass flag.
   @discardableResult
