@@ -11,11 +11,14 @@ covers:
   # The selection and bulk steps below are explicit UI assertions: the run
   # must expose the selection affordance, selected-row count, and bulk result.
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskMultiSelection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TasksViewModel+MultiSelection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskBulkOperationCoordinator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailPanel.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailPanelPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailSourceNavigator.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/Stores/TasksStore+BulkSelection.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage+BulkDelete.swift
 preconditions:
   - auth_ready
 

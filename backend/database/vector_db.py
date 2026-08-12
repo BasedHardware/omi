@@ -1039,7 +1039,9 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> No
     if not action_item_ids:
         return
     vector_ids = [f'{uid}-ai-{aid}' for aid in action_item_ids]
-    index.delete(ids=vector_ids, namespace=ACTION_ITEMS_NAMESPACE)
+    # Chunk to stay within Pinecone's per-delete id limit (1,000).
+    for i in range(0, len(vector_ids), 1000):
+        index.delete(ids=vector_ids[i : i + 1000], namespace=ACTION_ITEMS_NAMESPACE)
     logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
 
 
