@@ -4,7 +4,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from utils.llm import clients
 from utils.llm import oauth
+from utils.llm.clients import _create_llm_oauth_client
 
 
 def _token(account_id: str) -> str:
@@ -63,31 +65,29 @@ def test_expired_credential_refreshes_and_persists_the_replacement():
 
 
 def test_chatgpt_oauth_client_uses_the_codex_responses_surface():
-    from utils.llm.clients import _create_llm_oauth_client
-
-    client = _create_llm_oauth_client({'provider': 'chatgpt', 'access_token': _token('acct-1'), 'account_id': 'acct-1'})
-    assert client.openai_api_base == 'https://chatgpt.com/backend-api/codex'
-    assert client.use_responses_api is True
-    assert client.default_headers['chatgpt-account-id'] == 'acct-1'
+    with patch.object(clients, '_cached_openai_chat') as create_client:
+        _create_llm_oauth_client({'provider': 'chatgpt', 'access_token': _token('acct-1'), 'account_id': 'acct-1'})
+    assert create_client.call_args.args[:2] == ('gpt-5.4-mini', _token('acct-1'))
+    assert create_client.call_args.args[2]['base_url'] == 'https://chatgpt.com/backend-api/codex'
+    assert create_client.call_args.args[2]['use_responses_api'] is True
+    assert create_client.call_args.args[2]['default_headers']['chatgpt-account-id'] == 'acct-1'
 
 
 def test_get_llm_uses_the_selected_oauth_provider_without_a_key_header():
-    from utils.llm import clients
-
     credential = {'provider': 'grok', 'access_token': 'access-1', 'refresh_token': 'refresh-1'}
     with patch.object(clients, 'get_byok_key', return_value=None), patch.object(
         clients, 'get_byok_uid', return_value='user-1'
     ), patch.object(clients, 'get_byok_llm_provider', return_value='grok'), patch.object(
         clients, 'get_llm_oauth_credential', return_value=credential
-    ):
+    ), patch.object(
+        clients, '_create_llm_oauth_client'
+    ) as create_client:
         client = clients.get_llm('conv_structure')
-    assert client.openai_api_base == 'https://api.x.ai/v1'
-    assert client.model_name == 'grok-4.3'
+    assert client is create_client.return_value
+    assert create_client.call_args.args == (credential, False, 'conv_structure')
 
 
 def test_get_llm_does_not_fall_back_to_omi_when_oauth_refresh_fails():
-    from utils.llm import clients
-
     with patch.object(clients, 'get_byok_key', return_value=None), patch.object(
         clients, 'get_byok_uid', return_value='user-1'
     ), patch.object(clients, 'get_byok_llm_provider', return_value='chatgpt'), patch.object(
