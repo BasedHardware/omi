@@ -54,8 +54,6 @@ import XCTest
     XCTAssertEqual(APIKeyService.selectedBYOKLLMProvider, .openai)
   }
 
-  func testBuildHeadersAttachSelectedLLMByokKey() async throws {
-
   func testConnectedChatGPTOAuthActivatesByokWithoutSendingProviderKeys() async throws {
     clearAllBYOKKeys()
     UserDefaults.standard.set(BYOKLLMProvider.chatgpt.rawValue, forKey: .byokLLMProvider)
