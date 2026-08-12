@@ -26,6 +26,7 @@ jest.mock('react-native', () => {
     SafeAreaView: component('SafeAreaView'),
     StyleSheet: {create: <T,>(styles: T) => styles},
     Text,
+    useWindowDimensions: () => ({fontScale: 1, height: 900, scale: 1, width: 1200}),
     View,
   };
 });
@@ -71,6 +72,7 @@ test('renders the current native platform state', async () => {
   });
 
   expect(JSON.stringify(renderer!.toJSON())).toContain('Ready to find Omi devices');
+  expect(JSON.stringify(renderer!.toJSON())).toContain('No moments yet. Connect a real Omi to begin.');
 });
 
 test('waits for discovery before refreshing the native device list', async () => {

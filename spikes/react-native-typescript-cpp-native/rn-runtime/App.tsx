@@ -6,6 +6,7 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import {isNativeModuleInstalled, omiNative, type Device, type NativeSnapshot} from './src/omiNative';
@@ -34,6 +35,7 @@ const DeviceRow = memo(function DeviceRow({device, onPress, busy}: {device: Devi
 });
 
 function App(): React.JSX.Element {
+  const {width} = useWindowDimensions();
   const [snapshot, setSnapshot] = useState<NativeSnapshot>();
   const [runtimeState, setRuntimeState] = useState<RuntimeState>('loading');
   const [error, setError] = useState<string>();
@@ -121,28 +123,37 @@ function App(): React.JSX.Element {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <>
-            <View style={styles.topBar}>
-              <Text style={styles.wordmark}>omi</Text>
-              <Text style={styles.platform}>React Native</Text>
-            </View>
-            <Text style={styles.eyebrow}>YOUR DAY</Text>
-            <Text style={styles.title}>A quiet place for what matters.</Text>
-            <Text style={styles.subtitle}>Connect Omi to bring your day into view.</Text>
-            <View style={styles.statusCard}>
-              <View style={styles.statusHeading}>
-                <Text style={styles.cardTitle}>Connection</Text>
-                {runtimeState === 'loading' ? <ActivityIndicator color="#111111" /> : <Text style={styles.statusBadge}>{runtimeState}</Text>}
+            <View style={styles.frame}>
+              <View style={styles.topBar}>
+                <Text style={styles.wordmark}>omi</Text>
+                <Text style={styles.platform}>React Native</Text>
               </View>
-              <Text style={styles.statusCopy}>{status}</Text>
-              {snapshot ? <Text style={styles.muted}>Bluetooth: {snapshot.bluetooth} · Audio: {snapshot.audioRoute}</Text> : null}
-              <View style={styles.actions}>
-                <Action label={busy ? 'Working…' : 'Find my Omi'} onPress={scan} disabled={!isNativeModuleInstalled || busy} />
-                <Action label="Permissions" onPress={requestPermissions} disabled={!isNativeModuleInstalled || busy} />
+              <Text style={styles.eyebrow}>YOUR DAY</Text>
+              <Text style={styles.title}>A quiet place for what matters.</Text>
+              <Text style={styles.subtitle}>Connect Omi to bring your day into view.</Text>
+              <View style={[styles.overview, width >= 760 && styles.overviewWide]}>
+                <View style={[styles.todayCard, width >= 760 && styles.todayCardWide]}>
+                  <Text style={[styles.cardTitle, styles.todayText]}>Today</Text>
+                  <Text style={styles.todayValue}>—</Text>
+                  <Text style={[styles.statusCopy, styles.todayText]}>No moments yet. Connect a real Omi to begin.</Text>
+                </View>
+                <View style={[styles.statusCard, width >= 760 && styles.statusCardWide]}>
+                  <View style={styles.statusHeading}>
+                    <Text style={styles.cardTitle}>Connection</Text>
+                    {runtimeState === 'loading' ? <ActivityIndicator color="#111111" /> : <Text style={styles.statusBadge}>{runtimeState}</Text>}
+                  </View>
+                  <Text style={styles.statusCopy}>{status}</Text>
+                  {snapshot ? <Text style={styles.muted}>Bluetooth: {snapshot.bluetooth} · Audio: {snapshot.audioRoute}</Text> : null}
+                  <View style={styles.actions}>
+                    <Action label={busy ? 'Scanning…' : 'Find my Omi'} onPress={scan} disabled={!isNativeModuleInstalled || busy} />
+                    <Action label="Permissions" onPress={requestPermissions} disabled={!isNativeModuleInstalled || busy} />
+                  </View>
+                </View>
               </View>
-            </View>
-            <View style={styles.sectionHeading}>
-              <Text style={styles.cardTitle}>Nearby Omi devices</Text>
-              <Text style={styles.muted}>{snapshot?.devices.length ?? 0} found</Text>
+              <View style={styles.sectionHeading}>
+                <Text style={styles.cardTitle}>Nearby Omi devices</Text>
+                <Text style={styles.muted}>{snapshot?.devices.length ?? 0} found</Text>
+              </View>
             </View>
           </>
         }
@@ -154,14 +165,22 @@ function App(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   safe: {flex: 1, backgroundColor: '#f7f7f5'},
-  content: {padding: 24, gap: 12},
+  content: {alignSelf: 'center', maxWidth: 1120, padding: 24, width: '100%'},
+  frame: {width: '100%'},
   topBar: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 48},
   wordmark: {color: '#111111', fontSize: 28, fontWeight: '900', letterSpacing: -1},
   platform: {color: '#6b6b6b', fontSize: 13, fontWeight: '600'},
   eyebrow: {color: '#6b6b6b', fontSize: 12, fontWeight: '800', letterSpacing: 1.2},
   title: {color: '#111111', fontSize: 40, fontWeight: '800', letterSpacing: -1.8, lineHeight: 44, marginTop: 12, maxWidth: 520},
   subtitle: {color: '#666666', fontSize: 17, lineHeight: 24, marginTop: 12, maxWidth: 440},
-  statusCard: {backgroundColor: '#ffffff', borderColor: '#e3e3e0', borderRadius: 20, borderWidth: 1, gap: 12, marginTop: 32, padding: 20},
+  overview: {gap: 12, marginTop: 32},
+  overviewWide: {flexDirection: 'row'},
+  todayCard: {backgroundColor: '#111111', borderRadius: 20, gap: 12, padding: 20},
+  todayCardWide: {flex: 1},
+  todayText: {color: '#ffffff'},
+  todayValue: {color: '#ffffff', fontSize: 48, fontWeight: '800', letterSpacing: -2},
+  statusCard: {backgroundColor: '#ffffff', borderColor: '#e3e3e0', borderRadius: 20, borderWidth: 1, gap: 12, padding: 20},
+  statusCardWide: {flex: 1},
   statusHeading: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'},
   cardTitle: {color: '#111111', fontSize: 18, fontWeight: '800'},
   statusBadge: {color: '#555555', fontSize: 12, fontWeight: '800', textTransform: 'uppercase'},
@@ -171,7 +190,7 @@ const styles = StyleSheet.create({
   action: {backgroundColor: '#111111', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10},
   actionDisabled: {backgroundColor: '#d6d6d3'},
   actionText: {color: '#ffffff', fontSize: 13, fontWeight: '800'},
-  sectionHeading: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginTop: 28, paddingBottom: 4},
+  sectionHeading: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginTop: 28, paddingBottom: 16},
   empty: {color: '#6b6b6b', fontSize: 15, lineHeight: 22, paddingBottom: 8},
   deviceRow: {alignItems: 'center', backgroundColor: '#ffffff', borderColor: '#e3e3e0', borderRadius: 16, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 14},
   deviceMark: {alignItems: 'center', borderColor: '#111111', borderRadius: 24, borderWidth: 1, height: 48, justifyContent: 'center', width: 48},
