@@ -465,6 +465,49 @@ function canonicalizeScreenshot(file) {
     if (image.rgba[offset + 1] < 16) image.rgba[offset + 1] = 0;
     if (image.rgba[offset + 2] < 16) image.rgba[offset + 2] = 0;
   }
+  // CoreSimulator also has two stable glyph-raster variants that differ by a
+  // few gray antialiasing values even after the surface is fully ready. For
+  // nearly grayscale pixels on a genuine high-contrast edge, quantize the
+  // luminance to a bounded 16-level step. The phase keeps the two observed
+  // CoreSimulator grayscale blend families in the same bin while limiting
+  // any canonical adjustment to eight luminance values.
+  // Flat fills, alpha, colorful product pixels, geometry, and every pixel
+  // outside a 5x5 contrast edge remain byte-exact.
+  const pixels = image.width * image.height;
+  const eligible = new Uint8Array(pixels);
+  const luminance = new Uint8Array(pixels);
+  for (let pixel = 0; pixel < pixels; pixel += 1) {
+    const offset = pixel * 4;
+    const red = image.rgba[offset];
+    const green = image.rgba[offset + 1];
+    const blue = image.rgba[offset + 2];
+    if (image.rgba[offset + 3] === 255 && Math.max(red, green, blue) - Math.min(red, green, blue) <= 8) {
+      eligible[pixel] = 1;
+      luminance[pixel] = Math.round((red + green + blue) / 3);
+    }
+  }
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const pixel = y * image.width + x;
+      if (!eligible[pixel]) continue;
+      let low = 255;
+      let high = 0;
+      for (let sampleY = Math.max(0, y - 2); sampleY <= Math.min(image.height - 1, y + 2); sampleY += 1) {
+        for (let sampleX = Math.max(0, x - 2); sampleX <= Math.min(image.width - 1, x + 2); sampleX += 1) {
+          const sample = sampleY * image.width + sampleX;
+          if (!eligible[sample]) continue;
+          low = Math.min(low, luminance[sample]);
+          high = Math.max(high, luminance[sample]);
+        }
+      }
+      if (high - low < 32) continue;
+      const value = Math.max(0, Math.min(255, Math.round((luminance[pixel] - 14) / 16) * 16 + 14));
+      const offset = pixel * 4;
+      image.rgba[offset] = value;
+      image.rgba[offset + 1] = value;
+      image.rgba[offset + 2] = value;
+    }
+  }
   const stride = image.width * 4;
   const rows = Buffer.alloc(image.height * (stride + 1));
   for (let row = 0; row < image.height; row += 1) {
