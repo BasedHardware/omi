@@ -311,7 +311,8 @@ void main() {
       expect(outcome.ok, isTrue);
       expect(appAuth.lastTokenRequest?.refreshToken, 'legacy-rt',
           reason: 'the refresh must use the token migrated from the legacy pref');
-      expect(SharedPreferencesUtil().getString(_refreshTokenPrefKey), '', reason: 'the plaintext pref must be scrubbed');
+      expect(SharedPreferencesUtil().getString(_refreshTokenPrefKey), '',
+          reason: 'the plaintext pref must be scrubbed');
       expect(storage.store[_refreshTokenPrefKey], 'legacy-rt', reason: 'the token must live in secure storage');
     });
 
@@ -332,7 +333,8 @@ void main() {
 
       expect(prefs.getString(_refreshTokenPrefKey), 'legacy-rt',
           reason: 'a failed secure write must NOT discard the only refresh token (would strand the session)');
-      expect(storage.store.containsKey(_refreshTokenPrefKey), isFalse, reason: 'the token never reached secure storage');
+      expect(storage.store.containsKey(_refreshTokenPrefKey), isFalse,
+          reason: 'the token never reached secure storage');
     });
   });
 
@@ -360,12 +362,40 @@ void main() {
 
       expect(outcome.ok, isTrue);
       expect(storage.store[_refreshTokenPrefKey], 'rt-2', reason: 'new refresh token stored in secure storage');
-      expect(prefs.getString(_refreshTokenPrefKey), '', reason: 'refresh token must NEVER be written to plaintext prefs');
+      expect(prefs.getString(_refreshTokenPrefKey), '',
+          reason: 'refresh token must NEVER be written to plaintext prefs');
       expect(prefs.uid, 'user-42');
       expect(prefs.authToken, 'access-42');
       expect(prefs.tokenExpirationTime, expiry.millisecondsSinceEpoch);
       expect(prefs.email, 'u42@example.test');
       expect(prefs.givenName, 'Ada'); // first token of the display name
+    });
+
+    test('a failed secure write during persist leaves NO partial session (uid/authToken unset)', () async {
+      // A pre-existing refresh token in secure storage, so _readRefreshToken does NOT migrate;
+      // the only failing write is _persist's own _writeRefreshToken of the freshly minted token.
+      final appAuth = _FakeAppAuth(
+        tokenResponse: TokenResponse(
+          'access-new',
+          'rt-2',
+          now.add(const Duration(hours: 1)),
+          _jwt(<String, dynamic>{'sub': 'user-partial'}),
+          'Bearer',
+          null,
+          null,
+        ),
+      );
+      final storage = _FakeSecureStorage()..store[_refreshTokenPrefKey] = 'rt-1';
+      final service = OidcAuthService.forTest(appAuth: appAuth, secureStorage: storage, clock: () => now);
+      storage.throwOnWrite = true; // Keychain/Keystore write fails when _persist stores the new token
+
+      final outcome = await service.refresh(forceRefresh: true);
+      final prefs = SharedPreferencesUtil();
+
+      expect(outcome.ok, isFalse, reason: 'a secure-write failure must surface as a failed outcome');
+      expect(prefs.uid, isEmpty, reason: 'uid must not be persisted when the refresh-token write failed');
+      expect(prefs.authToken, isEmpty, reason: 'authToken must not be persisted -> no unrecoverable half-session');
+      expect(storage.store[_refreshTokenPrefKey], 'rt-1', reason: 'the new token never replaced the prior one');
     });
   });
 

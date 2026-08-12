@@ -271,9 +271,14 @@ class OidcAuthService {
     }
 
     final prefs = SharedPreferencesUtil();
+    // Persist the long-lived refresh token to secure storage BEFORE writing any session field to
+    // prefs. A Keychain/Keystore write can throw; doing it first means a failure aborts here (the
+    // login/refresh catch turns it into a failure outcome) and leaves NO half-written session —
+    // instead of a signed-in uid+authToken with no refresh token, an unrecoverable session that can
+    // never refresh and would 401 forever (cubic review PR 10887).
+    await _writeRefreshToken(refreshToken ?? '');
     prefs.uid = sub;
     prefs.authToken = accessToken;
-    await _writeRefreshToken(refreshToken ?? '');
     prefs.tokenExpirationTime = expiration?.millisecondsSinceEpoch ?? 0;
     if (prefs.email.isEmpty) {
       prefs.email = claims['email']?.toString() ?? '';

@@ -317,6 +317,37 @@ class AuthService {
     return null;
   }
 
+  /// Maps an [OidcLoginOutcome] onto the neutral [AuthTokenResult] the HTTP layer
+  /// switches on, preserving the outcome's definitive/transient classification.
+  ///
+  /// A definitive failure (`!ok && !transient` — a revoked/expired/invalid refresh
+  /// token) must surface a TERMINAL result so 401-recovery and [getIdToken] expire
+  /// the dead session and force re-login; mapping it to a transient failure (the
+  /// former behavior) left the session alive so every request replayed the same
+  /// rejected token and 401'd forever. A transient miss (network/timeout) keeps the
+  /// session for a retry. An `ok` outcome with no stored token is a contradictory
+  /// state — treat it as transient, never expire on it. (Cubic review PR 10887.)
+  @visibleForTesting
+  static AuthTokenResult oidcOutcomeToTokenResult(
+    OidcLoginOutcome outcome, {
+    required String authToken,
+    required int tokenExpirationMs,
+  }) {
+    if (outcome.ok) {
+      if (authToken.isNotEmpty) {
+        return AuthTokenSuccess(
+          token: authToken,
+          expirationTime: tokenExpirationMs > 0 ? DateTime.fromMillisecondsSinceEpoch(tokenExpirationMs) : null,
+        );
+      }
+      return const AuthTokenTransientFailure(failureClass: 'oidc_refresh_ok_no_token');
+    }
+    if (outcome.transient) {
+      return const AuthTokenTransientFailure(failureClass: 'oidc_refresh_failed');
+    }
+    return const AuthTokenMissingToken();
+  }
+
   /// [forceRefresh] forces a new token from the auth backend even if the cached
   /// one is not yet expired. Used for 401 recovery, where the backend rejected a
   /// still-valid-looking token and replaying it would 401 again. The Firebase
@@ -331,15 +362,11 @@ class AuthService {
     if (Env.useOidc) {
       return OidcAuthService.instance.refresh(forceRefresh: forceRefresh).then<AuthTokenResult>((o) {
         final prefs = SharedPreferencesUtil();
-        if (o.ok && prefs.authToken.isNotEmpty) {
-          return AuthTokenSuccess(
-            token: prefs.authToken,
-            expirationTime:
-                prefs.tokenExpirationTime > 0 ? DateTime.fromMillisecondsSinceEpoch(prefs.tokenExpirationTime) : null,
-          );
-        }
-        // Keep the stored session on a transient miss; do not expire/clear it.
-        return const AuthTokenTransientFailure(failureClass: 'oidc_refresh_failed');
+        return oidcOutcomeToTokenResult(
+          o,
+          authToken: prefs.authToken,
+          tokenExpirationMs: prefs.tokenExpirationTime,
+        );
       });
     }
     final currentUid = _tokenGateway.currentUser?.uid;
