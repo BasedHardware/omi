@@ -411,10 +411,16 @@ def list_action_item_ids(
     ),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """Return all of the user's action-item IDs (IDs only, no field reads).
+    """Return the user's action-item IDs (lightweight reconciliation).
 
-    A lightweight way for a client to reconcile which tasks it has without paging the full
-    list. Declared before /v1/action-items/{action_item_id} so the static path is not
+    Without ``completed``: returns every ID with no field reads — the cheapest
+    way for a client to know which tasks it has without paging the full list.
+
+    With ``completed``: returns only non-deleted IDs in the requested bucket,
+    which requires a three-field projection (``completed``, ``status``,
+    ``deleted``) streamed across the collection.
+
+    Declared before /v1/action-items/{action_item_id} so the static path is not
     captured as an action item id.
     """
     if completed is None:
@@ -568,9 +574,13 @@ def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str =
     vector store delete and the FCM cancellation message both use their batch
     helpers — no per-id loop on this hot path.
     """
-    existing_items = action_items_db.get_action_items_by_ids(uid, request.ids)
-    if any(item.get('is_locked', False) for item in existing_items):
-        raise HTTPException(status_code=402, detail="A paid plan is required to delete locked action items.")
+    # Chunk the locked-task preflight so large Select All batches (up to 10,000
+    # IDs) stay within Firestore's batch-get limits and avoid loading tens of
+    # megabytes of document data in one RPC before any deletion begins.
+    for i in range(0, len(request.ids), 500):
+        existing_items = action_items_db.get_action_items_by_ids(uid, request.ids[i : i + 500])
+        if any(item.get('is_locked', False) for item in existing_items):
+            raise HTTPException(status_code=402, detail="A paid plan is required to delete locked action items.")
 
     deleted_ids = action_items_db.delete_action_items_batch(uid, request.ids)
 

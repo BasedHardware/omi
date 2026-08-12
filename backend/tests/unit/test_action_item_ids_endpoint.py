@@ -144,3 +144,35 @@ def test_batch_delete_rejects_locked_items_before_any_delete(monkeypatch):
 
     assert error.value.status_code == 402
     assert delete_calls == []
+
+
+def test_batch_delete_preflight_chunks_large_id_lists(monkeypatch):
+    """Lock preflight must be chunked so large Select All batches don't hit
+    Firestore batch-get limits or load unbounded document data in one RPC."""
+    preflight_chunks: list[list[str]] = []
+
+    def fake_get(uid, ids):
+        preflight_chunks.append(list(ids))
+        return []
+
+    monkeypatch.setattr(ai_mod.action_items_db, 'get_action_items_by_ids', fake_get)
+    monkeypatch.setattr(
+        ai_mod.action_items_db,
+        'delete_action_items_batch',
+        lambda uid, ids: ids,
+    )
+    monkeypatch.setattr(ai_mod, 'delete_action_item_vectors_batch', lambda *a, **kw: None)
+    monkeypatch.setattr(ai_mod, 'send_action_items_batch_deletion_message', lambda *a, **kw: None)
+    monkeypatch.setattr(ai_mod, '_wake_task_changes', lambda *a, **kw: None)
+
+    # 1,200 IDs should be split into 3 chunks: 500 + 500 + 200
+    big_ids = [f'task-{i}' for i in range(1200)]
+    result = ai_mod.batch_delete_action_items(
+        ai_mod.BatchDeleteActionItemsRequest(ids=big_ids), uid='user-9'
+    )
+
+    assert len(preflight_chunks) == 3
+    assert len(preflight_chunks[0]) == 500
+    assert len(preflight_chunks[1]) == 500
+    assert len(preflight_chunks[2]) == 200
+    assert result['deleted_count'] == 1200
