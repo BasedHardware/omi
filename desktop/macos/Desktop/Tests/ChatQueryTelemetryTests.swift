@@ -298,6 +298,34 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertEqual(ids.assistant, "attempt-123-assistant")
   }
 
+  func testQuestionInteractionContinuityMatchesKernelOwnerConversationScope() {
+    let continuityKey = ChatProvider.questionInteractionContinuityKey(
+      ownerID: "alice",
+      conversationID: "conv_442a0a6004964766830774eb406562e4",
+      questionID: "cold-start:0:step:1",
+      optionID: "cold-start:0:outcome:progress"
+    )
+
+    XCTAssertEqual(continuityKey, "qri_918fa0e3102b91249755bfc291dfb813")
+    XCTAssertEqual(
+      ChatProvider.messageIds(forAttemptId: continuityKey).user,
+      "turn_61f833a2129a50b2"
+    )
+    XCTAssertEqual(
+      ChatProvider.messageIds(forAttemptId: continuityKey).assistant,
+      "turn_c7ec848ab1718b5f"
+    )
+    XCTAssertNotEqual(
+      continuityKey,
+      ChatProvider.questionInteractionContinuityKey(
+        ownerID: "bob",
+        conversationID: "conv_442a0a6004964766830774eb406562e4",
+        questionID: "cold-start:0:step:1",
+        optionID: "cold-start:0:outcome:progress"
+      )
+    )
+  }
+
   func testStagedImageAttachmentIsReportedAsImageInput() {
     XCTAssertTrue(
       ChatProvider.chatTelemetryHasImage(
