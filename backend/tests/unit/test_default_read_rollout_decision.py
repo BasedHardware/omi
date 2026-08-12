@@ -94,3 +94,19 @@ def test_global_read_gate_remains_deployment_wide_and_fail_closed():
     open_gate = normalize_global_read_gate({"memory_reads_enabled": True, "kill_switch_active": False})
     assert open_gate.source_path == GLOBAL_READ_GATE_PATH
     assert open_gate.read_decision == MemoryReadDecision.USE_MEMORY
+
+
+def test_control_state_timeout_fails_closed_without_legacy_fallback():
+    class _TimedOutDocument:
+        def get(self, **_kwargs):
+            raise TimeoutError("control-state read timed out")
+
+    class _TimedOutDb:
+        def document(self, _path):
+            return _TimedOutDocument()
+
+    decision = read_default_read_rollout(uid="u1", db_client=_TimedOutDb(), consumer="omi_chat")
+
+    assert decision.read_decision == MemoryReadDecision.DENY_MEMORY
+    assert decision.reason == "memory_control_read_failed"
+    assert decision.rollout_capabilities.legacy_reads_authoritative is False

@@ -10,9 +10,8 @@ Tests exercise:
   - get_prompt_memories() prompt-string formatting through the same authority
 
 No Firebase, Redis, stripe, anthropic, or network connections are required.
-Heavy transitive deps (database.memories → stripe, utils.memory.memory_service → anthropic)
-are blocked at import time using the project's sanctioned stub_modules + load_module_fresh
-isolation primitives from testing/import_isolation.py.
+The heavy memory-service import is isolated with the project's sanctioned stub_modules
+and load_module_fresh primitives from testing/import_isolation.py.
 """
 
 import pytest

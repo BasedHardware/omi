@@ -53,6 +53,16 @@ class _Db:
         return _Ref(self, path)
 
 
+class _UnreadableRef:
+    def get(self):
+        raise RuntimeError("transport unavailable")
+
+
+class _UnreadableDb:
+    def document(self, _path):
+        return _UnreadableRef()
+
+
 def test_arbitrary_authenticated_uids_are_canonical_without_a_code_list():
     assert resolve_memory_system("uid-never-seen") == MemorySystem.CANONICAL
     assert resolve_memory_system("uid-another-account") == MemorySystem.CANONICAL
@@ -69,6 +79,11 @@ def test_missing_apply_state_is_self_provisioned():
     assert control.uid == "uid-arbitrary"
     path = MemoryCollections(uid="uid-arbitrary").memory_apply_control_state
     assert MemoryControlState.model_validate(db.docs[path]) == control
+
+
+def test_apply_state_transport_failure_is_classified_as_unavailable():
+    with pytest.raises(RuntimeError, match="apply control state is unreadable"):
+        ensure_canonical_apply_control_state("uid-unavailable", db_client=_UnreadableDb())
 
 
 def test_malformed_apply_state_fails_closed_without_overwrite():

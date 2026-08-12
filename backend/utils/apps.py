@@ -905,7 +905,13 @@ def update_personas_async(uid: str):
 async def update_persona_prompt(persona: Dict[str, Any]):
     """Update a persona's chat prompt with latest memories and conversations."""
     uid = persona['uid']
-    universal_memories = MemoryService(db_client=firestore_db).read(uid, limit=250, offset=0)
+    universal_memories = await run_blocking(
+        db_executor,
+        MemoryService(db_client=firestore_db).read,
+        uid,
+        limit=250,
+        offset=0,
+    )
     memories = [memory.dict() for memory in universal_memories if memory.visibility == 'public']
     user_name = await run_blocking(db_executor, get_user_name, uid)
 

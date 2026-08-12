@@ -46,20 +46,33 @@ def get_memories_text(
             return f"Error: Invalid end_date format: {e}"
 
     try:
-        memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset, now=now)
+        service = MemoryService(db_client=firestore_db)
+        target_end = min(offset + limit, 5000)
+        scan_offset = 0
+        visible = []
+        max_scan = 5000
+        while scan_offset < max_scan and len(visible) < target_end:
+            batch_limit = min(500, max_scan - scan_offset)
+            fetch_limit = target_end if scan_offset == 0 else batch_limit
+            batch = service.read(uid, limit=fetch_limit, offset=scan_offset, now=now)
+            if not batch:
+                break
+            scan_offset += len(batch)
+            for memory in batch:
+                if memory.is_locked:
+                    continue
+                created = memory.created_at
+                if start_dt and created and created < start_dt:
+                    continue
+                if end_dt and created and created > end_dt:
+                    continue
+                visible.append(memory)
+            if len(batch) < fetch_limit:
+                break
+        memories = visible[offset:target_end]
     except Exception as e:
         logger.error(f"get_memories_text error: {e}")
         return f"Error retrieving memories: {e}"
-    # The released memory-list API may show a truncated locked preview, but
-    # agent/tool context must never feed paywalled protected content to a model.
-    memories = [memory for memory in memories if not memory.is_locked]
-    if start_dt or end_dt:
-        memories = [
-            memory
-            for memory in memories
-            if not (start_dt and memory.created_at and memory.created_at < start_dt)
-            and not (end_dt and memory.created_at and memory.created_at > end_dt)
-        ]
     if not memories:
         date_info = ""
         if start_dt and end_dt:

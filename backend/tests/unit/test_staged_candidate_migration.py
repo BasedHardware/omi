@@ -74,7 +74,7 @@ def test_migration_report_is_permanently_read_only_in_every_old_mode(monkeypatch
         assert report.created == report.reconciled == report.failed == 0
 
 
-def test_legacy_proposal_has_candidate_authority_and_ignores_score_metadata():
+def test_legacy_proposal_retains_compatibility_metadata_on_candidate_envelope():
     proposal = proposal_from_legacy_staged(
         {'id': 'staged-1', 'description': 'Send the budget', 'priority': 'high', 'relevance_score': 999}
     )
@@ -83,7 +83,30 @@ def test_legacy_proposal_has_candidate_authority_and_ignores_score_metadata():
     assert payload['source_surface'] == 'legacy_staged'
     assert payload['task_change']['priority'] == 'high'
     assert payload['evidence_refs'][0]['id'] == 'legacy-staged-staged-1'
-    assert 'relevance_score' not in payload
+    assert payload['compatibility'] == {'metadata': None, 'category': None, 'relevance_score': 999}
+
+
+def test_semantic_candidate_reuse_merges_compatibility_annotations():
+    existing_proposal = proposal_from_legacy_staged(
+        {'id': 'old-row', 'description': 'Send the budget', 'metadata': 'old', 'category': 'finance'}
+    )
+    existing = CandidateRecord(
+        **existing_proposal.model_dump(mode='python'),
+        candidate_id='candidate-1',
+        account_generation=7,
+        idempotency_key='idem-1',
+        created_at=NOW,
+    )
+    incoming = proposal_from_legacy_staged(
+        {'id': 'new-row', 'description': 'Send the budget', 'metadata': 'new', 'relevance_score': 850}
+    )
+
+    merged = candidates_db._merge_candidate_annotations(existing, incoming)
+
+    assert merged.compatibility is not None
+    assert merged.compatibility.metadata == 'new'
+    assert merged.compatibility.category == 'finance'
+    assert merged.compatibility.relevance_score == 850
 
 
 def test_get_pure_projects_mixed_rows_without_creating_candidates(monkeypatch):
@@ -284,7 +307,6 @@ def test_create_writes_candidate_only_with_stable_idempotency(monkeypatch):
         staged_router.staged_tasks_db,
         'create_staged_task',
         lambda *args, **kwargs: pytest.fail('new creates must not write historical staged_tasks'),
-        raising=False,
     )
     calls = []
 

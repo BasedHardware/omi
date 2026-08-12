@@ -19,6 +19,8 @@ from testing.parity_pack_v0.live_capture import capture_memory_write
 
 logger = logging.getLogger(__name__)
 
+PREFERENCE_DUPLICATE_THRESHOLD = 0.90
+
 # Import agent_config_context for fallback config access
 try:
     from utils.retrieval.agentic import agent_config_context
@@ -78,7 +80,7 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
     # Check for duplicate preferences via semantic search
     try:
         existing = MemoryService(db_client=db).search(uid, preference, limit=3)
-        if existing:
+        if existing and float(existing[0].score or 0.0) >= PREFERENCE_DUPLICATE_THRESHOLD:
             content = existing[0].memory.content
             score = existing[0].score
             logger.info(f"Skipping duplicate preference (score={score:.2f}): {content[:80]}")

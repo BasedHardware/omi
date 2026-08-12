@@ -76,6 +76,37 @@ def create_record(fake_db, **overrides):
     )
 
 
+def test_staged_compatibility_score_is_pending_only(fake_db):
+    proposal = task_create_proposal(
+        source_surface='legacy_staged',
+        evidence_refs=[{'kind': 'external', 'id': 'legacy-staged-row-1', 'scope': 'canonical'}],
+    )
+    candidate = candidates_db.create_candidate(
+        'user-1',
+        proposal,
+        idempotency_key='legacy-staged:row-1',
+        account_generation=3,
+    )
+
+    updated = candidates_db.update_candidate_compatibility_score(
+        'user-1',
+        candidate.candidate_id,
+        relevance_score=42,
+        account_generation=3,
+    )
+    assert updated.compatibility is not None
+    assert updated.compatibility.relevance_score == 42
+
+    candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
+    with pytest.raises(candidates_db.CandidateConflictError, match='not an active staged-task'):
+        candidates_db.update_candidate_compatibility_score(
+            'user-1',
+            candidate.candidate_id,
+            relevance_score=99,
+            account_generation=3,
+        )
+
+
 def evidence_refs(start, stop):
     return [
         {'kind': 'conversation', 'id': f'conversation-{index}', 'scope': 'canonical'} for index in range(start, stop)

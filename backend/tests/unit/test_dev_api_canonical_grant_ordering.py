@@ -2,6 +2,9 @@
 
 import ast
 from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
 
 ROUTER = Path(__file__).resolve().parents[2] / "routers" / "developer.py"
 
@@ -15,12 +18,33 @@ def _function_source(name: str) -> str:
     raise AssertionError(f"missing developer route function {name}")
 
 
-def test_list_authorizes_app_key_before_universal_repository_read():
-    source = _function_source("get_memories")
-    grant = source.index("authorize_memory_external_default_memory_read")
-    denial = source.index("if not app_key_grant.allowed")
-    read = source.index("MemoryService(db_client=db).read")
-    assert grant < denial < read
+def test_list_authorizes_app_key_before_universal_repository_read(monkeypatch):
+    """A denied app/key grant must short-circuit before MemoryService.read."""
+    import routers.developer as developer_module
+    from utils.memory.default_read_rollout import MemoryReadDecision
+    from utils.memory.product_authorization import ProductAuthorizationDecision
+
+    context = developer_module.ProductAuthorizationContext(
+        uid="uid1", consumer="developer_api", surface="developer_api", app_id="app", key_id="key"
+    )
+    denied = ProductAuthorizationDecision(
+        allowed=False,
+        context=context,
+        db_client=None,
+        read_decision=MemoryReadDecision.DENY_MEMORY,
+        reason="missing_memory_read_grant",
+        observability={"enabled": False},
+        status_code=403,
+    )
+    grant = MagicMock(return_value=denied)
+    service = MagicMock()
+    service.read.side_effect = AssertionError("MemoryService.read must not run after grant denial")
+    monkeypatch.setattr(developer_module, "authorize_memory_external_default_memory_read", grant)
+    monkeypatch.setattr(developer_module, "MemoryService", MagicMock(return_value=service))
+    with pytest.raises(developer_module.HTTPException) as exc_info:
+        developer_module.get_memories(auth_context=context)
+    assert exc_info.value.status_code == 403
+    grant.assert_called_once()
 
 
 def test_search_authorizes_app_key_before_universal_repository_search():

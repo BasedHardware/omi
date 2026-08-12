@@ -4,7 +4,7 @@ Verifies that is_locked conversations/memories are properly guarded
 across all previously-bypassed endpoints by calling the real code paths.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, call, patch
 import os
 import pytest
 import sys
@@ -685,6 +685,28 @@ class TestMemoryToolFiltering:
         assert 'LOCKED_SECRET_CONTENT' not in result
         assert '1 shown' in result  # Only 1 memory should appear
         memory_service.return_value.read.assert_called_once_with('test-uid', limit=10, offset=0)
+
+    def test_get_memories_backfills_when_first_page_is_locked(self):
+        """A full filtered page must not hide a later visible memory."""
+        from models.memories import MemoryDB
+        from utils.retrieval.tools import memory_tools
+        from utils.retrieval.tools.memory_tools import get_memories_tool
+
+        locked = MemoryDB.model_validate(_make_memory(locked=True))
+        visible_payload = _make_memory(locked=False, memory_id='visible')
+        visible_payload['content'] = 'LATER_VISIBLE_CONTENT'
+        visible = MemoryDB.model_validate(visible_payload)
+
+        config = {'configurable': {'user_id': 'test-uid'}}
+        with patch.object(memory_tools, 'MemoryService') as memory_service:
+            memory_service.return_value.read.side_effect = [[locked, locked], [visible], []]
+            result = get_memories_tool.invoke({'limit': 2, 'offset': 0}, config=config)
+
+        assert 'LATER_VISIBLE_CONTENT' in result
+        assert memory_service.return_value.read.call_args_list[:2] == [
+            call('test-uid', limit=2, offset=0),
+            call('test-uid', limit=500, offset=2),
+        ]
 
     def test_search_memories_filters_locked(self):
         """search_memories_tool must exclude locked memories from results."""

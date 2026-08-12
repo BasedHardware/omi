@@ -103,8 +103,114 @@ def test_registry_cursor_progresses_and_wraps_without_starvation():
     ]
     db = _Db(snapshots)
     assert cron.bounded_canonical_memory_uid_inventory(db, limit=1) == ("uid-a",)
-    assert cron.bounded_canonical_memory_uid_inventory(db, limit=1) == ("uid-b",)
+
+
+def test_registry_cursor_read_failure_fails_closed():
+    class BrokenDb:
+        def document(self, _path):
+            class BrokenRef:
+                def get(self):
+                    raise RuntimeError('transport unavailable')
+
+            return BrokenRef()
+
+        def collection(self, _name):
+            raise AssertionError('cursor failure should stop before registry query')
+
+    with pytest.raises(cron.CanonicalMaintenanceInventoryUnavailable, match='cursor unavailable'):
+        cron.bounded_canonical_memory_uid_inventory(BrokenDb(), limit=1)
+
+
+def test_seed_existing_apply_control_accounts_is_bounded_and_resumable():
+    class ApplySnapshot:
+        def __init__(self, uid):
+            self.reference = _Reference(f'users/{uid}/memory_state/apply_control')
+
+        def to_dict(self):
+            return {'uid': self.reference.path.split('/')[1]}
+
+    class SeedQuery:
+        def __init__(self, snapshots):
+            self.snapshots = snapshots
+            self.page_limit = None
+
+        def order_by(self, _field):
+            return self
+
+        def where(self, _field, _operator, value):
+            self.snapshots = [item for item in self.snapshots if item.to_dict().get('uid', '') > value]
+            return self
+
+        def start_after(self, snapshot):
+            path = getattr(getattr(snapshot, 'reference', None), 'path', '')
+            self.snapshots = [item for item in self.snapshots if item.reference.path > path]
+            return self
+
+        def limit(self, limit):
+            self.page_limit = limit
+            return self
+
+        def stream(self):
+            return iter(self.snapshots[: self.page_limit])
+
+    class SeedRef:
+        def __init__(self, path, state):
+            self.path = path
+            self.state = state
+
+        def get(self):
+            payload = self.state.get(self.path)
+            return type(
+                'Snapshot',
+                (),
+                {
+                    'exists': payload is not None,
+                    'reference': _Reference(self.path),
+                    'to_dict': lambda _self: payload,
+                },
+            )()
+
+        def set(self, payload, **_kwargs):
+            self.state[self.path] = payload
+
+    class SeedDb:
+        def __init__(self):
+            self.state = {
+                'users/uid-a/memory_state/apply_control': {'uid': 'uid-a'},
+                'users/uid-b/memory_state/apply_control': {'uid': 'uid-b'},
+            }
+            self.snapshots = [ApplySnapshot('uid-a'), ApplySnapshot('uid-b')]
+
+        def collection_group(self, _name):
+            return SeedQuery(self.snapshots)
+
+        def collection(self, name):
+            snapshots = [
+                type(
+                    'RegistrySnapshot',
+                    (),
+                    {
+                        'to_dict': lambda _self, payload=payload: payload,
+                    },
+                )()
+                for path, payload in self.state.items()
+                if path.startswith(f'{name}/')
+            ]
+            return SeedQuery(snapshots)
+
+        def document(self, path):
+            return SeedRef(path, self.state)
+
+    db = SeedDb()
+    cron._seed_registry_from_existing_memory_states(db, limit=1)
+
+    assert db.state['canonical_memory_maintenance_registry/uid-a'] == {'uid': 'uid-a', 'schema_version': 1}
+    assert db.state[cron.CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH] == {
+        'schema_version': 1,
+        'last_path': 'users/uid-a/memory_state/apply_control',
+    }
     assert cron.bounded_canonical_memory_uid_inventory(db, limit=1) == ("uid-a",)
+    assert cron.bounded_canonical_memory_uid_inventory(db, limit=1) == ("uid-b",)
 
 
 def test_injected_inventory_runs_arbitrary_uids(monkeypatch):

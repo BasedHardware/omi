@@ -106,7 +106,7 @@ backend/
                           #   - Speaker identification: matches segments to speech profiles (SpeechBrain, T4 GPU)
                           #   - VAD: voice activity detection (pyannote/voice-activity-detection)
                           #   - notifications-job: hourly push notifications + X sync (Cloud Run Job)
-                          #   - memory-maintenance-job: canonical ST→LT maintenance (Cloud Run Job)
+                          #   - memory-maintenance-job: universal Short-term maintenance (Cloud Run Job)
   tests/unit/            # 50+ unit tests (no external service deps)
   tests/integration/     # Integration tests (need Redis, Firebase, API keys)
   scripts/run-unit-ci.sh # Full CI unit-test contract

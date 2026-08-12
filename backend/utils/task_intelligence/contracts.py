@@ -221,7 +221,17 @@ def discover_backend_writer_anchors(*, repository_root: Path = REPOSITORY_ROOT) 
         # Walk only source directories. Test workers may create and remove
         # backend/_temp concurrently; os.walk tolerates that race while
         # Path.rglob can abort the whole contract scan with FileNotFoundError.
-        for current_root, dir_names, file_names in os.walk(backend_root):
+        def _on_walk_error(exc: OSError) -> None:
+            # A worker may create/remove backend/_temp while the contract scan
+            # runs. That disposable subtree is intentionally excluded; every
+            # other traversal failure must fail closed rather than silently
+            # weakening writer-anchor coverage.
+            path = Path(exc.filename) if exc.filename else None
+            if path is not None and any(part.startswith('_temp') for part in path.parts):
+                return
+            raise ValueError(f'cannot inspect backend source tree: {exc}') from exc
+
+        for current_root, dir_names, file_names in os.walk(backend_root, onerror=_on_walk_error):
             dir_names[:] = [
                 name
                 for name in dir_names

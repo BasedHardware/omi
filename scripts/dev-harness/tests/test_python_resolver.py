@@ -372,14 +372,14 @@ def test_canonical_maintenance_harness_accepts_any_synthetic_uid_only_in_emulato
         str(REPO_ROOT / "scripts/dev-harness/run-canonical-maintenance.py"),
         run_name="run_canonical_maintenance_test",
     )
-    from utils.memory import memory_system
+    from utils.memory import memory_authority
 
     monkeypatch.setenv("FIRESTORE_EMULATOR_HOST", "127.0.0.1:18080")
     monkeypatch.setenv("ENVIRONMENT", "local-dev-harness")
     module["_configure_local_universal_memory"]("synthetic-alice")
 
-    assert memory_system.resolve_memory_system("synthetic-alice") == memory_system.MemorySystem.CANONICAL
-    assert memory_system.resolve_memory_system("someone-else") == memory_system.MemorySystem.CANONICAL
+    assert memory_authority.resolve_memory_system("synthetic-alice") == memory_authority.MemorySystem.CANONICAL
+    assert memory_authority.resolve_memory_system("someone-else") == memory_authority.MemorySystem.CANONICAL
 
 
 def test_canonical_maintenance_harness_replaces_ambient_environment(monkeypatch) -> None:

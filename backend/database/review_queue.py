@@ -3,6 +3,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, cast
 
+from fastapi import HTTPException
 from google.cloud.firestore_v1 import FieldFilter, LastUpdateOption, Query
 
 from config.memory_confidence import CONFIDENCE_BANDS
@@ -849,8 +850,7 @@ def append_resolution_commit(
         conflict_with_raw: object = item.get('conflict_with')
         conflict_with: List[str] = cast(List[str], conflict_with_raw) if isinstance(conflict_with_raw, list) else []
         memory_service.write(uid, accepted_fact(candidate))
-        for memory_id in conflict_with:
-            memory_service.delete(uid, memory_id)
+        _delete_review_conflicts_idempotently(memory_service, uid, conflict_with)
     if decision == 'correct':
         correction_dict: Dict[str, Any] = correction if correction is not None else {}
         target_id: Any = correction_dict.get('target_fact_id') or item.get('fact_id')
@@ -868,6 +868,40 @@ def append_resolution_commit(
         run_id=f"review_queue:{item.get('review_id')}",
         use_current_head=True,
     )
+
+
+def _delete_review_conflicts_idempotently(memory_service: Any, uid: str, memory_ids: List[str]) -> None:
+    """Tombstone review conflicts as one bounded canonical operation.
+
+    The legacy review ledger is written after canonical mutations for wire
+    compatibility.  A retry can therefore observe conflicts already
+    tombstoned if the ledger write failed; filter those identities before the
+    batch operation and treat a fully tombstoned 404 as success.  Active or
+    unknown identities still fail closed instead of silently dropping a
+    conflict.
+    """
+    normalized = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
+    if not normalized:
+        return
+    status_reader = getattr(memory_service, '_canonical_status', None)
+    pending: List[str] = []
+    if callable(status_reader):
+        for memory_id in normalized:
+            status = status_reader(uid, memory_id)
+            if status != MemoryItemStatus.tombstoned:
+                pending.append(memory_id)
+    else:
+        pending = normalized
+    if not pending:
+        return
+    try:
+        memory_service.delete_batch(uid, pending)
+    except HTTPException as exc:
+        if exc.status_code != 404 or not callable(status_reader):
+            raise
+        remaining = [memory_id for memory_id in pending if status_reader(uid, memory_id) != MemoryItemStatus.tombstoned]
+        if remaining:
+            raise
 
 
 def resolve_expired_review_conflicts(

@@ -15,6 +15,7 @@ from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryItem, MemoryLayer
 from utils.llm.knowledge_graph import extract_knowledge_from_memory
 from utils.memory.memory_system import (
+    CanonicalApplyStateUnavailable,
     MemorySystem as MemorySystem,  # compatibility export for legacy test doubles
     ensure_canonical_apply_control_state,
     resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
@@ -117,8 +118,13 @@ def extract_kg_for_promoted_memory(
     client: Any = db_client if db_client is not None else default_db_client
     try:
         ensure_canonical_apply_control_state(uid, db_client=client)
-    except Exception as exc:
-        logger.warning("kg_extraction blocked by canonical apply state uid=%s reason=%s", uid, type(exc).__name__)
+    except CanonicalApplyStateUnavailable as exc:
+        logger.warning(
+            "kg_extraction blocked by canonical apply state uid=%s reason=%s",
+            uid,
+            exc,
+            exc_info=True,
+        )
         return CanonicalKgPromotionResult(skipped_reason="canonical_state_unavailable")
     if item.tier != MemoryLayer.long_term:
         return CanonicalKgPromotionResult(skipped_reason="not_long_term")

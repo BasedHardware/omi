@@ -63,6 +63,19 @@ class _Db:
         return _Batch(self)
 
 
+class _BatchStatusDb(_Db):
+    def __init__(self, docs=None):
+        super().__init__(docs)
+        self.get_all_calls = []
+
+    def get_all(self, refs):
+        refs = list(refs)
+        self.get_all_calls.append([ref.path for ref in refs])
+        for ref in refs:
+            payload = self.docs.get(ref.path)
+            yield _Snapshot(payload, exists=payload is not None)
+
+
 def _memory(service_mod, memory_id, *, content=None):
     payload = _sample_memory_dict(memory_id)
     if content is not None:
@@ -142,6 +155,38 @@ def test_mixed_read_deduplicates_canonical_public_identity(service_mod, monkeypa
     assert next(item for item in result if item.id == "same").content == "canonical"
 
 
+def test_mixed_read_batches_canonical_suppression_status_lookups(service_mod, monkeypatch):
+    db = _BatchStatusDb()
+    service = service_mod.MemoryService(db_client=db)
+    service._canonical.read = MagicMock(return_value=[])
+    service._history.read = MagicMock(
+        return_value=[_historical(service_mod, "legacy-a"), _historical(service_mod, "legacy-b")]
+    )
+
+    result = service.read("uid-test", limit=10)
+
+    assert {item.id for item in result} == {"legacy-a", "legacy-b"}
+    assert len(db.get_all_calls) == 1
+    assert db.get_all_calls[0] == [
+        "users/uid-test/memory_items/legacy-a",
+        "users/uid-test/memory_items/legacy-b",
+        "users/uid-test/memory_historical_overrides/legacy-a",
+        "users/uid-test/memory_historical_overrides/legacy-b",
+    ]
+
+
+def test_mixed_read_fails_closed_for_malformed_present_canonical_identity(service_mod):
+    db = _BatchStatusDb({'users/uid-test/memory_items/legacy-a': {'status': 'unknown'}})
+    service = service_mod.MemoryService(db_client=db)
+    service._canonical.read = MagicMock(return_value=[])
+    service._history.read = MagicMock(return_value=[_historical(service_mod, 'legacy-a')])
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.read('uid-test', limit=10)
+
+    assert exc_info.value.status_code == 503
+
+
 def test_default_product_search_includes_historical_rows_without_materializing(service_mod):
     from models.product_memory import MemoryAccessPolicy
 
@@ -165,6 +210,13 @@ def test_default_product_search_includes_historical_rows_without_materializing(s
 
     assert [item["memory_id"] for item in result["items"]] == ["canonical", "historical"]
     assert result["total_count"] == 2
+    service.read.assert_called_once_with(
+        "uid-test",
+        limit=service_mod.HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
+        offset=0,
+        include_pending_processing=False,
+        now=None,
+    )
     service._canonical.write.assert_not_called()
 
 
@@ -182,8 +234,8 @@ def test_offset_merge_fetches_a_complete_bounded_prefix(service_mod):
     assert len(page) == 10
     assert service._canonical.read.call_args.kwargs["limit"] == 510
     assert service._history.read.call_args.kwargs == {
-        "limit": 10,
-        "offset": 500,
+        "limit": 510,
+        "offset": 0,
         "device_scope_request": None,
     }
 
@@ -324,6 +376,36 @@ def test_export_includes_active_restricted_user_owned_canonical_memory(service_m
     assert service.export_memories("uid-test") == [expected]
 
 
+def test_export_preserves_full_locked_historical_content(service_mod, monkeypatch):
+    service = service_mod.MemoryService(db_client=_Db())
+    raw = _sample_memory_dict("locked-export")
+    raw["is_locked"] = True
+    raw["content"] = "locked content " * 20
+
+    def get_memories(_uid, _limit, offset, **_kwargs):
+        return [raw] if offset == 0 else []
+
+    monkeypatch.setattr(service_mod.memories_db, "get_memories", get_memories)
+    monkeypatch.setattr(service_mod, "fetch_authoritative_product_memory_items", lambda **_kwargs: [])
+
+    exported = service.export_memories("uid-test")
+
+    assert len(exported) == 1
+    assert exported[0].content == raw["content"]
+
+
+def test_export_honors_historical_tombstone_override(service_mod, monkeypatch):
+    from database.memory_collections import MemoryCollections
+
+    memory_id = "legacy-tombstoned-export"
+    path = f"{MemoryCollections(uid='uid-test').memory_historical_overrides}/{memory_id}"
+    service = service_mod.MemoryService(db_client=_Db({path: {"status": "tombstoned"}}))
+    service._history.all_live = MagicMock(return_value=[_historical(service_mod, memory_id)])
+    monkeypatch.setattr(service_mod, "fetch_authoritative_product_memory_items", lambda **_kwargs: [])
+
+    assert service.export_memories("uid-test") == []
+
+
 def test_canonical_materialization_failure_never_falls_back_to_legacy_write(service_mod, monkeypatch):
     db = _Db()
     service = service_mod.MemoryService(db_client=db)
@@ -346,7 +428,8 @@ def test_delete_all_commits_historical_tombstones_before_cleanup(service_mod, mo
     monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup_all", cleanup)
 
     service.delete_all("uid-test")
-    assert db.events[0] == ("canonical_delete", "uid-test")
+    assert db.events[0][0] in {"set", "batch_commit"}
+    assert any(event == ("canonical_delete", "uid-test") for event in db.events)
     assert db.events[-1] == ("cleanup", "uid-test")
     assert any(event[0] == "batch_commit" for event in db.events)
     assert db.docs["users/uid-test/memory_historical_overrides/legacy-1"]["status"] == "tombstoned"
@@ -371,6 +454,30 @@ def test_search_deduplicates_canonical_and_historical_candidates(service_mod):
     assert result[0].memory.content == "canonical"
 
 
+def test_canonical_search_preserves_order_as_relevance_when_provider_omits_score(service_mod, monkeypatch):
+    rows = [
+        {"memory_id": "first", "content": "first", "tier": "long_term", "date": "2025-01-01T00:00:00+00:00"},
+        {"memory_id": "second", "content": "second", "tier": "long_term", "date": "2025-01-01T00:00:00+00:00"},
+    ]
+    monkeypatch.setattr(service_mod, "search_canonical_memories", lambda *args, **kwargs: rows)
+
+    results = service_mod.CanonicalMemoryBackend(db_client=_Db()).search("uid-test", "query", limit=2)
+
+    assert [match.memory.id for match in results] == ["first", "second"]
+    assert results[0].score > results[1].score
+
+
+def test_historical_missing_updated_at_uses_created_at_for_sort_and_validation(service_mod):
+    raw = _sample_memory_dict("missing-updated")
+    expected = raw["created_at"]
+    raw.pop("updated_at")
+
+    record = service_mod.HistoricalMemoryAdapter._adapt("uid-test", raw)
+
+    assert record is not None
+    assert record.memory.updated_at == expected
+
+
 def test_device_scope_keeps_device_neutral_historical_rows(service_mod):
     db = _Db()
     service = service_mod.MemoryService(db_client=db)
@@ -379,6 +486,23 @@ def test_device_scope_keeps_device_neutral_historical_rows(service_mod):
     request = service_mod.DeviceScopeRequest(device_scope="current", client_device_id="macos_abcd1234")
 
     assert [item.id for item in service.read("uid-test", device_scope_request=request)] == ["neutral"]
+
+
+def test_fetch_applies_device_scope_to_canonical_items(service_mod, monkeypatch):
+    item = MagicMock(primary_capture_device="device-a", capture_device_ids=[], evidence=[])
+    expected = _memory(service_mod, "canonical-device")
+    monkeypatch.setattr(service_mod, "read_canonical_memory_item", lambda *args, **kwargs: item)
+    monkeypatch.setattr(service_mod, "memory_item_to_memorydb", lambda _item: expected)
+    service = service_mod.MemoryService(db_client=_Db())
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.fetch(
+            "uid-test",
+            "canonical-device",
+            device_scope_request=service_mod.DeviceScopeRequest(device_scope="current", client_device_id="device-b"),
+        )
+
+    assert exc_info.value.status_code == 404
 
 
 def test_delete_batch_validates_every_id_before_any_write(service_mod, monkeypatch):
@@ -448,7 +572,51 @@ def test_delete_batch_tombstones_historical_without_materializing_then_cleans(se
     service.delete_batch("uid-test", ["canonical", "legacy", "legacy"])
 
     assert events == [
-        ("canonical_batch", ["canonical"]),
         ("override", ["canonical", "legacy"], service_mod.MemoryItemStatus.tombstoned),
+        ("canonical_batch", ["canonical"]),
         ("cleanup", "legacy"),
     ]
+
+
+def test_delete_batch_retries_already_tombstoned_historical_identity(service_mod, monkeypatch):
+    service = service_mod.MemoryService(db_client=_Db())
+    historical = _historical(service_mod, "legacy")
+    monkeypatch.setattr(service_mod, "read_canonical_memory_item", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, "_canonical_status", MagicMock(return_value=service_mod.MemoryItemStatus.tombstoned))
+    monkeypatch.setattr(service._history, "get", MagicMock(return_value=historical))
+    overrides = MagicMock()
+    cleanup = MagicMock()
+    monkeypatch.setattr(service, "_write_historical_overrides", overrides)
+    monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup", cleanup)
+    service._canonical.delete_batch = MagicMock()
+
+    service.delete_batch("uid-test", ["legacy"])
+
+    service._canonical.delete_batch.assert_not_called()
+    overrides.assert_called_once_with("uid-test", ["legacy"], service_mod.MemoryItemStatus.tombstoned)
+    cleanup.assert_called_once_with("uid-test", "legacy", db_client=service._db_client)
+
+
+def test_retract_conversation_suppresses_and_cleans_historical_memories(service_mod, monkeypatch):
+    historical = _historical(service_mod, "legacy", content="old conversation")
+    historical = historical.memory.model_copy(update={"conversation_id": "conversation-1"})
+    historical = service_mod.HistoricalMemoryRecord(
+        memory=historical,
+        locator=service_mod.MemoryLocator("uid-test", "legacy", "legacy"),
+    )
+    service = service_mod.MemoryService(db_client=_Db())
+    monkeypatch.setattr(
+        service_mod,
+        "retract_conversation_sourced_memories",
+        lambda *args, **kwargs: {"retracted_memory_ids": ["canonical"]},
+    )
+    service._history.all_live = MagicMock(return_value=[historical])
+    overrides = MagicMock()
+    cleanup = MagicMock()
+    monkeypatch.setattr(service, "_write_historical_overrides", overrides)
+    monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup", cleanup)
+
+    service.retract_conversation_memories("uid-test", "conversation-1")
+
+    overrides.assert_called_once_with("uid-test", ["canonical", "legacy"], service_mod.MemoryItemStatus.tombstoned)
+    cleanup.assert_called_once_with("uid-test", "legacy", db_client=service._db_client)

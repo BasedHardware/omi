@@ -154,7 +154,6 @@ def rebuild_graph(
     uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:rebuild")),
 ):
     _require_legacy_graph_mutation(uid)
-    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=CANONICAL_GRAPH_MUTATION_CONFLICT)
 
 
 @router.post(

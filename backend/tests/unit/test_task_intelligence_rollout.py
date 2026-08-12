@@ -1,6 +1,7 @@
 import pytest
+from pydantic import ValidationError
 
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowControl, TaskWorkflowMode
 from utils.task_intelligence.rollout import (
     effective_task_workflow_control,
     resolve_chat_first_ui,
@@ -55,3 +56,19 @@ def test_rollout_rejects_invalid_identity_and_generation():
         resolve_task_intelligence_rollout(uid='', workflow_mode='off')
     with pytest.raises(ValueError, match='nonnegative'):
         resolve_task_intelligence_rollout(uid='user-1', workflow_mode='write', account_generation=-1)
+
+
+def test_compatibility_cohort_diagnostic_cannot_be_false():
+    with pytest.raises(ValidationError):
+        TaskIntelligenceRolloutDecision(
+            uid='user-1',
+            workflow_mode=TaskWorkflowMode.read,
+            memory_cohort_eligible=False,
+            legacy_reads_authoritative=False,
+            legacy_writes_enabled=False,
+            intelligence_evaluation_enabled=True,
+            canonical_sidecar_writes_enabled=True,
+            canonical_reads_authoritative=True,
+            compatibility_projection_required=False,
+            intelligence_product_enabled=True,
+        )

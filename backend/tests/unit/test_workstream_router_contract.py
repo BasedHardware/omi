@@ -455,7 +455,11 @@ def test_work_intent_route_forwards_idempotency_and_generation(monkeypatch):
     assert refreshed == [('u1', 'w1')]
 
 
-def test_formerly_noncanonical_task_dependency_is_authenticated_only():
-    from routers.canonical_task_access import require_canonical_task_user
+def test_formerly_noncanonical_task_dependency_requires_authentication():
+    app = FastAPI()
+    app.include_router(workstreams_router.router)
 
-    assert require_canonical_task_user('not-enrolled') == 'not-enrolled'
+    response = TestClient(app).get('/v1/workstreams/workstream-1')
+
+    assert response.status_code == 401
+    assert response.json()['detail'] == 'Authorization header not found'

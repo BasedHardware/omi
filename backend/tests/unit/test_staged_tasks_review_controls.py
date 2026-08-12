@@ -245,12 +245,17 @@ def test_clear_rejects_candidate_and_each_historical_row_before_cleanup(monkeypa
     ]
 
 
-def test_batch_scores_remain_historical_metadata_only(monkeypatch):
+def test_batch_scores_update_canonical_candidate_compatibility(monkeypatch):
     calls = []
     monkeypatch.setattr(
-        router.staged_tasks_db,
-        'batch_update_staged_scores',
-        lambda uid, scores: calls.append((uid, scores)),
+        router,
+        '_candidate_for_public_id',
+        lambda uid, task_id, **kwargs: _candidate('candidate-1', row_id=task_id),
+    )
+    monkeypatch.setattr(
+        router.candidates_db,
+        'update_candidate_compatibility_score',
+        lambda *args, **kwargs: calls.append((args, kwargs)),
     )
 
     response = router.batch_update_staged_scores(
@@ -259,7 +264,74 @@ def test_batch_scores_remain_historical_metadata_only(monkeypatch):
     )
 
     assert response == {'status': 'ok'}
-    assert calls == [('user-1', [{'id': 'old-1', 'relevance_score': 42}])]
+    assert calls == [
+        (('user-1', 'candidate-1'), {'relevance_score': 42, 'account_generation': 7}),
+    ]
+
+
+def test_batch_scores_ignore_terminal_candidate_conflict(monkeypatch):
+    monkeypatch.setattr(
+        router,
+        '_candidate_for_public_id',
+        lambda uid, task_id, **kwargs: _candidate('candidate-1', row_id=task_id),
+    )
+    monkeypatch.setattr(
+        router.candidates_db,
+        'update_candidate_compatibility_score',
+        lambda *args, **kwargs: (_ for _ in ()).throw(router.candidates_db.CandidateConflictError('accepted')),
+    )
+
+    response = router.batch_update_staged_scores(
+        router.BatchUpdateScoresRequest(scores=[router.BatchScoreEntry(id='old-1', relevance_score=42)]),
+        uid='user-1',
+    )
+
+    assert response == {'status': 'ok'}
+
+
+def test_create_preserves_staged_annotations_and_uses_them_in_identity(monkeypatch):
+    rows = []
+
+    def materialize(uid, row, *, account_generation):
+        rows.append(row)
+        proposal = proposal_from_legacy_staged(row)
+        return CandidateRecord(
+            **proposal.model_dump(mode='python'),
+            candidate_id=row['id'],
+            account_generation=account_generation,
+            idempotency_key=row['id'],
+            created_at=NOW,
+        )
+
+    monkeypatch.setattr(router, '_materialize_historical_candidate', materialize)
+
+    first = router.create_staged_task(
+        router.CreateStagedTaskRequest(
+            description='Send the budget',
+            metadata='from-agent',
+            category='finance',
+            relevance_score=10,
+        ),
+        uid='user-1',
+    )
+    second = router.create_staged_task(
+        router.CreateStagedTaskRequest(
+            description='Send the budget',
+            metadata='from-agent',
+            category='finance',
+            relevance_score=20,
+        ),
+        uid='user-1',
+    )
+
+    assert rows[0]['metadata'] == 'from-agent'
+    assert rows[0]['category'] == 'finance'
+    assert rows[0]['relevance_score'] == 10
+    assert rows[0]['id'] != rows[1]['id']
+    assert first['metadata'] == 'from-agent'
+    assert first['category'] == 'finance'
+    assert first['relevance_score'] == 10
+    assert second['relevance_score'] == 20
 
 
 def test_top_promotion_uses_deterministic_merged_first_item(monkeypatch):

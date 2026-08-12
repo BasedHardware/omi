@@ -216,15 +216,22 @@ class _DocRef:
     def update(self, data):
         self._db.docs[self.path].update(data)
 
+    def collection(self, name):
+        return _CollectionRef(self._db, f"{self.path}/{name}")
+
 
 class _CollectionRef:
-    def __init__(self, db, path, *, filters=(), order_fields=(), limit_count=None, cursor=None):
+    def __init__(self, db, path, *, filters=(), order_fields=(), limit_count=None, offset_count=0, cursor=None):
         self._db = db
         self.path = path
         self._filters = tuple(filters)
         self._order_fields = tuple(order_fields)
         self._limit_count = limit_count
+        self._offset_count = offset_count
         self._cursor = cursor
+
+    def document(self, doc_id):
+        return _DocRef(self._db, f"{self.path}/{doc_id}")
 
     def where(self, field_path=None, op_string=None, value=None, *, filter=None):
         if filter is not None:
@@ -237,16 +244,18 @@ class _CollectionRef:
             filters=(*self._filters, (field_path, op_string, value)),
             order_fields=self._order_fields,
             limit_count=self._limit_count,
+            offset_count=self._offset_count,
             cursor=self._cursor,
         )
 
-    def order_by(self, field_path):
+    def order_by(self, field_path, direction=None):
         return _CollectionRef(
             self._db,
             self.path,
             filters=self._filters,
             order_fields=(*self._order_fields, field_path),
             limit_count=self._limit_count,
+            offset_count=self._offset_count,
             cursor=self._cursor,
         )
 
@@ -257,6 +266,18 @@ class _CollectionRef:
             filters=self._filters,
             order_fields=self._order_fields,
             limit_count=limit_count,
+            offset_count=self._offset_count,
+            cursor=self._cursor,
+        )
+
+    def offset(self, offset_count):
+        return _CollectionRef(
+            self._db,
+            self.path,
+            filters=self._filters,
+            order_fields=self._order_fields,
+            limit_count=self._limit_count,
+            offset_count=offset_count,
             cursor=self._cursor,
         )
 
@@ -267,6 +288,7 @@ class _CollectionRef:
             filters=self._filters,
             order_fields=self._order_fields,
             limit_count=self._limit_count,
+            offset_count=self._offset_count,
             cursor=snapshot,
         )
 
@@ -285,6 +307,8 @@ class _CollectionRef:
             cursor_data = self._cursor.to_dict() or {}
             cursor_key = self._sort_key(cursor_data, self._cursor.id)
             rows = [row for row in rows if row[0] > cursor_key]
+        if self._offset_count:
+            rows = rows[self._offset_count :]
         if self._limit_count is not None:
             rows = rows[: self._limit_count]
         return [

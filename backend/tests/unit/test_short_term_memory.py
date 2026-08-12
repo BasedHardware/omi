@@ -133,6 +133,7 @@ def test_review_queue_resolve_accept_appends_commit_updates_queue_and_records_co
     from utils.memory import memory_service as memory_service_module
 
     monkeypatch.setattr(memory_service_module, 'MemoryService', lambda db_client: service)
+    service._canonical_status = None
     monkeypatch.setattr(
         review_queue.memory_ledger,
         'append_commit',
@@ -156,7 +157,7 @@ def test_review_queue_resolve_accept_appends_commit_updates_queue_and_records_co
     accepted = service.write.call_args.args[1]
     assert accepted['status'] == 'accepted'
     assert accepted['qualifiers']['epistemic_status'] == 'accepted'
-    service.delete.assert_called_once_with('uid-1', 'old')
+    service.delete_batch.assert_called_once_with('uid-1', ['old'])
     assert updates[0]['status'] == 'accepted'
     assert updates[0]['resolution_commit_id'] == 'commit-review'
     assert corrections[0]['decision'] == 'accept'

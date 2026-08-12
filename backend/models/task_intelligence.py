@@ -87,7 +87,10 @@ class TaskIntelligenceRolloutDecision(BaseModel):
     workflow_mode: TaskWorkflowMode
     # Deprecated compatibility diagnostic; universal task authority is not
     # selected by memory enrollment.
-    memory_cohort_eligible: bool = True
+    # Retained only as a released-wire diagnostic. The old cohort signal is
+    # gone; accepting ``False`` would let callers publish a stale eligibility
+    # result even though every authenticated account is universal.
+    memory_cohort_eligible: Literal[True] = True
     account_generation: int = Field(default=0, ge=0)
     legacy_reads_authoritative: bool
     legacy_writes_enabled: bool

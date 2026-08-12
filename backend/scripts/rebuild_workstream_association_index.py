@@ -32,11 +32,16 @@ def main() -> int:
     args = parse_args()
     if args.all_users:
         raw = os.getenv('WORKSTREAM_ASSOCIATION_UID_INVENTORY', '')
-        uids = sorted({uid.strip() for uid in raw.split(',') if uid.strip()})[:MAX_INDEX_REBUILD_UIDS]
+        uids = sorted({uid.strip() for uid in raw.split(',') if uid.strip()})
         if not uids:
             raise SystemExit(
                 'bounded workstream UID inventory is unavailable; provide WORKSTREAM_ASSOCIATION_UID_INVENTORY '
                 'or explicit --uid values'
+            )
+        if len(uids) > MAX_INDEX_REBUILD_UIDS:
+            raise SystemExit(
+                f'WORKSTREAM_ASSOCIATION_UID_INVENTORY contains {len(uids)} UIDs, exceeding the '
+                f'per-run bound of {MAX_INDEX_REBUILD_UIDS}; page the inventory or provide explicit --uid values'
             )
     else:
         uids = args.uids or []

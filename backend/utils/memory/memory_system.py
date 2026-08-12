@@ -7,13 +7,19 @@ callers before a Firestore path is constructed; it is never treated as an
 entitled or legacy account.
 """
 
-from enum import Enum
+from __future__ import annotations
+
 from typing import Any
 
 from google.api_core.exceptions import AlreadyExists, Conflict
 
 from database.memory_collections import MemoryCollections
 from models.memory_apply import MemoryControlState
+from utils.memory.memory_authority import (
+    MemorySystem,
+    resolve_memory_system,
+    validate_uid_for_memory_path,
+)
 
 MEMORY_SYSTEM_FIELD = "memory_system"
 
@@ -22,25 +28,8 @@ CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH = "canonical_memory_maintenance_control
 CANONICAL_MEMORY_MAINTENANCE_REGISTRY_SCHEMA_VERSION = 1
 
 
-class MemorySystem(str, Enum):
-    LEGACY = "legacy"
-    CANONICAL = "canonical"
-
-
-def resolve_memory_system(uid: object, *, db_client: Any = None) -> MemorySystem:
-    """Return canonical authority for every valid authenticated UID.
-
-    ``db_client`` remains accepted so request-scoped callers do not need a
-    compatibility migration.  Control/readiness and integrity failures belong
-    to the operation that touches state; they must not silently route an
-    account to a legacy writer.
-    """
-    del db_client
-    if isinstance(uid, str) and uid.strip():
-        return MemorySystem.CANONICAL
-    # Invalid identity is not a legacy account.  The legacy enum value is kept
-    # only as a sentinel for callers that already reject malformed identities.
-    return MemorySystem.LEGACY
+class CanonicalApplyStateUnavailable(RuntimeError):
+    """The canonical apply-control state cannot be safely read or provisioned."""
 
 
 def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
@@ -50,29 +39,40 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
     cross-UID, or unreadable state fails closed so a producer cannot create a
     second ledger or fall back to historical writes.
     """
-    if not uid.strip():
-        raise ValueError("uid must be a nonblank authenticated identifier")
+    validate_uid_for_memory_path(uid)
     if db_client is None:
-        raise RuntimeError("canonical apply control state requires a database client")
+        raise CanonicalApplyStateUnavailable("canonical apply control state requires a database client")
 
     ref = db_client.document(MemoryCollections(uid=uid).memory_apply_control_state)
 
+    def _read_snapshot(target_ref: Any, *, unavailable_message: str) -> Any:
+        try:
+            return target_ref.get()
+        except Exception as exc:
+            raise CanonicalApplyStateUnavailable(unavailable_message) from exc
+
     def _read_existing() -> MemoryControlState:
-        snapshot = ref.get()
+        snapshot = _read_snapshot(
+            ref,
+            unavailable_message="canonical apply control state is unreadable",
+        )
         if not getattr(snapshot, "exists", False):
-            raise RuntimeError("canonical apply control state disappeared during provisioning")
+            raise CanonicalApplyStateUnavailable("canonical apply control state disappeared during provisioning")
         try:
             payload = snapshot.to_dict()
             if not isinstance(payload, dict):
                 raise ValueError("control payload must be an object")
             control = MemoryControlState.model_validate(payload)
         except Exception as exc:
-            raise RuntimeError("canonical apply control state is malformed") from exc
+            raise CanonicalApplyStateUnavailable("canonical apply control state is malformed") from exc
         if control.uid != uid:
-            raise RuntimeError("canonical apply control state uid mismatch")
+            raise CanonicalApplyStateUnavailable("canonical apply control state uid mismatch")
         return control
 
-    snapshot = ref.get()
+    snapshot = _read_snapshot(
+        ref,
+        unavailable_message="canonical apply control state is unreadable",
+    )
     if getattr(snapshot, "exists", False):
         control = _read_existing()
         _ensure_maintenance_registry_entry(uid, db_client=db_client)
@@ -97,15 +97,17 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
 
 
 def canonical_memory_maintenance_registry_path(uid: str) -> str:
-    if not uid.strip() or "/" in uid:
-        raise ValueError("uid must be a nonblank path-safe identifier")
+    validate_uid_for_memory_path(uid)
     return f"{CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION}/{uid}"
 
 
 def _ensure_maintenance_registry_entry(uid: str, *, db_client: Any) -> None:
     """Register a UID without storing content or entitlement metadata."""
     ref = db_client.document(canonical_memory_maintenance_registry_path(uid))
-    snapshot = ref.get()
+    try:
+        snapshot = ref.get()
+    except Exception as exc:
+        raise CanonicalApplyStateUnavailable("canonical maintenance registry entry is unreadable") from exc
     expected = {
         "uid": uid,
         "schema_version": CANONICAL_MEMORY_MAINTENANCE_REGISTRY_SCHEMA_VERSION,
@@ -114,9 +116,9 @@ def _ensure_maintenance_registry_entry(uid: str, *, db_client: Any) -> None:
         try:
             payload = snapshot.to_dict()
         except Exception as exc:
-            raise RuntimeError("canonical maintenance registry entry is unreadable") from exc
+            raise CanonicalApplyStateUnavailable("canonical maintenance registry entry is unreadable") from exc
         if payload != expected:
-            raise RuntimeError("canonical maintenance registry entry is malformed")
+            raise CanonicalApplyStateUnavailable("canonical maintenance registry entry is malformed")
         return
     try:
         create = getattr(ref, "create", None)
@@ -125,15 +127,18 @@ def _ensure_maintenance_registry_entry(uid: str, *, db_client: Any) -> None:
         else:
             ref.set(expected)
     except (AlreadyExists, Conflict):
-        snapshot = ref.get()
-        if not getattr(snapshot, "exists", False) or snapshot.to_dict() != expected:
-            raise RuntimeError("canonical maintenance registry entry is malformed")
+        try:
+            snapshot = ref.get()
+            payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+        except Exception as exc:
+            raise CanonicalApplyStateUnavailable("canonical maintenance registry entry is unreadable") from exc
+        if payload != expected:
+            raise CanonicalApplyStateUnavailable("canonical maintenance registry entry is malformed")
 
 
 def delete_canonical_memory_maintenance_registry_entry(uid: str, *, db_client: Any) -> None:
     """Delete the content-free inventory marker during account wipe."""
-    if not uid.strip() or "/" in uid:
-        raise ValueError("uid must be a nonblank path-safe identifier")
+    validate_uid_for_memory_path(uid)
     db_client.document(canonical_memory_maintenance_registry_path(uid)).delete()
 
 
@@ -141,6 +146,7 @@ __all__ = [
     "CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH",
     "CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION",
     "CANONICAL_MEMORY_MAINTENANCE_REGISTRY_SCHEMA_VERSION",
+    "CanonicalApplyStateUnavailable",
     "MemorySystem",
     "ensure_canonical_apply_control_state",
     "canonical_memory_maintenance_registry_path",

@@ -344,11 +344,47 @@ def get_memories(
             },
         )
 
-    memories = MemoryService(db_client=db).read(uid, limit=limit, offset=offset)
-    if category_list:
-        allowed = {category.value for category in category_list}
-        memories = [memory for memory in memories if getattr(memory.category, 'value', memory.category) in allowed]
-    return [CleanerMemory.model_validate(memory.model_dump(mode='json')) for memory in memories]
+    service = MemoryService(db_client=db)
+    allowed = {category.value for category in category_list} if category_list else None
+    if allowed is None:
+        memories = service.read(uid, limit=limit, offset=offset)
+        valid_memories = []
+        for memory in memories:
+            try:
+                valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode='json')))
+            except (AttributeError, TypeError, ValidationError, ValueError):
+                logger.warning('Skipping malformed memory in Developer API list')
+        return valid_memories
+    # Category is a sparse filter.  Read ordered universal pages until the
+    # requested category page is filled instead of filtering after a raw page
+    # (which returned short/empty pages whenever non-matching memories led it).
+    target_end = offset + limit
+    scan_offset = 0
+    matched = []
+    max_scan = 5000
+    while scan_offset < max_scan and len(matched) < target_end:
+        batch_limit = min(500, max_scan - scan_offset)
+        batch = service.read(uid, limit=batch_limit, offset=scan_offset)
+        if not batch:
+            break
+        scan_offset += len(batch)
+        if allowed is None:
+            matched.extend(batch)
+        else:
+            matched.extend(memory for memory in batch if getattr(memory.category, 'value', memory.category) in allowed)
+        if len(batch) < batch_limit:
+            break
+    memories = matched[offset:target_end]
+    valid_memories = []
+    for memory in memories:
+        try:
+            valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode='json')))
+        except (AttributeError, TypeError, ValidationError, ValueError):
+            # MemoryService normally returns validated MemoryDB rows, but a
+            # malformed historical adapter row must not turn this compatibility
+            # endpoint into a 500 for every otherwise healthy memory.
+            logger.warning('Skipping malformed memory in Developer API list')
+    return valid_memories
 
 
 @router.get(

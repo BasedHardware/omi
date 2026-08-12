@@ -51,6 +51,8 @@ DEFAULT_GRAPH_BACKFILL_PAGE_SIZE = 5
 GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER = 5
 DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = DEFAULT_GRAPH_BACKFILL_PAGE_SIZE * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER
 MAX_MAINTENANCE_UIDS_PER_RUN = 100
+CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_control/seed_cursor"
+CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION = 1
 
 
 class CanonicalMaintenanceInventoryUnavailable(RuntimeError):
@@ -78,7 +80,10 @@ def _registry_uid(snapshot: Any) -> Optional[str]:
 
 def _read_registry_cursor(db_client: Any) -> str:
     ref = db_client.document(CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH)
-    snapshot = ref.get()
+    try:
+        snapshot = ref.get()
+    except Exception as exc:
+        raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor unavailable") from exc
     if not getattr(snapshot, "exists", False):
         payload = {"schema_version": 1, "last_uid": ""}
         try:
@@ -107,6 +112,93 @@ def _persist_registry_cursor(db_client: Any, last_uid: str) -> None:
         raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor unavailable") from exc
 
 
+def _read_seed_cursor(db_client: Any) -> str:
+    ref = db_client.document(CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH)
+    try:
+        snapshot = ref.get()
+    except Exception as exc:
+        raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance seed cursor unavailable") from exc
+    if not getattr(snapshot, "exists", False):
+        return ""
+    payload = snapshot.to_dict()
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION
+    ):
+        raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance seed cursor is malformed")
+    last_path = payload.get("last_path", "")
+    if not isinstance(last_path, str):
+        raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance seed cursor is malformed")
+    return last_path
+
+
+def _persist_seed_cursor(db_client: Any, last_path: str) -> None:
+    payload = {"schema_version": CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION, "last_path": last_path}
+    try:
+        db_client.document(CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH).set(payload, merge=True)
+    except Exception as exc:
+        raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance seed cursor unavailable") from exc
+
+
+def _seed_registry_from_existing_memory_states(db_client: Any, *, limit: int) -> None:
+    """Discover pre-registry canonical accounts through a bounded resumable scan.
+
+    Earlier canonical accounts may already have ``memory_state/apply_control``
+    but no neutral maintenance marker because the registry was introduced later.
+    A separate document-path cursor lets this one-time discovery progress across
+    invocations without turning maintenance into an unbounded user scan. Fakes
+    and deployments without collection-group support retain the explicit
+    registry-only seam and simply skip this optional seed pass.
+    """
+    collection_group = getattr(db_client, "collection_group", None)
+    if not callable(collection_group):
+        return
+    bounded_limit = max(1, min(MAX_MAINTENANCE_UIDS_PER_RUN, int(limit)))
+    cursor_path = _read_seed_cursor(db_client)
+    cursor_snapshot = None
+    if cursor_path:
+        try:
+            candidate = db_client.document(cursor_path).get()
+        except Exception as exc:
+            raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance seed cursor unavailable") from exc
+        if getattr(candidate, "exists", False):
+            cursor_snapshot = candidate
+    try:
+        query = collection_group("memory_state").order_by("__name__")
+        if cursor_snapshot is not None:
+            query = query.start_after(cursor_snapshot)
+        page = list(query.limit(bounded_limit).stream())
+        if not page and cursor_snapshot is not None:
+            # Rotate after reaching the tail so every existing account is
+            # revisited when new state documents appear later.
+            page = list(collection_group("memory_state").order_by("__name__").limit(bounded_limit).stream())
+        last_path = cursor_path
+        for snapshot in page:
+            path = getattr(getattr(snapshot, "reference", None), "path", "")
+            parts = path.split("/") if isinstance(path, str) else []
+            if len(parts) != 4 or parts[0] != "users" or parts[2] != "memory_state" or parts[3] != "apply_control":
+                last_path = path if isinstance(path, str) else last_path
+                continue
+            payload = snapshot.to_dict() if hasattr(snapshot, "to_dict") else None
+            uid = parts[1]
+            if not isinstance(payload, dict) or payload.get("uid") != uid or not uid.strip() or "/" in uid:
+                raise CanonicalMaintenanceInventoryUnavailable("canonical memory apply state is malformed")
+            registry_ref = db_client.document(f"{CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION}/{uid}")
+            registry_ref.set(
+                {
+                    "uid": uid,
+                    "schema_version": CANONICAL_MEMORY_MAINTENANCE_REGISTRY_SCHEMA_VERSION,
+                }
+            )
+            last_path = path
+        if page:
+            _persist_seed_cursor(db_client, last_path)
+    except CanonicalMaintenanceInventoryUnavailable:
+        raise
+    except Exception as exc:
+        raise CanonicalMaintenanceInventoryUnavailable("canonical memory state registry seed failed") from exc
+
+
 def bounded_canonical_memory_uid_inventory(
     db_client: Any,
     *,
@@ -124,6 +216,7 @@ def bounded_canonical_memory_uid_inventory(
         raise CanonicalMaintenanceInventoryUnavailable(
             "bounded canonical UID registry is unavailable; provide a registry/index or injectable inventory"
         )
+    _seed_registry_from_existing_memory_states(db_client, limit=bounded_limit)
     cursor = _read_registry_cursor(db_client)
     try:
         # Firestore's public query objects and the strict test fakes both expose

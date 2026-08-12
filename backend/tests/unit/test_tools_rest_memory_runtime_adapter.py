@@ -39,6 +39,29 @@ def test_tools_rest_get_memories_text_preserves_empty_and_invalid_date_contract(
     assert memory_services.get_memories_text(uid="uid-arbitrary-account", start_date="bad").startswith("Error: Invalid")
 
 
+def test_tools_rest_get_memories_text_backfills_after_filtered_first_page(monkeypatch):
+    locked = SimpleNamespace(created_at=datetime.now(timezone.utc), id="locked", is_locked=True)
+    visible = SimpleNamespace(created_at=datetime.now(timezone.utc), id="visible", is_locked=False)
+    calls = []
+
+    class _UniversalService:
+        def __init__(self, **_kwargs):
+            pass
+
+        def read(self, uid, **kwargs):
+            calls.append((uid, kwargs))
+            return [[locked, locked], [visible], []][len(calls) - 1]
+
+    monkeypatch.setattr(memory_services, "MemoryService", _UniversalService)
+    monkeypatch.setattr(memory_services.MemoryDB, "get_memories_as_str", lambda memories: memories[0].id)
+
+    assert memory_services.get_memories_text(uid="uid", limit=2) == "User Memories (1 total):\n\nvisible"
+    assert calls[:2] == [
+        ("uid", {"limit": 2, "offset": 0, "now": None}),
+        ("uid", {"limit": 500, "offset": 2, "now": None}),
+    ]
+
+
 def test_tools_rest_search_memories_text_uses_universal_service_and_preserves_format(monkeypatch):
     calls = []
     memory = SimpleNamespace(

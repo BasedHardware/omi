@@ -17,6 +17,7 @@ from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskStatus
 from models.candidate import (
     CandidateAction,
+    CandidateCompatibilityMetadata,
     CandidateCreate,
     CandidateRecord,
     CandidateResolutionReceipt,
@@ -284,12 +285,23 @@ def _merge_candidate_annotations(existing: CandidateRecord, proposal: CandidateC
         evidence.append(evidence_ref)
         if len(evidence) == MAX_CANDIDATE_EVIDENCE_REFS:
             break
+    compatibility = existing.compatibility
+    if proposal.compatibility is not None:
+        current = compatibility or CandidateCompatibilityMetadata()
+        compatibility = current.model_copy(
+            update={
+                field: value
+                for field in ('metadata', 'category', 'relevance_score')
+                if (value := getattr(proposal.compatibility, field)) is not None
+            }
+        )
     payload = existing.model_dump(mode='python')
     payload.update(
         {
             'capture_confidence': max(existing.capture_confidence, proposal.capture_confidence),
             'ownership_confidence': max(existing.ownership_confidence, proposal.ownership_confidence),
             'evidence_refs': evidence,
+            'compatibility': compatibility,
         }
     )
     return CandidateRecord.model_validate(payload)
@@ -496,6 +508,11 @@ def create_candidate(
                         evidence_ref.model_dump(mode='python', exclude_none=True)
                         for evidence_ref in merged.evidence_refs
                     ],
+                    'compatibility': (
+                        merged.compatibility.model_dump(mode='python', exclude_none=True)
+                        if merged.compatibility is not None
+                        else None
+                    ),
                 },
             )
             if reusable_active_accept and claimed_task_ref is not None and claimed_task is not None:
@@ -546,6 +563,50 @@ def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
     if not snapshot.exists:
         return None
     return parse_snapshot_or_none(CandidateRecord, snapshot)
+
+
+def update_candidate_compatibility_score(
+    uid: str,
+    candidate_id: str,
+    *,
+    relevance_score: int,
+    account_generation: int,
+) -> CandidateRecord:
+    """Update the released staged-task score on the canonical Candidate envelope."""
+    if not 0 <= relevance_score <= 1000:
+        raise ValueError('relevance_score must be between 0 and 1000')
+    candidate_ref = _candidate_ref(uid, candidate_id)
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction):
+        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
+        snapshot = candidate_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            raise CandidateNotFoundError(candidate_id)
+        candidate = parse_snapshot_strict(CandidateRecord, snapshot)
+        if candidate.account_generation != account_generation:
+            raise CandidateGenerationMismatchError(candidate_id)
+        is_staged_compatibility_candidate = (
+            candidate.subject_kind == CandidateSubjectKind.task
+            and candidate.proposed_action == CandidateAction.create
+            and (
+                candidate.source_surface == 'legacy_staged'
+                or any(
+                    evidence.kind.value == 'external' and evidence.id.startswith('legacy-staged-')
+                    for evidence in candidate.evidence_refs
+                )
+            )
+        )
+        if candidate.status != CandidateStatus.pending or not is_staged_compatibility_candidate:
+            raise CandidateConflictError('Candidate is not an active staged-task compatibility proposal')
+        existing = candidate.compatibility or CandidateCompatibilityMetadata()
+        compatibility = existing.model_copy(update={'relevance_score': relevance_score})
+        write_transaction.update(candidate_ref, {'compatibility': compatibility.model_dump(mode='python')})
+        return candidate.model_copy(update={'compatibility': compatibility})
+
+    return apply(transaction)
 
 
 def list_candidates(
@@ -1194,6 +1255,7 @@ __all__ = [
     'complete_candidate_integration_dispatch',
     'create_candidate',
     'get_candidate',
+    'update_candidate_compatibility_score',
     'list_candidate_integration_dispatches',
     'list_candidates',
     'pending_candidate_semantic_identity',

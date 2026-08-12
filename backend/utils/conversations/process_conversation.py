@@ -74,6 +74,7 @@ from utils.llm.memories import (
     extract_canonical_l1_memory_candidates,
     extract_memories_from_text,
 )
+from utils.llm.temporal import date_in_tz
 from utils.conversations.memory_extraction_telemetry import (
     PATH_CANONICAL,
     ConversationMemoryExtractionResult,
@@ -871,6 +872,16 @@ def _extract_memories_canonical(
     language = users_db.get_user_language_preference(uid)
     capture_candidates: List[Tuple[Memory, List[str], str, List[str], bool]] = []
 
+    # Relative dates in delayed external content must resolve against capture
+    # time, not the worker's current wall clock.  Keep this date grounding on
+    # the universal extractor path as well as the retired legacy path.
+    content_date = None
+    if conversation.started_at is not None:
+        try:
+            content_date = date_in_tz(conversation.started_at, notification_db.get_user_time_zone(uid))
+        except Exception as exc:
+            logger.warning("canonical memory extraction content_date_failed uid=%s reason=%s", uid, exc)
+
     if conversation.source == ConversationSource.external_integration:
         ext_data = conversation.external_data or {}
         text_content = ext_data.get('text')
@@ -883,6 +894,7 @@ def _extract_memories_canonical(
                     text_content,
                     text_source,
                     language=language,
+                    content_date=content_date,
                     strict=True,
                 )
             ]

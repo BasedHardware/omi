@@ -405,17 +405,34 @@ def list_default_mcp_memories(
     """List universal MCP memories while retaining the old result envelope."""
     from utils.memory.memory_service import MemoryService
 
-    memories = [
-        memory.model_dump(mode='json') for memory in MemoryService(db_client=db_client).read(uid, limit=500, offset=0)
-    ]
+    service = MemoryService(db_client=db_client)
+    bounded_limit = max(1, min(limit, 500))
+    bounded_offset = max(0, offset)
+    target_end = bounded_offset + bounded_limit
+    max_scan = 5000
+    scanned_offset = 0
+    source_rows: List[Dict[str, Any]] = []
+    # Read in universal pages, then apply sparse filters and the requested
+    # offset.  The old adapter fetched only the first 500 rows before slicing,
+    # silently hiding later memories from larger accounts.
+    while scanned_offset < max_scan and len(source_rows) < max_scan:
+        batch_limit = min(500, max_scan - scanned_offset)
+        batch = service.read(uid, limit=batch_limit, offset=scanned_offset)
+        if not batch:
+            break
+        source_rows.extend(memory.model_dump(mode='json') for memory in batch)
+        scanned_offset += len(batch)
+        if len(batch) < batch_limit:
+            break
+
     memories = filter_and_sort_memories(
-        memories,
+        source_rows,
         reviewed=reviewed,
         manually_added=manually_added,
         categories=categories,
         sort='created_desc',
     )
-    page = memories[offset : offset + max(1, min(limit, 500))]
+    page = memories[bounded_offset:target_end]
     return McpMemoryListResult(memories=page, read_decision=MemoryReadDecision.USE_MEMORY)
 
 

@@ -847,9 +847,10 @@ class TestAcquireChatSession:
         mock_query.limit.return_value = mock_query
         mock_query.stream.return_value = []  # No existing sessions
 
-        with patch.object(chat_db, 'db') as patched_db, patch.object(
-            chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}
-        ) as mock_create:
+        with (
+            patch.object(chat_db, 'db') as patched_db,
+            patch.object(chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}) as mock_create,
+        ):
             patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
                 mock_query
             )
@@ -1273,9 +1274,10 @@ class TestSaveMessageSessionBehavior:
         message_ref.get.side_effect = [missing, winner]
         message_ref.create.side_effect = chat_db.AlreadyExists('concurrent writer won')
 
-        with patch.object(chat_db, 'acquire_chat_session', return_value='locally-acquired-session'), patch.object(
-            chat_db, 'db'
-        ) as patched_db:
+        with (
+            patch.object(chat_db, 'acquire_chat_session', return_value='locally-acquired-session'),
+            patch.object(chat_db, 'db') as patched_db,
+        ):
             patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
                 message_ref
             )
@@ -1314,9 +1316,10 @@ class TestSaveMessageSessionBehavior:
         mock_session_ref = MagicMock()
         mock_session_ref.get.return_value.exists = True
 
-        with patch.object(chat_db, 'acquire_chat_session', return_value='sess-1'), patch.object(
-            chat_db, 'db'
-        ) as patched_db:
+        with (
+            patch.object(chat_db, 'acquire_chat_session', return_value='sess-1'),
+            patch.object(chat_db, 'db') as patched_db,
+        ):
             # Mock message write
             patched_db.collection.return_value.document.return_value.collection.side_effect = lambda name: (
                 MagicMock(document=MagicMock(return_value=mock_session_ref))
@@ -1637,8 +1640,9 @@ class TestScoreComputation:
 
         mock_col.where = col_where
 
-        with patch.object(action_items_db, 'db') as patched_db, patch.object(
-            action_items_db, 'FieldFilter', side_effect=tracking_filter
+        with (
+            patch.object(action_items_db, 'db') as patched_db,
+            patch.object(action_items_db, 'FieldFilter', side_effect=tracking_filter),
         ):
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
             result = action_items_db.get_scores('test-uid', date='2025-01-15')
@@ -1669,8 +1673,9 @@ class TestScoreComputation:
             captured.append((field, op, value))
             return original_ff(field, op, value)
 
-        with patch.object(action_items_db, 'db') as patched_db, patch.object(
-            action_items_db, 'FieldFilter', side_effect=tracking_filter
+        with (
+            patch.object(action_items_db, 'db') as patched_db,
+            patch.object(action_items_db, 'FieldFilter', side_effect=tracking_filter),
         ):
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
             action_items_db.get_scores('test-uid', date='2026-07-19')
@@ -1932,21 +1937,27 @@ class TestPromoteResponseWireCompat:
     """Verify promote endpoint returns PromoteResponse envelope expected by Swift client."""
 
     def test_promote_returns_envelope_when_task_exists(self):
-        """Router wraps promoted action_item in {promoted: true, reason: null, promoted_task: {...}}."""
+        """Router selects the first projection and builds the response envelope."""
         from routers.staged_tasks import promote_staged_task
 
         mock_action_item = {'id': 'ai-1', 'description': 'Test task', 'completed': False}
+        candidate = MagicMock(candidate_id='candidate-1')
 
         with (
             patch.object(staged_router, '_merged_staged_projection', return_value=[{'id': 'candidate-1'}]),
             patch.object(
                 staged_router,
-                'promote_staged_task_by_id',
-                return_value={'promoted': True, 'reason': None, 'promoted_task': mock_action_item},
+                '_control',
+                return_value=MagicMock(account_generation=7),
             ),
+            patch.object(staged_router, '_candidate_for_public_id', return_value=candidate),
+            patch.object(staged_router, '_accept_candidate', return_value=mock_action_item) as accept_candidate,
+            patch.object(staged_router, '_retire_candidate_historical_rows') as retire_rows,
         ):
             result = promote_staged_task(uid='test-uid')
 
+        accept_candidate.assert_called_once_with('test-uid', candidate, account_generation=7)
+        retire_rows.assert_called_once_with('test-uid', candidate)
         assert result['promoted'] is True
         assert result['reason'] is None
         assert result['promoted_task'] == mock_action_item

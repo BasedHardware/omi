@@ -47,6 +47,7 @@ def _control(uid: str):
 
 def _candidate_as_staged(candidate: CandidateRecord) -> dict:
     task_change = candidate.task_change
+    compatibility = candidate.compatibility
     return {
         'id': candidate.candidate_id,
         'description': getattr(task_change, 'description', None) or 'Suggested task',
@@ -56,6 +57,9 @@ def _candidate_as_staged(candidate: CandidateRecord) -> dict:
         'due_at': getattr(task_change, 'due_at', None),
         'source': candidate.source_surface,
         'priority': getattr(task_change, 'priority', None),
+        'metadata': compatibility.metadata if compatibility is not None else None,
+        'category': compatibility.category if compatibility is not None else None,
+        'relevance_score': compatibility.relevance_score if compatibility is not None else None,
     }
 
 
@@ -280,6 +284,9 @@ def create_staged_task(request: CreateStagedTaskRequest, uid: str = Depends(auth
         'due_at': request.due_at.isoformat() if request.due_at else None,
         'priority': request.priority,
         'source': request.source,
+        'metadata': request.metadata,
+        'category': request.category,
+        'relevance_score': request.relevance_score,
     }
     digest = hashlib.sha256(
         json.dumps(identity_payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
@@ -290,6 +297,9 @@ def create_staged_task(request: CreateStagedTaskRequest, uid: str = Depends(auth
         'due_at': request.due_at,
         'source': request.source,
         'priority': request.priority,
+        'metadata': request.metadata,
+        'category': request.category,
+        'relevance_score': request.relevance_score,
     }
     candidate = _materialize_historical_candidate(
         uid,
@@ -388,9 +398,31 @@ def batch_update_staged_scores(
     request: BatchUpdateScoresRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    # Scores belong only to the released historical review UI. Candidate
-    # authority deliberately ignores unknown Candidate IDs here.
-    staged_tasks_db.batch_update_staged_scores(uid, [score.model_dump() for score in request.scores])
+    control = _control(uid)
+    for score in request.scores:
+        candidate = _candidate_for_public_id(uid, score.id, account_generation=control.account_generation)
+        if candidate is None:
+            row = _staged_row(uid, score.id)
+            if row is None:
+                continue
+            candidate = _materialize_historical_candidate(uid, row, account_generation=control.account_generation)
+        try:
+            candidates_db.update_candidate_compatibility_score(
+                uid,
+                candidate.candidate_id,
+                relevance_score=score.relevance_score,
+                account_generation=control.account_generation,
+            )
+        except candidates_db.CandidateNotFoundError:
+            # A concurrent resolution may close and clean up the Candidate;
+            # the endpoint remains idempotent for the released client.
+            continue
+        except candidates_db.CandidateConflictError:
+            # Accepted, rejected, expired, or non-staged Candidates are
+            # immutable through the released staged-score compatibility API.
+            continue
+        except candidates_db.CandidateGenerationMismatchError as exc:
+            raise HTTPException(status_code=409, detail='Task account generation changed') from exc
     return {'status': 'ok'}
 
 

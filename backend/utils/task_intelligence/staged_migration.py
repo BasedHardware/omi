@@ -13,6 +13,7 @@ import database.staged_tasks as staged_tasks_db
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope, TaskCreatePayload, TaskOwner, TaskPriority
 from models.candidate import (
     CandidateAction,
+    CandidateCompatibilityMetadata,
     CandidateCreate,
     CandidateMigrationReport,
     CandidateSubjectKind,
@@ -50,6 +51,15 @@ def proposal_from_legacy_staged(row: dict[str, Any]) -> CandidateCreate:
                 )
             ],
             'source_surface': 'legacy_staged',
+            'compatibility': (
+                CandidateCompatibilityMetadata(
+                    metadata=row.get('metadata'),
+                    category=row.get('category'),
+                    relevance_score=row.get('relevance_score'),
+                )
+                if any(row.get(field) is not None for field in ('metadata', 'category', 'relevance_score'))
+                else None
+            ),
         }
     )
 

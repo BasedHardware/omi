@@ -223,6 +223,16 @@ def _legacy_memory(mid):
     return m
 
 
+class _ServiceMemory:
+    """Minimal MemoryService row that leaves compatibility normalization to the route."""
+
+    def __init__(self, raw):
+        self._raw = raw
+
+    def model_dump(self, **_kwargs):
+        return dict(self._raw)
+
+
 def _build(page, monkeypatch):
     auth_context = developer_module.ProductAuthorizationContext(
         uid='uid1', consumer='developer_api', surface='developer_api', app_id='test-app', key_id='test-key'
@@ -238,16 +248,8 @@ def _build(page, monkeypatch):
             status_code=200,
         )
     )
-    normalized = []
-    for raw in page:
-        try:
-            normalized.append(developer_module.CleanerMemory.model_validate(raw))
-        except ValueError:
-            # MemoryService's historical adapter skips rows without a valid
-            # identity instead of poisoning the whole compatibility page.
-            continue
     memory_service = MagicMock()
-    memory_service.read.return_value = normalized
+    memory_service.read.return_value = [_ServiceMemory(raw) for raw in page]
     monkeypatch.setattr(developer_module, 'MemoryService', MagicMock(return_value=memory_service))
     app = FastAPI()
     app.include_router(developer_router)

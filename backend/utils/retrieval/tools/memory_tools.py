@@ -151,20 +151,33 @@ def get_memories_tool(
 
     try:
         service = MemoryService(db_client=firestore_db)
-        memories = service.read(uid, limit=min(limit, 5000), offset=max(offset, 0))
-        if start_dt or end_dt:
-            all_memories = service.read(uid, limit=5000, offset=0)
-            memories = [
-                memory
-                for memory in all_memories
-                if not (start_dt and memory.created_at and memory.created_at < start_dt)
-                and not (end_dt and memory.created_at and memory.created_at > end_dt)
-            ][offset : offset + limit]
         # Product/API reads retain a short locked preview for released clients,
         # but chat context must never receive paid-plan locked content. Keep the
         # privacy boundary at this LLM-facing consumer even though all rows now
         # come through the universal MemoryService.
-        memories = [memory for memory in memories if not memory.is_locked]
+        target_end = min(max(offset, 0) + limit, 5000)
+        scan_offset = 0
+        visible: List[MemoryDB] = []
+        max_scan = 5000
+        while scan_offset < max_scan and len(visible) < target_end:
+            batch_limit = min(500, max_scan - scan_offset)
+            fetch_limit = target_end if scan_offset == 0 else batch_limit
+            batch = service.read(uid, limit=fetch_limit, offset=scan_offset)
+            if not batch:
+                break
+            scan_offset += len(batch)
+            for memory in batch:
+                if memory.is_locked:
+                    continue
+                created = memory.created_at
+                if start_dt and created and created < start_dt:
+                    continue
+                if end_dt and created and created > end_dt:
+                    continue
+                visible.append(memory)
+            if len(batch) < fetch_limit:
+                break
+        memories = visible[max(offset, 0) : target_end]
     except Exception as e:
         logger.error(e)
 

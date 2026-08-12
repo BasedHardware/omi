@@ -394,7 +394,12 @@ def test_authorize_request_rejects_legacy_omi_client_id():
 
 
 def test_legacy_api_key_helper_rejects_oauth_tokens():
-    with patch('routers.mcp_sse.mcp_oauth_db.validate_access_token') as validate_access_token:
+    # Keep this auth-shape test independent from the account-deletion Firestore
+    # fence; the OAuth token must be rejected before any account state matters.
+    with (
+        patch('routers.mcp_sse.mcp_oauth_db.validate_access_token') as validate_access_token,
+        patch.object(sse, 'enforce_account_deletion_http_access'),
+    ):
         validate_access_token.return_value = {
             'uid': UID,
             'scopes': ['memories.read'],
@@ -663,8 +668,7 @@ def _allowed_empty_result():
     return SimpleNamespace(allowed=True, status_code=200, observability={'enabled': True})
 
 
-def _rest_universal_patches(adapter_attr, result):
-    del adapter_attr
+def _rest_universal_patches(result):
     service = MagicMock()
     service.read.return_value = []
     service.search_mcp.return_value = []
@@ -672,12 +676,10 @@ def _rest_universal_patches(adapter_attr, result):
         patch.object(rest, 'authorize_memory_external_default_memory_read', return_value=result),
         patch.object(rest, 'MemoryService', return_value=service),
         patch.object(rest, 'logger'),
-        patch.object(rest, 'db', rest.db),
     )
 
 
-def _sse_universal_patches(adapter_attr, result):
-    del adapter_attr
+def _sse_universal_patches(result):
     service = MagicMock()
     service.read.return_value = []
     service.search_mcp.return_value = []
@@ -685,19 +687,18 @@ def _sse_universal_patches(adapter_attr, result):
         patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=result),
         patch.object(sse, 'MemoryService', return_value=service),
         patch.object(sse, 'logger'),
-        patch.object(sse, 'db', sse.db),
     )
 
 
 def _run_rest_list(result):
-    a, b, c, d = _rest_universal_patches('list_default_mcp_memories', result)
-    with a, b, c, d:
+    a, b, c = _rest_universal_patches(result)
+    with a, b, c:
         return rest.get_memories(auth_context=SimpleNamespace(uid=UID))
 
 
 def _run_rest_search(result):
-    a, b, c, d = _rest_universal_patches('search_default_mcp_memories_vector', result)
-    with a, b, c, d:
+    a, b, c = _rest_universal_patches(result)
+    with a, b, c:
         return rest.search_memories(query='espresso', auth_context=SimpleNamespace(uid=UID))
 
 
@@ -706,14 +707,14 @@ def _sse_auth_context():
 
 
 def _run_sse_list(result):
-    a, b, c, d = _sse_universal_patches('list_default_mcp_memories', result)
-    with a, b, c, d:
+    a, b, c = _sse_universal_patches(result)
+    with a, b, c:
         return sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
 
 
 def _run_sse_search(result):
-    a, b, c, d = _sse_universal_patches('search_default_mcp_memories_vector', result)
-    with a, b, c, d:
+    a, b, c = _sse_universal_patches(result)
+    with a, b, c:
         return sse.execute_tool(UID, 'search_memories', {'query': 'espresso'}, auth_context=_sse_auth_context())
 
 
