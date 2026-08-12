@@ -398,12 +398,15 @@ def _create_byok_client(
 
     if provider == 'openrouter':
         # Gemini-based OpenRouter models reroute to Gemini direct via BYOK
-        if model.startswith('gemini'):
-            route_options = get_route_options(feature, model, provider)
-            if 'temperature' in route_options:
-                kwargs['temperature'] = route_options['temperature']
-            return _cached_openai_chat(model, byok_key, {**kwargs, 'base_url': GEMINI_OPENAI_BASE_URL})
-        return None  # Non-Gemini OpenRouter: no BYOK support
+        route_options = get_route_options(feature, model, provider)
+        if 'temperature' in route_options:
+            kwargs['temperature'] = route_options['temperature']
+        routed_model = f'google/{model}' if model.startswith('gemini') else model
+        return _cached_openai_chat(
+            routed_model,
+            byok_key,
+            {**kwargs, 'base_url': 'https://openrouter.ai/api/v1', 'default_headers': {'X-Title': 'Omi Chat'}},
+        )
 
     return None
 
@@ -496,8 +499,24 @@ def get_llm(
             get_active_profile_name(),
         )
 
-    byok_provider = _effective_byok_provider(model, provider)
-    byok_key = get_byok_key(byok_provider)
+    byok_key = get_byok_key('openrouter')
+    if byok_key:
+        provider = 'openrouter'
+        byok_provider = 'openrouter'
+        model = 'gemini-2.5-flash-lite'
+    else:
+        byok_provider = _effective_byok_provider(model, provider)
+        byok_key = get_byok_key(byok_provider)
+    if not byok_key:
+        for candidate in ('openrouter', 'openai', 'gemini'):
+            candidate_key = get_byok_key(candidate)
+            if candidate_key:
+                provider = candidate
+                byok_provider = candidate
+                byok_key = candidate_key
+                if candidate == 'gemini' and not model.startswith('gemini'):
+                    model = 'gemini-2.5-flash-lite'
+                break
     byok_profile = get_byok_profile()
 
     if byok_key and byok_profile:
