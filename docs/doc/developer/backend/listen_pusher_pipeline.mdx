@@ -49,8 +49,11 @@ Pre-recorded STT results from providers such as Modulate and Parakeet are
 normalized before they are written as transcript segments. Consecutive entries
 from the same speaker may be merged when their gap is under 30 seconds, but no
 normalized segment may span more than 30 seconds. A provider entry that is
-already longer than 30 seconds is split into contiguous slices before merging,
-with its text distributed across those slices.
+already longer than 30 seconds is split into contiguous equal-duration slices
+before merging — each slice is at most 30 seconds — and its text is distributed
+evenly across those slices, so timestamps stay proportional to the text they
+carry. A slice is never emitted without text: an entry with fewer words than
+slices is split into as many slices as it has words.
 
 Every `/v4/listen` stream receives a durable, user-scoped `recording_session`
 resource before it creates or resumes a conversation. A client-generated
