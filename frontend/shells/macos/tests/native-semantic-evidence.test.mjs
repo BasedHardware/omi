@@ -125,7 +125,14 @@ test(
 
 test(
   "headed shell keyboard sequence is available as an explicit operator probe",
-  { skip: process.env.OMI_NATIVE_SEMANTIC_TARGET_PID ? false : "set OMI_NATIVE_SEMANTIC_TARGET_PID for headed-shell evidence" },
+  {
+    skip:
+      process.env.OMI_NATIVE_SEMANTIC_TARGET_PID &&
+      process.env.OMI_ALLOW_TEMPORARY_FOCUS === "1" &&
+      process.env.OMI_RUN_INTERACTIVE_FIXTURE_TESTS === "1"
+        ? false
+        : "set target PID plus OMI_ALLOW_TEMPORARY_FOCUS=1 and OMI_RUN_INTERACTIVE_FIXTURE_TESTS=1",
+  },
   () => {
     const scratch = mkdtempSync(join(tmpdir(), "omi-native-semantic-operator-"));
     try {
