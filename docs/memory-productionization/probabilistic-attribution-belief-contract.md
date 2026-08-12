@@ -7,8 +7,8 @@ Decision: David, 2026-08-12 America/New_York
 ## Purpose
 
 Noisy observations must not be forced into `owner | discard`. Omi processes
-policy-eligible evidence broadly, retains exact provenance and uncertainty, and expresses
-conclusions according to calibrated belief and consequence. This contract applies to
+policy-eligible evidence broadly, retains exact provenance and uncertainty, and exposes
+calibrated beliefs without encoding action consequences. This contract applies to
 speech, OCR, images, imported records, and future modalities.
 
 ## Separate coordinates
@@ -20,7 +20,7 @@ The implementation must not collapse these coordinates:
 3. probabilistic source attribution;
 4. probabilistic claim-subject attribution;
 5. probabilistic claim truth; and
-6. versioned product-expression and action policy.
+6. separately composed presentation and agent/action policy.
 
 A probability cannot grant access or defeat deletion. Access remains fail-closed and is
 revalidated before selection and release. Conversely, an authorized reader does not make
@@ -31,8 +31,8 @@ an uncertain observation true or owner-attributed.
 A canonical attribution-belief revision must bind its account, exact observation/content
 digest, candidate hypotheses including unknown, support and counter-evidence refs,
 independence groups, prior revision, graph frontier, ambiguity/conflict markers, model and
-calibration contracts, calibrated probability or empirical band, and allowed expression
-classes. It is immutable and content-addressed; later evidence appends a new revision.
+calibration contracts, and calibrated probability or empirical band. It is immutable and
+content-addressed; later evidence appends a new revision.
 
 The aggregator may strengthen or weaken belief from related evidence only when provenance
 establishes how the factors depend on one another. A transcript, extraction, summary,
@@ -45,9 +45,9 @@ evidence but never rewrite the observation. Device possession, capture enrollmen
 `is_user`, diarization, voice similarity, first-person grammar, profile consistency, OCR
 confidence, and model/frame outputs are evidence factors, not certainty by themselves.
 
-## Product expression
+## Presentation and agent use
 
-The read policy maps calibrated belief and consequence to one of these closed classes:
+An external read/presentation policy may map calibrated belief to classes such as:
 
 - `owner_direct`: direct `you/your` wording;
 - `owner_qualified`: `you probably/likely` or equivalent calibrated uncertainty;
@@ -56,9 +56,10 @@ The read policy maps calibrated belief and consequence to one of these closed cl
 - `abstain`.
 
 An uncertain owner attribution must never be rendered as certain. Thresholds are learned
-from fresh held-out data, not embedded in this contract, and may be stricter for identity,
-health, finance, relationships, or consequential actions. Probabilistic memory never
-silently authorizes a consequential external action; that policy is separate.
+from fresh held-out data, not embedded in this contract. The memory layer returns the same
+belief and provenance regardless of the caller's intended consequence. Approvals,
+permissions, confirmations, and side-effect rules belong to the consuming product,
+agent, or action layer and may evolve without a memory migration.
 
 ## Shadow boundary
 
@@ -66,8 +67,20 @@ Shadow is a bounded calibration and rollout mechanism, not permanent uncertain s
 It runs the complete candidate belief pipeline on finalized, policy-eligible observations
 without changing authoritative memories or product answers. Promotion requires frozen
 machine gates, repeated read evaluation where applicable, blind truth grading, calibrated
-coverage/error evidence, and a new strategy coordinate. Shadow retention and bystander
-admission remain controlled by separately ratified privacy and disposition policy.
+coverage/error evidence, and a new strategy coordinate. Shadow retention remains
+controlled by separately ratified privacy and disposition policy.
+
+## Bystander and third-party retention
+
+Policy-permitted third-party observations may enter the owner's private authoritative
+memory graph after shadow qualification. They retain their actual or unknown subject,
+source provenance, calibrated uncertainty, citations, and restrictive policy labels. They
+may support qualified private recall but never silently become owner facts.
+
+This does not weaken capture policy or authorize public sharing, cross-account disclosure,
+or a probability-based grant. Exact internal subject vocabulary may evolve, but grammar,
+device possession, profile similarity, or a derived model result cannot erase the actual
+or unknown third-party subject.
 
 ## Compatibility and migration
 
@@ -85,9 +98,8 @@ Before activation, tests and held-out evaluation must prove:
 - cross-account, stale-frontier, deletion, and unauthorized support rejection;
 - dependency-aware aggregation with no derivative/self-confirmation gain;
 - counter-evidence, correction, revocation, and contradiction can lower belief;
-- wording classes are deterministic for the same belief/policy coordinates;
+- an external wording policy is deterministic for the same belief/policy coordinates;
 - no unauthorized or hidden support affects score, ranking, wording, timing, or presence;
 - uncertainty calibration and coverage on fresh modality-specific data; and
 - zero confidently wrong owner answers on the standing blind floor without collapsing
   useful correct/partly recall.
-
