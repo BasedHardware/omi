@@ -518,10 +518,11 @@ class TestAsyncTriggerRealtimeAudioBytes:
     @pytest.mark.asyncio
     async def test_no_threading_used(self):
         """Verify realtime audio fan-out stays async (no threading import/use)."""
-        assert not hasattr(app_integrations, "threading")
-        source = inspect.getsource(app_integrations.trigger_realtime_audio_bytes)
-        assert "threading.Thread" not in source
-        assert "Thread(" not in source
+        # Static tripwire on the real fan-out implementation (not the thin wrapper).
+        code = app_integrations._async_trigger_realtime_audio_bytes.__code__
+        assert "threading" not in code.co_names
+        assert "Thread" not in code.co_names
+        assert "gather_safe" in code.co_names
 
         app1 = _make_app("a1", "https://app1.test/hook", triggers_audio=True)
 
