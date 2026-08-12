@@ -915,6 +915,29 @@ class TestBYOKFingerprintValidation:
         finally:
             _byok_ctx.reset(token)
 
+    def test_oauth_selection_stores_a_fresh_credential_for_the_request(self):
+        from utils.byok import (
+            _byok_ctx,
+            _byok_llm_provider_ctx,
+            _byok_oauth_credential_ctx,
+            get_byok_oauth_credential,
+            validate_byok_request,
+        )
+
+        credential = {'provider': 'chatgpt', 'access_token': 'access-2', 'refresh_token': 'refresh-2'}
+        key_token = _byok_ctx.set({})
+        provider_token = _byok_llm_provider_ctx.set('chatgpt')
+        credential_token = _byok_oauth_credential_ctx.set(None)
+        try:
+            with patch('utils.llm.oauth.get_credential', return_value=credential) as get_credential:
+                validate_byok_request('oauth-uid')
+            get_credential.assert_called_once_with('oauth-uid', 'chatgpt')
+            assert get_byok_oauth_credential() == credential
+        finally:
+            _byok_ctx.reset(key_token)
+            _byok_llm_provider_ctx.reset(provider_token)
+            _byok_oauth_credential_ctx.reset(credential_token)
+
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
     def test_header_for_unenrolled_provider_is_not_used(self, mock_get_state):

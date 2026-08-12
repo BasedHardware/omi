@@ -314,9 +314,9 @@ def validate_byok_request(uid: str) -> None:
     provider = get_byok_llm_provider()
     if provider in {'chatgpt', 'grok'}:
         try:
-            from database import llm_oauth as llm_oauth_db
+            from utils.llm.oauth import get_credential as get_llm_oauth_credential
 
-            credential = llm_oauth_db.get_credential(uid, provider)
+            credential = get_llm_oauth_credential(uid, provider)
         except Exception as error:
             raise HTTPException(status_code=503, detail='LLM OAuth credential is temporarily unavailable') from error
         if credential is None:
