@@ -98,6 +98,7 @@ BYOK_HEADERS = {
     'openai': 'x-byok-openai',
     'anthropic': 'x-byok-anthropic',
     'gemini': 'x-byok-gemini',
+    'openrouter': 'x-byok-openrouter',
     'deepgram': 'x-byok-deepgram',
 }
 
@@ -226,10 +227,10 @@ def _check_byok_validity(uid: str) -> Optional[str]:
     # provider fingerprint.
     stored_fingerprints = state.get('fingerprints', {})
 
-    for provider, stored_fp in stored_fingerprints.items():
-        raw_key = request_keys.get(provider)
-        if not raw_key:
-            return f"BYOK key header missing for enrolled provider: {provider}"
+    for provider, raw_key in request_keys.items():
+        stored_fp = stored_fingerprints.get(provider)
+        if not stored_fp:
+            continue
         request_fp = hashlib.sha256(raw_key.encode()).hexdigest()
         # Accept either the current peppered form or the legacy plain form,
         # so users enrolled before BYOK_FINGERPRINT_PEPPER was set aren't
@@ -244,8 +245,7 @@ def _check_byok_validity(uid: str) -> Optional[str]:
     # loop above never sees it and it would reach the provider clients unvalidated. Drop
     # it, mirroring the non-enrolled-user path above: anything we cannot verify must not
     # be used, and downstream falls back to Omi's own key for that provider.
-    if any(provider not in stored_fingerprints for provider in request_keys):
-        _byok_ctx.set({p: key for p, key in request_keys.items() if p in stored_fingerprints})
+    _byok_ctx.set({p: key for p, key in request_keys.items() if p in stored_fingerprints})
 
     return None
 
