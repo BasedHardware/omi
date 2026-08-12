@@ -81,7 +81,7 @@ def delete_credential(uid: str, provider: str) -> None:
         ),
         None,
     )
-    update = {f'llm_oauth.{provider}': firestore.DELETE_FIELD}
+    update: dict[str, Any] = {f'llm_oauth.{provider}': firestore.DELETE_FIELD}
     if data.get('llm_oauth_provider') == provider:
         update['llm_oauth_provider'] = next_provider
     if next_provider is None and not (data.get('byok') or {}).get('fingerprints'):

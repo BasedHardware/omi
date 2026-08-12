@@ -97,8 +97,10 @@ def get_credential(uid: str, provider: str | None = None) -> dict[str, Any] | No
     expires_at = credential.get('expires_at')
     if isinstance(expires_at, int | float) and expires_at > time.time() + 60:
         return credential
-    provider = credential['provider']
-    config = _PROVIDERS[provider]
+    credential_provider = credential.get('provider')
+    if not isinstance(credential_provider, str) or credential_provider not in _PROVIDERS:
+        raise LLMOAuthError('Provider session is invalid; reconnect it in Settings')
+    config = _PROVIDERS[credential_provider]
     try:
         response = httpx.post(
             config['token_url'],
@@ -119,6 +121,6 @@ def get_credential(uid: str, provider: str | None = None) -> dict[str, Any] | No
         raise LLMOAuthError('Provider returned an invalid refresh response') from error
     if not isinstance(payload, dict):
         raise LLMOAuthError('Provider returned an invalid refresh response')
-    refreshed = _credential(provider, payload, credential['refresh_token'])
-    llm_oauth_db.save_credential(uid, provider, refreshed)
-    return {'provider': provider, **refreshed}
+    refreshed = _credential(credential_provider, payload, credential['refresh_token'])
+    llm_oauth_db.save_credential(uid, credential_provider, refreshed)
+    return {'provider': credential_provider, **refreshed}
