@@ -217,6 +217,11 @@ _TRIAL_PAYWALL_CACHE_TTL_SECONDS = 300
 _BYOK_REQUIRED_PROVIDERS = ("openai", "anthropic", "gemini", "deepgram")
 
 
+def _request_has_llm_byok_key() -> bool:
+    keys = get_byok_keys()
+    return any(keys.get(provider) for provider in ('openrouter', 'openai', 'gemini', 'anthropic'))
+
+
 def _request_has_all_byok_keys() -> bool:
     """True if the *current request* carries headers for all 4 enrolled BYOK
     providers.
@@ -266,7 +271,7 @@ def _is_trial_expired_cached(uid: str, *, firestore_client: Any | None = None, p
     # cache TTL is 5 min and Firestore's BYOK `is_active` heartbeat is 24 h,
     # so even a perfectly-configured BYOK user can transiently look stale to
     # Firestore. Trust the live request.
-    if _request_has_all_byok_keys():
+    if _request_has_llm_byok_key():
         return False
 
     cache_key = f"trial_paywall:expired:{uid}"
@@ -1111,9 +1116,7 @@ def enforce_chat_quota(
     # Require an LLM provider key on this request (not just any BYOK header)
     # so a user can't activate with fake fingerprints or send only x-byok-deepgram
     # to bypass chat quota while chat falls back to Omi's OpenAI/Anthropic keys.
-    if users_db.is_byok_active(uid, firestore_client=firestore_client) and (
-        get_byok_key('openai') or get_byok_key('anthropic')
-    ):
+    if users_db.is_byok_active(uid, firestore_client=firestore_client) and _request_has_llm_byok_key():
         return
 
     snapshot = get_chat_quota_snapshot(uid, platform=platform, firestore_client=firestore_client, provision=provision)
