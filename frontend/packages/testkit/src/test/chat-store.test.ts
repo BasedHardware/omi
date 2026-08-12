@@ -332,6 +332,94 @@ test("an admitted generation without a native stream fails explicitly and stays 
   );
 });
 
+test("two concurrent generation terminals append independently and survive reopen", async () => {
+  const disk = new MemoryStore();
+  const store = await ChatMessagesStore.open(
+    disk.openBridge("concurrent-terminals"),
+    new ManualEnv(),
+    new ScriptedHttp(),
+  );
+  const terminalWriter = store as unknown as {
+    recordGenerationTerminal(
+      generationId: string,
+      clientMessageId: RecordId,
+      terminal: { kind: "failed"; error: { code: string; retryable: boolean } },
+    ): Promise<void>;
+  };
+
+  await Promise.all([
+    terminalWriter.recordGenerationTerminal(
+      "generation-concurrent-one",
+      "message-concurrent-one" as RecordId,
+      { kind: "failed", error: { code: "provider_down", retryable: true } },
+    ),
+    terminalWriter.recordGenerationTerminal(
+      "generation-concurrent-two",
+      "message-concurrent-two" as RecordId,
+      { kind: "failed", error: { code: "context_unavailable", retryable: false } },
+    ),
+  ]);
+
+  const expected = [
+    {
+      generationId: "generation-concurrent-one",
+      clientMessageId: "message-concurrent-one",
+      terminal: { kind: "failed", error: { code: "provider_down", retryable: true } },
+    },
+    {
+      generationId: "generation-concurrent-two",
+      clientMessageId: "message-concurrent-two",
+      terminal: { kind: "failed", error: { code: "context_unavailable", retryable: false } },
+    },
+  ];
+  assert.deepEqual(await store.generationDeliveries(), expected);
+
+  const reopened = await ChatMessagesStore.open(
+    disk.openBridge("concurrent-terminals"),
+    new ManualEnv(),
+    new ScriptedHttp(),
+  );
+  assert.deepEqual(
+    await reopened.generationDeliveries(),
+    expected,
+    "append-only per-generation records prevent whole-value lost updates across reopen",
+  );
+});
+
+test("append-only terminal records retain the legacy whole-value snapshot during migration", async () => {
+  const disk = new MemoryStore();
+  const bridge = disk.openBridge("terminal-migration");
+  const legacyKv = await bridge.openKv("chat-generation-deliveries");
+  const legacy = {
+    generationId: "generation-legacy",
+    clientMessageId: "message-legacy",
+    terminal: { kind: "failed", error: { code: "legacy_failure", retryable: false } },
+  };
+  await legacyKv.set("generation-deliveries", JSON.stringify([legacy]));
+  const store = await ChatMessagesStore.open(bridge, new ManualEnv(), new ScriptedHttp());
+  const terminalWriter = store as unknown as {
+    recordGenerationTerminal(
+      generationId: string,
+      clientMessageId: RecordId,
+      terminal: { kind: "failed"; error: { code: string; retryable: boolean } },
+    ): Promise<void>;
+  };
+  await terminalWriter.recordGenerationTerminal(
+    "generation-log",
+    "message-log" as RecordId,
+    { kind: "failed", error: { code: "new_failure", retryable: true } },
+  );
+
+  assert.deepEqual(await store.generationDeliveries(), [
+    legacy,
+    {
+      generationId: "generation-log",
+      clientMessageId: "message-log",
+      terminal: { kind: "failed", error: { code: "new_failure", retryable: true } },
+    },
+  ]);
+});
+
 test("privacy-reduced agent activity persists in an append-only log and restores by generation", async () => {
   const disk = new MemoryStore();
   const env = new ManualEnv();
