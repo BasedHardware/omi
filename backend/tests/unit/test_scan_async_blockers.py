@@ -581,3 +581,37 @@ def test_diff_scope_includes_changed_transitive_helper_lines(scanner, tmp_path):
     }
 
     assert scanner.finding_in_changed_scope(finding, scope)
+
+
+def test_async_for_consumption_is_not_a_structural_finding(scanner, tmp_path):
+    """An endpoint that drives an async generator suspends and cannot become `def`."""
+    source_path = tmp_path / "streaming_consumer.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            async def consume_stream():
+                async for chunk in produce():
+                    continue
+                return "done"
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["no_await_should_be_def"] == []
+
+
+def test_async_with_is_not_a_structural_finding(scanner, tmp_path):
+    source_path = tmp_path / "context_consumer.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            async def use_context():
+                async with acquire() as handle:
+                    return handle
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["no_await_should_be_def"] == []
