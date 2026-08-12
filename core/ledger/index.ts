@@ -55,6 +55,8 @@ export interface DerivationAttempt {
   attempt_id: string;
   owner_account_id: string;
   input_revision_ids: readonly string[];
+  /** Exact immutable inputs retained for durable input rows and replay audit. */
+  input_revisions: readonly HashedRevision[];
   input_digest: string;
   input_version_digest: string;
   output_revision_ids: readonly string[];
@@ -93,7 +95,7 @@ export const prepareDerivation = (request: {
   const input_version_digest = sha256CanonicalRedacted({ input_revision_ids, input_content_hashes: input_revisions.map((revision) => revision.content_hash), versions: request.versions as unknown as CanonicalJson });
   const output_revision_ids = output_revisions.map((revision) => revision.revision_id);
   const output_digest = sha256CanonicalRedacted({ output_revision_ids, output_content_hashes: output_revisions.map((revision) => revision.content_hash) });
-  const attempt: DerivationAttempt = { attempt_id: request.attempt_id, owner_account_id: request.owner_account_id, input_revision_ids, input_digest, input_version_digest, output_revision_ids, output_revisions, output_digest, success_kind: request.success_kind, versions: request.versions };
+  const attempt: DerivationAttempt = { attempt_id: request.attempt_id, owner_account_id: request.owner_account_id, input_revision_ids, input_revisions, input_digest, input_version_digest, output_revision_ids, output_revisions, output_digest, success_kind: request.success_kind, versions: request.versions };
   return {
     attempt,
     commit: {

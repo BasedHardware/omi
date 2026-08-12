@@ -11,7 +11,16 @@ test("T9 canonical hashing sorts keys, preserves array order, and redacts fixed 
 
 test("T9 ledger records ordered digests and a successful-empty outcome", () => {
   const prepared = prepareDerivation({ attempt_id: "attempt-empty", commit_id: "commit-empty", owner_account_id: "owner-1", parent_commit: null, idempotency_key: "empty-key", input_revisions: [{ revision_id: "p-1", content: { value: 1 } }], output_revisions: [], versions, success_kind: "successful_empty" });
-  expect(prepared.commit).toMatchObject({ success_kind: "successful_empty", input_revision_ids: ["p-1"], output_revision_ids: [], sequence: null });
+  expect(prepared.commit).toMatchObject({
+    success_kind: "successful_empty",
+    input_revision_ids: ["p-1"],
+    input_revisions: [{ revision_id: "p-1", content: { value: 1 } }],
+    output_revision_ids: [],
+    sequence: null,
+  });
+  expect(prepared.commit.input_revisions[0]?.content_hash).toBe(
+    sha256CanonicalRedacted({ value: 1 }),
+  );
   expect(prepared.commit.input_version_digest).not.toBe(prepared.commit.input_digest);
 });
 
