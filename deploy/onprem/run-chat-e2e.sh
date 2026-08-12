@@ -49,8 +49,10 @@ OUT="$(compose exec -T backend curl -sS -N -X POST http://localhost:8080/v2/mess
   -H 'Authorization: Bearer dev' -H 'Content-Type: application/json' \
   -d '{"text":"Reply with one short friendly sentence confirming the on-prem chat works."}')"
 
-printf '%s' "$OUT" | grep -qiE 'Unable to complete the response' \
-  && fail "agentic loop errored (check: gateway healthy, OPENAI_BASE_URL serves $MODEL, backend logs)"
+# Reject a typed error/timeout terminal frame BEFORE accepting any done: payload, so the smoke test
+# proves a real successful LLM turn — not a canned fallback (cubic review PR 10887).
+printf '%s' "$OUT" | grep -qiE '^error: |Unable to complete the response|The response took too long' \
+  && fail "agentic loop errored/timed out (check: gateway healthy, OPENAI_BASE_URL serves $MODEL, backend logs)"
 
 ANSWER="$(printf '%s' "$OUT" | grep -m1 '^done: ' | sed 's/^done: //' \
   | python3 -c 'import sys,base64,json; s=sys.stdin.read().strip(); s+="="*(-len(s)%4); print(json.loads(base64.b64decode(s))["text"])' 2>/dev/null || true)"
