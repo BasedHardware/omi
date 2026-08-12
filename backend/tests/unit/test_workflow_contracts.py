@@ -389,6 +389,16 @@ def test_mobile_generated_files_only_run_for_codegen_or_localization_changes():
     assert 'fetch-depth: 0' in changes
 
 
+def test_mobile_jobs_share_the_repository_flutter_toolchain_pin():
+    repo = BACKEND_DIR.parent
+    mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
+    repo_checks = (repo / ".github/workflows/repo-checks.yml").read_text(encoding="utf-8")
+
+    pinned_version = re.search(r"flutter-version:\s*([^\s#]+)", repo_checks)
+    assert pinned_version is not None
+    assert mobile_checks.count(f"flutter-version: {pinned_version.group(1)}") == 3
+
+
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():
     installer = (BACKEND_DIR.parent / "scripts/install-git-hooks.sh").read_text(encoding="utf-8")
 
