@@ -189,6 +189,33 @@ void main() {
     expect(
         provider.conversations.where((conversation) => conversation.status != ConversationStatus.completed), isEmpty);
   });
+
+  test('websocket completion during lifecycle await is not erased by stale page snapshot', () async {
+    // Regression: a websocket ConversationEvent completes a processing row and
+    // inserts the completed conversation into the live list while the lifecycle
+    // lookup is still in flight. The subsequent list replacement from the stale
+    // page snapshot must not remove that freshly completed row.
+    final lifecycle = Completer<({ServerConversation? item, bool ok})>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('page', status: ConversationStatus.completed)], ok: true),
+      conversationLifecycleFetcher: (_) => lifecycle.future,
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.conversations = [_conversation('c1', status: ConversationStatus.completed)];
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+
+    final fetch = provider.fetchConversations();
+    await Future<void>.delayed(Duration.zero);
+
+    // The websocket completion has already inserted c1 as completed into the
+    // live conversations list (simulated by the initial assignment above).
+    lifecycle.complete((item: _conversation('c1', status: ConversationStatus.processing), ok: true));
+    await fetch;
+
+    expect(provider.conversations.map((c) => c.id), containsAll(['page', 'c1']));
+  });
 }
 
 ServerConversation _conversation(String id, {required ConversationStatus status}) => ServerConversation(

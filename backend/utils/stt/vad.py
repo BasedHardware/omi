@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import threading
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union, overload
@@ -37,7 +38,7 @@ def _positive_timeout_seconds(env_name: str, default: float) -> float:
         return default
     try:
         value = float(raw_value)
-        if value > 0:
+        if math.isfinite(value) and value > 0:
             return value
     except ValueError:
         pass

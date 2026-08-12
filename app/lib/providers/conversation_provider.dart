@@ -520,8 +520,18 @@ class ConversationProvider extends ChangeNotifier {
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
     _reconcileProcessingConversations(lifecycleResults, processingIdsAtStart, pageConversationIds);
 
-    // completed convos
+    // completed convos — merge fetched completed with any websocket completions
+    // that arrived during the lifecycle await so the stale page snapshot does
+    // not erase freshly completed conversations from the live list.
+    final fetchedCompletedIds = fetchedConversations
+        .where((m) => m.status == ConversationStatus.completed)
+        .map((m) => m.id)
+        .toSet();
+    final liveCompleted = conversations
+        .where((m) => m.status == ConversationStatus.completed && !fetchedCompletedIds.contains(m.id))
+        .toList();
     conversations = fetchedConversations.where((m) => m.status == ConversationStatus.completed).toList();
+    if (liveCompleted.isNotEmpty) conversations = [...conversations, ...liveCompleted];
 
     // Only use cache when no folder filter is applied
     if (conversations.isEmpty && selectedFolderId == null) {
@@ -741,15 +751,21 @@ class ConversationProvider extends ChangeNotifier {
     final results = <String, ({ServerConversation? item, bool ok})>{
       for (final conversation in pageItems) conversation.id: (item: conversation, ok: true),
     };
-    await Future.wait(
-      processingIdsAtStart.where((id) => !results.containsKey(id)).map((id) async {
-        try {
-          results[id] = await _conversationLifecycleFetcher(id);
-        } catch (_) {
-          results[id] = (item: null, ok: false);
-        }
-      }),
-    );
+    final offPageIds = processingIdsAtStart.where((id) => !results.containsKey(id)).toList();
+    // Cap concurrent lifecycle lookups to avoid request bursts after a large sync.
+    const maxConcurrent = 5;
+    for (var i = 0; i < offPageIds.length; i += maxConcurrent) {
+      final batch = offPageIds.skip(i).take(maxConcurrent);
+      await Future.wait(
+        batch.map((id) async {
+          try {
+            results[id] = await _conversationLifecycleFetcher(id);
+          } catch (_) {
+            results[id] = (item: null, ok: false);
+          }
+        }),
+      );
+    }
     return results;
   }
 

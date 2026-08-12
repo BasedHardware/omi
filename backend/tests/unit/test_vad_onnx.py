@@ -283,7 +283,7 @@ class TestVadIsEmptyFallback:
         assert timeout.pool == 3.0
         mock_local.assert_called_once_with(wav_path)
 
-    @pytest.mark.parametrize('invalid_value', ['0', '-1', 'abc'])
+    @pytest.mark.parametrize('invalid_value', ['0', '-1', 'abc', 'inf', 'Infinity', '1e309'])
     def test_invalid_hosted_timeouts_use_safe_defaults(self, invalid_value):
         with patch.dict(
             os.environ,
