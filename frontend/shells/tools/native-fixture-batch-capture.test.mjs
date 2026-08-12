@@ -104,6 +104,37 @@ function jitterFixturePng(rgb) {
   return Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n", "binary"), chunk("IHDR", header), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
 }
 
+function grayscaleEdgeFixturePng(sample) {
+  const width = 7;
+  const height = 7;
+  const rows = Buffer.alloc(height * (width * 4 + 1));
+  for (let row = 0; row < height; row += 1) {
+    const rowStart = row * (width * 4 + 1);
+    for (let column = 0; column < width; column += 1) {
+      const value = column >= 4 ? 224 : 32;
+      const offset = rowStart + 1 + column * 4;
+      rows[offset] = value;
+      rows[offset + 1] = value;
+      rows[offset + 2] = value;
+      rows[offset + 3] = 255;
+    }
+  }
+  const sampleOffset = 3 * (width * 4 + 1) + 1 + 3 * 4;
+  rows[sampleOffset] = sample;
+  rows[sampleOffset + 1] = sample;
+  rows[sampleOffset + 2] = sample;
+  const chunk = (type, body) => {
+    const kind = Buffer.from(type);
+    const payload = Buffer.concat([kind, body]);
+    const out = Buffer.alloc(12 + body.length);
+    out.writeUInt32BE(body.length, 0); payload.copy(out, 4); out.writeUInt32BE(pngCrc(payload), 8 + body.length);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 6;
+  return Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n", "binary"), chunk("IHDR", header), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+}
+
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object") return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
@@ -269,6 +300,25 @@ test("screenshot canonicalization removes low-bit compositor jitter but preserve
     writeFileSync(first, jitterFixturePng([3, 10, 13]));
     writeFileSync(second, jitterFixturePng([4, 9, 12]));
     writeFileSync(changed, jitterFixturePng([35, 10, 13]));
+    canonicalizeScreenshotForTest(first);
+    canonicalizeScreenshotForTest(second);
+    canonicalizeScreenshotForTest(changed);
+    assert.deepEqual(readFileSync(first), readFileSync(second));
+    assert.notDeepEqual(readFileSync(first), readFileSync(changed));
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test("screenshot canonicalization collapses bounded grayscale glyph-edge variants", () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), "omi-native-fixture-edge-pixels-"));
+  try {
+    const first = path.join(scratch, "first.png");
+    const second = path.join(scratch, "second.png");
+    const changed = path.join(scratch, "changed.png");
+    writeFileSync(first, grayscaleEdgeFixturePng(157));
+    writeFileSync(second, grayscaleEdgeFixturePng(163));
+    writeFileSync(changed, grayscaleEdgeFixturePng(96));
     canonicalizeScreenshotForTest(first);
     canonicalizeScreenshotForTest(second);
     canonicalizeScreenshotForTest(changed);
