@@ -77,6 +77,7 @@ import { createPostgresDurableMemoryWorkResultRepository } from "./durable-memor
 import { createPostgresDurableMemoryWorkSuccessRepository } from "./durable-memory-work-success";
 import { createPostgresFormationWorkInputRepository } from "./formation-work-input";
 import { createPostgresFormationOneShotRuntime } from "./formation-one-shot-runtime";
+import { createPostgresFirebaseAuthorizedGraphSnapshotRuntime } from "./firebase-authorized-graph-snapshot-runtime";
 import { createPostgresFirebaseAuthorizedLedgerRuntime } from "./firebase-authorized-ledger-runtime";
 import { createPostgresPredicateBatchWorkInputRepository } from "./predicate-batch-work-input";
 import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
@@ -1967,11 +1968,13 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const applicationId = "app:qualification";
     const credentialId = `credential:${suffix}`;
     const grantId = `grant:${suffix}`;
+    const readGrantId = `grant:${suffix}:read`;
     const firebaseProjectId = `firebase-project-${suffix}`;
     const firebaseUid = `firebase-user-${suffix}`;
     const controlHash = "1".repeat(64);
     const credentialHash = "2".repeat(64);
     const grantHash = "3".repeat(64);
+    const readGrantHash = "5".repeat(64);
     const now = Math.floor(Date.now() / 1_000);
 
     await ownerSql.begin(async (transaction) => {
@@ -2011,6 +2014,18 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
            capability, grant_id, grant_version)
         VALUES ($1, $2, $3, 4, 'memories.write', $4, 9)`,
       [accountId, applicationId, credentialId, grantId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 4, 'memories.read', $4, 1, 'active', true,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+      [accountId, applicationId, credentialId, readGrantId, readGrantHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version)
+        VALUES ($1, $2, $3, 4, 'memories.read', $4, 1)`,
+      [accountId, applicationId, credentialId, readGrantId]);
       await transaction.unsafe(`INSERT INTO omi_memory.firebase_identity_bindings
           (firebase_project_id, firebase_uid, account_id, principal_id,
            source_control_revision)
@@ -2596,6 +2611,30 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           sequence: 6,
         },
       });
+
+    const firebaseReadRuntime = createPostgresFirebaseAuthorizedGraphSnapshotRuntime({
+      pool: appRolePool,
+      project_id: firebaseProjectId,
+      runtime_mode: "deployed",
+      id_token_adapter: {
+        verification_source: "firebase_production",
+        verifyIdToken: async (_token, checkRevoked) => {
+          expect(checkRevoked).toBe(true);
+          return firebaseClaims;
+        },
+      },
+      application_id: applicationId,
+      context_ttl_seconds: 60,
+    });
+    const authorizedGraph = await firebaseReadRuntime.load(
+      "header.payload.signature",
+      now,
+    );
+    expect(authorizedGraph.kind).toBe("loaded");
+    if (authorizedGraph.kind !== "loaded") throw new Error("expected authorized graph");
+    expect(authorizedGraph.authorization_generation_digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(authorizedGraph.snapshot.owner_account_id).toBe(accountId);
+    expect(authorizedGraph.snapshot.graph_generation).toBe(6);
     await expect(firebaseRuntime.append("header.payload.signature", now, firebaseAppend))
       .resolves.toEqual({
         kind: "completed",
@@ -2669,6 +2708,49 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     expect([...firebaseRows]).toEqual([{
       commits: 6, head_sequence: "6", revoked_commit: 0,
     }]);
+
+    let readTransactions = 0;
+    const revokeBeforeReadPool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(
+        options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+        callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+      ) => {
+        readTransactions += 1;
+        if (readTransactions === 3) {
+          await ownerSql.begin(async (transaction) => {
+            await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+                (account_id, application_id, credential_id, credential_generation,
+                 capability, grant_id, grant_version, lifecycle, enabled, scopes,
+                 record_schema_version, record_json, content_hash)
+              VALUES ($1, $2, $3, 4, 'memories.read', $4, 2, 'revoked', false,
+                      '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+            [accountId, applicationId, credentialId, readGrantId, "6".repeat(64)]);
+            await transaction.unsafe(`UPDATE omi_memory.application_grant_heads
+              SET grant_version = 2, updated_at = transaction_timestamp()
+              WHERE account_id = $1 AND application_id = $2 AND credential_id = $3
+                AND credential_generation = 4 AND capability = 'memories.read'`,
+            [accountId, applicationId, credentialId]);
+          });
+        }
+        return appRolePool.withTransaction(options, callback);
+      },
+    });
+    const revokedReadRuntime = createPostgresFirebaseAuthorizedGraphSnapshotRuntime({
+      pool: revokeBeforeReadPool,
+      project_id: firebaseProjectId,
+      runtime_mode: "deployed",
+      id_token_adapter: {
+        verification_source: "firebase_production",
+        verifyIdToken: async () => firebaseClaims,
+      },
+      application_id: applicationId,
+      context_ttl_seconds: 60,
+    });
+    await expect(revokedReadRuntime.load(
+      "header.payload.signature",
+      now,
+    )).resolves.toEqual({ kind: "denied", outcome: "authorization" });
+    expect(readTransactions).toBe(3);
 
     await expect(repository.append(context, first)).resolves.toEqual({
       kind: "authorization_denied", reason: "grant_inactive",

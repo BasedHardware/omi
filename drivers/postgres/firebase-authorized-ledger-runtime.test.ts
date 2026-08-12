@@ -40,9 +40,9 @@ describe("PostgreSQL Firebase-authorized ledger runtime", () => {
       context_ttl_seconds: 60,
     };
     expect(() => createPostgresFirebaseAuthorizedLedgerRuntime({ ...base, extra: true } as never))
-      .toThrow("invalid PostgreSQL Firebase ledger runtime options");
+      .toThrow("invalid PostgreSQL Firebase runtime options");
     expect(() => createPostgresFirebaseAuthorizedLedgerRuntime(new Proxy(base, {}) as never))
-      .toThrow("invalid PostgreSQL Firebase ledger runtime options");
+      .toThrow("invalid PostgreSQL Firebase runtime options");
     expect(() => createPostgresFirebaseAuthorizedLedgerRuntime({
       ...base,
       id_token_adapter: {
