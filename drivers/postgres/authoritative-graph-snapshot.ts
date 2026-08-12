@@ -57,6 +57,9 @@ const textArray = (value: unknown): readonly string[] => {
 
 export interface PostgresAuthoritativeGraphSnapshotRepository {
   load(context: AuthorizedLedgerWriteContext): Promise<GraphSnapshot>;
+  loadCurrentParent(
+    context: AuthorizedLedgerWriteContext,
+  ): Promise<Readonly<{ kind: "found"; parent_commit: string | null }>>;
 }
 
 /**
@@ -68,6 +71,33 @@ export const createPostgresAuthoritativeGraphSnapshotRepository = (options: {
   readonly pool: PostgresTransactionPool;
   readonly observability?: PostgresTransactionObservability;
 }): PostgresAuthoritativeGraphSnapshotRepository => Object.freeze({
+  loadCurrentParent: async (context) => withAuthorizedSerializableConnectionTransaction(
+    options.pool,
+    context,
+    async ({ authority, connection }) => {
+      const rows = await connection.query<{
+        commit_id: string | null;
+        sequence: string | number | bigint;
+      }>({
+        name: "snapshot.graph_parent",
+        text: `SELECT commit_id, sequence
+               FROM omi_memory.memory_graph_heads
+               WHERE account_id = $1`,
+        values: [authority.account_id],
+      });
+      if (rows.length !== 1 || !rows[0]) {
+        throw new PostgresRepositoryError("persistence_failed");
+      }
+      const sequence = counter(rows[0].sequence);
+      const parent = rows[0].commit_id;
+      if ((sequence === 0 && parent !== null)
+        || (sequence > 0 && (typeof parent !== "string" || parent.length === 0))) {
+        throw new PostgresRepositoryError("persistence_failed");
+      }
+      return Object.freeze({ kind: "found" as const, parent_commit: parent });
+    },
+    options.observability,
+  ),
   load: async (context) => withAuthorizedSerializableConnectionTransaction(
     options.pool,
     context,

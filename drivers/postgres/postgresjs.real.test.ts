@@ -23,6 +23,7 @@ import {
 import {
   formationWorkInputStageRequestDigest,
 } from "../../apps/service/workers/formation-work-input-repository";
+import { DURABLE_MEMORY_GRAPH_PLAN_VERSION } from "../../apps/service/workers/durable-memory-graph-plan";
 import {
   FORMATION_INPUT_SNAPSHOT_VERSION,
   formationWorkInputManifest,
@@ -48,6 +49,10 @@ import {
   acceptDurableMemoryWork,
   type AcceptedDurableMemoryWork,
 } from "../../core/consolidate/state-machine";
+import {
+  GROUNDED_EXTRACTION_PROMPT_VERSION,
+  GROUNDED_MENTION_STRATEGY_VERSION,
+} from "../../core/extract/grounded";
 import { prepareDerivation, type AtomicGraphTransition } from "../../core/ledger";
 import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
 import type { IdentityAuthorization, IdentityConstraint, ProvisionalClaim } from "../../core/schema";
@@ -62,11 +67,13 @@ import { createPostgresDurableMemoryWorkExecutionRepository } from "./durable-me
 import { createPostgresDurableMemoryWorkResultRepository } from "./durable-memory-work-result";
 import { createPostgresDurableMemoryWorkSuccessRepository } from "./durable-memory-work-success";
 import { createPostgresFormationWorkInputRepository } from "./formation-work-input";
+import { createPostgresFormationOneShotRuntime } from "./formation-one-shot-runtime";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
 import { authorizationStateDigest, type AuthorityStateRow } from "./transaction";
 import { SqliteLedger } from "../sqlite";
+import { DeterministicFakeModel, type ModelInvokeRequest } from "../model/port";
 
 const explicitTestUrl = process.env["OMI_TEST_POSTGRES_URL"];
 const realTest = explicitTestUrl ? describe : describe.skip;
@@ -1204,6 +1211,209 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       successes: 1, success_outbox: 1, graph_sequence: "1",
     }]);
 
+    const runtimeSuffix = `${suffix}:one-shot-runtime`;
+    const runtimeBaseSnapshot = durableWorkFormationSnapshot(accountId, runtimeSuffix);
+    const runtimeSnapshot = parseFormationInputSnapshot({
+      ...runtimeBaseSnapshot,
+      input_frontier: "1",
+      graph_frontier: 1,
+      context: {
+        ...runtimeBaseSnapshot.context,
+        frontier: { ...runtimeBaseSnapshot.context.frontier, graph_head: "1" },
+      },
+    });
+    const runtimeStrategy = registerMemoryStrategy({
+      version: MEMORY_STRATEGY_VERSION,
+      strategy_id: "strategy:qualification:formation:one-shot:v1",
+      work_kind: "formation",
+      coordinates: {
+        strategy_version: "formation:qualification:one-shot:v1",
+        model_version: "deterministic-fake:v1",
+        prompt_version: GROUNDED_EXTRACTION_PROMPT_VERSION,
+        policy_version: "policy:qualification:one-shot:v1",
+        code_version: "code:qualification:one-shot:v1",
+        schema_version: "schema:qualification:one-shot:v1",
+        tokenizer_version: "none",
+        tool_version: "none",
+        result_contract_version: DURABLE_MEMORY_GRAPH_PLAN_VERSION,
+        speaker_strategy_version: GROUNDED_MENTION_STRATEGY_VERSION,
+        boundary_strategy_version: "v4",
+      },
+    });
+    const runtimeAssignmentPolicy = defineMemoryStrategyAssignmentPolicy({
+      policy_id: "policy:qualification:formation:one-shot:v1",
+      work_kind: "formation",
+      unit_kind: "work",
+      key_version: "assignment-key:qualification:one-shot:v1",
+      authority_strategy_id: runtimeStrategy.strategy_id,
+      shadow_candidates: [],
+    }, [runtimeStrategy]);
+    const runtimeAssignment = createMemoryStrategyAssigner(new Uint8Array(32).fill(23)).assign({
+      owner_account_id: accountId,
+      unit_ref: runtimeSnapshot.work_id,
+      policy: runtimeAssignmentPolicy,
+      strategies: [runtimeStrategy],
+    });
+    const runtimeExecutionPolicy = registerDurableMemoryWorkExecutionPolicy({
+      version: DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+      policy_id: "execution-policy:qualification:formation:one-shot:v1",
+      work_kind: "formation",
+      execution_contract_digest: runtimeStrategy.execution_contract_digest,
+      max_attempts: 2,
+      lease_duration_seconds: 2,
+      retry_delays_seconds: [1],
+    });
+    let runtimeModelCalls = 0;
+    const runtimeModel = new DeterministicFakeModel((request: ModelInvokeRequest) => {
+      runtimeModelCalls += 1;
+      if (request.strategy === "grounded-extraction") return {
+        claims: [{
+          relation: "uses",
+          arguments: [
+            { slot_id: "person", role: "person", surface: "Alice" },
+            { slot_id: "tool", role: "tool", surface: "Atlas" },
+          ],
+          polarity: "positive",
+          temporal_expression: {
+            kind: "absolute", granularity: "day", value: "2026-08-12",
+          },
+          evidence: "e1",
+          observed_speaker_slot_id: null,
+        }],
+      };
+      if (request.strategy === "local-handle-durable-entity") return { decision: "abstain" };
+      if (request.strategy === "scope-role-binding") return {
+        bindings: { person: null, tool: null },
+        scope: { locality: "durable", scope_ref: "global" },
+      };
+      if (request.strategy === "stm-ltm-unit-boundary") return { decision: "accept_ltm" };
+      throw new Error("unexpected_formation_model_strategy");
+    });
+    const formationRuntime = createPostgresFormationOneShotRuntime({
+      pool: appRolePool,
+      strategies: [runtimeStrategy],
+      resolve_model: async () => runtimeModel,
+      max_parent_rematerializations: 3,
+    });
+    const runtimeIngestion = {
+      snapshot: runtimeSnapshot,
+      strategy_assignment: runtimeAssignment,
+      execution_policy: runtimeExecutionPolicy,
+      accepted_at_event_time: now,
+    };
+
+    try {
+      await ownerSql.unsafe(`
+        CREATE OR REPLACE FUNCTION omi_memory.qualification_reject_one_shot_acceptance()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'qualification injected one-shot acceptance rollback'; END
+        $$;
+        DROP TRIGGER IF EXISTS reject_one_shot_acceptance
+          ON omi_memory.memory_work_state_revisions;
+        CREATE TRIGGER reject_one_shot_acceptance
+        AFTER INSERT ON omi_memory.memory_work_state_revisions
+        FOR EACH ROW EXECUTE FUNCTION omi_memory.qualification_reject_one_shot_acceptance()
+      `, [], { prepare: false });
+      await expect(formationRuntime.accept(context, runtimeIngestion))
+        .rejects.toMatchObject({ code: "persistence_failed", message: "persistence_failed" });
+    } finally {
+      await ownerSql.unsafe(`
+        DROP TRIGGER IF EXISTS reject_one_shot_acceptance
+          ON omi_memory.memory_work_state_revisions;
+        DROP FUNCTION IF EXISTS omi_memory.qualification_reject_one_shot_acceptance()
+      `, [], { prepare: false });
+    }
+    const stagedBeforeAcceptance = await ownerSql.unsafe<{
+      staged_inputs: number; acceptances: number;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_formation_work_inputs
+          WHERE account_id = $1 AND job_id = $2) AS staged_inputs,
+        (SELECT count(*)::int FROM omi_memory.memory_work_acceptances
+          WHERE account_id = $1 AND job_id = $2) AS acceptances
+    `, [accountId, runtimeSnapshot.work_id]);
+    expect([...stagedBeforeAcceptance]).toEqual([{ staged_inputs: 1, acceptances: 0 }]);
+    await expect(formationRuntime.accept(context, runtimeIngestion)).resolves.toMatchObject({
+      kind: "accepted", job: { job_id: runtimeSnapshot.work_id, state: "pending" },
+    });
+
+    try {
+      await ownerSql.unsafe(`
+        CREATE OR REPLACE FUNCTION omi_memory.qualification_reject_one_shot_success()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'qualification injected one-shot process loss'; END
+        $$;
+        DROP TRIGGER IF EXISTS reject_one_shot_success
+          ON omi_memory.memory_work_outbox_events;
+        CREATE TRIGGER reject_one_shot_success
+        BEFORE INSERT ON omi_memory.memory_work_outbox_events
+        FOR EACH ROW WHEN (NEW.event_kind = 'memory_work_succeeded')
+        EXECUTE FUNCTION omi_memory.qualification_reject_one_shot_success()
+      `, [], { prepare: false });
+      await expect(formationRuntime.runNext(executionContext)).resolves.toMatchObject({
+        kind: "stopped", stop_code: "storage_retryable", leased: 1,
+      });
+    } finally {
+      await ownerSql.unsafe(`
+        DROP TRIGGER IF EXISTS reject_one_shot_success
+          ON omi_memory.memory_work_outbox_events;
+        DROP FUNCTION IF EXISTS omi_memory.qualification_reject_one_shot_success()
+      `, [], { prepare: false });
+    }
+    expect(runtimeModelCalls).toBeGreaterThan(0);
+    const callsAfterStaging = runtimeModelCalls;
+    const stagedAfterProcessLoss = await ownerSql.unsafe<{
+      staged_results: number; successes: number; state: string;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_work_staged_results
+          WHERE account_id = $1 AND job_id = $2) AS staged_results,
+        (SELECT count(*)::int FROM omi_memory.memory_work_success_results
+          WHERE account_id = $1 AND job_id = $2) AS successes,
+        (SELECT s.state FROM omi_memory.memory_work_heads AS h
+          JOIN omi_memory.memory_work_state_revisions AS s
+            ON s.account_id = h.account_id AND s.job_id = h.job_id
+           AND s.state_revision = h.state_revision
+          WHERE h.account_id = $1 AND h.job_id = $2) AS state
+    `, [accountId, runtimeSnapshot.work_id]);
+    expect([...stagedAfterProcessLoss]).toEqual([{
+      staged_results: 1, successes: 0, state: "leased",
+    }]);
+
+    await Bun.sleep(3_100);
+    await expect(formationRuntime.recoverExpired(executionContext, runtimeSnapshot.work_id))
+      .resolves.toMatchObject({
+        kind: "recovered",
+        job: { state: "retryable_failed", outcome: { error_code: "worker_lost" } },
+      });
+    await Bun.sleep(2_100);
+    await expect(formationRuntime.runNext(executionContext)).resolves.toMatchObject({
+      kind: "completed", result: "succeeded", leased: 1,
+      producer_calls: 0, materialization_attempts: 1,
+    });
+    expect(runtimeModelCalls).toBe(callsAfterStaging);
+    const oneShotCommitted = await ownerSql.unsafe<{
+      staged_results: number; successes: number; success_outbox: number;
+      formation_outcomes: number; graph_sequence: string;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_work_staged_results
+          WHERE account_id = $1 AND job_id = $2) AS staged_results,
+        (SELECT count(*)::int FROM omi_memory.memory_work_success_results
+          WHERE account_id = $1 AND job_id = $2) AS successes,
+        (SELECT count(*)::int FROM omi_memory.memory_work_outbox_events
+          WHERE account_id = $1 AND job_id = $2
+            AND event_kind = 'memory_work_succeeded') AS success_outbox,
+        (SELECT count(*)::int FROM omi_memory.memory_formation_outcomes
+          WHERE account_id = $1 AND formation_work_id = $2) AS formation_outcomes,
+        (SELECT sequence::text FROM omi_memory.memory_graph_heads
+          WHERE account_id = $1) AS graph_sequence
+    `, [accountId, runtimeSnapshot.work_id]);
+    expect([...oneShotCommitted]).toEqual([{
+      staged_results: 1, successes: 1, success_outbox: 1,
+      formation_outcomes: 1, graph_sequence: "2",
+    }]);
+
     const rollbackSuccessSuffix = `${suffix}:success-rollback`;
     const rollbackSuccessAcceptance = durableWorkAcceptanceRequest(
       accountId, rollbackSuccessSuffix, now, 2, 1,
@@ -1278,7 +1488,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
            WHERE account_id = $1) AS graph_sequence
       `, [accountId, rollbackSuccessLease.job.job_id]);
       expect([...rolledBackSuccess]).toEqual([{
-        state: "leased", successes: 0, success_outbox: 0, graph_sequence: "1",
+        state: "leased", successes: 0, success_outbox: 0, graph_sequence: "2",
       }]);
     } finally {
       await ownerSql.unsafe(`
@@ -1300,7 +1510,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           WHERE account_id = $1 AND event_kind = 'memory_work_dead_letter') AS outbox
     `, [accountId]);
     expect([...executionRows]).toEqual([{
-      dead_letters: 2, retryable_failures: 2, outbox: 2,
+      dead_letters: 2, retryable_failures: 3, outbox: 2,
     }]);
     for (const forbiddenSql of [
       "UPDATE omi_memory.memory_work_state_revisions SET state = 'pending' WHERE account_id = $1",
