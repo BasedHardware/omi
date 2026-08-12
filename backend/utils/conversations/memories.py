@@ -8,7 +8,6 @@ from models.integrations import ExternalIntegrationCreateMemory
 from utils.llm.memories import extract_memories_from_text
 from utils.memory.memory_authority import MemorySystem
 from utils.memory.memory_service import MemoryService
-from utils.memory.required_promotion import required_processing_payload
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 import logging
 
