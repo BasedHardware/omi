@@ -1037,6 +1037,7 @@ export default function omiProvider(pi: ExtensionAPI): void {
   // key. We only attach the complete set — the backend's has_all_byok_keys()
   // requires all four to be present. (Env-var names match src/shared/byok.ts.)
   const byokMap: Array<[string, string]> = [
+    ['OMI_BYOK_OPENROUTER', 'X-BYOK-OpenRouter'],
     ['OMI_BYOK_OPENAI', 'X-BYOK-OpenAI'],
     ['OMI_BYOK_ANTHROPIC', 'X-BYOK-Anthropic'],
     ['OMI_BYOK_GEMINI', 'X-BYOK-Gemini'],
@@ -1047,7 +1048,7 @@ export default function omiProvider(pi: ExtensionAPI): void {
     const value = process.env[envName]
     if (value && value.length > 0) byokHeaders[headerName] = value
   }
-  const byokActive = Object.keys(byokHeaders).length === byokMap.length
+  const byokActive = Object.keys(byokHeaders).length > 0
   if (byokActive) {
     process.stderr.write(
       `[omi-provider] BYOK active — attaching ${byokMap.length} X-BYOK headers\n`

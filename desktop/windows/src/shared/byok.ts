@@ -14,13 +14,26 @@
 // file never drags a Node built-in into the web bundle.
 
 /** A provider whose API key a user can bring themselves. */
-export type ByokProvider = 'openai' | 'anthropic' | 'gemini' | 'deepgram'
+export type ByokProvider = 'openrouter' | 'openai' | 'anthropic' | 'gemini' | 'deepgram'
 
 /** The four BYOK providers, in the backend's canonical order. */
-export const BYOK_PROVIDERS: readonly ByokProvider[] = ['openai', 'anthropic', 'gemini', 'deepgram']
+export const BYOK_PROVIDERS: readonly ByokProvider[] = [
+  'openrouter',
+  'openai',
+  'anthropic',
+  'gemini',
+  'deepgram'
+]
+export const BYOK_LLM_PROVIDERS: readonly ByokProvider[] = [
+  'openrouter',
+  'openai',
+  'anthropic',
+  'gemini'
+]
 
 /** Canonical header casing clients send (backend matches case-insensitively). */
 export const BYOK_HEADER_NAMES: Record<ByokProvider, string> = {
+  openrouter: 'X-BYOK-OpenRouter',
   openai: 'X-BYOK-OpenAI',
   anthropic: 'X-BYOK-Anthropic',
   gemini: 'X-BYOK-Gemini',
@@ -35,6 +48,7 @@ export const BYOK_HEADER_NAMES: Record<ByokProvider, string> = {
  * source (`AgentRuntimeProcess.byokEnvironmentKey`).
  */
 export const BYOK_ENV_NAMES: Record<ByokProvider, string> = {
+  openrouter: 'OMI_BYOK_OPENROUTER',
   openai: 'OMI_BYOK_OPENAI',
   anthropic: 'OMI_BYOK_ANTHROPIC',
   gemini: 'OMI_BYOK_GEMINI',
@@ -97,7 +111,7 @@ export function withByokHeaders(
  * BYOK-active.
  */
 export function isByokActive(keys: ByokKeys): boolean {
-  return BYOK_PROVIDERS.every((provider) => Boolean(keys[provider]?.trim()))
+  return BYOK_LLM_PROVIDERS.some((provider) => Boolean(keys[provider]?.trim()))
 }
 
 /**
@@ -113,7 +127,8 @@ export function byokEnvVars(keys: ByokKeys): Record<string, string> {
   const out: Record<string, string> = {}
   for (const provider of BYOK_PROVIDERS) {
     // isByokActive guarantees a non-empty trimmed value for every provider.
-    out[BYOK_ENV_NAMES[provider]] = (keys[provider] as string).trim()
+    const value = keys[provider]?.trim()
+    if (value) out[BYOK_ENV_NAMES[provider]] = value
   }
   return out
 }

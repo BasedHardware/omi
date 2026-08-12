@@ -33,12 +33,16 @@ describe('withByokHeadersIfActive', () => {
     })
   })
 
-  it('attaches nothing for a partial set (all-or-none)', async () => {
+  it('attaches configured LLM keys for a partial set', async () => {
     await loadCache({ openai: 'sk-o', anthropic: 'sk-a', gemini: 'gm' })
-    expect(isByokActiveCached()).toBe(false)
+    expect(isByokActiveCached()).toBe(true)
     const out = withByokHeadersIfActive({ Authorization: 'Bearer t' })
-    expect(out).toEqual({ Authorization: 'Bearer t' })
-    expect(out['X-BYOK-OpenAI']).toBeUndefined()
+    expect(out).toEqual({
+      Authorization: 'Bearer t',
+      'X-BYOK-OpenAI': 'sk-o',
+      'X-BYOK-Anthropic': 'sk-a',
+      'X-BYOK-Gemini': 'gm'
+    })
   })
 
   it('stops attaching after the keys are cleared (refresh on byok:changed)', async () => {
