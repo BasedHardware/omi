@@ -521,6 +521,33 @@ function canonicalizeScreenshot(file) {
     image.rgba[offset + 1] = (mapped >> 8) & 0xff;
     image.rgba[offset + 2] = mapped & 0xff;
   }
+  // A few isolated glyph-edge pixels can remain after palette mapping. On
+  // opaque pixels whose 5x5 luminance neighborhood spans at least 32 values,
+  // use a 32-level channel step. Flat fills and non-edge product color remain
+  // exactly as captured.
+  const luminance = new Uint8Array(pixels);
+  for (let pixel = 0; pixel < pixels; pixel += 1) {
+    const offset = pixel * 4;
+    luminance[pixel] = Math.round((image.rgba[offset] + image.rgba[offset + 1] + image.rgba[offset + 2]) / 3);
+  }
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const pixel = y * image.width + x;
+      const offset = pixel * 4;
+      if (image.rgba[offset + 3] !== 255) continue;
+      let low = 255;
+      let high = 0;
+      for (let sampleY = Math.max(0, y - 2); sampleY <= Math.min(image.height - 1, y + 2); sampleY += 1) {
+        for (let sampleX = Math.max(0, x - 2); sampleX <= Math.min(image.width - 1, x + 2); sampleX += 1) {
+          const value = luminance[sampleY * image.width + sampleX];
+          low = Math.min(low, value);
+          high = Math.max(high, value);
+        }
+      }
+      if (high - low < 32) continue;
+      for (let channel = 0; channel < 3; channel += 1) image.rgba[offset + channel] = Math.min(255, Math.round(image.rgba[offset + channel] / 32) * 32);
+    }
+  }
   const stride = image.width * 4;
   const rows = Buffer.alloc(image.height * (stride + 1));
   for (let row = 0; row < image.height; row += 1) {
