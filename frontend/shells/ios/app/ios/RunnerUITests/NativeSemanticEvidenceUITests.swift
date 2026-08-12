@@ -36,27 +36,33 @@ final class NativeSemanticEvidenceUITests: XCTestCase {
     XCTAssertFalse(nodes.isEmpty, "fixture exposed no allowlisted native semantics")
 
     var steps = [Step(key: "launch", action: "launch", result: "foreground")]
-    let textField = app.textFields.firstMatch
-    if textField.waitForExistence(timeout: 5) {
-      textField.tap()
+    let webView = app.webViews.firstMatch
+    if webView.waitForExistence(timeout: 5) {
+      webView.tap()
+      webView.typeKey("p", modifierFlags: [.command, .shift])
+      let paletteTitle = firstElement(named: "Keyboard shortcuts", in: app)
+      if paletteTitle.waitForExistence(timeout: 2) {
+        steps.append(Step(key: "shift-command-p", action: "typeKey", result: "transition-observed"))
+        webView.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        let paletteClosed = XCTWaiter.wait(
+          for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: paletteTitle)],
+          timeout: 2
+        ) == .completed
+        if paletteClosed && webView.exists {
+          steps.append(Step(key: "escape", action: "typeKey", result: "restored"))
+        }
+      }
+    }
+    let textInput = firstTextInput(in: app)
+    if textInput.waitForExistence(timeout: 5) {
+      textInput.tap()
       let keyboard = app.keyboards.firstMatch
       if keyboard.waitForExistence(timeout: 2) {
         // Keyboard visibility is the only portable focus observation exposed
         // by XCTest here.  No element value or typed text is retained.
-        textField.typeText("x")
+        textInput.typeText("x")
         steps.append(Step(key: "focus", action: "tap", result: "keyboard-visible"))
         steps.append(Step(key: "type-text", action: "typeText", result: "accepted"))
-        // The simulator supports a real command-key probe.  This is recorded
-        // as an input attempt only; no product shortcut is claimed by it.
-        app.typeKey("k", modifierFlags: .command)
-        let search = app.buttons["Search"].firstMatch
-        if search.waitForExistence(timeout: 2) {
-          steps.append(Step(key: "command-k", action: "typeKey", result: "transition-observed"))
-          app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
-          if !search.exists && textField.exists {
-            steps.append(Step(key: "escape", action: "typeKey", result: "restored"))
-          }
-        }
       } else {
         steps.append(Step(key: "focus", action: "tap", result: "keyboard-not-observed"))
       }
@@ -118,6 +124,20 @@ final class NativeSemanticEvidenceUITests: XCTestCase {
       nodes.append(Node(role: "web-view", name: "Omi surface"))
     }
     return nodes
+  }
+
+  private func firstTextInput(in app: XCUIApplication) -> XCUIElement {
+    let textField = app.textFields.firstMatch
+    if textField.exists { return textField }
+    return app.textViews.firstMatch
+  }
+
+  private func firstElement(named name: String, in app: XCUIApplication) -> XCUIElement {
+    for query in [app.textFields, app.textViews, app.buttons, app.staticTexts] {
+      let element = query[name].firstMatch
+      if element.waitForExistence(timeout: 1) { return element }
+    }
+    return app.otherElements[name].firstMatch
   }
 
 }

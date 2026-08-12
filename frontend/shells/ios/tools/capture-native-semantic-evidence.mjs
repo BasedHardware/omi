@@ -141,13 +141,13 @@ function validateMatrixMarker(marker, manifest) {
 
 function validateKeyboardSteps(steps) {
   const keys = new Map(steps.map((step) => [step.key, step]));
-  if (keys.get("type-text")?.result !== "accepted" || keys.get("command-k")?.result !== "transition-observed" || keys.get("escape")?.result !== "restored") throw new Error("keyboard_trace requires a real key action with observed transition and restoration");
+  if (keys.get("type-text")?.result !== "accepted" || keys.get("shift-command-p")?.result !== "transition-observed" || keys.get("escape")?.result !== "restored") throw new Error("keyboard_trace requires a real key action with observed transition and restoration");
 }
 
 function hasObservedKeyboardTransition(marker) {
   const steps = new Map(marker.steps.map((step) => [step.key, step]));
   return steps.get("type-text")?.result === "accepted"
-    && steps.get("command-k")?.result === "transition-observed"
+    && steps.get("shift-command-p")?.result === "transition-observed"
     && steps.get("escape")?.result === "restored";
 }
 

@@ -16,8 +16,11 @@ Matrix manifests use `schema: omi.polish.matrix-coordinate/v1`, an exact
 `kind` (`ax_snapshot` or `keyboard_trace`), and the corresponding accessibility
 mode (`ax_snapshot` uses one of the six explicit AX modes; `keyboard_trace`
 uses `keyboard`). AX coordinates use the regular logical viewport. The current
-fixture does not expose a domain landmark or a real keyboard transition, so a
-matrix run fails closed rather than emitting a misleading row. The checked-in
+fixture exposes bounded domain landmarks and Chat text entry through native
+XCTest semantics. The simulator does not consistently surface the registered
+Shift-Command-P palette transition to XCUITest, so keyboard coordinates still
+fail closed unless that transition and Escape restoration are both actually
+observed. The checked-in
 `native-semantic-chat-ready.json` is deliberately marked
 `omi.native-ios-semantic-supplementary/v1` and uses the logical compact
 viewport 402x874@3; its application/WebView result cannot close matrix rows.

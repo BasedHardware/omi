@@ -105,7 +105,7 @@ test("matrix AX requires a domain landmark and keyboard requires observed transi
       { key: "launch", action: "launch", result: "foreground" },
       { key: "focus", action: "tap", result: "keyboard-visible" },
       { key: "type-text", action: "typeText", result: "accepted" },
-      { key: "command-k", action: "typeKey", result: "transition-observed" },
+      { key: "shift-command-p", action: "typeKey", result: "transition-observed" },
       { key: "escape", action: "typeKey", result: "restored" },
     ],
   }), validKeyboardManifest));
