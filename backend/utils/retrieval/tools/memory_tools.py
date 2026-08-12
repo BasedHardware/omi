@@ -9,22 +9,11 @@ import contextvars
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
-import database.memories as memory_db
 import database.notifications as notification_db
-import database.vector_db as vector_db
 from database._client import db as firestore_db
 from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import pin_memory_system
-from utils.memory.chat_memory_adapter import (
-    chat_legacy_read_authorized,
-    list_default_chat_memories_decision_text,
-    search_memory_default_chat_memories_vector_decision_text,
-)
-from utils.memory.default_read_rollout import MemoryReadDecision
 from utils.conversations.render import format_local_date, resolve_display_tz
-from utils.retrieval.hybrid import rrf_rerank
 from utils.retrieval.tools.result_bounds import cap_items_for_llm, bounded_result
 import logging
 
@@ -118,6 +107,7 @@ def get_memories_tool(
         logger.info(f"❌ get_memories_tool - config is None")
         return "Error: Configuration not available"
 
+    memories: List[MemoryDB] = []
     try:
         configurable: Any = cfg.get('configurable')
         uid = configurable.get('user_id')
@@ -159,82 +149,37 @@ def get_memories_tool(
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
-    memory_system = pin_memory_system(uid, db_client=firestore_db)
-    if memory_system == MemorySystem.CANONICAL:
-        service = MemoryService(db_client=firestore_db)
-        if start_dt or end_dt:
-            # Date filters present: scan raw canonical pages and apply the date
-            # bounds before paginating, mirroring the legacy DB path which pushes
-            # start_date/end_date into the query. Reading only the first `limit`
-            # page and then filtering would miss matching memories that live on
-            # later pages.
-            max_scan = 5000
-            scan_offset = 0
-            date_filtered: List[Any] = []
-            while scan_offset < max_scan:
-                batch = service.read(uid, limit=500, offset=scan_offset)
-                if not batch:
-                    break
-                for memory in batch:
-                    created = memory.created_at
-                    if start_dt and created and created < start_dt:
-                        continue
-                    if end_dt and created and created > end_dt:
-                        continue
-                    date_filtered.append(memory)
-                scan_offset += len(batch)
-                if len(batch) < 500:
-                    break
-            memories = date_filtered[offset : offset + limit]
-        else:
-            memories = service.read(uid, limit=limit, offset=offset)
-        memories_count = len(memories)
-        logger.info(f"📊 get_memories_tool - found {memories_count} canonical memories")
-        if memories_count >= 500:
-            logger.info(f"⚠️ Large number of memories retrieved ({memories_count}). Consider if all are needed.")
-        if not memories:
-            date_info = ""
-            if start_dt and end_dt:
-                date_info = f" between {start_dt.strftime('%Y-%m-%d')} and {end_dt.strftime('%Y-%m-%d')}"
-            elif start_dt:
-                date_info = f" after {start_dt.strftime('%Y-%m-%d')}"
-            elif end_dt:
-                date_info = f" before {end_dt.strftime('%Y-%m-%d')}"
-            msg = (
-                f"No memories found{date_info}. The user may not have any recorded facts or memories yet "
-                "in the system, or the date range may be outside their memory history."
-            )
-            logger.info(f"⚠️ get_memories_tool - {msg}")
-            return msg
-        result = f"User Memories ({len(memories)} total):\n\n{MemoryDB.get_memories_as_str(memories)}"
-        return result.strip()
-
-    default_memories = list_default_chat_memories_decision_text(
-        uid=uid,
-        limit=limit,
-        offset=offset,
-        db_client=firestore_db,
-    )
-    if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
-        logger.info("✅ get_memories_tool - using memory default chat memory list results")
-        return default_memories.text or "No memory default memories found."
-    if not chat_legacy_read_authorized(default_memories):
-        logger.info(
-            "🛑 get_memories_tool - memory chat memory list denied without legacy fallback: "
-            f"{default_memories.fallback_reason}"
-        )
-        return default_memories.text or "No memories available for this request."
-
-    # Get memories
-    memories: List[Any] = []
     try:
-        memories = memory_db.get_memories(uid, limit=limit, offset=offset, start_date=start_dt, end_date=end_dt)
+        service = MemoryService(db_client=firestore_db)
+        # Product/API reads retain a short locked preview for released clients,
+        # but chat context must never receive paid-plan locked content. Keep the
+        # privacy boundary at this LLM-facing consumer even though all rows now
+        # come through the universal MemoryService.
+        target_end = min(max(offset, 0) + limit, 5000)
+        scan_offset = 0
+        visible: List[MemoryDB] = []
+        max_scan = 5000
+        while scan_offset < max_scan and len(visible) < target_end:
+            batch_limit = min(500, max_scan - scan_offset)
+            fetch_limit = target_end if scan_offset == 0 else batch_limit
+            batch = service.read(uid, limit=fetch_limit, offset=scan_offset)
+            if not batch:
+                break
+            scan_offset += len(batch)
+            for memory in batch:
+                if memory.is_locked:
+                    continue
+                created = memory.created_at
+                if start_dt and created and created < start_dt:
+                    continue
+                if end_dt and created and created > end_dt:
+                    continue
+                visible.append(memory)
+            if len(batch) < fetch_limit:
+                break
+        memories = visible[max(offset, 0) : target_end]
     except Exception as e:
         logger.error(e)
-
-    # Filter out locked memories (paid plan required)
-    if memories:
-        memories = [m for m in memories if not m.get('is_locked', False)]
 
     # Bound how many memories are formatted for the chat model so a broad question cannot flood
     # its context and freeze it (#4927). The DB returns newest-first, so this keeps the most recent.
@@ -261,22 +206,10 @@ def get_memories_tool(
         logger.info(f"⚠️ get_memories_tool - {msg}")
         return msg
 
-    # Convert dictionaries to MemoryDB objects for proper formatting
-    memory_objects: List[MemoryDB] = []
-    for memory_data in memories:
-        try:
-            memory_objects.append(MemoryDB(**memory_data))
-        except Exception as e:
-            logger.error(f"Error creating MemoryDB object: {e}")
-            continue
-
-    if not memory_objects:
-        return "Error: Could not parse memories data"
-
     # Format memories using the Memory model's string formatter. Label the count as "shown" rather
     # than "total": it is the displayed page, which may be a subset of all the user's memories.
-    result = f"User Memories ({len(memory_objects)} shown):\n\n"
-    result += MemoryDB.get_memories_as_str(memory_objects)
+    result = f"User Memories ({len(memories)} shown):\n\n"
+    result += MemoryDB.get_memories_as_str(memories)
 
     return bounded_result(result.strip(), results_truncated, noun="memories")
 
@@ -351,109 +284,20 @@ def search_memories_tool(
         logger.warning(f"search_memories_tool - timezone lookup failed, formatting dates in UTC: {tz_error}")
         display_tz = timezone.utc
 
-    memory_system = pin_memory_system(uid, db_client=firestore_db)
-    if memory_system == MemorySystem.CANONICAL:
+    try:
         matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
+        matches = [match for match in matches if not match.memory.is_locked]
         if not matches:
             msg = (
                 f"No memories found matching '{query}'. The user may not have any recorded facts about this topic yet."
             )
             logger.info(f"⚠️ search_memories_tool - {msg}")
             return msg
+
         result = f"Found {len(matches)} memories matching '{query}':\n\n"
         for match in matches:
             memory = match.memory
-            date_str = format_local_date(memory.created_at, display_tz) if memory.created_at else 'Unknown'
-            result += (
-                f"- {memory.content} (relevance: {match.score:.2f}, "
-                f"category: {memory.category.value}, date: {date_str})\n"
-            )
-        return result.strip()
-
-    default_memories = search_memory_default_chat_memories_vector_decision_text(
-        uid=uid,
-        query=query,
-        limit=limit,
-        db_client=firestore_db,
-    )
-    if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
-        logger.info("✅ search_memories_tool - using memory default chat memory results")
-        return default_memories.text or f"No memory vector memories found matching '{query}'."
-    if not chat_legacy_read_authorized(default_memories):
-        logger.info(
-            "🛑 search_memories_tool - memory chat memory denied without legacy fallback: "
-            f"{default_memories.fallback_reason}"
-        )
-        return default_memories.text or "No memories available for this request."
-
-    try:
-        # Over-fetch then rerank: pull more vector candidates than we need so the
-        # keyword (BM25) signal can promote exact-term matches the vector ranking buried.
-        fetch_limit = min(limit * 3, 60)
-        matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
-
-        logger.info(f"📊 search_memories_tool - found {len(matches)} results for query: '{query}'")
-
-        if not matches:
-            msg = (
-                f"No memories found matching '{query}'. The user may not have any recorded facts about this topic yet."
-            )
-            logger.info(f"⚠️ search_memories_tool - {msg}")
-            return msg
-
-        memory_ids: List[str] = [match.get('memory_id') for match in matches if match.get('memory_id')]  # type: ignore[reportAssignmentType]  # match.get returns Any; filtered to truthy str values
-        scores_by_id = {match.get('memory_id'): match.get('score', 0) for match in matches}
-
-        if not memory_ids:
-            return f"Found matches but no valid memory IDs for query: '{query}'"
-
-        docs_by_id = {m.get('id'): m for m in memory_db.get_memories_by_ids(uid, memory_ids)}
-
-        # Preserve vector order, and drop locked / rejected / superseded memories so the
-        # agent never reasons over a fact that is no longer true.
-        candidates: List[Dict[str, Any]] = []
-        for mid in memory_ids:
-            m = docs_by_id.get(mid)
-            if not m:
-                continue
-            if m.get('is_locked', False) or m.get('user_review') is False or m.get('invalid_at') is not None:
-                continue
-            candidates.append(
-                {
-                    'id': m.get('id'),
-                    'content': m.get('content', ''),
-                    'vector_score': scores_by_id.get(mid, 0),
-                    '_doc': m,
-                }
-            )
-
-        if not candidates:
-            return f"No memories found matching '{query}'. The content may require a paid plan to access."
-
-        # Semantic score sets the vector rank; RRF then fuses in the BM25 keyword rank.
-        candidates.sort(key=lambda c: c.get('vector_score', 0), reverse=True)
-        candidates = rrf_rerank(query, candidates, limit)
-
-        # Convert to MemoryDB objects with scores
-        memory_objects: List[Dict[str, Any]] = []
-        for cand in candidates:
-            try:
-                memory_obj = MemoryDB(**cand['_doc'])
-                memory_objects.append({'memory': memory_obj, 'score': cand.get('vector_score', 0)})
-            except Exception as e:
-                logger.error(f"Error creating MemoryDB object: {e}")
-                continue
-
-        if not memory_objects:
-            return f"Found matches but could not retrieve memory details for query: '{query}'"
-
-        logger.info(f"🔍 search_memories_tool - Loaded {len(memory_objects)} full memories")
-
-        # Format results with relevance scores
-        result = f"Found {len(memory_objects)} memories matching '{query}':\n\n"
-        for item in memory_objects:
-            memory = item['memory']
-            score = item['score']
+            score = match.score
             date_str = format_local_date(memory.created_at, display_tz) if memory.created_at else 'Unknown'
             result += (
                 f"- {memory.content} (relevance: {score:.2f}, category: {memory.category.value}, date: {date_str})\n"

@@ -1,4 +1,4 @@
-"""Thin adapter over existing memory apply/read services for canonical-cohort MemoryService."""
+"""Thin adapter over canonical apply/read services for the universal MemoryService."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ from utils.memory.required_promotion import (
     REQUIRED_PROCESSOR_VERSION,
     REQUIRED_PROMOTION_STATUS_PENDING,
 )
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.retrieval.hybrid import rrf_rerank
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector
 from utils.memory.product_memory_read_service import (
@@ -137,8 +137,6 @@ def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str], *, db_c
     if not memory_ids:
         return
     client = db_client if db_client is not None else default_db_client
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
-        return
     pruned = kg_db.prune_memory_citations_from_kg(uid, memory_ids, db_client=client)
     logger.info(
         "kg_citations_pruned uid=%s retracted_memory_count=%d pruned_entities=%d",
@@ -230,6 +228,7 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         category = MemoryCategory.interesting
     tags = list(promotion.get("tags") or [])
     reviewed = bool(promotion.get("reviewed", False))
+    is_baseline = bool(promotion.get("is_baseline", False))
     user_review = promotion.get("user_review")
     source_attribution = _payload_or_empty(promotion.get("source_attribution"))
     raw_subject_attribution = source_attribution.get("subject_attribution", SubjectAttribution.unknown.value)
@@ -249,6 +248,7 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         conversation_id=conversation_id,
         manually_added=item.user_asserted,
         reviewed=reviewed,
+        is_baseline=is_baseline,
         user_review=user_review,
         visibility=item.visibility,
         evidence=evidence_payload,
@@ -487,15 +487,7 @@ def search_canonical_memories(
 
 
 def _ensure_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
-    collections = MemoryCollections(uid=uid)
-    ref = db_client.document(collections.memory_apply_control_state)
-    snapshot = ref.get()
-    if getattr(snapshot, "exists", False):
-        return MemoryControlState(**_snapshot_payload(snapshot))
-
-    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    ref.set(control.model_dump(mode="json"))
-    return control
+    return ensure_canonical_apply_control_state(uid, db_client=db_client)
 
 
 def _ordered_capture_devices_from_evidence(raw_evidence: List[Payload]) -> tuple[List[str], Optional[str]]:
@@ -902,15 +894,7 @@ def write_canonical_external_memory(uid: str, data: Dict[str, Any], *, db_client
 
 
 def _read_replacement_control(uid: str, *, db_client: Any) -> MemoryControlState:
-    snapshot = db_client.document(MemoryCollections(uid=uid).memory_apply_control_state).get()
-    if getattr(snapshot, "exists", False):
-        return MemoryControlState.model_validate(_snapshot_payload(snapshot))
-    return MemoryControlState(
-        uid=uid,
-        head_commit_id="head0",
-        account_generation=1,
-        source_generation=1,
-    )
+    return ensure_canonical_apply_control_state(uid, db_client=db_client)
 
 
 def _conversation_replacement_payload(
@@ -1332,6 +1316,85 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
     return updated
 
 
+def refine_canonical_memory(
+    uid: str,
+    memory_id: str,
+    arg_changes: Dict[str, Any],
+    *,
+    db_client: Any = None,
+) -> MemoryItem:
+    """Apply a released review-queue correction through canonical state.
+
+    Historical review records can carry structured argument changes in addition
+    to replacement content. One canonical patch preserves those changes and
+    returns the item to required Short-term processing; no historical writer is
+    involved.
+    """
+
+    if not arg_changes:
+        raise ValueError("canonical refinement requires argument changes")
+    client = db_client if db_client is not None else default_db_client
+
+    def build_patch(item: MemoryItem, now: datetime) -> Tuple[Payload, Payload]:
+        replacement_content = item.content or ""
+        arguments = dict(item.arguments or {})
+        for key, raw_change in arg_changes.items():
+            value = raw_change.get("to") if isinstance(raw_change, dict) and "to" in raw_change else raw_change
+            if key == "content":
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError("canonical refinement content must be non-empty")
+                replacement_content = value.strip()
+            elif key != "edited":
+                arguments[key] = value
+
+        promotion = _clear_settled_promotion_route(dict(item.promotion or {}))
+        prior_receipt = promotion.pop("processing_receipt", None)
+        processing_history = list(promotion.get("processing_history") or [])
+        if isinstance(prior_receipt, dict):
+            processing_history.append(prior_receipt)
+        promotion.update(
+            {
+                "required": True,
+                "status": REQUIRED_PROMOTION_STATUS_PENDING,
+                "processing_status": REQUIRED_PROCESSING_STATUS_PENDING,
+                "processor_id": REQUIRED_PROCESSOR_ID,
+                "processor_version": REQUIRED_PROCESSOR_VERSION,
+                "reason": "manual_review_refinement",
+                "source_surface": "memory_review_queue",
+                "attempt_count": 0,
+                "reviewed": True,
+                "user_review": True,
+                "processing_history": processing_history[-10:],
+                "review_correction": copy.deepcopy(arg_changes),
+            }
+        )
+        return (
+            {
+                "memory_text": replacement_content,
+                "arguments": arguments,
+                "target_tier": MemoryLayer.short_term.value,
+                "target_user_asserted": True,
+                "clear_graph_assertion": True,
+            },
+            {
+                "promotion_audit": promotion,
+                "expires_at": default_short_term_expiry(now),
+                "kg_extracted": False,
+            },
+        )
+
+    previous, updated = _apply_canonical_user_mutation(
+        uid,
+        memory_id,
+        mutation_kind="review_refinement",
+        build_patch=build_patch,
+        db_client=client,
+    )
+    if previous.tier == MemoryLayer.long_term or previous.graph_ready or previous.kg_extracted:
+        invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=client)
+    return updated
+
+
 def update_canonical_memory_visibility(
     uid: str, memory_id: str, visibility: str, *, db_client: Any = None
 ) -> MemoryItem:
@@ -1569,6 +1632,7 @@ def update_canonical_memory_product_fields(
     *,
     tags: Optional[List[str]] = None,
     category: Optional[str] = None,
+    is_baseline: Optional[bool] = None,
     db_client: Any = None,
 ) -> MemoryItem:
     client = db_client if db_client is not None else default_db_client
@@ -1577,6 +1641,8 @@ def update_canonical_memory_product_fields(
         metadata["tags"] = list(tags)
     if category is not None:
         metadata["category"] = category
+    if is_baseline is not None:
+        metadata["is_baseline"] = is_baseline
     if not metadata:
         item = _read_canonical_memory_item(uid, memory_id, db_client=client)
         if item is None:
@@ -1728,23 +1794,7 @@ def _run_immediate_privacy_cleanup(
 
         return delete_atom_keyword_doc(uid, memory_id, db_client=db_client)
 
-    def _delete_v3_compatibility_projection() -> bool:
-        # Imported lazily because the projection serializer reuses this
-        # adapter's MemoryItem -> MemoryDB mapping.
-        from utils.memory.v3.compatibility_projection_sync import (
-            delete_v3_compatibility_projection_item,
-        )
-
-        control = _read_replacement_control(uid, db_client=db_client)
-        return delete_v3_compatibility_projection_item(
-            uid,
-            memory_id,
-            expected_account_generation=control.account_generation,
-            db_client=db_client,
-        )
-
     cleanup_steps: List[Tuple[str, Callable[[], Any]]] = [
-        ("compatibility_projection", _delete_v3_compatibility_projection),
         ("vector", lambda: delete_canonical_memory_vector(uid, memory_id)),
         (
             "graph_assertion",

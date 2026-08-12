@@ -285,7 +285,7 @@ final class DashboardIntelligenceStore: ObservableObject {
       emitPresentedInterventions(recommendations)
     } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
       guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
-      // Canonical-read users outside the intelligence cohort retain calm
+      // Users without the intelligence capability retain calm
       // dashboard behavior while canonical Goals remain available.
       recommendations = []
     } catch {

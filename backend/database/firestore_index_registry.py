@@ -181,12 +181,6 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('appName'), _asc('timestamp'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
-        'candidates_generation_created',
-        'candidates',
-        'COLLECTION',
-        (_asc('account_generation'), _desc('created_at'), _desc('__name__')),
-    ),
-    FirestoreIndexRequirement(
         'candidates_status_generation_created',
         'candidates',
         'COLLECTION',
@@ -228,6 +222,14 @@ ACTIVE_ATTENTION_OVERRIDE_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('expires_at', '>', 'now'),
     ),
     index_fields=(_asc('account_generation'), _asc('expires_at'), _asc('__name__')),
+)
+
+CANDIDATES_COMPATIBILITY_QUERY = FirestoreQuerySpec(
+    identifier='candidates_generation_created',
+    collection_group='candidates',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('account_generation', '==', 'account_generation'),),
+    index_fields=(_asc('account_generation'), _desc('created_at'), _desc('__name__')),
 )
 
 LEGACY_CONVERSATION_RECOVERY_QUERY = FirestoreQuerySpec(
@@ -527,6 +529,7 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     REVIEW_QUEUE_BY_FACT_QUERY,

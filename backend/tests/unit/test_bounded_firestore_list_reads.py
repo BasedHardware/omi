@@ -263,24 +263,6 @@ def test_knowledge_graph_get_is_deterministic_and_bounded_for_large_fixtures(
     assert assertions.order_fields == [kg.KNOWLEDGE_GRAPH_DOCUMENT_ORDER]
 
 
-def test_legacy_get_memories_no_first_page_5000_force():
-    import routers.memories as mem
-
-    calls = []
-
-    def fake_get(uid, limit, offset):
-        calls.append((uid, limit, offset))
-        return []
-
-    with patch.object(mem.memories_db, 'get_memories', side_effect=fake_get):
-        mem._legacy_get_memories('u', limit=100, offset=0)
-    assert calls == [('u', 100, 0)]
-
-    with patch.object(mem.memories_db, 'get_memories', side_effect=fake_get):
-        mem._legacy_get_memories('u', limit=9999, offset=0)
-    assert calls[-1] == ('u', 500, 0)
-
-
 def test_knowledge_graph_route_exposes_truncation(monkeypatch):
     import routers.knowledge_graph as kg_router
 
@@ -293,7 +275,15 @@ def test_knowledge_graph_route_exposes_truncation(monkeypatch):
         'node_limit': 500,
         'edge_limit': 1000,
     }
-    monkeypatch.setattr(kg_router, 'get_knowledge_graph_payload', lambda uid: payload)
+    page = SimpleNamespace(
+        nodes=payload['nodes'],
+        edges=payload['edges'],
+        has_more=payload['truncated'],
+        next_cursor='next',
+    )
+    monkeypatch.setattr(
+        kg_router.canonical_graph_service, 'get_canonical_knowledge_graph', lambda *args, **kwargs: page
+    )
     app = FastAPI()
     app.include_router(kg_router.router)
     app.dependency_overrides[kg_router.auth.get_current_user_uid] = lambda: 'u'
@@ -301,7 +291,7 @@ def test_knowledge_graph_route_exposes_truncation(monkeypatch):
     response = TestClient(app).get('/v1/knowledge-graph')
 
     assert response.status_code == 200
-    assert response.json() == payload
+    assert response.json() == {**payload, 'node_limit': None, 'edge_limit': None}
 
 
 def test_knowledge_graph_route_keeps_firebase_auth_dependency():

@@ -152,9 +152,9 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var homeMode: String?
   /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
   var shellVariant: String?
-  /// Stable typed route for the cohort shell. Nil for the legacy shell.
+  /// Stable typed route for the Chat-first shell. Nil for the legacy shell.
   var chatFirstRoute: String?
-  /// Set only by the mounted cohort destination after it has appeared. This
+  /// Set only by the mounted Chat-first destination after it has appeared. This
   /// keeps a successful navigation response equivalent to the target being
   /// visible, rather than merely accepted by the root reducer.
   var visibleChatFirstRoute: String?

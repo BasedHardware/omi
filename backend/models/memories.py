@@ -572,8 +572,8 @@ class MemoryDB(Memory):
     is_baseline: bool = False
     evidence: List[Evidence] = Field(default_factory=list)
 
-    # Canonical memory tiering. Legacy API/service boundaries set this to None
-    # so non-cohort users cannot receive Short-term/Long-term rollout state.
+    # Universal memory tiering. This remains optional for directional decoding
+    # of older released payloads that omitted lifecycle fields.
     memory_tier: Optional[MemoryTier] = None
 
     @computed_field

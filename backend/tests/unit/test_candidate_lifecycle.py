@@ -43,8 +43,6 @@ def fake_db(monkeypatch):
 
     monkeypatch.setattr(candidates_db, 'db', database)
     monkeypatch.setattr(candidates_db.firestore, 'transactional', transactional)
-    # candidates.py gates writes on is_canonical_memory_user, not workflow_mode.
-    monkeypatch.setattr(candidates_db, 'is_canonical_memory_user', lambda uid: uid == 'user-1')
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
     candidate_service.task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
@@ -76,6 +74,37 @@ def create_record(fake_db, **overrides):
         account_generation=3,
         now=datetime(2026, 7, 9, tzinfo=timezone.utc),
     )
+
+
+def test_staged_compatibility_score_is_pending_only(fake_db):
+    proposal = task_create_proposal(
+        source_surface='legacy_staged',
+        evidence_refs=[{'kind': 'external', 'id': 'legacy-staged-row-1', 'scope': 'canonical'}],
+    )
+    candidate = candidates_db.create_candidate(
+        'user-1',
+        proposal,
+        idempotency_key='legacy-staged:row-1',
+        account_generation=3,
+    )
+
+    updated = candidates_db.update_candidate_compatibility_score(
+        'user-1',
+        candidate.candidate_id,
+        relevance_score=42,
+        account_generation=3,
+    )
+    assert updated.compatibility is not None
+    assert updated.compatibility.relevance_score == 42
+
+    candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
+    with pytest.raises(candidates_db.CandidateConflictError, match='not an active staged-task'):
+        candidates_db.update_candidate_compatibility_score(
+            'user-1',
+            candidate.candidate_id,
+            relevance_score=99,
+            account_generation=3,
+        )
 
 
 def evidence_refs(start, stop):
@@ -827,30 +856,11 @@ def test_expired_legacy_promotion_claim_gets_new_owner(fake_db):
         )
 
 
-@pytest.mark.parametrize('cohort', ['in', 'out'])
-def test_authoritative_control_blocks_candidate_writes_in_nonvisible_modes(fake_db, cohort):
-    if cohort == 'out':
-        # candidates.py gates writes on canonical cohort membership.
-        fake_db.rows[('users', 'user-1', 'task_intelligence_control', 'state')]['workflow_mode'] = 'off'
-        # Override the fixture's cohort patch to exclude user-1.
-        import database.candidates as _candidates_db
-
-        original_check = _candidates_db.is_canonical_memory_user
-        import database.candidates as candidates_module
-
-        candidates_module.is_canonical_memory_user = lambda uid: False
-
-        try:
-            with pytest.raises(candidates_db.CandidateConflictError):
-                create_record(fake_db)
-        finally:
-            candidates_module.is_canonical_memory_user = original_check
-
-        assert not [path for path in fake_db.rows if 'candidates' in path]
-    else:
-        # Canonical users are never blocked by the retired workflow_mode field.
-        record = create_record(fake_db)
-        assert record.candidate_id is not None
+@pytest.mark.parametrize('workflow_mode', ['off', 'shadow', 'write', 'read'])
+def test_candidate_writes_are_universal_and_ignore_retired_workflow_mode(fake_db, workflow_mode):
+    fake_db.rows[('users', 'user-1', 'task_intelligence_control', 'state')]['workflow_mode'] = workflow_mode
+    record = create_record(fake_db)
+    assert record.candidate_id is not None
 
 
 def test_generation_rollover_fences_acceptance_inside_transaction(fake_db):

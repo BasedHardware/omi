@@ -972,6 +972,32 @@ public enum OmiAPI {
   }
 
 
+  public struct CandidateCompatibilityMetadata: Codable {
+    public let category: String?
+    public let metadata: String?
+    public let relevanceScore: Int?
+
+    private enum CodingKeys: String, CodingKey {
+      case category
+      case metadata
+      case relevanceScore = "relevance_score"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      category = try c.decodeIfPresent(String.self, forKey: .category)
+      metadata = try c.decodeIfPresent(String.self, forKey: .metadata)
+      relevanceScore = try c.decodeIfPresent(Int.self, forKey: .relevanceScore)
+    }
+
+    public init(category: String? = nil, metadata: String? = nil, relevanceScore: Int? = nil) {
+      self.category = category
+      self.metadata = metadata
+      self.relevanceScore = relevanceScore
+    }
+  }
+
+
   public struct CandidateListResponse: Codable {
     public let candidates: [CandidateRecord]
     public let hasMore: Bool?
@@ -998,6 +1024,7 @@ public enum OmiAPI {
     public let accountGeneration: Int
     public let candidateId: String
     public let captureConfidence: Double
+    public let compatibility: CandidateCompatibilityMetadata?
     public let createdAt: String
     public let evidenceRefs: [EvidenceRef]
     public let goalId: String?
@@ -1020,6 +1047,7 @@ public enum OmiAPI {
       case accountGeneration = "account_generation"
       case candidateId = "candidate_id"
       case captureConfidence = "capture_confidence"
+      case compatibility
       case createdAt = "created_at"
       case evidenceRefs = "evidence_refs"
       case goalId = "goal_id"
@@ -1044,6 +1072,7 @@ public enum OmiAPI {
       accountGeneration = try c.decode(Int.self, forKey: .accountGeneration)
       candidateId = try c.decode(String.self, forKey: .candidateId)
       captureConfidence = try c.decode(Double.self, forKey: .captureConfidence)
+      compatibility = try c.decodeIfPresent(CandidateCompatibilityMetadata.self, forKey: .compatibility)
       createdAt = try c.decode(String.self, forKey: .createdAt)
       evidenceRefs = try c.decode([EvidenceRef].self, forKey: .evidenceRefs)
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
@@ -1074,10 +1103,11 @@ public enum OmiAPI {
       workstreamProposal = try c.decodeIfPresent(WorkstreamProposalOutput.self, forKey: .workstreamProposal)
     }
 
-    public init(accountGeneration: Int, candidateId: String, captureConfidence: Double, createdAt: String, evidenceRefs: [EvidenceRef], goalId: String? = nil, idempotencyKey: String, ownershipConfidence: Double, proposedAction: CandidateAction, resolutionReason: String? = nil, resolvedAt: String? = nil, resultTaskId: String? = nil, resultWorkstreamId: String? = nil, sourceSurface: String, status: CandidateStatus? = nil, subjectKind: CandidateSubjectKind, taskChange: CandidateTaskChange? = nil, taskId: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposalOutput? = nil) {
+    public init(accountGeneration: Int, candidateId: String, captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, createdAt: String, evidenceRefs: [EvidenceRef], goalId: String? = nil, idempotencyKey: String, ownershipConfidence: Double, proposedAction: CandidateAction, resolutionReason: String? = nil, resolvedAt: String? = nil, resultTaskId: String? = nil, resultWorkstreamId: String? = nil, sourceSurface: String, status: CandidateStatus? = nil, subjectKind: CandidateSubjectKind, taskChange: CandidateTaskChange? = nil, taskId: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposalOutput? = nil) {
       self.accountGeneration = accountGeneration
       self.candidateId = candidateId
       self.captureConfidence = captureConfidence
+      self.compatibility = compatibility
       self.createdAt = createdAt
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
@@ -3366,6 +3396,7 @@ public enum OmiAPI {
 
   public struct TaskCancelCandidate: Codable {
     public let captureConfidence: Double
+    public let compatibility: CandidateCompatibilityMetadata?
     public let evidenceRefs: [EvidenceRef]
     public let goalId: String?
     public let ownershipConfidence: Double
@@ -3378,6 +3409,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case captureConfidence = "capture_confidence"
+      case compatibility
       case evidenceRefs = "evidence_refs"
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
@@ -3392,6 +3424,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       captureConfidence = try c.decode(Double.self, forKey: .captureConfidence)
+      compatibility = try c.decodeIfPresent(CandidateCompatibilityMetadata.self, forKey: .compatibility)
       evidenceRefs = try c.decode([EvidenceRef].self, forKey: .evidenceRefs)
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
@@ -3403,8 +3436,9 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
+      self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence
@@ -3470,6 +3504,7 @@ public enum OmiAPI {
 
   public struct TaskCompleteCandidate: Codable {
     public let captureConfidence: Double
+    public let compatibility: CandidateCompatibilityMetadata?
     public let evidenceRefs: [EvidenceRef]
     public let goalId: String?
     public let ownershipConfidence: Double
@@ -3482,6 +3517,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case captureConfidence = "capture_confidence"
+      case compatibility
       case evidenceRefs = "evidence_refs"
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
@@ -3496,6 +3532,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       captureConfidence = try c.decode(Double.self, forKey: .captureConfidence)
+      compatibility = try c.decodeIfPresent(CandidateCompatibilityMetadata.self, forKey: .compatibility)
       evidenceRefs = try c.decode([EvidenceRef].self, forKey: .evidenceRefs)
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
@@ -3507,8 +3544,9 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
+      self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence
@@ -3524,6 +3562,7 @@ public enum OmiAPI {
 
   public struct TaskCreateCandidate: Codable {
     public let captureConfidence: Double
+    public let compatibility: CandidateCompatibilityMetadata?
     public let evidenceRefs: [EvidenceRef]
     public let goalId: String?
     public let ownershipConfidence: Double
@@ -3535,6 +3574,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case captureConfidence = "capture_confidence"
+      case compatibility
       case evidenceRefs = "evidence_refs"
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
@@ -3548,6 +3588,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       captureConfidence = try c.decode(Double.self, forKey: .captureConfidence)
+      compatibility = try c.decodeIfPresent(CandidateCompatibilityMetadata.self, forKey: .compatibility)
       evidenceRefs = try c.decode([EvidenceRef].self, forKey: .evidenceRefs)
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
@@ -3558,8 +3599,9 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskCreatePayload, workstreamId: String? = nil) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskCreatePayload, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
+      self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence
@@ -3731,6 +3773,7 @@ public enum OmiAPI {
 
   public struct TaskSupersedeCandidate: Codable {
     public let captureConfidence: Double
+    public let compatibility: CandidateCompatibilityMetadata?
     public let evidenceRefs: [EvidenceRef]
     public let goalId: String?
     public let ownershipConfidence: Double
@@ -3743,6 +3786,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case captureConfidence = "capture_confidence"
+      case compatibility
       case evidenceRefs = "evidence_refs"
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
@@ -3757,6 +3801,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       captureConfidence = try c.decode(Double.self, forKey: .captureConfidence)
+      compatibility = try c.decodeIfPresent(CandidateCompatibilityMetadata.self, forKey: .compatibility)
       evidenceRefs = try c.decode([EvidenceRef].self, forKey: .evidenceRefs)
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
@@ -3768,8 +3813,9 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
+      self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence
@@ -3785,6 +3831,7 @@ public enum OmiAPI {
 
   public struct TaskUpdateCandidate: Codable {
     public let captureConfidence: Double
+    public let compatibility: CandidateCompatibilityMetadata?
     public let evidenceRefs: [EvidenceRef]
     public let goalId: String?
     public let ownershipConfidence: Double
@@ -3797,6 +3844,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case captureConfidence = "capture_confidence"
+      case compatibility
       case evidenceRefs = "evidence_refs"
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
@@ -3811,6 +3859,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       captureConfidence = try c.decode(Double.self, forKey: .captureConfidence)
+      compatibility = try c.decodeIfPresent(CandidateCompatibilityMetadata.self, forKey: .compatibility)
       evidenceRefs = try c.decode([EvidenceRef].self, forKey: .evidenceRefs)
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
@@ -3822,8 +3871,9 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
+      self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence
@@ -4092,6 +4142,7 @@ public enum OmiAPI {
 
   public struct WorkstreamCreateCandidate: Codable {
     public let captureConfidence: Double
+    public let compatibility: CandidateCompatibilityMetadata?
     public let evidenceRefs: [EvidenceRef]
     public let goalId: String?
     public let ownershipConfidence: Double
@@ -4103,6 +4154,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case captureConfidence = "capture_confidence"
+      case compatibility
       case evidenceRefs = "evidence_refs"
       case goalId = "goal_id"
       case ownershipConfidence = "ownership_confidence"
@@ -4116,6 +4168,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       captureConfidence = try c.decode(Double.self, forKey: .captureConfidence)
+      compatibility = try c.decodeIfPresent(CandidateCompatibilityMetadata.self, forKey: .compatibility)
       evidenceRefs = try c.decode([EvidenceRef].self, forKey: .evidenceRefs)
       goalId = try c.decodeIfPresent(String.self, forKey: .goalId)
       ownershipConfidence = try c.decode(Double.self, forKey: .ownershipConfidence)
@@ -4126,8 +4179,9 @@ public enum OmiAPI {
       workstreamProposal = try c.decode(WorkstreamProposal.self, forKey: .workstreamProposal)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposal) {
+    public init(captureConfidence: Double, compatibility: CandidateCompatibilityMetadata? = nil, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposal) {
       self.captureConfidence = captureConfidence
+      self.compatibility = compatibility
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
       self.ownershipConfidence = ownershipConfidence

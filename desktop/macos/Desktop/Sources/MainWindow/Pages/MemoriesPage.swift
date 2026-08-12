@@ -204,8 +204,8 @@ class MemoriesViewModel: ObservableObject {
   }
 
   /// Whether the backend supports device_scope filtering for this user.
-  /// Canonical memory users support it; legacy users get a 400. Legacy rows
-  /// have no capture provenance, so after that fallback we preserve the
+  /// Universal memory supports it; historical rows can lack capture provenance,
+  /// so after that fallback we preserve the
   /// unscoped list rather than falsely filtering every row out locally.
   private var deviceScopeSupported = true
 
@@ -2812,7 +2812,7 @@ private struct MemoryCardView: View {
               .foregroundColor(Ink.secondary)
           }
 
-          // Badge when the server sent an authoritative layer (canonical cohort always does).
+          // Badge when the server sent an authoritative lifecycle layer.
           // Only badge memories the backend actually tiered; legacy/untiered
           // records carry no real tier, so we show no badge for them.
           if memory.tierIsExplicit {

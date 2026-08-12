@@ -206,9 +206,60 @@ def get_memories(
     if end_date:
         memories_ref = memories_ref.where(filter=FieldFilter('created_at', '<=', end_date))
 
-    # Keep the Firestore query on the existing indexed order. MCP-specific sort
-    # modes are applied after batch collection to avoid requiring extra
-    # composite indexes for category-filtered reads.
+    if sort in {'updated_desc', 'updated_at_desc', 'updated_or_created_desc'}:
+        # ``updated_at`` is absent from a material slice of the released
+        # collection. Firestore excludes those docs from an ``order_by`` query,
+        # so fetch bounded candidate windows from both updated and created order,
+        # merge by document id, then apply the product's final fallback key in
+        # Python. A row in the final top-N must occur in the corresponding top-N
+        # source window (updated rows in updated order, legacy rows in created
+        # order), so this remains bounded without dropping old data.
+        candidate_limit = max(1, min(limit + max(offset, 0), 5000))
+
+        def _ordered_query(order_fields: tuple[str, ...]) -> Any:
+            query = memories_ref
+            for field in order_fields:
+                query = query.order_by(field, direction=firestore.Query.DESCENDING)
+            return query.limit(candidate_limit).stream()
+
+        candidate_docs = list(_ordered_query(('updated_at',)))
+        candidate_docs.extend(_ordered_query(('created_at',)))
+        by_id: Dict[str, Dict[str, Any]] = {}
+        for doc in candidate_docs:
+            payload = _typed_doc(doc)
+            doc_id = getattr(doc, 'id', None) or payload.get('id')
+            if not isinstance(doc_id, str) or not doc_id:
+                continue
+            payload.setdefault('id', doc_id)
+            by_id.setdefault(doc_id, payload)
+
+        def _sort_key(memory: Dict[str, Any]) -> tuple[float, str]:
+            value = memory.get('updated_at') or memory.get('created_at')
+            if isinstance(value, str):
+                try:
+                    value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                except ValueError:
+                    value = None
+            if not isinstance(value, datetime):
+                timestamp = float('-inf')
+            else:
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=timezone.utc)
+                timestamp = value.timestamp()
+            return (-timestamp, str(memory.get('id') or ''))
+
+        memories = sorted(
+            (
+                memory
+                for memory in by_id.values()
+                if memory.get('user_review') is not False and (include_invalidated or memory.get('invalid_at') is None)
+            ),
+            key=_sort_key,
+        )
+        return memories[max(0, offset) : max(0, offset) + max(1, limit)]
+
+    # Keep the default query on the existing indexed scoring order. Unrelated
+    # legacy callers retain their released order and pagination semantics.
     memories_ref = memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING).order_by(
         'created_at', direction=firestore.Query.DESCENDING
     )

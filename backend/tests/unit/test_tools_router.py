@@ -123,7 +123,6 @@ _SYS_MODULE_NAMES = [
     "utils.memory.default_read_rollout",
     "utils.memory.memory_system",
     "utils.memory.memory_service",
-    "utils.memory.surface_routing",
     "utils.rate_limit_config",
     "routers",
     "routers.tools",
@@ -206,32 +205,36 @@ _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
 _stub_package("utils.memory")
 
-memory_adapter_stub = _stub_module("utils.memory.chat_memory_adapter")
-memory_adapter_stub.list_default_chat_memories_decision_text = MagicMock(
-    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
-)
-memory_adapter_stub.search_memory_default_chat_memories_vector_decision_text = MagicMock(
-    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
-)
-memory_adapter_stub.chat_legacy_read_authorized = MagicMock(
-    side_effect=lambda result: result.read_decision == "use_legacy_safe"
-    or (result.read_decision == "deny_memory" and result.fallback_reason == "missing_rollout_state")
-)
-read_rollout_stub = _stub_module("utils.memory.default_read_rollout")
-read_rollout_stub.MemoryReadDecision = types.SimpleNamespace(
-    USE_MEMORY="use_memory",
-    USE_LEGACY_SAFE="use_legacy_safe",
-    DENY_MEMORY="deny_memory",
-)
-
-memory_system_stub = _stub_module("utils.memory.memory_system")
-memory_system_stub.MemorySystem = types.SimpleNamespace(LEGACY="legacy", CANONICAL="canonical")
-
 memory_service_stub = _stub_module("utils.memory.memory_service")
-memory_service_stub.MemoryService = MagicMock
 
-surface_routing_stub = _stub_module("utils.memory.surface_routing")
-surface_routing_stub.pin_memory_system = MagicMock(return_value=memory_system_stub.MemorySystem.LEGACY)
+
+class FakeMemoryService:
+    """Exercise the universal service contract while keeping this router suite hermetic."""
+
+    def __init__(self, *, db_client=None):
+        self.db_client = db_client
+
+    def read(self, uid, *, limit=100, offset=0, now=None):
+        del now
+        return [FakeMemoryDB(**row) for row in memories_db.get_memories(uid, limit=limit, offset=offset)]
+
+    def search(self, uid, query, *, limit=5):
+        rows = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
+        ids = [row["memory_id"] for row in rows]
+        scores = {row["memory_id"]: float(row.get("score", 0.0)) for row in rows}
+        hydrated = {
+            row["id"]: FakeMemoryDB(**row)
+            for row in memories_db.get_memories_by_ids(uid, ids)
+            if not row.get("is_locked", False)
+        }
+        return [
+            types.SimpleNamespace(memory=hydrated[memory_id], score=scores[memory_id])
+            for memory_id in ids
+            if memory_id in hydrated
+        ]
+
+
+memory_service_stub.MemoryService = FakeMemoryService
 boundary_stub = _stub_module("utils.retrieval.tool_result_boundaries")
 boundary_stub.preserve_chat_memory_tool_result_boundary = MagicMock(side_effect=lambda _tool_name, result: result)
 
@@ -380,6 +383,7 @@ class FakeMemoryDB:
         self.content = kwargs.get('content', 'test memory')
         self.category = FakeCategory.other
         self.created_at = kwargs.get('created_at', datetime.now(timezone.utc))
+        self.is_locked = kwargs.get('is_locked', False)
 
     @staticmethod
     def get_memories_as_str(memories):

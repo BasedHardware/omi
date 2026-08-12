@@ -6,11 +6,42 @@ from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence, cast
 
 from database import chat as chat_db
 from database import conversations as conversations_db
-from database import memories as memories_db
+from database import _client as database_client
 from database.action_items import get_action_items as get_standalone_action_items
 from database.users import get_people, get_user_profile
+from utils.memory.memory_service import MemoryService
 
 JsonRecord = dict[str, Any]
+
+# Primary/user-visible task intelligence records. Derived projections, leases,
+# idempotency receipts, and outboxes are intentionally excluded: they are
+# implementation state, not additional user-authored product data.
+TASK_EXPORT_COLLECTIONS = (
+    'candidates',
+    'goals',
+    'workstreams',
+    'staged_tasks',
+    'task_recurrence_inbox',
+    'task_feedback',
+    'task_outcomes',
+    'task_interventions',
+    'task_attention_overrides',
+    'task_context_snapshots',
+    'task_open_loop_snapshots',
+    'chat_first_proactive_intents',
+    'chat_first_deferrals',
+)
+
+# User-visible history/evidence nested beneath its owning Goal or Workstream.
+# Projection heads, mutation receipts, leases, and outboxes stay excluded as
+# rebuildable implementation state.
+TASK_NESTED_EXPORT_COLLECTIONS = (
+    ('goal_events', 'goals', 'events'),
+    ('goal_history', 'goals', 'goal_history'),
+    ('workstream_events', 'workstreams', 'events'),
+    ('workstream_artifact_refs', 'workstreams', 'artifact_refs'),
+    ('workstream_continuation_checkpoints', 'workstreams', 'continuation_checkpoints'),
+)
 
 
 def _json_default(obj: object) -> str:
@@ -44,6 +75,38 @@ def _yield_json_array(items: Iterable[Mapping[str, Any]]) -> Iterator[str]:
     yield '\n  ]'
 
 
+def _iter_user_subcollection(uid: str, collection_name: str) -> Iterator[Mapping[str, Any]]:
+    """Stream one user-owned primary collection without loading it in memory."""
+
+    collection = database_client.db.collection('users').document(uid).collection(collection_name)
+    for snapshot in collection.stream():
+        payload = snapshot.to_dict()
+        if not isinstance(payload, dict):
+            continue
+        row = dict(payload)
+        row.setdefault('id', snapshot.id)
+        yield row
+
+
+def _iter_user_nested_subcollection(
+    uid: str,
+    parent_collection_name: str,
+    child_collection_name: str,
+) -> Iterator[Mapping[str, Any]]:
+    """Stream user-visible records nested below one user-owned collection."""
+
+    parents = database_client.db.collection('users').document(uid).collection(parent_collection_name)
+    for parent_snapshot in parents.stream():
+        for child_snapshot in parent_snapshot.reference.collection(child_collection_name).stream():
+            payload = child_snapshot.to_dict()
+            if not isinstance(payload, dict):
+                continue
+            row = dict(payload)
+            row.setdefault('id', child_snapshot.id)
+            row['parent_id'] = parent_snapshot.id
+            yield row
+
+
 def iter_user_data_export(uid: str) -> Iterator[str]:
     yield '{\n'
 
@@ -62,13 +125,14 @@ def iter_user_data_export(uid: str) -> Iterator[str]:
     yield '\n  ],\n'
 
     yield '  "memories": '
-    yield from _yield_json_array(
-        _iter_paginated(
-            lambda limit, offset: cast(
-                Sequence[Mapping[str, Any]], memories_db.get_non_filtered_memories(uid, limit=limit, offset=offset)
-            )
-        )
+    # Export is an explicit Archive-capable operation. The universal service
+    # merges canonical and historical physical formats, applies tombstone and
+    # override suppression, and returns every live logical memory once without
+    # materializing historical rows.
+    exported_memories = (
+        memory.model_dump(mode='json') for memory in MemoryService().export_memories(uid, include_archive=True)
     )
+    yield from _yield_json_array(exported_memories)
     yield ',\n'
 
     people = cast(Sequence[Mapping[str, Any]], get_people(uid))
@@ -83,6 +147,23 @@ def iter_user_data_export(uid: str) -> Iterator[str]:
         )
     )
     yield ',\n'
+
+    yield '  "task_data": {\n'
+    task_export_sections = [
+        (collection_name, _iter_user_subcollection(uid, collection_name)) for collection_name in TASK_EXPORT_COLLECTIONS
+    ]
+    task_export_sections.extend(
+        (
+            export_name,
+            _iter_user_nested_subcollection(uid, parent_collection_name, child_collection_name),
+        )
+        for export_name, parent_collection_name, child_collection_name in TASK_NESTED_EXPORT_COLLECTIONS
+    )
+    for index, (collection_name, records) in enumerate(task_export_sections):
+        yield f'    {json.dumps(collection_name)}: '
+        yield from _yield_json_array(records)
+        yield ',\n' if index < len(task_export_sections) - 1 else '\n'
+    yield '  },\n'
 
     yield '  "chat_messages": [\n'
     first = True

@@ -819,6 +819,12 @@ export interface CancelSubscriptionRequest {
 
 export type CandidateAction = "create" | "update" | "complete" | "cancel" | "supersede";
 
+export interface CandidateCompatibilityMetadata {
+  category?: string | null;
+  metadata?: string | null;
+  relevance_score?: number | null;
+}
+
 export type CandidateCreate = TaskCandidate | WorkstreamCreateCandidate;
 
 export interface CandidateListResponse {
@@ -3372,6 +3378,7 @@ export interface TaskAssistantSettings {
 
 export interface TaskCancelCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -3404,6 +3411,7 @@ export interface TaskChangePayload {
 
 export interface TaskCompleteCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -3417,6 +3425,7 @@ export interface TaskCompleteCandidate {
 
 export interface TaskCreateCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -3504,6 +3513,7 @@ export type TaskStatus = "active" | "completed" | "cancelled" | "superseded";
 
 export interface TaskSupersedeCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -3517,6 +3527,7 @@ export interface TaskSupersedeCandidate {
 
 export interface TaskUpdateCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -3916,6 +3927,7 @@ export interface Workstream {
 
 export interface WorkstreamCreateCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -4119,6 +4131,7 @@ export interface OmiApiSchemas {
   "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
   "CancelSubscriptionRequest": CancelSubscriptionRequest;
   "CandidateAction": CandidateAction;
+  "CandidateCompatibilityMetadata": CandidateCompatibilityMetadata;
   "CandidateCreate": CandidateCreate;
   "CandidateListResponse": CandidateListResponse;
   "CandidateMigrationReport": CandidateMigrationReport;

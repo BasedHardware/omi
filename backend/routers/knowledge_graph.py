@@ -5,29 +5,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Callable, Optional, cast
 
-from database import knowledge_graph as kg_db
-from database import memories as memories_db
-from database._client import db as firestore_db
 from database.auth import get_user_name
 from utils.memory import canonical_graph as canonical_graph_service
-from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import pin_memory_system
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.other import endpoints as auth
 from utils.subscription import is_trial_paywalled
 
 router = APIRouter()
-Payload = Dict[str, Any]
-MemoryPayloads = List[Payload]
-KnowledgeGraphLoader = Callable[[str], Payload]
-CanonicalKnowledgeGraphLoader = Callable[..., Payload]
 RateLimitFactory = Callable[[Any, str], Any]
-RebuildKnowledgeGraph = Callable[[str, MemoryPayloads, str], Payload]
-get_knowledge_graph_payload: KnowledgeGraphLoader = cast(KnowledgeGraphLoader, getattr(kg_db, "get_knowledge_graph"))
-get_canonical_knowledge_graph_payload: CanonicalKnowledgeGraphLoader = cast(
-    CanonicalKnowledgeGraphLoader,
-    getattr(canonical_graph_service, "get_canonical_knowledge_graph"),
-)
 with_rate_limit: RateLimitFactory = cast(RateLimitFactory, getattr(auth, "with_rate_limit"))
 CANONICAL_GRAPH_MUTATION_CONFLICT = (
     "Canonical knowledge graph state is derived from canonical memories and cannot be deleted or rebuilt directly."
@@ -38,17 +23,9 @@ def _knowledge_graph_llm_module() -> Any:
     return sys.modules.get("utils.llm.knowledge_graph") or importlib.import_module("utils.llm.knowledge_graph")
 
 
-def _run_rebuild_knowledge_graph(uid: str, memories: MemoryPayloads, user_name: str) -> Payload:
-    rebuild_knowledge_graph = cast(
-        RebuildKnowledgeGraph, getattr(_knowledge_graph_llm_module(), "rebuild_knowledge_graph")
-    )
-    return rebuild_knowledge_graph(uid, memories, user_name)
-
-
 def _is_assertion_backed_graph_account(uid: str) -> bool:
-    if pin_memory_system(uid, db_client=firestore_db) == MemorySystem.CANONICAL:
-        return True
-    return kg_db.has_stored_memory_graph_assertions(uid, db_client=firestore_db)
+    """All authenticated accounts use assertion-backed graph semantics."""
+    return True
 
 
 def _require_legacy_graph_mutation(uid: str) -> None:
@@ -116,9 +93,17 @@ class ExtractKnowledgeGraphResponse(BaseModel):
 
 @router.get('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=KnowledgeGraphResponse)
 def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
-    graph = get_knowledge_graph_payload(uid)
-    nodes = graph.get('nodes', [])
-    edges = graph.get('edges', [])
+    try:
+        page = canonical_graph_service.get_canonical_knowledge_graph(
+            uid,
+            limit=canonical_graph_service.MAX_CANONICAL_GRAPH_PAGE_LIMIT,
+            cursor=None,
+        )
+        nodes = page.nodes
+        edges = page.edges
+        graph = {'truncated': bool(page.has_more), 'node_count': len(nodes), 'edge_count': len(edges)}
+    except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
+        raise HTTPException(status_code=503, detail='knowledge_graph_unavailable') from exc
     return KnowledgeGraphResponse(
         nodes=nodes,
         edges=edges,
@@ -163,29 +148,12 @@ def get_canonical_knowledge_graph(
     )
 
 
-def _rebuild_graph_task(uid: str, user_name: str):
-    if _is_assertion_backed_graph_account(uid):
-        return
-    legacy_memories: MemoryPayloads = memories_db.get_memories(uid, limit=500)
-    memories = [memory for memory in legacy_memories if not memory.get('is_locked', False)]
-    if _is_assertion_backed_graph_account(uid):
-        return
-    _run_rebuild_knowledge_graph(uid, memories, user_name)
-
-
 @router.post('/v1/knowledge-graph/rebuild', tags=['knowledge_graph'], response_model=RebuildResponse)
 def rebuild_graph(
     background_tasks: BackgroundTasks,
     uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:rebuild")),
 ):
     _require_legacy_graph_mutation(uid)
-    user_name = get_user_name(uid) or ""
-
-    kg_db.delete_knowledge_graph(uid)
-
-    background_tasks.add_task(_rebuild_graph_task, uid, user_name)
-
-    return RebuildResponse(status="rebuilding", nodes_count=0, edges_count=0)
 
 
 @router.post(
@@ -230,6 +198,4 @@ async def extract_knowledge_graph(
 
 @router.delete('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=DeleteKnowledgeGraphResponse)
 def delete_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
-    _require_legacy_graph_mutation(uid)
-    kg_db.delete_knowledge_graph(uid)
-    return {"status": "deleted"}
+    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=CANONICAL_GRAPH_MUTATION_CONFLICT)

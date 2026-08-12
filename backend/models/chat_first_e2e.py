@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class ChatFirstE2EFixtureCase(str, Enum):
     enabled = 'enabled'
     question = 'question'
-    out_of_cohort = 'out_of_cohort'
+    disabled_control = 'disabled_control'
     unreachable_control = 'unreachable_control'
     cold_start = 'cold_start'
 
