@@ -148,6 +148,23 @@ if [ -n "$STAGED_WEB_FILES" ]; then
         exit 1
       fi
     fi
+    for plugin in prettier-plugin-tailwindcss; do
+      PLUGIN_RESOLVED=$(git show :"$dir/package-lock.json" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print((d.get('packages',{}).get('node_modules/' + sys.argv[1]) or {}).get('version',''))" "$plugin" 2>/dev/null)
+      if [ -n "$PLUGIN_RESOLVED" ]; then
+        PLUGIN_PKG="$dir/node_modules/$plugin/package.json"
+        if [ -f "$PLUGIN_PKG" ]; then
+          PLUGIN_LOCAL=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('version',''))" "$PLUGIN_PKG" 2>/dev/null)
+        else
+          PLUGIN_LOCAL=""
+        fi
+        if [ -z "$PLUGIN_LOCAL" ] || [ "$PLUGIN_LOCAL" != "$PLUGIN_RESOLVED" ]; then
+          echo "Prettier plugin toolchain mismatch in $dir: package-lock resolves $plugin $PLUGIN_RESOLVED, found ${PLUGIN_LOCAL:-no $dir/node_modules/$plugin}." >&2
+          echo "A missing or stale plugin reformats files into a shape CI rejects, so formatting is refused." >&2
+          echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+          exit 1
+        fi
+      fi
+    done
     echo "$DIR_FILES" | xargs "$PRETTIER_BIN" --write
     echo "$DIR_FILES" | xargs git add
   done
