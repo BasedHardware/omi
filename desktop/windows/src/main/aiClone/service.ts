@@ -17,7 +17,10 @@ import type {
 import { AiCloneStore } from './store'
 import {
   BeeperClient,
+  BEEPER_BASE_URL,
   beeperTimestampMs,
+  discoverBeeperBaseUrl,
+  oldestFirst,
   type BeeperChat,
   type BeeperMessage
 } from './beeperClient'
@@ -47,6 +50,12 @@ export class AiCloneService {
   private queue = new ChatTaskQueue()
   /** id → chat metadata cache for titles/types in decisions and drafts. */
   private chatCache = new Map<string, BeeperChat>()
+  /** Port Beeper Desktop was found on (23373 or 23374 depending on the build). */
+  private beeperBaseUrl = BEEPER_BASE_URL
+  /** Bumped whenever listening stops. Reply work captures the value it started
+   *  under, so a generation that was already in flight (or parked behind one)
+   *  when the user disabled or disconnected can never land a draft afterwards. */
+  private generation = 0
 
   constructor(
     private broadcast: (e: AiCloneEvent) => void,
@@ -65,9 +74,16 @@ export class AiCloneService {
     // A client exists whenever a token does (listChats/approveDraft work while
     // the responder is off); the WS subscription only runs while enabled.
     const token = this.store.getBeeperToken()
-    if (token) this.client = new BeeperClient(token)
-    // Resume listening on app start if the user left the clone enabled.
-    if (this.store.getEnabled() && this.client) this.startListening()
+    if (token) {
+      this.client = new BeeperClient(token, this.beeperBaseUrl)
+      // Resume listening on app start if the user left the clone enabled —
+      // after locating the port this Beeper build actually binds.
+      void discoverBeeperBaseUrl().then((base) => {
+        this.beeperBaseUrl = base
+        this.client = new BeeperClient(token, base)
+        if (this.store.getEnabled()) this.startListening()
+      })
+    }
   }
 
   // --- state ---
@@ -98,7 +114,8 @@ export class AiCloneService {
   // --- connection lifecycle ---
 
   async connect(beeperToken: string): Promise<AiCloneState> {
-    const probe = await new BeeperClient(beeperToken).validateToken()
+    this.beeperBaseUrl = await discoverBeeperBaseUrl()
+    const probe = await new BeeperClient(beeperToken, this.beeperBaseUrl).validateToken()
     if (!probe.ok) {
       this.lastError =
         probe.error === 'unreachable'
@@ -110,7 +127,7 @@ export class AiCloneService {
       return this.getState()
     }
     this.store.setBeeperToken(beeperToken)
-    this.client = new BeeperClient(beeperToken)
+    this.client = new BeeperClient(beeperToken, this.beeperBaseUrl)
     this.beeperReachable = true
     this.lastError = undefined
     if (this.store.getEnabled()) this.startListening()
@@ -144,7 +161,9 @@ export class AiCloneService {
   }
 
   private applyAuth(auth: AiCloneAuth): void {
-    this.firebaseToken = auth.token
+    // An empty token is the renderer saying "this session is gone" (sign-out or
+    // an account switch): drop it rather than storing a falsy credential.
+    this.firebaseToken = auth.token || null
     if (auth.apiBase) this.apiBase = auth.apiBase
     if (auth.desktopApiBase) this.desktopApiBase = auth.desktopApiBase
     if (auth.displayName !== undefined) this.displayName = auth.displayName
@@ -179,6 +198,9 @@ export class AiCloneService {
     this.subscription?.close()
     this.subscription = null
     this.beeperReachable = false
+    // Retire every reply that is already generating or parked behind one: the
+    // user turned the clone off, so none of them may still produce a draft.
+    this.generation += 1
   }
 
   // --- chats ---
@@ -217,8 +239,12 @@ export class AiCloneService {
     // (previously an in-flight guard silently dropped it). The decision runs
     // inside the task, at execution time, so a parked message is judged
     // against current state (mode changes, hourly cap, …).
+    const generation = this.generation
     this.queue.submit(chatID, async () => {
       if (!this.client || this.processed.has(messageId)) return
+      // Parked work can execute long after it was queued; if listening stopped
+      // in between, this message belongs to a session the user ended.
+      if (generation !== this.generation) return
       let chat = this.chatCache.get(chatID)
       if (!chat) {
         await this.refreshChatCache()
@@ -235,7 +261,7 @@ export class AiCloneService {
       if (decision.action === 'ignore') return
       // Only accepted messages are marked processed — ignores stay cheap to
       // re-decide, and a parked-then-superseded message was never marked.
-      if (await this.respond(chat, message)) this.markProcessed(messageId)
+      if (await this.respond(chat, message, generation)) this.markProcessed(messageId)
     })
   }
 
@@ -248,7 +274,11 @@ export class AiCloneService {
     }
   }
 
-  private async respond(chat: BeeperChat, message: BeeperMessage): Promise<boolean> {
+  private async respond(
+    chat: BeeperChat,
+    message: BeeperMessage,
+    generation: number
+  ): Promise<boolean> {
     const chatTitle = chat.title ?? chat.id
     if (!this.firebaseToken) {
       this.recordError(chatTitle, 'No Omi session token — open the AI Clone page to refresh')
@@ -286,6 +316,11 @@ export class AiCloneService {
       return false
     }
 
+    // Generation may have moved on while the model was answering (disable or
+    // disconnect, which also wipes the store) — never resurrect a draft into
+    // state the user just cleared.
+    if (generation !== this.generation) return false
+
     const draft: AiCloneDraft = {
       id: randomUUID(),
       chatId: chat.id,
@@ -309,10 +344,9 @@ export class AiCloneService {
   ): Promise<ReplyTranscriptLine[]> {
     const r = await this.client!.listMessages(chatID)
     if (!r.ok) return []
-    return r.value
+    return oldestFirst(r.value)
       .filter((m) => m.id !== excludeMessageId && m.text?.trim() && !m.isDeleted)
-      .slice(0, TRANSCRIPT_LINES)
-      .reverse()
+      .slice(-TRANSCRIPT_LINES)
       .map((m) => ({
         sender: m.senderName ?? 'them',
         text: m.text!,

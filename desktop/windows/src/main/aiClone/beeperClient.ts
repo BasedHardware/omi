@@ -1,10 +1,38 @@
 // Thin client for the Beeper Desktop API — a localhost REST + WebSocket server
-// that Beeper Desktop runs on port 23373. The user creates an access token in
+// that Beeper Desktop runs on port 23373 (the port documented at
+// https://developers.beeper.com/desktop-api; some builds bind 23374 instead, so
+// `discoverBeeperBaseUrl` probes both). The user creates an access token in
 // Beeper → Settings → Integrations ("Approved connections"); everything stays
-// on-device. Docs: https://developers.beeper.com/desktop-api
+// on-device.
 import WebSocket from 'ws'
 
 export const BEEPER_BASE_URL = 'http://localhost:23373'
+/** Ports Beeper Desktop is known to bind, most-documented first. */
+export const BEEPER_CANDIDATE_PORTS = [23373, 23374]
+/** A hung (accepted-but-silent) local socket must not stall the reply loop. */
+const REQUEST_TIMEOUT_MS = 15_000
+
+/**
+ * Find the port the running Beeper Desktop actually listens on. `/v1/info` is
+ * public (no token), so this can run before the user has pasted one. Returns
+ * the documented default when nothing answers, so callers still report a
+ * truthful "unreachable" against a real address.
+ */
+export async function discoverBeeperBaseUrl(fetchImpl: typeof fetch = fetch): Promise<string> {
+  for (const port of BEEPER_CANDIDATE_PORTS) {
+    const base = `http://localhost:${port}`
+    try {
+      const res = await fetchImpl(`${base}/v1/info`, {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      })
+      // Any answer at all (including 401) proves Beeper owns this port.
+      if (res.status < 500) return base
+    } catch {
+      /* nothing listening here — try the next candidate */
+    }
+  }
+  return BEEPER_BASE_URL
+}
 
 /** Raw Beeper wire shapes (subset of fields the clone uses). */
 export type BeeperChat = {
@@ -51,6 +79,21 @@ export function beeperTimestampMs(ts: string | number | undefined): number | und
   return Number.isNaN(parsed) ? undefined : parsed
 }
 
+/**
+ * Normalize a message page to oldest-first. The API documents message pages
+ * only as "sorted by timestamp" without a guaranteed direction, and both the
+ * prompt transcript and any replay need oldest-first, so sort explicitly rather
+ * than assuming. A page where some message lacks a usable timestamp carries no
+ * recoverable order, so it is passed through untouched.
+ */
+export function oldestFirst(messages: BeeperMessage[]): BeeperMessage[] {
+  const stamped = messages.map((m, index) => ({ m, index, ts: beeperTimestampMs(m.timestamp) }))
+  if (stamped.some((s) => s.ts === undefined)) return messages
+  return stamped
+    .sort((a, b) => (a.ts! === b.ts! ? a.index - b.index : a.ts! - b.ts!))
+    .map((s) => s.m)
+}
+
 /** Pull the item array out of a Beeper list response ({items:[…]} or bare []). */
 function listItems<T>(body: unknown): T[] {
   if (Array.isArray(body)) return body as T[]
@@ -73,6 +116,7 @@ export class BeeperClient {
     try {
       res = await fetch(`${this.baseUrl}${path}`, {
         method,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         headers: {
           Authorization: `Bearer ${this.token}`,
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {})
@@ -105,7 +149,8 @@ export class BeeperClient {
     return r.ok ? { ok: true, value: listItems<BeeperChat>(r.value) } : r
   }
 
-  /** Latest messages in a chat (Beeper returns newest-first pages). */
+  /** Latest messages in a chat; use `oldestFirst` before treating the page as
+   *  a transcript (the API does not guarantee a direction). */
   async listMessages(chatID: string): Promise<BeeperResult<BeeperMessage[]>> {
     const r = await this.request<unknown>(
       'GET',
