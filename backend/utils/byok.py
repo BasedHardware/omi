@@ -152,9 +152,9 @@ def has_byok_keys() -> bool:
     if uid is None or provider not in {'chatgpt', 'grok'}:
         return False
     try:
-        import database.users as users_db
+        from database import llm_oauth as llm_oauth_db
 
-        return users_db.get_llm_oauth_credential(uid, provider) is not None
+        return llm_oauth_db.get_credential(uid, provider) is not None
     except Exception:
         return False
 
