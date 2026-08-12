@@ -4,20 +4,36 @@ import XCTest
 @testable import Omi_Computer
 
 final class MemoryExportSetupTests: XCTestCase {
-  func testWorkspaceFallbackReroutesBackgroundCompletionToMainActor() async {
-    let callbackStarted = expectation(description: "background callback started")
-    let actionCompleted = expectation(description: "workspace fallback ran on main actor")
-
-    DispatchQueue.global().async {
-      XCTAssertFalse(Thread.isMainThread)
-      MemoryExportDestinationSheetModel.performOnMainActor {
+  @MainActor
+  func testWorkspaceFallbackReroutesFailedApplicationLaunchToMainActor() async {
+    let exportURL = URL(fileURLWithPath: "/tmp/memory-export.md")
+    let installedApplicationURL = URL(fileURLWithPath: "/Applications/Installed.app")
+    let defaultApplicationURL = URL(fileURLWithPath: "/Applications/Default.app")
+    let fallbackOpened = expectation(description: "workspace fallback opened on main actor")
+    var openedApplications: [URL] = []
+    let workspace = MemoryExportWorkspace(
+      installedApplicationURL: { _ in installedApplicationURL },
+      defaultApplicationURL: { _ in defaultApplicationURL },
+      openWithApplication: { _, applicationURL, _, completion in
+        openedApplications.append(applicationURL)
+        DispatchQueue.global().async {
+          completion(URLError(.cannotOpenFile))
+        }
+      },
+      open: { url in
         XCTAssertTrue(Thread.isMainThread)
-        actionCompleted.fulfill()
-      }
-      callbackStarted.fulfill()
-    }
+        XCTAssertEqual(url, exportURL)
+        fallbackOpened.fulfill()
+      })
+    var model: MemoryExportDestinationSheetModel? = MemoryExportDestinationSheetModel(workspace: workspace)
+    weak var weakModel = model
 
-    await fulfillment(of: [callbackStarted, actionCompleted], timeout: 1)
+    model?.openDestination(for: .chatgpt, url: exportURL)
+    model = nil
+
+    await fulfillment(of: [fallbackOpened], timeout: 1)
+    XCTAssertEqual(openedApplications, [installedApplicationURL, defaultApplicationURL])
+    XCTAssertNil(weakModel)
   }
 
   func testOpenClawManualSetupUsesMCPConfigNotMemoryPromptSecret() throws {
