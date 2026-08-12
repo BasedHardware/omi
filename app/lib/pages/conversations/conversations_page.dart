@@ -68,6 +68,36 @@ typedef _ConversationPageSnapshot = ({
 
 int _identitySignature(Iterable<Object> values) => Object.hashAll(values.map(identityHashCode));
 
+/// Whether a failed page request should release the scroll request latch so
+/// the same server offset can be retried.
+bool shouldReleaseConversationLoadMoreLatch({
+  required String? currentRequestKey,
+  required String requestKey,
+  required bool succeeded,
+}) =>
+    !succeeded && currentRequestKey == requestKey;
+
+String conversationLoadMoreFilterKey({
+  required String query,
+  required String? folderId,
+  required String? speakerId,
+  required DateTime? date,
+  required bool starredOnly,
+  required bool discarded,
+  required bool shortOnly,
+  required int shortThreshold,
+}) =>
+    [
+      query,
+      folderId ?? '',
+      speakerId ?? '',
+      date?.toIso8601String() ?? '',
+      starredOnly,
+      discarded,
+      shortOnly,
+      shortThreshold,
+    ].join('|');
+
 _ConversationPageSnapshot _conversationPageSnapshot(
   ConversationProvider conversations,
   LocalRecordingsProvider recordings,
@@ -249,13 +279,16 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   bool _requestMoreIfNeeded(ConversationProvider provider) {
     if (provider.isLoadingConversations) return false;
 
-    final filterKey = [
-      provider.previousQuery,
-      provider.selectedFolderId ?? '',
-      provider.selectedSpeakerId ?? '',
-      provider.selectedDate?.toIso8601String() ?? '',
-      provider.showStarredOnly,
-    ].join('|');
+    final filterKey = conversationLoadMoreFilterKey(
+      query: provider.previousQuery,
+      folderId: provider.selectedFolderId,
+      speakerId: provider.selectedSpeakerId,
+      date: provider.selectedDate,
+      starredOnly: provider.showStarredOnly,
+      discarded: provider.showDiscardedConversations,
+      shortOnly: provider.showShortConversations,
+      shortThreshold: provider.shortConversationThreshold,
+    );
     if (_loadMoreFilterKey != filterKey) {
       _loadMoreFilterKey = filterKey;
       _lastLoadMoreRequestKey = null;
@@ -267,9 +300,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       if (provider.totalSearchPages <= provider.currentSearchPage) return false;
       pageOrCount = 'page:${provider.currentSearchPage}';
     } else {
-      final count = provider.conversations.length + provider.memoriesToDelete.length;
-      if (count == 0 || count % 50 != 0) return false;
-      pageOrCount = 'count:$count';
+      if (!provider.hasMoreConversations) return false;
+      pageOrCount = 'offset:${provider.conversationServerOffset}';
     }
 
     final requestKey = '$filterKey|$pageOrCount';
@@ -279,7 +311,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     if (isSearch) {
       unawaited(provider.searchMoreConversations());
     } else {
-      unawaited(provider.getMoreConversationsFromServer());
+      unawaited(provider.getMoreConversationsFromServer().then((succeeded) {
+        if (mounted &&
+            shouldReleaseConversationLoadMoreLatch(
+              currentRequestKey: _lastLoadMoreRequestKey,
+              requestKey: requestKey,
+              succeeded: succeeded,
+            )) {
+          // A failed page fetch leaves the server cursor unchanged; release
+          // the latch so the next scroll can retry the same offset.
+          _lastLoadMoreRequestKey = null;
+        }
+      }));
     }
     return true;
   }

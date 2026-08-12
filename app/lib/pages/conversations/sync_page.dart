@@ -441,7 +441,7 @@ class _SyncPageState extends State<SyncPage> {
 
   String _formatErrorMessage(BuildContext context, String errorMessage) {
     if (SyncProvider.isPendingUploadError(errorMessage)) {
-      return context.l10n.syncStatusRetrying;
+      return context.l10n.syncStatusFailed;
     }
     if (errorMessage.startsWith('Exception: ')) {
       errorMessage = errorMessage.substring('Exception: '.length);

@@ -197,7 +197,7 @@ void main() {
     provider.dispose();
   });
 
-  test('generic upload failure uses a locale-neutral code with localized retry copy', () async {
+  test('generic upload failure uses a locale-neutral code with terminal localized failure copy', () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
@@ -211,8 +211,12 @@ void main() {
 
     expect(provider.syncError, SyncProvider.pendingUploadErrorCode);
     expect(SyncProvider.isPendingUploadError(provider.syncError), isTrue);
-    // The pages own this mapping so a provider state never ships English.
-    expect(AppLocalizationsEn().syncStatusRetrying, contains('retrying'));
+    // The pages own this mapping so a provider state never ships English. The
+    // terminal error card has an explicit Retry action; it must not claim that
+    // an automatic retry is already in progress.
+    final localizedFailure = AppLocalizationsEn().syncStatusFailed;
+    expect(localizedFailure, contains('Failed'));
+    expect(localizedFailure, isNot(contains('retrying')));
     expect(provider.syncError, isNot(contains('connection')));
     provider.dispose();
   });

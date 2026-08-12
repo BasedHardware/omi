@@ -7,6 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/pages/conversations/conversations_page.dart';
 
 void main() {
   setUp(() async {
@@ -352,6 +353,490 @@ void main() {
     await fetch;
 
     expect(provider.conversations.single.structured.title, 'Live');
+  });
+
+  test('successful lifecycle completion publishes detail when page still says processing', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.processing, title: 'Stale')], ok: true),
+      conversationLifecycleFetcher: (_) async =>
+          (item: _conversation('c1', status: ConversationStatus.completed, title: 'Completed'), ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+
+    await provider.fetchConversations();
+
+    expect(provider.processingConversations, isEmpty);
+    expect(provider.conversations.single.structured.title, 'Completed');
+  });
+
+  test('background refresh publishes lifecycle completion when page still says processing', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.processing, title: 'Stale')], ok: true),
+      conversationLifecycleFetcher: (_) async =>
+          (item: _conversation('c1', status: ConversationStatus.completed, title: 'Completed'), ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+
+    await provider.forceRefreshConversations();
+
+    expect(provider.processingConversations, isEmpty);
+    expect(provider.conversations.single.structured.title, 'Completed');
+  });
+
+  test('background refresh replaces stale same-id completed object with lifecycle detail', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.processing, title: 'Page')], ok: true),
+      conversationLifecycleFetcher: (_) async =>
+          (item: _conversation('c1', status: ConversationStatus.completed, title: 'Detail'), ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.conversations = [_conversation('c1', status: ConversationStatus.completed, title: 'Old')];
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+
+    await provider.forceRefreshConversations();
+
+    expect(provider.conversations.single.structured.title, 'Detail');
+  });
+
+  test('background refresh does not publish stale lifecycle completion over newer processing start', () async {
+    final lifecycle = Completer<({ServerConversation? item, bool ok})>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.processing, title: 'Page')], ok: true),
+      conversationLifecycleFetcher: (_) => lifecycle.future,
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, title: 'Old'));
+
+    final refresh = provider.forceRefreshConversations();
+    await Future<void>.delayed(Duration.zero);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, title: 'New'));
+    lifecycle.complete((item: _conversation('c1', status: ConversationStatus.completed), ok: true));
+    await refresh;
+
+    expect(provider.processingConversations.single.structured.title, 'New');
+    expect(provider.conversations, isEmpty);
+  });
+
+  test('full fetch does not publish stale page completion over newer processing start', () async {
+    final lifecycle = Completer<({ServerConversation? item, bool ok})>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.completed, title: 'Page')], ok: true),
+      conversationLifecycleFetcher: (_) => lifecycle.future,
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, title: 'Old'));
+
+    final fetch = provider.fetchConversations();
+    await Future<void>.delayed(Duration.zero);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, title: 'New'));
+    lifecycle.complete((item: _conversation('c1', status: ConversationStatus.completed), ok: true));
+    await fetch;
+
+    expect(provider.processingConversations.single.structured.title, 'New');
+    expect(provider.conversations, isEmpty);
+  });
+
+  test('cache fallback does not resurrect a row still marked processing', () async {
+    final lifecycle = Completer<({ServerConversation? item, bool ok})>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.completed, title: 'Page')], ok: true),
+      conversationLifecycleFetcher: (_) => lifecycle.future,
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    final cached = _conversation('c1', status: ConversationStatus.completed, title: 'Cached');
+    SharedPreferencesUtil().cachedConversations = [cached];
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, title: 'Old'));
+
+    final fetch = provider.fetchConversations();
+    await Future<void>.delayed(Duration.zero);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, title: 'New'));
+    lifecycle.complete((item: _conversation('c1', status: ConversationStatus.completed), ok: true));
+    await fetch;
+
+    expect(provider.conversations, isEmpty);
+  });
+
+  test('failed fetch cache fallback does not resurrect a row still marked processing', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: false),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    SharedPreferencesUtil().cachedConversations = [
+      _conversation('c1', status: ConversationStatus.completed, title: 'Cached'),
+    ];
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+
+    final fetched = await provider.fetchConversations();
+
+    expect(fetched, isFalse);
+    expect(provider.conversations, isEmpty);
+  });
+
+  test('live completion overlay does not disable the next server page', () async {
+    final lifecycle = Completer<({ServerConversation? item, bool ok})>();
+    final firstPage = List<ServerConversation>.generate(
+      50,
+      (index) => _conversation('page-$index', status: ConversationStatus.completed),
+    );
+    var requestedOffset = -1;
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: firstPage, ok: true),
+      conversationLifecycleFetcher: (_) => lifecycle.future,
+      isSignedIn: () => true,
+    );
+    provider.conversationPageFetcherOverride = () async {
+      requestedOffset = provider.conversationServerOffset;
+      return (items: <ServerConversation>[], ok: true);
+    };
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('off-page', status: ConversationStatus.processing));
+
+    final fetch = provider.fetchConversations();
+    await Future<void>.delayed(Duration.zero);
+    await provider.addConversation(_conversation('live', status: ConversationStatus.completed, title: 'Live'));
+    lifecycle.complete((item: _conversation('off-page', status: ConversationStatus.processing), ok: true));
+    await fetch;
+
+    expect(provider.conversations, hasLength(51));
+    expect(provider.hasMoreConversations, isTrue);
+    expect(provider.conversationServerOffset, 50);
+    await provider.getMoreConversationsFromServer();
+    expect(requestedOffset, 50);
+  });
+
+  test('failed load-more preserves cursor for a retry and deduplicates boundary rows', () async {
+    var calls = 0;
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (
+        items: List<ServerConversation>.generate(
+          50,
+          (index) => _conversation('page-$index', status: ConversationStatus.completed),
+        ),
+        ok: true
+      ),
+      isSignedIn: () => true,
+    );
+    provider.conversationPageFetcherOverride = () async {
+      calls++;
+      if (calls == 1) return (items: <ServerConversation>[], ok: false);
+      return (
+        items: [
+          _conversation('page-49', status: ConversationStatus.completed),
+          _conversation('page-50', status: ConversationStatus.completed),
+        ],
+        ok: true
+      );
+    };
+    addTearDown(provider.dispose);
+
+    await provider.fetchConversations();
+    await provider.getMoreConversationsFromServer();
+    expect(provider.conversationServerOffset, 50);
+    await provider.getMoreConversationsFromServer();
+
+    expect(calls, 2);
+    expect(provider.conversationServerOffset, 52);
+    expect(provider.conversations.where((conversation) => conversation.id == 'page-49'), hasLength(1));
+    expect(provider.conversations.where((conversation) => conversation.id == 'page-50'), hasLength(1));
+  });
+
+  test('background refresh does not rewind a loaded page cursor', () async {
+    var requestedOffsets = <int>[];
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (
+        items: List<ServerConversation>.generate(
+          50,
+          (index) => _conversation('page-$index', status: ConversationStatus.completed),
+        ),
+        ok: true
+      ),
+      isSignedIn: () => true,
+    );
+    provider.conversationPageFetcherOverride = () async {
+      requestedOffsets.add(provider.conversationServerOffset);
+      return (
+        items: List<ServerConversation>.generate(
+          50,
+          (index) => _conversation('next-$index', status: ConversationStatus.completed),
+        ),
+        ok: true
+      );
+    };
+    addTearDown(provider.dispose);
+
+    await provider.fetchConversations();
+    await provider.getMoreConversationsFromServer();
+    await provider.forceRefreshConversations();
+    await provider.getMoreConversationsFromServer();
+
+    expect(requestedOffsets, [50, 100]);
+  });
+
+  test('successful delete rebases cursor for a loaded row, not an unloaded row', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (
+        items: List<ServerConversation>.generate(
+          50,
+          (index) => _conversation('page-$index', status: ConversationStatus.completed),
+        ),
+        ok: true
+      ),
+      isSignedIn: () => true,
+    );
+    provider.conversationDeleteFetcherOverride = (_) async => true;
+    addTearDown(provider.dispose);
+
+    await provider.fetchConversations();
+    expect(provider.conversationServerOffset, 50);
+    provider.deleteConversationOnServer('page-10');
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.conversationServerOffset, 49);
+    provider.deleteConversationOnServer('never-loaded');
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.conversationServerOffset, 49);
+  });
+
+  test('failed delete does not rebase the server cursor', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (
+        items: List<ServerConversation>.generate(
+          50,
+          (index) => _conversation('page-$index', status: ConversationStatus.completed),
+        ),
+        ok: true
+      ),
+      isSignedIn: () => true,
+    );
+    provider.conversationDeleteFetcherOverride = (_) async => false;
+    addTearDown(provider.dispose);
+
+    await provider.fetchConversations();
+    provider.deleteConversationOnServer('page-10');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.conversationServerOffset, 50);
+  });
+
+  test('pending delete tombstone hides a row until DELETE settles', () async {
+    final delete = Completer<bool>();
+    final conversation = _conversation('page-10', status: ConversationStatus.completed);
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: [conversation], ok: true),
+      isSignedIn: () => true,
+    );
+    provider.conversationDeleteFetcherOverride = (_) => delete.future;
+    addTearDown(provider.dispose);
+
+    provider.conversations = [conversation];
+    provider.memoriesToDelete[conversation.id] = conversation;
+    provider.deleteConversationOnServer(conversation.id);
+
+    await provider.fetchConversations();
+    expect(provider.conversations, isEmpty);
+    expect(provider.memoriesToDelete, contains(conversation.id));
+
+    delete.complete(true);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.memoriesToDelete, isEmpty);
+    expect(provider.conversations, isEmpty);
+  });
+
+  test('background refresh does not reinsert a row while DELETE is pending', () async {
+    final delete = Completer<bool>();
+    final conversation = _conversation('c1', status: ConversationStatus.completed);
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: [conversation], ok: true),
+      isSignedIn: () => true,
+    );
+    provider.conversationDeleteFetcherOverride = (_) => delete.future;
+    addTearDown(provider.dispose);
+
+    provider.conversations = [conversation];
+    provider.deleteConversationLocally(conversation, conversationLocalDayKey(conversation.createdAt));
+    provider.deleteConversationOnServer(conversation.id);
+
+    await provider.forceRefreshConversations();
+    expect(provider.conversations, isEmpty);
+    expect(provider.memoriesToDelete, contains(conversation.id));
+
+    delete.complete(true);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.memoriesToDelete, isEmpty);
+    expect(provider.conversations, isEmpty);
+  });
+
+  test('stale full fetch is discarded after a confirmed delete', () async {
+    final page = Completer<({List<ServerConversation> items, bool ok})>();
+    final conversation = _conversation('c1', status: ConversationStatus.completed);
+    final provider = ConversationProvider(
+      conversationListFetcher: () => page.future,
+      isSignedIn: () => true,
+    );
+    final delete = Completer<bool>();
+    provider.conversationDeleteFetcherOverride = (_) => delete.future;
+    addTearDown(provider.dispose);
+    provider.conversations = [conversation];
+    provider.memoriesToDelete[conversation.id] = conversation;
+    final fetch = provider.fetchConversations();
+    provider.deleteConversationOnServer(conversation.id);
+    delete.complete(true);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.isLoadingConversations, isFalse);
+    page.complete((items: [conversation], ok: true));
+    await fetch;
+    expect(provider.conversations, isEmpty);
+    expect(provider.isLoadingConversations, isFalse);
+  });
+
+  test('stale background fetch is discarded after a confirmed delete', () async {
+    final page = Completer<({List<ServerConversation> items, bool ok})>();
+    final conversation = _conversation('c1', status: ConversationStatus.completed);
+    final provider = ConversationProvider(
+      conversationListFetcher: () => page.future,
+      isSignedIn: () => true,
+    );
+    final delete = Completer<bool>();
+    provider.conversationDeleteFetcherOverride = (_) => delete.future;
+    addTearDown(provider.dispose);
+    provider.conversations = [conversation];
+    provider.memoriesToDelete[conversation.id] = conversation;
+    final refresh = provider.forceRefreshConversations();
+    provider.deleteConversationOnServer(conversation.id);
+    delete.complete(true);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.isLoadingConversations, isFalse);
+    page.complete((items: [conversation], ok: true));
+    await refresh;
+    expect(provider.conversations, isEmpty);
+  });
+
+  test('older overlapping full fetch cannot overwrite newer fetch', () async {
+    final first = Completer<({List<ServerConversation> items, bool ok})>();
+    final second = Completer<({List<ServerConversation> items, bool ok})>();
+    var calls = 0;
+    final provider = ConversationProvider(
+      conversationListFetcher: () => ++calls == 1 ? first.future : second.future,
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+
+    final older = provider.fetchConversations();
+    final newer = provider.fetchConversations();
+    second.complete((items: [_conversation('new', status: ConversationStatus.completed)], ok: true));
+    await newer;
+    expect(provider.conversations.map((item) => item.id), ['new']);
+    first.complete((items: [_conversation('old', status: ConversationStatus.completed)], ok: true));
+    await older;
+    expect(provider.conversations.map((item) => item.id), ['new']);
+    expect(provider.isLoadingConversations, isFalse);
+  });
+
+  test('full fetch owns loading over an in-flight load-more request', () async {
+    final page = Completer<({List<ServerConversation> items, bool ok})>();
+    final lifecycle = Completer<({ServerConversation? item, bool ok})>();
+    final firstPage = List<ServerConversation>.generate(
+      50,
+      (index) => _conversation('page-$index', status: ConversationStatus.completed),
+    );
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: firstPage, ok: true),
+      conversationLifecycleFetcher: (_) => lifecycle.future,
+      isSignedIn: () => true,
+    );
+    provider.conversationPageFetcherOverride = () => page.future;
+    addTearDown(provider.dispose);
+    await provider.fetchConversations();
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+
+    final more = provider.getMoreConversationsFromServer();
+    final refresh = provider.fetchConversations();
+    page.complete((items: [_conversation('page-50', status: ConversationStatus.completed)], ok: true));
+    await more;
+    expect(provider.isLoadingConversations, isTrue);
+    lifecycle.complete((item: _conversation('c1', status: ConversationStatus.processing), ok: true));
+    await refresh;
+    expect(provider.isLoadingConversations, isFalse);
+  });
+
+  test('load-more filter key changes when short or discarded filters change', () {
+    final base = conversationLoadMoreFilterKey(
+      query: '',
+      folderId: null,
+      speakerId: null,
+      date: null,
+      starredOnly: false,
+      discarded: false,
+      shortOnly: false,
+      shortThreshold: 0,
+    );
+    expect(
+      conversationLoadMoreFilterKey(
+        query: '',
+        folderId: null,
+        speakerId: null,
+        date: null,
+        starredOnly: false,
+        discarded: true,
+        shortOnly: false,
+        shortThreshold: 0,
+      ),
+      isNot(base),
+    );
+    expect(
+      conversationLoadMoreFilterKey(
+        query: '',
+        folderId: null,
+        speakerId: null,
+        date: null,
+        starredOnly: false,
+        discarded: false,
+        shortOnly: true,
+        shortThreshold: 30,
+      ),
+      isNot(base),
+    );
+  });
+
+  test('failed page request releases the UI latch for the same offset retry', () {
+    expect(
+      shouldReleaseConversationLoadMoreLatch(
+        currentRequestKey: 'offset:50',
+        requestKey: 'offset:50',
+        succeeded: false,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldReleaseConversationLoadMoreLatch(
+        currentRequestKey: 'offset:50',
+        requestKey: 'offset:50',
+        succeeded: true,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldReleaseConversationLoadMoreLatch(
+        currentRequestKey: 'offset:100',
+        requestKey: 'offset:50',
+        succeeded: false,
+      ),
+      isFalse,
+    );
   });
 
   test('loading stays active until lifecycle reconciliation assigns the page', () async {
