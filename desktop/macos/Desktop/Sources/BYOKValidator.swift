@@ -23,7 +23,7 @@ enum BYOKValidator {
     switch provider {
     case .openrouter:
       return await ping(
-        url: URL(string: "https://openrouter.ai/api/v1/models")!,
+        url: URL(string: "https://openrouter.ai/api/v1/auth/key")!,
         headers: ["Authorization": "Bearer \(trimmed)"]
       )
     case .openai:

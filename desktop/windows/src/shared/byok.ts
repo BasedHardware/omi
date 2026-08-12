@@ -77,7 +77,7 @@ export type ByokValidationResults = Partial<Record<ByokProvider, ByokKeyValidati
 export interface ByokEnrollResult {
   /** True only when all four keys authenticated AND the backend accepted them. */
   active: boolean
-  /** Per-provider live-validation results (empty when the set wasn't full). */
+  /** Per-provider live-validation results for configured keys. */
   results: ByokValidationResults
   /**
    * Set only when the keys all validated but the backend enroll call itself
@@ -106,9 +106,7 @@ export function withByokHeaders(
 }
 
 /**
- * True only when ALL four providers have a non-empty trimmed key — matches the
- * backend's all-or-nothing gate (`has_all_byok_keys()`). A partial set is not
- * BYOK-active.
+ * True when at least one LLM provider has a non-empty trimmed key.
  */
 export function isByokActive(keys: ByokKeys): boolean {
   return BYOK_LLM_PROVIDERS.some((provider) => Boolean(keys[provider]?.trim()))
@@ -116,17 +114,14 @@ export function isByokActive(keys: ByokKeys): boolean {
 
 /**
  * The `OMI_BYOK_*` env set to inject into the pi-mono subprocess, or `{}` when
- * BYOK is not active. All-or-nothing, exactly like `withByokHeaders`'s consumer:
- * a partial set is never injected (the backend's `has_all_byok_keys()` requires
- * all four), so a 3/4 configuration falls through to Omi-managed billing rather
- * than silently sending an incomplete BYOK set. Values are trimmed to match the
- * wire value the backend fingerprints.
+ * BYOK is not active. Capability-scoped values are trimmed to match the wire
+ * value the backend fingerprints.
  */
 export function byokEnvVars(keys: ByokKeys): Record<string, string> {
   if (!isByokActive(keys)) return {}
   const out: Record<string, string> = {}
   for (const provider of BYOK_PROVIDERS) {
-    // isByokActive guarantees a non-empty trimmed value for every provider.
+    // isByokActive guarantees at least one LLM key; each provider remains optional.
     const value = keys[provider]?.trim()
     if (value) out[BYOK_ENV_NAMES[provider]] = value
   }
