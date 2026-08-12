@@ -127,7 +127,20 @@ def _scan_stmt(stmt: ast.stmt, aliases: set[str], count: _Count) -> None:
                     _scan_expr(default, aliases, count)
             elif isinstance(child, ast.expr):
                 _scan_expr(child, aliases, count)
-        _scan_scope(stmt.body, aliases, count)  # body opens a fresh scope seeded from this snapshot
+        if isinstance(stmt, ast.ClassDef):
+            # Class attributes are class-local names, NOT bare names inside the methods (which reach
+            # them via self/ClassName). So a class-level attribute must neither shadow nor become a
+            # bare alias for the methods: seed each nested def/class from the ENCLOSING aliases, while
+            # class-level statements mutate only a class-local set.
+            enclosing = set(aliases)
+            class_local = set(aliases)
+            for body_stmt in stmt.body:
+                if isinstance(body_stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    _scan_stmt(body_stmt, set(enclosing), count)
+                else:
+                    _scan_stmt(body_stmt, class_local, count)
+        else:
+            _scan_scope(stmt.body, aliases, count)  # body opens a fresh scope seeded from this snapshot
         aliases.discard(stmt.name)  # the def/class name is a non-alias binding in this scope
         return
 
@@ -155,9 +168,47 @@ def _scan_stmt(stmt: ast.stmt, aliases: set[str], count: _Count) -> None:
         _scan_expr(stmt.annotation, aliases, count)
         return
 
-    # Generic statement (Expr / Return / AugAssign / If / For / While / With / Try / match / …): scan
-    # its expression children here and recurse into any sub-statement bodies as the *same* scope, in
-    # order, so alias rebinds inside a branch/loop are seen by later statements.
+    if isinstance(stmt, ast.If):
+        # Branch-sensitive: a rebind inside one branch must NOT clear the alias for the sibling
+        # branch or for statements after the if. Scan each branch on its own copy, then keep an
+        # alias if it survives on EITHER path (union) so a later access on the not-rebound path stays
+        # visible.
+        _scan_expr(stmt.test, aliases, count)
+        branch = set(aliases)
+        for s in stmt.body:
+            _scan_stmt(s, branch, count)
+        other = set(aliases)
+        for s in stmt.orelse:
+            _scan_stmt(s, other, count)
+        aliases.clear()
+        aliases.update(branch | other)
+        return
+
+    if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
+        # A loop body may run zero or more times: union the not-entered (original), body, and else
+        # states so a conditional rebind inside the loop cannot hide a later alias access.
+        before = set(aliases)
+        if isinstance(stmt, ast.While):
+            _scan_expr(stmt.test, aliases, count)
+        else:
+            _scan_expr(stmt.iter, aliases, count)
+            if isinstance(stmt.target, ast.Name):
+                aliases.discard(stmt.target.id)  # the loop variable rebinds this name to an element
+            else:
+                _scan_expr(stmt.target, aliases, count)
+        body_aliases = set(aliases)
+        for s in stmt.body:
+            _scan_stmt(s, body_aliases, count)
+        else_aliases = set(aliases)
+        for s in stmt.orelse:
+            _scan_stmt(s, else_aliases, count)
+        aliases.clear()
+        aliases.update(before | body_aliases | else_aliases)
+        return
+
+    # Generic statement (Expr / Return / AugAssign / With / Try / match / …): scan its expression
+    # children here and recurse into any sub-statement bodies as the *same* scope, in order, so alias
+    # rebinds inside a linear block are seen by later statements.
     for child in ast.iter_child_nodes(stmt):
         if isinstance(child, ast.stmt):
             _scan_stmt(child, aliases, count)
@@ -165,7 +216,20 @@ def _scan_stmt(stmt: ast.stmt, aliases: set[str], count: _Count) -> None:
             if child.type is not None:
                 _scan_expr(child.type, aliases, count)
             _scan_scope(child.body, aliases, count)
+        elif isinstance(child, ast.withitem):
+            # ``with fb.auth...() as X``: the context expression was previously missed (withitem is
+            # neither an ast.stmt nor an ast.expr). Scan it, and propagate/clear the alias onto X.
+            _scan_expr(child.context_expr, aliases, count)
+            if isinstance(child.optional_vars, ast.Name):
+                if isinstance(child.context_expr, ast.Name) and child.context_expr.id in aliases:
+                    aliases.add(child.optional_vars.id)
+                else:
+                    aliases.discard(child.optional_vars.id)
         elif child.__class__.__name__ == 'match_case':  # ast.match_case (3.10+)
+            # ``case P if fb.auth...:`` — the guard expression was skipped before, letting a raw auth
+            # access in it pass. Scan the guard, then the case body.
+            if getattr(child, 'guard', None) is not None:
+                _scan_expr(child.guard, aliases, count)
             _scan_scope(child.body, aliases, count)
         elif isinstance(child, ast.expr):
             _scan_expr(child, aliases, count)

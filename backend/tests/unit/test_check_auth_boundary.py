@@ -92,3 +92,33 @@ def test_load_baseline_rejects_boolean_counts(tmp_path):
     path.write_text(json.dumps({'backend/x.py': True}))
     with pytest.raises(ValueError):
         _MODULE.load_baseline(path)
+
+
+# --- edge-case bypasses closed per cubic review PR 10887 ---
+
+
+def test_with_context_expression_auth_access_is_flagged():
+    # withitem is neither ast.stmt nor ast.expr; the ``with fb.auth...()`` context was missed before.
+    src = "import firebase_admin as fb\nwith fb.auth.lock() as l:\n    pass\n"
+    assert _MODULE.count_boundary_violations(src) == 1
+
+
+def test_match_case_guard_auth_access_is_flagged():
+    src = "import firebase_admin as fb\nmatch x:\n    case 1 if fb.auth.verify(t):\n        pass\n"
+    assert _MODULE.count_boundary_violations(src) == 1
+
+
+def test_class_attribute_does_not_shadow_module_alias_in_methods():
+    # A class attribute named ``fb`` must not hide the module alias inside a method — a bare ``fb``
+    # there is the module import, not the class attribute.
+    src = "import firebase_admin as fb\nclass C:\n    fb = other\n    def m(self):\n        fb.auth.verify(t)\n"
+    assert _MODULE.count_boundary_violations(src) == 1
+
+
+def test_conditional_rebind_keeps_the_not_rebound_path_visible():
+    rebound_one_branch = "import firebase_admin as fb\nif cond:\n    fb = build()\nfb.auth.verify(t)\n"
+    assert _MODULE.count_boundary_violations(rebound_one_branch) == 1
+    rebound_all_branches = (
+        "import firebase_admin as fb\nif cond:\n    fb = build()\nelse:\n    fb = other()\nfb.auth.verify(t)\n"
+    )
+    assert _MODULE.count_boundary_violations(rebound_all_branches) == 0
