@@ -37,6 +37,7 @@ import {
 import { createPostgresAuthoritativeGraphSnapshotRepository } from "./authoritative-graph-snapshot";
 import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatement } from "./connection";
 import { createPostgresDurableMemoryWorkAcceptanceRepository } from "./durable-memory-work-acceptance";
+import { createPostgresDurableMemoryWorkExecutionRepository } from "./durable-memory-work-execution";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
@@ -399,6 +400,7 @@ const durableWorkAcceptanceRequest = (
   suffix: string,
   acceptedAtEventTime: number,
   leaseDurationSeconds = 30,
+  retryDelaySeconds = 10,
 ): DurableMemoryWorkAcceptanceRequest => {
   const strategy = registerMemoryStrategy({
     version: MEMORY_STRATEGY_VERSION,
@@ -447,7 +449,7 @@ const durableWorkAcceptanceRequest = (
     execution_contract_digest: assignment.authority.execution_contract_digest,
     max_attempts: 2,
     lease_duration_seconds: leaseDurationSeconds,
-    retry_delays_seconds: [10],
+    retry_delays_seconds: [retryDelaySeconds],
   });
   return Object.freeze({
     accepted_work: accepted, input_manifest: inputs, strategy_assignment: assignment,
@@ -605,6 +607,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const applicationId = "app:qualification-work";
     const credentialId = `credential:work:${suffix}`;
     const grantId = `grant:work:${suffix}`;
+    const executeGrantId = `grant:work-execute:${suffix}`;
     const controlHash = "a".repeat(64);
     const credentialHash = "b".repeat(64);
     const grantHash = "c".repeat(64);
@@ -646,6 +649,18 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
            capability, grant_id, grant_version)
         VALUES ($1, $2, $3, 4, 'memories.work.accept', $4, 9)`,
       [accountId, applicationId, credentialId, grantId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 4, 'memories.work.execute', $4, 1, 'active', true,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+      [accountId, applicationId, credentialId, executeGrantId, "e".repeat(64)]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version)
+        VALUES ($1, $2, $3, 4, 'memories.work.execute', $4, 1)`,
+      [accountId, applicationId, credentialId, executeGrantId]);
     });
 
     const authorityRow: AuthorityStateRow = {
@@ -669,6 +684,22 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       lifecycle_state: "active", deletion_epoch: null, authentication_strength: "service-workload",
       issued_at_epoch_seconds: now - 60, expires_at_epoch_seconds: now + 3_600,
       authorization_state_digest: authorizationStateDigest(authorityRow),
+    }, now);
+    const executionAuthorityRow: AuthorityStateRow = {
+      ...authorityRow,
+      capability: "memories.work.execute",
+      grant_id: executeGrantId,
+      grant_version: 1,
+      grant_content_hash: "e".repeat(64),
+    };
+    const executionContext = createAuthorizedLedgerWriteContextIssuer().issue({
+      context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
+      account_id: accountId, application_id: applicationId, credential_id: credentialId,
+      credential_generation: 4, capability: "memories.work.execute", grant_id: executeGrantId,
+      grant_version: 1, account_epoch: 12, destination_activation_revision: 17,
+      lifecycle_state: "active", deletion_epoch: null, authentication_strength: "service-workload",
+      issued_at_epoch_seconds: now - 60, expires_at_epoch_seconds: now + 3_600,
+      authorization_state_digest: authorizationStateDigest(executionAuthorityRow),
     }, now);
     let lastWorkAcceptanceStatement = "none";
     let lastWorkAcceptanceProviderCode = "none";
@@ -714,9 +745,10 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
                          FROM jsonb_array_elements(($1::text)::jsonb)`,
                   values: [statement.values[8]!, Number(statement.values[6]) - 1],
                 });
+                const expectedDelay = JSON.parse(String(statement.values[8]))[0];
                 expect(validation).toEqual([{
                   valid: true, kind: "array", count: 1, item_kind: "number",
-                  item_text: "10", integer_shape: true, in_range: true,
+                  item_text: String(expectedDelay), integer_shape: true, in_range: true,
                 }]);
               }
               return await connection.execute(statement);
@@ -733,7 +765,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       }),
     });
     const repository = createPostgresDurableMemoryWorkAcceptanceRepository({ pool: appRolePool });
-    const acceptedRequest = durableWorkAcceptanceRequest(accountId, suffix, now);
+    const acceptedRequest = durableWorkAcceptanceRequest(accountId, suffix, now, 2, 1);
 
     try {
       expect(await repository.accept(context, acceptedRequest)).toMatchObject({
@@ -754,7 +786,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       context, durableWorkAcceptanceRequest(accountId, suffix, now + 1),
     )).resolves.toEqual({ kind: "idempotency_conflict" });
     await expect(repository.accept(
-      context, durableWorkAcceptanceRequest(accountId, `${suffix}:policy-drift`, now, 31),
+      context, durableWorkAcceptanceRequest(accountId, `${suffix}:policy-drift`, now, 3, 1),
     )).resolves.toEqual({ kind: "idempotency_conflict" });
 
     const persisted = await ownerSql.unsafe<{
@@ -782,13 +814,13 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     expect([...persisted]).toEqual([{
       definitions: 1, policies: 1, bundles: 1, execution_policies: 1, acceptances: 1,
       inputs: 2, states: 1, heads: 1, state: "pending", state_revision: "0",
-      execution_max_attempts: 2, execution_lease_seconds: 30, execution_retry_delays: [10],
+      execution_max_attempts: 2, execution_lease_seconds: 2, execution_retry_delays: [1],
     }]);
 
     await expect(ownerSql.begin(async (transaction) => {
       await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
       await transaction.unsafe(`UPDATE omi_memory.memory_work_heads
-        SET state_revision = state_revision WHERE account_id = $1`, [accountId]);
+        SET job_id = job_id WHERE account_id = $1`, [accountId]);
     })).rejects.toMatchObject({ code: "42501" });
     await expect(ownerSql.begin(async (transaction) => {
       await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
@@ -809,7 +841,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         FOR EACH ROW EXECUTE FUNCTION omi_memory.qualification_reject_work_acceptance()
       `, [], { prepare: false });
       await expect(repository.accept(
-        context, durableWorkAcceptanceRequest(accountId, rollbackSuffix, now),
+        context, durableWorkAcceptanceRequest(accountId, rollbackSuffix, now, 2, 1),
       )).rejects.toMatchObject({ code: "persistence_failed", message: "persistence_failed" });
     } finally {
       await ownerSql.unsafe(`
@@ -822,6 +854,109 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       WHERE account_id = $1 AND job_id = $2
     `, [accountId, `job:formation:${rollbackSuffix}`]);
     expect([...rolledBack]).toEqual([{ count: 0 }]);
+
+    const executionRepository = createPostgresDurableMemoryWorkExecutionRepository({
+      pool: appRolePool,
+    });
+    const firstLease = await executionRepository.leaseNext(executionContext, {
+      work_kinds: ["formation"],
+    });
+    expect(firstLease).toMatchObject({
+      kind: "leased",
+      job: { job_id: acceptedRequest.accepted_work.job_id, attempt: 1, lease_fence: 1 },
+    });
+    if (firstLease.kind !== "leased" || !firstLease.job.lease) {
+      throw new Error("qualification_missing_first_lease");
+    }
+    expect(firstLease.job.lease.expires_at_event_time
+      - firstLease.job.lease.leased_at_event_time).toBe(2);
+    await expect(executionRepository.recordFailure(executionContext, {
+      job_id: firstLease.job.job_id,
+      lease_fence: firstLease.job.lease_fence,
+      error_code: "model_timeout",
+    })).resolves.toMatchObject({
+      kind: "recorded",
+      job: { state: "retryable_failed", outcome: { error_code: "model_timeout" } },
+    });
+    // Cross the database-time retry boundary with a full second of scheduling margin.
+    await Bun.sleep(2_100);
+    const secondLease = await executionRepository.leaseNext(executionContext, {
+      work_kinds: ["formation"],
+    });
+    expect(secondLease).toMatchObject({
+      kind: "leased", job: { job_id: firstLease.job.job_id, attempt: 2, lease_fence: 2 },
+    });
+    if (secondLease.kind !== "leased") throw new Error("qualification_missing_second_lease");
+    await expect(executionRepository.recordFailure(executionContext, {
+      job_id: secondLease.job.job_id,
+      lease_fence: secondLease.job.lease_fence,
+      error_code: "model_response_invalid",
+    })).resolves.toMatchObject({
+      kind: "recorded",
+      job: { state: "dead_letter", attempt: 2, outcome: { attempts: 2 } },
+    });
+
+    const recoverySuffix = `${suffix}:recovery`;
+    await expect(repository.accept(
+      context, durableWorkAcceptanceRequest(accountId, recoverySuffix, now, 2, 1),
+    )).resolves.toMatchObject({ kind: "accepted", job: { state: "pending" } });
+    const recoveryLease = await executionRepository.leaseNext(executionContext, {
+      work_kinds: ["formation"],
+    });
+    expect(recoveryLease).toMatchObject({
+      kind: "leased", job: { job_id: `job:formation:${recoverySuffix}`, attempt: 1 },
+    });
+    if (recoveryLease.kind !== "leased") throw new Error("qualification_missing_recovery_lease");
+    // Cross the database-time lease expiry with a full second of scheduling margin.
+    await Bun.sleep(3_100);
+    await expect(executionRepository.recoverExpired(executionContext, {
+      job_id: recoveryLease.job.job_id,
+    })).resolves.toMatchObject({
+      kind: "recovered",
+      job: { state: "retryable_failed", outcome: { error_code: "worker_lost" } },
+    });
+
+    const executionRows = await ownerSql.unsafe<{
+      dead_letters: number; retryable_failures: number; outbox: number;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_work_state_revisions
+          WHERE account_id = $1 AND state = 'dead_letter') AS dead_letters,
+        (SELECT count(*)::int FROM omi_memory.memory_work_state_revisions
+          WHERE account_id = $1 AND state = 'retryable_failed') AS retryable_failures,
+        (SELECT count(*)::int FROM omi_memory.memory_work_outbox_events
+          WHERE account_id = $1 AND event_kind = 'memory_work_dead_letter') AS outbox
+    `, [accountId]);
+    expect([...executionRows]).toEqual([{
+      dead_letters: 1, retryable_failures: 2, outbox: 1,
+    }]);
+    for (const forbiddenSql of [
+      "UPDATE omi_memory.memory_work_state_revisions SET state = 'pending' WHERE account_id = $1",
+      "DELETE FROM omi_memory.memory_work_outbox_events WHERE account_id = $1",
+    ]) {
+      await expect(ownerSql.begin(async (transaction) => {
+        await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+        await transaction.unsafe(forbiddenSql, [accountId]);
+      })).rejects.toMatchObject({ code: "42501" });
+    }
+
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 4, 'memories.work.execute', $4, 2, 'revoked', false,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+      [accountId, applicationId, credentialId, executeGrantId, "f".repeat(64)]);
+      await transaction.unsafe(`UPDATE omi_memory.application_grant_heads
+        SET grant_version = 2, updated_at = transaction_timestamp()
+        WHERE account_id = $1 AND application_id = $2 AND credential_id = $3
+          AND credential_generation = 4 AND capability = 'memories.work.execute'`,
+      [accountId, applicationId, credentialId]);
+    });
+    await expect(executionRepository.load(executionContext, {
+      job_id: acceptedRequest.accepted_work.job_id,
+    })).resolves.toEqual({ kind: "authorization_denied", reason: "grant_inactive" });
 
     await ownerSql.begin(async (transaction) => {
       await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions

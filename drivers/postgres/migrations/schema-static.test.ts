@@ -336,21 +336,24 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(grants.length).toBeGreaterThan(0);
     expect(grants.join("\n")).not.toMatch(/\b(?:ALL|DELETE|TRUNCATE|CREATE|ALTER|DROP)\b/);
     const updateGrants = grants.filter((grant) => /\bUPDATE\b/.test(grant));
-    expect(updateGrants).toHaveLength(2);
+    expect(updateGrants).toHaveLength(3);
     expect(updateGrants[0]).toContain("UPDATE (commit_id, sequence, updated_at)");
     expect(updateGrants[0]).toContain("omi_memory.memory_graph_heads");
     expect(updateGrants[0]).not.toContain("INSERT");
     expect(updateGrants[1]).toContain("UPDATE (state, commit_id, finalized_at)");
     expect(updateGrants[1]).toContain("omi_memory.memory_idempotency_receipts");
+    expect(updateGrants[2]).toContain("UPDATE (state_revision, state_digest, updated_at)");
+    expect(updateGrants[2]).toContain("omi_memory.memory_work_heads");
     expect(grants.join("\n")).not.toContain("omi_memory.platform_schema_migrations TO omi_platform_application");
     const workGrants = grants.filter((grant) => /omi_memory\.memory_work_/.test(grant));
-    expect(workGrants).toHaveLength(5);
+    expect(workGrants).toHaveLength(7);
     expect(workGrants.join("\n")).toContain("memory_work_acceptances");
     expect(workGrants.join("\n")).toContain("memory_work_execution_policies");
     expect(workGrants.join("\n")).toContain("memory_work_input_manifest");
     expect(workGrants.join("\n")).toContain("memory_work_state_revisions");
     expect(workGrants.join("\n")).toContain("memory_work_heads");
-    expect(workGrants.join("\n")).not.toMatch(/UPDATE|DELETE|memory_work_(?:staged_results|success_results|outbox_events)/);
+    expect(workGrants.join("\n")).toContain("INSERT ON omi_memory.memory_work_outbox_events");
+    expect(workGrants.join("\n")).not.toMatch(/DELETE|memory_work_(?:staged_results|success_results)/);
     expect(grants.join("\n")).not.toMatch(/omi_memory\.memory_(?:product_|legacy_proposition|migration_item)/);
   });
 
