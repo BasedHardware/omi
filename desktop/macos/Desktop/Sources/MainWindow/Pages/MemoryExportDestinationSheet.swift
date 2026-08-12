@@ -425,8 +425,8 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
           log(
             "MemoryExportDestinationSheetModel: Failed opening \(destination.title) with installed app: \(error.localizedDescription)"
           )
-          Task { @MainActor in
-            self.openInDefaultHandler(url)
+          Self.performOnMainActor { [weak self] in
+            self?.openInDefaultHandler(url)
           }
         }
       }
@@ -447,13 +447,21 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
           log(
             "MemoryExportDestinationSheetModel: Failed opening \(url.absoluteString): \(error.localizedDescription)"
           )
-          NSWorkspace.shared.open(url)
+          Self.performOnMainActor {
+            NSWorkspace.shared.open(url)
+          }
         }
       }
       return
     }
 
     NSWorkspace.shared.open(url)
+  }
+
+  nonisolated static func performOnMainActor(_ operation: @escaping @MainActor @Sendable () -> Void) {
+    Task { @MainActor in
+      operation()
+    }
   }
 }
 

@@ -1,8 +1,25 @@
+import Dispatch
 import XCTest
 
 @testable import Omi_Computer
 
 final class MemoryExportSetupTests: XCTestCase {
+  func testWorkspaceFallbackReroutesBackgroundCompletionToMainActor() async {
+    let callbackStarted = expectation(description: "background callback started")
+    let actionCompleted = expectation(description: "workspace fallback ran on main actor")
+
+    DispatchQueue.global().async {
+      XCTAssertFalse(Thread.isMainThread)
+      MemoryExportDestinationSheetModel.performOnMainActor {
+        XCTAssertTrue(Thread.isMainThread)
+        actionCompleted.fulfill()
+      }
+      callbackStarted.fulfill()
+    }
+
+    await fulfillment(of: [callbackStarted, actionCompleted], timeout: 1)
+  }
+
   func testOpenClawManualSetupUsesMCPConfigNotMemoryPromptSecret() throws {
     let setup = try XCTUnwrap(MemoryExportDestination.openclaw.mcpSetup(key: "test-key"))
     let copyText = try XCTUnwrap(setup.copyText)
