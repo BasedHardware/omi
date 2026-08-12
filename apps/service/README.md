@@ -213,13 +213,7 @@ Generation quota is reserved once, in the same admission transaction as the cano
 
 On service construction, the supervisor scans durable non-terminal generations. A generation whose process disappeared without a cancellation request becomes `failed` with `generation_interrupted` and `retryable: true`; it is never resumed against a potentially non-deterministic provider and never remains `generating` indefinitely. A durable cancellation request discovered during recovery instead completes as `cancelled`, retaining its logged partial. Canonical assistant persistence and terminal event append share one SQLite transaction.
 
-The local adapter emits a deterministic scripted answer with real timer delays.
-Deployed LLM integration belongs behind `ChatGenerationSource`. Memory/context
-consultation belongs behind `ChatGenerationContextSource`: the local adapter
-returns an explicit `unavailable` envelope, while the opt-in PostgreSQL/Firebase
-adapter reuses the canonical authorized memory page and preserves its citations,
-window and completeness. No provider prompt or default consumes those bytes yet;
-see `docs/memory-productionization/authorized-chat-memory-context-contract.md`.
+The zero-config local adapter emits a deterministic scripted answer with real timer delays for UI-fixture work only. Model evaluation and real generation use `createGatewayChatGenerationSource`, which sends only a semantic lane through the authenticated LLM gateway; provider names, model names, fake providers, and provider credentials do not enter product code. The first gateway slice fails closed on attachments rather than silently dropping their content. Memory/context consultation belongs behind `ChatGenerationContextSource`: generation obtains memories only through the sealed `MemoryRouteReadPort` and its authorized read composition, preserving citations, window and completeness. See `docs/memory-productionization/authorized-chat-memory-context-contract.md`.
 
 The ratified Listen-to-memory semantic mapping is implemented as an inert
 acceptance adapter; it is intentionally not called by the local socket
@@ -241,6 +235,9 @@ All are optional.
 | `OMI_DEV_TOKEN_SECRET` | `omi-local-dev-token-not-a-secret-v1` | Label hashed into the dev signing key. Change only if you need a different stable token across restarts. |
 | `OMI_RUN_ID` | unset | Host-owned run id; requires `OMI_DEV_READY_RECORD`. |
 | `OMI_DEV_READY_RECORD` | unset | Host-owned path for the versioned subprocess readiness record. |
+| `OMI_LLM_GATEWAY_URL` | unset | Internal gateway origin. Set with `OMI_LLM_GATEWAY_SERVICE_TOKEN` to use gateway-backed Chat generation. |
+| `OMI_LLM_GATEWAY_SERVICE_TOKEN` | unset | Service-to-service gateway token. Never printed or persisted by the dev server. |
+| `OMI_LLM_GATEWAY_LANE` | `omi:auto:chat-agent` | Semantic gateway lane; provider/model names are rejected by the source adapter. |
 
 ## Troubleshooting
 

@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite";
 import { writeFileSync } from "node:fs";
 
 import { createLocalDevService } from "../app-facing";
+import { createGatewayChatGenerationSource } from "../chat/generation-source";
 import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
 import { isQaEvidenceRunId } from "../observability/producer-evidence";
 import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../qa/seed";
@@ -62,6 +63,11 @@ interface BootConfig {
   readonly devSecretLabel: string;
   readonly runId: string | null;
   readonly readyRecordPath: string | null;
+  readonly llmGateway: Readonly<{
+    readonly url: string;
+    readonly token: string;
+    readonly laneId: string;
+  }> | null;
 }
 
 const readConfig = (): BootConfig => {
@@ -109,6 +115,17 @@ const readConfig = (): BootConfig => {
     fail("OMI_DEV_READY_RECORD must be a non-empty host-owned path.");
   }
 
+  const gatewayUrl = process.env.OMI_LLM_GATEWAY_URL?.trim() ?? "";
+  const gatewayToken = process.env.OMI_LLM_GATEWAY_SERVICE_TOKEN?.trim() ?? "";
+  if ((gatewayUrl.length === 0) !== (gatewayToken.length === 0)) {
+    fail("OMI_LLM_GATEWAY_URL and OMI_LLM_GATEWAY_SERVICE_TOKEN must be supplied together.");
+  }
+  const llmGateway = gatewayUrl.length === 0 ? null : Object.freeze({
+    url: gatewayUrl,
+    token: gatewayToken,
+    laneId: process.env.OMI_LLM_GATEWAY_LANE?.trim() || "omi:auto:chat-agent",
+  });
+
   return Object.freeze({
     port,
     ownerAccountId: process.env.OMI_SEED_OWNER || DEFAULT_OWNER,
@@ -120,6 +137,7 @@ const readConfig = (): BootConfig => {
     devSecretLabel: process.env.OMI_DEV_TOKEN_SECRET || DEV_KEY_MATERIAL_LABEL,
     runId: rawRunId ?? null,
     readyRecordPath: rawReadyRecordPath ?? null,
+    llmGateway,
   });
 };
 
@@ -152,6 +170,13 @@ const main = (): void => {
       accountTimezone: config.accountTimezone,
       devSecretLabel: config.devSecretLabel,
       listenDefaultUnmetered: true,
+      ...(config.llmGateway === null ? {} : {
+        generationSource: createGatewayChatGenerationSource({
+          gatewayUrl: config.llmGateway.url,
+          laneId: config.llmGateway.laneId,
+          serviceToken: config.llmGateway.token,
+        }),
+      }),
     });
   } catch (error) {
     return fail(`failed to seed QA data: ${error instanceof Error ? error.message : "unknown error"}`);
