@@ -10,6 +10,7 @@ description: >
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenCandidateAdapter.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+RewindCapture.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/CandidateSink.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketRollup.swift
@@ -25,6 +26,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/InsightSQLPrivacy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/TaskContextualResurfacingService.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindCaptureExclusion.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/StagedTaskStorage.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer+CaptureExclusion.swift
 preconditions:
   - signed_in_dogfood_account
@@ -53,9 +55,12 @@ steps:
     name: Exercise task binding and candidate graduation
     do: >
       In the same context, create or complete a task whose wording is visible on screen,
-      then leave and revisit the context. Confirm any resurfaced task or graduated candidate
-      is attributed to the same signed-in account and context. Queued or dismissed cards
-      must not be recorded as delivered or graduate a candidate before presentation.
+      then leave and revisit the context several times while the visible wording varies by
+      a harmless paraphrase. Confirm the repeated observations reconcile to one Suggested
+      candidate, while a distinct identifier produces a separate candidate. Any resurfaced
+      task or graduated candidate must remain attributed to the same signed-in account and
+      context. Queued or dismissed cards must not be recorded as delivered or graduate a
+      candidate before presentation.
 
   - id: S4
     name: Verify excluded-app privacy
