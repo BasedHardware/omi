@@ -242,6 +242,7 @@ export interface AuthorizedPostgresTransaction {
  */
 interface AuthorizedPostgresConnectionTransaction extends AuthorizedPostgresTransaction {
   readonly connection: CheckedOutPostgresConnection;
+  readonly lockedControlRevision: number;
 }
 
 const providerCode = (error: unknown): string | undefined => {
@@ -357,6 +358,7 @@ export const withAuthorizedSerializableConnectionTransaction = async <Result>(
         const transaction: AuthorizedPostgresConnectionTransaction = Object.freeze({
           authority: context,
           dbNowEpochSeconds: row.db_now_epoch_seconds,
+          lockedControlRevision: row.control_revision,
           connection,
         });
         return callback(transaction);

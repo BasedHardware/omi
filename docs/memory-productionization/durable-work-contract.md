@@ -1,6 +1,6 @@
 # Durable memory work contract
 
-Status: P3 pre-registration, 2026-08-11
+Status: P3 acceptance transaction qualified; lease/result execution remains pre-registered, 2026-08-11
 
 ## Boundary
 
@@ -63,9 +63,10 @@ ineligible, but it does not erase or rewrite its history.
 
 ## Atomic PostgreSQL obligations
 
-Later P3 migrations and the real adapter must make each of these one transaction:
+P3 migrations and real adapters make each of these one transaction:
 
-1. accept work plus its exact input manifest;
+1. accept work plus its exact input manifest — implemented and qualified on
+   PostgreSQL 18.4 under the application role;
 2. acquire/reclaim lease plus fence/attempt advance;
 3. commit success plus authoritative graph transition, total formation outcome, and
    content-safe outbox coordinate; or
@@ -98,7 +99,7 @@ The core slice succeeds only if adversarial tests prove:
 - success requires exact response/result digests and terminal replay cannot mutate;
 - no durable job or outcome field can carry raw model output or raw error strings.
 
-The PostgreSQL slice later adds two-worker races, lease expiry/reclaim, deletion and
+The remaining PostgreSQL execution slice adds two-worker races, lease expiry/reclaim, deletion and
 credential revocation during work, process termination at every atomic boundary,
 outbox crash/replay, and restart reconstruction. Fake/in-memory tests cannot satisfy
 those gates.

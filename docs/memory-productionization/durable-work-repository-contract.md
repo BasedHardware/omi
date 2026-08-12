@@ -1,13 +1,14 @@
 # Durable work repository control contract
 
-Status: P3 service-boundary pre-registration, 2026-08-11
+Status: P3 acceptance path real-PostgreSQL qualified; execution control remains pre-registered, 2026-08-11
 
 ## Purpose
 
 This contract freezes the production-neutral repository boundary that persists
 accepted memory work before model execution and controls fenced worker attempts.
-It adds no PostgreSQL client, SQL operation, role grant, worker composition,
-model call, clock, retry schedule, or runtime default.
+The acceptance half now has a sealed PostgreSQL adapter and append-only
+application-role grant. It adds no worker composition, model call, lease/retry
+schedule, result grant, route, or runtime default.
 
 The first control port deliberately has **no success method**. A worker cannot
 mark work successful until success, the exact authoritative graph transition,
@@ -34,10 +35,15 @@ manifest. Same owner/job/digest is replay; same owner/job with different bytes
 is conflict. Acceptance never stores raw evidence, transcript, prompt, model
 output, provider error, query, or answer.
 
-The eventual adapter obtains the current control revision and database clock
-inside its transaction; neither is caller-selected. It revalidates lifecycle,
+The PostgreSQL adapter obtains the current locked control revision and database
+clock inside its transaction; neither is caller-selected. It revalidates lifecycle,
 epoch, destination, credential, grant, and capability before replay observation
 or mutation, and writes acceptance, manifest, and pending state atomically.
+
+Real PostgreSQL 18.4 qualification proves application-role accept, exact replay,
+changed-byte conflict, immutable-table privilege denial, injected rollback, and
+grant revocation before replay. The runtime is still inert: no service composes
+this adapter and no execution/result privilege is granted.
 
 ## Worker control
 
@@ -65,8 +71,8 @@ closed results, not exceptions carrying database/provider text.
 
 - No success/finalize operation; no graph or outbox commit can be skipped.
 - No model, prompt, policy, lease, or retry configuration is selected here.
-- No application route, worker loop, scheduler, PostgreSQL function, grant,
-  connection, query, or execute capability is added.
+- No application route, worker loop, scheduler, lease/result PostgreSQL
+  function or grant, or raw connection/query/execute capability is exposed.
 - No accepted input can be inferred from SQLite dream tables or a request-
   lifecycle deferred collection.
 - No `subject:*`, identity, bystander/privacy, or compose-voice behavior changes.

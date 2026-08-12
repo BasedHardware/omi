@@ -85,4 +85,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0013-atomic-liveness-frontier.sql",
     sha256: "faa364231f4003bb4be4e939a47a3862c5f109a3fce6d3c5fb32dc5e2fa63673",
   }),
+  Object.freeze({
+    version: 14,
+    name: "durable-work-acceptance-runtime",
+    fileName: "0014-durable-work-acceptance-runtime.sql",
+    sha256: "9ea369e8bbe082673b626449133fdf755156aff3eb09af8e4a2165b7013b6271",
+  }),
 ]);

@@ -342,7 +342,13 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(updateGrants[1]).toContain("UPDATE (state, commit_id, finalized_at)");
     expect(updateGrants[1]).toContain("omi_memory.memory_idempotency_receipts");
     expect(grants.join("\n")).not.toContain("omi_memory.platform_schema_migrations TO omi_platform_application");
-    expect(grants.join("\n")).not.toMatch(/omi_memory\.memory_work_/);
+    const workGrants = grants.filter((grant) => /omi_memory\.memory_work_/.test(grant));
+    expect(workGrants).toHaveLength(4);
+    expect(workGrants.join("\n")).toContain("memory_work_acceptances");
+    expect(workGrants.join("\n")).toContain("memory_work_input_manifest");
+    expect(workGrants.join("\n")).toContain("memory_work_state_revisions");
+    expect(workGrants.join("\n")).toContain("memory_work_heads");
+    expect(workGrants.join("\n")).not.toMatch(/UPDATE|DELETE|memory_work_(?:staged_results|success_results|outbox_events)/);
     expect(grants.join("\n")).not.toMatch(/omi_memory\.memory_(?:product_|legacy_proposition|migration_item)/);
   });
 
@@ -452,8 +458,18 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(allSql).toContain("memory_work_acceptances_authority_assignment_fk");
     expect(allSql).toContain("authority_strategy_id, execution_contract_digest");
     expect(acceptance.body).not.toContain("shadow");
-    expect(allSql).toContain("Deliberately no application, worker, experiment, or migration-runner grant");
-    expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_strategy_/s);
+    const acceptanceRuntime = migrationSql.find((entry) => entry.version === 14)!.sql;
+    for (const table of [
+      "memory_strategy_definitions",
+      "memory_strategy_assignment_policies",
+      "memory_strategy_policy_shadows",
+      "memory_strategy_assignment_bundles",
+      "memory_strategy_shadow_assignments",
+    ]) {
+      expect(acceptanceRuntime).toContain(`GRANT SELECT, INSERT ON omi_memory.${table}`);
+    }
+    expect(acceptanceRuntime).not.toMatch(/GRANT[^;]*\b(?:UPDATE|DELETE|TRUNCATE)\b/s);
+    expect(acceptanceRuntime).not.toMatch(/GRANT[^;]*memory_work_(?:staged_results|success_results|outbox_events)/s);
   });
 
   test("keeps repeated paired evaluation results physically outside memory authority", () => {

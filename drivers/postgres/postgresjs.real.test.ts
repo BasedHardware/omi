@@ -5,7 +5,24 @@ import postgres, { type Sql } from "postgres";
 
 import { createAuthorizedLedgerWriteContextIssuer } from "../../apps/service/auth/authorized-context-internal";
 import { authoritativeAppendRequestDigest, type AuthoritativeLedgerAppend } from "../../apps/service/stores/authoritative-ledger-repository";
+import {
+  durableMemoryWorkAcceptanceRequestDigest,
+  durableMemoryWorkInputManifestDigest,
+  type DurableMemoryWorkAcceptanceRequest,
+  type DurableMemoryWorkInputManifestEntry,
+} from "../../apps/service/stores/durable-memory-work-repository";
 import { formationCandidateManifestDigest } from "../../core/consolidate/formation-outcome";
+import {
+  MEMORY_STRATEGY_VERSION,
+  createMemoryStrategyAssigner,
+  defineMemoryStrategyAssignmentPolicy,
+  registerMemoryStrategy,
+} from "../../core/consolidate/strategy-assignment";
+import {
+  DURABLE_MEMORY_WORK_VERSION,
+  acceptDurableMemoryWork,
+  type AcceptedDurableMemoryWork,
+} from "../../core/consolidate/state-machine";
 import { prepareDerivation, type AtomicGraphTransition } from "../../core/ledger";
 import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
 import type { IdentityAuthorization, IdentityConstraint, ProvisionalClaim } from "../../core/schema";
@@ -15,6 +32,7 @@ import {
 } from "./authoritative-ledger-repository";
 import { createPostgresAuthoritativeGraphSnapshotRepository } from "./authoritative-graph-snapshot";
 import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatement } from "./connection";
+import { createPostgresDurableMemoryWorkAcceptanceRepository } from "./durable-memory-work-acceptance";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
@@ -372,6 +390,57 @@ const identityAppend = (
   };
 };
 
+const durableWorkAcceptanceRequest = (
+  accountId: string,
+  suffix: string,
+  acceptedAtEventTime: number,
+): DurableMemoryWorkAcceptanceRequest => {
+  const strategy = registerMemoryStrategy({
+    version: MEMORY_STRATEGY_VERSION,
+    strategy_id: "strategy:qualification:formation:authority",
+    work_kind: "formation",
+    coordinates: {
+      strategy_version: "formation:qualification:v1", model_version: "deepseek-flash:v1",
+      prompt_version: "prompt:qualification:v1", policy_version: "policy:qualification:v1",
+      code_version: "code:qualification:v1", schema_version: "schema:qualification:v1",
+      tokenizer_version: "tokenizer:qualification:v1", tool_version: "none",
+      result_contract_version: "formation-result:v2", speaker_strategy_version: "speaker:v1",
+      boundary_strategy_version: "boundary:deepseek:v1",
+    },
+  });
+  const policy = defineMemoryStrategyAssignmentPolicy({
+    policy_id: "policy:qualification:formation:v1", work_kind: "formation",
+    unit_kind: "session", key_version: "assignment-key:qualification:v1",
+    authority_strategy_id: strategy.strategy_id, shadow_candidates: [],
+  }, [strategy]);
+  const assignment = createMemoryStrategyAssigner(new Uint8Array(32).fill(11)).assign({
+    owner_account_id: accountId, unit_ref: `session:${suffix}`, policy, strategies: [strategy],
+  });
+  const inputs: readonly DurableMemoryWorkInputManifestEntry[] = [
+    {
+      input_kind: "evidence_revision", input_ref: `evidence:${suffix}`,
+      input_digest: sha256CanonicalContent({ evidence_revision: `evidence:${suffix}` }),
+    },
+    {
+      input_kind: "graph_frontier", input_ref: `frontier:${suffix}`,
+      input_digest: sha256CanonicalContent({ graph_frontier: `frontier:${suffix}` }),
+    },
+  ];
+  const accepted: AcceptedDurableMemoryWork = {
+    version: DURABLE_MEMORY_WORK_VERSION, job_id: `job:formation:${suffix}`,
+    owner_account_id: accountId, account_epoch: 12,
+    lifecycle_state: "active", deletion_epoch: null, work_kind: "formation",
+    input_frontier: `frontier:${suffix}`, input_digest: durableMemoryWorkInputManifestDigest(inputs),
+    execution_contract_digest: assignment.authority.execution_contract_digest,
+    accepted_at_event_time: acceptedAtEventTime, max_attempts: 2,
+  };
+  const pending = acceptDurableMemoryWork(accepted);
+  return Object.freeze({
+    accepted_work: accepted, input_manifest: inputs, strategy_assignment: assignment,
+    request_digest: durableMemoryWorkAcceptanceRequestDigest(pending, inputs, assignment),
+  });
+};
+
 realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
   let ownerSql: Sql<Record<string, never>>;
   let pool: CloseablePostgresTransactionPool;
@@ -511,6 +580,196 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       },
     );
   }, 30_000);
+
+  test("application role accepts exact durable work before inference and revalidates authority before replay", async () => {
+    const suffix = randomUUID();
+    const accountId = `account:work-acceptance:${suffix}`;
+    const principalId = `principal:work-acceptance:${suffix}`;
+    const applicationId = "app:qualification-work";
+    const credentialId = `credential:work:${suffix}`;
+    const grantId = `grant:work:${suffix}`;
+    const controlHash = "a".repeat(64);
+    const credentialHash = "b".repeat(64);
+    const grantHash = "c".repeat(64);
+    const now = Math.floor(Date.now() / 1_000);
+
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(
+        "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)", [accountId],
+      );
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+          (account_id, control_revision, account_generation, account_epoch,
+           lifecycle_state, deletion_epoch, observed_at, record_schema_version,
+           record_json, content_hash)
+        VALUES ($1, 17, 'new', 12, 'active', NULL, transaction_timestamp(),
+                'control-v1', '{}'::jsonb, $2)`, [accountId, controlHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+          (account_id, control_revision, activated_epoch, activation_control_revision)
+        VALUES ($1, 17, 12, 17)`, [accountId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_credential_revisions
+          (account_id, principal_id, application_id, credential_id,
+           credential_generation, credential_kind, lifecycle,
+           authentication_strength, expires_at, record_schema_version,
+           record_json, content_hash)
+        VALUES ($1, $2, $3, $4, 4, 'firebase', 'active', 'service-workload',
+                to_timestamp($5), 'credential-v1', '{}'::jsonb, $6)`,
+      [accountId, principalId, applicationId, credentialId, now + 7_200, credentialHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_credential_heads
+          (account_id, application_id, credential_id, credential_generation)
+        VALUES ($1, $2, $3, 4)`, [accountId, applicationId, credentialId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 4, 'memories.work.accept', $4, 9, 'active', true,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+      [accountId, applicationId, credentialId, grantId, grantHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version)
+        VALUES ($1, $2, $3, 4, 'memories.work.accept', $4, 9)`,
+      [accountId, applicationId, credentialId, grantId]);
+    });
+
+    const authorityRow: AuthorityStateRow = {
+      account_id: accountId, principal_id: principalId, application_id: applicationId,
+      credential_id: credentialId, credential_generation: 4,
+      capability: "memories.work.accept", grant_id: grantId, grant_version: 9,
+      account_epoch: 12, control_conflict_reason: null, control_conflict_at_revision: null,
+      destination_activation_epoch: 12, destination_activation_revision: 17,
+      lifecycle_state: "active", deletion_epoch: null, account_generation: "new",
+      credential_lifecycle: "active", grant_lifecycle: "active", grant_enabled: true,
+      authentication_strength: "service-workload",
+      credential_expires_at_epoch_seconds: now + 7_200, control_revision: 17,
+      control_content_hash: controlHash, credential_content_hash: credentialHash,
+      grant_content_hash: grantHash, db_now_epoch_seconds: now,
+    };
+    const context = createAuthorizedLedgerWriteContextIssuer().issue({
+      context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
+      account_id: accountId, application_id: applicationId, credential_id: credentialId,
+      credential_generation: 4, capability: "memories.work.accept", grant_id: grantId,
+      grant_version: 9, account_epoch: 12, destination_activation_revision: 17,
+      lifecycle_state: "active", deletion_epoch: null, authentication_strength: "service-workload",
+      issued_at_epoch_seconds: now - 60, expires_at_epoch_seconds: now + 3_600,
+      authorization_state_digest: authorizationStateDigest(authorityRow),
+    }, now);
+    let lastWorkAcceptanceStatement = "none";
+    const appRolePool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(
+        options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+        callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+      ) => pool.withTransaction(options, async (connection) => {
+        await connection.query({
+          name: "qualification.work_acceptance_set_role",
+          text: "SET LOCAL ROLE omi_platform_application", values: [],
+        });
+        const role = await connection.query<{ current_user: string }>({
+          name: "qualification.work_acceptance_assert_role", text: "SELECT current_user", values: [],
+        });
+        expect(role).toEqual([{ current_user: "omi_platform_application" }]);
+        return callback(Object.freeze({
+          connectionIdentity: connection.connectionIdentity,
+          query: async <Row extends Record<string, unknown>>(statement: SqlStatement) => {
+            lastWorkAcceptanceStatement = statement.name;
+            return connection.query<Row>(statement);
+          },
+          execute: async (statement: SqlStatement) => {
+            lastWorkAcceptanceStatement = statement.name;
+            return connection.execute(statement);
+          },
+        }));
+      }),
+    });
+    const repository = createPostgresDurableMemoryWorkAcceptanceRepository({ pool: appRolePool });
+    const acceptedRequest = durableWorkAcceptanceRequest(accountId, suffix, now);
+
+    try {
+      expect(await repository.accept(context, acceptedRequest)).toMatchObject({
+        kind: "accepted", job: { job_id: `job:formation:${suffix}`, state: "pending" },
+      });
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error
+        ? String(Reflect.get(error, "code")) : "assertion_or_unknown";
+      throw new Error(`work_acceptance_failure_at:${lastWorkAcceptanceStatement}:${code}`);
+    }
+    await expect(repository.accept(context, acceptedRequest)).resolves.toMatchObject({
+      kind: "replayed", job: { state: "pending" },
+    });
+    await expect(repository.accept(
+      context, durableWorkAcceptanceRequest(accountId, suffix, now + 1),
+    )).resolves.toEqual({ kind: "idempotency_conflict" });
+
+    const persisted = await ownerSql.unsafe<{
+      definitions: number; policies: number; bundles: number; acceptances: number;
+      inputs: number; states: number; heads: number; state: string; state_revision: string;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_strategy_definitions WHERE account_id = $1) AS definitions,
+        (SELECT count(*)::int FROM omi_memory.memory_strategy_assignment_policies WHERE account_id = $1) AS policies,
+        (SELECT count(*)::int FROM omi_memory.memory_strategy_assignment_bundles WHERE account_id = $1) AS bundles,
+        (SELECT count(*)::int FROM omi_memory.memory_work_acceptances WHERE account_id = $1) AS acceptances,
+        (SELECT count(*)::int FROM omi_memory.memory_work_input_manifest WHERE account_id = $1) AS inputs,
+        (SELECT count(*)::int FROM omi_memory.memory_work_state_revisions WHERE account_id = $1) AS states,
+        (SELECT count(*)::int FROM omi_memory.memory_work_heads WHERE account_id = $1) AS heads,
+        (SELECT state FROM omi_memory.memory_work_state_revisions WHERE account_id = $1) AS state,
+        (SELECT state_revision::text FROM omi_memory.memory_work_heads WHERE account_id = $1) AS state_revision
+    `, [accountId]);
+    expect([...persisted]).toEqual([{
+      definitions: 1, policies: 1, bundles: 1, acceptances: 1,
+      inputs: 2, states: 1, heads: 1, state: "pending", state_revision: "0",
+    }]);
+
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(`UPDATE omi_memory.memory_work_heads
+        SET state_revision = state_revision WHERE account_id = $1`, [accountId]);
+    })).rejects.toMatchObject({ code: "42501" });
+
+    const rollbackSuffix = `${suffix}:rollback`;
+    try {
+      await ownerSql.unsafe(`
+        CREATE OR REPLACE FUNCTION omi_memory.qualification_reject_work_acceptance()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'qualification injected rollback'; END
+        $$;
+        DROP TRIGGER IF EXISTS reject_work_acceptance ON omi_memory.memory_work_state_revisions;
+        CREATE TRIGGER reject_work_acceptance
+        AFTER INSERT ON omi_memory.memory_work_state_revisions
+        FOR EACH ROW EXECUTE FUNCTION omi_memory.qualification_reject_work_acceptance()
+      `, [], { prepare: false });
+      await expect(repository.accept(
+        context, durableWorkAcceptanceRequest(accountId, rollbackSuffix, now),
+      )).rejects.toMatchObject({ code: "persistence_failed", message: "persistence_failed" });
+    } finally {
+      await ownerSql.unsafe(`
+        DROP TRIGGER IF EXISTS reject_work_acceptance ON omi_memory.memory_work_state_revisions;
+        DROP FUNCTION IF EXISTS omi_memory.qualification_reject_work_acceptance()
+      `, [], { prepare: false });
+    }
+    const rolledBack = await ownerSql.unsafe<{ count: number }[]>(`
+      SELECT count(*)::int AS count FROM omi_memory.memory_work_acceptances
+      WHERE account_id = $1 AND job_id = $2
+    `, [accountId, `job:formation:${rollbackSuffix}`]);
+    expect([...rolledBack]).toEqual([{ count: 0 }]);
+
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 4, 'memories.work.accept', $4, 10, 'revoked', false,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+      [accountId, applicationId, credentialId, grantId, "d".repeat(64)]);
+      await transaction.unsafe(`UPDATE omi_memory.application_grant_heads
+        SET grant_version = 10, updated_at = transaction_timestamp()
+        WHERE account_id = $1 AND application_id = $2 AND credential_id = $3
+          AND credential_generation = 4 AND capability = 'memories.work.accept'`,
+      [accountId, applicationId, credentialId]);
+    });
+    await expect(repository.accept(context, acceptedRequest)).resolves.toEqual({
+      kind: "authorization_denied", reason: "grant_inactive",
+    });
+  }, 120_000);
 
   test("application-role authority adapter commits empty, graph, and formation work with exact replay and rollback", async () => {
     const suffix = randomUUID();
