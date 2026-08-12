@@ -820,6 +820,66 @@
         "title": "DevApiKeyCreated",
         "type": "object"
       },
+      "DevApiKeyRotated": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "key_prefix": {
+            "title": "Key Prefix",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "key_prefix",
+          "created_at",
+          "key"
+        ],
+        "title": "DevApiKeyRotated",
+        "type": "object"
+      },
       "DeveloperActionItem": {
         "properties": {
           "completed": {
@@ -2369,6 +2429,57 @@
           }
         ],
         "summary": "Delete Key",
+        "tags": [
+          "API Keys"
+        ]
+      }
+    },
+    "/v1/dev/keys/{key_id}/rotate": {
+      "post": {
+        "description": "Issue a new secret for an existing Developer key. The raw key is returned once.\n\nThe previous secret stops working immediately — there is no grace window.",
+        "operationId": "rotateApiKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevApiKeyRotated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Rotate Key",
         "tags": [
           "API Keys"
         ]
