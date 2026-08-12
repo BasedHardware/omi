@@ -1573,6 +1573,75 @@ async def test_chat_completions_gateway_config_error_is_http_503(monkeypatch):
     assert error.value.status_code == 503
 
 
+@pytest.mark.asyncio
+async def test_chat_completions_routes_oauth_provider_without_managed_gateway(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'get_byok_llm_provider', lambda: 'chatgpt')
+    monkeypatch.setattr(desktop_chat, 'get_byok_oauth_credential', lambda: {'provider': 'chatgpt'})
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+
+    class OAuthClient:
+        async def ainvoke(self, messages):
+            assert isinstance(messages[0], desktop_chat.HumanMessage)
+            return SimpleNamespace(
+                id='oauth-msg',
+                content='from OAuth',
+                tool_calls=[],
+                usage_metadata={'input_tokens': 2, 'output_tokens': 3},
+            )
+
+    monkeypatch.setattr(desktop_chat, 'get_llm', lambda *_args, **_kwargs: OAuthClient())
+
+    response = await desktop_chat.chat_completions(
+        {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}]},
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id='oauth-request',
+    )
+
+    assert response.status_code == 200
+    payload = json.loads(response.body)
+    assert payload['choices'][0]['message']['content'] == 'from OAuth'
+    assert payload['usage'] == {'prompt_tokens': 2, 'completion_tokens': 3, 'total_tokens': 5}
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_streams_oauth_provider_without_managed_gateway(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'get_byok_llm_provider', lambda: 'grok')
+    monkeypatch.setattr(desktop_chat, 'get_byok_oauth_credential', lambda: {'provider': 'grok'})
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+
+    class OAuthClient:
+        async def astream(self, messages):
+            assert isinstance(messages[0], desktop_chat.HumanMessage)
+            yield SimpleNamespace(content='from', tool_call_chunks=[], usage_metadata=None)
+            yield SimpleNamespace(
+                content=' OAuth', tool_call_chunks=[], usage_metadata={'input_tokens': 2, 'output_tokens': 3}
+            )
+
+    monkeypatch.setattr(desktop_chat, 'get_llm', lambda *_args, **_kwargs: OAuthClient())
+
+    response = await desktop_chat.chat_completions(
+        {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}], 'stream': True},
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id='oauth-stream-request',
+    )
+
+    body = ''.join([chunk async for chunk in response.body_iterator]).encode()
+    assert b'"content":"from"' in body
+    assert b'"content":" OAuth"' in body
+    assert b'"prompt_tokens":2' in body
+    assert body.endswith(b'data: [DONE]\n\n')
+
+
 async def _done():
     return None
 

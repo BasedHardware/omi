@@ -13,13 +13,14 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from database import llm_usage as llm_usage_db
 from database import redis_db
 from utils.http_client import get_llm_gateway_semaphore
-from utils.byok import get_byok_key
+from utils.byok import get_byok_key, get_byok_llm_provider, get_byok_oauth_credential
 from utils.executors import critical_executor, db_executor, run_blocking
-from utils.llm.clients import anthropic_client, get_direct_anthropic_client
+from utils.llm.clients import anthropic_client, get_direct_anthropic_client, get_llm
 from utils.llm.desktop_llm_stub import (
     llm_stub_enabled,
     stub_chat_completions_json,
@@ -438,6 +439,185 @@ def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LAN
         translated.append(updated)
     gateway_body = {key: value for key, value in body.items() if key != 'omi_web_search'}
     return {**gateway_body, 'model': lane_id, 'messages': translated}
+
+
+def _oauth_provider() -> str | None:
+    provider = get_byok_llm_provider()
+    return provider if provider in {'chatgpt', 'grok'} and get_byok_oauth_credential() is not None else None
+
+
+def _oauth_messages(body: Mapping[str, object]) -> list[object]:
+    messages = body.get('messages')
+    if not isinstance(messages, list):
+        raise ValueError('messages must be an array')
+    translated: list[object] = []
+    for message in messages:
+        if not isinstance(message, Mapping) or not isinstance(message.get('role'), str):
+            raise ValueError('messages must contain role objects')
+        role = message['role']
+        content = message.get('content', '')
+        if role in {'system', 'developer'}:
+            translated.append(SystemMessage(content=_text(content)))
+        elif role == 'user':
+            translated.append(HumanMessage(content=content))
+        elif role == 'assistant':
+            tool_calls: list[dict[str, object]] = []
+            raw_tool_calls = message.get('tool_calls')
+            if isinstance(raw_tool_calls, list):
+                for call in raw_tool_calls:
+                    function = call.get('function') if isinstance(call, Mapping) else None
+                    if not isinstance(function, Mapping):
+                        raise ValueError('invalid assistant tool call')
+                    name, arguments, call_id = function.get('name'), function.get('arguments'), call.get('id')
+                    if not isinstance(name, str) or not isinstance(arguments, str) or not isinstance(call_id, str):
+                        raise ValueError('invalid assistant tool call')
+                    try:
+                        args = json.loads(arguments)
+                    except ValueError as error:
+                        raise ValueError('invalid assistant tool call') from error
+                    if not isinstance(args, dict):
+                        raise ValueError('invalid assistant tool call')
+                    tool_calls.append({'name': name, 'args': args, 'id': call_id})
+            translated.append(AIMessage(content=_text(content), tool_calls=tool_calls))
+        elif role == 'tool':
+            tool_call_id = message.get('tool_call_id')
+            if not isinstance(tool_call_id, str):
+                raise ValueError('tool message missing tool_call_id')
+            translated.append(ToolMessage(content=_text(content), tool_call_id=tool_call_id))
+        else:
+            raise ValueError('unsupported message role')
+    return translated
+
+
+def _oauth_tools(body: Mapping[str, object]) -> list[dict[str, object]]:
+    tools = body.get('tools')
+    if not isinstance(tools, list):
+        return []
+    return [dict(tool) for tool in tools if isinstance(tool, Mapping) and tool.get('type') == 'function']
+
+
+def _oauth_response_message(message: object) -> dict[str, object]:
+    content = _text(getattr(message, 'content', ''))
+    response: dict[str, object] = {'role': 'assistant', 'content': content or None}
+    raw_calls = getattr(message, 'tool_calls', [])
+    if isinstance(raw_calls, list):
+        tool_calls = [
+            {
+                'id': call.get('id'),
+                'type': 'function',
+                'function': {
+                    'name': call.get('name'),
+                    'arguments': json.dumps(call.get('args', {}), separators=(',', ':')),
+                },
+            }
+            for call in raw_calls
+            if isinstance(call, Mapping) and isinstance(call.get('name'), str)
+        ]
+        if tool_calls:
+            response['tool_calls'] = tool_calls
+    return response
+
+
+def _oauth_usage(message: object) -> dict[str, int]:
+    metadata = getattr(message, 'usage_metadata', None)
+    if isinstance(metadata, Mapping):
+        return {
+            'input_tokens': _usage_field(metadata, 'input_tokens'),
+            'output_tokens': _usage_field(metadata, 'output_tokens'),
+        }
+    return {}
+
+
+async def _stream_oauth(
+    body: Mapping[str, object], public_model: str, uid: str, *, on_upstream_accepted: Callable[[], Awaitable[None]]
+) -> AsyncIterator[str]:
+    stream_id = f'chatcmpl-{uuid4()}'
+    created = int(time.time())
+    messages = _oauth_messages(body)
+    client: Any = get_llm('chat_agent', streaming=True)
+    tools = _oauth_tools(body)
+    if tools:
+        client = client.bind_tools(tools, tool_choice=body.get('tool_choice', 'auto'))
+    yield _sse(
+        {
+            'id': stream_id,
+            'object': 'chat.completion.chunk',
+            'created': created,
+            'model': public_model,
+            'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}],
+        }
+    )
+    usage: dict[str, int] = {}
+    tool_indexes: dict[str, int] = {}
+    next_tool_index = 0
+    await on_upstream_accepted()
+    try:
+        async for chunk in client.astream(messages):
+            content = _text(getattr(chunk, 'content', ''))
+            if content:
+                yield _sse(
+                    {
+                        'id': stream_id,
+                        'object': 'chat.completion.chunk',
+                        'created': created,
+                        'model': public_model,
+                        'choices': [{'index': 0, 'delta': {'content': content}, 'finish_reason': None}],
+                    }
+                )
+            for call in getattr(chunk, 'tool_call_chunks', []):
+                if not isinstance(call, Mapping):
+                    continue
+                name = call.get('name')
+                if not isinstance(name, str):
+                    continue
+                raw_call_id = call.get('id')
+                call_id = raw_call_id if isinstance(raw_call_id, str) else name
+                index = tool_indexes.get(call_id)
+                if index is None:
+                    index = next_tool_index
+                    tool_indexes[call_id] = index
+                    next_tool_index += 1
+                    delta: dict[str, object] = {
+                        'index': index,
+                        'id': call.get('id'),
+                        'type': 'function',
+                        'function': {'name': name, 'arguments': call.get('args') or ''},
+                    }
+                else:
+                    delta = {'index': index, 'function': {'arguments': call.get('args') or ''}}
+                yield _sse(
+                    {
+                        'id': stream_id,
+                        'object': 'chat.completion.chunk',
+                        'created': created,
+                        'model': public_model,
+                        'choices': [{'index': 0, 'delta': {'tool_calls': [delta]}, 'finish_reason': None}],
+                    }
+                )
+            usage = _oauth_usage(chunk) or usage
+        yield _sse(
+            {
+                'id': stream_id,
+                'object': 'chat.completion.chunk',
+                'created': created,
+                'model': public_model,
+                'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}],
+            }
+        )
+        if usage:
+            yield _sse(
+                {
+                    'id': stream_id,
+                    'object': 'chat.completion.chunk',
+                    'created': created,
+                    'model': public_model,
+                    'choices': [],
+                    'usage': _usage(usage),
+                }
+            )
+    except Exception:
+        yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}})
+    yield 'data: [DONE]\n\n'
 
 
 def _tool_choice(choice: object) -> dict[str, str] | None:
@@ -1101,6 +1281,10 @@ async def _record_chat_quota_question(uid: str, request_id: str, platform: str |
     )
 
 
+async def _no_op_async() -> None:
+    return None
+
+
 async def _stream_gateway(
     gateway_payload: dict[str, object],
     uid: str,
@@ -1240,10 +1424,12 @@ async def chat_completions(
     payload: dict[str, object] = {}
     try:
         direct_web_search_requested = _direct_web_search_requested(body)
+        oauth_provider = _oauth_provider()
         gateway_mode = (
             should_route_chat_agent_through_gateway()
             and _uses_managed_chat_agent(body)
             and not direct_web_search_requested
+            and oauth_provider is None
         )
         if gateway_mode and get_byok_key('anthropic'):
             record_fallback(
@@ -1254,7 +1440,17 @@ async def chat_completions(
                 outcome='recovered',
             )
             gateway_mode = False
-        if gateway_mode:
+        if oauth_provider is not None:
+            record_fallback(
+                component='desktop_chat',
+                from_mode='managed_chat',
+                to_mode=f'{oauth_provider}_oauth',
+                reason='byok',
+                outcome='recovered',
+            )
+            public_model, _ = _request(body)
+            gateway_payload = {}
+        elif gateway_mode:
             public_model = _managed_lane_id(body)
             gateway_payload = _gateway_body(body, public_model)
         else:
@@ -1269,6 +1465,16 @@ async def chat_completions(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if body.get('stream') is True:
+        if oauth_provider is not None:
+            return StreamingResponse(
+                _stream_oauth(body, public_model, uid, on_upstream_accepted=_no_op_async),
+                media_type='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'X-Omi-Chat-Contract-Version': '1',
+                    'X-Request-Id': request_id,
+                },
+            )
         if gateway_mode:
             return StreamingResponse(
                 _stream_gateway(gateway_payload, uid, request_id, x_app_platform, public_model),
@@ -1293,6 +1499,26 @@ async def chat_completions(
                 'X-Omi-Chat-Contract-Version': '1',
                 'X-Request-Id': request_id,
             },
+        )
+    if oauth_provider is not None:
+        try:
+            client: Any = get_llm('chat_agent')
+            tools = _oauth_tools(body)
+            if tools:
+                client = client.bind_tools(tools, tool_choice=body.get('tool_choice', 'auto'))
+            message = await client.ainvoke(_oauth_messages(body))
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail='Upstream provider error') from exc
+        return JSONResponse(
+            {
+                'id': f'chatcmpl-{getattr(message, "id", uuid4())}',
+                'object': 'chat.completion',
+                'created': int(time.time()),
+                'model': public_model,
+                'choices': [{'index': 0, 'message': _oauth_response_message(message), 'finish_reason': 'stop'}],
+                'usage': _usage(_oauth_usage(message)),
+            },
+            headers={'X-Omi-Chat-Contract-Version': '1', 'X-Request-Id': request_id},
         )
     if gateway_mode:
         usage_token = set_usage_context(uid, _gateway_feature_for_lane(public_model))
