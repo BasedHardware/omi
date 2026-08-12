@@ -26,6 +26,7 @@ import {
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { inflateSync } from "node:zlib";
 
 const coreRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const validDomains = new Set(["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"]);
@@ -228,7 +229,7 @@ function inputSet(manifestPath, artifacts = {}, extraFiles = []) {
       size: stat.size,
       mode: stat.mode & 0o777,
     };
-  }).sort((left, right) => left.key.localeCompare(right.key));
+  }).sort((left, right) => left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
   const tree = sha256(canonical(entries));
   return { id: `input-v1-${tree}`, entries, tree_sha256: tree };
 }
@@ -368,7 +369,61 @@ function imageInfo(file) {
   const bytes = readFileSync(file);
   const magic = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   if (bytes.length < 24 || !bytes.subarray(0, 8).equals(magic) || bytes.toString("ascii", 12, 16) !== "IHDR") fail(`capture ${file} is not a valid PNG`);
-  return { bytes: bytes.length, width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20), sha256: sha256(bytes) };
+  const width = bytes.readUInt32BE(16);
+  const height = bytes.readUInt32BE(20);
+  if (bytes[24] !== 8 || bytes[25] !== 6 || bytes[26] !== 0 || bytes[27] !== 0 || bytes[28] !== 0) {
+    fail(`capture ${file} must be a non-interlaced 8-bit RGBA PNG`);
+  }
+  const idat = [];
+  for (let offset = 8; offset + 12 <= bytes.length;) {
+    const length = bytes.readUInt32BE(offset);
+    const end = offset + 12 + length;
+    if (end > bytes.length) fail(`capture ${file} has a truncated PNG chunk`);
+    if (bytes.toString("ascii", offset + 4, offset + 8) === "IDAT") idat.push(bytes.subarray(offset + 8, offset + 8 + length));
+    offset = end;
+  }
+  if (idat.length === 0) fail(`capture ${file} has no PNG image data`);
+  let inflated;
+  try { inflated = inflateSync(Buffer.concat(idat), { maxOutputLength: height * (width * 4 + 1) }); }
+  catch { fail(`capture ${file} has invalid PNG image data`); }
+  const stride = width * 4;
+  if (inflated.length !== height * (stride + 1)) fail(`capture ${file} has unexpected PNG image data length`);
+  const previous = Buffer.alloc(stride);
+  const current = Buffer.alloc(stride);
+  let firstPixel = null;
+  let varied = false;
+  const paeth = (left, above, upperLeft) => {
+    const estimate = left + above - upperLeft;
+    const leftDistance = Math.abs(estimate - left);
+    const aboveDistance = Math.abs(estimate - above);
+    const upperLeftDistance = Math.abs(estimate - upperLeft);
+    return leftDistance <= aboveDistance && leftDistance <= upperLeftDistance ? left : aboveDistance <= upperLeftDistance ? above : upperLeft;
+  };
+  for (let row = 0; row < height; row += 1) {
+    const inputOffset = row * (stride + 1);
+    const filter = inflated[inputOffset];
+    if (filter > 4) fail(`capture ${file} has an unsupported PNG filter`);
+    for (let column = 0; column < stride; column += 1) {
+      const raw = inflated[inputOffset + 1 + column];
+      const left = column >= 4 ? current[column - 4] : 0;
+      const above = previous[column];
+      const upperLeft = column >= 4 ? previous[column - 4] : 0;
+      const predictor = filter === 1 ? left
+        : filter === 2 ? above
+        : filter === 3 ? Math.floor((left + above) / 2)
+        : filter === 4 ? paeth(left, above, upperLeft)
+        : 0;
+      current[column] = (raw + predictor) & 0xff;
+    }
+    for (let column = 0; column < stride; column += 4) {
+      const pixel = `${current[column]},${current[column + 1]},${current[column + 2]},${current[column + 3]}`;
+      if (firstPixel === null) firstPixel = pixel;
+      else if (pixel !== firstPixel) varied = true;
+    }
+    current.copy(previous);
+  }
+  if (!varied) fail(`capture ${file} is a uniform framebuffer and cannot prove rendered UI`);
+  return { bytes: bytes.length, width, height, sha256: sha256(bytes) };
 }
 
 function validateImage(file, coordinate) {
