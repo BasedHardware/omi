@@ -15,17 +15,44 @@ class LLMOAuthError(Exception):
 _PROVIDERS = {
     'chatgpt': {
         'client_id': 'app_EMoamEEZ73f0CkXaXp7hrann',
+        'authorization_url': 'https://auth.openai.com/oauth/authorize',
+        'redirect_uri': 'http://localhost:1455/auth/callback',
+        'scope': 'openid profile email offline_access',
+        'authorization_parameters': {
+            'id_token_add_organizations': 'true',
+            'codex_cli_simplified_flow': 'true',
+            'originator': 'omi',
+        },
         'token_url': 'https://auth.openai.com/oauth/token',
+        'models_url': 'https://chatgpt.com/backend-api/codex/models?client_version=0.142.5',
     },
     'grok': {
         'client_id': 'b1a00492-073a-47ea-816f-4c329264a828',
+        'authorization_url': 'https://auth.x.ai/oauth2/authorize',
+        'redirect_uri': 'http://127.0.0.1:56121/callback',
+        'scope': 'openid profile email offline_access grok-cli:access api:access',
+        'authorization_parameters': {},
         'token_url': 'https://auth.x.ai/oauth2/token',
+        'models_url': 'https://api.x.ai/v1/models',
     },
 }
 
 
 def supported_provider(provider: str) -> bool:
     return provider in _PROVIDERS
+
+
+def oauth_configuration(provider: str) -> dict[str, Any] | None:
+    config = _PROVIDERS.get(provider)
+    if config is None:
+        return None
+    return {
+        'authorization_url': config['authorization_url'],
+        'client_id': config['client_id'],
+        'redirect_uri': config['redirect_uri'],
+        'scope': config['scope'],
+        'authorization_parameters': config['authorization_parameters'],
+    }
 
 
 def _account_id(access_token: str) -> str | None:
@@ -61,6 +88,64 @@ def _credential(provider: str, payload: dict[str, Any], refresh_token: str | Non
     return credential
 
 
+def _available_models(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    values = payload.get('models') or payload.get('data') or payload.get('items')
+    if not isinstance(values, list):
+        return []
+    models: list[str] = []
+    for value in values:
+        model = (
+            value
+            if isinstance(value, str)
+            else next(
+                (
+                    value.get(name)
+                    for name in ('slug', 'id', 'model', 'name')
+                    if isinstance(value, dict) and isinstance(value.get(name), str)
+                ),
+                None,
+            )
+        )
+        if isinstance(model, str) and model and model not in models:
+            models.append(model)
+    return models
+
+
+def verify_credential(provider: str, credential: dict[str, Any]) -> dict[str, Any]:
+    config = _PROVIDERS.get(provider)
+    if config is None:
+        raise LLMOAuthError('Unsupported LLM OAuth provider')
+    headers = {'authorization': f"Bearer {credential['access_token']}"}
+    if provider == 'chatgpt':
+        account_id = credential.get('account_id')
+        if not isinstance(account_id, str) or not account_id:
+            raise LLMOAuthError('ChatGPT did not return an account identity')
+        headers.update(
+            {
+                'chatgpt-account-id': account_id,
+                'openai-beta': 'responses=experimental',
+                'originator': 'codex_cli_rs',
+            }
+        )
+    try:
+        response = httpx.get(config['models_url'], headers=headers, timeout=15.0)
+    except httpx.HTTPError as error:
+        raise LLMOAuthError('Provider could not verify model access') from error
+    if response.status_code >= 400:
+        raise LLMOAuthError('Provider account does not have model access')
+    try:
+        models = _available_models(response.json())
+    except ValueError as error:
+        raise LLMOAuthError('Provider returned an invalid model response') from error
+    if not models:
+        raise LLMOAuthError('Provider account does not have an available model')
+    preferred = 'gpt-5.4-mini' if provider == 'chatgpt' else 'grok-4.3'
+    credential['model'] = preferred if preferred in models else models[0]
+    return credential
+
+
 def exchange_authorization_code(provider: str, code: str, code_verifier: str, redirect_uri: str) -> dict[str, Any]:
     config = _PROVIDERS.get(provider)
     if config is None:
@@ -87,7 +172,7 @@ def exchange_authorization_code(provider: str, code: str, code_verifier: str, re
         raise LLMOAuthError('Provider returned an invalid token response') from error
     if not isinstance(payload, dict):
         raise LLMOAuthError('Provider returned an invalid token response')
-    return _credential(provider, payload)
+    return verify_credential(provider, _credential(provider, payload))
 
 
 def get_credential(uid: str, provider: str | None = None) -> dict[str, Any] | None:
@@ -122,6 +207,8 @@ def get_credential(uid: str, provider: str | None = None) -> dict[str, Any] | No
     if not isinstance(payload, dict):
         raise LLMOAuthError('Provider returned an invalid refresh response')
     refreshed = _credential(credential_provider, payload, credential['refresh_token'])
+    if isinstance(credential.get('model'), str):
+        refreshed['model'] = credential['model']
     generation = credential.get('generation')
     if not isinstance(generation, str) or not llm_oauth_db.save_refreshed_credential(
         uid, credential_provider, refreshed, generation

@@ -32,6 +32,7 @@ def _stored_credential(uid: str, credential: dict[str, Any], generation: str) ->
         'refresh_token': encryption.encrypt(refresh_token, uid),
         'expires_at': credential.get('expires_at'),
         'account_id': credential.get('account_id'),
+        'model': credential.get('model'),
         'generation': generation,
         'updated_at': datetime.now(timezone.utc),
     }
@@ -82,6 +83,7 @@ def get_credential(uid: str, provider: str | None = None, *, firestore_client: A
         'refresh_token': encryption.decrypt(refresh_token, uid),
         'expires_at': stored.get('expires_at'),
         'account_id': stored.get('account_id'),
+        'model': stored.get('model'),
         'generation': stored.get('generation'),
     }
 

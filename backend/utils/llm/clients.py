@@ -415,7 +415,8 @@ def _create_byok_client(
 
 def _create_llm_oauth_client(credential: Dict[str, Any], streaming: bool = False, feature: str = '') -> ChatOpenAI:
     provider = credential['provider']
-    model = 'gpt-5.4-mini' if provider == 'chatgpt' else 'grok-4.3'
+    default_model = 'gpt-5.4-mini' if provider == 'chatgpt' else 'grok-4.3'
+    model = credential.get('model') if isinstance(credential.get('model'), str) else default_model
     kwargs: Dict[str, Any] = _with_llm_callbacks(
         {'request_timeout': 120, 'max_retries': 1}, provider, model=model, feature=feature
     )
@@ -424,7 +425,7 @@ def _create_llm_oauth_client(credential: Dict[str, Any], streaming: bool = False
         kwargs['stream_options'] = {'include_usage': True}
     if provider == 'chatgpt':
         headers = {
-            'originator': 'omi',
+            'originator': 'codex_cli_rs',
             'openai-beta': 'responses=experimental',
             'user-agent': 'omi-codex',
         }
