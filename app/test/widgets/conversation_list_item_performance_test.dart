@@ -41,7 +41,11 @@ void main() {
           ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: ConversationListItem(conversation: conversation, date: DateTime.utc(2020), conversationIdx: 0),
+            body: ConversationListItem(
+              conversation: conversation,
+              date: DateTime.utc(2020),
+              conversationIdx: 0,
+            ),
           ),
         ),
       ),

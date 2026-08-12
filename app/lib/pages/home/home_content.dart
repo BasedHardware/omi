@@ -494,16 +494,19 @@ class HomeConversationsPreview extends StatelessWidget {
     if (recent.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
     return SliverList(
-      delegate: SliverChildBuilderDelegate(childCount: recent.length, (context, index) {
-        final conversation = recent[index];
-        final date = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
-        return ConversationListItem(
-          key: ValueKey(conversation.id),
-          conversation: conversation,
-          date: date,
-          conversationIdx: index,
-        );
-      }),
+      delegate: SliverChildBuilderDelegate(
+        childCount: recent.length,
+        (context, index) {
+          final conversation = recent[index];
+          final date = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
+          return ConversationListItem(
+            key: ValueKey(conversation.id),
+            conversation: conversation,
+            date: date,
+            conversationIdx: index,
+          );
+        },
+      ),
     );
   }
 }

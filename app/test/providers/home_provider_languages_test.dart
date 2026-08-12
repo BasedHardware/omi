@@ -112,12 +112,10 @@ void main() {
       final provider = HomeProvider();
       addTearDown(provider.dispose);
 
-      await provider.loadLanguagesThenSetupPrimary(
-        fetch: () async {
-          provider.clearUserData(); // signs out while the request is in flight
-          return {'Swahili': 'sw'};
-        },
-      );
+      await provider.loadLanguagesThenSetupPrimary(fetch: () async {
+        provider.clearUserData(); // signs out while the request is in flight
+        return {'Swahili': 'sw'};
+      });
 
       expect(provider.availableLanguages.containsKey('Swahili'), isFalse);
       expect(provider.availableLanguages['English'], 'en');
@@ -127,12 +125,10 @@ void main() {
       final provider = HomeProvider();
       addTearDown(provider.dispose);
 
-      await provider.loadLanguagesThenSetupPrimary(
-        fetch: () async {
-          provider.clearUserData();
-          return {'Swahili': 'sw'};
-        },
-      );
+      await provider.loadLanguagesThenSetupPrimary(fetch: () async {
+        provider.clearUserData();
+        return {'Swahili': 'sw'};
+      });
 
       expect(SharedPreferencesUtil().cachedAvailableLanguages, isEmpty);
     });

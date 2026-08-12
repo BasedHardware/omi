@@ -36,7 +36,9 @@ void main() {
         home: ChangeNotifierProvider.value(
           value: provider,
           child: Scaffold(
-            body: CustomScrollView(slivers: [HomeConversationsPreview(conversationProvider: provider)]),
+            body: CustomScrollView(
+              slivers: [HomeConversationsPreview(conversationProvider: provider)],
+            ),
           ),
         ),
       ),

@@ -782,7 +782,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         // Show slim green call bar on non-home/conversations tabs when a call is active
                         if (selectedIndex > 1) const ActiveCallTopBar(),
                         Expanded(
-                          child: IndexedStack(index: selectedIndex, children: _buildPages(selectedIndex)),
+                          child: IndexedStack(
+                            index: selectedIndex,
+                            children: _buildPages(selectedIndex),
+                          ),
                         ),
                       ],
                     ),
@@ -941,8 +944,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                              ? Colors.orange.withValues(alpha: 0.15)
-                              : const Color(0xFF1F1F25),
+                                  ? Colors.orange.withValues(alpha: 0.15)
+                                  : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -951,8 +954,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                              ? Colors.orangeAccent
-                              : Colors.white70,
+                                  ? Colors.orangeAccent
+                                  : Colors.white70,
                         ),
                       ),
                     );

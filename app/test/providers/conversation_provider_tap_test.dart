@@ -72,9 +72,7 @@ void main() {
 
     expect(provider.groupedConversations[date]![0], same(other));
     expect(
-      provider.groupedConversations[date]!.firstWhere((conversation) => conversation.id == 'c1'),
-      same(enrichment),
-    );
+        provider.groupedConversations[date]!.firstWhere((conversation) => conversation.id == 'c1'), same(enrichment));
   });
 }
 
@@ -88,7 +86,7 @@ ConversationProvider _providerWith(List<ServerConversation> conversations) {
 }
 
 ServerConversation _conversation(String id, {DateTime? createdAt}) => ServerConversation(
-  id: id,
-  createdAt: createdAt ?? DateTime.utc(2026, 8, 10),
-  structured: Structured('Title', 'Overview'),
-);
+      id: id,
+      createdAt: createdAt ?? DateTime.utc(2026, 8, 10),
+      structured: Structured('Title', 'Overview'),
+    );

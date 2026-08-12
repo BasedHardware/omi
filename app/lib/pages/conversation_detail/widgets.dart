@@ -62,9 +62,8 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
       TextSpan(
         text: text.substring(index, index + searchQuery.length),
         style: TextStyle(
-          backgroundColor: isCurrentResult
-              ? Colors.orange.withValues(alpha: 0.9)
-              : Colors.deepPurple.withValues(alpha: 0.6),
+          backgroundColor:
+              isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
@@ -897,15 +896,15 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                     ],
                   )
                 : _isEditing
-                ? _buildEditor(context, content)
-                : GestureDetector(
-                    onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
-                    child: ConversationMarkdownWidget(
-                      content: content,
-                      searchQuery: widget.searchQuery,
-                      currentResultIndex: widget.currentResultIndex,
-                    ),
-                  ),
+                    ? _buildEditor(context, content)
+                    : GestureDetector(
+                        onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+                        child: ConversationMarkdownWidget(
+                          content: content,
+                          searchQuery: widget.searchQuery,
+                          currentResultIndex: widget.currentResultIndex,
+                        ),
+                      ),
           ),
 
           // App info in a more subtle format below the content - only show if content is not empty
@@ -1096,9 +1095,8 @@ class GetAppsWidgets extends StatelessWidget {
                 canStartEditing: canStartEditing,
                 onEditStarted: onEditStarted == null ? null : () => onEditStarted!(summarizedApp.appId),
                 onEditCancelled: onEditCancelled == null ? null : () => onEditCancelled!(summarizedApp.appId),
-                onSaveSummary: onSaveSummary == null
-                    ? null
-                    : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
+                onSaveSummary:
+                    onSaveSummary == null ? null : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
                 asSliver: true,
               ),
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
@@ -1359,7 +1357,11 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                 ? CachedNetworkImage(
                     imageUrl: widget.app!.getImageUrl(),
                     imageBuilder: (context, imageProvider) {
-                      return CircleAvatar(backgroundColor: Colors.white, radius: 12, backgroundImage: imageProvider);
+                      return CircleAvatar(
+                        backgroundColor: Colors.white,
+                        radius: 12,
+                        backgroundImage: imageProvider,
+                      );
                     },
                     errorWidget: (context, url, error) {
                       return const CircleAvatar(
@@ -1380,7 +1382,10 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                   )
                 : Container(
                     decoration: BoxDecoration(
-                      image: DecorationImage(image: AssetImage(Assets.images.background.path), fit: BoxFit.cover),
+                      image: DecorationImage(
+                        image: AssetImage(Assets.images.background.path),
+                        fit: BoxFit.cover,
+                      ),
                       borderRadius: const BorderRadius.all(Radius.circular(12.0)),
                     ),
                     height: 24,
@@ -1401,7 +1406,11 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                         Text(
                           widget.app != null ? widget.app!.name.decodeString : context.l10n.unknownApp,
                           maxLines: 1,
-                          style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 14),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
                         ),
                         if (widget.app != null)
                           Text(
@@ -1413,7 +1422,10 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 42, child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20)),
+                  const SizedBox(
+                    width: 42,
+                    child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
+                  ),
                 ],
               ),
             ),

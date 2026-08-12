@@ -37,7 +37,10 @@ void main() {
   test('keeps button listener alive and resubscribes after reconnect', () async {
     final subscribeCalls = <List<Object?>>[];
     final services = [
-      BleService(uuid: _serviceUuid, characteristicUuids: [_characteristicUuid]),
+      BleService(
+        uuid: _serviceUuid,
+        characteristicUuids: [_characteristicUuid],
+      ),
     ];
 
     setHostApiHandler('manageDevice', (message) async {

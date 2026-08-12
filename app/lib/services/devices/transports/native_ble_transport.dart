@@ -29,7 +29,7 @@ class NativeBleTransport extends DeviceTransport {
   DeviceTransportState _state = DeviceTransportState.disconnected;
 
   NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
-    : _hostApi = hostApi ?? BleHostApi() {
+      : _hostApi = hostApi ?? BleHostApi() {
     BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
       onConnectionState: _handleConnectionState,

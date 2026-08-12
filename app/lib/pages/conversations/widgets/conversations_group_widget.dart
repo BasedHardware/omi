@@ -51,7 +51,11 @@ class ConversationsGroupWidget extends StatelessWidget {
   }
 }
 
-typedef ConversationGroupEntry = ({DateTime time, ServerConversation? conversation, LocalRecording? recording});
+typedef ConversationGroupEntry = ({
+  DateTime time,
+  ServerConversation? conversation,
+  LocalRecording? recording,
+});
 
 /// Merge conversations and local recordings into the time-sorted order used by
 /// the conversations page. The page consumes these lightweight descriptors in

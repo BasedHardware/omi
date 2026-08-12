@@ -7,10 +7,7 @@ import {
   upsertTranscriptSegment,
 } from './transcriptSegments';
 
-function seg(
-  id: string,
-  text = id,
-): { id: string; text: string; speaker: number; isUser: boolean; timestamp: number } {
+function seg(id: string, text = id): { id: string; text: string; speaker: number; isUser: boolean; timestamp: number } {
   return { id, text, speaker: 0, isUser: false, timestamp: 0 };
 }
 

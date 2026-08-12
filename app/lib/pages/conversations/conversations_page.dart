@@ -451,8 +451,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings =
-            convoProvider.previousQuery.isEmpty &&
+        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly &&
             !convoProvider.showDailySummaries;
@@ -468,8 +467,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
-        final bool isShowingConversationSkeleton =
-            isWaitingForInitialData ||
+        final bool isShowingConversationSkeleton = isWaitingForInitialData ||
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
@@ -540,9 +538,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     child: Column(
                       children: [
                         if (showGoals)
-                          RepaintBoundary(
-                            child: GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
-                          ),
+                          RepaintBoundary(child: GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals)),
                       ],
                     ),
                   );
@@ -660,7 +656,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           date: row.date,
                         );
                       case _ConversationListRowKind.recording:
-                        return RecordingListItem(key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);
+                        return RecordingListItem(
+                          key: ValueKey('rec_${row.recording!.id}'),
+                          recording: row.recording!,
+                        );
                       case _ConversationListRowKind.groupSpacer:
                         return const SizedBox(height: 10);
                     }
