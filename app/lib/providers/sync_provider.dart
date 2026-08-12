@@ -31,6 +31,12 @@ List<SyncedConversationPointer> sortSyncedConversationPointers(Iterable<SyncedCo
 }
 
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
+  /// Machine-readable error state consumed by sync surfaces, which own the
+  /// localized copy. Providers must not embed user-facing English in state.
+  static const pendingUploadErrorCode = 'sync_pending_upload';
+
+  static bool isPendingUploadError(String? message) => message == pendingUploadErrorCode;
+
   // Services
   final AudioPlayerUtils _audioPlayerUtils = AudioPlayerUtils.instance;
   final IWalService? _walServiceOverride;
@@ -681,7 +687,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } else if (baseMessage.toLowerCase().contains('temporarily unavailable')) {
       baseMessage = 'Server is temporarily unavailable. Try again later';
     } else if (baseMessage.toLowerCase().contains('upload failed')) {
-      baseMessage = 'Omi could not upload or process this recording. It remains pending; try again';
+      // Keep state locale-neutral; the sync pages resolve this code through
+      // AppLocalizations at render time.
+      return pendingUploadErrorCode;
     }
 
     if (wal != null) {

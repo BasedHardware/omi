@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/l10n/app_localizations_en.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
@@ -196,7 +197,7 @@ void main() {
     provider.dispose();
   });
 
-  test('generic upload failure says the recording remains pending without blaming connectivity', () async {
+  test('generic upload failure uses a locale-neutral code with localized retry copy', () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
@@ -208,7 +209,10 @@ void main() {
 
     await provider.syncWal(wal);
 
-    expect(provider.syncError, contains('remains pending'));
+    expect(provider.syncError, SyncProvider.pendingUploadErrorCode);
+    expect(SyncProvider.isPendingUploadError(provider.syncError), isTrue);
+    // The pages own this mapping so a provider state never ships English.
+    expect(AppLocalizationsEn().syncStatusRetrying, contains('retrying'));
     expect(provider.syncError, isNot(contains('connection')));
     provider.dispose();
   });

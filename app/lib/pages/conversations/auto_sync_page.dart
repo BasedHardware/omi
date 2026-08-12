@@ -314,7 +314,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              syncState.errorMessage ?? context.l10n.syncFailed,
+              SyncProvider.isPendingUploadError(syncState.errorMessage)
+                  ? context.l10n.syncStatusRetrying
+                  : syncState.errorMessage ?? context.l10n.syncFailed,
               style: const TextStyle(color: Colors.redAccent, fontSize: 13),
             ),
           ),

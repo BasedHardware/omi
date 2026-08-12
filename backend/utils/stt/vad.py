@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import threading
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union, overload
@@ -21,6 +22,8 @@ HOSTED_VAD_CONNECT_TIMEOUT_SECONDS_ENV = 'HOSTED_VAD_CONNECT_TIMEOUT_SECONDS'
 HOSTED_VAD_READ_TIMEOUT_SECONDS_ENV = 'HOSTED_VAD_READ_TIMEOUT_SECONDS'
 DEFAULT_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS = 3.0
 DEFAULT_HOSTED_VAD_READ_TIMEOUT_SECONDS = 30.0
+MAX_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS = 30.0
+MAX_HOSTED_VAD_READ_TIMEOUT_SECONDS = 60.0
 
 
 class VADAudioDecodeError(RuntimeError):
@@ -31,17 +34,23 @@ class VADProcessingError(RuntimeError):
     """The local VAD could not make a trustworthy speech decision."""
 
 
-def _positive_timeout_seconds(env_name: str, default: float) -> float:
+def _positive_timeout_seconds(env_name: str, default: float, maximum: float) -> float:
     raw_value = os.getenv(env_name)
     if raw_value is None:
         return default
     try:
         value = float(raw_value)
-        if value > 0:
+        if math.isfinite(value) and 0 < value <= maximum:
             return value
     except ValueError:
         pass
-    logger.warning('Invalid %s=%r; using safe default %.1fs', env_name, raw_value, default)
+    logger.warning(
+        'Invalid or excessive %s=%r; using safe default %.1fs (maximum %.1fs)',
+        env_name,
+        raw_value,
+        default,
+        maximum,
+    )
     return default
 
 
@@ -52,10 +61,12 @@ def _hosted_vad_timeout_seconds() -> Tuple[float, float]:
         _positive_timeout_seconds(
             HOSTED_VAD_CONNECT_TIMEOUT_SECONDS_ENV,
             DEFAULT_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS,
+            MAX_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS,
         ),
         _positive_timeout_seconds(
             HOSTED_VAD_READ_TIMEOUT_SECONDS_ENV,
             DEFAULT_HOSTED_VAD_READ_TIMEOUT_SECONDS,
+            MAX_HOSTED_VAD_READ_TIMEOUT_SECONDS,
         ),
     )
 
