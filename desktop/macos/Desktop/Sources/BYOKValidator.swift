@@ -21,6 +21,11 @@ enum BYOKValidator {
     guard !trimmed.isEmpty else { return .failed("Empty") }
 
     switch provider {
+    case .openrouter:
+      return await ping(
+        url: URL(string: "https://openrouter.ai/api/v1/models")!,
+        headers: ["Authorization": "Bearer \(trimmed)"]
+      )
     case .openai:
       return await ping(
         url: URL(string: "https://api.openai.com/v1/models")!,

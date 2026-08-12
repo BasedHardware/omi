@@ -16,6 +16,7 @@ import { validateAllByokKeys, type FetchLike } from './byokValidator'
 import { byokFingerprint } from '../../shared/byokFingerprint'
 import {
   BYOK_PROVIDERS,
+  BYOK_LLM_PROVIDERS,
   isByokActive,
   type ByokEnrollResult,
   type ByokKeys
@@ -101,14 +102,16 @@ export async function enrollByok(opts: {
   }
 
   const results = await validateAllByokKeys(keys, opts.validateFetch)
-  const allOk = BYOK_PROVIDERS.every((p) => results[p]?.ok)
+  const allOk = BYOK_LLM_PROVIDERS.some((p) => results[p]?.ok)
   if (!allOk) {
     await deleteActivate(apiBase, token, backendFetch)
     return { active: false, results }
   }
 
   const fingerprints: Record<string, string> = {}
-  for (const p of BYOK_PROVIDERS) fingerprints[p] = byokFingerprint(keys[p] as string)
+  for (const p of BYOK_PROVIDERS) {
+    if (keys[p]?.trim() && results[p]?.ok) fingerprints[p] = byokFingerprint(keys[p] as string)
+  }
   const posted = await postActivate(apiBase, token, fingerprints, backendFetch)
   if (!posted.ok) return { active: false, results, backendError: posted.error }
   return { active: true, results }
