@@ -97,13 +97,26 @@ export function getOverageInfo(token: string) {
   return request<OverageInfo>('/v1/payments/overage-info', token);
 }
 
+/**
+ * The checkout route has two outcomes. A new subscription returns a Stripe
+ * `url` to redirect to; reactivating a subscription that was scheduled to
+ * cancel returns no url at all, only `status: 'reactivated'` and a `message`.
+ * A caller that models only `url` silently does nothing in that second case.
+ */
+export interface CheckoutSessionResponse {
+  url?: string;
+  session_id?: string;
+  status?: string;
+  message?: string;
+  next_billing_date?: number;
+}
+
 /** LIVE: POST /v1/payments/checkout-session */
 export function createCheckoutSession(token: string, priceId: string) {
-  return request<{ url?: string; sessionId?: string }>(
-    '/v1/payments/checkout-session',
-    token,
-    { method: 'POST', body: JSON.stringify({ price_id: priceId }) },
-  );
+  return request<CheckoutSessionResponse>('/v1/payments/checkout-session', token, {
+    method: 'POST',
+    body: JSON.stringify({ price_id: priceId }),
+  });
 }
 
 /** LIVE: POST /v1/payments/customer-portal */

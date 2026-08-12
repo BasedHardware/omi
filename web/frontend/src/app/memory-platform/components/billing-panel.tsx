@@ -30,6 +30,7 @@ export default function BillingPanel() {
   const [quota, setQuota] = useState<PlatformApiQuota | null>(null);
   const [quotaUnavailable, setQuotaUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -73,9 +74,17 @@ export default function BillingPanel() {
     const token = await getToken();
     if (!token) return;
     setBusy(true);
+    setNotice(null);
     try {
       const session = await createCheckoutSession(token, priceId);
-      if (session?.url) window.location.href = session.url;
+      if (session?.url) {
+        window.location.href = session.url;
+        return;
+      }
+      // Reactivating a subscription scheduled to cancel returns no redirect —
+      // report the outcome and reload billing state, or the click looks inert.
+      setNotice(session?.message ?? 'Your subscription was updated.');
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start checkout.');
     } finally {
@@ -114,6 +123,7 @@ export default function BillingPanel() {
   return (
     <div className="flex flex-col gap-8">
       {error ? <p className="text-xs text-[#ff806a]">{error}</p> : null}
+      {notice ? <p className="text-xs text-neutral-300">{notice}</p> : null}
 
       <div className="grid gap-4 md:grid-cols-3">
         <HairlineCard eyebrow="current plan" title={planLabel(overage?.plan_type)}>
