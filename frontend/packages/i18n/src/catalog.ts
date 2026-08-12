@@ -251,6 +251,8 @@ export const EN_MESSAGES = {
   "chat.pending": "Sending",
   "chat.failed": "Not delivered",
   "chat.responseUnavailable": "Response unavailable.",
+  "chat.liveUpdatesUnavailable": "Live response updates are unavailable in this shell.",
+  "chat.liveUpdatesUnavailableHint": "Restart Omi or open this conversation in another Omi app to continue.",
   "chat.startNewMessage": "Start a new message",
   "chat.startNewMessageHint": "This restores the question for review. It does not rerun the failed response or restore attachments.",
   "chat.emptyTitle": "No messages yet",

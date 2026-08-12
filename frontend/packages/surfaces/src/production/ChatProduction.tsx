@@ -548,6 +548,12 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                         ? t(locale, "chat.responseUnavailable")
                         : "")}
                     </p>
+                    {failedDelivery?.source === "transport" && (
+                      <div className="chat-failure-recovery" data-recovery="unsupported-stream">
+                        <p>{t(locale, "chat.liveUpdatesUnavailable")}</p>
+                        <p>{t(locale, "chat.liveUpdatesUnavailableHint")}</p>
+                      </div>
+                    )}
                     {message.role === "assistant" && message.agentRun && message.agentRun.events.length > 0 && (
                       <details className="chat-agent-run" data-agent-run-state={message.agentRun.state}>
                         <summary>

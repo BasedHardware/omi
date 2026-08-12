@@ -66,7 +66,7 @@ export interface ActiveChatGeneration {
   readonly text: string;
   readonly lastEventId: string | null;
   readonly observationState: "streaming" | "failed";
-  readonly failure: "observation-failed" | null;
+  readonly failure: "observation-failed" | "stream-unavailable" | null;
 }
 
 export interface ChatHistoryWindow {
@@ -347,8 +347,8 @@ export class ChatMessagesStore {
       clientMessageId: admission.message.id,
       text: "",
       lastEventId: null,
-      observationState: "streaming",
-      failure: null,
+      observationState: this.streamPort === null ? "failed" : "streaming",
+      failure: this.streamPort === null ? "stream-unavailable" : null,
     };
     this.active.set(generationId, state);
     await this.persistActiveGenerations();
@@ -543,6 +543,7 @@ export class ChatMessagesStore {
     try {
       const parsed = JSON.parse(raw) as unknown;
       if (!Array.isArray(parsed)) return;
+      let normalizedUnsupportedStream = false;
       for (const value of parsed) {
         if (
           typeof value !== "object" || value === null ||
@@ -559,16 +560,27 @@ export class ChatMessagesStore {
           ) ||
           !(
             (value as ActiveChatGeneration).failure === null ||
-            (value as ActiveChatGeneration).failure === "observation-failed"
+            (value as ActiveChatGeneration).failure === "observation-failed" ||
+            (value as ActiveChatGeneration).failure === "stream-unavailable"
           )
         ) continue;
-        const state = value as ActiveChatGeneration;
+        const restored = value as ActiveChatGeneration;
+        const state: ActiveChatGeneration =
+          restored.observationState === "streaming" && this.streamPort === null
+            ? {
+                ...restored,
+                observationState: "failed",
+                failure: "stream-unavailable",
+              }
+            : restored;
+        if (state !== restored) normalizedUnsupportedStream = true;
         this.active.set(state.generationId, state);
         if (state.observationState === "streaming") {
           this.startObservation(state);
           this.startAgentRunObservation(state.generationId, state.clientMessageId);
         }
       }
+      if (normalizedUnsupportedStream) await this.persistActiveGenerations();
     } catch {
       // Malformed advisory state never corrupts the canonical projection.
     }

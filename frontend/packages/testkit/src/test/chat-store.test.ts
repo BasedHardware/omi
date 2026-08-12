@@ -299,6 +299,39 @@ test("POST admission drains the durable outbox while generation remains hanging"
   }]);
 });
 
+test("an admitted generation without a native stream fails explicitly and stays failed after reopen", async () => {
+  const disk = new MemoryStore();
+  const env = new ManualEnv();
+  const http = new ScriptedHttp();
+  const store = await ChatMessagesStore.open(disk.openBridge("unsupported-stream"), env, http);
+
+  await store.send("keep an unsupported stream honest");
+  const clientMessageId = (await store.list())[0]!.id;
+  http.respond(...successfulSend(clientMessageId, "keep an unsupported stream honest"));
+  await env.advance(10);
+  await drainMicrotasks();
+
+  assert.deepEqual(store.activeGenerations(), [{
+    generationId: `generation-${clientMessageId}`,
+    clientMessageId,
+    text: "",
+    lastEventId: null,
+    observationState: "failed",
+    failure: "stream-unavailable",
+  }], "missing native streaming support is terminal-looking, never a false active spinner");
+
+  const reopened = await ChatMessagesStore.open(
+    disk.openBridge("unsupported-stream"),
+    new ManualEnv(),
+    new ScriptedHttp(),
+  );
+  assert.deepEqual(
+    reopened.activeGenerations(),
+    store.activeGenerations(),
+    "the bounded unsupported-stream state remains explicit across restart",
+  );
+});
+
 test("privacy-reduced agent activity persists in an append-only log and restores by generation", async () => {
   const disk = new MemoryStore();
   const env = new ManualEnv();
