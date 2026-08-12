@@ -35,6 +35,14 @@ workstreams_collection = 'workstreams'
 DEFAULT_FOCUS_CAP = 5
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
 TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
+# Per-user serialization token for focus mutations. The focused set is a collection query the
+# point-based store transaction cannot read into its transactional read-set, so concurrent
+# focus_goal calls would each see a stale focused set and could jointly exceed focus_cap or land on
+# the same focus_rank. Every state-changing focus write bumps this single doc; two concurrent focus
+# transactions therefore write-write-conflict on it (the same optimistic-concurrency mechanism the
+# store contract exercises via create/AlreadyExists), so the store aborts one and re-runs apply(),
+# which re-reads a now-consistent focused set. See goals.py focus_goal.
+FOCUS_RESERVATION_DOCUMENT = 'focus_reservation'
 MUTATION_RECEIPTS_COLLECTION = 'workflow_mutation_receipts'
 
 
@@ -76,6 +84,10 @@ def _goal_history_path(uid: str, goal_id: str) -> str:
 
 def _goal_control_path(uid: str) -> str:
     return f'{users_collection}/{uid}/{TASK_INTELLIGENCE_CONTROL_COLLECTION}/{TASK_INTELLIGENCE_CONTROL_DOCUMENT}'
+
+
+def _goal_focus_reservation_path(uid: str) -> str:
+    return f'{users_collection}/{uid}/{TASK_INTELLIGENCE_CONTROL_COLLECTION}/{FOCUS_RESERVATION_DOCUMENT}'
 
 
 def _validate_canonical_write(snapshot: Any, *, uid: str, account_generation: int) -> None:
@@ -507,6 +519,13 @@ def focus_goal(
         )
         if stored_result is not None:
             return normalize_goal_storage(stored_result, goal_id=goal_id)
+        # Read the focus reservation token into the transactional read-set before any write (the
+        # store requires reads-before-writes). A state-changing focus below bumps it; that write is
+        # what makes two concurrent focus transactions conflict, since the focused-set query itself
+        # cannot join the read-set. Replays returned above never touch it.
+        reservation_version = (write_transaction.get(_goal_focus_reservation_path(uid)).to_dict() or {}).get(
+            'version', 0
+        )
         target_snapshot = write_transaction.get(goal_path)
         if not target_snapshot.exists:
             raise GoalNotFoundError(goal_id)
@@ -557,6 +576,13 @@ def focus_goal(
             'updated_at': now,
         }
         write_transaction.update(goal_path, patch)
+        # Serialize concurrent focus mutations: this write conflicts with any other in-flight focus
+        # transaction for the same user, forcing the store to retry apply() against a fresh focused
+        # set so focus_cap and focus_rank stay consistent.
+        write_transaction.set(
+            _goal_focus_reservation_path(uid),
+            {'version': reservation_version + 1, 'updated_at': now},
+        )
         result = normalize_goal_storage({**target, **patch}, goal_id=goal_id)
         _finish_goal_mutation(
             write_transaction,
