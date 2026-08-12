@@ -57,16 +57,22 @@ def is_allowed_success_redirect_url(redirect_uri: str) -> bool:
     # characters; they only appear when someone is aiming at the callback page.
     if any(c in redirect_uri for c in '<>"\'`') or any(c.isspace() or ord(c) < 0x20 for c in redirect_uri):
         return False
-    parsed = urlparse(redirect_uri)
-    scheme = (parsed.scheme or "").strip().lower()
-    if not scheme:
+    try:
+        parsed = urlparse(redirect_uri)
+        scheme = (parsed.scheme or "").strip().lower()
+        if not scheme:
+            return False
+        if scheme == "http":
+            hostname = (parsed.hostname or "").strip().lower()
+            parsed.port  # validates the port component — `localhost:notaport` is rejected
+            return hostname in _LOOPBACK_HOSTNAMES
+        if scheme in _FORBIDDEN_REDIRECT_SCHEMES:
+            return False
+        return _is_valid_redirect_scheme(scheme)
+    except ValueError:
+        # Malformed authority (`http://[`) makes urlparse/`.port` raise; that is
+        # invalid client input, so treat it as disallowed rather than a 500.
         return False
-    if scheme == "http":
-        hostname = (parsed.hostname or "").strip().lower()
-        return hostname in _LOOPBACK_HOSTNAMES
-    if scheme in _FORBIDDEN_REDIRECT_SCHEMES:
-        return False
-    return _is_valid_redirect_scheme(scheme)
 
 
 def _validated_success_redirect(url: Optional[str]) -> str:

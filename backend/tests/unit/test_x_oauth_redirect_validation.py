@@ -44,6 +44,9 @@ def test_allowed_success_redirect_urls(uri):
         "data:text/html,hi",
         "",
         "://missing-scheme",
+        # Malformed authorities must be rejected, not blow up the handler.
+        "http://[",
+        "http://localhost:notaport/x",
         # Markup delimiters: the callback page is the sink.
         "omi://x/</script><script>alert(1)</script>",
         'omi://x/"onload="alert(1)',
