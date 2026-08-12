@@ -76,6 +76,8 @@ function App(): React.JSX.Element {
     if (native) {
       run(async () => {
         await native.startScan(5, []);
+        await new Promise<void>((resolve) => setTimeout(resolve, 5_000));
+        await native.stopScan();
       });
     }
   }, [run]);
@@ -145,7 +147,6 @@ function App(): React.JSX.Element {
           </>
         }
         ListEmptyComponent={<Text style={styles.empty}>No nearby Omi devices are available.</Text>}
-        ListFooterComponent={<Text style={styles.footer}>Memories, conversations, and tasks appear here after their shared client data bridge is connected.</Text>}
       />
     </SafeAreaView>
   );
@@ -177,7 +178,6 @@ const styles = StyleSheet.create({
   deviceMarkText: {color: '#111111', fontSize: 11, fontWeight: '900'},
   deviceCopy: {flex: 1, gap: 3},
   deviceName: {color: '#111111', fontSize: 16, fontWeight: '800'},
-  footer: {color: '#787878', fontSize: 12, lineHeight: 18, marginTop: 28, paddingBottom: 24},
 });
 
 export default App;

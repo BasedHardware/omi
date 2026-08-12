@@ -32,7 +32,7 @@ class OmiNativeModule(private val context: ReactApplicationContext) : ReactConte
 
   @ReactMethod
   fun startScan(timeoutSeconds: Int?, serviceUuids: ReadableArray?, promise: Promise) {
-    val uuids = buildList { serviceUuids?.let { values -> for (index in 0 until values.size()) add(values.getString(index)) } }
+    val uuids = buildList { serviceUuids?.let { values -> for (index in 0 until values.size()) values.getString(index)?.let(::add) } }
     ble.startScan(uuids)
     promise.resolve(ble.devices())
   }

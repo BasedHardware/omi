@@ -30,9 +30,39 @@ jest.mock('react-native', () => {
   };
 });
 
-import App from '../App';
+jest.mock('../src/omiNative', () => ({
+  isNativeModuleInstalled: true,
+  omiNative: {
+    connectDevice: jest.fn(),
+    disconnectDevice: jest.fn(),
+    getSnapshot: jest.fn(),
+    requestPermissions: jest.fn(),
+    startScan: jest.fn(),
+    stopScan: jest.fn(),
+  },
+}));
 
-test('renders an honest unavailable-native state', async () => {
+import App from '../App';
+import {omiNative} from '../src/omiNative';
+
+const mockNativeModule = omiNative! as unknown as jest.Mocked<Pick<NonNullable<typeof omiNative>, 'connectDevice' | 'disconnectDevice' | 'getSnapshot' | 'requestPermissions' | 'startScan' | 'stopScan'>>;
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+
+test('renders the current native platform state', async () => {
+  mockNativeModule.getSnapshot.mockResolvedValue({
+    audioRoute: 'phone-mic',
+    bluetooth: 'poweredOn',
+    capture: 'idle',
+    captureMode: 'stream',
+    devices: [],
+    lastEvent: 'Ready to find Omi devices',
+    microphone: 'granted',
+    notifications: 'granted',
+    background: 'active',
+  });
   let renderer: ReactTestRenderer.ReactTestRenderer;
 
   await ReactTestRenderer.act(async () => {
@@ -40,5 +70,44 @@ test('renders an honest unavailable-native state', async () => {
     await Promise.resolve();
   });
 
-  expect(JSON.stringify(renderer!.toJSON())).toContain('This platform has no Omi native adapter yet.');
+  expect(JSON.stringify(renderer!.toJSON())).toContain('Ready to find Omi devices');
+});
+
+test('waits for discovery before refreshing the native device list', async () => {
+  jest.useFakeTimers();
+  mockNativeModule.getSnapshot.mockResolvedValue({
+    audioRoute: 'phone-mic',
+    bluetooth: 'poweredOn',
+    capture: 'idle',
+    captureMode: 'stream',
+    devices: [],
+    lastEvent: 'Ready to find Omi devices',
+    microphone: 'granted',
+    notifications: 'granted',
+    background: 'active',
+  });
+  mockNativeModule.startScan.mockResolvedValue([]);
+  mockNativeModule.stopScan.mockResolvedValue();
+  let renderer: ReactTestRenderer.ReactTestRenderer;
+
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(<App />);
+    await Promise.resolve();
+  });
+
+  const findMyOmi = renderer!.root.findAll((node) => node.props.accessibilityRole === 'button').find((node) => node.props.children.props.children === 'Find my Omi')!;
+  await ReactTestRenderer.act(async () => {
+    findMyOmi.props.onPress();
+    await Promise.resolve();
+  });
+  expect(mockNativeModule.startScan).toHaveBeenCalledWith(5, []);
+  expect(mockNativeModule.stopScan).not.toHaveBeenCalled();
+
+  await ReactTestRenderer.act(async () => {
+    jest.advanceTimersByTime(5_000);
+    await Promise.resolve();
+  });
+  expect(mockNativeModule.stopScan).toHaveBeenCalledTimes(1);
+  expect(mockNativeModule.getSnapshot).toHaveBeenCalledTimes(2);
+  jest.useRealTimers();
 });
