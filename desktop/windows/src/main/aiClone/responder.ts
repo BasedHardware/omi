@@ -27,10 +27,12 @@ export function decide(input: ResponderInput): ResponderDecision {
   if (message.isDeleted) return { action: 'ignore', reason: 'deleted' }
   if (!message.text?.trim()) return { action: 'ignore', reason: 'non_text' }
 
+  // Fail closed on the freshness check: a message that cannot prove it arrived
+  // during this listening session might be reconnect backfill, and drafting
+  // replies to old history is exactly what the cutoff exists to prevent.
   const ts = beeperTimestampMs(message.timestamp)
-  if (ts !== undefined && ts < input.sessionStartedAt) {
-    return { action: 'ignore', reason: 'old_message' }
-  }
+  if (ts === undefined) return { action: 'ignore', reason: 'undated_message' }
+  if (ts < input.sessionStartedAt) return { action: 'ignore', reason: 'old_message' }
 
   // v1 never auto-sends into group chats (too easy to misfire in front of an
   // audience) — an 'auto' group still gets a reviewable draft.

@@ -35,9 +35,29 @@ export class AiCloneStore {
   private load(): void {
     if (!existsSync(this.deps.file)) return
     try {
-      this.data = JSON.parse(readFileSync(this.deps.file, 'utf8')) as FileShape
+      const parsed: unknown = JSON.parse(readFileSync(this.deps.file, 'utf8'))
+      // Valid JSON is not a valid store: `null`, an array or a number would all
+      // parse and then crash the first accessor. Corruption of either kind has
+      // to take the same start-fresh path.
+      this.data = AiCloneStore.sanitize(parsed)
     } catch {
       this.data = {} // corrupted file — start fresh rather than crash
+    }
+  }
+
+  private static sanitize(parsed: unknown): FileShape {
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {}
+    const raw = parsed as Record<string, unknown>
+    const record = (value: unknown): boolean =>
+      typeof value === 'object' && value !== null && !Array.isArray(value)
+    return {
+      beeperToken: typeof raw.beeperToken === 'string' ? raw.beeperToken : undefined,
+      enabled: raw.enabled === true,
+      chatModes: record(raw.chatModes)
+        ? (raw.chatModes as FileShape['chatModes'])
+        : undefined,
+      drafts: Array.isArray(raw.drafts) ? (raw.drafts as FileShape['drafts']) : undefined,
+      activity: Array.isArray(raw.activity) ? (raw.activity as FileShape['activity']) : undefined
     }
   }
 
@@ -73,10 +93,6 @@ export class AiCloneStore {
   getChatMode(chatId: string): AiCloneChatMode {
     const mode = this.data.chatModes?.[chatId] ?? 'off'
     return mode === 'auto' ? 'draft' : mode
-  }
-
-  getChatModes(): Record<string, AiCloneChatMode> {
-    return { ...(this.data.chatModes ?? {}) }
   }
 
   setChatMode(chatId: string, mode: AiCloneChatMode): void {

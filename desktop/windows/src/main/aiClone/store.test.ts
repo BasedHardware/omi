@@ -90,6 +90,21 @@ describe('AiCloneStore', () => {
     expect(t.getBeeperToken()).toBeNull()
   })
 
+  it('recovers from a file that parses but is not a store object', () => {
+    // `null`, an array or a scalar are all valid JSON and used to be assigned
+    // straight to the in-memory shape, crashing the first accessor at startup
+    // instead of taking the documented start-fresh path.
+    for (const body of ['null', '[]', '42', '"a string"', '{"chatModes":"nope","drafts":7}']) {
+      writeFileSync(file, body, 'utf8')
+      const s = new AiCloneStore(deps(file))
+      expect(s.getEnabled()).toBe(false)
+      expect(s.getBeeperToken()).toBeNull()
+      expect(s.getChatMode('chat1')).toBe('off')
+      expect(s.getDrafts()).toEqual([])
+      expect(s.getActivity()).toEqual([])
+    }
+  })
+
   it('caps the activity feed at 100 entries, newest first', () => {
     const s = new AiCloneStore(deps(file))
     for (let i = 0; i < 105; i++) {

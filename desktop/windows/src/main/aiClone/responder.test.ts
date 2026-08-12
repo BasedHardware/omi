@@ -43,6 +43,16 @@ describe('decide', () => {
     expect(decide(input)).toEqual({ action: 'ignore', reason: 'old_message' })
   })
 
+  it('ignores messages whose timestamp cannot prove they are from this session', () => {
+    // Reconnect backfill without a usable timestamp used to skip the cutoff
+    // entirely and draft replies to history.
+    for (const timestamp of [undefined, 'not-a-date']) {
+      const input = base()
+      input.message.timestamp = timestamp
+      expect(decide(input)).toEqual({ action: 'ignore', reason: 'undated_message' })
+    }
+  })
+
   it('ignores deleted and non-text messages', () => {
     const deleted = base()
     deleted.message.isDeleted = true
