@@ -78,6 +78,7 @@ import { createPostgresDurableMemoryWorkSuccessRepository } from "./durable-memo
 import { createPostgresFormationWorkInputRepository } from "./formation-work-input";
 import { createPostgresFormationOneShotRuntime } from "./formation-one-shot-runtime";
 import { createPostgresPredicateBatchWorkInputRepository } from "./predicate-batch-work-input";
+import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
@@ -1592,6 +1593,126 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         WHERE account_id = $1`, [accountId]);
     })).rejects.toMatchObject({ code: "42501" });
 
+    const predicateRuntimePolicy = registerDurableMemoryWorkExecutionPolicy({
+      version: DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+      policy_id: `execution-policy:predicate-runtime:${suffix}`,
+      work_kind: "predicate_batch",
+      execution_contract_digest: predicateStrategy.execution_contract_digest,
+      max_attempts: 2,
+      lease_duration_seconds: 2,
+      retry_delays_seconds: [1],
+    });
+    let predicateModelCalls = 0;
+    const predicateRuntime = createPostgresPredicateBatchOneShotRuntime({
+      pool: appRolePool,
+      strategies: [predicateStrategy],
+      resolve_model: async () => new DeterministicFakeModel(() => {
+        predicateModelCalls += 1;
+        return { assertions: [] };
+      }),
+      max_parent_rematerializations: 3,
+    });
+    const predicateRuntimeRequest = {
+      snapshot: {
+        ...predicateSnapshot,
+        input_frontier: "graph:predicate:qualification:runtime",
+        predicates: [predicate("alpha_relation"), predicate("bravo_relation")],
+      },
+      strategy_assignment: predicateAssignment,
+      execution_policy: predicateRuntimePolicy,
+      accepted_at_event_time: now,
+      max_jobs_per_invocation: 1,
+    } as const;
+    const predicateRuntimeAcceptance = await predicateRuntime.schedule(
+      context,
+      predicateRuntimeRequest,
+    );
+    expect(predicateRuntimeAcceptance).toMatchObject({
+      kind: "accepted", scheduled: [{ acceptance: "accepted" }],
+    });
+    const predicateRuntimeJobId = predicateRuntimeAcceptance.scheduled[0]?.job_id;
+    if (!predicateRuntimeJobId) throw new Error("qualification_missing_predicate_runtime_job");
+
+    try {
+      await ownerSql.unsafe(`
+        CREATE OR REPLACE FUNCTION omi_memory.qualification_reject_predicate_success()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'qualification injected predicate process loss'; END
+        $$;
+        DROP TRIGGER IF EXISTS reject_predicate_success
+          ON omi_memory.memory_work_outbox_events;
+        CREATE TRIGGER reject_predicate_success
+        BEFORE INSERT ON omi_memory.memory_work_outbox_events
+        FOR EACH ROW WHEN (NEW.event_kind = 'memory_work_succeeded')
+        EXECUTE FUNCTION omi_memory.qualification_reject_predicate_success()
+      `, [], { prepare: false });
+      await expect(predicateRuntime.runNext(executionContext)).resolves.toMatchObject({
+        kind: "stopped", stop_code: "storage_retryable", leased: 1,
+      });
+    } finally {
+      await ownerSql.unsafe(`
+        DROP TRIGGER IF EXISTS reject_predicate_success
+          ON omi_memory.memory_work_outbox_events;
+        DROP FUNCTION IF EXISTS omi_memory.qualification_reject_predicate_success()
+      `, [], { prepare: false });
+    }
+    expect(predicateModelCalls).toBe(1);
+    const predicateCallsAfterStaging = predicateModelCalls;
+    const predicateStaged = await ownerSql.unsafe<{
+      staged_results: number; successes: number; state: string;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_work_staged_results
+          WHERE account_id = $1 AND job_id = $2) AS staged_results,
+        (SELECT count(*)::int FROM omi_memory.memory_work_success_results
+          WHERE account_id = $1 AND job_id = $2) AS successes,
+        (SELECT s.state FROM omi_memory.memory_work_heads AS h
+          JOIN omi_memory.memory_work_state_revisions AS s
+            ON s.account_id = h.account_id AND s.job_id = h.job_id
+           AND s.state_revision = h.state_revision
+          WHERE h.account_id = $1 AND h.job_id = $2) AS state
+    `, [accountId, predicateRuntimeJobId]);
+    expect([...predicateStaged]).toEqual([{
+      staged_results: 1, successes: 0, state: "leased",
+    }]);
+
+    await Bun.sleep(3_100);
+    await expect(predicateRuntime.recoverExpired(executionContext, predicateRuntimeJobId))
+      .resolves.toMatchObject({
+        kind: "recovered",
+        job: { state: "retryable_failed", outcome: { error_code: "worker_lost" } },
+      });
+    await Bun.sleep(2_100);
+    await expect(predicateRuntime.runNext(executionContext)).resolves.toMatchObject({
+      kind: "completed", result: "succeeded", leased: 1,
+      producer_calls: 0, materialization_attempts: 1,
+    });
+    expect(predicateModelCalls).toBe(predicateCallsAfterStaging);
+    const predicateCompleted = await ownerSql.unsafe<{
+      staged_results: number; successes: number; success_outbox: number;
+      state: string; graph_sequence: string;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_work_staged_results
+          WHERE account_id = $1 AND job_id = $2) AS staged_results,
+        (SELECT count(*)::int FROM omi_memory.memory_work_success_results
+          WHERE account_id = $1 AND job_id = $2) AS successes,
+        (SELECT count(*)::int FROM omi_memory.memory_work_outbox_events
+          WHERE account_id = $1 AND job_id = $2
+            AND event_kind = 'memory_work_succeeded') AS success_outbox,
+        (SELECT s.state FROM omi_memory.memory_work_heads AS h
+          JOIN omi_memory.memory_work_state_revisions AS s
+            ON s.account_id = h.account_id AND s.job_id = h.job_id
+           AND s.state_revision = h.state_revision
+          WHERE h.account_id = $1 AND h.job_id = $2) AS state,
+        (SELECT sequence::text FROM omi_memory.memory_graph_heads
+          WHERE account_id = $1) AS graph_sequence
+    `, [accountId, predicateRuntimeJobId]);
+    expect([...predicateCompleted]).toEqual([{
+      staged_results: 1, successes: 1, success_outbox: 1,
+      state: "succeeded", graph_sequence: "2",
+    }]);
+
     const rollbackSuccessSuffix = `${suffix}:success-rollback`;
     const rollbackSuccessAcceptance = durableWorkAcceptanceRequest(
       accountId, rollbackSuccessSuffix, now, 2, 1,
@@ -1688,7 +1809,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           WHERE account_id = $1 AND event_kind = 'memory_work_dead_letter') AS outbox
     `, [accountId]);
     expect([...executionRows]).toEqual([{
-      dead_letters: 2, retryable_failures: 3, outbox: 2,
+      dead_letters: 2, retryable_failures: 4, outbox: 2,
     }]);
     for (const forbiddenSql of [
       "UPDATE omi_memory.memory_work_state_revisions SET state = 'pending' WHERE account_id = $1",
