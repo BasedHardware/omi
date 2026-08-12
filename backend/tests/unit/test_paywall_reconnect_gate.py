@@ -416,6 +416,7 @@ class TestByokRequestEscapeHatch:
                 'deepgram': 'stub-deepgram',
             }
         )
+        self._byok._byok_validated_ctx.set(True)
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
 
     def test_partial_byok_headers_still_paywall(self):
@@ -455,5 +456,6 @@ class TestByokRequestEscapeHatch:
                 'deepgram': 'stub-deepgram',
             }
         )
+        self._byok._byok_validated_ctx.set(True)
         meta = self._sub.get_trial_metadata('uid-stale-firestore')
         assert meta.trial_expired is False

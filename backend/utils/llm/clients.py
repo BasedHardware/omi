@@ -25,6 +25,7 @@ import tiktoken
 from models.structured_extraction import StructuredExtraction
 from utils.byok import get_byok_key
 from utils.llm.byok_errors import handle_llm_error
+from utils.observability.fallback import record_fallback
 from utils.llm.model_config import (
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
@@ -432,10 +433,16 @@ def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
 
 
 def _effective_byok_provider(model: str, provider: str) -> str:
-    """Map provider to the actual BYOK key type needed (Gemini-based OpenRouter → Gemini key)."""
-    if provider == 'openrouter' and model.startswith('gemini'):
-        return 'gemini'
+    """Return the credential provider required by the resolved route."""
     return provider
+
+
+def _byok_fallback_model(provider: str) -> str:
+    if provider == 'openai':
+        return 'gpt-4o-mini'
+    if provider in {'gemini', 'openrouter'}:
+        return 'gemini-2.5-flash-lite'
+    return ''
 
 
 # Compatibility wrappers for tests and legacy imports. New provider construction
@@ -499,25 +506,37 @@ def get_llm(
             get_active_profile_name(),
         )
 
-    byok_key = get_byok_key('openrouter')
-    if byok_key:
-        provider = 'openrouter'
-        byok_provider = 'openrouter'
-        model = 'gemini-2.5-flash-lite'
+    byok_profile = get_byok_profile()
+    if byok_profile:
+        profile_model, profile_provider = byok_profile.get(feature, (model, provider))
+        profile_key = get_byok_key(_effective_byok_provider(profile_model, profile_provider))
+        if profile_key:
+            model, provider, byok_key = profile_model, profile_provider, profile_key
+            byok_provider = _effective_byok_provider(model, provider)
+        else:
+            byok_provider = _effective_byok_provider(model, provider)
+            byok_key = get_byok_key(byok_provider)
     else:
         byok_provider = _effective_byok_provider(model, provider)
         byok_key = get_byok_key(byok_provider)
     if not byok_key:
+        configured_provider = provider
         for candidate in ('openrouter', 'openai', 'gemini'):
             candidate_key = get_byok_key(candidate)
             if candidate_key:
                 provider = candidate
                 byok_provider = candidate
                 byok_key = candidate_key
-                if candidate == 'gemini' and not model.startswith('gemini'):
-                    model = 'gemini-2.5-flash-lite'
+                model = _byok_fallback_model(candidate)
+                record_fallback(
+                    component='other',
+                    from_mode=configured_provider,
+                    to_mode=candidate,
+                    reason='byok',
+                    outcome='recovered',
+                    log=logger,
+                )
                 break
-    byok_profile = get_byok_profile()
 
     if byok_key and byok_profile:
         byok_model, byok_prov = byok_profile.get(feature, (model, provider))

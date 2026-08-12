@@ -106,6 +106,7 @@ BYOK_HEADERS = {
 # Default is None (not {}) to avoid sharing a mutable object across contexts.
 _byok_ctx: ContextVar[Optional[Dict[str, str]]] = ContextVar('byok_keys', default=None)
 _byok_uid_ctx: ContextVar[Optional[str]] = ContextVar('byok_uid', default=None)
+_byok_validated_ctx: ContextVar[bool] = ContextVar('byok_validated', default=False)
 
 
 def get_byok_keys() -> Dict[str, str]:
@@ -136,9 +137,15 @@ def has_byok_keys() -> bool:
     return bool(keys)
 
 
+def has_validated_byok_keys() -> bool:
+    """True when the current request's BYOK headers passed enrollment validation."""
+    return _byok_validated_ctx.get() and bool(_byok_ctx.get())
+
+
 def set_byok_keys(keys: Dict[str, str]):
     """Used by the middleware; also useful from WS handlers that read headers manually."""
     _byok_ctx.set({k: v for k, v in keys.items() if v})
+    _byok_validated_ctx.set(False)
 
 
 def extract_byok_from_websocket(websocket: WebSocket) -> Dict[str, str]:
@@ -171,11 +178,13 @@ class BYOKMiddleware(BaseHTTPMiddleware):
                 keys[provider] = value
         token = _byok_ctx.set(keys)
         uid_token = _byok_uid_ctx.set(None)
+        validated_token = _byok_validated_ctx.set(False)
         try:
             return await call_next(request)
         finally:
             _byok_ctx.reset(token)
             _byok_uid_ctx.reset(uid_token)
+            _byok_validated_ctx.reset(validated_token)
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +254,7 @@ def _check_byok_validity(uid: str) -> Optional[str]:
     # loop above never sees it and it would reach the provider clients unvalidated. Drop
     # it, mirroring the non-enrolled-user path above: anything we cannot verify must not
     # be used, and downstream falls back to Omi's own key for that provider.
-    _byok_ctx.set({p: key for p, key in request_keys.items() if p in stored_fingerprints})
+    _byok_ctx.set({p: key for p, key in request_keys.items() if stored_fingerprints.get(p)})
 
     return None
 
@@ -260,6 +269,7 @@ def validate_byok_request(uid: str) -> None:
     if error:
         logger.warning('BYOK validation failed uid=%s: %s', uid, error)
         raise HTTPException(status_code=403, detail=error)
+    _byok_validated_ctx.set(True)
     set_byok_uid(uid)
 
 
@@ -274,5 +284,6 @@ def validate_byok_websocket(uid: str) -> Optional[str]:
     if error:
         logger.warning('BYOK WS validation failed uid=%s: %s', uid, error)
     else:
+        _byok_validated_ctx.set(True)
         set_byok_uid(uid)
     return error

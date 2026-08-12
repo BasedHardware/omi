@@ -41,7 +41,7 @@ function providerRequest(
       }
     case 'openrouter':
       return {
-        url: 'https://openrouter.ai/api/v1/models',
+        url: 'https://openrouter.ai/api/v1/auth/key',
         headers: { Authorization: `Bearer ${key}` }
       }
     case 'anthropic':
@@ -100,9 +100,7 @@ export async function validateProviderKey(
 }
 
 /**
- * Validate every provider in `keys` in parallel. Only the four canonical
- * providers are checked; missing entries are validated as empty (fail), so the
- * caller can treat a non-`ok` result uniformly as "not all four authenticate".
+ * Validate every configured provider in `keys` in parallel.
  */
 export async function validateAllByokKeys(
   keys: ByokKeys,

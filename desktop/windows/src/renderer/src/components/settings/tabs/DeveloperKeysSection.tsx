@@ -94,7 +94,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
     }
   }, [])
 
-  const hasAll = isByokActive(keys)
+  const hasActiveLLMByok = isByokActive(keys)
   const hasAnyKey = BYOK_PROVIDERS.some((p) => keys[p].trim().length > 0)
 
   // Persist the current key set, then reconcile backend activation. Runs
@@ -102,8 +102,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
   const commit = async (): Promise<void> => {
     const cur = keysRef.current
     await Promise.all(BYOK_PROVIDERS.map((p) => window.omi.byokSet(p, cur[p].trim())))
-    // Live-validate only when the full set is present (matches the enroll IPC's
-    // own gate); a partial set just deactivates with no per-provider network.
+    // Live-validate when an LLM key is configured; Deepgram remains optional.
     const willValidate = isByokActive(cur)
     setChecking(willValidate)
     setActivationError(null)
@@ -131,7 +130,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
         .sort()
       setActivationError(
         rejected.length
-          ? `Rejected by provider: ${rejected.join(', ')}. Free plan stays off until all 4 keys authenticate.`
+          ? `Rejected by provider: ${rejected.join(', ')}. Free plan stays off until an LLM key authenticates.`
           : null
       )
     }
@@ -172,17 +171,17 @@ export function DeveloperKeysSection(): React.JSX.Element {
 
       {/* Status banner — verbatim macOS copy, "this Mac" adapted to "this PC". */}
       <div className="mb-4 flex items-start gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
-        {hasAll ? (
+        {hasActiveLLMByok ? (
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" strokeWidth={1.75} />
         ) : (
           <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-white/55" strokeWidth={1.75} />
         )}
         <div className="min-w-0">
           <div className="text-[15px] font-semibold text-text-primary">
-            {hasAll ? 'Free plan active' : 'Use Omi free forever'}
+            {hasActiveLLMByok ? 'Free plan active' : 'Use Omi free forever'}
           </div>
           <div className="mt-0.5 text-sm text-text-tertiary">
-            {hasAll
+            {hasActiveLLMByok
               ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this PC."
               : 'Add an LLM key to switch to the free plan. OpenRouter is preferred when configured; Deepgram is optional and only powers transcription. Keys stay on this PC — we never store them on our servers.'}
           </div>
