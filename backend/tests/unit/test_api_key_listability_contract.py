@@ -147,6 +147,14 @@ class _Redis:
     def __init__(self):
         self.mcp_context: Optional[dict[str, Any]] = None
         self.dev_context: Optional[dict[str, Any]] = None
+        self.retired: set[str] = set()
+
+    def mark_api_key_hash_retired_strict(self, hashed_key: str) -> bool:
+        self.retired.add(hashed_key)
+        return True
+
+    def api_key_hash_is_retired(self, hashed_key: str) -> bool:
+        return hashed_key in self.retired
 
     def read_cached_mcp_api_key_auth_context(self, _hashed_key: str) -> ApiKeyCacheReadResult:
         if self.mcp_context is None:
