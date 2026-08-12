@@ -134,7 +134,8 @@ extension APIClient {
     provider: LLMOAuthProvider,
     code: String,
     codeVerifier: String,
-    redirectURI: String
+    redirectURI: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws {
     struct Request: Encodable {
       let code: String
@@ -159,7 +160,9 @@ extension APIClient {
     let _: Response = try await post(
       "v1/users/me/llm-oauth/\(provider.rawValue)",
       body: Request(code: code, codeVerifier: codeVerifier, redirectURI: redirectURI),
-      includeBYOK: false
+      includeBYOK: false,
+      authorizationSnapshot: authorizationSnapshot,
+      allowsAuthRetry: false
     )
   }
 
