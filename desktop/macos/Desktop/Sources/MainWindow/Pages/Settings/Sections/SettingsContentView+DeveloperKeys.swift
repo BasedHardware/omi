@@ -296,6 +296,8 @@ extension SettingsContentView {
     devDeepgramKey = ""
     byokKeyStatuses = [:]
     byokActivationError = nil
+    chatGPTLLMOAuthConnected = false
+    grokLLMOAuthConnected = false
     // Clearing the fields is an explicit "take me off the free plan", so say so
     // now rather than leaving it to the debounced reconcile. Cleared within the
     // debounce window the reconcile sees an untouched-looking form and — quite
@@ -303,6 +305,9 @@ extension SettingsContentView {
     // backend believing BYOK was still active with no keys behind it. Both
     // paths only ever deactivate, so the duplicate call is harmless.
     Task {
+      for provider in LLMOAuthProvider.allCases {
+        try? await APIClient.shared.disconnectLLMOAuth(provider)
+      }
       try? await APIClient.shared.deactivateBYOK()
       await FloatingBarUsageLimiter.shared.fetchPlan()
     }

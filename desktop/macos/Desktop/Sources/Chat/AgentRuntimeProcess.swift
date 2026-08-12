@@ -2599,7 +2599,6 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: pi-mono start refused, OMI_DESKTOP_API_URL is not configured")
       throw BridgeError.bridgeScriptNotFound
     }
-
     Self.removeInheritedBYOKEnvironment(from: &env)
     let byok = await Self.usableBYOKEnvironment()
     try assertStartupAuthority(
@@ -2609,6 +2608,7 @@ actor AgentRuntimeProcess {
       env[key] = value
     }
     if APIKeyService.isByokActive {
+      env["OMI_BYOK_LLM_PROVIDER"] = APIKeyService.selectedBYOKLLMSelection.rawValue
       if !byok.suppressedProviders.isEmpty {
         for provider in byok.suppressedProviders {
           log(
