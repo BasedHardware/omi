@@ -419,16 +419,14 @@ class TestByokRequestEscapeHatch:
         self._byok._byok_validated_ctx.set(True)
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
 
-    def test_partial_byok_headers_still_paywall(self):
-        # Only 3 of 4 — not a fully-enrolled BYOK request, paywall remains.
-        self._byok.set_byok_keys(
-            {
-                'openai': 'sk-stub',
-                'anthropic': 'sk-stub',
-                'gemini': 'stub',
-                # deepgram missing
-            }
-        )
+    def test_validated_llm_byok_header_bypasses_paywall(self):
+        self._byok.set_byok_keys({'openrouter': 'sk-stub'})
+        self._byok._byok_validated_ctx.set(True)
+        assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
+
+    def test_validated_deepgram_only_header_still_paywalls(self):
+        self._byok.set_byok_keys({'deepgram': 'stub-deepgram'})
+        self._byok._byok_validated_ctx.set(True)
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is True
 
     def test_empty_byok_keys_still_paywall(self):

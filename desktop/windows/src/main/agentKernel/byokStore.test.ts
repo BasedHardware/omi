@@ -82,12 +82,13 @@ describe('ByokKeyStore', () => {
     expect(store.isActive()).toBe(false)
   })
 
-  it('isActive is true only at 4/4 providers', () => {
+  it('isActive is true with a configured LLM provider', () => {
     expect(store.isActive()).toBe(false)
     store.setKey('openai', 'sk-openai')
+    expect(store.isActive()).toBe(true)
     store.setKey('anthropic', 'sk-ant')
     store.setKey('gemini', 'gm-key')
-    expect(store.isActive()).toBe(false)
+    expect(store.isActive()).toBe(true)
     store.setKey('deepgram', 'dg-key')
     expect(store.isActive()).toBe(true)
   })

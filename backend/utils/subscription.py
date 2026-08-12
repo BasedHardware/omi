@@ -172,7 +172,9 @@ _BYOK_REQUIRED_PROVIDERS = ("openai", "anthropic", "gemini", "deepgram")
 
 
 def _request_has_llm_byok_key() -> bool:
-    return has_validated_byok_keys()
+    return has_validated_byok_keys() and any(
+        get_byok_keys().get(provider) for provider in ('openrouter', 'openai', 'anthropic', 'gemini')
+    )
 
 
 def _request_has_all_byok_keys() -> bool:

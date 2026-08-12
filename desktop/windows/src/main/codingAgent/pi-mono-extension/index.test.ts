@@ -221,14 +221,18 @@ describe('BYOK header gating', () => {
     })
   })
 
-  it('attaches NO headers for a partial (3/4) BYOK set', () => {
+  it('attaches configured headers without requiring an unrelated Deepgram key', () => {
     process.env.OMI_BYOK_OPENAI = 'oa'
     process.env.OMI_BYOK_ANTHROPIC = 'an'
     process.env.OMI_BYOK_GEMINI = 'ge'
     // deepgram missing
     const cap = makeFakePi()
     omiProvider(cap.pi)
-    expect(cap.provider?.cfg.headers).toBeUndefined()
+    expect(cap.provider?.cfg.headers).toEqual({
+      'X-BYOK-OpenAI': 'oa',
+      'X-BYOK-Anthropic': 'an',
+      'X-BYOK-Gemini': 'ge'
+    })
   })
 
   it('attaches NO headers when no BYOK keys are present', () => {

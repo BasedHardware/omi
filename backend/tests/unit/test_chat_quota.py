@@ -47,6 +47,7 @@ _announcements_mod.compare_versions = _compare_versions
 _byok_mod = ModuleType("utils.byok")
 _byok_mod.get_byok_key = MagicMock(return_value=None)
 _byok_mod.get_byok_keys = MagicMock(return_value={})
+_byok_mod.has_validated_byok_keys = MagicMock(return_value=False)
 
 # Loaded fresh by the autouse module fixture; reloaded per-test to pick up env changes.
 _sub_mod_ref = None
