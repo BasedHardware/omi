@@ -625,12 +625,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       if (permanentFailures > 0) {
         final hint = result?.localUploadPermanentError;
         final errorMessage = _formatSyncError(
-          hint != null ? Exception(hint) : Exception('Upload failed. Check your connection and try again'),
+          hint != null ? Exception(hint) : Exception('Upload failed unexpectedly'),
           failedWal,
         );
-        DebugLogManager.logWarning(
-          'SyncProvider: $context had $permanentFailures permanent local upload failure(s)',
-        );
+        DebugLogManager.logWarning('SyncProvider: $context had $permanentFailures permanent local upload failure(s)');
         _updateSyncState(_syncState.toError(message: errorMessage, failedWal: failedWal));
       } else if (localFailures > 0) {
         DebugLogManager.logWarning(
@@ -683,7 +681,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } else if (baseMessage.toLowerCase().contains('temporarily unavailable')) {
       baseMessage = 'Server is temporarily unavailable. Try again later';
     } else if (baseMessage.toLowerCase().contains('upload failed')) {
-      baseMessage = 'Upload failed. Check your connection and try again';
+      baseMessage = 'Omi could not upload or process this recording. It remains pending; try again';
     }
 
     if (wal != null) {

@@ -182,7 +182,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     } else if (uploaded > 0) {
       // Uploads finished, reconciler is resolving jobs in the background.
       title = l.syncCardProcessing;
-      progressText = l.syncCardProgressOf(uploaded, uploaded + readyToBackUp);
+      // Uploaded WAL counts are queue state, not server segment progress. A
+      // localized background hint avoids presenting them as a completion meter.
+      progressText = l.syncProcessingBackgroundHint;
     } else if (attention > 0) {
       title = l.syncCardNeedsAttention(attention);
       titleColor = Colors.orangeAccent;

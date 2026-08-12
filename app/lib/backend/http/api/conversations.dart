@@ -232,21 +232,27 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
-Future<ServerConversation?> getConversationById(String conversationId) async {
+Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return null;
+  if (response == null) return (item: null, ok: false);
   if (response.statusCode == 200) {
-    return ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return (item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>), ok: true);
   } else if (response.statusCode == 402) {
     Logger.debug('Unlimited Plan Required for conversation: $conversationId');
-    return null;
+    return (item: null, ok: false);
+  } else if (response.statusCode == 404) {
+    return (item: null, ok: true);
   }
-  return null;
+  return (item: null, ok: false);
+}
+
+Future<ServerConversation?> getConversationById(String conversationId) async {
+  return (await getConversationByIdResult(conversationId)).item;
 }
 
 Future<bool> updateConversationTitle(String conversationId, String title) async {
