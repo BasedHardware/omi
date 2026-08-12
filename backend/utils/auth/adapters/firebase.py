@@ -100,9 +100,15 @@ class FirebaseAuthProvider:
         provider_id = {'google': 'google.com', 'apple': 'apple.com'}.get(provider)
         if not provider_id:
             raise errors.AuthError(f'unsupported provider: {provider}')
-        post_body = f'id_token={id_token}&providerId={provider_id}'
+        # URL-encode every field: opaque provider tokens can contain form-reserved
+        # characters (& = +), which would otherwise corrupt the signInWithIdp postBody
+        # and fail the exchange for some Google/Apple sign-ins.
+        from urllib.parse import urlencode
+
+        params = {'id_token': id_token, 'providerId': provider_id}
         if access_token:
-            post_body += f'&access_token={access_token}'
+            params['access_token'] = access_token
+        post_body = urlencode(params)
         url = f'https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={api_key}'
         resp = httpx.post(
             url,
