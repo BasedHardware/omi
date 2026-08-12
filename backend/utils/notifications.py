@@ -622,12 +622,10 @@ def send_important_conversation_message(user_id: str, conversation_id: str):
         user_id: The user's Firebase UID
         conversation_id: ID of the completed conversation
     """
-    tokens = notification_db.get_all_tokens(user_id)
-    if not tokens:
-        logger.info(f"No notification tokens found for user {user_id} for important conversation notification")
-        return
-
-    # FCM data values must be strings
+    # Route through the selected push backend via _send_to_user (like the sibling data-message
+    # senders). A get_all_tokens (FCM) precheck here returned early for UnifiedPush-only users, so
+    # the sync push was silently skipped for them (cubic review PR 10887); _send_to_user already
+    # handles empty FCM tokens and the UnifiedPush-endpoint case internally.
     data = {
         'type': 'important_conversation',
         'conversation_id': conversation_id,
