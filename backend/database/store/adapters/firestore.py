@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
+from google.cloud.firestore_v1.field_path import FieldPath as _FieldPath
 
 from google.api_core.exceptions import (
     AlreadyExists as _FirestoreAlreadyExists,
@@ -60,6 +61,20 @@ def _translate(data: Dict[str, Any]) -> Dict[str, Any]:
     nested inside a map value — so translating the top level is complete and correct.
     """
     return {key: _to_firestore_value(value) for key, value in data.items()}
+
+
+def _translate_update(data: Dict[str, Any]) -> Dict[Any, Any]:
+    """Like ``_translate`` but for ``update()``, where a dotted key is a nested field PATH.
+
+    Firestore's update() parses dotted string keys and mis-handles segments that are not simple
+    identifiers (e.g. a raw UUID key id with hyphens embedded in ``grants...keys.<uuid>``). Rebuild
+    each dotted key through FieldPath.to_api_repr(), which backtick-escapes such segments into a
+    valid field-path string; simple keys pass through unchanged.
+    """
+    return {
+        (_FieldPath(*key.split(".")).to_api_repr() if "." in key else key): _to_firestore_value(value)
+        for key, value in data.items()
+    }
 
 
 def _ensure_timezone_aware(dt: datetime) -> datetime:
@@ -127,7 +142,7 @@ class _FirestoreBatch:
         self._batch.set(self._client.document(path), _translate(data), merge=merge)
 
     def update(self, path: str, data: Dict[str, Any]) -> None:
-        self._batch.update(self._client.document(path), _translate(data))
+        self._batch.update(self._client.document(path), _translate_update(data))
 
     def delete(self, path: str) -> None:
         self._batch.delete(self._client.document(path))
@@ -152,7 +167,7 @@ class _FirestoreTransaction:
 
     def update(self, path: str, data: Dict[str, Any]) -> None:
         try:
-            self._transaction.update(self._client.document(path), _translate(data))
+            self._transaction.update(self._client.document(path), _translate_update(data))
         except _FirestoreNotFound as exc:
             raise NotFound(path) from exc
 
@@ -187,7 +202,7 @@ class FirestoreDocumentStore:
 
     def update(self, path: str, data: Dict[str, Any]) -> None:
         try:
-            self._client.document(path).update(_translate(data))
+            self._client.document(path).update(_translate_update(data))
         except _FirestoreNotFound as exc:
             raise NotFound(path) from exc
 

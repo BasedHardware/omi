@@ -361,6 +361,17 @@ def test_run_transaction_create_succeeds_then_conflicts(store, uid):
     assert store.get(path).to_dict() == {"description": "restored"}  # first write preserved
 
 
+def test_update_nested_field_with_non_identifier_segment(store, uid):
+    # A dotted field-path update whose leaf segment isn't a simple identifier (a raw UUID key id in
+    # grants...keys.<uuid>) must reach the nested field on every backend. Firestore mis-handles a
+    # plain dotted string here and needs the segment as an explicit FieldPath (cubic review PR 10887).
+    key_id = "3f9a1c2b-77d4-4e10-9abc-000000000001"
+    store.set(f"users/{uid}", {"grants": {"keys": {}}})
+    store.update(f"users/{uid}", {f"grants.keys.{key_id}": {"enabled": True}})
+    got = store.get(f"users/{uid}").to_dict()
+    assert got["grants"]["keys"][key_id] == {"enabled": True}
+
+
 def test_query_not_equal_filter_on_present_field(store, uid):
     # `!=` on a present field must work on every backend: migration 004 discovers conversations with
     # non-empty action_items via ('structured.action_items', '!=', []), and Mongo lacked the operator
