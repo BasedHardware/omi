@@ -50,12 +50,12 @@ committed witnesses and the active identity-authorization head before reserving 
 receipt. Claim purge/forget is now an exact `manual_liveness` transition: it requires
 committed claim witnesses and derivation inputs, writes a commit-linked closed-code
 fence, and advances the same graph frontier atomically. The old SQLite side-write API
-has been removed. An inert owner-internal reconstruction adapter now rebuilds a deterministic
+has been removed. An inert owner-internal reconstruction adapter rebuilds a deterministic
 `GraphSnapshot` from checksummed authoritative rows through a fresh application-role
-pool, but product-projection rebuild and a separately ratified read/rebuild capability
-remain unimplemented; and a backend terminated during a Bun + Postgres.js transaction
-rolls back atomically but leaves the size-one pool unable to recover promptly. Those
-remain activation blockers. A later unit may add exactly one
+pool. Backend termination and in-flight cancellation are qualified under Bun and Node,
+including rollback, reconnection, and cleared transaction-local authority state. David's
+2026-08-12 projection ruling makes persisted semantic projections optional derived views,
+not an authoritative-storage or P2 exit condition. A later unit may add exactly one
 canonical service composition only after the complete gate exists. The existing synchronous `LedgerPort.findCommitByIdempotencyKey` is
 not a production PostgreSQL seam and is not widened or faked. Model preflight will use
 an asynchronous authorized lookup owned by the new repository.
@@ -277,10 +277,11 @@ The first slice succeeds only when a repository-owned real PostgreSQL gate prove
 - the shared synthetic transition has semantically identical SQLite and PostgreSQL
   ledger snapshots while PostgreSQL remains the production-semantic arbiter.
 
-P3 separately gates deletion during leases and outbox crash/drain. P4 separately gates
-nonempty product projection rebuilds covering citations, liveness, multiple lineage
-revisions, and the reader-relative case where a hidden newer head must not suppress an
-older visible revision.
+P3 separately gates deletion during leases and outbox crash/drain. P4 gates the canonical
+product read and shared-client integration. The first product read may render directly
+from a freshly authorized graph. Any future persisted derived view must retain citation
+closure, authorize every underlying support before selection or ranking, and repeat final
+authorization validation after I/O; it is not authority and is not required for P2.
 
 Mocks and SQLite may exercise query planning and shared fixtures, but cannot satisfy the
 pool, lock, isolation, cancellation, backend-termination, or migration gates.
@@ -303,8 +304,8 @@ no commit, the dead lease is not committed or returned to the open queue, and th
 transaction reconnects with cleared local authority state under both runtimes. Arbitrary
 in-flight query cancellation is now also qualified: an explicit abort cancels the active
 Postgres.js query, rolls back, and returns the same physical backend only after its local
-authority state is cleared. Complete injected-failure coverage and product-projection
-reconstruction remain open.
+authority state is cleared. Production read composition, exact-image load qualification,
+backup/restore drills, and release evidence remain open.
 
 ## Activation blockers outside this slice
 

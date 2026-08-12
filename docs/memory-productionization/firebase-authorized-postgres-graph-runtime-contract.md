@@ -49,9 +49,11 @@ passes the PostgreSQL/Postgres.js parity corpus under pinned Bun 1.3.14 and Node
 24.19.0. The local harness stops the managed runtime and preserves the labelled
 synthetic volume.
 
-This contract does not complete or activate the product read. A later unit
-must project reader-visible state, render, bind cursor/generation coordinates,
-repeat live authority validation after any awaited product I/O, and only then
-release item, absence, completeness, citation, or trace bytes. Product
-projection materialization subject and public query-bearing recall remain
-separately ratified decisions.
+This contract does not complete or activate the product read. David's 2026-08-12
+projection ruling permits the first product read to render directly from the freshly
+authorized graph; no persisted semantic projection is required. The read must still bind
+cursor/generation coordinates, repeat live authority validation after any awaited render
+or product I/O, and only then release item, absence, completeness, citation, or trace
+bytes. Any future persisted projection remains a disposable derived view whose every
+support is authorized before selection or ranking and revalidated before release. Public
+query-bearing recall remains separately ratified.

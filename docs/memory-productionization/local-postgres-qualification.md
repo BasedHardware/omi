@@ -79,5 +79,8 @@ checkpoint after its first write, proves observer-visible rollback, and proves t
 transaction reconnects with cleared local state. It also cancels an in-flight
 `pg_sleep` through an explicit `AbortSignal`, rolls the transaction back, and proves the
 same physical backend is safely reusable with cleared transaction-local authority. It
-does not by itself activate PostgreSQL for production. Product-projection rebuild,
-load/recovery, and the remaining gates in the PostgreSQL authority contract still apply.
+does not by itself activate PostgreSQL for production. Persisted semantic projection
+rebuild is not an authority prerequisite: the first read may render directly from a
+freshly authorized graph. Exact-image load/recovery, backup/restore, canonical
+service/client integration, and the remaining release gates in the PostgreSQL authority
+contract still apply.
