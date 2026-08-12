@@ -79,6 +79,7 @@ def _byok_isolation():
         # per-test fast-unit CPU-time guard doesn't charge cold-start cost to the
         # first cache-routing test. Uses a distinct key so no assertion is affected.
         from utils.llm.clients import _cached_openai_chat
+        import utils.subscription
 
         _cached_openai_chat('gpt-4.1-mini', 'sk-warmup-timing-guard-not-asserted', {})
         yield
