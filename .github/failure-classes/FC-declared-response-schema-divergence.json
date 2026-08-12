@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-declared-response-schema-divergence",
+  "violated_contract": "A route's declared response schema must accept the value its handler actually produces. An empty collection validates against any item model, so a schema that disagrees with its producer's projection passes every empty-result test and fails on all real data.",
+  "canonical_prevention": "Give the projection a named model and declare that model on the route, then cover the schema with a test that serializes a non-empty page through the real response-model path.",
+  "evidence_prs": [11417],
+  "scope_hints": ["backend/models/**", "backend/routers/**", "web/frontend/src/lib/api/**"],
+  "status": "open"
+}
