@@ -58,6 +58,8 @@ enum BYOKLLMProvider: String, CaseIterable, Identifiable {
   case openai
   case gemini
   case anthropic
+  case chatgpt
+  case grok
 
   var id: String { rawValue }
 
@@ -67,15 +69,26 @@ enum BYOKLLMProvider: String, CaseIterable, Identifiable {
     case .openai: return "OpenAI Direct"
     case .gemini: return "Gemini"
     case .anthropic: return "Anthropic"
+    case .chatgpt: return "ChatGPT"
+    case .grok: return "Grok"
     }
   }
 
-  var provider: BYOKProvider {
+  var provider: BYOKProvider? {
     switch self {
     case .openrouter: return .openrouter
     case .openai: return .openai
     case .gemini: return .gemini
     case .anthropic: return .anthropic
+    case .chatgpt, .grok: return nil
+    }
+  }
+
+  var oauthProvider: LLMOAuthProvider? {
+    switch self {
+    case .chatgpt: return .chatgpt
+    case .grok: return .grok
+    default: return nil
     }
   }
 }
@@ -241,21 +254,26 @@ final class APIKeyService: ObservableObject {
   /// The subscription-bypass gate: when this is true, the user is on the free
   /// plan and we attach their selected LLM key to every backend request.
   nonisolated static var isByokActive: Bool {
-    selectedBYOKLLMProvider != nil
+    if selectedBYOKLLMProvider != nil { return true }
+    guard let oauthProvider = selectedBYOKLLMSelection.oauthProvider else { return false }
+    return UserDefaults.standard.bool(forKey: oauthProvider.connectionStorageKey)
   }
 
-  nonisolated static var selectedBYOKLLMProvider: BYOKProvider? {
-    let requested: BYOKLLMProvider
+  nonisolated static var selectedBYOKLLMSelection: BYOKLLMProvider {
     if let stored = UserDefaults.standard.string(forKey: .byokLLMProvider),
       let selected = BYOKLLMProvider(rawValue: stored)
     {
-      requested = selected
-    } else if let legacy = BYOKLLMProvider.allCases.first(where: { byokKey($0.provider) != nil }) {
-      requested = legacy
-    } else {
-      requested = .openrouter
+      return selected
     }
-    return byokKey(requested.provider) == nil ? nil : requested.provider
+    return BYOKLLMProvider.allCases.first { selection in
+      guard let provider = selection.provider else { return false }
+      return byokKey(provider) != nil
+    } ?? .openrouter
+  }
+
+  nonisolated static var selectedBYOKLLMProvider: BYOKProvider? {
+    guard let provider = selectedBYOKLLMSelection.provider else { return nil }
+    return byokKey(provider) == nil ? nil : provider
   }
 
   /// SHA-256 fingerprint of a key, used by the backend to detect when the

@@ -221,11 +221,6 @@ class BYOKMiddleware(BaseHTTPMiddleware):
             _byok_uid_ctx.reset(uid_token)
             _byok_validated_ctx.reset(validated_token)
             _byok_llm_provider_ctx.reset(provider_token)
-<<<<<<< HEAD
-            _byok_validated_ctx.reset(validated_token)
-=======
-            _byok_llm_provider_ctx.reset(provider_token)
->>>>>>> 56a1518a8b (feat(byok): add ChatGPT and Grok OAuth routing)
 
 
 # ---------------------------------------------------------------------------

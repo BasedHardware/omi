@@ -25,6 +25,8 @@ import XCTest
     clearAllBYOKKeys()
     UserDefaults.standard.removeObject(forKey: paywallKey)
     UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+    UserDefaults.standard.removeObject(forKey: .chatGPTLLMOAuthConnected)
+    UserDefaults.standard.removeObject(forKey: .grokLLMOAuthConnected)
   }
 
   func testByokActiveRequiresSelectedLLMKey() {
@@ -49,6 +51,25 @@ import XCTest
     UserDefaults.standard.set("sk-test-openai", forKey: BYOKProvider.openai.storageKey)
 
     XCTAssertEqual(APIKeyService.selectedBYOKLLMProvider, .openai)
+  }
+
+  func testBuildHeadersAttachSelectedLLMByokKey() async throws {
+
+  func testConnectedChatGPTOAuthActivatesByokWithoutSendingProviderKeys() async throws {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.chatgpt.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set(true, forKey: .chatGPTLLMOAuthConnected)
+
+    XCTAssertTrue(APIKeyService.isByokActive)
+    XCTAssertTrue(APIKeyService.activeBYOKSnapshot.isEmpty)
+
+    let client = APIClient()
+    await client.setTestAuthHeader("Bearer test-token")
+    let headers = try await client.buildHeaders()
+    XCTAssertEqual(headers["X-BYOK-LLM-Provider"], BYOKLLMProvider.chatgpt.rawValue)
+    for provider in BYOKProvider.allCases {
+      XCTAssertNil(headers[provider.headerName])
+    }
   }
 
   func testBuildHeadersAttachSelectedLLMByokKey() async throws {
