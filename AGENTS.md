@@ -99,7 +99,7 @@ The unit of work is the violated contract, not only the line where the symptom a
 
 ## Formatting
 
-The pre-commit hook (installed by `make setup`) auto-formats staged files. Verify: `test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK`. It refuses to format rather than reformat with an unpinned toolchain: web needs the installed Prettier to match the version resolved in `package-lock.json` (run `npm ci` in the changed web dir), Dart needs the pinned Flutter and its sibling `dart`. Hatches: `OMI_SKIP_WEB_FORMAT=1`, `OMI_SKIP_DART_FORMAT=1`. Manual commands:
+The pre-commit hook (installed by `make setup`) auto-formats staged files. Verify: `test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK`. It refuses to format rather than reformat with an unpinned toolchain: web needs the installed Prettier and its resolved plugins to match the versions in `package-lock.json` (run `npm ci` in the changed web dir), Dart needs the pinned Flutter and its sibling `dart`. Hatches: `OMI_SKIP_WEB_FORMAT=1`, `OMI_SKIP_DART_FORMAT=1`. Manual commands:
 
 | Language | Manual command |
 |----------|----------------|
