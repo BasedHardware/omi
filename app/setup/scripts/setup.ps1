@@ -46,14 +46,14 @@ function SetupFirebase {
     New-Item -ItemType Directory -Force -Path "android/app/src/dev/", "ios/Config/Dev/", "ios/Runner/"
     
     # Copy files
-    Copy-Item "setup/prebuilt/firebase_options_local.dart" -Destination "lib/firebase_options_dev.dart"
+    Copy-Item "lib/firebase_options_local.dart" -Destination "lib/firebase_options_dev.dart"
     Copy-Item "setup/prebuilt/google-services-local.json" -Destination "android/app/src/dev/google-services.json"
     Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Config/Dev/GoogleService-Info.plist"
     Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Runner/GoogleService-Info.plist"
 
     # Mocking setup
     New-Item -ItemType Directory -Force -Path "android/app/src/prod/", "ios/Config/Prod/"
-    Copy-Item "setup/prebuilt/firebase_options_local.dart" -Destination "lib/firebase_options_prod.dart"
+    Copy-Item "lib/firebase_options_local.dart" -Destination "lib/firebase_options_prod.dart"
     Copy-Item "setup/prebuilt/google-services-local.json" -Destination "android/app/src/prod/google-services.json"
     Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Config/Prod/GoogleService-Info.plist"
 }

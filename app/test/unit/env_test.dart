@@ -114,6 +114,19 @@ void main() {
         AppEnvironmentProfile.localDev,
       );
     });
+
+    test('production iOS config keeps the production Google redirect client id', () {
+      final prodConfig = File('ios/Flutter/prodRelease.xcconfig').readAsStringSync();
+
+      expect(
+        prodConfig,
+        contains('GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as'),
+      );
+      expect(
+        prodConfig,
+        isNot(contains('GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.1031333818730-')),
+      );
+    });
   });
 
   group('Env.apiBaseUrl', () {

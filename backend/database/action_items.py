@@ -137,6 +137,28 @@ def get_action_item_ids(uid: str) -> List[str]:
     return _store().list_ids(_action_items_path(uid))
 
 
+def get_visible_action_item_ids(
+    uid: str,
+    *,
+    completed: bool,
+) -> List[str]:
+    """Return IDs in one visible Tasks status bucket.
+
+    The account-wide ID census intentionally includes every document for reconciliation
+    and account deletion. UI Select All needs a narrower contract: exclude soft-deleted
+    rows and include only rows that the explicit ``completed`` list filter can render.
+    """
+    visible_ids: List[str] = []
+    for doc in _store().query(_action_items_path(uid)):
+        data = _typed_doc(doc)
+        if data.get('deleted'):
+            continue
+        completed_value = data.get('completed')
+        if completed_value is completed:
+            visible_ids.append(doc.id)
+    return visible_ids
+
+
 def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: bool = False) -> Dict[str, Any]:
     """Prepare action item data for writing to database"""
     action_item_data = dict(action_item_data)

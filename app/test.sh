@@ -23,7 +23,7 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   echo "Running setup prerequisites..."
 
   mkdir -p android/app/src/dev/ ios/Config/Dev/ ios/Runner/ macos/ macos/Config/Dev
-  cp setup/prebuilt/firebase_options_local.dart lib/firebase_options_dev.dart
+  cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
   cp setup/prebuilt/google-services-local.json android/app/src/dev/google-services.json
   cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Dev/GoogleService-Info.plist
   cp setup/prebuilt/GoogleService-Info-Local.plist ios/Runner/GoogleService-Info.plist
@@ -31,7 +31,7 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   cp setup/prebuilt/GoogleService-Info-Local.plist macos/Config/Dev/GoogleService-Info.plist
 
   mkdir -p android/app/src/prod/ ios/Config/Prod/ macos/Config/Prod
-  cp setup/prebuilt/firebase_options_local.dart lib/firebase_options_prod.dart
+  cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
   cp setup/prebuilt/google-services-local.json android/app/src/prod/google-services.json
   cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Prod/GoogleService-Info.plist
   cp setup/prebuilt/GoogleService-Info-Local.plist macos/Config/Prod/GoogleService-Info.plist

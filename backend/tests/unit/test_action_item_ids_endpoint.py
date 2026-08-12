@@ -9,20 +9,25 @@ patches the import-cheap db helper with monkeypatch.setattr, and calls the handl
 
 import os
 
+import pytest
+from fastapi import HTTPException
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 from routers import action_items as ai_mod  # noqa: E402
+from database import action_items as action_items_db  # noqa: E402
+from tests.store_fakes import FakeDocumentStore  # noqa: E402
 
 
 def test_list_action_item_ids_returns_ids(monkeypatch):
     monkeypatch.setattr(ai_mod.action_items_db, 'get_action_item_ids', lambda uid: ['a1', 'a2', 'a3'])
-    assert ai_mod.list_action_item_ids(uid='u1') == {'ids': ['a1', 'a2', 'a3']}
+    assert ai_mod.list_action_item_ids(completed=None, uid='u1') == {'ids': ['a1', 'a2', 'a3']}
 
 
 def test_list_action_item_ids_empty(monkeypatch):
     monkeypatch.setattr(ai_mod.action_items_db, 'get_action_item_ids', lambda uid: [])
-    assert ai_mod.list_action_item_ids(uid='u1') == {'ids': []}
+    assert ai_mod.list_action_item_ids(completed=None, uid='u1') == {'ids': []}
 
 
 def test_list_action_item_ids_scopes_to_caller(monkeypatch):
@@ -33,5 +38,103 @@ def test_list_action_item_ids_scopes_to_caller(monkeypatch):
         return []
 
     monkeypatch.setattr(ai_mod.action_items_db, 'get_action_item_ids', fake)
-    ai_mod.list_action_item_ids(uid='user-9')
+    ai_mod.list_action_item_ids(completed=None, uid='user-9')
     assert seen['uid'] == 'user-9'
+
+
+def test_list_action_item_ids_scopes_select_all_to_completion_bucket(monkeypatch):
+    seen = {}
+
+    def fake(uid, *, completed):
+        seen.update(uid=uid, completed=completed)
+        return ['done-1']
+
+    monkeypatch.setattr(ai_mod.action_items_db, 'get_visible_action_item_ids', fake)
+
+    assert ai_mod.list_action_item_ids(completed=True, uid='user-9') == {
+        'ids': ['done-1'],
+        'completed_scope': True,
+    }
+    assert seen == {'uid': 'user-9', 'completed': True}
+
+
+def test_visible_action_item_ids_matches_explicit_bucket_and_excludes_deleted(monkeypatch):
+    store = FakeDocumentStore()
+    for doc_id, data in [
+        ('active', {'completed': False}),
+        ('legacy-active', {'completed': None}),
+        ('legacy-status-active', {'status': 'active'}),
+        ('legacy-status-done', {'status': 'completed'}),
+        ('done', {'completed': True}),
+        ('deleted-active', {'completed': False, 'deleted': True}),
+    ]:
+        store._docs[f'users/user-9/action_items/{doc_id}'] = dict(data)
+    monkeypatch.setattr(action_items_db, '_store', lambda: store)
+
+    ids = action_items_db.get_visible_action_item_ids('user-9', completed=False)
+
+    assert ids == ['active']
+
+
+def test_visible_action_item_ids_excludes_legacy_null_completion_rows(monkeypatch):
+    store = FakeDocumentStore()
+    for doc_id, data in [
+        ('legacy-done', {'completed': None, 'status': 'completed'}),
+        ('legacy-active', {'completed': None, 'status': 'active'}),
+    ]:
+        store._docs[f'users/user-9/action_items/{doc_id}'] = dict(data)
+    monkeypatch.setattr(action_items_db, '_store', lambda: store)
+
+    ids = action_items_db.get_visible_action_item_ids('user-9', completed=True)
+
+    assert ids == []
+
+
+def test_batch_delete_rejects_locked_items_before_any_delete(monkeypatch):
+    monkeypatch.setattr(
+        ai_mod.action_items_db,
+        'get_action_items_by_ids',
+        lambda uid, ids: [{'id': ids[0], 'is_locked': True}],
+    )
+    delete_calls = []
+    monkeypatch.setattr(
+        ai_mod.action_items_db,
+        'delete_action_items_batch',
+        lambda uid, ids: delete_calls.append((uid, ids)),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        ai_mod.batch_delete_action_items(ai_mod.BatchDeleteActionItemsRequest(ids=['locked-1']), uid='user-9')
+
+    assert error.value.status_code == 402
+    assert delete_calls == []
+
+
+def test_batch_delete_preflight_chunks_large_id_lists(monkeypatch):
+    """Lock preflight must be chunked so large Select All batches don't hit
+    Firestore batch-get limits or load unbounded document data in one RPC."""
+    preflight_chunks: list[list[str]] = []
+
+    def fake_get(uid, ids):
+        preflight_chunks.append(list(ids))
+        return []
+
+    monkeypatch.setattr(ai_mod.action_items_db, 'get_action_items_by_ids', fake_get)
+    monkeypatch.setattr(
+        ai_mod.action_items_db,
+        'delete_action_items_batch',
+        lambda uid, ids: ids,
+    )
+    monkeypatch.setattr(ai_mod, 'delete_action_item_vectors_batch', lambda *a, **kw: None)
+    monkeypatch.setattr(ai_mod, 'send_action_items_batch_deletion_message', lambda *a, **kw: None)
+    monkeypatch.setattr(ai_mod, '_wake_task_changes', lambda *a, **kw: None)
+
+    # 1,200 IDs should be split into 3 chunks: 500 + 500 + 200
+    big_ids = [f'task-{i}' for i in range(1200)]
+    result = ai_mod.batch_delete_action_items(ai_mod.BatchDeleteActionItemsRequest(ids=big_ids), uid='user-9')
+
+    assert len(preflight_chunks) == 3
+    assert len(preflight_chunks[0]) == 500
+    assert len(preflight_chunks[1]) == 500
+    assert len(preflight_chunks[2]) == 200
+    assert result['deleted_count'] == 1200

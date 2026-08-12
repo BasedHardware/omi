@@ -118,9 +118,14 @@ checks:
     reason: "the Stable manifest schema must keep admitting exactly one app artifact pair; a beta_zip_url re-entering it is how a beta build becomes describable as Stable"
   - id: desktop-release-doctor-v1
     command: ["python3", ".github/scripts/test_desktop_release_doctor.py"]
-    triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
+    triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/desktop_proactive_delivery_health.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
     lanes: ["local", "ci"]
     reason: "advisory desktop release evidence and drift report"
+  - id: desktop-proactive-delivery-health
+    command: ["python3", ".github/scripts/test_desktop_proactive_delivery_health.py"]
+    triggers: [".github/scripts/desktop_proactive_delivery_health.py", ".github/scripts/test_desktop_proactive_delivery_health.py", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/workflows/desktop_release_doctor.yml", "desktop/macos/docs/release-health-metrics.md", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PT24H Advice Generated users over macOS DAU must alarm on exact zero without treating low samples or broken collection as healthy"
   - id: desktop-beta-admission-firestore-contention
     command: ["bash", "backend/testing/desktop_beta_admission/run.sh"]
     triggers: ["backend/database/desktop_update_channels.py", "backend/testing/desktop_beta_admission/**", "package.json", "package-lock.json", ".github/checks-manifest.yaml"]

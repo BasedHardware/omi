@@ -14,7 +14,7 @@ from database.store import get_document_store
 from database.store.sentinels import Increment
 from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
-from utils.subscription import is_trial_paywalled
+from utils.subscription import enforce_chat_quota
 
 
 def _store():
@@ -143,11 +143,7 @@ async def _persist_session(uid: str, token: str, provider: str, model: str, expi
 
 @router.post("/v2/realtime/session")
 async def mint_session(request: MintRequest, uid: str = Depends(get_current_user_uid)) -> JSONResponse:
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
-        return JSONResponse(
-            status_code=402,
-            content={"error": "trial_expired", "message": "Desktop trial expired. Upgrade or bring your own keys."},
-        )
+    await run_blocking(db_executor, enforce_chat_quota, uid, "desktop")
     if request.provider == "openai":
         key = os.getenv("OPENAI_API_KEY", "").strip()
         if not key:
@@ -247,11 +243,7 @@ def _usage_cost(report: UsageReport) -> float:
 
 @router.post("/v2/realtime/usage", status_code=204)
 async def report_usage(report: UsageReport, uid: str = Depends(get_current_user_uid)) -> Response:
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
-        return JSONResponse(
-            status_code=402,
-            content={"error": "trial_expired", "message": "Desktop trial expired. Upgrade or bring your own keys."},
-        )
+    await run_blocking(db_executor, enforce_chat_quota, uid, "desktop")
     input_tokens = max(report.input_text_tokens, 0) + max(report.input_audio_tokens, 0)
     output_tokens = max(report.output_text_tokens, 0) + max(report.output_audio_tokens, 0)
     cached_tokens = max(report.input_cached_tokens, 0)
