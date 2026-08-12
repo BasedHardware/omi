@@ -1,16 +1,21 @@
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable, TypeVar, cast
+from uuid import uuid4
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownVariableType]
 
 from ._client import get_firestore_client
 
 LLM_OAUTH_PROVIDERS = frozenset({'chatgpt', 'grok'})
+_T = TypeVar('_T')
 
 
-def save_credential(uid: str, provider: str, credential: dict[str, Any], *, firestore_client: Any = None) -> None:
-    if provider not in LLM_OAUTH_PROVIDERS:
-        raise ValueError(f'Unsupported LLM OAuth provider: {provider}')
+def _typed_transactional(function: Callable[..., _T]) -> Callable[..., _T]:
+    return cast(Callable[..., _T], transactional(function))
+
+
+def _stored_credential(uid: str, credential: dict[str, Any], generation: str) -> dict[str, Any]:
     from utils import encryption
 
     access_token = credential.get('access_token')
@@ -22,13 +27,20 @@ def save_credential(uid: str, provider: str, credential: dict[str, Any], *, fire
         or not refresh_token.strip()
     ):
         raise ValueError('LLM OAuth credential requires access and refresh tokens')
-    stored = {
+    return {
         'access_token': encryption.encrypt(access_token, uid),
         'refresh_token': encryption.encrypt(refresh_token, uid),
         'expires_at': credential.get('expires_at'),
         'account_id': credential.get('account_id'),
+        'generation': generation,
         'updated_at': datetime.now(timezone.utc),
     }
+
+
+def save_credential(uid: str, provider: str, credential: dict[str, Any], *, firestore_client: Any = None) -> None:
+    if provider not in LLM_OAUTH_PROVIDERS:
+        raise ValueError(f'Unsupported LLM OAuth provider: {provider}')
+    stored = _stored_credential(uid, credential, uuid4().hex)
     client = firestore_client or get_firestore_client()
     client.collection('users').document(uid).set(
         {
@@ -61,7 +73,39 @@ def get_credential(uid: str, provider: str | None = None, *, firestore_client: A
         'refresh_token': encryption.decrypt(refresh_token, uid),
         'expires_at': stored.get('expires_at'),
         'account_id': stored.get('account_id'),
+        'generation': stored.get('generation'),
     }
+
+
+def save_refreshed_credential(
+    uid: str, provider: str, credential: dict[str, Any], generation: str, *, firestore_client: Any = None
+) -> bool:
+    if provider not in LLM_OAUTH_PROVIDERS:
+        raise ValueError(f'Unsupported LLM OAuth provider: {provider}')
+    if not generation:
+        return False
+    stored = _stored_credential(uid, credential, generation)
+    client = firestore_client or get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    transaction = client.transaction()
+
+    @_typed_transactional
+    def apply(write_transaction):
+        snapshot = user_ref.get(transaction=write_transaction)
+        data = snapshot.to_dict() or {}
+        current = (data.get('llm_oauth') or {}).get(provider)
+        if not isinstance(current, dict) or current.get('generation') != generation:
+            return False
+        write_transaction.update(
+            user_ref,
+            {
+                f'llm_oauth.{provider}': stored,
+                'byok.last_seen_at': datetime.now(timezone.utc),
+            },
+        )
+        return True
+
+    return bool(apply(transaction))
 
 
 def get_status(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:

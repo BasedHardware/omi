@@ -302,6 +302,38 @@ class TestBYOKFingerprintValidation:
         finally:
             _byok_ctx.reset(token)
 
+    def test_oauth_selection_defers_credential_fetch_to_the_route_task(self):
+        """validate_byok_request must not fetch the OAuth credential itself.
+
+        Credential fetching moved to the chat/listen route tasks
+        (desktop_chat._install_oauth_credential, ListenSessionRuntime): the
+        auth dependency runs on a worker thread via run_blocking, so a
+        credential stored here would land in the wrong context and miss the
+        event-loop task's reset in the middleware finally-block. Downstream
+        consumers (utils.llm.clients.get_llm) fetch lazily from the LLM
+        provider context instead.
+        """
+        from utils.byok import (
+            _byok_ctx,
+            _byok_llm_provider_ctx,
+            _byok_oauth_credential_ctx,
+            get_byok_oauth_credential,
+            validate_byok_request,
+        )
+
+        key_token = _byok_ctx.set({})
+        provider_token = _byok_llm_provider_ctx.set('chatgpt')
+        credential_token = _byok_oauth_credential_ctx.set(None)
+        try:
+            with patch('utils.llm.oauth.get_credential') as get_credential:
+                validate_byok_request('oauth-uid')
+            get_credential.assert_not_called()
+            assert get_byok_oauth_credential() is None
+        finally:
+            _byok_ctx.reset(key_token)
+            _byok_llm_provider_ctx.reset(provider_token)
+            _byok_oauth_credential_ctx.reset(credential_token)
+
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
     def test_header_for_unenrolled_provider_is_not_used(self, mock_get_state):
