@@ -101,17 +101,16 @@ def _is_raw_blob_method(node: ast.Call) -> bool:
 
 
 def _is_s3_client_construction(node: ast.Call) -> bool:
-    """``boto3.client('s3')`` / ``boto3.resource('s3')`` — the raw S3 client the s3 adapter wraps.
+    """A raw S3 client/resource: ``<x>.client('s3')`` / ``<x>.resource('s3')`` for ANY receiver.
 
-    Detected specifically (not a blanket boto3 ban) so unrelated AWS clients are not false positives.
-    The service name is read from the first positional arg or the ``service_name=`` keyword."""
+    Keyed on the ``'s3'`` service name (not a blanket boto3 ban) so unrelated AWS clients (sqs/sns/…)
+    are not false positives. The receiver is intentionally unconstrained — not just the literal
+    ``boto3`` — so an aliased ``import boto3 as b3``, a ``boto3.Session().client('s3')``, and a
+    ``session.client('s3')`` variable are all caught, closing the previous alias/Session bypass
+    (cubic review PR 10887). The service name is read from the first positional arg or the
+    ``service_name=`` keyword."""
     func = node.func
-    if not (
-        isinstance(func, ast.Attribute)
-        and func.attr in ('client', 'resource')
-        and isinstance(func.value, ast.Name)
-        and func.value.id == 'boto3'
-    ):
+    if not (isinstance(func, ast.Attribute) and func.attr in ('client', 'resource')):
         return False
     arg = node.args[0] if node.args else next((kw.value for kw in node.keywords if kw.arg == 'service_name'), None)
     return isinstance(arg, ast.Constant) and arg.value == 's3'

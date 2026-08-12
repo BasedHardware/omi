@@ -141,3 +141,19 @@ def test_load_baseline_rejects_boolean_counts(tmp_path):
     path.write_text(json.dumps({'backend/x.py': True}))
     with pytest.raises(ValueError):
         _MODULE.load_baseline(path)
+
+
+# --- S3 client alias/Session bypasses closed per cubic review PR 10887 ---
+
+
+def test_s3_client_via_boto3_alias_is_flagged():
+    assert _MODULE.count_boundary_violations("import boto3 as b3\nb3.client('s3')\n") == 1
+
+
+def test_s3_client_via_session_is_flagged():
+    assert _MODULE.count_boundary_violations("import boto3\nboto3.Session().client('s3')\n") == 1
+    assert _MODULE.count_boundary_violations("import boto3\ns = boto3.Session()\ns.client('s3')\n") == 1
+
+
+def test_non_s3_aws_client_is_not_flagged():
+    assert _MODULE.count_boundary_violations("import boto3\nboto3.client('sqs')\n") == 0
