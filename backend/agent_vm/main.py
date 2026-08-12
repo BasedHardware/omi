@@ -483,7 +483,7 @@ async def execute_backend_tool(name: str, params: dict[str, Any]) -> str:
 def read_only_sql_authorizer(
     action: int, arg1: str | None, arg2: str | None, dbname: str | None, source: str | None
 ) -> int:
-    if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION):
+    if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION, sqlite3.SQLITE_RECURSIVE):
         return sqlite3.SQLITE_OK
     if action == sqlite3.SQLITE_PRAGMA and arg1 is not None and arg1.casefold() == "data_version" and arg2 is None:
         return sqlite3.SQLITE_OK

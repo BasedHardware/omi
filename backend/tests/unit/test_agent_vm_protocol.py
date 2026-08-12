@@ -725,6 +725,7 @@ def test_execute_sql_clears_authorizer_after_error(tmp_path: Path) -> None:
         "DELETE FROM screenshots",
         "UPDATE screenshots SET id = 'changed'",
         "SELECT 1; DROP TABLE screenshots",
+        "SELECT * FROM pragma_journal_mode()",
     ],
 )
 def test_execute_sql_denies_destructive_queries(tmp_path: Path, query: str) -> None:
