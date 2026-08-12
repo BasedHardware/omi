@@ -110,7 +110,7 @@ actor AgentContextAdmissionGate {
     case .granted:
       return true
     case .cancelled:
-      finalizeCancelledWaiter(at: slotIndex)
+      finalizeCancelledWaiter(handle: handle)
       return false
     }
   }
