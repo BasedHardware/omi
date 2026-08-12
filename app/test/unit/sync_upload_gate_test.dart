@@ -97,8 +97,10 @@ void main() {
   });
 
   test('legacy unclassified rateLimit state never blocks admission or becomes fair use offline', () async {
-    SharedPreferencesUtil()
-        .saveInt('syncRateLimitedUntilMs', DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch);
+    SharedPreferencesUtil().saveInt(
+      'syncRateLimitedUntilMs',
+      DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+    );
     SharedPreferencesUtil().saveString('syncRateLimitedReason', 'rateLimit');
     var statusCalls = 0;
     var uploads = 0;
@@ -193,10 +195,7 @@ void main() {
       fairUseStatusLoader: () async => null,
       uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
         uploads++;
-        throw SyncRateLimitedException(
-          kind: SyncRateLimitKind.backendCapacity,
-          retryAfterSeconds: 40 * 24 * 60 * 60,
-        );
+        throw SyncRateLimitedException(kind: SyncRateLimitKind.backendCapacity, retryAfterSeconds: 40 * 24 * 60 * 60);
       },
     );
 

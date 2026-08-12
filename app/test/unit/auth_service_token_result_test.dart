@@ -300,25 +300,20 @@ AuthService _service(
   _FakeTokenGateway gateway, {
   AuthRefreshDelay? refreshDelay,
   AuthTelemetryRecorder? recordTelemetry,
-}) =>
-    AuthService.forTesting(
-      tokenGateway: gateway,
-      refreshDelay: refreshDelay ?? (_) async {},
-      recordTelemetry: recordTelemetry,
-      telemetryContextProvider: () => const {
-        'platform': 'ios',
-        'app_version': '1.2.3+456',
-        'release_channel': 'testflight',
-      },
-    );
+}) => AuthService.forTesting(
+  tokenGateway: gateway,
+  refreshDelay: refreshDelay ?? (_) async {},
+  recordTelemetry: recordTelemetry,
+  telemetryContextProvider: () => const {
+    'platform': 'ios',
+    'app_version': '1.2.3+456',
+    'release_channel': 'testflight',
+  },
+);
 
 final class _FakeTokenGateway implements AuthTokenGateway {
   _FakeTokenGateway({
-    this.user = const AuthUserSnapshot(
-      uid: 'user-1',
-      email: 'person@example.com',
-      displayName: 'Person Example',
-    ),
+    this.user = const AuthUserSnapshot(uid: 'user-1', email: 'person@example.com', displayName: 'Person Example'),
     this.results = const [],
     this.error,
     this.refreshCompleter,
