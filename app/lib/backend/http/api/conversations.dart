@@ -288,12 +288,14 @@ class TranscriptsResponse {
   List<TranscriptSegment> soniox;
   List<TranscriptSegment> whisperx;
   List<TranscriptSegment> speechmatics;
+  List<TranscriptSegment> prerecorded;
 
   TranscriptsResponse({
     this.deepgram = const [],
     this.soniox = const [],
     this.whisperx = const [],
     this.speechmatics = const [],
+    this.prerecorded = const [],
   });
 
   factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
@@ -318,6 +320,7 @@ class TranscriptsResponse {
       soniox: readSegments('soniox'),
       whisperx: readSegments('whisperx'),
       speechmatics: readSegments('speechmatics'),
+      prerecorded: readSegments('prerecorded'),
     );
   }
 }
