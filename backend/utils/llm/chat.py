@@ -43,7 +43,7 @@ def normalize_filter(value: str) -> str:
     value = re.sub(r'\s+', ' ', value)
 
     # Remove common filler words
-    filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
+    filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'of'}
     value = ' '.join(word for word in value.split() if word not in filler_words)
 
     # Standardize common variations
@@ -1252,7 +1252,7 @@ def retrieve_metadata_from_message(
     prompt = f'''
     You will be given the content of a message or conversation {source_context}.
 
-    Your task is to extract the most accurate information from the message in the output object indicated below.
+    Your task is to extract the most accurate information from the message in the output object indicated below. Use a maximum of 2 words per item to have more standardization possibilities.
 
     Focus on identifying:
     1. People mentioned in the message (sender, recipients, and anyone referenced)
