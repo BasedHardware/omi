@@ -52,7 +52,6 @@ trap 'rm -f "$FILES_TO_SYNC"; cleanup' EXIT
   find desktop/macos/Desktop/Sources -type f \
     \( -name 'Onboarding*.swift' \
     -o -name 'PostOnboardingPromptViews.swift' \
-    -o -path 'desktop/macos/Desktop/Sources/FileIndexing/OnboardingLoadingAnimation.swift' \
     -o -path 'desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift' \
     -o -path 'desktop/macos/Desktop/Sources/Theme/OmiColors.swift' \) \
     | sort

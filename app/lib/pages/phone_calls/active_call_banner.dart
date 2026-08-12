@@ -20,7 +20,8 @@ class ActiveCallBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
-        bool isCallInProgress = provider.callState == PhoneCallState.active ||
+        bool isCallInProgress =
+            provider.callState == PhoneCallState.active ||
             provider.callState == PhoneCallState.connecting ||
             provider.callState == PhoneCallState.ringing;
 
@@ -311,17 +312,14 @@ class ActiveCallTopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
-        bool isCallInProgress = provider.callState == PhoneCallState.active ||
+        bool isCallInProgress =
+            provider.callState == PhoneCallState.active ||
             provider.callState == PhoneCallState.connecting ||
             provider.callState == PhoneCallState.ringing;
 
         if (!isCallInProgress) return const SizedBox.shrink();
 
-        String twoDigits(int n) => n.toString().padLeft(2, '0');
-        Duration d = provider.callDuration;
-        String timeStr = d.inHours > 0
-            ? '${twoDigits(d.inHours)}:${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}'
-            : '${twoDigits(d.inMinutes)}:${twoDigits(d.inSeconds.remainder(60))}';
+        String timeStr = formatPhoneCallDuration(provider.callDuration);
 
         String displayName = provider.contactName ?? provider.remoteNumber ?? '';
 
