@@ -122,5 +122,9 @@ def get_credential(uid: str, provider: str | None = None) -> dict[str, Any] | No
     if not isinstance(payload, dict):
         raise LLMOAuthError('Provider returned an invalid refresh response')
     refreshed = _credential(credential_provider, payload, credential['refresh_token'])
-    llm_oauth_db.save_credential(uid, credential_provider, refreshed)
+    generation = credential.get('generation')
+    if not isinstance(generation, str) or not llm_oauth_db.save_refreshed_credential(
+        uid, credential_provider, refreshed, generation
+    ):
+        return None
     return {'provider': credential_provider, **refreshed}

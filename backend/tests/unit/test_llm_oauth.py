@@ -4,6 +4,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from database import llm_oauth as llm_oauth_db
+from utils import encryption
 from utils.llm import clients
 from utils.llm import oauth
 from utils.llm.clients import _create_llm_oauth_client
@@ -53,15 +55,73 @@ def test_expired_credential_refreshes_and_persists_the_replacement():
         'refresh_token': 'refresh-1',
         'expires_at': 0,
         'account_id': None,
+        'generation': 'generation-1',
     }
     with patch.object(oauth.llm_oauth_db, 'get_credential', return_value=stored), patch.object(
-        oauth.llm_oauth_db, 'save_credential'
+        oauth.llm_oauth_db, 'save_refreshed_credential', return_value=True
     ) as save, patch.object(oauth.httpx, 'post', return_value=response) as post:
         credential = oauth.get_credential('user-1')
     assert credential is not None
     assert credential['access_token'] == 'access-2'
     assert post.call_args.kwargs['data']['grant_type'] == 'refresh_token'
     save.assert_called_once()
+
+
+def test_refresh_does_not_restore_a_credential_disconnected_during_the_provider_request():
+    response = Mock(status_code=200)
+    response.json.return_value = {'access_token': 'access-2', 'refresh_token': 'refresh-2', 'expires_in': 3600}
+    stored = {
+        'provider': 'grok',
+        'access_token': 'access-1',
+        'refresh_token': 'refresh-1',
+        'expires_at': 0,
+        'account_id': None,
+        'generation': 'generation-1',
+    }
+    with patch.object(oauth.llm_oauth_db, 'get_credential', return_value=stored), patch.object(
+        oauth.llm_oauth_db, 'save_refreshed_credential', return_value=False
+    ) as save, patch.object(oauth.httpx, 'post', return_value=response):
+        assert oauth.get_credential('user-1') is None
+    save.assert_called_once()
+
+
+def test_conditional_refresh_write_leaves_a_disconnected_credential_deleted():
+    class Snapshot:
+        def to_dict(self):
+            return {'llm_oauth': {}}
+
+    class UserRef:
+        def get(self, transaction):
+            return Snapshot()
+
+    class Transaction:
+        updates: list[dict] = []
+
+        def update(self, _ref, update):
+            self.updates.append(update)
+
+    class Client:
+        def __init__(self):
+            self.transaction_instance = Transaction()
+
+        def collection(self, _name):
+            return self
+
+        def document(self, _uid):
+            return UserRef()
+
+        def transaction(self):
+            return self.transaction_instance
+
+    client = Client()
+    credential = {'access_token': 'access-2', 'refresh_token': 'refresh-2', 'expires_at': 4_000_000_000}
+    with patch.object(llm_oauth_db, 'transactional', side_effect=lambda apply: apply), patch.object(
+        encryption, 'encrypt', side_effect=lambda value, _uid: f'encrypted:{value}'
+    ):
+        assert not llm_oauth_db.save_refreshed_credential(
+            'user-1', 'grok', credential, 'generation-1', firestore_client=client
+        )
+    assert client.transaction_instance.updates == []
 
 
 def test_unexpired_credential_does_not_refresh():
