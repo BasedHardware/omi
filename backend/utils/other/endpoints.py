@@ -563,6 +563,10 @@ def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False
         )
 
 
+def enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False) -> None:
+    _enforce_rate_limit(key, policy_name, fail_closed=fail_closed)
+
+
 def rate_limit_key_for_context(auth_context: Any) -> str:
     """Return the narrowest stable rate-limit subject for an auth context."""
     app_id = getattr(auth_context, 'app_id', None)
