@@ -102,6 +102,11 @@ jobs:
           npm ci
           npm run build
 
+      - name: Test SEO serializer
+        if: needs.changes.outputs.has_web_app == 'true'
+        working-directory: ./web/app
+        run: npm run test:seo
+
       - name: Build Admin Dashboard
         if: needs.changes.outputs.has_admin == 'true'
         working-directory: ./web/admin
