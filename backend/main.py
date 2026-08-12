@@ -81,6 +81,7 @@ from routers import (
     desktop_screen_crisp,
     referrals,
     desktop_tts_updates,
+    llm_oauth,
     scores,
     stt,
     tts,
@@ -182,6 +183,7 @@ app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
 app.include_router(referrals.router)
+app.include_router(llm_oauth.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 
