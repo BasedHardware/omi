@@ -1027,6 +1027,12 @@ export interface ColdStartSequenceTerminalReceipt {
   terminal_state: "completed" | "abandoned";
 }
 
+export interface CompletionRequest {
+  code: string;
+  code_verifier: string;
+  redirect_uri: string;
+}
+
 export interface ConnectorSynthesisRequest {
   existing_memories?: Array<string>;
   items: Array<string>;
@@ -3987,6 +3993,11 @@ export interface WrappedStatusResponse {
   year?: number;
 }
 
+export interface routers__llm_oauth__StatusResponse {
+  connected: Array<string>;
+  selected_provider: string | null;
+}
+
 export interface routers__memories__BatchMemoriesRequest {
   memories: Array<Memory>;
 }
@@ -4149,6 +4160,7 @@ export interface OmiApiSchemas {
   "ClickUpTeamsResponse": ClickUpTeamsResponse;
   "ColdStartSequence": ColdStartSequence;
   "ColdStartSequenceTerminalReceipt": ColdStartSequenceTerminalReceipt;
+  "CompletionRequest": CompletionRequest;
   "ConnectorSynthesisRequest": ConnectorSynthesisRequest;
   "ConnectorSynthesisResponse": ConnectorSynthesisResponse;
   "ConnectorSynthesisTask": ConnectorSynthesisTask;
@@ -4559,6 +4571,7 @@ export interface OmiApiSchemas {
   "WorkstreamStatus": WorkstreamStatus;
   "WorkstreamUpdate": WorkstreamUpdate;
   "WrappedStatusResponse": WrappedStatusResponse;
+  "routers__llm_oauth__StatusResponse": routers__llm_oauth__StatusResponse;
   "routers__memories__BatchMemoriesRequest": routers__memories__BatchMemoriesRequest;
   "routers__memories__BatchMemoriesResponse": routers__memories__BatchMemoriesResponse;
   "routers__payment__PricingOption": routers__payment__PricingOption;
@@ -7683,6 +7696,35 @@ export interface OmiApiPaths {
       responses: {
         "200": BYOKActiveResponse;
         "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/llm-oauth": {
+    get: {
+      operationId: "get_status_v1_users_me_llm_oauth_get";
+      responses: {
+        "200": routers__llm_oauth__StatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/me/llm-oauth/{provider}": {
+    post: {
+      operationId: "complete_v1_users_me_llm_oauth__provider__post";
+      responses: {
+        "200": routers__llm_oauth__StatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_v1_users_me_llm_oauth__provider__delete";
+      responses: {
+        "200": routers__llm_oauth__StatusResponse;
+        "401": void;
+        "404": void;
         "422": HTTPValidationError;
       };
     };
@@ -14622,6 +14664,65 @@ export async function deactivate_byok_endpoint_v1_users_me_byok_active_delete(he
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_status_v1_users_me_llm_oauth_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<routers__llm_oauth__StatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/me/llm-oauth`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function complete_v1_users_me_llm_oauth__provider__post(path: { provider: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CompletionRequest, init?: OmiApiClientInit): Promise<routers__llm_oauth__StatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/me/llm-oauth/${path.provider}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function delete_v1_users_me_llm_oauth__provider__delete(path: { provider: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<routers__llm_oauth__StatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/me/llm-oauth/${path.provider}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_llm_usage_v1_users_me_llm_usage_get(query: { days?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<LlmUsageResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/me/llm-usage`;
@@ -16462,4 +16563,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 399 client methods generated.
+// Total: 402 client methods generated.
