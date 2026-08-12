@@ -382,10 +382,12 @@ enum ContextBucketPurger {
           sql: "DELETE FROM proactive_deliveries WHERE bucketID = ?", arguments: [bucketID])
         // Recompute visit metadata from surviving completed visits so the
         // bucket no longer reports deleted activity as recent or count it.
-        let survivingCount = try (Int.fetchOne(
-          db,
-          sql: "SELECT COUNT(*) FROM context_visits WHERE bucketID = ? AND outcome = 'completed'",
-          arguments: [bucketID]) ?? 0)
+        let survivingCount =
+          try
+          (Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) FROM context_visits WHERE bucketID = ? AND outcome = 'completed'",
+            arguments: [bucketID]) ?? 0)
         if survivingCount == 0 {
           try db.execute(
             sql: "DELETE FROM context_buckets WHERE id = ?", arguments: [bucketID])

@@ -135,7 +135,7 @@ private struct SuggestedCandidateCard: View {
     isBusy: Bool,
     onDoNow: @escaping (String?) async -> Void,
     onLater: @escaping () async -> Void,
-    onDismiss: @escaping () async -> Void
+    onDismiss: @escaping (OmiAPI.TaskIntelligenceFeedbackReason?) async -> Void
   ) {
     self.candidate = candidate
     self.isBusy = isBusy
