@@ -1,8 +1,8 @@
 # Query-evaluation composition-root contract
 
-Status: P5 production-neutral composition root plus real PostgreSQL query-input,
-authorized-graph, result/pair, and grounding adapters, 2026-08-12; concrete
-one-shot composition and activation absent
+Status: P5 production-neutral composition root plus real-PostgreSQL-qualified
+route-free one-shot assembly over query-input, authorized-graph, result/pair,
+and grounding adapters, 2026-08-12; activation absent
 
 ## Purpose
 
@@ -120,6 +120,8 @@ occupied fixed-port dev-server test remained excluded.
 - query input, exact authorized graph source, result, pair, and atomic
   result-plus-grounding PostgreSQL adapters are landed and real-database
   qualified but remain route-free and inactive;
+- one driver-level one-shot runtime reuses this registered root and exposes only
+  explicit input-stage and paired-run operations;
 - no production codec root, model credential, API-key scheduler, worker, route,
   grant, cache, Listen mapping, deployment, or traffic;
 - no statistics, contamination conclusion, blind sheet, human grading request,

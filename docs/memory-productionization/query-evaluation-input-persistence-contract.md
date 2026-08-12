@@ -72,5 +72,5 @@ the labelled synthetic volume is preserved.
 - no blind grading, statistics conclusion, promotion, or cohort decision;
 - no `subject:*`, bystander/privacy, identity authority, compose voice, or data
   disposition change;
-- no claim that the still-inert end-to-end PostgreSQL query runtime has been
-  composed or that assertion-local evidence has been human-graded.
+- the route-free one-shot runtime is composed and real-database qualified, but
+  no assertion-local evidence has been human-graded.

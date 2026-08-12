@@ -11,8 +11,6 @@ import {
   type ProductProjectionWriteBody,
 } from "../../apps/service/stores/product-projection-repository";
 import { defineMemoryEvaluationEvidenceSource } from "../../apps/service/stores/memory-evaluation-evidence-source";
-import { materializeMemoryQueryEvaluationInput } from
-  "../../apps/service/stores/memory-query-evaluation-input-repository";
 import { materializeFinalizedMemoryReadGrounding } from "../../apps/service/stores/memory-read-grounding-repository";
 import {
   materializeMemoryEvaluationResult,
@@ -112,6 +110,8 @@ import {
   createPostgresMemoryQueryEvaluationGraphSource,
   createPostgresMemoryQueryEvaluationInputRepository,
 } from "./memory-query-evaluation-source";
+import { createPostgresMemoryQueryEvaluationOneShotRuntime } from
+  "./memory-query-evaluation-one-shot-runtime";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
@@ -3276,13 +3276,18 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const groundings = createPostgresMemoryReadGroundingRepository({ pool: appRolePool });
     const graphRepository = createPostgresAuthoritativeGraphSnapshotRepository({ pool: appRolePool });
     const graphSnapshot = await graphRepository.load(context);
-    const queryInput = materializeMemoryQueryEvaluationInput(context, {
-      input_ref: `mqir1_${sha256CanonicalContent({ suffix, query: 1 })}`,
-      query_text: "Where do I work?", account_timezone: "UTC", graph_snapshot: graphSnapshot,
+    const queryRuntime = createPostgresMemoryQueryEvaluationOneShotRuntime({
+      pool: appRolePool, codec_root_secret: new Uint8Array(32).fill(8),
+      produce: async () => { throw new Error("empty_projection_must_not_call_model"); },
     });
+    const stagedQueryInput = await queryRuntime.stageInput(context, {
+      input_ref: `mqir1_${sha256CanonicalContent({ suffix, query: 1 })}`,
+      query_text: "Where do I work?", account_timezone: "UTC",
+    });
+    if (stagedQueryInput.kind !== "staged") throw new Error("qualification query input not staged");
+    const queryInput = stagedQueryInput.input;
     const queryInputs = createPostgresMemoryQueryEvaluationInputRepository({ pool: appRolePool });
     const queryGraphSource = createPostgresMemoryQueryEvaluationGraphSource({ pool: appRolePool });
-    await expect(queryInputs.stage(context, queryInput)).resolves.toEqual({ kind: "staged", input: queryInput });
     await expect(queryInputs.stage(context, queryInput)).resolves.toEqual({ kind: "replayed", input: queryInput });
     const restartedQueryInputs = createPostgresMemoryQueryEvaluationInputRepository({ pool: appRolePool });
     await expect(restartedQueryInputs.load(context, queryInput.source_ref)).resolves.toEqual({
@@ -3297,6 +3302,32 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       query_text: queryInput.query_text, account_timezone: queryInput.account_timezone,
       graph_snapshot: graphSnapshot,
     });
+    const queryRunRequest = Object.freeze({
+      assignment_bundle: assignment,
+      evaluation_run_id: `mer1_${sha256CanonicalContent({ suffix, run: "postgres-query" })}`,
+      source_request: Object.freeze({
+        source_kind: "authorized_graph_snapshot" as const,
+        source_ref: queryInput.source_ref,
+        input_frontier: queryInput.input_frontier,
+      }),
+      repeats: 1,
+    });
+    const firstQueryRun = await queryRuntime.run(context, queryRunRequest);
+    expect(firstQueryRun).toMatchObject({
+      kind: "completed", observed_model_calls: 0, staged_results: 2,
+      replayed_results: 0, recorded_pairs: 1, replayed_pairs: 0,
+    });
+    expect(firstQueryRun.pair_receipts).toHaveLength(1);
+    const restartedQueryRuntime = createPostgresMemoryQueryEvaluationOneShotRuntime({
+      pool: appRolePool, codec_root_secret: new Uint8Array(32).fill(8),
+      produce: async () => { throw new Error("replay_must_not_call_model"); },
+    });
+    const replayedQueryRun = await restartedQueryRuntime.run(context, queryRunRequest);
+    expect(replayedQueryRun).toMatchObject({
+      kind: "completed", observed_model_calls: 0, staged_results: 0,
+      replayed_results: 2, recorded_pairs: 0, replayed_pairs: 1,
+    });
+    expect(replayedQueryRun.pair_receipts).toEqual(firstQueryRun.pair_receipts);
     const baselineRequest = stageRequest("baseline");
     const candidateRequest = stageRequest("candidate");
     const baselineResult = materializeMemoryEvaluationResult(context, baselineRequest);
@@ -3341,8 +3372,8 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
        WHERE table_schema = 'omi_memory' AND table_name = 'memory_strategy_evaluation_pairs'
          AND data_type IN ('json', 'jsonb')) AS pair_json_columns`, [accountId]);
     expect([...persisted]).toEqual([{
-      baselines: 1, candidates: 1, pairs: 1,
-      baseline_groundings: 1, candidate_groundings: 1, query_inputs: 1, pair_json_columns: 0,
+      baselines: 2, candidates: 2, pairs: 2,
+      baseline_groundings: 2, candidate_groundings: 2, query_inputs: 1, pair_json_columns: 0,
     }]);
 
     const rollbackPolicy = defineMemoryStrategyAssignmentPolicy({

@@ -1,8 +1,8 @@
 # Owner-projected query source contract
 
-Status: P5 production-neutral source adapter plus exact PostgreSQL query-input
-and authoritative-graph loader, 2026-08-12; production codec secret, concrete
-one-shot composition, and activation absent
+Status: P5 production-neutral source adapter plus exact PostgreSQL query-input,
+authoritative-graph loader, and route-free one-shot composition, 2026-08-12;
+production codec secret and activation absent
 
 ## Purpose
 
