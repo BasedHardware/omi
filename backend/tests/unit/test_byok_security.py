@@ -688,21 +688,20 @@ class TestCacheRouting:
         assert isinstance(client, stub_client)
         assert client.model_name == 'gpt-4.1-mini'
 
-    def test_openrouter_gemini_byok_routes_to_gemini_direct(self, monkeypatch):
-        """OpenRouter BYOK for Gemini models reroutes to Gemini direct endpoint."""
-        from utils.llm.clients import _GEMINI_OPENAI_BASE_URL
+    def test_openrouter_gemini_byok_routes_through_openrouter(self, monkeypatch):
+        """OpenRouter BYOK keeps Gemini models on the OpenRouter endpoint."""
 
         clients, stub_client, _constructor = self._stub_openai_constructor(monkeypatch)
 
         client = clients._create_byok_client('gemini-3-flash-preview', 'openrouter', 'AIza-byok-key')
         assert isinstance(client, stub_client)
-        # Must use Gemini base URL, not OpenRouter
+        # Must use OpenRouter's compatible endpoint.
         assert client.openai_api_base == 'https://openrouter.ai/api/v1'
-        # Must use the bare model name for Gemini direct API
+        # OpenRouter requires its Google model namespace.
         assert client.model_name == 'google/gemini-3-flash-preview'
 
-    def test_non_gemini_openrouter_returns_none(self):
-        """Non-Gemini OpenRouter models have no BYOK support — returns None."""
+    def test_non_gemini_openrouter_creates_client(self):
+        """OpenRouter BYOK supports non-Gemini models through its compatible API."""
         from utils.llm.clients import _create_byok_client
 
         result = _create_byok_client('anthropic/claude-3.5-sonnet', 'openrouter', 'sk-or-key')
@@ -1162,7 +1161,7 @@ class TestWSAuthDependencyBYOK:
         return ws
 
     @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
-    @patch('utils.other.endpoints.validate_byok_websocket', return_value=None)
+    @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({'openai': 'sk-test'}, None))
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
     def test_ws_listen_with_byok_headers_validates(self, _mock_auth, mock_validate, _mock_deletion):
         import asyncio
@@ -1171,10 +1170,10 @@ class TestWSAuthDependencyBYOK:
         ws = self._make_ws({'x-byok-openai': 'sk-test'})
         uid = asyncio.run(get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok'))
         assert uid == 'ws-uid'
-        mock_validate.assert_called_once_with('ws-uid')
+        mock_validate.assert_called_once_with('ws-uid', {'openai': 'sk-test'})
 
     @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
-    @patch('utils.other.endpoints.validate_byok_websocket', return_value=None)
+    @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({}, None))
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
     def test_ws_listen_no_headers_passes(self, _mock_auth, mock_validate, _mock_deletion):
         import asyncio
@@ -1183,10 +1182,10 @@ class TestWSAuthDependencyBYOK:
         ws = self._make_ws({})
         uid = asyncio.run(get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok'))
         assert uid == 'ws-uid'
-        mock_validate.assert_called_once()
+        mock_validate.assert_called_once_with('ws-uid', {})
 
     @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
-    @patch('utils.other.endpoints.validate_byok_websocket', return_value='fingerprint mismatch')
+    @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({}, 'fingerprint mismatch'))
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
     def test_ws_listen_validation_failure_raises_4003(self, _mock_auth, _mock_validate, _mock_deletion):
         import asyncio
@@ -1197,6 +1196,23 @@ class TestWSAuthDependencyBYOK:
         with pytest.raises(WebSocketException) as exc_info:
             asyncio.run(get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok'))
         assert exc_info.value.code == 4003
+
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
+    @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({'openai': 'sk-good'}, None))
+    @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
+    def test_ws_listen_installs_only_validated_byok_keys(self, _mock_auth, _mock_validate, _mock_deletion):
+        import asyncio
+        from utils.byok import get_byok_keys, has_validated_byok_keys
+        from utils.other.endpoints import get_current_user_uid_ws_listen
+
+        ws = self._make_ws({'x-byok-openai': 'sk-good', 'x-byok-deepgram': 'rejected'})
+
+        async def authenticate_and_assert_context():
+            await get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok')
+            assert get_byok_keys() == {'openai': 'sk-good'}
+            assert has_validated_byok_keys()
+
+        asyncio.run(authenticate_and_assert_context())
 
 
 class TestActivationCacheInvalidation:
