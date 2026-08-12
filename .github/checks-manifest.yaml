@@ -220,6 +220,16 @@ checks:
     triggers: ["desktop/macos/**"]
     lanes: ["local", "ci"]
     reason: "desktop files changed"
+  - id: analytics-reachability
+    command: ["python3", ".github/scripts/check_analytics_reachability.py"]
+    triggers: ["app/lib/**/*.dart", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/windows/src/renderer/src/**/*.ts", "desktop/windows/src/renderer/src/**/*.tsx", ".github/scripts/check_analytics_reachability.py", ".github/scripts/analytics_reachability_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "static tripwire: 02524b7c0b orphaned the reactive Device Connected emitter and made the primary pendant denominator disappear"
+  - id: analytics-reachability-tests
+    command: ["python3", ".github/scripts/test_check_analytics_reachability.py"]
+    triggers: [".github/scripts/check_analytics_reachability.py", ".github/scripts/test_check_analytics_reachability.py", ".github/scripts/analytics_reachability_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the lexical analytics tripwire must ignore comments and strings while catching call-site count loss, empty methods, and unreachable helpers"
   - id: omi-macos-dev-cli
     command: ["bash", "desktop/macos/tests/test-omi-macos-dev.sh"]
     triggers: ["desktop/macos/scripts/omi-macos-dev", "desktop/macos/scripts/cleanup-omi-tcc.sh", "desktop/macos/tests/test-omi-macos-dev.sh", "desktop/macos/tests/test-cleanup-omi-tcc.sh"]

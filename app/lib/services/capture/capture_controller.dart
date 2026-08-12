@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -47,6 +46,7 @@ import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/app_globals.dart';
 
 import 'package:omi/backend/schema/message_event.dart'
@@ -62,6 +62,23 @@ import 'package:omi/backend/schema/message_event.dart'
         PhotoDescribedEvent,
         FreemiumThresholdReachedEvent,
         SegmentsDeletedEvent;
+
+const Set<String> _liveTranscriptionErrorCodes = {
+  'expected_silence',
+  'empty_unexpected',
+  'timeout',
+  'upstream_error',
+  'config_error',
+  'invalid_input',
+};
+
+const Set<String> _liveTranscriptionProviders = {'deepgram', 'modulate', 'parakeet'};
+
+String _boundedLiveTranscriptionErrorCode(String? outcome) =>
+    _liveTranscriptionErrorCodes.contains(outcome) ? outcome! : 'stt_failed';
+
+String? _boundedLiveTranscriptionProvider(String? provider) =>
+    _liveTranscriptionProviders.contains(provider) ? provider : null;
 
 class CaptureController extends ChangeNotifier
     with MessageNotifierMixin
@@ -117,6 +134,7 @@ class CaptureController extends ChangeNotifier
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
   MessageServiceStatusEvent? _terminalTranscriptionFailure;
   MessageServiceStatusEvent? get terminalTranscriptionFailure => _terminalTranscriptionFailure;
+  bool _transcriptionErrorRecorded = false;
 
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
   bool _phoneMicWalActive = false;
@@ -274,6 +292,24 @@ class CaptureController extends ChangeNotifier
 
   String? _getConversationSourceFromDevice() {
     return conversationSourceForDeviceType(_recordingDevice?.type);
+  }
+
+  String get _analyticsTranscriptionSource =>
+      _socket?.source ?? _getConversationSourceFromDevice() ?? ConversationSource.phone.name;
+
+  void _recordTranscriptionError({
+    required String errorCode,
+    String? provider,
+    bool? retryable,
+  }) {
+    if (_transcriptionErrorRecorded) return;
+    _transcriptionErrorRecorded = true;
+    PlatformManager.instance.analytics.transcriptionError(
+      source: _analyticsTranscriptionSource,
+      errorCode: errorCode,
+      provider: provider,
+      retryable: retryable,
+    );
   }
 
   ServerConversation? _conversation;
@@ -1634,6 +1670,9 @@ class CaptureController extends ChangeNotifier
   void onError(Object err) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
+    // Exceptions can contain URLs, provider responses, or user data. Record only
+    // the bounded failure class, once per failed socket lifecycle.
+    _recordTranscriptionError(errorCode: 'socket_error', retryable: true);
 
     notifyListeners();
     _startKeepAliveServices();
@@ -1642,6 +1681,7 @@ class CaptureController extends ChangeNotifier
   @override
   void onConnected() {
     _transcriptServiceReady = true;
+    _transcriptionErrorRecorded = false;
     // Restart mic on reconnect if interrupted (skip during active call).
     if (recordingState == RecordingState.interrupted && !_micInterrupted) {
       if (_activeSource is PhoneMicSource) {
@@ -1851,8 +1891,14 @@ class CaptureController extends ChangeNotifier
       // list so the user can see the outage while the reconnect loop runs.
       if (event.status == 'stt_failed') {
         _terminalTranscriptionFailure = event;
+        _recordTranscriptionError(
+          errorCode: _boundedLiveTranscriptionErrorCode(event.outcome),
+          provider: _boundedLiveTranscriptionProvider(event.provider),
+          retryable: event.retryable,
+        );
       } else if (event.status == 'ready') {
         _terminalTranscriptionFailure = null;
+        _transcriptionErrorRecorded = false;
       }
 
       _transcriptionServiceStatuses.add(event);

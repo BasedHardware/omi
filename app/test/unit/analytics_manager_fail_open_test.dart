@@ -46,6 +46,29 @@ void main() {
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
   });
 
+  test('every event receives bootstrap-owned platform and release context', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    AnalyticsManager.configureEventContext({
+      'platform': 'android',
+      'app_version': '1.2.3',
+      'app_build': '456',
+      'release_channel': 'production',
+    });
+    await AnalyticsManager.init();
+
+    AnalyticsManager().track('Context Event', properties: {'platform': 'incorrect', 'feature': 'capture'});
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events.single.properties, {
+      'platform': 'android',
+      'feature': 'capture',
+      'app_version': '1.2.3',
+      'app_build': '456',
+      'release_channel': 'production',
+    });
+  });
+
   test('page opens register context for native interaction events', () async {
     final adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);

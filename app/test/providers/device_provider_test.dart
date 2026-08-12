@@ -97,7 +97,7 @@ void main() {
     }
   });
 
-  test('non-null to null transition emits one truthful Device Session Ended', () async {
+  test('non-null to null transition emits one bounded disconnect and session end', () async {
     SharedPreferences.setMockInitialValues({'uid': 'session-user'});
     await SharedPreferencesUtil.init();
     final analytics = _TestAnalyticsAdapter();
@@ -116,7 +116,7 @@ void main() {
             connectionDurationMs: 1250,
             appState: 'foreground',
             timeToReconnectMs: 0,
-            rssiTrend: 'falling',
+            rssiTrend: 'fading',
           ),
         ],
         reconnectionCount: 0,
@@ -139,6 +139,21 @@ void main() {
     await provider.setConnectedDevice(null);
     await AnalyticsManager.flushPending(force: true);
 
+    final disconnectEvents = [
+      for (var i = 0; i < analytics.events.length; i++)
+        if (analytics.events[i] == 'Device Disconnected') analytics.eventProperties[i],
+    ];
+    expect(disconnectEvents, hasLength(1));
+    expect(disconnectEvents.single, containsPair('connection_duration_seconds', 1.25));
+    expect(disconnectEvents.single, containsPair('disconnect_type', 'unexpected'));
+    expect(disconnectEvents.single, containsPair('reason', 'connection_timeout'));
+    expect(disconnectEvents.single, containsPair('hci_reason_code', 8));
+    expect(disconnectEvents.single, containsPair('app_state', 'foreground'));
+    expect(disconnectEvents.single, containsPair('last_rssi', -82));
+    expect(disconnectEvents.single, containsPair('rssi_trend', 'fading'));
+    expect(disconnectEvents.single, isNot(contains('id')));
+    expect(disconnectEvents.single, isNot(contains('name')));
+
     final sessionEvents = [
       for (var i = 0; i < analytics.events.length; i++)
         if (analytics.events[i] == 'Device Session Ended') analytics.eventProperties[i],
@@ -151,6 +166,96 @@ void main() {
     expect(sessionEvents.single, containsPair('model', 'Omi DevKit 2'));
     expect(sessionEvents.single, containsPair('firmware_revision', '3.0.20'));
     expect(sessionEvents.single, isNot(contains('reconnect_attempt_count')));
+  });
+
+  test('missing native diagnostics still emits one sanitized disconnect and session end', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'diagnostics-error-user'});
+    await SharedPreferencesUtil.init();
+    final analytics = _TestAnalyticsAdapter();
+    AnalyticsManager.configure(analytics);
+    await AnalyticsManager.init();
+    final provider = DeviceProvider(bleDiagnosticsLoader: (_) async => throw StateError('private native details'));
+    addTearDown(provider.dispose);
+    final device = BtDevice(
+      id: 'AA:AA:AA:AA:AA:04',
+      name: 'Private device name',
+      type: DeviceType.omi,
+      rssi: -50,
+      modelNumber: 'Omi DevKit 2',
+      firmwareRevision: '3.0.20',
+    );
+
+    await provider.setConnectedDevice(device);
+    await provider.setConnectedDevice(null);
+    await provider.setConnectedDevice(null);
+    await AnalyticsManager.flushPending(force: true);
+
+    final disconnectEvents = [
+      for (var i = 0; i < analytics.events.length; i++)
+        if (analytics.events[i] == 'Device Disconnected') analytics.eventProperties[i],
+    ];
+    expect(disconnectEvents, hasLength(1));
+    expect(disconnectEvents.single, containsPair('disconnect_type', 'unknown'));
+    expect(disconnectEvents.single, containsPair('reason', 'unknown'));
+    expect(disconnectEvents.single, containsPair('app_state', 'unknown'));
+    expect(disconnectEvents.single, containsPair('rssi_trend', 'unknown'));
+    expect(disconnectEvents.single, isNot(contains('hci_reason_code')));
+    expect(disconnectEvents.single, isNot(contains('last_rssi')));
+    expect(disconnectEvents.single.values, isNot(contains('private native details')));
+    expect(analytics.events.where((event) => event == 'Device Session Ended'), hasLength(1));
+  });
+
+  test('native disconnect diagnostics are constrained to closed analytics values', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'sanitized-diagnostics-user'});
+    await SharedPreferencesUtil.init();
+    final analytics = _TestAnalyticsAdapter();
+    AnalyticsManager.configure(analytics);
+    await AnalyticsManager.init();
+    final provider = DeviceProvider(
+      bleDiagnosticsLoader: (_) async => BleDeviceDiagnostics(
+        disconnectHistory: [
+          BleDisconnectEvent(
+            timestamp: DateTime.now().millisecondsSinceEpoch,
+            reason: 'private native error details',
+            reasonCode: 9001,
+            isManual: false,
+            eventType: 'fail_to_connect',
+            lastRssi: 42,
+            connectionDurationMs: 0,
+            appState: 'private_state',
+            timeToReconnectMs: 0,
+            rssiTrend: 'private_trend',
+          ),
+        ],
+        reconnectionCount: 0,
+        connectedAt: 0,
+        failToConnectCount: 1,
+      ),
+    );
+    addTearDown(provider.dispose);
+    final device = BtDevice(
+      id: 'AA:AA:AA:AA:AA:05',
+      name: 'Private device name',
+      type: DeviceType.omi,
+      rssi: -50,
+      firmwareRevision: '3.0.20',
+    );
+
+    await provider.setConnectedDevice(device);
+    await provider.setConnectedDevice(null);
+    await AnalyticsManager.flushPending(force: true);
+
+    final disconnectIndex = analytics.events.indexOf('Device Disconnected');
+    final properties = analytics.eventProperties[disconnectIndex];
+    expect(properties, containsPair('disconnect_type', 'fail_to_connect'));
+    expect(properties, containsPair('reason', 'unknown'));
+    expect(properties, containsPair('app_state', 'unknown'));
+    expect(properties, containsPair('rssi_trend', 'unknown'));
+    expect(properties, isNot(contains('hci_reason_code')));
+    expect(properties, isNot(contains('last_rssi')));
+    expect(properties.values, isNot(contains('private native error details')));
+    expect(properties.values, isNot(contains('private_state')));
+    expect(properties.values, isNot(contains('private_trend')));
   });
 
   group('battery throttling', () {

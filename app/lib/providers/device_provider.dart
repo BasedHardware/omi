@@ -167,18 +167,67 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       } catch (_) {
         // Native diagnostics are best-effort; local timing still makes the event useful.
       }
+      final duration = disconnect != null && disconnect.connectionDurationMs > 0
+          ? Duration(milliseconds: disconnect.connectionDurationMs)
+          : now.difference(sessionStartedAt);
+      PlatformManager.instance.analytics.deviceDisconnected(
+        device: endedDevice,
+        duration: duration,
+        disconnectType: _disconnectType(disconnect),
+        reason: _disconnectReason(disconnect?.reason),
+        hciReasonCode: _hciReasonCode(disconnect?.reasonCode),
+        appState: _appState(disconnect?.appState),
+        lastRssi: _lastRssi(disconnect?.lastRssi),
+        rssiTrend: _rssiTrend(disconnect?.rssiTrend),
+      );
       PlatformManager.instance.analytics.deviceSessionEnded(
         device: endedDevice,
-        duration: disconnect != null && disconnect.connectionDurationMs > 0
-            ? Duration(milliseconds: disconnect.connectionDurationMs)
-            : now.difference(sessionStartedAt),
-        reason: disconnect?.reason,
-        hciReasonCode: disconnect?.reasonCode,
+        duration: duration,
+        reason: _disconnectReason(disconnect?.reason),
+        hciReasonCode: _hciReasonCode(disconnect?.reasonCode),
       );
     }
     Logger.debug('setConnectedDevice: $device');
     notifyListeners();
   }
+
+  static String _disconnectType(BleDisconnectEvent? event) {
+    if (event == null) return 'unknown';
+    if (event.eventType == 'fail_to_connect') return 'fail_to_connect';
+    return event.isManual ? 'graceful' : 'unexpected';
+  }
+
+  static String _disconnectReason(String? reason) {
+    const knownReasons = {
+      'manual',
+      'clean_disconnect',
+      'connection_timeout',
+      'remote_device_terminated',
+      'paired_to_another_phone',
+      'link_key_mismatch',
+      'connection_failed_instant_passed',
+      'app_closed',
+      'pairing_lost',
+    };
+    if (reason != null && knownReasons.contains(reason)) return reason;
+    if (reason?.startsWith('gatt_error_') ?? false) return 'gatt_error';
+    return 'unknown';
+  }
+
+  static String _appState(String? appState) {
+    const knownStates = {'foreground', 'background', 'inactive'};
+    return appState != null && knownStates.contains(appState) ? appState : 'unknown';
+  }
+
+  static String _rssiTrend(String? rssiTrend) {
+    const knownTrends = {'fading', 'sudden', 'gap', 'unknown'};
+    return rssiTrend != null && knownTrends.contains(rssiTrend) ? rssiTrend : 'unknown';
+  }
+
+  static int? _lastRssi(int? lastRssi) => lastRssi != null && lastRssi >= -127 && lastRssi <= -1 ? lastRssi : null;
+
+  static int? _hciReasonCode(int? reasonCode) =>
+      reasonCode != null && reasonCode >= 0 && reasonCode <= 255 ? reasonCode : null;
 
   Future<String?> _markDevicePaired(String deviceId) async {
     final preferences = SharedPreferencesUtil();
@@ -503,7 +552,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
 
-    PlatformManager.instance.analytics.deviceDisconnected();
     BatteryWidgetService().updateBatteryInfo(
       deviceName: SharedPreferencesUtil().deviceName,
       batteryLevel: -1,
