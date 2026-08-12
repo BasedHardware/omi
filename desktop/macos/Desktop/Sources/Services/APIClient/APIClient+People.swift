@@ -130,6 +130,60 @@ extension APIClient {
     try await delete("v1/users/me/byok-active", includeBYOK: false)
   }
 
+  func completeLLMOAuth(
+    provider: LLMOAuthProvider,
+    code: String,
+    codeVerifier: String,
+    redirectURI: String
+  ) async throws {
+    struct Request: Encodable {
+      let code: String
+      let codeVerifier: String
+      let redirectURI: String
+
+      enum CodingKeys: String, CodingKey {
+        case code
+        case codeVerifier = "code_verifier"
+        case redirectURI = "redirect_uri"
+      }
+    }
+    struct Response: Decodable {
+      let connected: [String]
+      let selectedProvider: String?
+
+      enum CodingKeys: String, CodingKey {
+        case connected
+        case selectedProvider = "selected_provider"
+      }
+    }
+    let _: Response = try await post(
+      "v1/users/me/llm-oauth/\(provider.rawValue)",
+      body: Request(code: code, codeVerifier: codeVerifier, redirectURI: redirectURI),
+      includeBYOK: false
+    )
+  }
+
+  func llmOAuthStatus() async throws -> (connected: Set<LLMOAuthProvider>, selected: LLMOAuthProvider?) {
+    struct Response: Decodable {
+      let connected: [String]
+      let selectedProvider: String?
+
+      enum CodingKeys: String, CodingKey {
+        case connected
+        case selectedProvider = "selected_provider"
+      }
+    }
+    let response: Response = try await get("v1/users/me/llm-oauth", includeBYOK: false)
+    return (
+      Set(response.connected.compactMap(LLMOAuthProvider.init(rawValue:))),
+      response.selectedProvider.flatMap(LLMOAuthProvider.init(rawValue:))
+    )
+  }
+
+  func disconnectLLMOAuth(_ provider: LLMOAuthProvider) async throws {
+    try await delete("v1/users/me/llm-oauth/\(provider.rawValue)", includeBYOK: false)
+  }
+
   /// Fetches all people for the current user
   func getPeople() async throws -> [Person] {
     return try await get("v1/users/people")
