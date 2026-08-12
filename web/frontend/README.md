@@ -64,6 +64,58 @@ A Next.js web application for the Omi wearable device by Based Hardware. This fr
 5. **Open your browser**
    Navigate to [http://localhost:3000](http://localhost:3000)
 
+## Signing in locally (Firebase Auth emulator)
+
+Signed-in surfaces such as `/memory-platform` need a real Omi session. Rather than a
+production Firebase project, point the app at the repo's local dev harness, which runs
+the Firebase Auth emulator on `127.0.0.1:9099`, the Firestore emulator on `127.0.0.1:8085`,
+and the backend on `127.0.0.1:8000`.
+
+1. **Start the stack** from the repo root:
+
+   ```bash
+   PROVIDER_MODE=offline make dev-up   # backend + Firestore/Auth emulators + Redis + Typesense
+   ```
+
+   The harness allows `http://localhost:3000` and `http://localhost:3001` through the
+   backend's default-deny CORS policy, so browser requests from `npm run dev` work.
+
+2. **Create `web/frontend/.env`** (never committed — `.env*` is gitignored). Fake but
+   well-formed Firebase values are fine; the emulator ignores the API key, but the project
+   id must match the harness project:
+
+   ```bash
+   NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+   API_URL=http://127.0.0.1:8000
+   NEXT_PUBLIC_FIREBASE_API_KEY=fake-api-key
+   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=demo-omi-local.firebaseapp.com
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-omi-local
+   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=demo-omi-local.appspot.com
+   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=000000000000
+   NEXT_PUBLIC_FIREBASE_APP_ID=1:000000000000:web:0000000000000000000000
+
+   # Opt in to the emulator. Unset it and the app talks to real Firebase.
+   NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099
+   ```
+
+3. **Run `npm run dev` and sign in.** Use the header's sign-in button; the Google popup is
+   served by the emulator, where **Add new account** creates a test user (the first field is
+   the email). A red *"Running in emulator mode"* banner confirms the app is not talking to
+   production.
+
+`NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` is honoured only in a non-production build and
+only for a loopback host — see `src/lib/firebase-auth-emulator.mjs`. A production deploy
+therefore cannot be redirected to an emulator by a stray environment variable.
+
+To act as the harness's seeded canonical memory user, give the emulator's `alice` account a
+password and sign in as it:
+
+```bash
+curl -X POST "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/projects/demo-omi-local/accounts:update" \
+  -H "Authorization: Bearer owner" -H "Content-Type: application/json" \
+  -d '{"localId":"alice","email":"alice@omi.local","password":"omi-local-dev","emailVerified":true}'
+```
+
 ## Environment Variables
 
 See `.env.template` for all required environment variables. Key variables include:
