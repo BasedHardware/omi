@@ -471,6 +471,24 @@ function canonicalizeScreenshot(file) {
       }
     }
   }
+  // Wide iPad simulators retain a centered system home-indicator layer even
+  // when the capture-only view controller requests auto-hide. Its opacity can
+  // change between frames. Normalize only that bottom system slot to the
+  // already captured edge background for the same row.
+  if (image.width >= 2000 && image.height >= 2600) {
+    const startX = Math.floor(image.width / 2) - 350;
+    const endX = Math.floor(image.width / 2) + 350;
+    for (let y = image.height - 48; y < image.height; y += 1) {
+      const source = y * image.width * 4;
+      for (let x = startX; x < endX; x += 1) {
+        const offset = (y * image.width + x) * 4;
+        image.rgba[offset] = image.rgba[source];
+        image.rgba[offset + 1] = image.rgba[source + 1];
+        image.rgba[offset + 2] = image.rgba[source + 2];
+        image.rgba[offset + 3] = image.rgba[source + 3];
+      }
+    }
+  }
   // CoreSimulator can vary a handful of near-black compositor bytes by one
   // value across otherwise identical launches. Collapse only values below 16
   // before the bounded palette pass below.
