@@ -257,7 +257,9 @@ class FileChatTool:
                 model="gpt-5.6-luna",
                 messages=messages,
                 stream=True,
-                max_tokens=2048,
+                # Luna uses the current Chat Completions output-budget field.
+                # `max_tokens` is rejected by the provider with HTTP 400.
+                max_completion_tokens=2048,
             )
             async for chunk in stream:
                 delta = chunk.choices[0].delta if chunk.choices else None
