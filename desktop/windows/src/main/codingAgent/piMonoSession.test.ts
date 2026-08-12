@@ -191,7 +191,7 @@ describe('getPiMonoByokEnv (all-or-nothing, separate from the Firebase session)'
     })
   })
 
-  it('returns {} at 3/4 keys (never a partial injection)', () => {
+  it('returns configured keys without requiring an unrelated Deepgram key', () => {
     const store = new ByokKeyStore(
       join(dir, `byok-partial-${Math.random().toString(36).slice(2)}.json`)
     )
@@ -200,7 +200,11 @@ describe('getPiMonoByokEnv (all-or-nothing, separate from the Firebase session)'
     store.setKey('gemini', 'gm-key')
     __setByokKeyStoreForTests(store)
 
-    expect(getPiMonoByokEnv()).toEqual({})
+    expect(getPiMonoByokEnv()).toEqual({
+      OMI_BYOK_OPENAI: 'sk-openai',
+      OMI_BYOK_ANTHROPIC: 'sk-ant',
+      OMI_BYOK_GEMINI: 'gm-key'
+    })
   })
 
   it('is independent of the Firebase session (empty even with a live session)', () => {

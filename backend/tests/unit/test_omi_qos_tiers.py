@@ -1078,8 +1078,8 @@ class TestEffectiveBYOKProvider:
     def test_gemini_passthrough(self):
         assert _effective_byok_provider('gemini-2.5-flash', 'gemini') == 'gemini'
 
-    def test_openrouter_gemini_maps_to_gemini(self):
-        assert _effective_byok_provider('gemini-3-flash-preview', 'openrouter') == 'gemini'
+    def test_openrouter_gemini_uses_openrouter_key(self):
+        assert _effective_byok_provider('gemini-3-flash-preview', 'openrouter') == 'openrouter'
 
     def test_openrouter_non_gemini_stays_openrouter(self):
         assert _effective_byok_provider('anthropic/claude-3.5-sonnet', 'openrouter') == 'openrouter'
