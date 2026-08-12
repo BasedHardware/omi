@@ -165,12 +165,26 @@ struct BeeperDesktopClient {
         let info = try? await BeeperDesktopClient(accessToken: "probe", baseURL: candidate, session: session)
           .probeInfo()
       else { continue }
-      if let advertised = info.server?.baseURL, let url = URL(string: advertised) {
+      if let advertised = info.server?.baseURL, let url = URL(string: advertised),
+        isLoopbackURL(url)
+      {
         return url
       }
       return candidate
     }
     return nil
+  }
+
+  /// Discovery data comes from whatever is listening on a candidate port, so it
+  /// is untrusted: only a loopback URL may be adopted. Otherwise a local process
+  /// squatting the port could point the authed client — and the Beeper access
+  /// token in its `Authorization` header — at a host it controls.
+  static func isLoopbackURL(_ url: URL) -> Bool {
+    guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+      return false
+    }
+    guard let host = url.host?.lowercased() else { return false }
+    return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
   }
 
   // MARK: Endpoints
