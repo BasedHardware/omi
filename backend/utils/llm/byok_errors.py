@@ -3,11 +3,6 @@ import logging
 from typing import Optional
 
 try:
-    from utils.notifications import send_user_notification
-except ImportError:
-    send_user_notification = None
-
-try:
     from database.redis_db import (
         try_acquire_byok_llm_error_notification_lock,
         release_byok_llm_error_notification_lock,
@@ -128,9 +123,15 @@ def _release_byok_llm_error_lock(uid: str, provider: str, reason: str) -> None:
 
 
 def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> None:
-    if send_user_notification is None:
+    # Import at call time, not module load: a top-level import created a cycle
+    # (utils.notifications -> utils.llm.clients -> ... -> byok_errors) whose broad ImportError
+    # fallback masked it by disabling delivery entirely (cubic review PR 10887). By call time both
+    # modules are fully initialized, so the import resolves and BYOK notifications are delivered.
+    try:
+        from utils.notifications import send_user_notification
+    except ImportError as e:
         logger.error(
-            'BYOK LLM notification dependencies unavailable uid=%s provider=%s reason=%s', uid, provider, reason
+            'BYOK LLM notification dependency unavailable uid=%s provider=%s reason=%s: %s', uid, provider, reason, e
         )
         return
 
