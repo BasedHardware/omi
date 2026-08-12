@@ -40,6 +40,23 @@ Three services (`deploy/onprem/compose.prod.yaml`), network **`internal: true`**
 Out of WP0 scope (added in later WPs): Pusher, Typesense, Mongo/ArcadeDB, Qdrant,
 RustFS/SeaweedFS, Keycloak, GPU inference.
 
+## Data durability (persistent volumes)
+
+Every stateful backend that can hold on-prem data survives `docker compose down`/`up` on a **named
+volume** (compose.base.yaml `volumes:` block): `mongo-data:/data/db` (ADR-0002 datastore),
+`rustfs-data:/data` (ADR-0032 object store, `RUSTFS_VOLUMES=/data`), `qdrant-storage` (ADR-0033
+vectors), `keycloak-data:/opt/keycloak/data`. A plain `down` keeps them; only `down -v` wipes them
+(and would also drop the pre-provisioned `inference-models` weights, which have no egress to refetch
+— avoid `-v` on this project).
+
+Keycloak runs in **production mode** (`start`, not `start-dev`) with a persistent `dev-file` H2 DB on
+`keycloak-data`, so realm state — including the imported `omi-backend-admin` service-account client —
+lives across restarts. `--import-realm` seeds a **fresh** volume from `keycloak/omi-realm.example.json`;
+on an existing volume KC logs "Realm 'omi' already exists. Import skipped" and keeps the persisted
+realm. **To re-import after editing the realm JSON**, remove just that volume:
+`docker compose stop keycloak && docker volume rm <project>_keycloak-data && docker compose up -d keycloak`
+(the realm JSON description fields must stay ≤255 chars — the H2 `CLIENT.DESCRIPTION` column limit).
+
 ## Prerequisites
 
 Only **Docker** (with Compose v2) on the host. No java/node/redis/firebase-CLI to install:
@@ -794,9 +811,11 @@ Dedicated declarative config (per ADR-0043, layered over the common base):
   `STORAGE_BACKEND=mongo` (real on-prem store, no Google) + Qdrant + host embeddings (`bge-m3`).
 
 Prerequisites:
-- Keycloak realm `omi` up with a public direct-access client (`omi-test`) **and** a confidential
-  service-account client (`omi-backend-admin`, realm-management `view-users` role) for `OIDC_ADMIN_*`
-  (resolves the user's display name used in memory attribution).
+- Keycloak realm `omi` up: `keycloak/omi-realm.example.json` (auto-imported via `--import-realm`)
+  ships the public direct-access client (`omi-test`) **and** the confidential service-account client
+  (`omi-backend-admin`, realm-management `view-users` role) for `OIDC_ADMIN_*` (resolves the user's
+  display name used in memory attribution). The client's DEV secret is in the realm JSON and in
+  `backend.env.seed(.example)` — they must match; regenerate a strong secret for production.
 - Backend reachable at `--api-url`, validating the same issuer's JWKS. Mongo (`STORAGE_BACKEND=mongo`).
 - Operator LLM (chat, e.g. `qwen2.5:14b` via the gateway) + a 1024-dim embeddings model (`bge-m3`).
 - **`OLLAMA_NUM_PARALLEL=1`** is NOT required, but on a single small GPU concurrent chat + embeddings

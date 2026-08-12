@@ -56,6 +56,10 @@ services:
       timeout: 5s
       retries: 30
       start_period: 10s
+    volumes:
+      # Persist the replica-set data across `down`/`up` (ADR-0002 is the PROD datastore; without a
+      # named volume the seed/user data lives in the container layer and is lost on recreate).
+      - mongo-data:/data/db
     networks: [omi]
     restart: unless-stopped
 
@@ -78,6 +82,9 @@ services:
       timeout: 5s
       retries: 30
       start_period: 5s
+    volumes:
+      # Persist S3 objects across `down`/`up` (RUSTFS_VOLUMES=/data; ADR-0032 PROD object store).
+      - rustfs-data:/data
     networks: [omi]
     restart: unless-stopped
 
@@ -347,7 +354,14 @@ services:
     image: quay.io/keycloak/keycloak:26.0
     profiles: ["auth"]
     command:
-      - start-dev
+      # Production mode with a PERSISTENT H2 dev-file DB on the keycloak-data volume, so realm state
+      # — including the imported omi-backend-admin service-account client — survives `down`/`up`.
+      # start-dev kept H2 under /opt/keycloak/data/h2 but, without a named volume, it was lost on
+      # recreate. dev-file H2 is enough for single-node on-prem; switch to --db=postgres + a DB
+      # service for HA. kc-proxy terminates TLS, so KC serves plain HTTP internally (--http-enabled).
+      - start
+      - --db=dev-file
+      - --http-enabled=true
       - --http-port=8090
       - --proxy-headers=xforwarded
       - --hostname=${KC_HOSTNAME:-https://localhost:8443}
@@ -366,6 +380,11 @@ services:
       # supply a strong operator secret.
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:?KC_ADMIN_PASSWORD must be set (no default admin/admin bootstrap)}
     volumes:
+      # Persist H2 (realm + imported omi-backend-admin) across `down`/`up`. --import-realm seeds a
+      # FRESH volume from the JSON below; on an existing volume KC keeps the persisted realm (a
+      # changed realm JSON needs `down -v` to re-import). The realm JSON is a read-only bind at a
+      # subpath, layered over this named volume.
+      - keycloak-data:/opt/keycloak/data
       - ./keycloak/omi-realm.example.json:/opt/keycloak/data/import/omi-realm.json:ro
     # http-only behind kc-proxy; no published ports (the backend + the proxy reach it via
     # `keycloak:8090` on the internal net). TLS is terminated by kc-proxy below.
@@ -419,3 +438,9 @@ volumes:
   inference-models:
   # Qdrant vector-store persistence (self-hosted vector backend, ADR-0033; `chat` profile).
   qdrant-storage:
+  # Mongo replica-set data (ADR-0002 PROD datastore; `mongo` profile).
+  mongo-data:
+  # RustFS S3 objects (ADR-0032 PROD object store; `objstore` profile).
+  rustfs-data:
+  # Keycloak realm/H2 persistence incl. the imported omi-backend-admin client (`auth` profile).
+  keycloak-data:
