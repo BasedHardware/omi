@@ -33,6 +33,8 @@ from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
 from models.chat import (
     ChatSession,
+    GenerateReplyRequest,
+    GenerateReplyResponse,
     Message,
     SendMessageRequest,
     MessageSender,
@@ -562,6 +564,86 @@ def send_message(
                 journey_attempt.finish('failure' if stream_exhausted else 'cancelled')
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
+
+
+@router.post('/v2/chat/generate-reply', tags=['chat'], response_model=GenerateReplyResponse)
+async def generate_reply(
+    data: GenerateReplyRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
+    """Stateless owner-authenticated reply generation.
+
+    Same generation path as ``POST /v2/messages`` (``execute_chat_stream``) with the
+    persistence and session identity removed: no human or AI message is written to the
+    owner's chat history, no chat session is acquired or mutated, and no chat quota
+    question is attributed to the conversation. Automated drafting surfaces (the AI
+    clone) must use this instead of ``/v2/messages`` so machine-generated turns never
+    contaminate the human's chat.
+
+    Error contract is explicit: streamed ``error: `` frames and the canned answer the
+    stream stages alongside ``callback_data['error']`` are never returned as reply
+    text. A failed generation is an HTTP 502 with ``{'error': <reason>}``.
+    """
+    enforce_chat_quota(uid, platform=x_app_platform)
+
+    app_id = data.app_id if data.app_id not in ['null', ''] else None
+    app_record = get_available_app_by_id(app_id, uid)
+    app = App(**app_record) if app_record else None
+    resolved_app_id = app.id if app else None
+
+    created_at = datetime.now(timezone.utc)
+    messages = [
+        Message(
+            id=str(uuid.uuid4()),
+            text=turn.text,
+            created_at=created_at,
+            sender=turn.sender,
+            type='text',
+            app_id=resolved_app_id,
+        )
+        for turn in data.history
+    ]
+    messages.append(
+        Message(
+            id=str(uuid.uuid4()),
+            text=data.text,
+            created_at=created_at,
+            sender=MessageSender.human,
+            type='text',
+            app_id=resolved_app_id,
+        )
+    )
+
+    callback_data: dict = {}
+    usage_token = set_usage_context(uid, Features.CHAT)
+    try:
+        async for _chunk in execute_chat_stream(
+            uid,
+            messages,
+            app,
+            cited=False,
+            callback_data=callback_data,
+            chat_session=None,
+            platform=x_app_platform,
+        ):
+            continue
+    finally:
+        reset_usage_context(usage_token)
+
+    error = callback_data.get('error')
+    answer = callback_data.get('answer')
+    if error or not answer:
+        record_fallback(
+            component='other',
+            from_mode='llm_answer',
+            to_mode='none',
+            reason='other',
+            outcome='exhausted',
+        )
+        raise HTTPException(status_code=502, detail={'error': error or 'no_answer'})
+
+    return GenerateReplyResponse(text=answer, app_id=resolved_app_id)
 
 
 @router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)
