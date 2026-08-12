@@ -20,12 +20,12 @@ ServerConversation _conversation(String id, DateTime createdAt) =>
     ServerConversation(id: id, createdAt: createdAt, structured: Structured('Title', 'Overview'));
 
 LocalRecording _recording(String fileName, DateTime startedAt) => LocalRecording(
-      fileName: fileName,
-      filePath: '/tmp/$fileName',
-      timerStart: startedAt.millisecondsSinceEpoch ~/ 1000,
-      codec: BleAudioCodec.opus,
-      frameSize: 160,
-      sizeBytes: 1024,
-      seconds: 1,
-      state: LocalRecordingState.pending,
-    );
+  fileName: fileName,
+  filePath: '/tmp/$fileName',
+  timerStart: startedAt.millisecondsSinceEpoch ~/ 1000,
+  codec: BleAudioCodec.opus,
+  frameSize: 160,
+  sizeBytes: 1024,
+  seconds: 1,
+  state: LocalRecordingState.pending,
+);
