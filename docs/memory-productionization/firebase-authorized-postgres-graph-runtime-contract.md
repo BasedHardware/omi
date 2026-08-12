@@ -36,9 +36,15 @@ The pinned PostgreSQL 18.4 real-adapter test proves:
 4. a new revoked read-grant revision becomes current after both preliminary
    authorization reads but immediately before graph reconstruction; and
 5. the locked graph transaction returns a closed authorization denial and no
-   snapshot.
+   snapshot;
+6. `legacy`, `migrating`, `rolled_back_stranded`, unactivated `new`,
+   `deletion_pending`, `deleted`, and conflicted account-control rows deny both
+   the Firebase read and write runtimes before either can reach a third
+   graph/ledger transaction; and
+7. a transition from active to deleted immediately before the locked graph
+   transaction denies and releases no snapshot.
 
-The same real suite reports 5 passed, 0 failed, and 282 expectations, then
+The same real suite reports 8 passed, 0 failed, and 473 expectations, then
 passes the PostgreSQL/Postgres.js parity corpus under pinned Bun 1.3.14 and Node
 24.19.0. The local harness stops the managed runtime and preserves the labelled
 synthetic volume.

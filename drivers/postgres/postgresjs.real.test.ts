@@ -735,6 +735,10 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const credentialHash = "b".repeat(64);
     const grantHash = "c".repeat(64);
     const now = Math.floor(Date.now() / 1_000);
+    // The managed VM clock is synchronized independently from the host. Keep
+    // accepted work safely in the past so a sub-second host/guest skew cannot
+    // turn an immediately leaseable job into a transient none_available.
+    const acceptedAt = now - 5;
 
     await ownerSql.begin(async (transaction) => {
       await transaction.unsafe(
@@ -905,9 +909,9 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     };
     await expect(repository.accept(
       context,
-      durableWorkAcceptanceRequest(accountId, `${suffix}:missing-input`, now, 2, 1),
+      durableWorkAcceptanceRequest(accountId, `${suffix}:missing-input`, acceptedAt, 2, 1),
     )).rejects.toMatchObject({ code: "persistence_failed", message: "persistence_failed" });
-    const acceptedRequest = durableWorkAcceptanceRequest(accountId, suffix, now, 2, 1);
+    const acceptedRequest = durableWorkAcceptanceRequest(accountId, suffix, acceptedAt, 2, 1);
 
     await expect(stageInput(acceptedRequest, suffix)).resolves.toMatchObject({
       kind: "staged", input: { snapshot: { work_id: `job:formation:${suffix}` } },
@@ -930,10 +934,10 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       kind: "replayed", job: { state: "pending" },
     });
     await expect(repository.accept(
-      context, durableWorkAcceptanceRequest(accountId, suffix, now + 1),
+      context, durableWorkAcceptanceRequest(accountId, suffix, acceptedAt + 1),
     )).resolves.toEqual({ kind: "idempotency_conflict" });
     const policyDriftRequest = durableWorkAcceptanceRequest(
-      accountId, `${suffix}:policy-drift`, now, 3, 1,
+      accountId, `${suffix}:policy-drift`, acceptedAt, 3, 1,
     );
     await expect(stageInput(policyDriftRequest, `${suffix}:policy-drift`))
       .resolves.toMatchObject({ kind: "staged" });
@@ -980,7 +984,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     })).rejects.toMatchObject({ code: "42501" });
 
     const rollbackSuffix = `${suffix}:rollback`;
-    const rollbackRequest = durableWorkAcceptanceRequest(accountId, rollbackSuffix, now, 2, 1);
+    const rollbackRequest = durableWorkAcceptanceRequest(accountId, rollbackSuffix, acceptedAt, 2, 1);
     await expect(stageInput(rollbackRequest, rollbackSuffix)).resolves.toMatchObject({ kind: "staged" });
     try {
       await ownerSql.unsafe(`
@@ -1105,7 +1109,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     });
 
     const recoverySuffix = `${suffix}:recovery`;
-    const recoveryRequest = durableWorkAcceptanceRequest(accountId, recoverySuffix, now, 2, 1);
+    const recoveryRequest = durableWorkAcceptanceRequest(accountId, recoverySuffix, acceptedAt, 2, 1);
     await expect(stageInput(recoveryRequest, recoverySuffix)).resolves.toMatchObject({ kind: "staged" });
     await expect(repository.accept(context, recoveryRequest))
       .resolves.toMatchObject({ kind: "accepted", job: { state: "pending" } });
@@ -1138,7 +1142,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     })).resolves.toMatchObject({ kind: "recorded", job: { state: "dead_letter" } });
 
     const successSuffix = `${suffix}:success`;
-    const successAcceptance = durableWorkAcceptanceRequest(accountId, successSuffix, now, 2, 1);
+    const successAcceptance = durableWorkAcceptanceRequest(accountId, successSuffix, acceptedAt, 2, 1);
     await expect(stageInput(successAcceptance, successSuffix)).resolves.toMatchObject({ kind: "staged" });
     await expect(repository.accept(context, successAcceptance)).resolves.toMatchObject({
       kind: "accepted", job: { state: "pending" },
@@ -2793,6 +2797,175 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     await expect(repository.append(context, first)).resolves.toEqual({
       kind: "authorization_denied", reason: "grant_inactive",
     });
+  }, 120_000);
+
+  test("Firebase-authorized reads and writes fail closed across the real lifecycle matrix", async () => {
+    const suffix = randomUUID();
+    const applicationId = "app:qualification-lifecycle";
+    const firebaseProjectId = `firebase-lifecycle-${suffix}`;
+    const now = Math.floor(Date.now() / 1_000);
+    const deniedCases = [
+      { name: "legacy", generation: "legacy", lifecycle: "active", deletion: null, activated: false, conflict: false },
+      { name: "migrating", generation: "migrating", lifecycle: "active", deletion: null, activated: false, conflict: false },
+      { name: "rolled-back", generation: "rolled_back_stranded", lifecycle: "active", deletion: null, activated: false, conflict: false },
+      { name: "unactivated", generation: "new", lifecycle: "active", deletion: null, activated: false, conflict: false },
+      { name: "deletion-pending", generation: "new", lifecycle: "deletion_pending", deletion: 12, activated: true, conflict: false },
+      { name: "deleted", generation: "new", lifecycle: "deleted", deletion: 12, activated: true, conflict: false },
+      { name: "conflicted", generation: "new", lifecycle: "active", deletion: null, activated: true, conflict: true },
+    ] as const;
+    const allCases = [
+      ...deniedCases,
+      { name: "race", generation: "new", lifecycle: "active", deletion: null, activated: true, conflict: false },
+    ] as const;
+
+    await ownerSql.begin(async (transaction) => {
+      for (const selected of allCases) {
+        const accountId = `account:lifecycle:${selected.name}:${suffix}`;
+        const principalId = `principal:lifecycle:${selected.name}:${suffix}`;
+        const credentialId = `credential:lifecycle:${selected.name}:${suffix}`;
+        const firebaseUid = `firebase-user-${selected.name}-${suffix}`;
+        await transaction.unsafe(
+          "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)", [accountId],
+        );
+        await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+            (account_id, control_revision, account_generation, account_epoch,
+             lifecycle_state, deletion_epoch, observed_at, record_schema_version,
+             record_json, content_hash)
+          VALUES ($1, 1, $2, 11, $3, $4, transaction_timestamp(),
+                  'control-v1', '{}'::jsonb, $5)`,
+        [accountId, selected.generation, selected.lifecycle, selected.deletion, "1".repeat(64)]);
+        await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+            (account_id, control_revision, activated_epoch, activation_control_revision,
+             conflict_reason, conflict_at_control_revision)
+          VALUES ($1, 1, $2, $3, $4, $5)`, [
+          accountId,
+          selected.activated ? 11 : null,
+          selected.activated ? 1 : null,
+          selected.conflict ? "projection_conflicted" : null,
+          selected.conflict ? 1 : null,
+        ]);
+        await transaction.unsafe(`INSERT INTO omi_memory.application_credential_revisions
+            (account_id, principal_id, application_id, credential_id,
+             credential_generation, credential_kind, lifecycle,
+             authentication_strength, expires_at, record_schema_version,
+             record_json, content_hash)
+          VALUES ($1, $2, $3, $4, 1, 'firebase', 'active', 'firebase-id-token',
+                  to_timestamp($5), 'credential-v1', '{}'::jsonb, $6)`,
+        [accountId, principalId, applicationId, credentialId, now + 7_200, "2".repeat(64)]);
+        await transaction.unsafe(`INSERT INTO omi_memory.application_credential_heads
+            (account_id, application_id, credential_id, credential_generation)
+          VALUES ($1, $2, $3, 1)`, [accountId, applicationId, credentialId]);
+        for (const capability of ["memories.read", "memories.write"] as const) {
+          const grantId = `grant:lifecycle:${selected.name}:${capability}:${suffix}`;
+          await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+              (account_id, application_id, credential_id, credential_generation,
+               capability, grant_id, grant_version, lifecycle, enabled, scopes,
+               record_schema_version, record_json, content_hash)
+            VALUES ($1, $2, $3, 1, $4, $5, 1, 'active', true,
+                    '[]'::jsonb, 'grant-v1', '{}'::jsonb, $6)`,
+          [accountId, applicationId, credentialId, capability, grantId, "3".repeat(64)]);
+          await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+              (account_id, application_id, credential_id, credential_generation,
+               capability, grant_id, grant_version)
+            VALUES ($1, $2, $3, 1, $4, $5, 1)`,
+          [accountId, applicationId, credentialId, capability, grantId]);
+        }
+        await transaction.unsafe(`INSERT INTO omi_memory.firebase_identity_bindings
+            (firebase_project_id, firebase_uid, account_id, principal_id,
+             source_control_revision)
+          VALUES ($1, $2, $3, $4, 1)`,
+        [firebaseProjectId, firebaseUid, accountId, principalId]);
+        await transaction.unsafe(`INSERT INTO omi_memory.firebase_application_credential_bindings
+            (account_id, firebase_project_id, firebase_uid, principal_id,
+             application_id, credential_id)
+          VALUES ($1, $2, $3, $4, $5, $6)`,
+        [accountId, firebaseProjectId, firebaseUid, principalId, applicationId, credentialId]);
+      }
+    });
+
+    let transactions = 0;
+    const appRolePool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(
+        options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+        callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+      ) => {
+        transactions += 1;
+        return pool.withTransaction(options, async (connection) => {
+          await connection.query({
+            name: "qualification.lifecycle_set_role",
+            text: "SET LOCAL ROLE omi_platform_application", values: [],
+          });
+          return callback(connection);
+        });
+      },
+    });
+    const runtimeOptions = (selected: (typeof allCases)[number]) => ({
+      pool: appRolePool,
+      project_id: firebaseProjectId,
+      runtime_mode: "deployed" as const,
+      id_token_adapter: {
+        verification_source: "firebase_production" as const,
+        verifyIdToken: async () => ({
+          aud: firebaseProjectId,
+          iss: `https://securetoken.google.com/${firebaseProjectId}`,
+          sub: `firebase-user-${selected.name}-${suffix}`,
+          uid: `firebase-user-${selected.name}-${suffix}`,
+          exp: now + 3_600, iat: now - 60, auth_time: now - 120,
+        }),
+      },
+      application_id: applicationId,
+      context_ttl_seconds: 60,
+    });
+
+    for (const selected of deniedCases) {
+      const readBefore = transactions;
+      await expect(createPostgresFirebaseAuthorizedGraphSnapshotRuntime(runtimeOptions(selected))
+        .load("header.payload.signature", now))
+        .resolves.toEqual({ kind: "denied", outcome: "authorization" });
+      expect(transactions - readBefore).toBeLessThanOrEqual(2);
+
+      const writeBefore = transactions;
+      const write = nonemptyAppend(
+        `account:lifecycle:${selected.name}:${suffix}`,
+        `lifecycle:${selected.name}:${suffix}`,
+        null,
+      );
+      await expect(createPostgresFirebaseAuthorizedLedgerRuntime(runtimeOptions(selected))
+        .append("header.payload.signature", now, write))
+        .resolves.toEqual({ kind: "denied", outcome: "authorization" });
+      expect(transactions - writeBefore).toBeLessThanOrEqual(2);
+    }
+
+    let raceTransactions = 0;
+    const race = allCases[allCases.length - 1]!;
+    const raceAccount = `account:lifecycle:${race.name}:${suffix}`;
+    const racePool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(
+        options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+        callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+      ) => {
+        raceTransactions += 1;
+        if (raceTransactions === 3) {
+          await ownerSql.begin(async (transaction) => {
+            await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+                (account_id, control_revision, account_generation, account_epoch,
+                 lifecycle_state, deletion_epoch, observed_at, record_schema_version,
+                 record_json, content_hash)
+              VALUES ($1, 2, 'new', 11, 'deleted', 12, transaction_timestamp(),
+                      'control-v1', '{}'::jsonb, $2)`, [raceAccount, "4".repeat(64)]);
+            await transaction.unsafe(`UPDATE omi_memory.account_control_heads
+              SET control_revision = 2, updated_at = transaction_timestamp()
+              WHERE account_id = $1`, [raceAccount]);
+          });
+        }
+        return appRolePool.withTransaction(options, callback);
+      },
+    });
+    await expect(createPostgresFirebaseAuthorizedGraphSnapshotRuntime({
+      ...runtimeOptions(race), pool: racePool,
+    }).load("header.payload.signature", now))
+      .resolves.toEqual({ kind: "denied", outcome: "authorization" });
+    expect(raceTransactions).toBe(3);
   }, 120_000);
 
   test("application-role product projection writer is atomic, replayable, graph-fenced, and authority-fenced", async () => {
