@@ -322,7 +322,7 @@ struct AICloneContent: View {
         HStack {
           cardTitle("Activity")
           Spacer()
-          if !service.configuration.activityLog.isEmpty || !service.pendingApprovals.isEmpty {
+          if !service.configuration.activityLog.isEmpty {
             Button("Clear") { service.clearActivity() }
               .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
           }
