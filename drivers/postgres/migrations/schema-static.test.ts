@@ -90,6 +90,7 @@ const expectedTables = [
   "memory_product_group_projections",
   "memory_product_membership_claim_lineages",
   "memory_product_membership_revisions",
+  "memory_product_operation_receipts",
   "memory_product_projection_citation_evidence_refs",
   "memory_product_projection_citations",
   "memory_product_projection_payloads",
@@ -682,6 +683,15 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     for (const table of tables.filter((candidate) => !candidate.name.startsWith("memory_product_group_"))) {
       expect(table.body, `${table.name} cannot depend on grouping`).not.toContain("group_projection_id");
     }
+
+    const receipts = tables.find((table) => table.name === "memory_product_operation_receipts")!;
+    expect(receipts.body).toContain("PRIMARY KEY (account_id, request_digest)");
+    expect(receipts.body).toContain("UNIQUE (account_id, operation, operation_identity)");
+    expect(receipts.body).toContain("operation IN (\n    'birth', 'membership', 'projection', 'redirect', 'group'");
+    expect(receipts.body).toContain("receipt_contract_version = 'product-operation-receipt-v1'");
+    expect(receipts.body).toContain("account_id, graph_commit_id, graph_commit_sequence");
+    expect(allSql).toContain("product-projection runtime idempotency substrate");
+    expect(allSql).toContain("Deliberately no application, projector, reader, worker, or migration-copier");
 
     expect(allSql).toContain("Deliberately no application, migration-copier, projector, or worker grant");
     expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_(?:product_|legacy_proposition|migration_item)/s);

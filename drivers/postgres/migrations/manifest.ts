@@ -127,4 +127,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0020-predicate-batch-work-input.sql",
     sha256: "9ba91102f09dd3d29e4b601ea11d51eb837d824c4b79dbb3e825f1af23ee3547",
   }),
+  Object.freeze({
+    version: 21,
+    name: "product-projection-runtime",
+    fileName: "0021-product-projection-runtime.sql",
+    sha256: "6cf363c08e51820b633ca42cd1f3df3fb325cb1ab0c73674cace68d492940f4b",
+  }),
 ]);
