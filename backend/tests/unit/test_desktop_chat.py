@@ -1583,19 +1583,20 @@ async def test_chat_completions_routes_oauth_provider_without_managed_gateway(mo
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
 
     class OAuthClient:
-        async def ainvoke(self, messages):
+        async def ainvoke(self, messages, **kwargs):
             assert isinstance(messages[0], desktop_chat.HumanMessage)
+            assert kwargs == {'max_tokens': 16}
             return SimpleNamespace(
                 id='oauth-msg',
                 content='from OAuth',
-                tool_calls=[],
+                tool_calls=[{'id': 'call_1', 'name': 'weather', 'args': {'city': 'Kuala Lumpur'}}],
                 usage_metadata={'input_tokens': 2, 'output_tokens': 3},
             )
 
     monkeypatch.setattr(desktop_chat, 'get_llm', lambda *_args, **_kwargs: OAuthClient())
 
     response = await desktop_chat.chat_completions(
-        {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}]},
+        {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}], 'max_tokens': 16},
         uid='user-1',
         x_app_platform=None,
         x_omi_chat_contract_version=None,
@@ -1605,6 +1606,8 @@ async def test_chat_completions_routes_oauth_provider_without_managed_gateway(mo
     assert response.status_code == 200
     payload = json.loads(response.body)
     assert payload['choices'][0]['message']['content'] == 'from OAuth'
+    assert payload['choices'][0]['finish_reason'] == 'tool_calls'
+    assert payload['choices'][0]['message']['tool_calls'][0]['function']['arguments'] == '{"city":"Kuala Lumpur"}'
     assert payload['usage'] == {'prompt_tokens': 2, 'completion_tokens': 3, 'total_tokens': 5}
 
 
@@ -1618,8 +1621,9 @@ async def test_chat_completions_streams_oauth_provider_without_managed_gateway(m
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
 
     class OAuthClient:
-        async def astream(self, messages):
+        async def astream(self, messages, **kwargs):
             assert isinstance(messages[0], desktop_chat.HumanMessage)
+            assert kwargs == {'max_tokens': 16}
             yield SimpleNamespace(content='from', tool_call_chunks=[], usage_metadata=None)
             yield SimpleNamespace(
                 content=' OAuth', tool_call_chunks=[], usage_metadata={'input_tokens': 2, 'output_tokens': 3}
@@ -1628,7 +1632,7 @@ async def test_chat_completions_streams_oauth_provider_without_managed_gateway(m
     monkeypatch.setattr(desktop_chat, 'get_llm', lambda *_args, **_kwargs: OAuthClient())
 
     response = await desktop_chat.chat_completions(
-        {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}], 'stream': True},
+        {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}], 'stream': True, 'max_tokens': 16},
         uid='user-1',
         x_app_platform=None,
         x_omi_chat_contract_version=None,
@@ -1640,6 +1644,40 @@ async def test_chat_completions_streams_oauth_provider_without_managed_gateway(m
     assert b'"content":" OAuth"' in body
     assert b'"prompt_tokens":2' in body
     assert body.endswith(b'data: [DONE]\n\n')
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_streams_argument_only_oauth_tool_chunks(monkeypatch):
+    class OAuthClient:
+        async def astream(self, _messages, **_kwargs):
+            yield SimpleNamespace(
+                content='',
+                tool_call_chunks=[{'id': 'call_1', 'name': 'weather', 'args': '{"city":'}],
+                usage_metadata=None,
+            )
+            yield SimpleNamespace(
+                content='', tool_call_chunks=[{'id': 'call_1', 'args': '"Kuala Lumpur"}'}], usage_metadata=None
+            )
+
+    monkeypatch.setattr(desktop_chat, 'get_llm', lambda *_args, **_kwargs: OAuthClient())
+    events = [
+        event
+        async for event in desktop_chat._stream_oauth(
+            {'messages': [{'role': 'user', 'content': 'hello'}], 'max_tokens': 16},
+            'omi-sonnet',
+            'user-1',
+            on_upstream_accepted=desktop_chat._no_op_async,
+        )
+    ]
+    payloads = [json.loads(event[6:]) for event in events if event.startswith('data: {')]
+    tool_deltas = [
+        call
+        for payload in payloads
+        if payload.get('choices')
+        for call in payload['choices'][0].get('delta', {}).get('tool_calls', [])
+    ]
+    assert [call['function']['arguments'] for call in tool_deltas] == ['{"city":', '"Kuala Lumpur"}']
+    assert payloads[-1]['choices'][0]['finish_reason'] == 'tool_calls'
 
 
 async def _done():

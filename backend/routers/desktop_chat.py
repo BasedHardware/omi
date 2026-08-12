@@ -528,6 +528,13 @@ def _oauth_usage(message: object) -> dict[str, int]:
     return {}
 
 
+def _oauth_max_tokens(body: Mapping[str, object]) -> int:
+    maximum = body.get('max_completion_tokens', body.get('max_tokens', _MAX_TOKENS))
+    if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 1:
+        raise ValueError('max_tokens must be a positive integer')
+    return min(maximum, _MAX_TOKENS)
+
+
 async def _stream_oauth(
     body: Mapping[str, object], public_model: str, uid: str, *, on_upstream_accepted: Callable[[], Awaitable[None]]
 ) -> AsyncIterator[str]:
@@ -552,7 +559,7 @@ async def _stream_oauth(
     next_tool_index = 0
     await on_upstream_accepted()
     try:
-        async for chunk in client.astream(messages):
+        async for chunk in client.astream(messages, max_tokens=_oauth_max_tokens(body)):
             content = _text(getattr(chunk, 'content', ''))
             if content:
                 yield _sse(
@@ -567,24 +574,32 @@ async def _stream_oauth(
             for call in getattr(chunk, 'tool_call_chunks', []):
                 if not isinstance(call, Mapping):
                     continue
-                name = call.get('name')
-                if not isinstance(name, str):
-                    continue
                 raw_call_id = call.get('id')
+                name = call.get('name')
+                if not isinstance(raw_call_id, str) and not isinstance(name, str):
+                    continue
                 call_id = raw_call_id if isinstance(raw_call_id, str) else name
+                if not isinstance(call_id, str):
+                    continue
                 index = tool_indexes.get(call_id)
+                arguments = call.get('args')
+                if not isinstance(arguments, str):
+                    arguments = ''
                 if index is None:
                     index = next_tool_index
                     tool_indexes[call_id] = index
                     next_tool_index += 1
                     delta: dict[str, object] = {
                         'index': index,
-                        'id': call.get('id'),
-                        'type': 'function',
-                        'function': {'name': name, 'arguments': call.get('args') or ''},
+                        'function': {'arguments': arguments},
                     }
+                    if isinstance(raw_call_id, str):
+                        delta['id'] = raw_call_id
+                        delta['type'] = 'function'
                 else:
-                    delta = {'index': index, 'function': {'arguments': call.get('args') or ''}}
+                    delta = {'index': index, 'function': {'arguments': arguments}}
+                if isinstance(name, str):
+                    cast(dict[str, object], delta['function'])['name'] = name
                 yield _sse(
                     {
                         'id': stream_id,
@@ -601,7 +616,7 @@ async def _stream_oauth(
                 'object': 'chat.completion.chunk',
                 'created': created,
                 'model': public_model,
-                'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}],
+                'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'tool_calls' if tool_indexes else 'stop'}],
             }
         )
         if usage:
@@ -1506,7 +1521,7 @@ async def chat_completions(
             tools = _oauth_tools(body)
             if tools:
                 client = client.bind_tools(tools, tool_choice=body.get('tool_choice', 'auto'))
-            message = await client.ainvoke(_oauth_messages(body))
+            message = await client.ainvoke(_oauth_messages(body), max_tokens=_oauth_max_tokens(body))
         except Exception as exc:
             raise HTTPException(status_code=502, detail='Upstream provider error') from exc
         return JSONResponse(
@@ -1515,7 +1530,13 @@ async def chat_completions(
                 'object': 'chat.completion',
                 'created': int(time.time()),
                 'model': public_model,
-                'choices': [{'index': 0, 'message': _oauth_response_message(message), 'finish_reason': 'stop'}],
+                'choices': [
+                    {
+                        'index': 0,
+                        'message': _oauth_response_message(message),
+                        'finish_reason': 'tool_calls' if getattr(message, 'tool_calls', []) else 'stop',
+                    }
+                ],
                 'usage': _usage(_oauth_usage(message)),
             },
             headers={'X-Omi-Chat-Contract-Version': '1', 'X-Request-Id': request_id},
