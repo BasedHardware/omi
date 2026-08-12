@@ -294,9 +294,21 @@ def _repair_scanned_review_documents(
                 update['created_at'] = REVIEW_LIST_LEGACY_CREATED_AT_SENTINEL
         if not update:
             continue
-        # The port exposes no last-write revision precondition; the neutral equivalent of the
-        # optimistic compare-and-set is an unconditional path-addressed update.
-        _store().update(document.path, update)
+
+        # Re-read under a transaction: a stale self-heal redaction (status -> tombstoned) must not
+        # clobber a row a concurrent accept/reject already resolved. Redact only while still pending;
+        # the benign rank backfill (impact/created_at) may always apply.
+        def _heal(tx, path=document.path, planned=dict(update)) -> None:
+            snapshot = tx.get(path)
+            if not snapshot.exists:
+                return
+            still_pending = (snapshot.to_dict() or {}).get('status') in {'pending', 'pending_review'}
+            if 'status' in planned and not still_pending:
+                planned = {k: v for k, v in planned.items() if k in ('impact', 'created_at')}
+            if planned:
+                tx.update(path, planned)
+
+        _store().run_transaction(_heal)
 
 
 def list_review_conflicts(uid: str, status: str = 'pending', limit: int = 100) -> List[Dict[str, Any]]:
