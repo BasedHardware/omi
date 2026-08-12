@@ -19,7 +19,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from models.app import App
-from models.chat import GenerateReplyRequest, GenerateReplyResponse, Message, MessageSender
+from models.chat import GenerateReplyRequest, GenerateReplyResponse, Message, MessageSender, MessageType
 from utils.apps import get_available_app_by_id
 from utils.llm.usage_tracker import Features, reset_usage_context, set_usage_context
 from utils.observability.fallback import record_fallback
@@ -54,7 +54,7 @@ async def generate_reply(
     enforce_chat_quota(uid, platform=x_app_platform)
 
     app_id = data.app_id if data.app_id not in ['null', ''] else None
-    app_record = get_available_app_by_id(app_id, uid)
+    app_record = get_available_app_by_id(app_id, uid) if app_id else None
     app = App(**app_record) if app_record else None
     resolved_app_id = app.id if app else None
 
@@ -65,7 +65,7 @@ async def generate_reply(
             text=turn.text,
             created_at=created_at,
             sender=turn.sender,
-            type='text',
+            type=MessageType.text,
             app_id=resolved_app_id,
         )
         for turn in data.history
@@ -76,7 +76,7 @@ async def generate_reply(
             text=data.text,
             created_at=created_at,
             sender=MessageSender.human,
-            type='text',
+            type=MessageType.text,
             app_id=resolved_app_id,
         )
     )
