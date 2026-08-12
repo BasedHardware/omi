@@ -124,6 +124,12 @@ def test_rotate_dev_key_preserves_name_and_scopes_and_issues_a_new_secret(monkey
             "scopes": ["memories:read"],
         }
     )
+    redis.auth_context = {
+        "user_id": "user-1",
+        "scopes": ["memories:read"],
+        "key_id": "key-1",
+        "app_id": dev_api_key_db.DEV_API_KEY_APP_ID,
+    }
     _install(monkeypatch, dev_api_key_db, db, redis)
     monkeypatch.setattr(dev_api_key_db, "generate_dev_api_key", lambda: ("sk_omi_new", "c" * 64, "sk_omi_new_"))
 
@@ -138,6 +144,11 @@ def test_rotate_dev_key_preserves_name_and_scopes_and_issues_a_new_secret(monkey
     stored = db.collection("dev_api_keys").document("key-1").get().to_dict()
     assert stored["hashed_key"] == "c" * 64
     assert stored["created_at"] == created_at
+    assert stored["scopes"] == ["memories:read"]
+    assert stored["rotated_at"] is not None
+    # The retired secret must not survive in the auth cache.
+    assert redis.auth_context is None
+    # No raw secret is ever persisted.
     assert "sk_omi_new" not in str(stored.get("hashed_key"))
 
 
@@ -151,6 +162,9 @@ def test_rotate_dev_key_rejects_a_key_owned_by_another_user(monkeypatch):
 
     with pytest.raises(ApiKeyNotFoundError):
         dev_api_key_db.rotate_dev_key("intruder", "key-1")
+    with pytest.raises(ApiKeyNotFoundError):
+        dev_api_key_db.rotate_dev_key("owner", "missing-key")
+    assert db.collection("dev_api_keys").document("key-1").get().to_dict()["hashed_key"] == _VALID_HASH
 
 
 def test_rotation_fences_an_authentication_that_races_the_secret_swap(monkeypatch):
