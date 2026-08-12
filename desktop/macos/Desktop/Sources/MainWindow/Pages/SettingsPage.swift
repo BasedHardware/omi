@@ -550,8 +550,12 @@ struct SettingsContentView: View {
   @AppStorage("dev_openrouter_api_key") var devOpenRouterKey: String = ""
   @AppStorage("dev_deepgram_api_key") var devDeepgramKey: String = ""
   @AppStorage(DefaultsKey.byokLLMProvider.rawValue) var devBYOKLLMProvider: String = ""
+  @AppStorage(DefaultsKey.chatGPTLLMOAuthConnected.rawValue) var chatGPTLLMOAuthConnected: Bool = false
+  @AppStorage(DefaultsKey.grokLLMOAuthConnected.rawValue) var grokLLMOAuthConnected: Bool = false
   @State var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
   @State var byokActivationError: String?
+  @State var isConnectingLLMOAuth: Bool = false
+  @State var llmOAuthError: String?
 
   init(
     appState: AppState,

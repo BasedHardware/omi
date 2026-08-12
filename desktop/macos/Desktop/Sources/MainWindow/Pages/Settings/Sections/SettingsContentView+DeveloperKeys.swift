@@ -68,13 +68,17 @@ extension SettingsContentView {
         }
       }
 
-      developerKeyField(
-        provider: selectedBYOKLLMProvider.provider,
-        title: "\(selectedBYOKLLMProvider.displayName) API Key",
-        subtitle: selectedBYOKLLMSubtitle,
-        settingId: "advanced.devkeys.llm-key",
-        value: selectedBYOKLLMKey
-      )
+      if let provider = selectedBYOKLLMProvider.provider, let key = selectedBYOKLLMKey {
+        developerKeyField(
+          provider: provider,
+          title: "\(selectedBYOKLLMProvider.displayName) API Key",
+          subtitle: selectedBYOKLLMSubtitle,
+          settingId: "advanced.devkeys.llm-key",
+          value: key
+        )
+      } else if let provider = selectedBYOKLLMProvider.oauthProvider {
+        llmOAuthCard(provider)
+      }
 
       developerKeyField(
         provider: .deepgram,
@@ -111,6 +115,9 @@ extension SettingsContentView {
       migrateLegacyBYOKSelection()
       await refreshBYOKActivation()
     }
+    .task {
+      await refreshLLMOAuthStatus()
+    }
   }
 
   /// Identity of the current key set for `.task(id:)` — a SHA-256 over the four
@@ -118,7 +125,7 @@ extension SettingsContentView {
   /// without a secret sitting in a view-diff identity.
   var byokKeySetFingerprint: String {
     APIKeyService.byokFingerprint(
-      [devBYOKLLMProvider, selectedBYOKLLMKey.wrappedValue, devDeepgramKey].joined(separator: "\u{1}"))
+      [devBYOKLLMProvider, selectedBYOKLLMKey?.wrappedValue ?? "", devDeepgramKey].joined(separator: "\u{1}"))
   }
 
   var selectedBYOKLLMProvider: BYOKLLMProvider {
@@ -132,12 +139,13 @@ extension SettingsContentView {
     devBYOKLLMProvider = selectedBYOKLLMProvider.rawValue
   }
 
-  var selectedBYOKLLMKey: Binding<String> {
+  var selectedBYOKLLMKey: Binding<String>? {
     switch selectedBYOKLLMProvider {
     case .openrouter: return $devOpenRouterKey
     case .openai: return $devOpenAIKey
     case .gemini: return $devGeminiKey
     case .anthropic: return $devAnthropicKey
+    case .chatgpt, .grok: return nil
     }
   }
 
@@ -147,6 +155,92 @@ extension SettingsContentView {
     case .openai: return "Uses your OpenAI API key directly."
     case .gemini: return "Uses Gemini 2.5 Flash Lite directly."
     case .anthropic: return "Uses your Anthropic API key directly."
+    case .chatgpt: return "Uses your ChatGPT plan through OAuth."
+    case .grok: return "Uses your Grok account through OAuth."
+    }
+  }
+
+  func llmOAuthCard(_ provider: LLMOAuthProvider) -> some View {
+    settingsCard(settingId: "advanced.devkeys.\(provider.rawValue)-oauth") {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        HStack {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("\(selectedBYOKLLMProvider.displayName) account")
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(Ink.primary)
+            Text(selectedBYOKLLMSubtitle)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+          Spacer()
+          if isLLMOAuthConnected(provider) {
+            Text("Connected")
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(Ink.listeningGreen)
+          }
+        }
+        if let llmOAuthError {
+          Text(llmOAuthError)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(SettingsInk.notice)
+        }
+        HStack {
+          Button(isLLMOAuthConnected(provider) ? "Disconnect" : "Connect \(selectedBYOKLLMProvider.displayName)") {
+            Task { await toggleLLMOAuth(provider) }
+          }
+          .buttonStyle(.bordered)
+          .disabled(isConnectingLLMOAuth)
+          if isConnectingLLMOAuth {
+            ProgressView().controlSize(.small)
+          }
+        }
+      }
+    }
+  }
+
+  func isLLMOAuthConnected(_ provider: LLMOAuthProvider) -> Bool {
+    switch provider {
+    case .chatgpt: return chatGPTLLMOAuthConnected
+    case .grok: return grokLLMOAuthConnected
+    }
+  }
+
+  func setLLMOAuthConnected(_ connected: Bool, provider: LLMOAuthProvider) {
+    switch provider {
+    case .chatgpt: chatGPTLLMOAuthConnected = connected
+    case .grok: grokLLMOAuthConnected = connected
+    }
+  }
+
+  @MainActor
+  func refreshLLMOAuthStatus() async {
+    do {
+      let status = try await APIClient.shared.llmOAuthStatus()
+      for provider in LLMOAuthProvider.allCases {
+        setLLMOAuthConnected(status.connected.contains(provider), provider: provider)
+      }
+    } catch {
+      return
+    }
+  }
+
+  @MainActor
+  func toggleLLMOAuth(_ provider: LLMOAuthProvider) async {
+    isConnectingLLMOAuth = true
+    llmOAuthError = nil
+    defer { isConnectingLLMOAuth = false }
+    do {
+      if isLLMOAuthConnected(provider) {
+        try await APIClient.shared.disconnectLLMOAuth(provider)
+        setLLMOAuthConnected(false, provider: provider)
+      } else {
+        try await LLMOAuthConnector.shared.connect(provider)
+        setLLMOAuthConnected(true, provider: provider)
+      }
+      await FloatingBarUsageLimiter.shared.fetchPlan()
+      loadSubscriptionInfo()
+    } catch {
+      llmOAuthError = error.localizedDescription
     }
   }
 
@@ -164,7 +258,7 @@ extension SettingsContentView {
 
   var hasAnyBYOKKey: Bool {
     !devOpenRouterKey.isEmpty || !devOpenAIKey.isEmpty || !devAnthropicKey.isEmpty || !devGeminiKey.isEmpty
-      || !devDeepgramKey.isEmpty
+      || !devDeepgramKey.isEmpty || chatGPTLLMOAuthConnected || grokLLMOAuthConnected
   }
 
   var hasAllBYOKKeys: Bool {
@@ -220,17 +314,20 @@ extension SettingsContentView {
 
   @MainActor
   func refreshBYOKActivation() async {
-    guard !selectedBYOKLLMKey.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    guard let selectedKey = selectedBYOKLLMKey else {
+      return
+    }
+    guard !selectedKey.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       byokKeyStatuses = [:]
       byokActivationError = nil
-      if hasAnyBYOKKey {
+      if !chatGPTLLMOAuthConnected && !grokLLMOAuthConnected && hasAnyBYOKKey {
         try? await APIClient.shared.deactivateBYOK()
         await FloatingBarUsageLimiter.shared.fetchPlan()
       }
       return
     }
     let action = BYOKReconciliation.action(
-      forKeys: [selectedBYOKLLMKey.wrappedValue],
+      forKeys: [selectedKey.wrappedValue],
       hasCheckedStatuses: !byokKeyStatuses.isEmpty,
       hasActivationError: byokActivationError != nil
     )
@@ -261,7 +358,7 @@ extension SettingsContentView {
       let results = await BYOKValidator.validateAll(snapshot)
       guard !Task.isCancelled else { return }
       let selectedLLMValid =
-        results[selectedBYOKLLMProvider.provider].map {
+        selectedBYOKLLMProvider.provider.flatMap { results[$0] }.map {
           if case .ok = $0 { return true }
           return false
         } ?? false
