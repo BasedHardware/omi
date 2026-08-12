@@ -87,13 +87,12 @@ def _enabled_rollout_doc(uid='u1'):
 
 def test_developer_route_reads_use_universal_service_without_legacy_fallback():
     contents = _developer_source()
-    compact = _compact_python(contents)
-    assert "service=MemoryService(db_client=db)" in compact
-    assert "memories=service.read(uid,limit=limit,offset=offset,include_pending_processing=True)" in compact
-    assert "MemoryService(db_client=db).search(uid,query,limit=min(limit,20))" in compact
-    assert "read_default_read_rollout" not in contents
-    assert "search_memory_default_developer_memories(" not in contents
-    assert "memories_db" not in contents
+    assert 'service = MemoryService(db_client=db)' in contents
+    assert 'memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)' in contents
+    assert 'MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))' in contents
+    assert 'read_default_read_rollout' not in contents
+    assert 'search_memory_default_developer_memories(' not in contents
+    assert 'memories_db' not in contents
 
 
 def test_developer_vector_route_wires_app_key_scope_grant_before_memory_vector_reads():

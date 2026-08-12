@@ -150,7 +150,7 @@ def iter_user_data_export(uid: str) -> Iterator[str]:
         yield "    " + json.dumps(conv, default=_json_default, indent=4)
     yield "\n  ],\n"
 
-    yield '  "memories": ' + memories_json + ",\n"
+    yield '  "memories": ' + memories_json + ',\n'
 
     people = cast(Sequence[Mapping[str, Any]], get_people(uid))
     yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ",\n"

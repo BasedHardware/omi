@@ -116,12 +116,8 @@ def _truncate_locked_preview_text(content: str) -> str:
 
 
 def truncate_locked_memory_preview(memory: MemoryDB) -> MemoryDB:
-    """Truncate locked-memory content to the legacy 70-char preview.
-
-    Unlocked memories keep their full content. Only paid/locked rows are
-    preview-truncated for list surfaces that still expose a stub.
-    """
-    if not memory.is_locked or not memory.content:
+    """Truncate locked-memory content to the legacy 70-char preview."""
+    if not getattr(memory, 'is_locked', False) or not memory.content:
         return memory
     truncated = _truncate_locked_preview_text(memory.content)
     if truncated == memory.content:
@@ -347,7 +343,7 @@ class CanonicalMemoryBackend:
             device_scope_request=device_scope_request,
         )
         results: List[MemorySearchMatch] = []
-        for position, item in enumerate(items):
+        for rank, item in enumerate(items):
             if not item.get("memory_id"):
                 continue
             memory_obj = search_result_to_memorydb(uid, item)
@@ -355,9 +351,9 @@ class CanonicalMemoryBackend:
                 continue
             raw_score = item.get("score") or item.get("relevance_score")
             try:
-                score = float(raw_score) if raw_score is not None else 1.0 - (position / max(len(items), 1))
+                score = float(raw_score) if raw_score is not None else 1.0 - rank * 0.0001
             except (TypeError, ValueError):
-                score = 1.0 - (position / max(len(items), 1))
+                score = 1.0 - rank * 0.0001
             results.append(MemorySearchMatch(memory=memory_obj, score=score))
         return results
 

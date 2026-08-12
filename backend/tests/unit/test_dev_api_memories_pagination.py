@@ -295,16 +295,12 @@ def test_pagination_is_clamped_before_firestore(monkeypatch):
     # Clamp before MemoryService so neither canonical nor historical storage
     # can receive an unbounded or negative page request.
     client, memory_service = _build([], monkeypatch)
-    assert client.get("/v1/dev/user/memories?limit=99999&offset=-1").status_code == 200
-    assert client.get("/v1/dev/user/memories?limit=0&offset=5").status_code == 200
-    assert memory_service.read.call_args_list[0].args == ("uid1",)
+    assert client.get('/v1/dev/user/memories?limit=99999&offset=-1').status_code == 200
+    assert client.get('/v1/dev/user/memories?limit=0&offset=5').status_code == 200
+    assert memory_service.read.call_args_list[0].args == ('uid1',)
     assert memory_service.read.call_args_list[0].kwargs == {
-        "limit": 1000,
-        "offset": 0,
-        "include_pending_processing": True,
+        'limit': 1000,
+        'offset': 0,
+        'include_pending_processing': True,
     }
-    assert memory_service.read.call_args_list[1].kwargs == {
-        "limit": 1,
-        "offset": 5,
-        "include_pending_processing": True,
-    }
+    assert memory_service.read.call_args_list[1].kwargs == {'limit': 1, 'offset': 5, 'include_pending_processing': True}

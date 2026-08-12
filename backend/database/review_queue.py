@@ -858,11 +858,18 @@ def append_resolution_commit(
         arg_changes: Dict[str, Any] = cast(Dict[str, Any], arg_changes_raw) if isinstance(arg_changes_raw, dict) else {}
         if arg_changes:
             memory_service.refine(uid, str(target_id), arg_changes)
-    if decision == "reject":
-        fact_id: Any = item.get("fact_id")
-        # Treat already-tombstoned identities as success so a retry after a
-        # committed tombstone + failed ledger write remains idempotent.
-        _delete_review_conflicts_idempotently(memory_service, uid, [str(fact_id)])
+    if decision == 'reject':
+        fact_id: Any = item.get('fact_id')
+        try:
+            memory_service.delete(uid, str(fact_id))
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            status_reader = getattr(memory_service, '_canonical_status', None)
+            if not callable(status_reader) or status_reader(uid, str(fact_id)) != MemoryItemStatus.tombstoned:
+                raise
+            # Already tombstoned by a prior reject whose ledger commit failed.
+            # Treat as success so the retry can complete the ledger append.
     return memory_ledger.append_commit(
         uid,
         None,

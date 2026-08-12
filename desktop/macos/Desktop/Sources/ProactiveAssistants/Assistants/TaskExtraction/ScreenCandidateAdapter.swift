@@ -25,9 +25,7 @@ enum ScreenCandidateReconciliation {
 
     let lhsTarget = canonicalTarget(in: lhsMetadata)
     let rhsTarget = canonicalTarget(in: rhsMetadata)
-    // Create vs refine/duplicate_of must stay distinct even when prose overlaps.
-    // Only both-nil (pure creates) or equal targets may reconcile.
-    guard lhsTarget == rhsTarget else { return false }
+    if lhsTarget != rhsTarget { return false }
 
     let lhsTokens = semanticTokens(lhs.description)
     let rhsTokens = semanticTokens(rhs.description)

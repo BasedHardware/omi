@@ -1616,11 +1616,12 @@ actor TaskAssistant: ProactiveAssistant {
       let stagedTasks = try await StagedTaskStorage.shared.getAllStagedTasks(limit: 30)
       let canonicalCandidateDescriptions =
         try await StagedTaskStorage.shared.getRecentCanonicalCandidateDescriptions(limit: 30)
-      stagedTaskDescriptions = Self.mergeDedupContextDescriptions(
-        staged: stagedTasks.map(\.description),
-        canonical: canonicalCandidateDescriptions,
-        limit: 30
-      )
+      var seen = Set<String>()
+      // Prioritize canonical candidates so they are never crowded out by
+      // legacy staged-task descriptions within the 30-item limit.
+      let distinctDescriptions = (canonicalCandidateDescriptions + stagedTasks.map { $0.description })
+        .filter { seen.insert($0.lowercased()).inserted }
+      stagedTaskDescriptions = Array(distinctDescriptions.prefix(30))
     } catch {
       logError("Task: Failed to load staged tasks for context", error: error)
     }

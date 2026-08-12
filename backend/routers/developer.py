@@ -347,9 +347,6 @@ def get_memories(
     service = MemoryService(db_client=db)
     allowed = {category.value for category in category_list} if category_list else None
     if allowed is None:
-        # Developer creates go through required-processing and remain pending
-        # until promotion. List must include those just-created pending rows so
-        # create/list/fetch stay consistent on the same surface.
         memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)
         valid_memories = []
         for memory in memories:

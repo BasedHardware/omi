@@ -6,6 +6,7 @@ import database.users as users_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.integrations import ExternalIntegrationCreateMemory
 from utils.llm.memories import extract_memories_from_text
+from utils.memory.memory_authority import MemorySystem
 from utils.memory.memory_service import MemoryService
 from utils.memory.required_promotion import required_processing_payload
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
@@ -144,22 +145,20 @@ def process_external_integration_memory(
 
     # Save all memories to the database if any were created
     if saved_memories:
-        db_client = getattr(db_client_module, "db", None)
-        # Canonical apply is the sole write authority for every account.  The
-        # external source metadata above remains stable, so retries converge
-        # without a historical mirror or an enrollment decision.
-        # Explicit integration assertions keep the required-processing lifecycle
-        # (pending Short-term until durable processing completes). Text-extracted
-        # integration memories remain ordinary conversation-style admissions.
-        payloads: List[Dict[str, Any]] = []
-        for memory in saved_memories:
-            data = memory.model_dump(mode="python")
-            first_evidence = memory.evidence[0] if memory.evidence else None
-            extractor_id = getattr(first_evidence, "extractor_id", None) if first_evidence is not None else None
-            if extractor_id == "external_integration_explicit":
-                data = required_processing_payload(data, source_surface=f"integration:{app_id}")
-            payloads.append(data)
-        MemoryService(db_client=db_client).write_batch(uid, payloads)
+        db_client = getattr(db_client_module, 'db', None)
+        # Canonical apply is the sole write authority for every account.  Use
+        # create_external_memory_batch so required_processing_payload (tier,
+        # promotion, processor tracking) is applied — write_batch bypasses the
+        # required-processing/admission lifecycle.
+        MemoryService(db_client=db_client).create_external_memory_batch(
+            uid,
+            saved_memories,
+            memory_system=MemorySystem.CANONICAL,
+            consumer=f"integration:{app_id}",
+            operation="explicit_memory_create",
+            upsert_vectors=False,
+            require_canonical_promotion=True,
+        )
 
         _capture_external_memory_write(uid, source=f"integration_{app_id}", memories=saved_memories)
 
@@ -197,9 +196,14 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
     # Save all memories in batch
     if saved_memories:
         db_client = getattr(db_client_module, 'db', None)
-        MemoryService(db_client=db_client).write_batch(
+        MemoryService(db_client=db_client).create_external_memory_batch(
             uid,
-            [memory.model_dump(mode='python') for memory in saved_memories],
+            saved_memories,
+            memory_system=MemorySystem.CANONICAL,
+            consumer=f"twitter:{persona_id}",
+            operation="explicit_memory_create",
+            upsert_vectors=False,
+            require_canonical_promotion=True,
         )
 
         _capture_external_memory_write(uid, source=f"twitter_{persona_id}", memories=saved_memories)
