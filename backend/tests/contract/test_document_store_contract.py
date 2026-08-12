@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -359,6 +359,19 @@ def test_run_transaction_create_succeeds_then_conflicts(store, uid):
     with pytest.raises(AlreadyExists):
         store.run_transaction(create_one)  # the second create-if-absent conflicts
     assert store.get(path).to_dict() == {"description": "restored"}  # first write preserved
+
+
+def test_datetime_field_round_trips_timezone_aware(store, uid):
+    # A stored datetime must read back timezone-aware on every backend so callers can compare it to
+    # _now() (aware) without TypeError. PyMongo defaults to naive datetimes — the adapter sets
+    # tz_aware=True (cubic review PR 10887: Mongo finalization/admission stale checks crashed).
+    when = datetime(2026, 8, 12, 9, 30, tzinfo=timezone.utc)
+    store.set(f"users/{uid}", {"lease_expires_at": when})
+    got = store.get(f"users/{uid}").to_dict()["lease_expires_at"]
+    assert got.tzinfo is not None
+    assert got == when
+    # The comparison the callers actually do must not raise.
+    assert (got > datetime.now(timezone.utc)) in (True, False)
 
 
 def test_update_nested_field_with_non_identifier_segment(store, uid):

@@ -161,7 +161,10 @@ class MongoDocumentStore:
     """``DocumentStore`` backed by MongoDB (pymongo, sync)."""
 
     def __init__(self, uri: Optional[str] = None, db_name: str = "omi", client: Any = None):
-        self._mongo_client = client if client is not None else MongoClient(uri)
+        # tz_aware=True so BSON datetimes decode as timezone-aware UTC (PyMongo defaults to naive).
+        # Stored timestamps (_now() is aware) then compare cleanly against aware values at the callers
+        # (lease/admission/stale checks) instead of raising "can't compare naive and aware" TypeErrors.
+        self._mongo_client = client if client is not None else MongoClient(uri, tz_aware=True)
         self._db = self._mongo_client[db_name]
 
     def close(self) -> None:
