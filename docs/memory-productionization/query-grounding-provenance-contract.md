@@ -2,8 +2,8 @@
 
 Status: P5 contract, legacy compatibility gate, sealed repository,
 production-neutral producer/source/paired-coordinator kernels, single
-composition root, and real PostgreSQL atomic result-plus-grounding adapter,
-2026-08-12; no graph-query input adapter, route, model runtime, or activation
+composition root, and real PostgreSQL query-input, graph-source, and atomic
+result-plus-grounding adapters, 2026-08-12; no route, model runtime, or activation
 
 ## Purpose
 

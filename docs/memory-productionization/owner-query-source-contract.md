@@ -1,8 +1,8 @@
 # Owner-projected query source contract
 
-Status: P5 preregistration plus production-neutral source adapter, 2026-08-11;
-concrete PostgreSQL loader, production codec secret, composition, and activation
-absent
+Status: P5 production-neutral source adapter plus exact PostgreSQL query-input
+and authoritative-graph loader, 2026-08-12; production codec secret, concrete
+one-shot composition, and activation absent
 
 ## Purpose
 
@@ -102,7 +102,8 @@ drift.
 
 - no lexical/vector/model candidate ranking in this first source adapter;
 - no accepted/STM overlay until those inputs have the same projection closure;
-- no concrete PostgreSQL loader or production codec secret;
+- the concrete route-free PostgreSQL loader is real-database qualified; no
+  production codec secret or activated runtime exists;
 - no product read or external-application policy widening;
 - no inference that a source-derived class is David-specific truth.
 

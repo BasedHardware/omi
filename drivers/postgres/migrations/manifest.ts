@@ -145,4 +145,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0023-memory-experiment-runtime.sql",
     sha256: "1e0ca4fc4cad4e170a67fd112c9f8244367a19563cf47651ae926811d4e316cc",
   }),
+  Object.freeze({
+    version: 24,
+    name: "memory-query-evaluation-input",
+    fileName: "0024-memory-query-evaluation-input.sql",
+    sha256: "58640fdd710371cf5f336158e671c199b1bf95dd0182818876360fcbe44ba307",
+  }),
 ]);

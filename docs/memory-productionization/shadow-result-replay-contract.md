@@ -1,7 +1,8 @@
 # Shadow result and offline replay contract
 
-Status: P5 contract plus real PostgreSQL result/pair adapter qualification,
-2026-08-12; graph-query input, model runtime, route, and activation absent
+Status: P5 contract plus real PostgreSQL query-input, graph-source, and
+result/pair adapter qualification, 2026-08-12; model runtime, route, and
+activation absent
 
 ## Purpose
 

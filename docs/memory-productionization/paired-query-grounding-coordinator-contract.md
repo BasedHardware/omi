@@ -1,7 +1,8 @@
 # Paired query-grounding coordinator contract
 
-Status: P5 preregistration plus production-neutral coordinator kernel,
-2026-08-11; concrete adapters, service composition, and activation absent
+Status: P5 production-neutral coordinator and composition root plus concrete
+route-free PostgreSQL query/result/grounding adapters, 2026-08-12; one-shot
+runtime, model adapter, and activation absent
 
 ## Purpose
 
@@ -150,9 +151,9 @@ excluded.
 
 ## Explicit exclusions
 
-- no concrete PostgreSQL adapter, owner-graph loader, codec secret, model
-  adapter, API-key pool, worker scheduler, service composition, route, grant,
-  cache, Listen mapping, deployment, or product read;
+- no concrete codec secret, model adapter, API-key pool, worker scheduler,
+  one-shot PostgreSQL runtime, route, activated grant, cache, Listen mapping,
+  deployment, or product read;
 - no McNemar or contamination verdict inside the coordinator;
 - no blind sheet or request for David's grading until fresh machine gates pass;
 - no `subject:*`, bystander/privacy, identity authority, compose voice, data

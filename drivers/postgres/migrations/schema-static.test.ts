@@ -98,6 +98,7 @@ const expectedTables = [
   "memory_product_propositions",
   "memory_product_redirect_successors",
   "memory_product_redirects",
+  "memory_query_evaluation_inputs",
   "memory_work_acceptances",
   "memory_work_execution_policies",
   "memory_work_heads",
@@ -636,6 +637,20 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
       expect(experimentRuntime).toContain(`GRANT SELECT, INSERT ON omi_memory.${table}`);
     }
     expect(experimentRuntime).not.toMatch(/GRANT[^;]*\b(?:UPDATE|DELETE|TRUNCATE)\b/s);
+  });
+
+  test("keeps restart-safe query inputs sensitive, snapshot-bound, and outside graph authority", () => {
+    const input = tables.find((table) => table.name === "memory_query_evaluation_inputs")!;
+    expect(input.body).toContain("input_version = 'memory-query-evaluation-input-v1'");
+    expect(input.body).toContain("graph_snapshot_digest text NOT NULL");
+    expect(input.body).toContain("graph_generation bigint NOT NULL");
+    expect(input.body).toContain("query_text text NOT NULL");
+    expect(input.body).toContain("account_timezone text NOT NULL");
+    expect(input.body).not.toMatch(/graph_snapshot_json|answer|prompt|grade|label|statistic/i);
+    const runtime = migrationSql.find((entry) => entry.version === 24)!.sql;
+    expect(runtime).toContain("GRANT SELECT, INSERT ON omi_memory.memory_query_evaluation_inputs");
+    expect(runtime).not.toMatch(/GRANT[^;]*\b(?:UPDATE|DELETE|TRUNCATE)\b/s);
+    expect(runtime).not.toMatch(/GRANT[^;]*memory_(?:graph|product|work_|revisions)/s);
   });
 
   test("persists P4 product state with only the sealed writer's append grants", () => {

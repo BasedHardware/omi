@@ -11,6 +11,8 @@ import {
   type ProductProjectionWriteBody,
 } from "../../apps/service/stores/product-projection-repository";
 import { defineMemoryEvaluationEvidenceSource } from "../../apps/service/stores/memory-evaluation-evidence-source";
+import { materializeMemoryQueryEvaluationInput } from
+  "../../apps/service/stores/memory-query-evaluation-input-repository";
 import { materializeFinalizedMemoryReadGrounding } from "../../apps/service/stores/memory-read-grounding-repository";
 import {
   materializeMemoryEvaluationResult,
@@ -106,6 +108,10 @@ import {
   createPostgresMemoryReadGroundingRepository,
   createPostgresMemoryShadowResultRepository,
 } from "./memory-experiment-repository";
+import {
+  createPostgresMemoryQueryEvaluationGraphSource,
+  createPostgresMemoryQueryEvaluationInputRepository,
+} from "./memory-query-evaluation-source";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
@@ -3268,6 +3274,29 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
 
     const results = createPostgresMemoryShadowResultRepository({ pool: appRolePool });
     const groundings = createPostgresMemoryReadGroundingRepository({ pool: appRolePool });
+    const graphRepository = createPostgresAuthoritativeGraphSnapshotRepository({ pool: appRolePool });
+    const graphSnapshot = await graphRepository.load(context);
+    const queryInput = materializeMemoryQueryEvaluationInput(context, {
+      input_ref: `mqir1_${sha256CanonicalContent({ suffix, query: 1 })}`,
+      query_text: "Where do I work?", account_timezone: "UTC", graph_snapshot: graphSnapshot,
+    });
+    const queryInputs = createPostgresMemoryQueryEvaluationInputRepository({ pool: appRolePool });
+    const queryGraphSource = createPostgresMemoryQueryEvaluationGraphSource({ pool: appRolePool });
+    await expect(queryInputs.stage(context, queryInput)).resolves.toEqual({ kind: "staged", input: queryInput });
+    await expect(queryInputs.stage(context, queryInput)).resolves.toEqual({ kind: "replayed", input: queryInput });
+    const restartedQueryInputs = createPostgresMemoryQueryEvaluationInputRepository({ pool: appRolePool });
+    await expect(restartedQueryInputs.load(context, queryInput.source_ref)).resolves.toEqual({
+      kind: "found", input: queryInput,
+    });
+    await expect(queryGraphSource.load(context, {
+      source_kind: "authorized_graph_snapshot", source_ref: queryInput.source_ref,
+      input_frontier: queryInput.input_frontier,
+    })).resolves.toEqual({
+      kind: "found", owner_account_id: accountId, account_epoch: 12,
+      source_ref: queryInput.source_ref, input_frontier: queryInput.input_frontier,
+      query_text: queryInput.query_text, account_timezone: queryInput.account_timezone,
+      graph_snapshot: graphSnapshot,
+    });
     const baselineRequest = stageRequest("baseline");
     const candidateRequest = stageRequest("candidate");
     const baselineResult = materializeMemoryEvaluationResult(context, baselineRequest);
@@ -3300,19 +3329,20 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
 
     const persisted = await ownerSql.unsafe<{
       baselines: number; candidates: number; pairs: number; baseline_groundings: number;
-      candidate_groundings: number; pair_json_columns: number;
+      candidate_groundings: number; query_inputs: number; pair_json_columns: number;
     }[]>(`SELECT
       (SELECT count(*)::int FROM omi_memory.memory_strategy_evaluation_baselines WHERE account_id = $1) AS baselines,
       (SELECT count(*)::int FROM omi_memory.memory_strategy_shadow_results WHERE account_id = $1) AS candidates,
       (SELECT count(*)::int FROM omi_memory.memory_strategy_evaluation_pairs WHERE account_id = $1) AS pairs,
       (SELECT count(*)::int FROM omi_memory.memory_strategy_baseline_read_groundings WHERE account_id = $1) AS baseline_groundings,
       (SELECT count(*)::int FROM omi_memory.memory_strategy_candidate_read_groundings WHERE account_id = $1) AS candidate_groundings,
+      (SELECT count(*)::int FROM omi_memory.memory_query_evaluation_inputs WHERE account_id = $1) AS query_inputs,
       (SELECT count(*)::int FROM information_schema.columns
        WHERE table_schema = 'omi_memory' AND table_name = 'memory_strategy_evaluation_pairs'
          AND data_type IN ('json', 'jsonb')) AS pair_json_columns`, [accountId]);
     expect([...persisted]).toEqual([{
       baselines: 1, candidates: 1, pairs: 1,
-      baseline_groundings: 1, candidate_groundings: 1, pair_json_columns: 0,
+      baseline_groundings: 1, candidate_groundings: 1, query_inputs: 1, pair_json_columns: 0,
     }]);
 
     const rollbackPolicy = defineMemoryStrategyAssignmentPolicy({
@@ -3388,10 +3418,15 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     await expect(results.stage(context, baselineRequest)).resolves.toEqual({
       kind: "authorization_denied", reason: "grant_inactive",
     });
+    await expect(restartedQueryInputs.load(context, queryInput.source_ref)).resolves.toEqual({
+      kind: "authorization_denied", reason: "grant_inactive",
+    });
 
     for (const forbiddenSql of [
       "UPDATE omi_memory.memory_strategy_evaluation_baselines SET result_version = result_version WHERE account_id = $1",
       "DELETE FROM omi_memory.memory_strategy_evaluation_pairs WHERE account_id = $1",
+      "UPDATE omi_memory.memory_query_evaluation_inputs SET query_text = query_text WHERE account_id = $1",
+      "DELETE FROM omi_memory.memory_query_evaluation_inputs WHERE account_id = $1",
     ]) {
       await expect(ownerSql.begin(async (transaction) => {
         await transaction.unsafe("SET LOCAL ROLE omi_platform_application");

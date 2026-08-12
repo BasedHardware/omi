@@ -156,7 +156,8 @@ occupied fixed-port dev-server test remained excluded.
 ## Explicit exclusions
 
 - no direct use or widening of the P4 external-application generic projection;
-- no concrete graph/source/PostgreSQL adapter or worker grant;
+- concrete route-free PostgreSQL query-input, graph-source, result, and
+  grounding adapters are qualified; no activated worker grant or runtime;
 - no paired/repeat scheduling in this first unit;
 - no model choice, prompt tuning, cache, route, Listen mapping, or deployment;
 - no truth grade or promotion decision;

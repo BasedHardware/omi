@@ -72,6 +72,8 @@ Passing this entrypoint proves the pinned server/client/runtime scaffold, migrat
 reapply, callback-scoped serializable transaction behavior, rollback-local cleanup,
 application-role graph/formation/identity/liveness append and reconstruction, shared
 SQLite/PostgreSQL snapshot parity, one-head race behavior, and Bun/Node client parity.
+It also covers append-only product projection writes and isolated read-experiment query
+inputs, exact graph-source reload, result pairing, and finalized grounding persistence.
 The real corpus also kills a size-one pool backend at a query-quiescent pre-commit
 checkpoint after its first write, proves observer-visible rollback, and proves the next
 transaction reconnects with cleared local state. It does not by itself activate
