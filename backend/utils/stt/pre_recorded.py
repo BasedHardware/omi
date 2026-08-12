@@ -523,7 +523,6 @@ def deepgram_prerecorded_from_bytes(
 
 
 @timeit
-@timeit
 def modulate_prerecorded_from_bytes(
     audio_bytes: bytes,
     sample_rate: int = 16000,
