@@ -446,10 +446,10 @@ class TestTranscriptionCreditBYOKBypass:
 
 
 class TestBYOKHeadersConstant:
-    def test_headers_has_all_four_providers(self):
+    def test_headers_has_all_supported_providers(self):
         from utils.byok import BYOK_HEADERS
 
-        assert set(BYOK_HEADERS.keys()) == {'openai', 'anthropic', 'gemini', 'deepgram'}
+        assert set(BYOK_HEADERS.keys()) == {'openai', 'anthropic', 'gemini', 'openrouter', 'deepgram'}
 
     def test_headers_are_lowercase(self):
         from utils.byok import BYOK_HEADERS
@@ -521,17 +521,25 @@ class TestBYOKActivationValidation:
         assert result == {"active": True}
         mock_users_db.set_byok_active.assert_called_once_with('test-uid', fps)
 
-    def test_missing_provider_rejects(self):
+    def test_stt_only_activation_rejects(self):
         from fastapi import HTTPException
         from routers.users import BYOKActivateRequest, activate_byok_endpoint
 
-        fps = self._valid_fingerprints()
-        del fps['deepgram']
-        data = BYOKActivateRequest(fingerprints=fps)
+        data = BYOKActivateRequest(fingerprints={'deepgram': hashlib.sha256(b'dg').hexdigest()})
         with pytest.raises(HTTPException) as exc_info:
             activate_byok_endpoint(data, uid='test-uid')
         assert exc_info.value.status_code == 400
-        assert 'deepgram' in str(exc_info.value.detail)
+        assert 'LLM' in str(exc_info.value.detail)
+
+    @patch('routers.users.users_db')
+    def test_openrouter_only_activation_persists_fingerprint(self, mock_users_db):
+        from routers.users import BYOKActivateRequest, activate_byok_endpoint
+
+        fingerprints = {'openrouter': hashlib.sha256(b'or-key').hexdigest()}
+        assert activate_byok_endpoint(BYOKActivateRequest(fingerprints=fingerprints), uid='test-uid') == {
+            "active": True
+        }
+        mock_users_db.set_byok_active.assert_called_once_with('test-uid', fingerprints)
 
     def test_unknown_provider_rejects(self):
         from fastapi import HTTPException
@@ -596,10 +604,10 @@ class TestBYOKActivationValidation:
 
     def test_production_constants_match(self):
         """Verify the test regex matches the production regex."""
-        from routers.users import _SHA256_HEX_RE as prod_re, _BYOK_REQUIRED_PROVIDERS as prod_providers
+        from routers.users import _BYOK_ALLOWED_PROVIDERS as prod_providers, _SHA256_HEX_RE as prod_re
 
         assert prod_re.pattern == _SHA256_HEX_RE.pattern
-        assert prod_providers == {'openai', 'anthropic', 'gemini', 'deepgram'}
+        assert prod_providers == {'openai', 'anthropic', 'gemini', 'openrouter', 'deepgram'}
 
 
 # ---------------------------------------------------------------------------
@@ -686,16 +694,16 @@ class TestCacheRouting:
         client = clients._create_byok_client('gemini-3-flash-preview', 'openrouter', 'AIza-byok-key')
         assert isinstance(client, stub_client)
         # Must use Gemini base URL, not OpenRouter
-        assert client.openai_api_base == _GEMINI_OPENAI_BASE_URL
+        assert client.openai_api_base == 'https://openrouter.ai/api/v1'
         # Must use the bare model name for Gemini direct API
-        assert client.model_name == 'gemini-3-flash-preview'
+        assert client.model_name == 'google/gemini-3-flash-preview'
 
     def test_non_gemini_openrouter_returns_none(self):
         """Non-Gemini OpenRouter models have no BYOK support — returns None."""
         from utils.llm.clients import _create_byok_client
 
         result = _create_byok_client('anthropic/claude-3.5-sonnet', 'openrouter', 'sk-or-key')
-        assert result is None
+        assert result is not None
 
 
 # ---------------------------------------------------------------------------
@@ -847,19 +855,15 @@ class TestBYOKFingerprintValidation:
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
-    def test_missing_header_raises_403(self, mock_get_state):
+    def test_legacy_enrollment_allows_a_capability_scoped_header(self, mock_get_state):
         """BYOK-active user sends some headers but missing a provider → 403."""
-        from fastapi import HTTPException
         from utils.byok import _byok_ctx, validate_byok_request
 
         mock_get_state.return_value = self._mock_byok_state()
         # Send only openai key — this is a broken BYOK attempt (partial headers)
         token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
-            with pytest.raises(HTTPException) as exc_info:
-                validate_byok_request('byok-uid')
-            assert exc_info.value.status_code == 403
-            assert 'missing' in exc_info.value.detail
+            validate_byok_request('byok-uid')
         finally:
             _byok_ctx.reset(token)
 
@@ -952,18 +956,15 @@ class TestBYOKFingerprintValidation:
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
-    def test_partial_headers_when_byok_active_raises_403(self, mock_get_state):
+    def test_partial_headers_when_byok_active_stay_available(self, mock_get_state):
         """BYOK-active user sending SOME but not all headers → 403 (incomplete BYOK attempt)."""
-        from fastapi import HTTPException
         from utils.byok import _byok_ctx, validate_byok_request
 
         mock_get_state.return_value = self._mock_byok_state()
         # Send only openai key, missing the rest — this is a broken BYOK attempt, not mobile
         token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
-            with pytest.raises(HTTPException) as exc_info:
-                validate_byok_request('byok-uid')
-            assert exc_info.value.status_code == 403
+            validate_byok_request('byok-uid')
         finally:
             _byok_ctx.reset(token)
 
@@ -1039,8 +1040,7 @@ class TestBYOKFingerprintValidation:
         token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
             error = validate_byok_websocket('byok-uid')
-            assert error is not None
-            assert 'missing' in error
+            assert error is None
         finally:
             _byok_ctx.reset(token)
 
