@@ -84,24 +84,32 @@ final class LLMOAuthConnector: @unchecked Sendable {
   static let shared = LLMOAuthConnector()
 
   func connect(_ provider: LLMOAuthProvider) async throws {
-    let listener = try CallbackListener(provider: provider)
-    defer { listener.cancel() }
     let verifier = Self.randomURLSafe(length: 64)
     let state = Self.randomURLSafe(length: 24)
     let challenge = Self.codeChallenge(for: verifier)
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      throw AuthError.userChangedDuringRequest
+    }
+    let listener = try CallbackListener(provider: provider, expectedState: state)
+    defer { listener.cancel() }
     guard var components = URLComponents(string: provider.authorizationEndpoint) else {
       throw Error.invalidAuthorizationURL
     }
     components.queryItems = provider.authorizationItems(verifier: verifier, state: state, challenge: challenge)
     guard let url = components.url else { throw Error.invalidAuthorizationURL }
-    _ = await MainActor.run { NSWorkspace.shared.open(url) }
-    let values = try await listener.waitForCallback(timeout: 240)
+    async let callback = listener.waitForCallback(timeout: 240)
+    await Task.yield()
+    guard await MainActor.run(body: { NSWorkspace.shared.open(url) }) else {
+      throw Error.invalidAuthorizationURL
+    }
+    let values = try await callback
     guard values["state"] == state, let code = values["code"] else { throw Error.invalidCallback }
     try await APIClient.shared.completeLLMOAuth(
       provider: provider,
       code: code,
       codeVerifier: verifier,
-      redirectURI: provider.redirectURI
+      redirectURI: provider.redirectURI,
+      authorizationSnapshot: authorizationSnapshot
     )
     UserDefaults.standard.set(true, forKey: provider.connectionStorageKey)
   }
@@ -126,10 +134,13 @@ final class LLMOAuthConnector: @unchecked Sendable {
 
   private final class CallbackListener: @unchecked Sendable {
     private let listener: NWListener
+    private let expectedState: String
     private let lock = NSLock()
     private var continuation: CheckedContinuation<[String: String], Swift.Error>?
+    private var completedResult: Result<[String: String], Swift.Error>?
 
-    init(provider: LLMOAuthProvider) throws {
+    init(provider: LLMOAuthProvider, expectedState: String) throws {
+      self.expectedState = expectedState
       let port = provider == .chatgpt ? UInt16(1455) : UInt16(56121)
       guard let endpointPort = NWEndpoint.Port(rawValue: port) else { throw Error.callbackUnavailable }
       do {
@@ -150,6 +161,15 @@ final class LLMOAuthConnector: @unchecked Sendable {
     func waitForCallback(timeout: TimeInterval) async throws -> [String: String] {
       try await withCheckedThrowingContinuation { continuation in
         lock.lock()
+        if let completedResult = self.completedResult {
+          self.completedResult = nil
+          lock.unlock()
+          switch completedResult {
+          case .success(let values): continuation.resume(returning: values)
+          case .failure(let error): continuation.resume(throwing: error)
+          }
+          return
+        }
         self.continuation = continuation
         lock.unlock()
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak self] in
@@ -170,7 +190,7 @@ final class LLMOAuthConnector: @unchecked Sendable {
         let response =
           "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n\(html)"
         connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
-        if !values.isEmpty {
+        if values["state"] == self.expectedState, values["code"] != nil {
           self.finish(.success(values))
         }
       }
@@ -180,6 +200,9 @@ final class LLMOAuthConnector: @unchecked Sendable {
       lock.lock()
       let continuation = self.continuation
       self.continuation = nil
+      if continuation == nil {
+        completedResult = result
+      }
       lock.unlock()
       switch result {
       case .success(let values): continuation?.resume(returning: values)
