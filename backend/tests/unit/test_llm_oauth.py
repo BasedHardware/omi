@@ -226,6 +226,18 @@ def test_get_llm_uses_the_selected_oauth_provider_without_a_key_header():
     assert create_client.call_args.args == (credential, False, 'conv_structure')
 
 
+def test_get_llm_uses_oauth_for_chat_agent_when_direct_provider_mode_is_enabled():
+    credential = {'provider': 'chatgpt', 'access_token': 'access-1', 'refresh_token': 'refresh-1'}
+    with patch.object(clients, 'should_route_features_through_gateway', return_value=False), patch.object(
+        clients, 'get_byok_key', return_value=None
+    ), patch.object(clients, 'get_byok_oauth_credential', return_value=credential), patch.object(
+        clients, '_create_llm_oauth_client'
+    ) as create_client:
+        client = clients.get_llm('chat_agent')
+    assert client is create_client.return_value
+    assert create_client.call_args.args == (credential, False, 'chat_agent')
+
+
 def test_get_llm_does_not_fall_back_to_omi_when_oauth_refresh_fails():
     with patch.object(clients, 'get_byok_key', return_value=None), patch.object(
         clients, 'get_byok_uid', return_value='user-1'
