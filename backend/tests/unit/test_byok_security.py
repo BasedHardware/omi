@@ -732,6 +732,24 @@ class TestCacheRouting:
         assert isinstance(client, stub_client)
         assert client.model_name == 'gpt-4.1-mini'
 
+    def test_anthropic_byok_routes_generic_features_through_the_user_key(self, monkeypatch):
+        from utils.llm import clients
+
+        client = MagicMock()
+        create_client = MagicMock(return_value=client)
+        monkeypatch.setattr(clients, '_cached_anthropic_chat', create_client)
+        monkeypatch.setattr(
+            clients, 'get_byok_key', lambda provider: 'sk-ant-user-key' if provider == 'anthropic' else None
+        )
+        monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
+
+        assert clients.get_llm('memories') is client
+        create_client.assert_called_once()
+        assert create_client.call_args.args[:2] == ('claude-sonnet-4-6', 'sk-ant-user-key')
+        assert create_client.call_args.args[2]['timeout'] == 120
+        assert 'request_timeout' not in create_client.call_args.args[2]
+
     def test_openrouter_gemini_byok_routes_through_openrouter(self, monkeypatch):
         """OpenRouter BYOK keeps Gemini models on the OpenRouter endpoint."""
 

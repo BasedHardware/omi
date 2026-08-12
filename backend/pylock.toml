@@ -653,6 +653,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/16/22/a4d4ac98fc2e39353
 wheels = [{ url = "https://files.pythonhosted.org/packages/7c/06/c3394327f815fade875724c0f6cff529777c96a1e17fea066deb997f8cf5/langchain-1.2.10-py3-none-any.whl", upload-time = 2026-02-10T14:56:47Z, size = 111738, hashes = { sha256 = "e07a377204451fffaed88276b8193e894893b1003e25c5bca6539288ccca3698" } }]
 
 [[packages]]
+name = "langchain-anthropic"
+version = "1.1.0"
+sdist = { url = "https://files.pythonhosted.org/packages/d2/d3/8ac7d664e87aa9bdf5f6a4d55324316933aec8beb1690932dbe7b63416e2/langchain_anthropic-1.1.0.tar.gz", upload-time = 2025-11-17T21:31:31Z, size = 684087, hashes = { sha256 = "427e102b76a417fb5713e81e853225e7459d71fc7abdf4d86722f0e01ad43845" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/aa/95/f340acdd8d9f392606f026a1326a33cfb1f9b172c7607c70ab0c2b43d74d/langchain_anthropic-1.1.0-py3-none-any.whl", upload-time = 2025-11-17T21:31:29Z, size = 47793, hashes = { sha256 = "2593f10b984448e31a9fd486ab2f7ebc8a0f7f82ba1ca477339e4f5ddd7f0e8d" } }]
+
+[[packages]]
 name = "langchain-classic"
 version = "1.0.7"
 sdist = { url = "https://files.pythonhosted.org/packages/9b/78/84b5065816f348c39fefa4316f209f0135e8410216340a953bec17d9e4e4/langchain_classic-1.0.7.tar.gz", upload-time = 2026-05-07T15:46:56Z, size = 10554118, hashes = { sha256 = "debbec8065e69b95108d2652e8d5c44f4516e19aa8d716c02ed2211c3aee099d" } }

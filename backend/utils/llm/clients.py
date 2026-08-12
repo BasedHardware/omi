@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Optional
 import anthropic
 import httpx
 from cachetools import TTLCache
+from langchain_anthropic import ChatAnthropic
 
 try:
     from langchain_core.callbacks import BaseCallbackHandler
@@ -352,6 +353,7 @@ _BYOK_CACHE_TTL_SECONDS = 3600  # 1 hour
 
 _openai_cache: TTLCache = TTLCache(maxsize=_BYOK_CACHE_MAX_SIZE, ttl=_BYOK_CACHE_TTL_SECONDS)
 _anthropic_cache: TTLCache = TTLCache(maxsize=_BYOK_CACHE_MAX_SIZE, ttl=_BYOK_CACHE_TTL_SECONDS)
+_anthropic_chat_cache: TTLCache = TTLCache(maxsize=_BYOK_CACHE_MAX_SIZE, ttl=_BYOK_CACHE_TTL_SECONDS)
 
 
 def _hash_key(api_key: str) -> str:
@@ -377,9 +379,18 @@ def _cached_anthropic(api_key: str) -> anthropic.AsyncAnthropic:
     return inst
 
 
+def _cached_anthropic_chat(model: str, api_key: str, ctor_kwargs: Dict[str, Any]) -> ChatAnthropic:
+    cache_key = f"{model}:{_hash_key(api_key)}:{hash(frozenset((k, repr(v)) for k, v in ctor_kwargs.items()))}"
+    inst = _anthropic_chat_cache.get(cache_key)
+    if inst is None:
+        inst = ChatAnthropic(model=model, api_key=api_key, **ctor_kwargs)
+        _anthropic_chat_cache[cache_key] = inst
+    return inst
+
+
 def _create_byok_client(
     model: str, provider: str, byok_key: str, streaming: bool = False, feature: str = ''
-) -> Optional[ChatOpenAI]:
+) -> Optional[BaseChatModel]:
     """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider."""
     callback_provider = _effective_byok_provider(model, provider)
     kwargs: Dict[str, Any] = _with_llm_callbacks(
@@ -408,6 +419,11 @@ def _create_byok_client(
             byok_key,
             {**kwargs, 'base_url': 'https://openrouter.ai/api/v1', 'default_headers': {'X-Title': 'Omi Chat'}},
         )
+
+    if provider == 'anthropic':
+        anthropic_kwargs = dict(kwargs)
+        anthropic_kwargs['timeout'] = anthropic_kwargs.pop('request_timeout')
+        return _cached_anthropic_chat(model, byok_key, anthropic_kwargs)
 
     return None
 
@@ -442,6 +458,8 @@ def _byok_fallback_model(provider: str) -> str:
         return 'gpt-4o-mini'
     if provider in {'gemini', 'openrouter'}:
         return 'gemini-2.5-flash-lite'
+    if provider == 'anthropic':
+        return 'claude-sonnet-4-6'
     return ''
 
 
@@ -521,7 +539,7 @@ def get_llm(
         byok_key = get_byok_key(byok_provider)
     if not byok_key:
         configured_provider = provider
-        for candidate in ('openrouter', 'openai', 'gemini'):
+        for candidate in ('openrouter', 'openai', 'gemini', 'anthropic'):
             candidate_key = get_byok_key(candidate)
             if candidate_key:
                 provider = candidate
