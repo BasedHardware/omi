@@ -13,6 +13,17 @@ _MODULE_NAMES = ('routers.memory_platform', 'utils.other.endpoints')
 def _auth_stub() -> types.ModuleType:
     module = types.ModuleType('utils.other.endpoints')
     module.get_current_user_uid = lambda: 'test-user'
+
+    # `with_rate_limit` has to be stubbed too. Omitting it made
+    # `_rate_limited_uid` silently fall back to the unrated dependency, so the
+    # search route's rate-limit wiring was never exercised by any test here.
+    def _with_rate_limit(dependency, policy_name):
+        wrapped = lambda: dependency()  # noqa: E731 - keeps the wrapper a distinct callable
+        wrapped.rate_limit_policy = policy_name
+        wrapped.wrapped_dependency = dependency
+        return wrapped
+
+    module.with_rate_limit = _with_rate_limit
     return module
 
 
@@ -76,7 +87,22 @@ def _client(memory_platform_router):
     app = FastAPI()
     app.include_router(memory_platform_router.router)
     app.dependency_overrides[memory_platform_router.auth.get_current_user_uid] = lambda: 'test-user'
+    # Metered routes depend on the rate-limited wrapper, not on the bare uid
+    # dependency, so each wrapper needs its own override to reach the handler.
+    for route in app.routes:
+        for dependency in getattr(getattr(route, 'dependant', None), 'dependencies', []):
+            if getattr(dependency.call, 'rate_limit_policy', None) is not None:
+                app.dependency_overrides[dependency.call] = lambda: 'test-user'
     return TestClient(app)
+
+
+def test_metered_search_depends_on_the_rate_limited_uid(memory_platform_router):
+    """The search route must be metered by `tools:search`, not the bare uid dependency."""
+    routes = [route for route in memory_platform_router.router.routes if route.path == '/v1/memory/platform/search']
+
+    assert len(routes) == 1
+    policies = [getattr(dependency.call, 'rate_limit_policy', None) for dependency in routes[0].dependant.dependencies]
+    assert policies == ['tools:search']
 
 
 def test_quota_route_exposes_remaining_platform_allowance(memory_platform_router, monkeypatch):
@@ -157,3 +183,105 @@ def test_search_returns_the_documented_400_for_invalid_bounds(memory_platform_ro
 
     assert response.status_code == 400
     assert 'must be' in str(response.json()['detail'])
+
+
+def _rollout_observability() -> dict:
+    """A real ProductRolloutObservability payload, dumped the way the route emits it."""
+    from models.memory_admin import ReadRolloutCapabilities
+    from models.memory_product import ProductRolloutObservability
+
+    return ProductRolloutObservability(
+        consumer='omi_chat',
+        enabled=True,
+        reason='memory_reads_enabled',
+        read_decision='USE_MEMORY',
+        mode='memory_authoritative',
+        memory_reads_enabled=True,
+        legacy_reads_authoritative=False,
+        default_memory_grant=True,
+        archive_default_visible=False,
+        archive_capability=False,
+        fallback_reason=None,
+        capabilities=ReadRolloutCapabilities(
+            legacy_only=False,
+            shadow_artifacts_enabled=False,
+            memory_writes_enabled=True,
+            memory_reads_enabled=True,
+            legacy_reads_authoritative=False,
+        ),
+        surface='platform_search',
+        archive_capability_required=False,
+        archive_capability_granted=False,
+        explicit_archive_request=False,
+        app_context={},
+    ).model_dump(mode='json')
+
+
+def _seeded_search_client(memory_platform_router, monkeypatch):
+    """Wire the route to a Firestore fake holding one default-visible memory item.
+
+    Everything from `fetch_default_product_memory_search` outward is production
+    code, so the response goes through FastAPI's real `response_model`
+    serialization — which is exactly where issue #11438 failed.
+    """
+    from datetime import datetime, timezone
+
+    from models.product_memory import MemoryAccessPolicy
+    from tests.unit.test_product_memory_read_service import _FirestoreFake, _memory_item, _stored_item
+
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    item = _memory_item('m1', now=now, content='coffee fresh short term', uid='test-user')
+    db_client = _FirestoreFake({'users/test-user/memory_items/m1': _stored_item(item)})
+
+    monkeypatch.setattr(memory_platform_router, 'get_firestore_client', lambda: db_client)
+    monkeypatch.setattr(memory_platform_router, '_current_time', lambda: now)
+    monkeypatch.setattr(memory_platform_router, 'enforce_platform_quota', lambda _uid: None)
+    gate = types.SimpleNamespace(
+        source_path='memory_state/read_gate',
+        read_decision=types.SimpleNamespace(value='USE_MEMORY'),
+        fallback_reason=None,
+        reason='memory_reads_enabled',
+    )
+    monkeypatch.setattr(
+        memory_platform_router,
+        '_require_product_authorization',
+        lambda _uid, _db: types.SimpleNamespace(
+            policy=MemoryAccessPolicy.for_omi_chat(),
+            global_gate=gate,
+            observability=_rollout_observability(),
+        ),
+    )
+    return _client(memory_platform_router)
+
+
+def test_search_serializes_a_non_empty_page_of_real_projections(memory_platform_router, monkeypatch):
+    """Regression for #11438: any matching row used to 500 on response validation.
+
+    The read service returns product projections (`memory_id`, `date`,
+    `agent_use`, ...), not authoritative `MemoryItem` documents. While
+    `ProductMemorySearchResponse.items` was declared as `List[MemoryItem]`, an
+    empty page serialized fine and every non-empty page raised
+    `ResponseValidationError`, so the endpoint 500'd on all real data.
+    """
+    client = _seeded_search_client(memory_platform_router, monkeypatch)
+
+    empty = client.get('/v1/memory/platform/search', params={'query': 'zzzznomatch', 'limit': 20, 'offset': 0})
+    assert empty.status_code == 200
+    assert empty.json()['items'] == []
+
+    response = client.get('/v1/memory/platform/search', params={'query': 'coffee', 'limit': 20, 'offset': 0})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['total_count'] == 1
+    assert body['returned_count'] == 1
+    assert [row['memory_id'] for row in body['items']] == ['m1']
+    row = body['items'][0]
+    assert row['content'] == 'coffee fresh short term'
+    assert row['tier'] == 'short_term'
+    assert row['memory_layer'] == 'product_memory'
+    assert row['agent_use'] == 'default_access_memory'
+    assert row['date'] == '2026-06-18T12:00:00+00:00'
+    # The projection must not leak the authoritative storage fields.
+    assert 'uid' not in row
+    assert 'sensitivity_labels' not in row

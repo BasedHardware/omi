@@ -284,6 +284,89 @@ def test_fetch_archive_product_memory_search_requires_archive_capability_and_kee
     assert [item['memory_id'] for item in default['items']] == ['fresh-short-term', 'long-term']
 
 
+def test_non_empty_search_pages_satisfy_the_declared_route_response_models():
+    """Regression for #11438: the declared wire schema must accept real rows.
+
+    `/memory/search`, `/memory/archive/search` and `/v1/memory/platform/search`
+    all return this service's dict verbatim under a `response_model`. While that
+    model declared `items: List[MemoryItem]`, only an empty page validated, so
+    every request that matched anything 500'd. Validating a non-empty page
+    through the same pydantic models FastAPI uses keeps the projection and the
+    published schema from drifting apart again.
+    """
+    from models.memory_product import ArchiveProductMemorySearchResponse, ProductMemorySearchResponse
+
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
+    archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
+    db_client = _FirestoreFake(
+        {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [archive, fresh_short_term]}
+    )
+    observability = {
+        'policy': {
+            'consumer': 'omi_chat',
+            'app_has_default_memory_grant': True,
+            'archive_capability': False,
+            'raw_provenance_capability': False,
+        },
+        'global_read_gate': {
+            'source_path': 'memory_state/read_gate',
+            'read_decision': 'USE_MEMORY',
+            'fallback_reason': None,
+            'reason': 'memory_reads_enabled',
+        },
+        'rollout': {
+            'consumer': 'omi_chat',
+            'enabled': True,
+            'reason': 'memory_reads_enabled',
+            'read_decision': 'USE_MEMORY',
+            'mode': 'memory_authoritative',
+            'memory_reads_enabled': True,
+            'legacy_reads_authoritative': False,
+            'default_memory_grant': True,
+            'archive_default_visible': False,
+            'archive_capability': False,
+            'fallback_reason': None,
+            'capabilities': {
+                'legacy_only': False,
+                'shadow_artifacts_enabled': False,
+                'memory_writes_enabled': True,
+                'memory_reads_enabled': True,
+                'legacy_reads_authoritative': False,
+            },
+            'surface': 'product_default_search',
+            'archive_capability_required': False,
+            'archive_capability_granted': False,
+            'explicit_archive_request': False,
+            'app_context': {},
+        },
+    }
+
+    default = fetch_default_product_memory_search(
+        uid='u1',
+        query='coffee',
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        now=now,
+        db_client=db_client,
+    )
+    archive_page = fetch_archive_product_memory_search(
+        uid='u1',
+        query='coffee',
+        policy=MemoryAccessPolicy.for_omi_chat(archive_capability=True),
+        now=now,
+        db_client=db_client,
+    )
+    assert default['items'] and archive_page['items']
+
+    validated_default = ProductMemorySearchResponse.model_validate({**default, **observability})
+    validated_archive = ArchiveProductMemorySearchResponse.model_validate({**archive_page, **observability})
+
+    assert [row.memory_id for row in validated_default.items] == ['fresh-short-term']
+    assert [row.memory_id for row in validated_archive.items] == ['archive']
+    assert validated_default.items[0].agent_use == 'default_access_memory'
+    assert validated_archive.items[0].agent_use == 'explicit_archive_memory'
+
+
 class _QuerySnapshot(_Snapshot):
     def __init__(self, document_id, data):
         super().__init__(data)
