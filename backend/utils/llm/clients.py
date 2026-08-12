@@ -543,18 +543,14 @@ def get_llm(
         )
 
     byok_profile = get_byok_profile()
+    byok_provider = _effective_byok_provider(model, provider)
+    byok_key = get_byok_key(byok_provider)
     if byok_profile:
         profile_model, profile_provider = byok_profile.get(feature, (model, provider))
         profile_key = get_byok_key(_effective_byok_provider(profile_model, profile_provider))
         if profile_key:
             model, provider, byok_key = profile_model, profile_provider, profile_key
             byok_provider = _effective_byok_provider(model, provider)
-    else:
-        byok_provider = _effective_byok_provider(model, provider)
-        byok_key = get_byok_key(byok_provider)
-    else:
-        byok_provider = _effective_byok_provider(model, provider)
-        byok_key = get_byok_key(byok_provider)
     if not byok_key:
         configured_provider = provider
         for candidate in ('openrouter', 'openai', 'gemini'):

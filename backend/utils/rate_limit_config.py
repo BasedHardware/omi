@@ -35,6 +35,7 @@ RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "false").lower() =
 # ---------------------------------------------------------------------------
 
 RATE_POLICIES: dict[str, tuple[int, int]] = {
+    "llm_oauth:exchange": (10, 3600),
     # Conversations — each triggers ~22 OpenAI calls
     "conversations:create": (10, 3600),
     "conversations:reprocess": (3, 3600),
