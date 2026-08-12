@@ -1815,6 +1815,15 @@ async def _chat_completions_unobserved(
             )
             gateway_mode = False
         if oauth_provider is not None:
+            if direct_web_search_requested:
+                record_fallback(
+                    component='desktop_chat',
+                    from_mode=f'{oauth_provider}_oauth',
+                    to_mode='unsupported_web_search',
+                    reason='capability_mismatch',
+                    outcome='degraded',
+                )
+                raise HTTPException(status_code=400, detail='OAuth providers do not support Omi web search')
             record_fallback(
                 component='desktop_chat',
                 from_mode='managed_chat',
