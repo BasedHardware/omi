@@ -1,6 +1,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import httpx
 import pytest
@@ -1609,6 +1610,39 @@ async def test_chat_completions_routes_oauth_provider_without_managed_gateway(mo
     assert payload['choices'][0]['finish_reason'] == 'tool_calls'
     assert payload['choices'][0]['message']['tool_calls'][0]['function']['arguments'] == '{"city":"Kuala Lumpur"}'
     assert payload['usage'] == {'prompt_tokens': 2, 'completion_tokens': 3, 'total_tokens': 5}
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_rejects_oauth_web_search_without_claiming_recovery(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'get_byok_llm_provider', lambda: 'chatgpt')
+    monkeypatch.setattr(desktop_chat, 'get_byok_oauth_credential', lambda: {'provider': 'chatgpt'})
+    fallback = Mock()
+    monkeypatch.setattr(desktop_chat, 'record_fallback', fallback)
+    monkeypatch.setattr(desktop_chat, 'get_llm', Mock())
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat.chat_completions(
+            {
+                'model': 'omi-sonnet',
+                'messages': [{'role': 'user', 'content': 'find current news'}],
+                'omi_web_search': True,
+            },
+            uid='user-1',
+            x_app_platform=None,
+            x_omi_chat_contract_version=None,
+            x_omi_request_id=None,
+        )
+
+    assert error.value.status_code == 400
+    fallback.assert_called_once_with(
+        component='desktop_chat',
+        from_mode='chatgpt_oauth',
+        to_mode='unsupported_web_search',
+        reason='capability_mismatch',
+        outcome='degraded',
+    )
+    desktop_chat.get_llm.assert_not_called()
 
 
 @pytest.mark.asyncio
