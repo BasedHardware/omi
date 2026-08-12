@@ -7,6 +7,7 @@ import {
   type AgentRunApprovalResolution,
   type AgentRunEvent,
   type AgentRunEventStore,
+  type AgentRunEventStoreSnapshot,
   type AgentRunRecoveryAction,
   type AgentRunStatus,
   type AgentRunTerminalCode,
@@ -16,6 +17,8 @@ import {
 export interface AgentRunScenario {
   readonly runId?: string;
   readonly attemptId?: string;
+  /** Strict durable state restored before the declarative continuation runs. */
+  readonly initialSnapshot?: AgentRunEventStoreSnapshot;
   readonly capability?: {
     readonly capabilityId: string;
     readonly tier: "deterministic-scripted" | "real-provider" | "unknown";
@@ -90,8 +93,15 @@ export const runAgentRunScenario = (
 ): AgentRunScenarioResult => {
   const runId = scenario.runId ?? SCENARIO_RUN;
   const attemptId = scenario.attemptId ?? SCENARIO_ATTEMPT;
-  let now = 0;
+  if (existingStore !== undefined && scenario.initialSnapshot !== undefined) {
+    throw new TypeError("agent run scenario has two durable state authorities");
+  }
   const store = existingStore ?? createInMemoryAgentRunEventStore();
+  if (scenario.initialSnapshot !== undefined) store.restore(scenario.initialSnapshot);
+  const initialEvents = store.list(runId);
+  let now = initialEvents.length === 0
+    ? 0
+    : Math.max(...initialEvents.map((event) => event.createdAt)) + 1;
   const supervisor = createAgentRunEventSupervisor({
     events: store,
     nowEpochMilliseconds: () => now,
@@ -102,7 +112,9 @@ export const runAgentRunScenario = (
     events.push(event);
     now += 1;
   };
-  record(supervisor.accepted({ runId, attemptId, admissionId: SCENARIO_ADMISSION }));
+  if (initialEvents.length === 0) {
+    record(supervisor.accepted({ runId, attemptId, admissionId: SCENARIO_ADMISSION }));
+  }
   if (scenario.capability !== undefined) record(supervisor.capability({ runId, attemptId, ...scenario.capability }));
   if (scenario.context !== undefined) record(supervisor.context({ runId, attemptId, ...scenario.context }));
   for (const status of scenario.statuses ?? []) record(supervisor.status({ runId, attemptId, ...status }));

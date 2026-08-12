@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   CURRENT_AGENT_RUN_EVENT_SCHEMA_VERSION,
+  createAgentRunEventSupervisor,
   createInMemoryAgentRunEventStore,
   parseAgentRunEvent,
   projectAgentRunTimeline,
@@ -79,6 +80,67 @@ describe("versioned agent run events", () => {
       terminalOutcome: "completed", terminalCode: "completed", retryable: false, recoveryAction: null,
     });
     expect(scanAgentRunRedactions(first.timeline)).toEqual([]);
+  });
+
+  test("declarative durable initial state resumes with tools and approval then reloads exactly", () => {
+    let now = 40;
+    const seeded = createInMemoryAgentRunEventStore();
+    const seedSupervisor = createAgentRunEventSupervisor({
+      events: seeded,
+      nowEpochMilliseconds: () => now++,
+      eventId: (runId, sequence, kind) => `${runId}:${sequence}:${kind}`,
+    });
+    seedSupervisor.accepted({ runId: "run-resumed", attemptId: "attempt-1", admissionId: "admission-resumed" });
+    seedSupervisor.context({
+      runId: "run-resumed",
+      attemptId: "attempt-1",
+      contextReceiptId: "context-resumed",
+      sourceKind: "memory",
+      sourceRef: "memory-safe-ref",
+      sourceHash: HASH,
+      ownerRef: "owner-safe-ref",
+      expiresAt: 100,
+      redactedPreview: "Safe resumed context",
+      tokenEstimate: 4,
+      inclusionReason: "Continuation context",
+      policyDecision: "included",
+    });
+
+    const resumed = runAgentRunScenario({
+      initialSnapshot: seeded.snapshot(),
+      runId: "run-resumed",
+      attemptId: "attempt-2",
+      statuses: [{ status: "using_tool", progressPct: 50 }],
+      tools: [{
+        callId: "call-resumed",
+        toolName: "safe.lookup",
+        timeoutMs: 1_000,
+        idempotencyKey: "idem-resumed",
+        result: { summary: "Lookup resumed", durationMs: 3, retryable: false },
+      }],
+      approval: {
+        approvalId: "approval-resumed",
+        callId: "call-resumed",
+        reason: "Approval remained scoped",
+        expiresAt: 200,
+        resolution: "approved",
+      },
+      terminal: { outcome: "completed", code: "completed", retryable: false, recoveryAction: null },
+    });
+
+    expect(resumed.events.map((event) => event.kind)).toEqual([
+      "run_accepted", "context_receipt", "status", "tool_request", "tool_result",
+      "approval_requested", "approval_resolved", "terminal",
+    ]);
+    expect(resumed.events.map((event) => event.sequence)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(resumed.events[2]?.createdAt).toBeGreaterThan(resumed.events[1]!.createdAt);
+    expect(resumed.replayEvents).toEqual(resumed.events);
+    expect(resumed.timeline?.events.at(-1)?.kind).toBe("terminal");
+    expect(scanAgentRunRedactions(resumed.timeline)).toEqual([]);
+    expect(() => runAgentRunScenario({
+      initialSnapshot: seeded.snapshot(),
+      terminal: scenario.terminal,
+    }, createInMemoryAgentRunEventStore())).toThrow("two durable state authorities");
   });
 
   test("current-minus-one is accepted while unknown versions fail closed", () => {
