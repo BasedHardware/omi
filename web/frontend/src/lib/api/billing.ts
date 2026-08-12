@@ -1,7 +1,12 @@
 import { browserApiBase as apiBase } from '@/src/lib/api/browser-base';
 
 export type PlanId =
-  'basic' | 'unlimited' | 'architect' | 'operator' | 'plus' | 'unlimited_v2';
+  | 'basic'
+  | 'unlimited'
+  | 'architect'
+  | 'operator'
+  | 'plus'
+  | 'unlimited_v2';
 
 export const PLAN_DISPLAY_NAMES: Record<PlanId, string> = {
   basic: 'Free',
