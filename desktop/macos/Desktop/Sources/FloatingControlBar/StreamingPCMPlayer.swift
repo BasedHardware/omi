@@ -49,19 +49,69 @@ final class StreamingPCMPlaybackQueue<Buffer: AnyObject> {
   }
 }
 
-final class DeferredConfigurationRecovery {
-  private var isPending = false
+private final class DeferredConfigurationRecoveryAction: @unchecked Sendable {
+  let action: () -> Void
 
-  func schedule(
-    onMainQueue: (@escaping () -> Void) -> Void,
-    action: @escaping () -> Void
-  ) {
-    guard !isPending else { return }
-    isPending = true
-    onMainQueue { [weak self] in
-      action()
-      self?.isPending = false
+  init(_ action: @escaping () -> Void) {
+    self.action = action
+  }
+}
+
+final class DeferredConfigurationRecovery: @unchecked Sendable {
+  typealias MainQueueScheduler = @Sendable (@escaping @Sendable () -> Void) -> Void
+
+  private let lock = NSLock()
+  private let onMainQueue: MainQueueScheduler
+  private var isPending = false
+  private var generation = 0
+
+  init(
+    onMainQueue: @escaping MainQueueScheduler = { action in
+      DispatchQueue.main.async(execute: action)
     }
+  ) {
+    self.onMainQueue = onMainQueue
+  }
+
+  func schedule(action: @escaping () -> Void) {
+    let scheduledGeneration: Int
+    lock.lock()
+    guard !isPending else {
+      lock.unlock()
+      return
+    }
+    isPending = true
+    generation += 1
+    scheduledGeneration = generation
+    lock.unlock()
+
+    let actionBox = DeferredConfigurationRecoveryAction(action)
+    onMainQueue { [weak self, actionBox] in
+      guard self?.isPendingRecovery(generation: scheduledGeneration) == true else { return }
+      actionBox.action()
+      self?.finishPendingRecovery(generation: scheduledGeneration)
+    }
+  }
+
+  func cancel() {
+    lock.lock()
+    generation += 1
+    isPending = false
+    lock.unlock()
+  }
+
+  private func isPendingRecovery(generation scheduledGeneration: Int) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return isPending && generation == scheduledGeneration
+  }
+
+  private func finishPendingRecovery(generation scheduledGeneration: Int) {
+    lock.lock()
+    if generation == scheduledGeneration {
+      isPending = false
+    }
+    lock.unlock()
   }
 }
 
@@ -112,9 +162,7 @@ final class StreamingPCMPlayer: @unchecked Sendable {
       forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
     ) { [weak self] _ in
       guard let self = self else { return }
-      self.configurationRecovery.schedule(
-        onMainQueue: { action in DispatchQueue.main.async(execute: action) }
-      ) { [weak self] in
+      self.configurationRecovery.schedule { [weak self] in
         guard let self = self else { return }
         self.rebuildAfterConfigurationChange()
       }
@@ -205,6 +253,7 @@ final class StreamingPCMPlayer: @unchecked Sendable {
 
   func stop() {
     playbackEpoch += 1
+    configurationRecovery.cancel()
     playbackQueue.clearForExplicitStop()
     player.stop()
     engine.stop()

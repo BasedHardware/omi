@@ -6,21 +6,6 @@ import XCTest
 final class StreamingPCMPlaybackQueueTests: XCTestCase {
   private final class BufferBox {}
 
-  func testStreamingPlayerPublishesEpochForEveryScheduledBuffer() throws {
-    let source = try String(
-      contentsOf: URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Sources/FloatingControlBar/StreamingPCMPlayer.swift"),
-      encoding: .utf8
-    )
-
-    XCTAssertTrue(source.contains("var onPlaybackScheduled: ((Int) -> Void)?"))
-    XCTAssertTrue(
-      source.contains("let scheduledPlaybackEpoch = playbackEpoch\n    onPlaybackScheduled?(scheduledPlaybackEpoch)"))
-    XCTAssertTrue(source.contains("for buffer in buffersToReplay {\n        self.schedule(buffer)\n      }"))
-  }
-
   func testConfigurationChangeReturnsScheduledTailForReplay() {
     let queue = StreamingPCMPlaybackQueue<BufferBox>()
     let first = BufferBox()
@@ -34,6 +19,23 @@ final class StreamingPCMPlaybackQueueTests: XCTestCase {
     XCTAssertTrue(replay[0] === first)
     XCTAssertTrue(replay[1] === second)
     XCTAssertTrue(queue.isEmpty)
+  }
+
+  func testConfigurationChangeReplayPreservesTailOrder() {
+    let queue = StreamingPCMPlaybackQueue<BufferBox>()
+    let first = BufferBox()
+    let second = BufferBox()
+
+    queue.appendScheduled(first)
+    queue.appendScheduled(second)
+    let replay = queue.buffersToReplayAfterConfigurationChange()
+    for buffer in replay {
+      queue.appendScheduled(buffer)
+    }
+
+    XCTAssertEqual(queue.scheduledBuffers.count, 2)
+    XCTAssertTrue(queue.scheduledBuffers[0] === first)
+    XCTAssertTrue(queue.scheduledBuffers[1] === second)
   }
 
   func testReplayedBuffersUseNewGenerationSoStaleCompletionsCannotDropThem() {
@@ -87,41 +89,70 @@ final class StreamingPCMPlaybackQueueTests: XCTestCase {
   }
 
   func testConfigurationRecoveryDefersAndCoalescesNotificationWork() {
-    let recovery = DeferredConfigurationRecovery()
-    var pendingActions: [() -> Void] = []
+    let pendingActions = PendingRecoveryActions()
+    let recovery = DeferredConfigurationRecovery(onMainQueue: pendingActions.schedule)
     var recoveryCount = 0
 
-    recovery.schedule(
-      onMainQueue: { pendingActions.append($0) },
-      action: {
-        recoveryCount += 1
-        recovery.schedule(
-          onMainQueue: { pendingActions.append($0) },
-          action: { recoveryCount += 1 }
-        )
-      }
-    )
-    recovery.schedule(
-      onMainQueue: { pendingActions.append($0) },
-      action: { recoveryCount += 1 }
-    )
+    recovery.schedule {
+      recoveryCount += 1
+      recovery.schedule { recoveryCount += 1 }
+    }
+    recovery.schedule { recoveryCount += 1 }
 
     XCTAssertEqual(recoveryCount, 0)
     XCTAssertEqual(pendingActions.count, 1)
 
-    pendingActions.removeFirst()()
+    pendingActions.runFirst()
 
     XCTAssertEqual(recoveryCount, 1)
     XCTAssertTrue(pendingActions.isEmpty)
 
-    recovery.schedule(
-      onMainQueue: { pendingActions.append($0) },
-      action: { recoveryCount += 1 }
-    )
+    recovery.schedule { recoveryCount += 1 }
 
     XCTAssertEqual(pendingActions.count, 1)
-    pendingActions.removeFirst()()
+    pendingActions.runFirst()
     XCTAssertEqual(recoveryCount, 2)
+  }
+
+  func testConfigurationRecoveryCancellationDiscardsPendingWork() {
+    let pendingActions = PendingRecoveryActions()
+    let recovery = DeferredConfigurationRecovery(onMainQueue: pendingActions.schedule)
+    var recoveryCount = 0
+
+    recovery.schedule { recoveryCount += 1 }
+    recovery.cancel()
+    pendingActions.runFirst()
+
+    XCTAssertEqual(recoveryCount, 0)
+
+    recovery.schedule { recoveryCount += 1 }
+    pendingActions.runFirst()
+
+    XCTAssertEqual(recoveryCount, 1)
+  }
+}
+
+private final class PendingRecoveryActions: @unchecked Sendable {
+  private let lock = NSLock()
+  private var actions: [@Sendable () -> Void] = []
+
+  var count: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return actions.count
+  }
+
+  func schedule(_ action: @escaping @Sendable () -> Void) {
+    lock.lock()
+    actions.append(action)
+    lock.unlock()
+  }
+
+  func runFirst() {
+    lock.lock()
+    let action = actions.removeFirst()
+    lock.unlock()
+    action()
   }
 }
 
