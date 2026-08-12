@@ -10,6 +10,7 @@ import test from "node:test";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const producer = path.join(root, "shells/tools/capture-native-fixture-batch.mjs");
+const { canonicalizeScreenshotForTest } = await import(producer);
 const coreSha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const platformSha = "1".repeat(40);
 
@@ -86,6 +87,20 @@ function uniformFixturePng(width, height) {
   };
   const header = Buffer.alloc(13);
   header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 6;
+  return Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n", "binary"), chunk("IHDR", header), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+}
+
+function jitterFixturePng(rgb) {
+  const rows = Buffer.from([0, ...rgb, 255, 255, 255, 255, 255]);
+  const chunk = (type, body) => {
+    const kind = Buffer.from(type);
+    const payload = Buffer.concat([kind, body]);
+    const out = Buffer.alloc(12 + body.length);
+    out.writeUInt32BE(body.length, 0); payload.copy(out, 4); out.writeUInt32BE(pngCrc(payload), 8 + body.length);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(2, 0); header.writeUInt32BE(1, 4); header[8] = 8; header[9] = 6;
   return Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n", "binary"), chunk("IHDR", header), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
 }
 
@@ -224,9 +239,30 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(appDelegate, /NATIVE_CAPTURE_READY run_id=%@ route=%@ fixture=%@ state=%@/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /elapsedSeconds/);
+  assert.match(source, /canonicalizeScreenshot/);
+  assert.match(source, /image\.rgba\[offset\] < 16/);
   assert.match(source, /validAccessibilities = new Set\(\["none"\]\)/);
   assert.doesNotMatch(source, /const env = \{ \.\.\.process\.env \}/);
   assert.doesNotMatch(source, /OMI_API_TOKEN/);
+});
+
+test("screenshot canonicalization removes low-bit compositor jitter but preserves visible changes", () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), "omi-native-fixture-pixels-"));
+  try {
+    const first = path.join(scratch, "first.png");
+    const second = path.join(scratch, "second.png");
+    const changed = path.join(scratch, "changed.png");
+    writeFileSync(first, jitterFixturePng([3, 10, 13]));
+    writeFileSync(second, jitterFixturePng([4, 9, 12]));
+    writeFileSync(changed, jitterFixturePng([35, 10, 13]));
+    canonicalizeScreenshotForTest(first);
+    canonicalizeScreenshotForTest(second);
+    canonicalizeScreenshotForTest(changed);
+    assert.deepEqual(readFileSync(first), readFileSync(second));
+    assert.notDeepEqual(readFileSync(first), readFileSync(changed));
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 test("batch boundaries require prepared inputs and reject oversized/semantic ranges", () => {
