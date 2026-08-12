@@ -42,6 +42,7 @@ const runLint = () =>
 test("authority fences reject issuer construction and raw PostgreSQL capabilities outside their owners", () => {
   const issuerFixture = join(platformRoot, "scripts", "authorized-ledger-issuer-tripwire-fixture.ts");
   const postgresFixture = join(platformRoot, "apps", "service", "routes", "postgres-transaction-tripwire-fixture.ts");
+  const driverCapabilityFixture = join(platformRoot, "drivers", "postgres", "connection-capability-tripwire-fixture.ts");
   try {
     writeFileSync(issuerFixture, [
       'import * as authorityInternals from "../apps/service/auth/authorized-context-internal";',
@@ -55,14 +56,20 @@ test("authority fences reject issuer construction and raw PostgreSQL capabilitie
       'import { withAuthorizedSerializableTransaction } from "../../../drivers/postgres/transaction";',
       "export const raw = withAuthorizedSerializableTransaction;",
     ].join("\n"));
+    writeFileSync(driverCapabilityFixture, [
+      'import { withAuthorizedSerializableConnectionTransaction } from "./transaction";',
+      "export const rawConnection = withAuthorizedSerializableConnectionTransaction;",
+    ].join("\n"));
     const result = runLint();
     expect(result.status).not.toBe(0);
     const output = `${result.stdout}${result.stderr}`;
     expect(output).toContain("ledger context minting module is private");
     expect(output).toContain("application code may not import the raw PostgreSQL");
+    expect(output).toContain("authorized raw PostgreSQL connection capability is private");
   } finally {
     rmSync(issuerFixture, { force: true });
     rmSync(postgresFixture, { force: true });
+    rmSync(driverCapabilityFixture, { force: true });
   }
 });
 

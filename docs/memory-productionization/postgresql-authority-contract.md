@@ -1,6 +1,7 @@
 # PostgreSQL memory authority contract
 
-Status: P2 pre-registration plus inert P2.1 scaffolding, 2026-08-11
+Status: P2 pre-registration plus an inert, qualification-only successful-empty
+transaction kernel, 2026-08-11
 
 ## Decision boundary
 
@@ -10,17 +11,16 @@ backend ADR-009, ADR-010, ADR-013, and ADR-014; it does not choose new product o
 data-disposition policy.
 
 The current tree now contains inert, checksummed migration files, a sealed service
-repository contract, and a transaction-time authority revalidation boundary with fake
-tests. It still has no PostgreSQL client dependency, migration runner, real pool or
-ledger adapter, container harness, or real PostgreSQL test. SQLite remains the
-offline/QA reference. This is scaffolding for a future production adapter with shared
-invariant fixtures, not a translation of SQLite tables and not a production authority
-claim.
+repository contract, Postgres.js 3.4.9, a migration runner, a hermetic PostgreSQL 18.4
+container harness, and a transaction-time authority revalidation boundary. A narrowly
+named successful-empty repository kernel has been exercised against the real database
+under the application role. It proves authority-before-replay, exact receipt replay and
+conflict, graph-head compare-and-swap, atomic rollback, and transaction-local context
+for an empty non-formation append only. SQLite remains the offline/QA reference. This
+is not a translation of SQLite tables and not a production authority claim.
 
-Two choices remain outside this unit:
+One identifier choice remains outside this unit:
 
-- the supported PostgreSQL major is still open in WS-003 and must be pinned before a
-  real PostgreSQL gate can pass;
 - the account identifier grammar is blocked by backend ADR-012's reconciliation note.
   This slice accepts a bounded opaque platform account key and neither mints nor
   validates either proposed word-slug grammar.
@@ -41,9 +41,11 @@ The planned slice has four parts:
 4. shared SQLite/PostgreSQL invariant fixtures plus PostgreSQL-only concurrency,
    pooling, and crash tests.
 
-The checked-in repository contract and transaction revalidation boundary are inert;
-there is no PostgreSQL ledger implementation to wire yet. A later unit may add exactly
-one canonical service composition only after the real adapter and gate exist. The existing synchronous `LedgerPort.findCommitByIdempotencyKey` is
+The checked-in repository contract, transaction revalidation boundary, and
+successful-empty qualification kernel are inert. There is no full PostgreSQL ledger
+implementation to wire yet: graph-bearing, formation, identity-witness, liveness, and
+reconstruction paths fail closed or remain unimplemented. A later unit may add exactly
+one canonical service composition only after the complete adapter and gate exist. The existing synchronous `LedgerPort.findCommitByIdempotencyKey` is
 not a production PostgreSQL seam and is not widened or faked. Model preflight will use
 an asynchronous authorized lookup owned by the new repository.
 

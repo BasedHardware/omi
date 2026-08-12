@@ -102,6 +102,89 @@ export const authorizationStateDigest = (row: AuthorityStateRow): string =>
     grant_content_hash: row.grant_content_hash,
   })).digest("hex");
 
+const safeDatabaseInteger = (value: unknown, nullable = false): number | null => {
+  if (value === null && nullable) return null;
+  if (typeof value !== "number" && typeof value !== "bigint" && typeof value !== "string") {
+    throw new PostgresRepositoryError("authorization_state_denied");
+  }
+  if (typeof value === "string" && !/^(?:0|[1-9][0-9]*)$/.test(value)) {
+    throw new PostgresRepositoryError("authorization_state_denied");
+  }
+  const numeric = Number(value);
+  if (!Number.isSafeInteger(numeric) || numeric < 0) {
+    throw new PostgresRepositoryError("authorization_state_denied");
+  }
+  return numeric;
+};
+
+const databaseString = (value: unknown): string => {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new PostgresRepositoryError("authorization_state_denied");
+  }
+  return value;
+};
+
+const nullableDatabaseString = (value: unknown): string | null =>
+  value === null ? null : databaseString(value);
+
+const normalizeAuthorityStateRow = (row: Record<string, unknown>): AuthorityStateRow => {
+  const expectedKeys = [
+    "account_id", "principal_id", "application_id", "credential_id",
+    "credential_generation", "capability", "grant_id", "grant_version",
+    "account_epoch", "control_conflict_reason", "control_conflict_at_revision",
+    "destination_activation_epoch", "destination_activation_revision",
+    "lifecycle_state", "deletion_epoch", "account_generation",
+    "credential_lifecycle", "grant_lifecycle", "grant_enabled",
+    "authentication_strength", "credential_expires_at_epoch_seconds",
+    "control_revision", "control_content_hash", "credential_content_hash",
+    "grant_content_hash", "db_now_epoch_seconds",
+  ].sort();
+  const actualKeys = Object.keys(row).sort();
+  if (actualKeys.length !== expectedKeys.length
+    || actualKeys.some((key, index) => key !== expectedKeys[index])) {
+    throw new PostgresRepositoryError("authorization_state_denied");
+  }
+  const lifecycleState = databaseString(row["lifecycle_state"]);
+  const accountGeneration = databaseString(row["account_generation"]);
+  const credentialLifecycle = databaseString(row["credential_lifecycle"]);
+  const grantLifecycle = databaseString(row["grant_lifecycle"]);
+  if (!["active", "deletion_pending", "deleted"].includes(lifecycleState)
+    || !["legacy", "migrating", "new", "rolled_back_stranded"].includes(accountGeneration)
+    || !["active", "inactive", "revoked"].includes(credentialLifecycle)
+    || !["active", "inactive", "revoked"].includes(grantLifecycle)
+    || typeof row["grant_enabled"] !== "boolean") {
+    throw new PostgresRepositoryError("authorization_state_denied");
+  }
+  return Object.freeze({
+    account_id: databaseString(row["account_id"]),
+    principal_id: databaseString(row["principal_id"]),
+    application_id: databaseString(row["application_id"]),
+    credential_id: databaseString(row["credential_id"]),
+    credential_generation: safeDatabaseInteger(row["credential_generation"])!,
+    capability: databaseString(row["capability"]),
+    grant_id: databaseString(row["grant_id"]),
+    grant_version: safeDatabaseInteger(row["grant_version"])!,
+    account_epoch: safeDatabaseInteger(row["account_epoch"], true),
+    control_conflict_reason: nullableDatabaseString(row["control_conflict_reason"]),
+    control_conflict_at_revision: safeDatabaseInteger(row["control_conflict_at_revision"], true),
+    destination_activation_epoch: safeDatabaseInteger(row["destination_activation_epoch"], true),
+    destination_activation_revision: safeDatabaseInteger(row["destination_activation_revision"], true),
+    lifecycle_state: lifecycleState as AuthorityStateRow["lifecycle_state"],
+    deletion_epoch: safeDatabaseInteger(row["deletion_epoch"], true),
+    account_generation: accountGeneration as AuthorityStateRow["account_generation"],
+    credential_lifecycle: credentialLifecycle as AuthorityStateRow["credential_lifecycle"],
+    grant_lifecycle: grantLifecycle as AuthorityStateRow["grant_lifecycle"],
+    grant_enabled: row["grant_enabled"],
+    authentication_strength: databaseString(row["authentication_strength"]),
+    credential_expires_at_epoch_seconds: safeDatabaseInteger(row["credential_expires_at_epoch_seconds"], true),
+    control_revision: safeDatabaseInteger(row["control_revision"])!,
+    control_content_hash: databaseString(row["control_content_hash"]),
+    credential_content_hash: databaseString(row["credential_content_hash"]),
+    grant_content_hash: databaseString(row["grant_content_hash"]),
+    db_now_epoch_seconds: safeDatabaseInteger(row["db_now_epoch_seconds"])!,
+  });
+};
+
 const assertAuthorityState = (
   context: AuthorizedLedgerWriteContext,
   row: AuthorityStateRow,
@@ -149,6 +232,16 @@ const assertAuthorityState = (
 export interface AuthorizedPostgresTransaction {
   readonly authority: AuthorizedLedgerWriteContext;
   readonly dbNowEpochSeconds: number;
+}
+
+/**
+ * Driver-internal transaction capability.  Service composition must receive
+ * only the sealed repository port; SQL access never crosses the driver.
+ *
+ * @internal
+ */
+interface AuthorizedPostgresConnectionTransaction extends AuthorizedPostgresTransaction {
+  readonly connection: CheckedOutPostgresConnection;
 }
 
 const providerCode = (error: unknown): string | undefined => {
@@ -217,10 +310,11 @@ const emitTransactionTelemetry = (
   }
 };
 
-export const withAuthorizedSerializableTransaction = async <Result>(
+/** @internal Shared implementation for PostgreSQL repositories in this driver. */
+export const withAuthorizedSerializableConnectionTransaction = async <Result>(
   pool: PostgresTransactionPool,
   suppliedContext: AuthorizedLedgerWriteContext,
-  callback: (transaction: AuthorizedPostgresTransaction) => Promise<Result>,
+  callback: (transaction: AuthorizedPostgresConnectionTransaction) => Promise<Result>,
   observability: PostgresTransactionObservability = {},
 ): Promise<Result> => {
   const started = safeNowMilliseconds(observability.nowMilliseconds ?? Date.now);
@@ -254,14 +348,16 @@ export const withAuthorizedSerializableTransaction = async <Result>(
             context.grant_id,
           ],
         });
-        const row = rows[0];
-        if (rows.length !== 1 || !row) {
+        const rawRow = rows[0];
+        if (rows.length !== 1 || !rawRow) {
           throw new PostgresRepositoryError("authorization_state_denied");
         }
+        const row = normalizeAuthorityStateRow(rawRow);
         assertAuthorityState(context, row);
-        const transaction: AuthorizedPostgresTransaction = Object.freeze({
+        const transaction: AuthorizedPostgresConnectionTransaction = Object.freeze({
           authority: context,
           dbNowEpochSeconds: row.db_now_epoch_seconds,
+          connection,
         });
         return callback(transaction);
       },
@@ -274,3 +370,19 @@ export const withAuthorizedSerializableTransaction = async <Result>(
     throw mapped;
   }
 };
+
+/**
+ * Metadata-only public transaction boundary retained for callers that must
+ * never receive a SQL capability.
+ */
+export const withAuthorizedSerializableTransaction = async <Result>(
+  pool: PostgresTransactionPool,
+  suppliedContext: AuthorizedLedgerWriteContext,
+  callback: (transaction: AuthorizedPostgresTransaction) => Promise<Result>,
+  observability: PostgresTransactionObservability = {},
+): Promise<Result> => withAuthorizedSerializableConnectionTransaction(
+  pool,
+  suppliedContext,
+  ({ authority, dbNowEpochSeconds }) => callback(Object.freeze({ authority, dbNowEpochSeconds })),
+  observability,
+);

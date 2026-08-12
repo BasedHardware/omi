@@ -473,6 +473,7 @@ const durableWorkRunnerLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["']
 const consolidationWorkServiceImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/consolidation-work-service(?:\.ts)?["']/;
 const productProjectionMaterializerImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/product-projection-materialization(?:\.ts)?["']/;
 const productConflictCoreImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*core\/retrieve\/product-conflict(?:\.ts)?["']/;
+const authorizedPostgresConnectionCapability = /\b(?:withAuthorizedSerializableConnectionTransaction|AuthorizedPostgresConnectionTransaction)\b/;
 
 /** Blank out comments so documentation of the fence does not trip the fence. */
 const withoutComments = (text: string): string => text
@@ -516,6 +517,14 @@ for (const file of files(root)) {
       failures.push(
         `${shown}: application code may not import the raw PostgreSQL connection/transaction capability; `
         + "compose only the sealed authoritative repository adapter",
+      );
+    }
+    if (shown !== "scripts/lint-import-graph.ts"
+      && shown !== "drivers/postgres/transaction.ts"
+      && shown !== "drivers/postgres/authoritative-ledger-repository.ts"
+      && authorizedPostgresConnectionCapability.test(code)) {
+      failures.push(
+        `${shown}: the authorized raw PostgreSQL connection capability is private to the sealed ledger adapter`,
       );
     }
     if (!queryEvaluationInternalImporters.has(shown) && queryEvaluationLowLevelImport.test(code)) {

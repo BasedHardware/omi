@@ -167,6 +167,24 @@ test("classifies stale context and authorization rows before repository work", a
   }
 });
 
+test("rejects malformed database authority rows without coercion or provider detail", async () => {
+  const base = authorityRow();
+  for (const malformed of [
+    { ...base, credential_generation: "04" },
+    { ...base, grant_version: "-1" },
+    { ...base, control_revision: "9007199254740992" },
+    { ...base, lifecycle_state: "unknown" },
+    { ...base, provider_private_field: "must-not-pass" },
+    Object.fromEntries(Object.entries(base).filter(([key]) => key !== "grant_id")),
+  ]) {
+    await expect(withAuthorizedSerializableTransaction(
+      new FakePool(new FakeConnection(malformed as unknown as AuthorityStateRow)),
+      context(base),
+      async () => "never",
+    )).rejects.toEqual(new PostgresRepositoryError("authorization_state_denied"));
+  }
+});
+
 test("transaction-local context is cleared when the callback fails", async () => {
   const row = authorityRow();
   const connection = new FakeConnection(row);
