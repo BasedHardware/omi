@@ -80,6 +80,7 @@ backend/
     prompts.py            #   LLM prompt templates for memory extraction, categorization, etc.
     translation.py        #   Multi-language translation coordination
     speaker_identification.py  # Speaker diarization + person matching against speech profiles
+  #   Per-subservice internals: backend/docs/subservice-internals.md
   pusher/                 # Subservice: real-time data distribution hub (separate Docker)
   llm_gateway/            # Subservice: internal Omi-managed LLM auto-lane gateway
   diarizer/              # Subservice: speaker audio analysis (separate Docker, GPU/CUDA)
