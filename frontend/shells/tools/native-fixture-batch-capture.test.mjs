@@ -119,6 +119,12 @@ function grayscaleEdgeFixturePng(sample) {
       rows[offset + 3] = 255;
     }
   }
+  for (const row of [2, 4]) {
+    const anchorOffset = row * (width * 4 + 1) + 1 + 3 * 4;
+    rows[anchorOffset] = 160;
+    rows[anchorOffset + 1] = 160;
+    rows[anchorOffset + 2] = 160;
+  }
   const sampleOffset = 3 * (width * 4 + 1) + 1 + 3 * 4;
   rows[sampleOffset] = sample;
   rows[sampleOffset + 1] = sample;
@@ -285,7 +291,8 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /elapsedSeconds/);
   assert.match(source, /canonicalizeScreenshot/);
-  assert.match(source, /image\.rgba\[offset\] < 16/);
+  assert.match(source, /value < 16/);
+  assert.match(source, /distance > 6/);
   assert.match(source, /diagnostics.*replay-mismatch/);
   assert.match(source, /first\.raw\.png/);
   assert.match(source, /repeat\.raw\.png/);
