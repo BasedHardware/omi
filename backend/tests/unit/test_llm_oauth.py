@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from database import llm_oauth as llm_oauth_db
+from routers import llm_oauth as llm_oauth_router
 from utils import encryption
 from utils.llm import clients
 from utils.llm import oauth
@@ -63,15 +64,15 @@ def test_oauth_configuration_keeps_provider_connection_details_server_owned():
 
 
 def test_connection_status_includes_the_server_owned_provider_configuration(monkeypatch):
-    from routers import llm_oauth
-
     async def run_blocking(_executor, function, *args, **_kwargs):
         return function(*args)
 
-    monkeypatch.setattr(llm_oauth, 'run_blocking', run_blocking)
-    monkeypatch.setattr(llm_oauth.llm_oauth_db, 'get_status', lambda _uid: {'connected': [], 'selected_provider': None})
+    monkeypatch.setattr(llm_oauth_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(
+        llm_oauth_router.llm_oauth_db, 'get_status', lambda _uid: {'connected': [], 'selected_provider': None}
+    )
 
-    status = asyncio.run(llm_oauth._status_response('user-1'))
+    status = asyncio.run(llm_oauth_router._status_response('user-1'))
 
     assert status['configurations']['grok']['redirect_uri'] == 'http://127.0.0.1:56121/callback'
 
