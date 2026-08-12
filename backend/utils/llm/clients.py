@@ -683,6 +683,7 @@ def get_llm(
     get_model(feature) to get the model string and the provider-specific client.
     """
     gateway_feature_mode = should_route_features_through_gateway()
+    oauth_credential = get_byok_oauth_credential()
     # Chat-agent has its own kill switch. FEATURE_MODE=gateway plus
     # CHAT_AGENT_ROUTE=direct must stay on direct OpenAI/Luna, not the gateway lane
     # and not a leftover Anthropic Messages client.
@@ -690,11 +691,11 @@ def get_llm(
         should_route_chat_agent_through_gateway() if feature == 'chat_agent' else gateway_feature_mode
     )
 
-    if is_anthropic_only_feature(feature) and not gateway_feature_mode:
+    if is_anthropic_only_feature(feature) and not gateway_feature_mode and oauth_credential is None:
         raise ValueError(
             f"Feature '{feature}' is Anthropic — use get_model('{feature}') with anthropic_client instead of get_llm()"
         )
-    if is_perplexity_only_feature(feature) and not gateway_feature_mode:
+    if is_perplexity_only_feature(feature) and not gateway_feature_mode and oauth_credential is None:
         raise ValueError(
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
@@ -715,11 +716,11 @@ def get_llm(
     # with missing_byok_key. Keep the pre-selection provider to detect the switch.
     lane_provider = _effective_byok_provider(model, provider)
 
-    if provider == 'anthropic' and not gateway_feature_mode:
+    if provider == 'anthropic' and not gateway_feature_mode and oauth_credential is None:
         raise ValueError(
             f"Feature '{feature}' resolved to Anthropic model '{model}' — use get_model() with anthropic_client"
         )
-    if provider == 'perplexity' and not gateway_feature_mode:
+    if provider == 'perplexity' and not gateway_feature_mode and oauth_credential is None:
         raise ValueError(
             f"Feature '{feature}' resolved to Perplexity model '{model}' — use get_model() with Perplexity HTTP client"
         )
@@ -776,7 +777,6 @@ def get_llm(
                     log=logger,
                 )
                 break
-    oauth_credential = get_byok_oauth_credential()
     if not byok_key:
         uid = get_byok_uid()
         oauth_provider = get_byok_llm_provider()
