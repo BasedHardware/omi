@@ -257,7 +257,7 @@ class FileChatTool:
                 model="gpt-5.6-luna",
                 messages=messages,
                 stream=True,
-                max_tokens=2048,
+                max_completion_tokens=2048,
             )
             async for chunk in stream:
                 delta = chunk.choices[0].delta if chunk.choices else None
