@@ -124,7 +124,7 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
-from utils.byok import has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
+from utils.byok import get_byok_key, has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1172,7 +1172,7 @@ def get_user_subscription_endpoint(
     # these users aren't surprised by a disabled phone-call feature.
     unlimited_phone_quota = PhoneCallQuota(has_access=True, is_paid=True)
 
-    if users_db.is_byok_active(uid) and has_byok_keys():
+    if users_db.is_byok_active(uid) and get_byok_key('deepgram'):
         return UserSubscriptionResponse(
             subscription=_byok_unlimited_subscription(),
             transcription_seconds_used=0,
