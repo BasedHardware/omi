@@ -23,7 +23,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
 from models.structured_extraction import StructuredExtraction
-from utils.byok import get_byok_key, get_byok_llm_provider, get_byok_uid
+from utils.byok import get_byok_key, get_byok_llm_provider, get_byok_oauth_credential, get_byok_uid
 from utils.llm.byok_errors import handle_llm_error
 from utils.observability.fallback import record_fallback
 from utils.llm.oauth import LLMOAuthError, get_credential as get_llm_oauth_credential
@@ -569,11 +569,11 @@ def get_llm(
                     log=logger,
                 )
                 break
-    oauth_credential = None
+    oauth_credential = get_byok_oauth_credential()
     if not byok_key:
         uid = get_byok_uid()
         oauth_provider = get_byok_llm_provider()
-        if uid and oauth_provider in {'chatgpt', 'grok'}:
+        if oauth_credential is None and uid and oauth_provider in {'chatgpt', 'grok'}:
             try:
                 oauth_credential = get_llm_oauth_credential(uid, oauth_provider)
             except LLMOAuthError as error:

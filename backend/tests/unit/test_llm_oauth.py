@@ -64,6 +64,21 @@ def test_expired_credential_refreshes_and_persists_the_replacement():
     save.assert_called_once()
 
 
+def test_unexpired_credential_does_not_refresh():
+    stored = {
+        'provider': 'grok',
+        'access_token': 'access-1',
+        'refresh_token': 'refresh-1',
+        'expires_at': 4_000_000_000,
+        'account_id': None,
+    }
+    with patch.object(oauth.llm_oauth_db, 'get_credential', return_value=stored), patch.object(
+        oauth.httpx, 'post'
+    ) as post:
+        assert oauth.get_credential('user-1') is stored
+    post.assert_not_called()
+
+
 def test_chatgpt_oauth_client_uses_the_codex_responses_surface():
     with patch.object(clients, '_cached_openai_chat') as create_client:
         _create_llm_oauth_client({'provider': 'chatgpt', 'access_token': _token('acct-1'), 'account_id': 'acct-1'})
@@ -73,12 +88,19 @@ def test_chatgpt_oauth_client_uses_the_codex_responses_surface():
     assert create_client.call_args.args[2]['default_headers']['chatgpt-account-id'] == 'acct-1'
 
 
+def test_grok_oauth_client_uses_xai_surface():
+    with patch.object(clients, '_cached_openai_chat') as create_client:
+        _create_llm_oauth_client({'provider': 'grok', 'access_token': 'access-1'})
+    assert create_client.call_args.args[:2] == ('grok-4.3', 'access-1')
+    assert create_client.call_args.args[2]['base_url'] == 'https://api.x.ai/v1'
+
+
 def test_get_llm_uses_the_selected_oauth_provider_without_a_key_header():
     credential = {'provider': 'grok', 'access_token': 'access-1', 'refresh_token': 'refresh-1'}
     with patch.object(clients, 'get_byok_key', return_value=None), patch.object(
         clients, 'get_byok_uid', return_value='user-1'
     ), patch.object(clients, 'get_byok_llm_provider', return_value='grok'), patch.object(
-        clients, 'get_llm_oauth_credential', return_value=credential
+        clients, 'get_byok_oauth_credential', return_value=credential
     ), patch.object(
         clients, '_create_llm_oauth_client'
     ) as create_client:
@@ -91,6 +113,8 @@ def test_get_llm_does_not_fall_back_to_omi_when_oauth_refresh_fails():
     with patch.object(clients, 'get_byok_key', return_value=None), patch.object(
         clients, 'get_byok_uid', return_value='user-1'
     ), patch.object(clients, 'get_byok_llm_provider', return_value='chatgpt'), patch.object(
+        clients, 'get_byok_oauth_credential', return_value=None
+    ), patch.object(
         clients, 'get_llm_oauth_credential', side_effect=oauth.LLMOAuthError('expired')
     ), patch.object(
         clients, 'get_default_client'
