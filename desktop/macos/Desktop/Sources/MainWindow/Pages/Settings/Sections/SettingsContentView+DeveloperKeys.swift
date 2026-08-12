@@ -108,6 +108,7 @@ extension SettingsContentView {
     // once — and opening the pane with four saved keys finally fills in the
     // per-provider badges instead of leaving them blank until the next edit.
     .task(id: byokKeySetFingerprint) {
+      migrateLegacyBYOKSelection()
       await refreshBYOKActivation()
     }
   }
@@ -121,7 +122,14 @@ extension SettingsContentView {
   }
 
   var selectedBYOKLLMProvider: BYOKLLMProvider {
-    BYOKLLMProvider(rawValue: devBYOKLLMProvider) ?? .openrouter
+    BYOKLLMProvider(rawValue: devBYOKLLMProvider)
+      ?? APIKeyService.selectedBYOKLLMProvider.flatMap { BYOKLLMProvider(rawValue: $0.rawValue) }
+      ?? .openrouter
+  }
+
+  func migrateLegacyBYOKSelection() {
+    guard BYOKLLMProvider(rawValue: devBYOKLLMProvider) == nil else { return }
+    devBYOKLLMProvider = selectedBYOKLLMProvider.rawValue
   }
 
   var selectedBYOKLLMKey: Binding<String> {
@@ -213,6 +221,8 @@ extension SettingsContentView {
   @MainActor
   func refreshBYOKActivation() async {
     guard !selectedBYOKLLMKey.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      byokKeyStatuses = [:]
+      byokActivationError = nil
       if hasAnyBYOKKey {
         try? await APIClient.shared.deactivateBYOK()
         await FloatingBarUsageLimiter.shared.fetchPlan()
