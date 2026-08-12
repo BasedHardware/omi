@@ -77,10 +77,15 @@ const firebaseUid = (value: unknown): value is string =>
   && value.length <= MAX_FIREBASE_UID_CODE_UNITS
   && !/[\u0000-\u001f\u007f]/.test(value);
 
-const counter = (value: unknown): value is number =>
-  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const counter = (value: unknown): number | undefined => {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
+  if (typeof value !== "string" || !/^(0|[1-9][0-9]*)$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+};
 
-const nullableCounter = (value: unknown): value is number | null => value === null || counter(value);
+const nullableCounter = (value: unknown): number | null | undefined =>
+  value === null ? null : counter(value);
 const nullableToken = (value: unknown): value is string | null => value === null || token(value);
 
 const snapshotQuery = (value: unknown): Readonly<{
@@ -188,6 +193,15 @@ const parseCurrent = (value: unknown, request: RequestCoordinates): unknown | nu
   const controlHash = get("control_content_hash");
   const credentialHash = get("credential_content_hash");
   const grantHash = get("grant_content_hash");
+  const credentialGenerationValue = counter(credentialGeneration);
+  const credentialExpiryValue = nullableCounter(credentialExpiry);
+  const grantVersionValue = counter(grantVersion);
+  const controlRevisionValue = counter(controlRevision);
+  const accountEpochValue = nullableCounter(accountEpoch);
+  const destinationActivationRevisionValue = nullableCounter(destinationActivationRevision);
+  const destinationActivationEpochValue = nullableCounter(destinationActivationEpoch);
+  const conflictAtValue = nullableCounter(conflictAt);
+  const deletionEpochValue = nullableCounter(deletionEpoch);
 
   if (projectId !== request.firebase_project_id
     || uid !== request.firebase_uid
@@ -196,24 +210,24 @@ const parseCurrent = (value: unknown, request: RequestCoordinates): unknown | nu
     || !token(principalId)
     || !token(accountId, MAX_ACCOUNT_CODE_UNITS)
     || !token(credentialId)
-    || !counter(credentialGeneration)
+    || credentialGenerationValue === undefined
     || typeof credentialLifecycle !== "string" || !AUTHORITY_LIFECYCLES.has(credentialLifecycle)
     || !token(authenticationStrength)
-    || !nullableCounter(credentialExpiry)
+    || credentialExpiryValue === undefined
     || !token(grantId)
-    || !counter(grantVersion)
+    || grantVersionValue === undefined
     || typeof grantLifecycle !== "string" || !AUTHORITY_LIFECYCLES.has(grantLifecycle)
     || typeof grantEnabled !== "boolean"
-    || !counter(controlRevision)
-    || !nullableCounter(accountEpoch)
-    || !nullableCounter(destinationActivationRevision)
-    || !nullableCounter(destinationActivationEpoch)
+    || controlRevisionValue === undefined
+    || accountEpochValue === undefined
+    || destinationActivationRevisionValue === undefined
+    || destinationActivationEpochValue === undefined
     || !nullableToken(conflictReason)
-    || !nullableCounter(conflictAt)
-    || (conflictReason === null) !== (conflictAt === null)
+    || conflictAtValue === undefined
+    || (conflictReason === null) !== (conflictAtValue === null)
     || typeof lifecycleState !== "string" || !ACCOUNT_LIFECYCLES.has(lifecycleState)
-    || !nullableCounter(deletionEpoch)
-    || (lifecycleState === "active") !== (deletionEpoch === null)
+    || deletionEpochValue === undefined
+    || (lifecycleState === "active") !== (deletionEpochValue === null)
     || typeof accountGeneration !== "string" || !ACCOUNT_GENERATIONS.has(accountGeneration)
     || typeof controlHash !== "string" || !DIGEST.test(controlHash)
     || typeof credentialHash !== "string" || !DIGEST.test(credentialHash)
@@ -224,24 +238,24 @@ const parseCurrent = (value: unknown, request: RequestCoordinates): unknown | nu
     principal_id: principalId,
     application_id: applicationId,
     credential_id: credentialId,
-    credential_generation: credentialGeneration,
+    credential_generation: credentialGenerationValue,
     capability,
     grant_id: grantId,
-    grant_version: grantVersion,
-    account_epoch: accountEpoch,
+    grant_version: grantVersionValue,
+    account_epoch: accountEpochValue,
     control_conflict_reason: conflictReason,
-    control_conflict_at_revision: conflictAt,
-    destination_activation_epoch: destinationActivationEpoch,
-    destination_activation_revision: destinationActivationRevision,
+    control_conflict_at_revision: conflictAtValue,
+    destination_activation_epoch: destinationActivationEpochValue,
+    destination_activation_revision: destinationActivationRevisionValue,
     lifecycle_state: lifecycleState as AuthorityStateRow["lifecycle_state"],
-    deletion_epoch: deletionEpoch,
+    deletion_epoch: deletionEpochValue,
     account_generation: accountGeneration as AuthorityStateRow["account_generation"],
     credential_lifecycle: credentialLifecycle as AuthorityStateRow["credential_lifecycle"],
     grant_lifecycle: grantLifecycle as AuthorityStateRow["grant_lifecycle"],
     grant_enabled: grantEnabled,
     authentication_strength: authenticationStrength,
-    credential_expires_at_epoch_seconds: credentialExpiry,
-    control_revision: controlRevision,
+    credential_expires_at_epoch_seconds: credentialExpiryValue,
+    control_revision: controlRevisionValue,
     control_content_hash: controlHash,
     credential_content_hash: credentialHash,
     grant_content_hash: grantHash,
@@ -256,19 +270,19 @@ const parseCurrent = (value: unknown, request: RequestCoordinates): unknown | nu
     account_id: accountId,
     application_id: applicationId,
     credential_id: credentialId,
-    credential_generation: credentialGeneration,
+    credential_generation: credentialGenerationValue,
     credential_lifecycle: credentialLifecycle,
     authentication_strength: authenticationStrength,
-    credential_expires_at_epoch_seconds: credentialExpiry,
+    credential_expires_at_epoch_seconds: credentialExpiryValue,
     capability,
     grant_id: grantId,
-    grant_version: grantVersion,
+    grant_version: grantVersionValue,
     grant_lifecycle: grantLifecycle,
     grant_enabled: grantEnabled,
     authorization_state_digest: authorizationStateDigest(digestRow),
-    control_revision: controlRevision,
-    account_epoch: accountEpoch,
-    destination_activation_revision: destinationActivationRevision,
+    control_revision: controlRevisionValue,
+    account_epoch: accountEpochValue,
+    destination_activation_revision: destinationActivationRevisionValue,
   });
 };
 

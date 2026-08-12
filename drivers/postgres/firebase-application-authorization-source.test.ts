@@ -134,6 +134,31 @@ describe("PostgreSQL Firebase application authorization source", () => {
     expect(Object.isFrozen(result)).toBe(true);
   });
 
+  test("normalizes canonical Postgres bigint strings without accepting ambiguous forms", async () => {
+    const bigintRow = row({
+      credential_generation: "4",
+      credential_expires_at_epoch_seconds: "300",
+      grant_version: "9",
+      control_revision: "17",
+      account_epoch: "12",
+      destination_activation_revision: "17",
+      destination_activation_epoch: "12",
+    });
+    await expect(setup([bigintRow]).source.load(request())).resolves.toMatchObject({
+      status: "current",
+      credential_generation: 4,
+      credential_expires_at_epoch_seconds: 300,
+      grant_version: 9,
+      control_revision: 17,
+      account_epoch: 12,
+      destination_activation_revision: 17,
+    });
+    for (const value of ["04", "+4", "9007199254740992"]) {
+      await expect(setup([row({ credential_generation: value })]).source.load(request()))
+        .resolves.toEqual({ status: "unavailable" });
+    }
+  });
+
   test("structurally composes into the single authorization path without another lookup", async () => {
     const fixture = setup();
     const authorizer = composeFirebaseApplicationAuthorization({

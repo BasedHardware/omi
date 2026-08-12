@@ -77,6 +77,7 @@ import { createPostgresDurableMemoryWorkResultRepository } from "./durable-memor
 import { createPostgresDurableMemoryWorkSuccessRepository } from "./durable-memory-work-success";
 import { createPostgresFormationWorkInputRepository } from "./formation-work-input";
 import { createPostgresFormationOneShotRuntime } from "./formation-one-shot-runtime";
+import { createPostgresFirebaseAuthorizedLedgerRuntime } from "./firebase-authorized-ledger-runtime";
 import { createPostgresPredicateBatchWorkInputRepository } from "./predicate-batch-work-input";
 import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
@@ -1966,6 +1967,8 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const applicationId = "app:qualification";
     const credentialId = `credential:${suffix}`;
     const grantId = `grant:${suffix}`;
+    const firebaseProjectId = `firebase-project-${suffix}`;
+    const firebaseUid = `firebase-user-${suffix}`;
     const controlHash = "1".repeat(64);
     const credentialHash = "2".repeat(64);
     const grantHash = "3".repeat(64);
@@ -2008,6 +2011,16 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
            capability, grant_id, grant_version)
         VALUES ($1, $2, $3, 4, 'memories.write', $4, 9)`,
       [accountId, applicationId, credentialId, grantId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.firebase_identity_bindings
+          (firebase_project_id, firebase_uid, account_id, principal_id,
+           source_control_revision)
+        VALUES ($1, $2, $3, $4, 17)`,
+      [firebaseProjectId, firebaseUid, accountId, principalId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.firebase_application_credential_bindings
+          (account_id, firebase_project_id, firebase_uid, principal_id,
+           application_id, credential_id)
+        VALUES ($1, $2, $3, $4, $5, $6)`,
+      [accountId, firebaseProjectId, firebaseUid, principalId, applicationId, credentialId]);
     });
 
     const authorityRow: AuthorityStateRow = {
@@ -2546,20 +2559,117 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       `, [], { prepare: false }).catch(() => undefined);
     }
 
-    await ownerSql.begin(async (transaction) => {
-      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
-          (account_id, application_id, credential_id, credential_generation,
-           capability, grant_id, grant_version, lifecycle, enabled, scopes,
-           record_schema_version, record_json, content_hash)
-        VALUES ($1, $2, $3, 4, 'memories.write', $4, 10, 'revoked', false,
-                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
-      [accountId, applicationId, credentialId, grantId, "4".repeat(64)]);
-      await transaction.unsafe(`UPDATE omi_memory.application_grant_heads
-        SET grant_version = 10, updated_at = transaction_timestamp()
-        WHERE account_id = $1 AND application_id = $2 AND credential_id = $3
-          AND credential_generation = 4 AND capability = 'memories.write'`,
-      [accountId, applicationId, credentialId]);
+    const firebaseClaims = {
+      aud: firebaseProjectId,
+      iss: `https://securetoken.google.com/${firebaseProjectId}`,
+      sub: firebaseUid,
+      uid: firebaseUid,
+      exp: now + 3_600,
+      iat: now - 60,
+      auth_time: now - 120,
+    };
+    const firebaseRuntime = createPostgresFirebaseAuthorizedLedgerRuntime({
+      pool: appRolePool,
+      project_id: firebaseProjectId,
+      runtime_mode: "deployed",
+      id_token_adapter: {
+        verification_source: "firebase_production",
+        verifyIdToken: async (_token, checkRevoked) => {
+          expect(checkRevoked).toBe(true);
+          return firebaseClaims;
+        },
+      },
+      application_id: applicationId,
+      context_ttl_seconds: 60,
     });
+    const firebaseAppend = append(
+      `commit:${suffix}:firebase`,
+      `append:${suffix}:firebase`,
+      livenessTransition.derivation.commit.commit_id,
+    );
+    await expect(firebaseRuntime.append("header.payload.signature", now, firebaseAppend))
+      .resolves.toEqual({
+        kind: "completed",
+        outcome: {
+          kind: "committed",
+          commit_id: firebaseAppend.transition.derivation.commit.commit_id,
+          sequence: 6,
+        },
+      });
+    await expect(firebaseRuntime.append("header.payload.signature", now, firebaseAppend))
+      .resolves.toEqual({
+        kind: "completed",
+        outcome: {
+          kind: "replayed",
+          commit_id: firebaseAppend.transition.derivation.commit.commit_id,
+          sequence: 6,
+        },
+      });
+
+    let firebaseTransactions = 0;
+    const revokeBeforeAppendPool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(
+        options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+        callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+      ) => {
+        firebaseTransactions += 1;
+        if (firebaseTransactions === 3) {
+          await ownerSql.begin(async (transaction) => {
+            await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+                (account_id, application_id, credential_id, credential_generation,
+                 capability, grant_id, grant_version, lifecycle, enabled, scopes,
+                 record_schema_version, record_json, content_hash)
+              VALUES ($1, $2, $3, 4, 'memories.write', $4, 10, 'revoked', false,
+                      '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+            [accountId, applicationId, credentialId, grantId, "4".repeat(64)]);
+            await transaction.unsafe(`UPDATE omi_memory.application_grant_heads
+              SET grant_version = 10, updated_at = transaction_timestamp()
+              WHERE account_id = $1 AND application_id = $2 AND credential_id = $3
+                AND credential_generation = 4 AND capability = 'memories.write'`,
+            [accountId, applicationId, credentialId]);
+          });
+        }
+        return appRolePool.withTransaction(options, callback);
+      },
+    });
+    const revocationRaceRuntime = createPostgresFirebaseAuthorizedLedgerRuntime({
+      pool: revokeBeforeAppendPool,
+      project_id: firebaseProjectId,
+      runtime_mode: "deployed",
+      id_token_adapter: {
+        verification_source: "firebase_production",
+        verifyIdToken: async () => firebaseClaims,
+      },
+      application_id: applicationId,
+      context_ttl_seconds: 60,
+    });
+    const revokedAppend = append(
+      `commit:${suffix}:firebase-revoked`,
+      `append:${suffix}:firebase-revoked`,
+      firebaseAppend.transition.derivation.commit.commit_id,
+    );
+    await expect(revocationRaceRuntime.append(
+      "header.payload.signature", now, revokedAppend,
+    )).resolves.toEqual({
+      kind: "completed",
+      outcome: { kind: "authorization_denied", reason: "grant_inactive" },
+    });
+    expect(firebaseTransactions).toBe(3);
+    const firebaseRows = await ownerSql.unsafe<{
+      commits: number; head_sequence: string; revoked_commit: number;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_derivation_commits
+          WHERE account_id = $1) AS commits,
+        (SELECT sequence::text FROM omi_memory.memory_graph_heads
+          WHERE account_id = $1) AS head_sequence,
+        (SELECT count(*)::int FROM omi_memory.memory_derivation_commits
+          WHERE account_id = $1 AND commit_id = $2) AS revoked_commit
+    `, [accountId, revokedAppend.transition.derivation.commit.commit_id]);
+    expect([...firebaseRows]).toEqual([{
+      commits: 6, head_sequence: "6", revoked_commit: 0,
+    }]);
+
     await expect(repository.append(context, first)).resolves.toEqual({
       kind: "authorization_denied", reason: "grant_inactive",
     });
