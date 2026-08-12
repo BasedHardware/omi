@@ -5,6 +5,9 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import routers.developer as developer_module
+from utils.memory.default_read_rollout import MemoryReadDecision
+from utils.memory.product_authorization import ProductAuthorizationDecision
 
 ROUTER = Path(__file__).resolve().parents[2] / "routers" / "developer.py"
 
@@ -20,10 +23,6 @@ def _function_source(name: str) -> str:
 
 def test_list_authorizes_app_key_before_universal_repository_read(monkeypatch):
     """A denied app/key grant must short-circuit before MemoryService.read."""
-    import routers.developer as developer_module
-    from utils.memory.default_read_rollout import MemoryReadDecision
-    from utils.memory.product_authorization import ProductAuthorizationDecision
-
     context = developer_module.ProductAuthorizationContext(
         uid="uid1", consumer="developer_api", surface="developer_api", app_id="app", key_id="key"
     )

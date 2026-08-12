@@ -167,10 +167,23 @@ def _make_memory(memory_id='good'):
 
 def _memory_record(payload):
     """Minimal MemoryService record double preserving the integration boundary contract."""
-    record = MagicMock()
-    record.id = payload.get('id')
-    record.model_dump.return_value = payload
-    return record
+
+    class _Record:
+        def __init__(self, value):
+            self._value = dict(value)
+            self.id = self._value.get('id')
+            self.content = self._value.get('content')
+            self.is_locked = self._value.get('is_locked', False)
+
+        def model_dump(self, **_kwargs):
+            return dict(self._value)
+
+        def model_copy(self, *, update=None, **_kwargs):
+            value = dict(self._value)
+            value.update(update or {})
+            return _Record(value)
+
+    return _Record(payload)
 
 
 def test_get_tasks_skips_malformed_record():
@@ -207,6 +220,7 @@ def test_get_memories_skips_malformed_record():
         patch.object(integ, 'verify_api_key', return_value=True),
         patch.object(integ, 'apps_utils') as au,
         patch.object(integ, 'MemoryService') as memory_service,
+        patch.object(integ, 'truncate_locked_memory_preview', side_effect=lambda memory: memory),
     ):
         au.app_can_read_memories.return_value = True
         memory_service.return_value.read.return_value = [_memory_record(valid), _memory_record(malformed)]
@@ -241,6 +255,7 @@ def test_get_memories_all_malformed_returns_empty():
         patch.object(integ, 'verify_api_key', return_value=True),
         patch.object(integ, 'apps_utils') as au,
         patch.object(integ, 'MemoryService') as memory_service,
+        patch.object(integ, 'truncate_locked_memory_preview', side_effect=lambda memory: memory),
     ):
         au.app_can_read_memories.return_value = True
         memory_service.return_value.read.return_value = [

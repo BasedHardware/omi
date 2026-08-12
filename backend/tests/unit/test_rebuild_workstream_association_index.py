@@ -15,8 +15,11 @@ def _load_script():
     return module
 
 
+SCRIPT_MODULE = _load_script()
+
+
 def test_all_users_rejects_inventory_that_would_be_truncated(monkeypatch):
-    module = _load_script()
+    module = SCRIPT_MODULE
     monkeypatch.setenv(
         'WORKSTREAM_ASSOCIATION_UID_INVENTORY',
         ','.join(f'user-{index}' for index in range(module.MAX_INDEX_REBUILD_UIDS + 1)),

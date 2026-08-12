@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from models.memories import Memory, MemoryCategory
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -23,6 +25,7 @@ os.environ.setdefault(
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROCESS_CONVERSATION_PATH = BACKEND_DIR / "utils" / "conversations" / "process_conversation.py"
+_PROCESS_CONVERSATION_MODULE = None
 
 
 class _AutoMockModule(ModuleType):
@@ -51,6 +54,10 @@ def _collection_constant(relative_module: str, constant_name: str) -> str:
 
 def _ensure_process_conversation_importable():
     """Stub heavy deps so process_conversation can be imported in unit tests."""
+    global _PROCESS_CONVERSATION_MODULE
+    if _PROCESS_CONVERSATION_MODULE is not None:
+        return _PROCESS_CONVERSATION_MODULE
+
     stubs = [
         "anthropic",
         "av",
@@ -152,8 +159,8 @@ def _ensure_process_conversation_importable():
     )
     sys.modules["utils.task_intelligence.workstream_association"].associate_canonical_evidence = MagicMock()
 
-    sys.modules.pop("utils.conversations.process_conversation", None)
-    return importlib.import_module("utils.conversations.process_conversation")
+    _PROCESS_CONVERSATION_MODULE = importlib.import_module("utils.conversations.process_conversation")
+    return _PROCESS_CONVERSATION_MODULE
 
 
 class TestStoreSeparation:
@@ -344,8 +351,6 @@ class TestNoConversationAsMemory:
             ),
         )
         memory_service = MagicMock()
-        from models.memories import Memory, MemoryCategory
-
         extracted = Memory(content="User prefers morning meetings on Tuesdays.", category=MemoryCategory.interesting)
 
         with (
@@ -358,7 +363,14 @@ class TestNoConversationAsMemory:
         ):
             pc._extract_memories_canonical("uid-ext", conversation, db_client=MagicMock())
 
-        mock_text_extractor.assert_called_once_with("uid-ext", integration_text, "email", language="en", strict=True)
+        mock_text_extractor.assert_called_once_with(
+            "uid-ext",
+            integration_text,
+            "email",
+            language="en",
+            content_date="2026-06-01",
+            strict=True,
+        )
 
         text_arg = mock_text_extractor.call_args[0][1]
         assert text_arg == integration_text
