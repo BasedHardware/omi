@@ -104,6 +104,21 @@ def _safe_error(exc: BaseException) -> str:
 def _configure_env(*, project: str) -> None:
     os.environ["GOOGLE_CLOUD_PROJECT"] = project
     os.environ["GOOGLE_CLOUD_PROJECT_ID"] = project
+    # A Firestore client built from SERVICE_ACCOUNT_JSON uses the credential's own project_id, not
+    # GOOGLE_CLOUD_PROJECT — so a mismatched credential would silently read/write a different project
+    # than --project while the proof still reports --project as its target. Fail closed so an operator
+    # cannot run a dev proof against, e.g., production data (cubic review PR 10887).
+    sa_json = os.environ.get("SERVICE_ACCOUNT_JSON")
+    if sa_json:
+        try:
+            credential_project = json.loads(sa_json).get("project_id")
+        except (ValueError, TypeError):
+            credential_project = None
+        if credential_project and credential_project != project:
+            raise SystemExit(
+                f"credential project {credential_project!r} != --project {project!r}: refusing to run "
+                f"the lifecycle proof against a project the service-account credential does not target"
+            )
     # Force single-item canary isolation for this harness.
     os.environ[BATCH_CAP_ENV] = "1"
     os.environ.setdefault(CONSOLIDATION_ENABLED_ENV, "true")
