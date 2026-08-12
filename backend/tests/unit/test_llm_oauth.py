@@ -52,8 +52,8 @@ def test_expired_credential_refreshes_and_persists_the_replacement():
         'expires_at': 0,
         'account_id': None,
     }
-    with patch.object(oauth.users_db, 'get_llm_oauth_credential', return_value=stored), patch.object(
-        oauth.users_db, 'save_llm_oauth_credential'
+    with patch.object(oauth.llm_oauth_db, 'get_credential', return_value=stored), patch.object(
+        oauth.llm_oauth_db, 'save_credential'
     ) as save, patch.object(oauth.httpx, 'post', return_value=response) as post:
         credential = oauth.get_credential('user-1')
     assert credential is not None
