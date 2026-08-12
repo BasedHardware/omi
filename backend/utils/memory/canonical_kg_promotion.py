@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Any, Optional, cast
 
-from google.api_core.exceptions import NotFound as FirestoreNotFound
+from database.store.errors import NotFound
 
 from database import knowledge_graph as kg_db
 from database import document_store
@@ -74,7 +74,7 @@ def set_canonical_memory_kg_extracted(uid: str, memory_id: str) -> bool:
     try:
         document_store.update_document(path, {"kg_extracted": True, "updated_at": datetime.now(timezone.utc)})
         return True
-    except FirestoreNotFound:
+    except NotFound:
         logger.warning(
             "Skipping stale canonical memory kg_extracted update: document no longer exists uid=%s",
             uid,
@@ -89,7 +89,7 @@ def set_canonical_memory_kg_extracted_without_touching_updated_at(
     try:
         document_store.update_document(path, {"kg_extracted": True})
         return True
-    except FirestoreNotFound:
+    except NotFound:
         logger.warning(
             "Skipping stale canonical memory kg_extracted update: document no longer exists uid=%s",
             uid,
