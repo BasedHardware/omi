@@ -73,6 +73,7 @@ test('renders the current native platform state', async () => {
 
   expect(JSON.stringify(renderer!.toJSON())).toContain('Ready to find Omi devices');
   expect(JSON.stringify(renderer!.toJSON())).toContain('No moments yet. Connect a real Omi to begin.');
+  expect(renderer!.root.findAll((node) => Array.isArray(node.props.style) && node.props.style.some((style: {flexDirection?: string} | false) => style !== false && style.flexDirection === 'row')).some((node) => node.findAll((child) => child.props.children === 'Today').length > 0)).toBe(true);
 });
 
 test('waits for discovery before refreshing the native device list', async () => {
