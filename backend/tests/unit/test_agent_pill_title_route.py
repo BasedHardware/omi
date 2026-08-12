@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from fastapi import HTTPException
 
@@ -19,9 +21,10 @@ def _entitled(monkeypatch):
 async def test_generate_agent_pill_title_returns_without_persisting(monkeypatch):
     calls: dict[str, object] = {}
 
-    def fake_generate(uid, query):
+    def fake_generate(uid, query, deadline=None):
         calls['uid'] = uid
         calls['query'] = query
+        calls['deadline'] = deadline
         return AgentPillTitleAck(title='Build Mario Level', ack='Got it, on it.')
 
     import utils.llm.agent_pill_title as agent_pill_title_llm
@@ -37,6 +40,7 @@ async def test_generate_agent_pill_title_returns_without_persisting(monkeypatch)
     assert response.ack == 'Got it, on it.'
     assert calls['uid'] == UID
     assert calls['query'] == 'build a mario level'
+    assert isinstance(calls['deadline'], float)
 
 
 async def test_generate_agent_pill_title_fails_closed_when_generation_returns_none(monkeypatch):
@@ -50,6 +54,30 @@ async def test_generate_agent_pill_title_fails_closed_when_generation_returns_no
             uid=UID,
         )
     assert exc.value.status_code == 502
+
+
+async def test_generate_agent_pill_title_fails_closed_when_executor_exceeds_deadline(monkeypatch):
+    """A queued title job that exceeds the route's outer deadline returns 502."""
+    monkeypatch.setattr(chat_sessions_router, 'AGENT_PILL_TITLE_ROUTE_TIMEOUT_SECONDS', 0.1)
+
+    call_count = [0]
+
+    async def slow_run_blocking(executor, fn, *args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # The first call is the trial-paywall check; return quickly.
+            return False
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(chat_sessions_router, 'run_blocking', slow_run_blocking)
+
+    with pytest.raises(HTTPException) as exc:
+        await chat_sessions_router.generate_agent_pill_title(
+            chat_sessions_router.AgentPillTitleRequest(query='anything'),
+            uid=UID,
+        )
+    assert exc.value.status_code == 502
+    assert exc.value.detail == 'agent_pill_title_timeout'
 
 
 async def test_generate_agent_pill_title_blocks_a_trial_expired_account(monkeypatch):

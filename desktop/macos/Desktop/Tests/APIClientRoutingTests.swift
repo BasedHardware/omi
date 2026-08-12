@@ -589,7 +589,7 @@ final class APIClientRoutingTests: XCTestCase {
     }
   }
 
-  func testGenerateAgentPillTitleUsesManagedRouteWithoutBYOK() async throws {
+  func testGenerateAgentPillTitleUsesManagedRouteWithBYOKEligibilityHeaders() async throws {
     let previousOwner = UserDefaults.standard.object(forKey: .authUserId)
     UserDefaults.standard.set("agent-pill-owner", forKey: .authUserId)
     for provider in BYOKProvider.allCases {
@@ -605,6 +605,7 @@ final class APIClientRoutingTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: provider.storageKey)
       }
     }
+    await MainActor.run { CredentialHealthManager.shared.reset() }
 
     URLCapture.setResponse(statusCode: 200, body: Data(#"{"title":"Build Mario Level","ack":"Got it, on it."}"#.utf8))
     let client = await makeTestClient()
@@ -622,7 +623,7 @@ final class APIClientRoutingTests: XCTestCase {
     let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: String])
     XCTAssertEqual(json["query"], "build a mario level")
     for provider in BYOKProvider.allCases {
-      XCTAssertNil(request.headers[provider.headerName])
+      XCTAssertEqual(request.headers[provider.headerName], "sk-test-\(provider.rawValue)")
     }
   }
 

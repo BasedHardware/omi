@@ -91,6 +91,11 @@ def _make_client():
     app = FastAPI()
     app.include_router(module.router)
     _ROUTER_HARNESS = TestClient(app), module, saved
+    # Restore the real sys.modules graph immediately so the fake harness
+    # modules never leak to other test files, while the router module keeps
+    # its own references to the fakes for assertions.
+    sys.modules.clear()
+    sys.modules.update(saved)
     return _ROUTER_HARNESS
 
 
@@ -105,9 +110,6 @@ def _cleanup(saved):
     module.chat_db.get_messages_reconcile_page.reset_mock(return_value=True, side_effect=True)
     module.chat_db.get_messages_reconcile_page.return_value = ([], None, False)
     module.llm_usage_db.record_chat_quota_question.reset_mock()
-
-
-_make_client()
 
 
 def test_desktop_human_message_records_quota_once_after_persistence_acceptance():

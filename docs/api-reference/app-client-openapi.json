@@ -1427,7 +1427,7 @@
         "additionalProperties": false,
         "properties": {
           "query": {
-            "maxLength": 100000,
+            "maxLength": 2000,
             "minLength": 1,
             "title": "Query",
             "type": "string"

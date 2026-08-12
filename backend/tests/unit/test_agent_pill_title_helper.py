@@ -62,3 +62,30 @@ def test_generate_agent_pill_title_ack_normalizes_and_caps_ack_words(monkeypatch
 
     assert result is not None
     assert result.ack == 'Got it, I am building this level'
+
+
+def test_generate_agent_pill_title_ack_honors_supplied_deadline(monkeypatch):
+    """A supplied deadline caps request_timeout to the remaining time budget."""
+    captured: dict[str, object] = {}
+
+    class FakeLLM:
+        def invoke(self, _prompt):
+            return SimpleNamespace(content='{"title": "T", "ack": "ok"}')
+
+    @contextmanager
+    def fake_track_usage(*_args, **_kwargs):
+        yield
+
+    def fake_get_llm(feature, **kwargs):
+        captured['kwargs'] = kwargs
+        return FakeLLM()
+
+    monkeypatch.setattr(agent_pill_title_llm, 'get_llm', fake_get_llm)
+    monkeypatch.setattr(agent_pill_title_llm, 'track_usage', fake_track_usage)
+    # Fix time so the remaining budget is deterministic.
+    monkeypatch.setattr(agent_pill_title_llm.time, 'monotonic', lambda: 100.0)
+
+    result = agent_pill_title_llm.generate_agent_pill_title_ack('uid', 'build a mario level', deadline=100.5)
+
+    assert result is not None
+    assert captured['kwargs']['request_timeout'] == 0.5

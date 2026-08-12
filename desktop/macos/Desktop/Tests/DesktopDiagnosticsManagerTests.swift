@@ -703,13 +703,28 @@ import XCTest
     func testFallbackNamedAreasAreNotCollapsedToOther() throws {
       for area in [
         "screen_capture", "memory_scope", "desktop_update", "tts_fallback", "task_workflow",
-        "auth_storage", "ptt_input_routing",
+        "auth_storage", "ptt_input_routing", "agent_pill_title",
       ] {
         DesktopDiagnosticsManager.shared.resetForTests()
         DesktopDiagnosticsManager.shared.recordFallback(
           area: area, from: "a", to: "b", reason: "capability_mismatch", outcome: .degraded)
         try assertLatestHealthSnapshot(
           event: .fallbackTriggered, contains: ["area": area, "outcome": "degraded"])
+      }
+    }
+
+    func testFallbackAgentPillReasonsAreNotCollapsedToOther() throws {
+      for reason in ["empty_response", "request_failed"] {
+        DesktopDiagnosticsManager.shared.resetForTests()
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "agent_pill_title",
+          from: "backend_title_service",
+          to: "heuristic_title",
+          reason: reason,
+          outcome: .recovered)
+        try assertLatestHealthSnapshot(
+          event: .fallbackTriggered,
+          contains: ["area": "agent_pill_title", "reason": reason, "outcome": "recovered"])
       }
     }
 

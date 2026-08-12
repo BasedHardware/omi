@@ -260,7 +260,7 @@ extension APIClient {
     return try await post(
       "v1/desktop/agent-pill/title",
       body: Body(query: String(query.prefix(2000))),
-      includeBYOK: false,
+      includeBYOK: true,
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: pinnedAuthorization,
       requestTimeout: 8)

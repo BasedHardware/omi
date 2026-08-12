@@ -5,6 +5,8 @@ Desktop used to build this prompt itself and call Anthropic Haiku through
 here, behind ``get_llm('session_titles')``.
 """
 
+import logging
+import time
 from typing import Any, Optional, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -12,7 +14,6 @@ from pydantic import BaseModel, Field
 
 from utils.llm.usage_tracker import Features, track_usage
 from .clients import get_llm
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +45,30 @@ RULES:
 """
 
 
-def generate_agent_pill_title_ack(uid: str, query: str) -> Optional[AgentPillTitleAck]:
+def generate_agent_pill_title_ack(
+    uid: str,
+    query: str,
+    deadline: float | None = None,
+) -> Optional[AgentPillTitleAck]:
     """Return-only title + ack through get_llm('session_titles').
 
     Returns an empty result for an empty query and ``None`` when the model call or
     parse fails, so callers can fall back to a heuristic title / random ack.
+
+    When ``deadline`` is supplied, the request timeout is capped to the remaining
+    time so a queued title job does not outlive the calling Mac client's budget.
     """
     text = (query or "").strip()
     if not text:
         return AgentPillTitleAck(title="", ack="")
     text = text[:MAX_QUERY_CHARS]
+
+    request_timeout = AGENT_PILL_TITLE_TIMEOUT_SECONDS
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        request_timeout = min(request_timeout, remaining)
 
     try:
         parser = PydanticOutputParser(pydantic_object=AgentPillTitleAck)
@@ -64,7 +79,7 @@ def generate_agent_pill_title_ack(uid: str, query: str) -> Optional[AgentPillTit
         with track_usage(uid, Features.CHAT):
             response = get_llm(
                 'session_titles',
-                request_timeout=AGENT_PILL_TITLE_TIMEOUT_SECONDS,
+                request_timeout=request_timeout,
                 max_tokens=MAX_OUTPUT_TOKENS,
                 max_retries=0,
                 allow_byok=False,

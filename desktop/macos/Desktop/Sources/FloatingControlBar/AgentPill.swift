@@ -503,7 +503,12 @@ final class AgentPillsManager: ObservableObject {
     if preFetchedTitle == nil {
       Task { [weak pill] in
         guard let pill else { return }
-        guard let result = await AgentPillsManager.generateTitleAndAck(for: pill.query) else { return }
+        guard
+          let result = await AgentPillsManager.generateTitleAndAck(
+            for: pill.query,
+            ownerID: pill.ownerID
+          )
+        else { return }
         await MainActor.run {
           guard RuntimeOwnerIdentity.currentOwnerId() == pill.ownerID else { return }
           pill.title = result.title
@@ -2291,11 +2296,17 @@ final class AgentPillsManager: ObservableObject {
     instantAcks.randomElement() ?? "On it."
   }
 
-  fileprivate static func generateTitleAndAck(for query: String) async -> (title: String, ack: String)? {
+  fileprivate static func generateTitleAndAck(
+    for query: String,
+    ownerID: String
+  ) async -> (title: String, ack: String)? {
     // Prompt + model live behind POST /v1/desktop/agent-pill/title (session_titles SSOT).
     // Keep a local heuristic fallback when the backend call fails so the pill still titles.
     do {
-      let response = try await APIClient.shared.generateAgentPillTitle(query: query)
+      let response = try await APIClient.shared.generateAgentPillTitle(
+        query: query,
+        expectedOwnerId: ownerID.isEmpty ? nil : ownerID
+      )
       let title = response.title.trimmingCharacters(in: .whitespacesAndNewlines)
       let ack = response.ack.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !title.isEmpty, !ack.isEmpty else {
