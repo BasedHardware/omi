@@ -214,7 +214,41 @@ describe('backend seams are isolated to one client function each', () => {
         !/v1\/memory\/platform\/quota/.test(source),
         `${file} calls the platform quota API directly`,
       );
-      assert.ok(!/v1\/payments\//.test(source), `${file} calls the payments API directly`);
+      assert.ok(
+        !/v1\/payments\//.test(source),
+        `${file} calls the payments API directly`,
+      );
     }
+  });
+});
+
+/**
+ * STATIC TRIPWIRE — not behavioral coverage. The lane cannot render a component.
+ * The behavior was verified by hand against a local backend: submitting the
+ * create form with every scope unchecked returned HTTP 400 and the message was
+ * painted on the page *behind* the dialog's own overlay, so a user saw only a
+ * button that appeared to do nothing.
+ */
+describe('a failed key creation reports inside the dialog that stays open', () => {
+  const source = readFileSync(
+    path.join(SURFACE, 'components', 'keys-manager.tsx'),
+    'utf8',
+  );
+
+  it('routes the create failure to a dialog-scoped error, not the page-level one', () => {
+    const submit = source.slice(
+      source.indexOf('const submitCreate'),
+      source.indexOf('const rotate'),
+    );
+    assert.ok(submit.length > 0, 'submitCreate not found');
+    assert.match(submit, /setCreateError\(/);
+    assert.ok(
+      !/\bsetError\(/.test(submit),
+      'create failures must not go to the page-level error, which the dialog overlay covers',
+    );
+  });
+
+  it('renders the dialog-scoped error as an alert', () => {
+    assert.match(source, /createError \?[\s\S]{0,120}role="alert"/);
   });
 });
