@@ -17,7 +17,8 @@ from pydantic import ValidationError
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat
 from utils.executors import db_executor, llm_executor, run_blocking
-from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
+from utils.llm.gateway_client import should_route_features_through_gateway
+from utils.llm.gateway_observability import record_direct_exception_surface
 import logging
 
 logger = logging.getLogger(__name__)
@@ -67,8 +68,17 @@ def _get_async_openai() -> AsyncOpenAI:
     return _async_openai
 
 
-def _assert_direct_file_chat_allowed() -> None:
-    raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files_assistants_vision')
+def _record_direct_file_chat_surface() -> None:
+    """File chat has no gateway lane (OpenAI Files/Assistants/vision), so under gateway
+    feature mode it stays an acknowledged direct surface: counted, never blocked.
+    A misconfigured gateway rollout (should_route_features_through_gateway raising) must
+    not block it either."""
+    try:
+        routed = should_route_features_through_gateway()
+    except RuntimeError:
+        routed = True
+    if routed:
+        record_direct_exception_surface(surface='file_chat.openai_files_assistants_vision')
 
 
 class _StreamingCallbackProtocol:
@@ -140,7 +150,7 @@ class FileChatTool:
 
     @staticmethod
     def upload(file_path: Union[str, Path]) -> Dict[str, Any]:
-        _assert_direct_file_chat_allowed()
+        _record_direct_file_chat_surface()
         result: Dict[str, Any] = {}
         file = File(file_path)
         file.get_mime_type()
@@ -166,7 +176,7 @@ class FileChatTool:
 
     def process_chat_with_file(self, question: str, file_ids: List[str]) -> str:
         """Process chat with file attachments"""
-        _assert_direct_file_chat_allowed()
+        _record_direct_file_chat_surface()
         self._ensure_thread_and_assistant()
         answer = self.ask(self.uid, question, file_ids, self.thread_id, self.assistant_id)
         return answer
@@ -178,7 +188,7 @@ class FileChatTool:
         callback: Optional[_StreamingCallbackProtocol] = None,
     ) -> str:
         """Process chat with file attachments (streaming)"""
-        _assert_direct_file_chat_allowed()
+        _record_direct_file_chat_surface()
         # Offloaded: the Firestore read is sync and blocks the event loop in this async path.
         # If this pre-stream setup fails, signal the streaming callback's end before propagating
         # (mirrors the _ensure_thread_and_assistant failure path below) so it is not left dangling.

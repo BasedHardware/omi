@@ -359,7 +359,7 @@ routes:
         state: active
   - route_type: http
     method: POST
-    path: /v2/desktop/beta/promote-qualified
+    path: /v2/desktop/beta/promote-candidate
     policy:
       review_status: reviewed
       auth:

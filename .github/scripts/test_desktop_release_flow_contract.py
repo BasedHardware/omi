@@ -193,23 +193,23 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             self.workflow,
         )
 
-    def test_recovery_can_read_the_retained_qualification_artifact(self) -> None:
+    def test_recovery_reuses_signed_candidate_promotion_without_qualification_inputs(self) -> None:
         for fragment in (
-            "actions: read",
             "uses: ./.github/workflows/desktop_promote_beta.yml",
-            "qualification_run_id:",
-            "qualification_run_attempt:",
+            "signed-smoke evidence",
         ):
             self.assertIn(fragment, self.recovery)
+        self.assertNotIn("qualification_run_id", self.recovery)
 
-    def test_reusable_promotion_validates_retained_run_identity_before_artifact_selection(self) -> None:
-        self.assertIn('[[ "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]', self.promotion)
-        self.assertIn('[[ "$QUALIFICATION_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]', self.promotion)
+    def test_reusable_promotion_accepts_only_the_exact_candidate_tag(self) -> None:
+        self.assertIn("workflow_call:", self.promotion)
+        self.assertIn("/v2/desktop/beta/promote-candidate", self.promotion)
+        self.assertNotIn("workflow_run:", self.promotion)
 
-    def test_reusable_promotion_requires_uid_continuity_only_for_beta_artifact_topology(self) -> None:
-        # omi-test-quality: source-inspection -- static workflow condition gates immutable evidence topology.
-        self.assertIn('if jq -e \'.artifacts | has("Omi.Beta.zip") and has("omi-beta.dmg")\'', self.promotion)
-        self.assertIn("qualification evidence lacks production Firebase UID continuity proof", self.promotion)
+    def test_reusable_promotion_has_no_qualification_evidence_dependency(self) -> None:
+        self.assertNotIn("qualification_run_id", self.promotion)
+        self.assertNotIn("qualification-evidence.json", self.promotion)
+        self.assertNotIn("desktop_qualify_beta.yml", self.promotion)
 
     def test_release_process_guard_accepts_the_run_isolated_tag_checkout(self) -> None:
         # omi-test-quality: source-inspection -- static tripwire: the guard's
@@ -442,10 +442,11 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             cleanup = json.loads((stage / "cleanup-evidence.json").read_text(encoding="utf-8"))
             self.assertEqual(cleanup, {"cleanup_status": "no-lease-acquired"})
 
-    def test_normal_codemagic_candidate_build_still_dispatches_m1_workflow(self) -> None:
+    def test_normal_codemagic_candidate_build_promotes_beta_without_qualification(self) -> None:
         self.assertIn("omi-desktop-swift-release:", self.codemagic)
-        self.assertIn("Dispatch trusted macOS beta qualification", self.codemagic)
-        self.assertIn("gh workflow run desktop_qualify_beta.yml", self.codemagic)
+        self.assertIn("Promote signed candidate to Omi Beta", self.codemagic)
+        self.assertIn("/v2/desktop/beta/promote-candidate", self.codemagic)
+        self.assertNotIn("gh workflow run desktop_qualify_beta.yml", self.codemagic)
 
 
 if __name__ == "__main__":

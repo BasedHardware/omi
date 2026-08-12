@@ -154,10 +154,7 @@ Future _init() async {
   }
 
   if (Env.profile.usesFirebaseAuthEmulator) {
-    await FirebaseAuth.instance.useAuthEmulator(
-      Env.firebaseAuthEmulatorHost,
-      Env.firebaseAuthEmulatorPort,
-    );
+    await FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort);
   }
 
   await PlatformManager.initializeServices();
@@ -223,21 +220,24 @@ Future _init() async {
 }
 
 void main() {
-  runZonedGuarded(() async {
-    // Ensure
-    if (kDebugMode) {
-      MarionetteBinding.ensureInitialized();
-    } else {
-      WidgetsFlutterBinding.ensureInitialized();
-    }
-    await _init();
-    runApp(const MyApp());
-  }, (error, stack) {
-    print('Uncaught error: $error\n$stack');
-    if (Firebase.apps.isNotEmpty) {
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    }
-  });
+  runZonedGuarded(
+    () async {
+      // Ensure
+      if (kDebugMode) {
+        MarionetteBinding.ensureInitialized();
+      } else {
+        WidgetsFlutterBinding.ensureInitialized();
+      }
+      await _init();
+      runApp(const MyApp());
+    },
+    (error, stack) {
+      debugPrint('Uncaught error: $error\n$stack');
+      if (Firebase.apps.isNotEmpty) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      }
+    },
+  );
 }
 
 class MyApp extends StatefulWidget {

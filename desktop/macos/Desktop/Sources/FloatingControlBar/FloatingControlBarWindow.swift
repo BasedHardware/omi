@@ -2706,6 +2706,7 @@ class FloatingControlBarManager {
     snoozedUntil = until
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
+    Self.recordQueuedInsightOutcomes(pendingNotifications, reason: .snoozed)
     pendingNotifications.removeAll()
     if let window, window.state.currentNotification != nil {
       window.dismissNotification(animated: false)
@@ -2739,7 +2740,6 @@ class FloatingControlBarManager {
     }
     snoozeTimer = timer
   }
-
   private init() {
     ownerChangeCancellable = NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)
       .sink { [weak self] _ in
@@ -2753,6 +2753,7 @@ class FloatingControlBarManager {
     activeQueryGeneration &+= 1
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
+    Self.recordQueuedInsightOutcomes(pendingNotifications, reason: .staleOwner)
     pendingNotifications.removeAll()
     pendingNotificationJournalWrites.removeAll()
     storedNotificationMessages.removeAll()
@@ -2763,7 +2764,6 @@ class FloatingControlBarManager {
     }
     window?.state.clearVisibleConversation()
   }
-
   var notificationProjectionSnapshot: NotificationProjectionSnapshot {
     NotificationProjectionSnapshot(
       queuedCount: pendingNotifications.count,
@@ -3224,6 +3224,7 @@ class FloatingControlBarManager {
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil
   ) -> OwnerBoundNotificationPresentationResult {
     guard !ownerID.isEmpty, RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
@@ -3238,6 +3239,7 @@ class FloatingControlBarManager {
       context: context,
       action: action,
       suggestionTelemetryIdentity: suggestionTelemetryIdentity,
+      insightDeliveryID: insightDeliveryID,
       screenshotData: screenshotData
     )
     guard let window else {
@@ -3257,7 +3259,7 @@ class FloatingControlBarManager {
     }
 
     if window.state.currentNotification != nil || window.state.showingAIConversation {
-      pendingNotifications.append(notification)
+      Self.appendAdviceNotification(notification, to: &pendingNotifications)
       return .queued
     }
 
@@ -3274,17 +3276,13 @@ class FloatingControlBarManager {
   func flushQueuedNotificationsIfPossible() {
     guard let window, window.state.currentNotification == nil, !window.state.showingAIConversation
     else { return }
-    while !pendingNotifications.isEmpty {
-      let nextNotification = pendingNotifications.removeFirst()
-      guard nextNotification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
-        log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
-        continue
-      }
+    if let nextNotification = Self.dequeueCurrentOwnerAdviceNotification(
+      from: &pendingNotifications,
+      currentOwnerID: RuntimeOwnerIdentity.currentOwnerId()
+    ) {
       presentNotification(nextNotification, in: window)
-      return
     }
   }
-
   /// Detach the floating UI from any in-flight chat streaming.
   func cancelChat(keepVoiceAlive: Bool = false, stopProvider: Bool = false) {
     activeQueryGeneration += 1
@@ -3849,6 +3847,7 @@ class FloatingControlBarManager {
   private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
     guard notification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
       log("FloatingControlBarManager: refusing to present stale-owner notification")
+      Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .staleOwner)
       return
     }
     persistNotificationMessageIfNeeded(notification)
@@ -3883,6 +3882,7 @@ class FloatingControlBarManager {
     if let suggestionIdentity = notification.suggestionTelemetryIdentity {
       AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(.delivered, identity: suggestionIdentity)
     }
+    Self.recordAdvicePresentation(notification)
     AnalyticsManager.shared.notificationSent(
       notificationId: notification.id.uuidString,
       title: notification.title,
@@ -3915,12 +3915,10 @@ class FloatingControlBarManager {
     }
 
     if !window.state.showingAIConversation {
-      while !pendingNotifications.isEmpty {
-        let nextNotification = pendingNotifications.removeFirst()
-        guard nextNotification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
-          log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
-          continue
-        }
+      if let nextNotification = Self.dequeueCurrentOwnerAdviceNotification(
+        from: &pendingNotifications,
+        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId()
+      ) {
         presentNotification(nextNotification, in: window)
         return
       }
@@ -4189,6 +4187,8 @@ class FloatingControlBarManager {
     }
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
+    let cancelledNotifications = pendingNotifications.filter { $0.id == notificationID }
+    Self.recordQueuedInsightOutcomes(cancelledNotifications, reason: .queueCancelled)
     pendingNotifications.removeAll { $0.id == notificationID }
     if window.state.currentNotification != nil {
       window.dismissNotification()

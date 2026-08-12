@@ -36,26 +36,31 @@
 //    and steals its click. A root SwiftUI gesture also competes with every Button, Menu, search field,
 //    and filter in the shell. The top-bar-only simultaneous gesture preserves those child controls.
 //
-//  ## The two presentations, and why there are two
+//  ## It is still an ordinary application window
 //
-//  A surface with no visible chrome is not a conventional managed application window any more; it is a
-//  thing you summon. `.summoned` says so to AppKit — floating level, so it comes up over whatever you
-//  were reading until focus moves elsewhere. `ShellSummon` owns where it lands.
+//  Chrome-less is a *drawing* decision. It is not permission to leave AppKit's application-window
+//  contract, and the shell did leave it: `.floating` level plus `hidesOnDeactivate` made it a panel
+//  that vanished the moment another app took focus. That is unreachable, not transient. A window
+//  AppKit has ordered out is in no switcher's list — not ⌘-Tab's window cycling, not AltTab, not
+//  Mission Control — so the only ways back to a shell holding the user's chat history were the chord
+//  and the menu bar icon, while every other window on the machine was an ⌥-Tab away. A `.floating`
+//  shell that stayed up would have been the opposite failure: permanently on top of the app you
+//  switched to.
 //
-//  ## Click-away dismissal
+//  So both presentations are `.normal` and neither auto-hides. The shell stays where you left it,
+//  every switcher can offer it, and putting it away is something the user asks for: ⌘O toggles,
+//  Escape and ⌘W dismiss.
 //
-//  A signed-in shell is a transient summoned surface: press the Open Omi chord, work in it, then click
-//  the desktop or another app to put it away. AppKit already owns that contract through
-//  `hidesOnDeactivate`; using the native property avoids a global mouse monitor or an Accessibility
-//  permission dependency.
+//  ## The two presentations, and why there are still two
 //
-//  `.anchored` is the same window before the user has an account and a completed setup, and what
-//  separates it is still behavioural rather than cosmetic. A first run sends people to System Settings
-//  for microphone, screen recording and accessibility; a `.floating` window sits on top of the Settings
-//  pane and covers the control the user was just told to click. So onboarding stays at `.normal` and
-//  takes a Space of its own (`.fullScreenPrimary`), and the shell only becomes summonable once
-//  `ShellSummon` can see a signed-in, onboarded user — with `dress` idempotent so the switch is a
-//  re-dress, not a rebuild.
+//  What separates them is how they join Spaces, and that is behavioural rather than cosmetic.
+//  `.summoned` is `.fullScreenAuxiliary` — the chord must be able to bring the shell up *over* a
+//  full-screen app, which is the whole point of a global summon. `.anchored` is the same window before
+//  the user has an account and a completed setup: a first run sends people to System Settings for
+//  microphone, screen recording and accessibility, so onboarding takes a Space of its own
+//  (`.fullScreenPrimary`) rather than riding along on someone else's. `ShellSummon` decides which one
+//  applies and owns where the window lands — with `dress` idempotent so the switch is a re-dress, not
+//  a rebuild.
 //
 //  Brand: nothing here picks a colour at all (INV-UI-1).
 //
@@ -67,14 +72,15 @@ import SwiftUI
 /// The main window's chrome: transparent, light-pinned, and without the system's window buttons.
 @MainActor
 enum ShellWindowChrome {
-  /// Whether the shell is a thing you summon, or a window that stays where you left it.
+  /// Whether the shell is a thing you summon onto whatever Space you are on, or a window that owns a
+  /// Space of its own.
   ///
-  /// Behavioural, not cosmetic — the two differ only in the AppKit properties that decide whether the
-  /// window survives losing focus. See this file's header for why a first run needs the second.
+  /// Behavioural, not cosmetic — the two differ only in how the window joins Spaces. Both stay put
+  /// when focus moves elsewhere. See this file's header for why a first run needs the second.
   enum Presentation: Equatable, CaseIterable, Sendable {
-    /// Steady state: floats over other apps and hides when another app or the desktop takes focus.
+    /// Steady state: the chord can bring it up over a full-screen app.
     case summoned
-    /// Onboarding, sign-in and permission-granting: an ordinary window that stays put.
+    /// Onboarding, sign-in and permission-granting: takes a Space of its own.
     case anchored
   }
 
@@ -146,10 +152,12 @@ enum ShellWindowChrome {
     // mouse-down may move the window even when the point is a Button, so this native switch turns
     // ordinary clicks into window drags. `ShellWindowDragHandle` keeps the explicit top-bar handle in SwiftUI.
     window.isMovableByWindowBackground = false
-    window.level = presentation == .summoned ? .floating : .normal
-    // Onboarding and sign-in must survive trips to a browser or System Settings. Once the shell is a
-    // summoned surface, AppKit owns click-away dismissal without an event monitor.
-    window.hidesOnDeactivate = presentation == .summoned
+    // The two properties that decide whether this window exists for the rest of the system. A window
+    // switcher can only offer a window that is on screen, and `.normal` is the level an application
+    // window is expected to cycle at — assert both in every presentation, so no path can leave the
+    // shell as an overlay only its own chord can reach. See this file's header.
+    window.level = .normal
+    window.hidesOnDeactivate = false
     window.collectionBehavior = collectionBehavior(for: presentation, current: window.collectionBehavior)
   }
 
@@ -192,8 +200,8 @@ enum ShellWindowChrome {
       && window.titlebarSeparatorStyle == .none
       && buttonsAreHidden
       && !window.isMovableByWindowBackground
-      && window.level == (presentation == .summoned ? .floating : .normal)
-      && window.hidesOnDeactivate == (presentation == .summoned)
+      && window.level == .normal
+      && !window.hidesOnDeactivate
       && window.collectionBehavior.contains(.moveToActiveSpace)
       && hasExpectedSpaceBehavior
   }

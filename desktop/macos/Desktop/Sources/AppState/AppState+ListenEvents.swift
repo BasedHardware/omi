@@ -189,9 +189,15 @@ extension AppState {
       )
     else {
       pendingBackendConversationId = nil
-      if let currentBackendConversationId, currentBackendConversationId != backendId {
-        ignoredRotatedBackendConversationIds.insert(backendId)
-      }
+      // A repeated callback for an already-ignored rollover is harmless. Do
+      // not evict an unrelated guard entry just because that stale callback
+      // arrived again; eviction is reserved for a newly observed rotation.
+      ignoredRotatedBackendConversationIds = DesktopConversationMatchPolicy.rememberingRotatedBackendId(
+        backendId,
+        activeBackendId: currentBackendConversationId,
+        ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds,
+        maxCount: Self.maxIgnoredRotatedBackendConversationIds
+      )
       log("Transcription: Ignoring non-matching backend conversation id \(backendId) for current local session")
       return
     }
@@ -246,6 +252,12 @@ extension AppState {
       return false
     }
     if let recordingSessionId, let lifecycleSequence {
+      if lifecycleSequenceByRecordingSession.count >= Self.maxLifecycleRecordingSessions,
+        lifecycleSequenceByRecordingSession[recordingSessionId] == nil,
+        let evicted = lifecycleSequenceByRecordingSession.keys.first
+      {
+        lifecycleSequenceByRecordingSession.removeValue(forKey: evicted)
+      }
       lifecycleSequenceByRecordingSession[recordingSessionId] = lifecycleSequence
     }
     return true
@@ -322,45 +334,37 @@ extension AppState {
       // Mark DB session as completed so TranscriptionRetryService won't re-upload.
       // Only bind the session captured before rotation; live events may arrive while
       // the next recording is already active.
-      let targetSessionId = finishedSessionId
-      let targetClientConversationId = finishedClientConversationId
-      let targetStartTime = finishedRecordingStartTime
-      let didBindLocalSession: Bool
       let conversationId = event.raw["conversation_id"] as? String ?? memoryId
       guard conversationId == memoryId,
+        let targetIndex = DesktopConversationMatchPolicy.matchingFinishedRecordingIndex(
+          memoryId: memoryId,
+          memory: memory,
+          recordingSessionId: recordingSessionId,
+          pending: pendingFinishedRecordings
+        )
+      else {
+        log("Transcription: Ignoring memory_created \(memoryId); no matching finished local recording")
+        break
+      }
+      let target = pendingFinishedRecordings[targetIndex]
+      guard
         acceptsLifecycleEnvelope(
           event,
           conversationId: conversationId,
           expectedLifecyclePhase: "completed",
-          expectedBackendId: targetClientConversationId
+          expectedBackendId: target.clientConversationId
         )
       else {
         break
       }
-      if !DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
-        memoryId: memoryId,
-        recordingSessionId: recordingSessionId,
-        expectedBackendId: targetClientConversationId
-      ) {
-        log("Transcription: Ignoring stale memory_created \(memoryId) for finished recording")
-        break
-      }
+
       isSavingConversation = false
-      // New desktop sessions carry an exact client-generated recording id, so
-      // they must never fall back to a timestamp guess. Timestamp matching is
-      // retained only for legacy sessions without that identity.
-      let matchesFinishedRecording =
-        targetClientConversationId != nil
-        || DesktopConversationMatchPolicy.memoryEventMatchesFinishedSession(
-          memory, sessionStartedAt: targetStartTime ?? .distantPast)
-      if let sessionId = targetSessionId,
-        memoryId != "?",
-        matchesFinishedRecording
-      {
-        finishedSessionId = nil  // Consume once
-        finishedClientConversationId = nil
-        finishedRecordingStartTime = nil
-        didBindLocalSession = true
+      pendingFinishedRecordings.remove(at: targetIndex)
+      if let recordingSessionId {
+        lifecycleSequenceByRecordingSession.removeValue(forKey: recordingSessionId)
+      }
+
+      if let sessionId = target.sessionId {
         Task {
           do {
             try await TranscriptionStorage.shared.markSessionCompleted(
@@ -372,37 +376,11 @@ extension AppState {
           }
         }
       } else {
-        didBindLocalSession = false
-        if memoryId != "?" {
-          if targetSessionId == nil || targetStartTime == nil {
-            log(
-              "Transcription: Ignoring memory_created \(memoryId); no finished local session is awaiting backend binding"
-            )
-          } else if let sessionId = targetSessionId, let startTime = targetStartTime {
-            if let memoryStartedAt = DesktopConversationMatchPolicy.parseMemoryEventDate(
-              memory?["started_at"] ?? memory?["startedAt"])
-            {
-              let delta = abs(memoryStartedAt.timeIntervalSince(startTime))
-              if delta >= DesktopConversationMatchPolicy.startedAtTolerance {
-                log(
-                  "Transcription: Ignoring memory_created event; started_at delta \(String(format: "%.1f", delta))s exceeds session match tolerance"
-                )
-              }
-            }
-            log(
-              "Transcription: Waiting for API reconciliation before binding memory_created \(memoryId) to local session \(sessionId)"
-            )
-          }
-        }
-      }
-
-      // Track conversation creation — use captured start time for accurate duration after session rotation
-      if didBindLocalSession, let startTime = targetStartTime {
-        let durationSeconds = Int(Date().timeIntervalSince(startTime))
+        log("Transcription: Accepted memory_created \(memoryId) without a durable local session")
         AnalyticsManager.shared.conversationCreated(
           conversationId: memoryId,
-          source: currentConversationSource.rawValue,
-          durationSeconds: durationSeconds
+          source: target.source.rawValue,
+          durationSeconds: max(0, Int(Date().timeIntervalSince(target.startedAt)))
         )
       }
 
