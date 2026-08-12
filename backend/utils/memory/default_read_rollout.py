@@ -545,8 +545,22 @@ def normalize_archive_read_rollout_decision(
     )
 
 
+import concurrent.futures as _futures
+
+# Bound each rollout/global-gate store read so a slow or unreachable datastore can't hold a
+# synchronous memory-authorization request worker past the intended deadline. On timeout the read
+# raises; every caller already fails closed on Exception (reason='rollout_read_failed').
+_ROLLOUT_READ_POOL = _futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="default-read-rollout")
+
+
 def _get_firestore_document_snapshot(path: str) -> Any:
-    return document_store.get_document(path)
+    future = _ROLLOUT_READ_POOL.submit(document_store.get_document, path)
+    try:
+        return future.result(timeout=DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS)
+    except _futures.TimeoutError as exc:
+        raise TimeoutError(
+            f"default-read rollout store read exceeded {DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS}s"
+        ) from exc
 
 
 def read_default_read_rollout(*, uid: str, consumer: str) -> DefaultReadRolloutDecision:
