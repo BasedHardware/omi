@@ -220,6 +220,8 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /screenConfig.*geometry/);
   assert.match(source, /viewport\.width \* viewport\.scale/);
   assert.match(source, /flutter, \["config", `--build-dir=/);
+  assert.match(source, /ios\/Flutter\/ephemeral/);
+  assert.match(source, /rmSync\(ephemeral, \{ recursive: true, force: true \}\)/);
   assert.match(source, /found nothing to terminate/);
   assert.match(source, /--omi-capture-run-id=/);
   assert.match(source, /--omi-capture-nonce=/);
