@@ -1,5 +1,8 @@
 {
   "name": "@platform/postgres",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "postgres": "3.4.9"
+  }
 }

@@ -11,6 +11,11 @@
   "scripts": {
     "test": "bun test",
     "test:node": "bun test",
+    "test:postgres": "bun run scripts/postgres-test.ts test",
+    "test:postgres:setup": "bun run scripts/postgres-test.ts setup",
+    "test:postgres:status": "bun run scripts/postgres-test.ts status",
+    "test:postgres:teardown": "bun run scripts/postgres-test.ts teardown",
+    "test:postgres:destroy": "bun run scripts/postgres-test.ts destroy --yes",
     "lint:imports": "bun run scripts/lint-import-graph.ts",
     "qa:contracts": "bun run scripts/qa-contracts.ts",
     "qa:production-deps": "node scripts/verify-production-dependency-closure.mjs"

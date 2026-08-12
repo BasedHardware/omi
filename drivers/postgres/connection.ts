@@ -47,13 +47,13 @@ export interface PostgresTransactionPool {
 
 export const REAL_POSTGRES_ACTIVATION = Object.freeze({
   supported: false as const,
-  reasonCode: "postgres_runtime_not_ratified" as const,
+  reasonCode: "postgres_runtime_not_qualified" as const,
 });
 
 export class UnsupportedPostgresRuntimeError extends Error {
-  readonly code = "postgres_runtime_not_ratified" as const;
+  readonly code = "postgres_runtime_not_qualified" as const;
   constructor() {
-    super("PostgreSQL runtime is not ratified");
+    super("PostgreSQL runtime is not qualified");
     this.name = "UnsupportedPostgresRuntimeError";
   }
 }
