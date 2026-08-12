@@ -51,15 +51,12 @@ def _is_unsafe_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     )
 
 
-def assert_public_http_url(url: str) -> str:
-    """Reject webhook/callback URLs that don't point at a public host.
+def _resolve_safe_ips(url: str) -> list[str]:
+    """Resolve `url` and return every public IP address for its host.
 
-    Returns the first resolved IP address (as a string). Callers that go on
-    to make the actual request MUST connect to that exact address (see
-    `pin_to_resolved_ip` / `safe_request_target`) rather than letting the
-    HTTP client re-resolve the hostname — otherwise a DNS record can be
-    swapped between this check and the real connect (DNS rebinding), and
-    this validation is worthless.
+    Raises UnsafeWebhookURLError when the URL is malformed, has a non-http(s)
+    scheme, has no hostname, does not resolve, or resolves to any non-public
+    address (any unsafe record rejects the whole host).
     """
     # A malformed URL (`http://[::1`, `http://h:notaport`) makes urlparse and
     # its hostname/port properties raise ValueError. That is an invalid target,
@@ -84,19 +81,33 @@ def assert_public_http_url(url: str) -> str:
     except socket.gaierror as e:
         raise UnsafeWebhookURLError(f'Could not resolve host {hostname!r}: {e}')
 
-    first_safe_ip: str | None = None
+    safe_ips: list[str] = []
     for _family, _type, _proto, _canonname, sockaddr in addrinfo:
         ip = ipaddress.ip_address(sockaddr[0])
         if _is_unsafe_ip(ip):
             raise UnsafeWebhookURLError(f'{hostname!r} resolves to non-public address {ip}')
-        if first_safe_ip is None:
-            first_safe_ip = str(ip)
+        ip_str = str(ip)
+        if ip_str not in safe_ips:
+            safe_ips.append(ip_str)
 
-    if first_safe_ip is None:
+    if not safe_ips:
         # getaddrinfo() succeeded but returned zero records — treat like a resolution failure.
         raise UnsafeWebhookURLError(f'Could not resolve host {hostname!r}: no addresses returned')
 
-    return first_safe_ip
+    return safe_ips
+
+
+def assert_public_http_url(url: str) -> str:
+    """Reject webhook/callback URLs that don't point at a public host.
+
+    Returns the first resolved IP address (as a string). Callers that go on
+    to make the actual request MUST connect to that exact address (see
+    `pin_to_resolved_ip` / `safe_request_target`) rather than letting the
+    HTTP client re-resolve the hostname — otherwise a DNS record can be
+    swapped between this check and the real connect (DNS rebinding), and
+    this validation is worthless.
+    """
+    return _resolve_safe_ips(url)[0]
 
 
 def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
@@ -135,6 +146,18 @@ def safe_request_target(url: str) -> tuple[str, dict]:
     for anything private/loopback/link-local/reserved/unresolvable."""
     resolved_ip = assert_public_http_url(url)
     return pin_to_resolved_ip(url, resolved_ip)
+
+
+def safe_request_targets(url: str) -> list[tuple[str, dict]]:
+    """Like `safe_request_target`, but return one (pinned_url, extra_kwargs)
+    pair per public address the host resolved to.
+
+    A host with several A/AAAA records can have one address unreachable
+    (e.g. a dual-stack host whose IPv6 edge is down) while another works.
+    Retrying callers rotate through this list so a delivery tries every
+    validated address before giving up — each attempt still connects to a
+    pinned address, so the DNS-rebinding protection is unchanged."""
+    return [pin_to_resolved_ip(url, ip) for ip in _resolve_safe_ips(url)]
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +230,21 @@ class WebhookCircuitBreaker:
         if self._failures >= _CIRCUIT_BREAKER_FAILURE_THRESHOLD:
             self._state = 'open'
             logger.warning(f'Circuit breaker OPEN for webhook: {self._url[:80]}')
+
+    def release_probe(self):
+        """Resolve a consumed HALF_OPEN probe that never reached the network.
+
+        A delivery can be rejected before any request is made (the target URL
+        is no longer public or its DNS fails). In HALF_OPEN that rejection
+        still consumed the single recovery probe; leaving `_half_open_in_flight`
+        at 1 would reject every later delivery forever. Fall back to OPEN and
+        wait out the recovery timeout before probing again, without counting
+        the rejection as a network failure.
+        """
+        if self._state == 'half_open':
+            self._state = 'open'
+            self._last_failure_time = time.monotonic()
+            self._half_open_in_flight = 0
 
 
 # Global registry of per-target circuit breakers
@@ -435,6 +473,26 @@ def get_webhook_client() -> httpx.AsyncClient:
         lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=2.0),
             limits=httpx.Limits(max_connections=64, max_keepalive_connections=16),
+        ),
+    )
+
+
+def get_pinned_webhook_client() -> httpx.AsyncClient:
+    """Return a shared async HTTP client for IP-pinned webhook delivery.
+
+    Pinned requests rewrite the URL to the validated IP, so two different
+    webhook hostnames that share an IP:port have the same HTTPX origin and a
+    keep-alive pool would reuse one TLS connection for both — the second
+    request would be sent with the first hostname's SNI and certificate
+    verification (421/misdelivery, transcript/audio leakage on shared hosting).
+    Keep-alive is disabled so every delivery opens a fresh connection carrying
+    its own SNI; same trade the auth and TTS clients already make.
+    """
+    return _get_client(
+        'pinned_webhook',
+        lambda: httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=2.0),
+            limits=httpx.Limits(max_connections=64, max_keepalive_connections=0),
         ),
     )
 

@@ -13,6 +13,7 @@ import pytest
 
 import utils.webhooks as webhooks_module
 from models.users import WebhookType
+from utils.http_client import UnsafeWebhookURLError
 from utils.webhooks import realtime_transcript_webhook, send_audio_bytes_developer_webhook, day_summary_webhook
 
 
@@ -32,8 +33,8 @@ def _stub_webhook_db_helpers(monkeypatch):
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_failure", MagicMock(return_value=False))
     monkeypatch.setattr(
         webhooks_module,
-        "safe_request_target",
-        lambda url: (url, {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}}),
+        "safe_request_targets",
+        lambda url: [(url, {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}})],
     )
 
 
@@ -50,7 +51,7 @@ class TestRealtimeTranscriptWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
+        with patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
 
         mock_client.post.assert_called_once()
@@ -67,7 +68,7 @@ class TestRealtimeTranscriptWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
+        with patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client), patch(
             "utils.webhooks.send_webhook_notification"
         ) as mock_notify:
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
@@ -83,7 +84,7 @@ class TestRealtimeTranscriptWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
+        with patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client), patch(
             "utils.webhooks.send_webhook_notification"
         ) as mock_notify:
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
@@ -95,7 +96,7 @@ class TestRealtimeTranscriptWebhook:
         mock_client = AsyncMock()
 
         with patch("utils.webhooks.user_webhook_status_db", return_value=False), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+            "utils.webhooks.get_pinned_webhook_client", return_value=mock_client
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_client.post.assert_not_called()
@@ -108,7 +109,7 @@ class TestRealtimeTranscriptWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("connect timeout"))
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
+        with patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client), patch(
             "utils.webhooks._get_dev_webhook_retry_delays", return_value=()
         ):
             # Should not raise
@@ -127,7 +128,7 @@ class TestSendAudioBytesDeveloperWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
+        with patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100))
 
         mock_client.post.assert_called_once()
@@ -143,7 +144,7 @@ class TestSendAudioBytesDeveloperWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
+        with patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\xab\xcd'))
 
         call_args = mock_client.post.call_args
@@ -161,7 +162,7 @@ class TestSendAudioBytesDeveloperWebhook:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch("utils.webhooks.get_user_webhook_db", return_value="https://example.com/audio,10"), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+            "utils.webhooks.get_pinned_webhook_client", return_value=mock_client
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
 
@@ -175,7 +176,7 @@ class TestSendAudioBytesDeveloperWebhook:
         mock_client = AsyncMock()
 
         with patch("utils.webhooks.user_webhook_status_db", return_value=False), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+            "utils.webhooks.get_pinned_webhook_client", return_value=mock_client
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
             mock_client.post.assert_not_called()
@@ -228,11 +229,12 @@ class TestConversationAndSummaryWebhooksStructural:
         ), "utils/webhooks.py must not import the blocking 'requests' library — use httpx.AsyncClient"
 
     def test_webhooks_uses_httpx_client(self):
-        """utils/webhooks.py must use the shared httpx client (get_webhook_client)."""
+        """utils/webhooks.py must use a shared httpx client (get_webhook_client or the
+        pinned variant used for IP-pinned delivery)."""
         source = self._read_webhooks_source()
         assert (
-            'get_webhook_client' in source
-        ), "webhooks.py must use get_webhook_client() (shared httpx.AsyncClient) for HTTP calls"
+            'get_webhook_client' in source or 'get_pinned_webhook_client' in source
+        ), "webhooks.py must use the shared httpx clients for HTTP calls"
 
     def test_conversation_created_webhook_uses_await_post(self):
         """conversation_created_webhook must await an async HTTP post, not call requests.post."""
@@ -302,7 +304,7 @@ class TestDaySummaryWebhookJsonField:
 
         legacy_summary_str = str(self._SAMPLE_SUMMARY_JSON)
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
+        with patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client):
             await day_summary_webhook("uid-1", legacy_summary_str, self._SAMPLE_SUMMARY_JSON)
 
         mock_client.post.assert_called_once()
@@ -328,7 +330,7 @@ class TestDaySummaryWebhookJsonField:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
+        with patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client):
             await day_summary_webhook("uid-1", "{'legacy': 'repr'}")
 
         payload = mock_client.post.call_args.kwargs["json"]
@@ -367,7 +369,7 @@ class TestCircuitBreakerIntegration:
         mock_client = AsyncMock()
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+            "utils.webhooks.get_pinned_webhook_client", return_value=mock_client
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_client.post.assert_not_called()
@@ -386,10 +388,34 @@ class TestCircuitBreakerIntegration:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+            "utils.webhooks.get_pinned_webhook_client", return_value=mock_client
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_cb.record_success.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_transcript_webhook_releases_half_open_probe_when_target_rejected(self):
+        """A rejection before any request must not leave the HALF_OPEN probe in flight.
+
+        `_post_dev_webhook` returns None when the target is no longer public or
+        fails DNS. If the breaker had just granted its single recovery probe,
+        that consumed probe has to be released or every later delivery is
+        rejected forever (in-flight stays at the half-open maximum).
+        """
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+
+        mock_client = AsyncMock()
+
+        with (
+            patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.safe_request_targets", side_effect=UnsafeWebhookURLError("not public")),
+        ):
+            await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
+
+        mock_cb.release_probe.assert_called_once()
+        mock_client.post.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_transcript_webhook_records_failure_on_exception(self):
@@ -401,7 +427,7 @@ class TestCircuitBreakerIntegration:
         mock_client.post = AsyncMock(side_effect=Exception("connection refused"))
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+            "utils.webhooks.get_pinned_webhook_client", return_value=mock_client
         ), patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_cb.record_failure.assert_called_once()
@@ -415,7 +441,7 @@ class TestCircuitBreakerIntegration:
         mock_client = AsyncMock()
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
-            "utils.webhooks.get_webhook_client", return_value=mock_client
+            "utils.webhooks.get_pinned_webhook_client", return_value=mock_client
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100))
             mock_client.post.assert_not_called()

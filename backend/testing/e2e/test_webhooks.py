@@ -36,7 +36,7 @@ def _run_realtime_delivery(monkeypatch, handler):
 
     async def exercise_webhook():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as fake_client:
-            monkeypatch.setattr(webhooks, "get_webhook_client", lambda: fake_client)
+            monkeypatch.setattr(webhooks, "get_pinned_webhook_client", lambda: fake_client)
             await webhooks.realtime_transcript_webhook(
                 "123",
                 [{"text": "Hermetic realtime transcript", "speaker": "SPEAKER_00", "start": 0.0, "end": 1.0}],

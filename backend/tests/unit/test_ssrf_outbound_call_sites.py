@@ -215,8 +215,8 @@ async def test_post_dev_webhook_rejects_non_public_without_post():
     mock_client = AsyncMock()
     mock_client.post = AsyncMock()
     with (
-        patch('utils.webhooks.get_webhook_client', return_value=mock_client),
-        patch('utils.webhooks.safe_request_target', side_effect=UnsafeWebhookURLError('private')),
+        patch('utils.webhooks.get_pinned_webhook_client', return_value=mock_client),
+        patch('utils.webhooks.safe_request_targets', side_effect=UnsafeWebhookURLError('private')),
     ):
         result = await _post_dev_webhook('test_webhook', 'http://127.0.0.1/hook', json={})
     assert result is None
@@ -234,9 +234,9 @@ async def test_post_dev_webhook_pins_and_disables_redirects():
     pinned, pin_kwargs = _pin('https://hooks.example.com/x')
 
     with (
-        patch('utils.webhooks.get_webhook_client', return_value=mock_client),
+        patch('utils.webhooks.get_pinned_webhook_client', return_value=mock_client),
         patch('utils.webhooks.get_webhook_semaphore', return_value=mock_sem),
-        patch('utils.webhooks.safe_request_target', return_value=(pinned, pin_kwargs)),
+        patch('utils.webhooks.safe_request_targets', return_value=[(pinned, pin_kwargs)]),
     ):
         result = await _post_dev_webhook(
             'test_webhook',

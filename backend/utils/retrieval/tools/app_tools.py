@@ -29,7 +29,7 @@ from database.webhook_health import (
 from models.app import App, ChatTool
 from utils.mcp_client import call_mcp_tool
 from utils.http_client import get_webhook_circuit_breaker, safe_request_target, UnsafeWebhookURLError
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, resolver_executor, run_blocking
 from utils.notifications import send_notification
 import logging
 
@@ -316,8 +316,8 @@ async def _call_tool_endpoint(
         return f"The {app_tool.name} tool is temporarily disabled due to sustained failures. The app developer has been notified."
 
     try:
-        pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, app_tool.endpoint)
-    except UnsafeWebhookURLError:
+        pinned_url, pin_kwargs = await run_blocking(resolver_executor, safe_request_target, app_tool.endpoint)
+    except (UnsafeWebhookURLError, ValueError):
         return f"Error: The {app_tool.name} tool endpoint is invalid or unavailable."
 
     cb = get_webhook_circuit_breaker(app_tool.endpoint)

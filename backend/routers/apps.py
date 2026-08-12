@@ -19,6 +19,7 @@ from utils.executors import (
     critical_executor,
     db_executor,
     llm_executor,
+    resolver_executor,
     storage_executor,
     run_blocking,
     start_background_task,
@@ -1831,8 +1832,9 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
         raise HTTPException(status_code=422, detail='MCP server URL is required')
     try:
         # getaddrinfo() is blocking: a user-supplied hostname with a slow
-        # resolver would stall the whole event loop, so offload it.
-        await run_blocking(db_executor, assert_public_http_url, server_url)
+        # resolver would stall the whole event loop, so offload it. DNS runs
+        # on the resolver bulkhead, not db workers.
+        await run_blocking(resolver_executor, assert_public_http_url, server_url)
     except UnsafeWebhookURLError:
         raise HTTPException(status_code=400, detail='MCP server URL must be a public http(s) URL')
 

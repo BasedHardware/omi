@@ -245,8 +245,8 @@ class TestDevWebhookAutoDisable:
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
         monkeypatch.setattr(
-            "utils.webhooks.safe_request_target",
-            lambda url: (url, {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}}),
+            "utils.webhooks.safe_request_targets",
+            lambda url: [(url, {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}})],
         )
 
     def test_append_query_params_preserves_existing_query(self):
@@ -284,15 +284,14 @@ class TestDevWebhookAutoDisable:
             sleep_calls.append(delay)
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
             patch(
-                "utils.webhooks.safe_request_target",
-                side_effect=lambda url: (
-                    url,
-                    {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}},
-                ),
+                "utils.webhooks.safe_request_targets",
+                side_effect=lambda url: [
+                    (url, {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}})
+                ],
             ),
         ):
             response = await _post_dev_webhook(
@@ -325,7 +324,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
             patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
@@ -357,7 +356,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
         ):
@@ -376,7 +375,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
@@ -413,7 +412,7 @@ class TestDevWebhookAutoDisable:
             sleep_calls.append(delay)
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
@@ -1974,8 +1973,8 @@ class TestDevWebhookIntegrationPaths:
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
         monkeypatch.setattr(
-            "utils.webhooks.safe_request_target",
-            lambda url: (url, {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}}),
+            "utils.webhooks.safe_request_targets",
+            lambda url: [(url, {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}})],
         )
 
     @pytest.mark.asyncio
@@ -1996,7 +1995,7 @@ class TestDevWebhookIntegrationPaths:
 
         with (
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=AsyncMock()),
         ):
@@ -2033,7 +2032,7 @@ class TestDevWebhookIntegrationPaths:
 
         with (
             patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
@@ -2070,7 +2069,7 @@ class TestDevWebhookIntegrationPaths:
             patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
             patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
             patch("utils.webhooks.send_notification") as mock_notify,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),

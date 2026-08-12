@@ -20,7 +20,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 import httpx
 
 from models.app import ChatTool
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, resolver_executor, run_blocking
 from utils.http_client import safe_request_target
 from utils.log_sanitizer import sanitize
 import logging
@@ -53,7 +53,7 @@ async def discover_oauth_metadata(server_url: str) -> Optional[dict[str, Any]]:
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
-            pinned_url, pin_kwargs = await run_blocking(db_executor, _safe_request_target, metadata_url)
+            pinned_url, pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, metadata_url)
             resp = await client.get(
                 pinned_url,
                 headers=pin_kwargs['headers'],
@@ -90,7 +90,7 @@ async def register_oauth_client(
     if scopes:
         payload["scope"] = " ".join(scopes)
 
-    pinned_url, pin_kwargs = await run_blocking(db_executor, _safe_request_target, registration_endpoint)
+    pinned_url, pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, registration_endpoint)
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
             pinned_url,
@@ -162,7 +162,7 @@ async def exchange_oauth_code(
     if code_verifier:
         payload["code_verifier"] = code_verifier
 
-    pinned_url, pin_kwargs = await run_blocking(db_executor, _safe_request_target, token_endpoint)
+    pinned_url, pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, token_endpoint)
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
             pinned_url,
@@ -203,7 +203,7 @@ async def refresh_oauth_token(
     if client_secret:
         payload["client_secret"] = client_secret
 
-    pinned_url, pin_kwargs = await run_blocking(db_executor, _safe_request_target, token_endpoint)
+    pinned_url, pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, token_endpoint)
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
             pinned_url,
@@ -278,7 +278,7 @@ async def _mcp_post(
     if session_id:
         headers["Mcp-Session-Id"] = session_id
 
-    pinned_url, pin_kwargs = await run_blocking(db_executor, _safe_request_target, server_url)
+    pinned_url, pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, server_url)
     headers.update(pin_kwargs['headers'])
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
@@ -372,7 +372,7 @@ async def _sse_send_and_receive_inner(
     if access_token:
         headers["Authorization"] = f"Bearer {access_token}"
 
-    pinned_sse_url, sse_pin_kwargs = await run_blocking(db_executor, _safe_request_target, sse_url)
+    pinned_sse_url, sse_pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, sse_url)
     headers.update(sse_pin_kwargs['headers'])
 
     expected_responses = sum(1 for p in payloads if "id" in p)
