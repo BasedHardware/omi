@@ -728,7 +728,10 @@ and hands the app an endpoint like `https://<HOST_IP>:${NTFY_HTTPS_PORT}/<topic>
 saves to the backend (`POST /v1/users/unifiedpush-endpoint`). The backend sits on the **internal**
 `omi` network (no egress) and cannot reach that host address — so it keeps only the endpoint's *path*
 and POSTs to `${UNIFIEDPUSH_INTERNAL_BASE_URL}${path}` = `http://ntfy:80/<topic>?up=1`, reaching the
-same server by service name.
+same server by service name. **`UNIFIEDPUSH_INTERNAL_BASE_URL` is REQUIRED and fail-closed** (cubic
+review PR 10887): the registered endpoint is user-controlled, so POSTing to it verbatim would be an
+SSRF primitive — with the base unset the backend refuses to send that endpoint rather than fetching a
+user-supplied URL.
 
 **Flow:** app registers → `onNewEndpoint` → the app generates a WebPush key set, saves the endpoint
 **plus its `p256dh`/`auth`** to the backend → backend builds the notification JSON

@@ -24,6 +24,15 @@ from testing.import_isolation import load_module_fresh, stub_modules  # noqa: E4
 from utils.push import unifiedpush as up  # noqa: E402
 from utils.push.base import PushMessage  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _require_internal_base(monkeypatch):
+    # UnifiedPush is now fail-closed: it POSTs only through the operator-configured internal base,
+    # never to a user-registered endpoint verbatim (SSRF). Default it here so the send tests exercise
+    # the real path; the addressing tests override via setenv (rewrite) / delenv (fail-closed).
+    # The test endpoints use host `ntfy` with no port, so base `http://ntfy` rewrites to identity.
+    monkeypatch.setenv('UNIFIEDPUSH_INTERNAL_BASE_URL', 'http://ntfy')
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -49,9 +58,13 @@ def test_render_payload_data_only_omits_notification():
     assert payload['data'] == {'type': 'action_item_reminder'}
 
 
-def test_target_url_verbatim_without_internal_base(monkeypatch):
+def test_target_url_fails_closed_without_internal_base(monkeypatch):
+    # Fail-closed: without an internal base URL the backend must refuse to POST to the
+    # user-registered endpoint verbatim (SSRF), not send to it. Changed from the previous
+    # verbatim behavior per the cubic review (PR 10887) that flagged it as an SSRF primitive.
     monkeypatch.delenv('UNIFIEDPUSH_INTERNAL_BASE_URL', raising=False)
-    assert up._target_url('http://10.0.2.2:8090/topicA?up=1') == 'http://10.0.2.2:8090/topicA?up=1'
+    with pytest.raises(ValueError):
+        up._target_url('http://10.0.2.2:8090/topicA?up=1')
 
 
 def test_target_url_rewrites_host_via_internal_base(monkeypatch):

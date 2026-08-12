@@ -61,10 +61,19 @@ def _internal_base() -> Optional[str]:
 
 
 def _target_url(endpoint: str) -> str:
-    """Resolve the URL to POST to, applying UNIFIEDPUSH_INTERNAL_BASE_URL if configured."""
+    """Resolve the URL to POST to via the operator-configured internal push server.
+
+    Fail closed: ``UNIFIEDPUSH_INTERNAL_BASE_URL`` is REQUIRED. The stored ``endpoint`` is
+    user-registered, so POSTing to it verbatim would let an authenticated user turn delivery into
+    an SSRF primitive. We keep only the endpoint's *path* and send it to the trusted internal base;
+    without that base configured we refuse to send rather than fetch a user-controlled URL.
+    """
     base = _internal_base()
     if not base:
-        return endpoint
+        raise ValueError(
+            'UNIFIEDPUSH_INTERNAL_BASE_URL is not set; refusing to POST to a user-registered '
+            'endpoint verbatim (SSRF). Configure the internal push-server base URL.'
+        )
     parts = urlsplit(endpoint)
     path = parts.path or '/'
     if parts.query:
@@ -133,17 +142,22 @@ async def _post_async(url: str, body: bytes, headers: dict) -> Optional[int]:
 
 def _send_one_sync(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> Optional[int]:
     try:
+        # Resolve the target inside the guard: a malformed key set OR a fail-closed addressing
+        # error (no UNIFIEDPUSH_INTERNAL_BASE_URL) skips just this endpoint, never aborts the
+        # fan-out and never POSTs to a user-controlled URL.
+        target = _target_url(endpoint.url)
         body, headers = _encode_for(endpoint, plaintext)
     except ValueError as e:
-        # One malformed persisted key set must not abort the whole fan-out; skip just this endpoint
-        # (treated as a non-fatal failure, like a network error) so the others still receive the push.
-        logger.error('UnifiedPush skipping endpoint with an invalid key set %s: %s', endpoint.url, e)
+        logger.error('UnifiedPush skipping endpoint %s: %s', endpoint.url, e)
         return None
-    return _post_sync(_target_url(endpoint.url), body, headers)
+    return _post_sync(target, body, headers)
 
 
 async def _send_one_async(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> Optional[int]:
     try:
+        # Fail-closed target resolution before any work (see _send_one_sync): a missing internal
+        # base URL skips this endpoint instead of POSTing a user-registered URL verbatim (SSRF).
+        target = _target_url(endpoint.url)
         if endpoint.p256dh and endpoint.auth:
             # RFC 8291 encryption is CPU-bound (P-256 keygen + ECDH + AES): offload it so a fan-out
             # (asyncio.gather over N endpoints) never runs the crypto on the event loop, and cap the
@@ -153,9 +167,9 @@ async def _send_one_async(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> Op
             # Plaintext fallback (pre-encryption client): trivial, no reason to bounce off the loop.
             body, headers = _encode_for(endpoint, plaintext)
     except ValueError as e:
-        logger.error('UnifiedPush skipping endpoint with an invalid key set %s: %s', endpoint.url, e)
+        logger.error('UnifiedPush skipping endpoint %s: %s', endpoint.url, e)
         return None
-    return await _post_async(_target_url(endpoint.url), body, headers)
+    return await _post_async(target, body, headers)
 
 
 def send_to_user(user_id: str, msg: PushMessage, *, endpoints: Optional[List[UnifiedPushEndpoint]] = None) -> int:
