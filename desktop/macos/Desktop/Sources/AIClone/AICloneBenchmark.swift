@@ -77,8 +77,12 @@ struct AICloneBenchmark {
         inboundText: sample.inboundText,
         inboundSenderName: sample.inboundSenderName)
       let decision = try await engine.decide(context: context)
-      guard decision.shouldReply, let generated = decision.reply, !generated.isEmpty else {
-        // The user did reply here; a silent clone is a miss for this sample.
+      guard !decision.suspectedInjection, decision.shouldReply, let generated = decision.reply,
+        !generated.isEmpty
+      else {
+        // The user did reply here; a silent clone is a miss for this sample —
+        // and so is an injection-flagged one, which live policy would refuse to
+        // send. Scoring it would let rejected samples inflate the Auto gate.
         scores.append(0)
         continue
       }

@@ -198,6 +198,11 @@ struct AICloneReplyDecision: Codable, Equatable {
     inboundText: String = ""
   ) -> AICloneActionOutcome {
     if suspectedInjection { return .declinedInjection }
+    // Silence first: with no reply to draft or review there is no action to
+    // report, so a declined sensitive message must not be logged as Drafted or
+    // Asked for an approval that will never appear.
+    guard shouldReply, let reply, !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else { return .stayedSilent }
     if Self.requiresHumanReview(inboundText: inboundText, replyText: reply) {
       switch mode {
       case .off: return .stayedSilent
@@ -205,8 +210,6 @@ struct AICloneReplyDecision: Codable, Equatable {
       case .ask: return .askedApproval
       }
     }
-    guard shouldReply, let reply, !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    else { return .stayedSilent }
     switch mode {
     case .off:
       return .stayedSilent
@@ -217,8 +220,18 @@ struct AICloneReplyDecision: Codable, Equatable {
     case .auto:
       // Low confidence downgrades to a draft rather than sending — the user
       // still sees the proposal in Beeper without the clone speaking for them.
+      // A malformed confidence (NaN, 2, -1) is not evidence of confidence, so
+      // it must never satisfy the gate that speaks in the user's name.
+      guard Self.isValidConfidence(confidence), Self.isValidConfidence(autoConfidenceThreshold) else {
+        return .drafted
+      }
       return confidence >= autoConfidenceThreshold ? .sentAutomatically : .drafted
     }
+  }
+
+  /// The auto-send gate only accepts a finite probability in 0…1.
+  static func isValidConfidence(_ value: Double) -> Bool {
+    value.isFinite && value >= 0 && value <= 1
   }
 
   private static let sensitiveContent = [
