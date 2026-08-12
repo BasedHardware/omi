@@ -514,24 +514,36 @@ class ConversationProvider extends ChangeNotifier {
     _initialFetchRetryCount = 0;
     final fetchedConversations = _filterPendingDeletes(result.items);
 
+    // Snapshot completed IDs present before the lifecycle await so we can
+    // identify websocket completions that arrive during it.
+    final completedIdsBeforeAwait = conversations
+        .where((m) => m.status == ConversationStatus.completed)
+        .map((m) => m.id)
+        .toSet();
+
     final processingIdsAtStart = _realProcessingConversationIds();
     final pageConversationIds = fetchedConversations.map((conversation) => conversation.id).toSet();
     final lifecycleResults = await _loadProcessingLifecycleResults(fetchedConversations, processingIdsAtStart);
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
     _reconcileProcessingConversations(lifecycleResults, processingIdsAtStart, pageConversationIds);
 
-    // completed convos — merge fetched completed with any websocket completions
+    // completed convos — merge fetched completed with websocket completions
     // that arrived during the lifecycle await so the stale page snapshot does
-    // not erase freshly completed conversations from the live list.
+    // not erase freshly completed conversations from the live list. Only
+    // preserve rows that were NOT in the list before the await, so filtered
+    // views do not accumulate off-filter rows.
     final fetchedCompletedIds = fetchedConversations
         .where((m) => m.status == ConversationStatus.completed)
         .map((m) => m.id)
         .toSet();
-    final liveCompleted = conversations
-        .where((m) => m.status == ConversationStatus.completed && !fetchedCompletedIds.contains(m.id))
+    final newCompletionsDuringAwait = conversations
+        .where((m) =>
+            m.status == ConversationStatus.completed &&
+            !completedIdsBeforeAwait.contains(m.id) &&
+            !fetchedCompletedIds.contains(m.id))
         .toList();
     conversations = fetchedConversations.where((m) => m.status == ConversationStatus.completed).toList();
-    if (liveCompleted.isNotEmpty) conversations = [...conversations, ...liveCompleted];
+    if (newCompletionsDuringAwait.isNotEmpty) conversations = [...conversations, ...newCompletionsDuringAwait];
 
     // Only use cache when no folder filter is applied
     if (conversations.isEmpty && selectedFolderId == null) {

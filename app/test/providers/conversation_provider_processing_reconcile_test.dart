@@ -203,18 +203,49 @@ void main() {
       isSignedIn: () => true,
     );
     addTearDown(provider.dispose);
-    provider.conversations = [_conversation('c1', status: ConversationStatus.completed)];
+    provider.conversations = [];
     provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
 
     final fetch = provider.fetchConversations();
     await Future<void>.delayed(Duration.zero);
 
-    // The websocket completion has already inserted c1 as completed into the
-    // live conversations list (simulated by the initial assignment above).
+    // Simulate a websocket completion arriving during the lifecycle await:
+    // the completed conversation is inserted directly into the live list.
+    provider.conversations = [_conversation('c1', status: ConversationStatus.completed)];
+
     lifecycle.complete((item: _conversation('c1', status: ConversationStatus.processing), ok: true));
     await fetch;
 
     expect(provider.conversations.map((c) => c.id), containsAll(['page', 'c1']));
+  });
+
+  test('filtered fetch does not merge pre-existing off-filter completed conversations', () async {
+    // Regression: merging the entire prior completed list pollutes filtered
+    // views and breaks pagination. Only completions arriving during the await
+    // (not in the pre-await snapshot) should be preserved.
+    final lifecycle = Completer<({ServerConversation? item, bool ok})>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('page', status: ConversationStatus.completed)], ok: true),
+      conversationLifecycleFetcher: (_) => lifecycle.future,
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    // Pre-existing completed rows from a prior unfiltered fetch.
+    provider.conversations = [
+      _conversation('old1', status: ConversationStatus.completed),
+      _conversation('old2', status: ConversationStatus.completed),
+    ];
+    provider.addProcessingConversation(_conversation('off-page', status: ConversationStatus.processing));
+
+    final fetch = provider.fetchConversations();
+    await Future<void>.delayed(Duration.zero);
+    // No websocket completion arrives — only the pre-existing rows are present.
+    lifecycle.complete((item: _conversation('off-page', status: ConversationStatus.completed), ok: true));
+    await fetch;
+
+    // The fetched page result must replace, not merge with, the prior list.
+    expect(provider.conversations.map((c) => c.id), ['page']);
   });
 }
 
