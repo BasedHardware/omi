@@ -326,11 +326,10 @@ class TestGeminiKeyNotInUrl:
 
 
 class TestChatQuotaBYOKBypass:
-    @patch('utils.subscription.get_byok_key')
+    @patch('utils.subscription.has_validated_byok_keys', return_value=True)
     @patch('utils.subscription.users_db')
-    def test_enforce_chat_quota_bypasses_for_byok_with_openai_key(self, mock_users_db, mock_get_key):
+    def test_enforce_chat_quota_bypasses_for_validated_openai_key(self, mock_users_db, _mock_validated):
         mock_users_db.is_byok_active.return_value = True
-        mock_get_key.side_effect = lambda p: 'sk-openai' if p == 'openai' else None
         from utils.subscription import enforce_chat_quota
 
         enforce_chat_quota('byok-user-uid')
@@ -744,12 +743,11 @@ class TestMiddlewareIsolation:
 
 
 class TestQuotaBoundaryTests:
-    @patch('utils.subscription.get_byok_key')
+    @patch('utils.subscription.has_validated_byok_keys', return_value=True)
     @patch('utils.subscription.users_db')
-    def test_chat_quota_bypasses_with_anthropic_key_only(self, mock_users_db, mock_get_key):
+    def test_chat_quota_bypasses_with_validated_anthropic_key_only(self, mock_users_db, _mock_validated):
         """Anthropic-only BYOK should also bypass chat quota."""
         mock_users_db.is_byok_active.return_value = True
-        mock_get_key.side_effect = lambda p: 'sk-ant-byok' if p == 'anthropic' else None
         from utils.subscription import enforce_chat_quota
 
         enforce_chat_quota('anthropic-byok-uid')  # Should not raise
