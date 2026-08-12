@@ -72,6 +72,7 @@ const expectedTables = [
   "memory_formation_extraction_outcomes",
   "memory_formation_outcomes",
   "memory_formation_placement_outcomes",
+  "memory_formation_work_inputs",
   "memory_generated_adjacency",
   "memory_graph_heads",
   "memory_idempotency_receipts",
@@ -468,6 +469,26 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     );
     expect(allSql).not.toMatch(
       /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE)[^;]*memory_work_success_results/s,
+    );
+  });
+
+  test("stages exact sensitive formation input before acceptance and fences restart reads", () => {
+    const input = tables.find((table) => table.name === "memory_formation_work_inputs")!;
+    expect(input.body).toContain("formation-work-staged-input-v1");
+    expect(input.body).toContain("staged_input_id ~ '^fwi1_[0-9a-f]{64}$'");
+    expect(input.body).toContain("PRIMARY KEY (account_id, job_id)");
+    expect(input.body).toContain("snapshot_version = 'formation-input-snapshot-v1'");
+    expect(input.body).toContain("jsonb_typeof(snapshot_json) = 'object'");
+    expect(input.body).toContain("octet_length(snapshot_json::text) <= 524288");
+    expect(allSql).toContain("memory_formation_acceptance_requires_input");
+    expect(allSql).toContain("DEFERRABLE INITIALLY DEFERRED");
+    expect(allSql).toContain("CREATE FUNCTION omi_memory.read_formation_work_input");
+    expect(allSql).toContain("CREATE FUNCTION omi_memory.insert_formation_work_input");
+    expect(allSql).toContain("capability NOT IN ('memories.work.accept', 'memories.work.execute')");
+    expect(allSql).toContain("s.worker_id = current_setting('omi.principal_id', true)");
+    expect(allSql).toContain("GRANT EXECUTE ON FUNCTION omi_memory.read_formation_work_input");
+    expect(allSql).not.toMatch(
+      /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE)[^;]*memory_formation_work_inputs/s,
     );
   });
 

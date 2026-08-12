@@ -21,6 +21,10 @@ import {
 } from "./formation-work-producer";
 import { defineFormationWorkIngestion } from "./formation-work-ingestion";
 import {
+  defineFormationWorkInputRepository,
+  materializeStagedFormationWorkInput,
+} from "./formation-work-input-repository";
+import {
   GROUNDED_EXTRACTION_PROMPT_VERSION,
   GROUNDED_MENTION_STRATEGY_VERSION,
 } from "../../../core/extract/grounded";
@@ -127,6 +131,22 @@ const snapshot = (excerpt = "Alice uses Atlas"): Readonly<FormationInputSnapshot
   });
 };
 
+const inputRepository = () => {
+  const stored = new Map<string, ReturnType<typeof materializeStagedFormationWorkInput>>();
+  return defineFormationWorkInputRepository({
+    async stage(_authorized, request) {
+      const expected = materializeStagedFormationWorkInput(request);
+      const prior = stored.get(expected.job_id);
+      if (prior) return prior.stage_request_digest === expected.stage_request_digest
+        ? { kind: "replayed", input: prior }
+        : { kind: "idempotency_conflict" };
+      stored.set(expected.job_id, expected);
+      return { kind: "staged", input: expected };
+    },
+    async load() { return { kind: "not_found" }; },
+  });
+};
+
 describe("formation work ingestion", () => {
   test("accepts exact copied input before any producer and replays byte-identically", async () => {
     const stored = new Map<string, { digest: string; job: unknown }>();
@@ -142,7 +162,7 @@ describe("formation work ingestion", () => {
       });
       return { kind: "accepted", job: request.pending_job };
     });
-    const ingestion = defineFormationWorkIngestion(repository);
+    const ingestion = defineFormationWorkIngestion(repository, inputRepository());
     const request = {
       snapshot: snapshot(), strategy_assignment: assignment(),
       execution_policy: executionPolicy(), accepted_at_event_time: 100,
@@ -170,7 +190,7 @@ describe("formation work ingestion", () => {
         ? { kind: "replayed", job: request.pending_job }
         : { kind: "idempotency_conflict" };
     });
-    const ingestion = defineFormationWorkIngestion(repository);
+    const ingestion = defineFormationWorkIngestion(repository, inputRepository());
     const base = {
       strategy_assignment: assignment(), execution_policy: executionPolicy(),
       accepted_at_event_time: 100,
@@ -179,7 +199,7 @@ describe("formation work ingestion", () => {
     await expect(ingestion.accept(context(), {
       ...base, snapshot: snapshot("Mallory uses Atlas"),
     })).resolves.toEqual({ kind: "idempotency_conflict" });
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
   });
 
   test("capability, owner, schedule, and unminted assignment fail before repository access", async () => {
@@ -189,6 +209,7 @@ describe("formation work ingestion", () => {
         calls += 1;
         return { kind: "accepted", job: request.pending_job };
       }),
+      inputRepository(),
     );
     const base = {
       snapshot: snapshot(), strategy_assignment: assignment(),

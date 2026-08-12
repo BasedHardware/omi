@@ -27,6 +27,10 @@ import {
   parseFormationInputSnapshot,
   type FormationInputSnapshot,
 } from "./formation-work-producer";
+import {
+  formationWorkInputStageRequestDigest,
+  type FormationWorkInputRepository,
+} from "./formation-work-input-repository";
 
 const INGESTION_PORT: unique symbol = Symbol("formation-work-ingestion");
 
@@ -84,6 +88,7 @@ const acceptedWork = (
 
 export const defineFormationWorkIngestion = (
   repository: DurableMemoryWorkAcceptanceRepository,
+  inputRepository: FormationWorkInputRepository,
 ): FormationWorkIngestion => Object.freeze({
   [INGESTION_PORT]: true as const,
   async accept(
@@ -108,6 +113,12 @@ export const defineFormationWorkIngestion = (
     );
     const manifest = formationWorkInputManifest(snapshot);
     const pending: Readonly<DurableMemoryWorkJob> = acceptDurableMemoryWork(accepted);
+    const inputBody = Object.freeze({ pending_job: pending, snapshot });
+    const staged = await inputRepository.stage(context, {
+      ...inputBody,
+      request_digest: formationWorkInputStageRequestDigest(inputBody),
+    });
+    if (staged.kind !== "staged" && staged.kind !== "replayed") return staged;
     return repository.accept(context, {
       accepted_work: accepted,
       input_manifest: manifest,

@@ -31,6 +31,10 @@ import { defineDurableMemoryWorkResultRepository } from "../stores/durable-memor
 import { defineDurableMemoryWorkSuccessRepository } from "../stores/durable-memory-work-success-repository";
 import { DURABLE_MEMORY_GRAPH_PLAN_VERSION } from "./durable-memory-graph-plan";
 import {
+  defineFormationWorkInputRepository,
+  materializeStagedFormationWorkInput,
+} from "./formation-work-input-repository";
+import {
   FORMATION_INPUT_SNAPSHOT_VERSION,
   formationWorkInputManifest,
   parseFormationInputSnapshot,
@@ -176,9 +180,14 @@ describe("formation work service composition", () => {
         stage: async () => ({ kind: "ineligible_state" }),
       }),
       success_repository: defineDurableMemoryWorkSuccessRepository(async () => ({ kind: "ineligible_state" })),
+      input_repository: defineFormationWorkInputRepository({
+        stage: async (_authorized, request) => ({
+          kind: "staged", input: materializeStagedFormationWorkInput(request),
+        }),
+        load: async () => ({ kind: "not_found" }),
+      }),
       resolve_strategy: async () => strategy,
       formation: {
-        load_input: async () => ({ kind: "not_found" }),
         resolve_model: async () => null,
         load_current_parent: async () => ({ kind: "failed", error_code: "dependency_unavailable" }),
       },
@@ -224,9 +233,12 @@ describe("formation work service composition", () => {
       success_repository: defineDurableMemoryWorkSuccessRepository(async () => {
         throw new Error("must not commit missing input");
       }),
+      input_repository: defineFormationWorkInputRepository({
+        stage: async () => { throw new Error("must not stage during execution"); },
+        load: async () => { inputLoads += 1; return { kind: "not_found" }; },
+      }),
       resolve_strategy: async () => { strategyResolutions += 1; return strategy; },
       formation: {
-        load_input: async () => { inputLoads += 1; return { kind: "not_found" }; },
         resolve_model: async () => { throw new Error("must not resolve model without input"); },
         load_current_parent: async () => { throw new Error("must not load parent without input"); },
       },

@@ -21,6 +21,15 @@ import {
   type DurableMemoryWorkSuccessBody,
 } from "../../apps/service/stores/durable-memory-work-success-repository";
 import {
+  formationWorkInputStageRequestDigest,
+} from "../../apps/service/workers/formation-work-input-repository";
+import {
+  FORMATION_INPUT_SNAPSHOT_VERSION,
+  formationWorkInputManifest,
+  parseFormationInputSnapshot,
+  type FormationInputSnapshot,
+} from "../../apps/service/workers/formation-work-producer";
+import {
   formationCandidateManifestDigest,
   parseFormationOutcomeEnvelope,
 } from "../../core/consolidate/formation-outcome";
@@ -52,6 +61,7 @@ import { createPostgresDurableMemoryWorkAcceptanceRepository } from "./durable-m
 import { createPostgresDurableMemoryWorkExecutionRepository } from "./durable-memory-work-execution";
 import { createPostgresDurableMemoryWorkResultRepository } from "./durable-memory-work-result";
 import { createPostgresDurableMemoryWorkSuccessRepository } from "./durable-memory-work-success";
+import { createPostgresFormationWorkInputRepository } from "./formation-work-input";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
@@ -437,21 +447,14 @@ const durableWorkAcceptanceRequest = (
   const assignment = createMemoryStrategyAssigner(new Uint8Array(32).fill(11)).assign({
     owner_account_id: accountId, unit_ref: `session:${suffix}`, policy, strategies: [strategy],
   });
-  const inputs: readonly DurableMemoryWorkInputManifestEntry[] = [
-    {
-      input_kind: "evidence_revision", input_ref: `evidence:${suffix}`,
-      input_digest: sha256CanonicalContent({ evidence_revision: `evidence:${suffix}` }),
-    },
-    {
-      input_kind: "graph_frontier", input_ref: `frontier:${suffix}`,
-      input_digest: sha256CanonicalContent({ graph_frontier: `frontier:${suffix}` }),
-    },
-  ];
+  const inputs: readonly DurableMemoryWorkInputManifestEntry[] = formationWorkInputManifest(
+    durableWorkFormationSnapshot(accountId, suffix),
+  );
   const accepted: AcceptedDurableMemoryWork = {
     version: DURABLE_MEMORY_WORK_VERSION, job_id: `job:formation:${suffix}`,
     owner_account_id: accountId, account_epoch: 12,
     lifecycle_state: "active", deletion_epoch: null, work_kind: "formation",
-    input_frontier: `frontier:${suffix}`, input_digest: durableMemoryWorkInputManifestDigest(inputs),
+    input_frontier: "0", input_digest: durableMemoryWorkInputManifestDigest(inputs),
     execution_contract_digest: assignment.authority.execution_contract_digest,
     accepted_at_event_time: acceptedAtEventTime, max_attempts: 2,
   };
@@ -471,6 +474,54 @@ const durableWorkAcceptanceRequest = (
     request_digest: durableMemoryWorkAcceptanceRequestDigest(
       pending, inputs, assignment, executionPolicy,
     ),
+  });
+};
+
+const durableWorkFormationSnapshot = (
+  accountId: string,
+  suffix: string,
+): Readonly<FormationInputSnapshot> => {
+  const event = {
+    event_id: `event:work:${suffix}`, event_revision_id: `event:work:${suffix}:r1`,
+    owner_account_id: accountId, capture_session_id: `session:${suffix}`,
+    stream_id: `stream:${suffix}`, event_kind: "text",
+    payload_schema_ref: "text:v1", schema_version: "schema:v1", payload: {},
+    event_time: "2026-08-12T00:00:00Z", ingest_time: "2026-08-12T00:00:01Z",
+    source_sequence: 0, evidence_addressable_refs: [`evidence:work:${suffix}`],
+    source_trust: "test", policy_labels: [], canonical_redacted_hash: "e".repeat(64),
+  };
+  const evidence = {
+    evidence_id: `evidence:work:${suffix}`, event_revision_id: event.event_revision_id,
+    source_unit_ref: `unit:${suffix}`, range: { start: 0, end: 16 },
+    excerpt: "Alice uses Atlas",
+    source_identity_ref: {
+      namespace_instance_ref: `source:${suffix}`, local_key: "speaker:unknown",
+      producer: { producer_ref: null, contract_ref: null },
+      asserted_identity: { domain: null, scope_ref: null },
+    },
+    speaker_rendering: null, source_local_mention_ref: null, state: "active" as const,
+    source_trust: "test", policy_labels: [], source_independence_key: `capture:${suffix}`,
+  };
+  return parseFormationInputSnapshot({
+    version: FORMATION_INPUT_SNAPSHOT_VERSION,
+    owner_account_id: accountId, work_id: `job:formation:${suffix}`,
+    session_id: `session:${suffix}`, input_frontier: "0", graph_frontier: 0,
+    observed_at: "2026-08-12T00:00:00Z", source_language: "en",
+    account_timezone: "UTC",
+    reference_clock: {
+      query_at: "2026-08-12T00:00:00Z", capture_at: "2026-08-12T00:00:00Z",
+    },
+    context: {
+      frontier: {
+        graph_head: "0", policy_version: "policy:qualification:v1",
+        predicate_alias_generation: "alias:0", authorization_generation: "authorization:0",
+        stm_generation: "stm:0",
+      },
+      entity_candidates: [], predicate_signatures: [], open_propositions: [],
+    },
+    predicate_registry: [], entity_registry: [], target_evidence_ids: [evidence.evidence_id],
+    evidence: [evidence], events: [event], entities: [], identity_authorizations: [],
+    identity_authority_context: null,
   });
 };
 
@@ -779,7 +830,31 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       }),
     });
     const repository = createPostgresDurableMemoryWorkAcceptanceRepository({ pool: appRolePool });
+    const inputRepository = createPostgresFormationWorkInputRepository({ pool: appRolePool });
+    const stageInput = async (
+      request: DurableMemoryWorkAcceptanceRequest,
+      inputSuffix: string,
+    ) => {
+      const pending = acceptDurableMemoryWork(request.accepted_work);
+      const body = {
+        pending_job: pending,
+        snapshot: durableWorkFormationSnapshot(accountId, inputSuffix),
+      };
+      return inputRepository.stage(context, {
+        ...body,
+        request_digest: formationWorkInputStageRequestDigest(body),
+      });
+    };
+    await expect(repository.accept(
+      context,
+      durableWorkAcceptanceRequest(accountId, `${suffix}:missing-input`, now, 2, 1),
+    )).rejects.toMatchObject({ code: "persistence_failed", message: "persistence_failed" });
     const acceptedRequest = durableWorkAcceptanceRequest(accountId, suffix, now, 2, 1);
+
+    await expect(stageInput(acceptedRequest, suffix)).resolves.toMatchObject({
+      kind: "staged", input: { snapshot: { work_id: `job:formation:${suffix}` } },
+    });
+    await expect(stageInput(acceptedRequest, suffix)).resolves.toMatchObject({ kind: "replayed" });
 
     try {
       expect(await repository.accept(context, acceptedRequest)).toMatchObject({
@@ -799,9 +874,13 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     await expect(repository.accept(
       context, durableWorkAcceptanceRequest(accountId, suffix, now + 1),
     )).resolves.toEqual({ kind: "idempotency_conflict" });
-    await expect(repository.accept(
-      context, durableWorkAcceptanceRequest(accountId, `${suffix}:policy-drift`, now, 3, 1),
-    )).resolves.toEqual({ kind: "idempotency_conflict" });
+    const policyDriftRequest = durableWorkAcceptanceRequest(
+      accountId, `${suffix}:policy-drift`, now, 3, 1,
+    );
+    await expect(stageInput(policyDriftRequest, `${suffix}:policy-drift`))
+      .resolves.toMatchObject({ kind: "staged" });
+    await expect(repository.accept(context, policyDriftRequest))
+      .resolves.toEqual({ kind: "idempotency_conflict" });
 
     const persisted = await ownerSql.unsafe<{
       definitions: number; policies: number; bundles: number; execution_policies: number;
@@ -827,7 +906,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     `, [accountId]);
     expect([...persisted]).toEqual([{
       definitions: 1, policies: 1, bundles: 1, execution_policies: 1, acceptances: 1,
-      inputs: 2, states: 1, heads: 1, state: "pending", state_revision: "0",
+      inputs: 3, states: 1, heads: 1, state: "pending", state_revision: "0",
       execution_max_attempts: 2, execution_lease_seconds: 2, execution_retry_delays: [1],
     }]);
 
@@ -843,6 +922,8 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     })).rejects.toMatchObject({ code: "42501" });
 
     const rollbackSuffix = `${suffix}:rollback`;
+    const rollbackRequest = durableWorkAcceptanceRequest(accountId, rollbackSuffix, now, 2, 1);
+    await expect(stageInput(rollbackRequest, rollbackSuffix)).resolves.toMatchObject({ kind: "staged" });
     try {
       await ownerSql.unsafe(`
         CREATE OR REPLACE FUNCTION omi_memory.qualification_reject_work_acceptance()
@@ -854,9 +935,8 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         AFTER INSERT ON omi_memory.memory_work_state_revisions
         FOR EACH ROW EXECUTE FUNCTION omi_memory.qualification_reject_work_acceptance()
       `, [], { prepare: false });
-      await expect(repository.accept(
-        context, durableWorkAcceptanceRequest(accountId, rollbackSuffix, now, 2, 1),
-      )).rejects.toMatchObject({ code: "persistence_failed", message: "persistence_failed" });
+      await expect(repository.accept(context, rollbackRequest))
+        .rejects.toMatchObject({ code: "persistence_failed", message: "persistence_failed" });
     } finally {
       await ownerSql.unsafe(`
         DROP TRIGGER IF EXISTS reject_work_acceptance ON omi_memory.memory_work_state_revisions;
@@ -882,6 +962,14 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     if (firstLease.kind !== "leased" || !firstLease.job.lease) {
       throw new Error("qualification_missing_first_lease");
     }
+    await expect(inputRepository.load(executionContext, firstLease.job)).resolves.toMatchObject({
+      kind: "found", snapshot: { work_id: acceptedRequest.accepted_work.job_id },
+    });
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(`SELECT * FROM omi_memory.memory_formation_work_inputs
+        WHERE account_id = $1`, [accountId]);
+    })).rejects.toMatchObject({ code: "42501" });
     expect(firstLease.job.lease.expires_at_event_time
       - firstLease.job.lease.leased_at_event_time).toBe(2);
     const resultRepository = createPostgresDurableMemoryWorkResultRepository({
@@ -959,9 +1047,10 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     });
 
     const recoverySuffix = `${suffix}:recovery`;
-    await expect(repository.accept(
-      context, durableWorkAcceptanceRequest(accountId, recoverySuffix, now, 2, 1),
-    )).resolves.toMatchObject({ kind: "accepted", job: { state: "pending" } });
+    const recoveryRequest = durableWorkAcceptanceRequest(accountId, recoverySuffix, now, 2, 1);
+    await expect(stageInput(recoveryRequest, recoverySuffix)).resolves.toMatchObject({ kind: "staged" });
+    await expect(repository.accept(context, recoveryRequest))
+      .resolves.toMatchObject({ kind: "accepted", job: { state: "pending" } });
     const recoveryLease = await executionRepository.leaseNext(executionContext, {
       work_kinds: ["formation"],
     });
@@ -992,6 +1081,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
 
     const successSuffix = `${suffix}:success`;
     const successAcceptance = durableWorkAcceptanceRequest(accountId, successSuffix, now, 2, 1);
+    await expect(stageInput(successAcceptance, successSuffix)).resolves.toMatchObject({ kind: "staged" });
     await expect(repository.accept(context, successAcceptance)).resolves.toMatchObject({
       kind: "accepted", job: { state: "pending" },
     });
@@ -1115,9 +1205,13 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     }]);
 
     const rollbackSuccessSuffix = `${suffix}:success-rollback`;
-    await expect(repository.accept(
-      context, durableWorkAcceptanceRequest(accountId, rollbackSuccessSuffix, now, 2, 1),
-    )).resolves.toMatchObject({ kind: "accepted", job: { state: "pending" } });
+    const rollbackSuccessAcceptance = durableWorkAcceptanceRequest(
+      accountId, rollbackSuccessSuffix, now, 2, 1,
+    );
+    await expect(stageInput(rollbackSuccessAcceptance, rollbackSuccessSuffix))
+      .resolves.toMatchObject({ kind: "staged" });
+    await expect(repository.accept(context, rollbackSuccessAcceptance))
+      .resolves.toMatchObject({ kind: "accepted", job: { state: "pending" } });
     const rollbackSuccessLease = await executionRepository.leaseNext(executionContext, {
       work_kinds: ["formation"],
     });

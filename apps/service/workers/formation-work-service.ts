@@ -21,6 +21,7 @@ import {
   defineFormationWorkAdapter,
   type FormationWorkAdapterDependencies,
 } from "./formation-work-producer";
+import type { FormationWorkInputRepository } from "./formation-work-input-repository";
 import {
   defineFormationWorkIngestion,
   type FormationWorkIngestionOutcome,
@@ -34,10 +35,11 @@ export interface FormationWorkServiceDependencies {
   readonly execution_repository: DurableMemoryWorkExecutionRepository;
   readonly result_repository: DurableMemoryWorkResultRepository;
   readonly success_repository: DurableMemoryWorkSuccessRepository;
+  readonly input_repository: FormationWorkInputRepository;
   readonly resolve_strategy: (
     job: Readonly<DurableMemoryWorkJob>,
   ) => Promise<RegisteredMemoryStrategy | null>;
-  readonly formation: FormationWorkAdapterDependencies;
+  readonly formation: Omit<FormationWorkAdapterDependencies, "load_input">;
   readonly max_parent_rematerializations: number;
 }
 
@@ -73,8 +75,14 @@ const stopped = (
 export const defineFormationWorkService = (
   dependencies: FormationWorkServiceDependencies,
 ): FormationWorkService => {
-  const ingestion = defineFormationWorkIngestion(dependencies.acceptance_repository);
-  const adapter = defineFormationWorkAdapter(dependencies.formation);
+  const ingestion = defineFormationWorkIngestion(
+    dependencies.acceptance_repository,
+    dependencies.input_repository,
+  );
+  const adapter = defineFormationWorkAdapter({
+    ...dependencies.formation,
+    load_input: async (context, job) => dependencies.input_repository.load(context, job),
+  });
   const runner = defineDurableMemoryWorkRunner({
     work_repository: dependencies.execution_repository,
     result_repository: dependencies.result_repository,

@@ -267,7 +267,7 @@ export const formationWorkInputManifest = (
   return Object.freeze(entries);
 };
 
-const assertSnapshotMatchesJob = (
+export const assertFormationInputSnapshotMatchesJob = (
   snapshot: Readonly<FormationInputSnapshot>,
   job: Readonly<DurableMemoryWorkJob>,
 ): void => {
@@ -372,7 +372,7 @@ export const defineFormationWorkAdapter = (
       if (loaded.kind === "failed") return failed(loaded.error_code);
       if (loaded.kind !== "found") return failed("dependency_unavailable");
       snapshot = parseFormationInputSnapshot(loaded.snapshot);
-      assertSnapshotMatchesJob(snapshot, job);
+      assertFormationInputSnapshotMatchesJob(snapshot, job);
     } catch {
       return failed("dependency_unavailable");
     }
