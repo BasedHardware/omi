@@ -15,6 +15,10 @@ final class SuggestedTasksPresentationPolicyTests: XCTestCase {
   func testLoadedSuggestionsReplaceTheFloatingIndicatorWithTheSection() {
     XCTAssertTrue(SuggestedTasksPresentationPolicy.showsSection(candidateCount: 1))
     XCTAssertFalse(
+      SuggestedTasksPresentationPolicy.showsCandidates(candidateCount: 1, isExpanded: false))
+    XCTAssertTrue(
+      SuggestedTasksPresentationPolicy.showsCandidates(candidateCount: 1, isExpanded: true))
+    XCTAssertFalse(
       SuggestedTasksPresentationPolicy.showsFloatingLoadingIndicator(
         isLoading: false,
         candidateCount: 1

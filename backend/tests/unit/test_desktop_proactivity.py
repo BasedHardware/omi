@@ -101,6 +101,35 @@ async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("operation", "expected_limit"),
+    [
+        (desktop_proactivity.ProactiveOperation.EXTRACTION, 200),
+        (desktop_proactivity.ProactiveOperation.REASONING, 100),
+    ],
+)
+async def test_quota_matches_expanded_director_budget(monkeypatch, operation, expected_limit):
+    observed = {}
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    def check_rate_limit(uid, key, limit, window_seconds):
+        observed.update(uid=uid, key=key, limit=limit, window_seconds=window_seconds)
+        return True, 1, 0
+
+    monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proactivity.redis_db, "check_rate_limit", check_rate_limit)
+
+    await desktop_proactivity._consume_quota("user-1", operation)
+
+    assert observed["uid"] == "user-1"
+    assert observed["key"] == f"desktop_{operation.value}"
+    assert observed["limit"] == expected_limit
+    assert observed["window_seconds"] == 24 * 60 * 60
+
+
+@pytest.mark.asyncio
 async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
     seen = {}
 

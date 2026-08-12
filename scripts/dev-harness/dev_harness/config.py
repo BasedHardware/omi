@@ -23,6 +23,7 @@ TYPESENSE_CONTAINER_PORT = 8108
 TYPESENSE_PINNED_VERSION = "27.1"
 LOCAL_TYPESENSE_API_KEY = "local-typesense-api-key-not-real"
 LOCAL_FIREBASE_API_KEY = "local-firebase-auth-emulator-api-key"
+LOCAL_LLM_GATEWAY_SERVICE_TOKEN = "local-dev-llm-gateway-service-token-not-real"
 PORT_OFFSET_ENV = "OMI_HARNESS_PORT_OFFSET"
 PORT_OVERRIDE_ENVS = {
     "firestore": "OMI_HARNESS_FIRESTORE_PORT",
@@ -284,6 +285,8 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "TYPESENSE_PROTOCOL": "http",
         "BASE_API_URL": cfg.backend_url,
         "API_BASE_URL": cfg.backend_url,
+        "OMI_LLM_GATEWAY_URL": "http://127.0.0.1:9080",
+        "OMI_LLM_GATEWAY_SERVICE_TOKEN": LOCAL_LLM_GATEWAY_SERVICE_TOKEN,
     }
 
 

@@ -3417,12 +3417,34 @@ final class DesktopAutomationActionRegistry {
       let appState = await MainActor.run { AppState.current }
       let hasPermission = appState?.hasNotificationPermission ?? false
       let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
+      let activePeriod = await MainActor.run { NotificationService.currentActivePeriod() }
       return [
         "enabled": settings.enabled ? "true" : "false",
         "frequency": "\(settings.frequency)",
         "frequency_label": settings.frequencyDescription,
         "has_permission": hasPermission ? "true" : "false",
         "banners_disabled": bannersDisabled ? "true" : "false",
+        "active_start_minute": "\(activePeriod.startMinute)",
+        "active_end_minute": "\(activePeriod.endMinute)",
+      ]
+    }
+
+    register(
+      name: "set_notification_active_period",
+      summary: "Set the device-local proactive notification active period",
+      params: ["start_minute", "end_minute"]
+    ) { params in
+      let current = await MainActor.run { NotificationService.currentActivePeriod() }
+      let startMinute = intParam(params["start_minute"], default: current.startMinute)
+      let endMinute = intParam(params["end_minute"], default: current.endMinute)
+      let saved = await MainActor.run { () -> NotificationActivePeriod in
+        NotificationService.updateActivePeriod(startMinute: startMinute, endMinute: endMinute)
+        return NotificationService.currentActivePeriod()
+      }
+      return [
+        "saved": "true",
+        "active_start_minute": "\(saved.startMinute)",
+        "active_end_minute": "\(saved.endMinute)",
       ]
     }
 

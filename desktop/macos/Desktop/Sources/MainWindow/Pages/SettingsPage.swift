@@ -278,7 +278,11 @@ struct SettingsContentView: View {
   @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
     forHour: 22, referenceDate: Date())
   @State var notificationsEnabled: Bool = true
-  @State var notificationFrequency: Int = 3
+  // Start from the synchronous persisted mirror so reopening Settings never flashes
+  // Balanced while the authoritative backend value is still hydrating.
+  @State var notificationFrequency: Int = NotificationService.currentFrequencyLevel()
+  @State var notificationActiveStartMinute: Int = NotificationActivePeriod.defaultValue.startMinute
+  @State var notificationActiveEndMinute: Int = NotificationActivePeriod.defaultValue.endMinute
 
   // Privacy settings (from backend)
   @State var recordingPermissionEnabled: Bool = false
@@ -593,6 +597,9 @@ struct SettingsContentView: View {
     _memoryNotificationsEnabled = State(
       initialValue: MemoryAssistantSettings.shared.notificationsEnabled)
     _memoryExcludedApps = State(initialValue: MemoryAssistantSettings.shared.excludedApps)
+    let activePeriod = NotificationService.currentActivePeriod()
+    _notificationActiveStartMinute = State(initialValue: activePeriod.startMinute)
+    _notificationActiveEndMinute = State(initialValue: activePeriod.endMinute)
     _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
     _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
     _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
@@ -719,7 +726,7 @@ struct SettingsContentView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Refresh notification permission when app becomes active (user may have changed it in System Settings)
-      appState.checkNotificationPermission()
+      appState.refreshNotificationPermissionAfterSystemSettings()
     }
     .sheet(item: $activeBillingWebFlow) { flow in
       BillingWebFlowSheet(flow: flow) { outcome in

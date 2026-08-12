@@ -2,7 +2,17 @@ import XCTest
 
 @testable import Omi_Computer
 
+@MainActor
 final class SettingsControlMetricsTests: XCTestCase {
+  func testNotificationFrequencyInitialValueComesFromPersistedMirror() throws {
+    let suiteName = "SettingsControlMetricsTests.notification-frequency.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
+    XCTAssertEqual(NotificationService.currentFrequencyLevel(defaults: defaults), 5)
+  }
+
   func testSteppedSliderEndpointsKeepThumbInsideContainer() {
     let containerWidth: CGFloat = 200
     let thumbRadius = SettingsControlMetrics.steppedSliderThumbDiameter / 2
@@ -42,5 +52,11 @@ final class SettingsControlMetricsTests: XCTestCase {
     XCTAssertEqual(calendar.component(.hour, from: summaryDate), 20)
     XCTAssertEqual(calendar.component(.minute, from: summaryDate), 0)
     XCTAssertEqual(SettingsControlMetrics.dailySummaryHour(from: summaryDate, calendar: calendar), 20)
+  }
+
+  func testNotificationPeriodLabelUsesClamped24HourTime() {
+    XCTAssertEqual(SettingsControlMetrics.notificationPeriodLabel(forMinute: 0), "00:00")
+    XCTAssertEqual(SettingsControlMetrics.notificationPeriodLabel(forMinute: 20 * 60 + 45), "20:45")
+    XCTAssertEqual(SettingsControlMetrics.notificationPeriodLabel(forMinute: 1_500), "23:59")
   }
 }

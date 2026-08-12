@@ -65,6 +65,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// `true` when the key is absent (first run before the Settings page hydrates).
   static let masterEnabledDefaultsKey = "notifications_enabled"
 
+  /// Device-local active period for proactive interruptions, stored as minutes since midnight.
+  /// The setting follows the Mac's local clock and defaults to 08:00–22:00.
+  static let activePeriodStartDefaultsKey = "notification_active_period_start_minute"
+  static let activePeriodEndDefaultsKey = "notification_active_period_end_minute"
+
   /// Default level used when the key has never been written (e.g. first run before
   /// the Settings page has hydrated from the backend). Mirrors the backend default.
   /// Proactive notifications are OFF by default — users opt in via the Settings slider.
@@ -550,6 +555,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     ownerID: String,
     title: String,
     message: String,
+    decisionType: String,
     context: FloatingBarNotificationContext,
     onPresented: (() -> Void)? = nil,
     onDropped: (() -> Void)? = nil
@@ -566,6 +572,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       message: message,
       assistantId: "context-director",
       sound: .default,
+      kind: ProactiveNotificationKind.from(decisionType: decisionType),
       context: context,
       authorizationSnapshot: authorizationSnapshot,
       onPresented: onPresented,
@@ -797,12 +804,37 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
   /// Current frequency level from UserDefaults, clamped to [0, 5]. Falls back to
   /// `defaultFrequencyLevel` when the key is absent (first run before sync).
-  static func currentFrequencyLevel() -> Int {
-    guard UserDefaults.standard.object(forKey: Self.frequencyDefaultsKey) != nil else {
+  static func currentFrequencyLevel(defaults: UserDefaults = .standard) -> Int {
+    guard defaults.object(forKey: Self.frequencyDefaultsKey) != nil else {
       return Self.defaultFrequencyLevel
     }
-    let raw = UserDefaults.standard.integer(forKey: Self.frequencyDefaultsKey)
+    let raw = defaults.integer(forKey: Self.frequencyDefaultsKey)
     return max(0, min(5, raw))
+  }
+
+  static func currentActivePeriod(defaults: UserDefaults = .standard) -> NotificationActivePeriod {
+    let fallback = NotificationActivePeriod.defaultValue
+    let start =
+      defaults.object(forKey: activePeriodStartDefaultsKey) == nil
+      ? fallback.startMinute : defaults.integer(forKey: activePeriodStartDefaultsKey)
+    let end =
+      defaults.object(forKey: activePeriodEndDefaultsKey) == nil
+      ? fallback.endMinute : defaults.integer(forKey: activePeriodEndDefaultsKey)
+    return NotificationActivePeriod(startMinute: start, endMinute: end)
+  }
+
+  static func updateActivePeriod(startMinute: Int, endMinute: Int) {
+    let period = NotificationActivePeriod(startMinute: startMinute, endMinute: endMinute)
+    UserDefaults.standard.set(period.startMinute, forKey: activePeriodStartDefaultsKey)
+    UserDefaults.standard.set(period.endMinute, forKey: activePeriodEndDefaultsKey)
+
+    // Contextual task interruptions predate the shared notification setting and persist the
+    // inverse quiet period. Keep that legacy policy projection aligned with the user-facing
+    // active period until its versioned configuration is retired.
+    var taskConfiguration = ProactiveTaskInterruptionSettings.load()
+    taskConfiguration.quietHoursStartMinute = period.endMinute
+    taskConfiguration.quietHoursEndMinute = period.startMinute
+    ProactiveTaskInterruptionSettings.save(taskConfiguration)
   }
 
   /// Minimum interval between proactive notifications for a given level.
@@ -810,10 +842,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   private static func minInterval(forLevel level: Int) -> TimeInterval? {
     switch level {
     case 0: return .infinity  // Off
-    case 1: return 60 * 60  // Minimal:  1 per hour
-    case 2: return 30 * 60  // Low:      1 per 30 min
-    case 3: return 10 * 60  // Balanced: 1 per 10 min
-    case 4: return 3 * 60  // High:     1 per 3 min
+    case 1...4: return ContextDeliveryBudget.cooldownSeconds(frequencyLevel: level)
     default: return nil  // Maximum:  no throttle
     }
   }

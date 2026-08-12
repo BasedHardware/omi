@@ -212,6 +212,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
   let title: String
   let message: String
   let assistantId: String
+  let kind: ProactiveNotificationKind
   let context: FloatingBarNotificationContext?
   let action: FloatingBarNotificationAction?
   /// Optional opaque proactive-suggestion join keys. No card content or screen
@@ -228,6 +229,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     title: String,
     message: String,
     assistantId: String,
+    kind: ProactiveNotificationKind? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
@@ -238,6 +240,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.title = title
     self.message = message
     self.assistantId = assistantId
+    self.kind = kind ?? ProactiveNotificationKind.from(assistantId: assistantId)
     self.context = context
     self.action = action
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity

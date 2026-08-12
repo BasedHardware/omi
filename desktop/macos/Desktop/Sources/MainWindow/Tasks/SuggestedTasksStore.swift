@@ -31,15 +31,11 @@ enum SuggestedCardAction: String, Equatable {
   case dismiss
   case saveEdit
   case cancelEdit
-  case alreadyHandled
-  case notMine
-  case notUseful
 }
 
 enum SuggestedCardState: Equatable {
   case ready
   case editing
-  case dismissReasons
   case busy
 }
 
@@ -48,7 +44,6 @@ enum SuggestedActionPolicy {
     switch state {
     case .ready: return [.doNow, .later, .dismiss]
     case .editing: return [.saveEdit, .cancelEdit]
-    case .dismissReasons: return [.alreadyHandled, .notMine, .notUseful]
     case .busy: return []
     }
   }
@@ -58,8 +53,6 @@ struct SuggestedCandidate: Identifiable, Equatable {
   let id: String
   let title: String
   let detail: String?
-  let provenanceLabel: String
-  let evidenceCount: Int
   let accountGeneration: Int
   let isEditableTask: Bool
   let createdAt: String
@@ -809,8 +802,6 @@ final class SuggestedTasksStore: ObservableObject {
       id: record.candidateId,
       title: title,
       detail: detail,
-      provenanceLabel: provenanceLabel(for: record.sourceSurface),
-      evidenceCount: record.evidenceRefs.count,
       accountGeneration: record.accountGeneration,
       isEditableTask: record.subjectKind == .task && record.proposedAction == .create,
       createdAt: record.createdAt
@@ -824,15 +815,6 @@ final class SuggestedTasksStore: ObservableObject {
     case .change(let task): return task.description_ ?? "Review a task update"
     case .none: return "Review suggested work"
     }
-  }
-
-  private static func provenanceLabel(for source: String) -> String {
-    if source.contains("screen") { return "From your current context" }
-    if source.contains("conversation") || source.contains("transcript") {
-      return "From a conversation"
-    }
-    if source.contains("integration") || source.contains("email") { return "From a connected app" }
-    return "Suggested by Omi"
   }
 
   private static func iso8601(_ date: Date) -> String {

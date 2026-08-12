@@ -8,6 +8,10 @@ enum SuggestedTasksPresentationPolicy {
     candidateCount > 0
   }
 
+  static func showsCandidates(candidateCount: Int, isExpanded: Bool) -> Bool {
+    candidateCount > 0 && isExpanded
+  }
+
   static func showsFloatingLoadingIndicator(isLoading: Bool, candidateCount: Int) -> Bool {
     isLoading && candidateCount == 0
   }
@@ -37,42 +41,61 @@ struct SuggestedTasksLoadingIndicator: View {
 
 struct SuggestedTasksSection: View {
   @ObservedObject var store: SuggestedTasksStore
+  @Binding var isExpanded: Bool
   let onCanonicalChange: () async -> Void
 
   var body: some View {
     if SuggestedTasksPresentationPolicy.showsSection(candidateCount: store.candidates.count) {
       VStack(alignment: .leading, spacing: 10) {
-        HStack(spacing: 8) {
-          Image(systemName: "tray")
-            .scaledFont(size: 13)
-            .foregroundColor(Ink.secondary)
-          Text("Suggested")
-            .scaledFont(size: 15, weight: .semibold)
-            .foregroundColor(Ink.primary)
-          Text("\(store.candidates.count)")
-            .scaledFont(size: 11, weight: .medium)
-            .foregroundColor(Ink.secondary)
-          Spacer()
-          Text("Quietly captured for your review")
-            .scaledFont(size: 11)
-            .foregroundColor(Ink.secondary)
+        Button {
+          isExpanded.toggle()
+        } label: {
+          HStack(spacing: 8) {
+            Image(systemName: "tray")
+              .scaledFont(size: 13)
+              .foregroundColor(Ink.secondary)
+            Text("Suggested")
+              .scaledFont(size: 15, weight: .semibold)
+              .foregroundColor(Ink.primary)
+            Text("\(store.candidates.count)")
+              .scaledFont(size: 11, weight: .medium)
+              .foregroundColor(Ink.secondary)
+            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+              .scaledFont(size: 10, weight: .semibold)
+              .foregroundColor(Ink.secondary)
+            Spacer()
+            Text("Quietly captured for your review")
+              .scaledFont(size: 11)
+              .foregroundColor(Ink.secondary)
+          }
+          .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Suggested tasks")
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("suggested-section-toggle")
 
-        ForEach(store.candidates) { candidate in
-          SuggestedCandidateCard(
-            candidate: candidate,
-            isBusy: store.busyCandidateIDs.contains(candidate.id),
-            onDoNow: { editedTitle in
-              _ = await store.doNow(candidateID: candidate.id, editedTitle: editedTitle)
-              await onCanonicalChange()
-            },
-            onLater: { await store.later(candidateID: candidate.id) },
-            onDismiss: { reason in
-              await store.dismiss(candidateID: candidate.id, reason: reason)
-            }
-          )
-          .id("suggested-\(candidate.id)")
-          .task { await store.presented(candidateID: candidate.id) }
+        if SuggestedTasksPresentationPolicy.showsCandidates(
+          candidateCount: store.candidates.count,
+          isExpanded: isExpanded
+        ) {
+          ForEach(store.candidates) { candidate in
+            SuggestedCandidateCard(
+              candidate: candidate,
+              isBusy: store.busyCandidateIDs.contains(candidate.id),
+              onDoNow: { editedTitle in
+                _ = await store.doNow(candidateID: candidate.id, editedTitle: editedTitle)
+                await onCanonicalChange()
+              },
+              onLater: { await store.later(candidateID: candidate.id) },
+              onDismiss: {
+                await store.dismiss(candidateID: candidate.id, reason: nil)
+              }
+            )
+            .id("suggested-\(candidate.id)")
+            .task { await store.presented(candidateID: candidate.id) }
+          }
         }
 
         if let error = store.error {
@@ -101,18 +124,16 @@ private struct SuggestedCandidateCard: View {
   let isBusy: Bool
   let onDoNow: (String?) async -> Void
   let onLater: () async -> Void
-  let onDismiss: (OmiAPI.TaskIntelligenceFeedbackReason?) async -> Void
+  let onDismiss: () async -> Void
 
   @State private var title: String
-  @State private var showDismissReasons = false
-  @State private var selectedDismissReason = false
 
   init(
     candidate: SuggestedCandidate,
     isBusy: Bool,
     onDoNow: @escaping (String?) async -> Void,
     onLater: @escaping () async -> Void,
-    onDismiss: @escaping (OmiAPI.TaskIntelligenceFeedbackReason?) async -> Void
+    onDismiss: @escaping () async -> Void
   ) {
     self.candidate = candidate
     self.isBusy = isBusy
@@ -146,15 +167,6 @@ private struct SuggestedCandidateCard: View {
       }
 
       HStack(spacing: 8) {
-        Label(candidate.provenanceLabel, systemImage: "link")
-        if candidate.evidenceCount > 0 {
-          Text("\(candidate.evidenceCount) source\(candidate.evidenceCount == 1 ? "" : "s")")
-        }
-      }
-      .scaledFont(size: 10)
-      .foregroundColor(Ink.secondary)
-
-      HStack(spacing: 8) {
         Button("Do now") {
           Task { await onDoNow(candidate.isEditableTask ? title : nil) }
         }
@@ -173,13 +185,9 @@ private struct SuggestedCandidateCard: View {
         .accessibilityIdentifier("suggested-later-\(candidate.id)")
 
         Button("Dismiss") {
-          selectedDismissReason = false
-          showDismissReasons = true
+          Task { await onDismiss() }
         }
         .buttonStyle(.bordered)
-        .popover(isPresented: $showDismissReasons, arrowEdge: .bottom) {
-          dismissReasons
-        }
         .accessibilityIdentifier("suggested-dismiss-\(candidate.id)")
 
         Spacer()
@@ -199,45 +207,6 @@ private struct SuggestedCandidateCard: View {
     .onChange(of: candidate.title) { _, updated in
       if !isBusy { title = updated }
     }
-    .onChange(of: showDismissReasons) { wasShowing, isShowing in
-      guard wasShowing, !isShowing, !selectedDismissReason else { return }
-      Task { await onDismiss(nil) }
-    }
-  }
-
-  private var dismissReasons: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Text("Optional reason")
-        .scaledFont(size: 12, weight: .semibold)
-        .foregroundColor(Ink.primary)
-      Text("Close this menu to dismiss without a reason.")
-        .scaledFont(size: 10)
-        .foregroundColor(Ink.secondary)
-
-      ForEach(dismissReasonChoices, id: \.label) { choice in
-        Button(choice.label) {
-          selectedDismissReason = true
-          let reasonRaw = choice.reason.rawValue
-          Task {
-            await onDismiss(OmiAPI.TaskIntelligenceFeedbackReason(rawValue: reasonRaw))
-          }
-          showDismissReasons = false
-        }
-        .buttonStyle(.bordered)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityIdentifier("suggested-reason-\(choice.reason.rawValue)-\(candidate.id)")
-      }
-    }
-    .padding(12)
-    .frame(width: 230)
-  }
-
-  private var dismissReasonChoices: [(label: String, reason: OmiAPI.TaskIntelligenceFeedbackReason)] {
-    [
-      ("Already handled", .already_handled),
-      ("Not mine", .not_mine),
-      ("Not useful", .not_useful),
-    ]
   }
 }
 

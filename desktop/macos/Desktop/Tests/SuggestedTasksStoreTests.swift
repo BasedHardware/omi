@@ -15,15 +15,11 @@ final class SuggestedTasksStoreTests: XCTestCase {
 
   func testActionPolicyNeverOffersMoreThanThreeChoices() {
     for state in [
-      SuggestedCardState.ready, .editing, .dismissReasons, .busy,
+      SuggestedCardState.ready, .editing, .busy,
     ] {
       XCTAssertLessThanOrEqual(SuggestedActionPolicy.actions(for: state).count, 3)
     }
     XCTAssertEqual(SuggestedActionPolicy.actions(for: .ready), [.doNow, .later, .dismiss])
-    XCTAssertEqual(
-      SuggestedActionPolicy.actions(for: .dismissReasons),
-      [.alreadyHandled, .notMine, .notUseful]
-    )
   }
 
   func testLoadProjectsOnlyPendingCandidatesWithoutManagedNounLeak() async {

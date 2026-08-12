@@ -23,8 +23,11 @@ router = APIRouter()
 _MAX_REQUEST_BYTES = 5 * 1024 * 1024
 _QUOTA_WINDOW_SECONDS = 24 * 60 * 60
 _OPERATION_DAILY_LIMITS = {
-    "proactive_extraction": 40,
-    "proactive_reasoning": 20,
+    # Extraction can precede reasoning for several context buckets. Keep its
+    # server ceiling at twice the Maximum client director budget so lower
+    # notification levels remain governed by their device-side frequency gate.
+    "proactive_extraction": 200,
+    "proactive_reasoning": 100,
 }
 _OPERATION_LANES = {
     "proactive_extraction": "omi:auto:desktop-proactive-extraction",

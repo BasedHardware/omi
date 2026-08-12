@@ -1,5 +1,88 @@
 import Foundation
 
+enum ScreenCandidateReconciliation {
+  /// Repeated screen observations arrive in short bursts while the user moves
+  /// between apps. Keep this intentionally narrow so a genuinely repeated task
+  /// later in the day can become a new Candidate.
+  static let reuseWindow: TimeInterval = 30 * 60
+
+  static func isEquivalent(_ lhs: StagedTaskRecord, _ rhs: StagedTaskRecord) -> Bool {
+    guard normalized(lhs.sourceApp) == normalized(rhs.sourceApp) else { return false }
+    guard compatibleDueDates(lhs.dueAt, rhs.dueAt) else { return false }
+
+    let lhsMetadata = lhs.metadata ?? [:]
+    let rhsMetadata = rhs.metadata ?? [:]
+    guard captureAction(in: lhsMetadata) == captureAction(in: rhsMetadata) else { return false }
+
+    let lhsTarget = canonicalTarget(in: lhsMetadata)
+    let rhsTarget = canonicalTarget(in: rhsMetadata)
+    if let lhsTarget, let rhsTarget, lhsTarget != rhsTarget { return false }
+
+    let lhsTokens = semanticTokens(lhs.description)
+    let rhsTokens = semanticTokens(rhs.description)
+    guard !lhsTokens.isEmpty, !rhsTokens.isEmpty else { return false }
+
+    // Identifiers are high-signal task identity. In particular, PR #123 and
+    // PR #124 must not collapse merely because the surrounding prose matches.
+    let lhsIdentifiers = Set(lhsTokens.filter(containsDigit))
+    let rhsIdentifiers = Set(rhsTokens.filter(containsDigit))
+    guard lhsIdentifiers == rhsIdentifiers else { return false }
+
+    if lhsTokens == rhsTokens { return true }
+    let intersection = lhsTokens.intersection(rhsTokens).count
+    let union = lhsTokens.union(rhsTokens).count
+    return union > 0 && Double(intersection) / Double(union) >= 0.72
+  }
+
+  private static func normalized(_ value: String?) -> String {
+    value?
+      .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased() ?? ""
+  }
+
+  private static func compatibleDueDates(_ lhs: Date?, _ rhs: Date?) -> Bool {
+    switch (lhs, rhs) {
+    case (nil, nil): true
+    case (.some(let lhs), .some(let rhs)): abs(lhs.timeIntervalSince(rhs)) < 60
+    default: false
+    }
+  }
+
+  private static func captureAction(in metadata: [String: Any]) -> String {
+    (metadata["already_done"] as? Bool) == true ? "complete" : "capture"
+  }
+
+  private static func canonicalTarget(in metadata: [String: Any]) -> String? {
+    (metadata["duplicate_of"] as? String) ?? (metadata["refines_task"] as? String)
+  }
+
+  private static func containsDigit(_ token: String) -> Bool {
+    token.unicodeScalars.contains { CharacterSet.decimalDigits.contains($0) }
+  }
+
+  private static func semanticTokens(_ value: String) -> Set<String> {
+    let ignored: Set<String> = [
+      "a", "about", "an", "and", "for", "in", "of", "on", "the", "to", "with",
+    ]
+    let folded = value.folding(
+      options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+    let words = folded.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
+    return Set(
+      words.compactMap { word in
+        guard word.count > 1, !ignored.contains(word) else { return nil }
+        return stem(word)
+      })
+  }
+
+  private static func stem(_ word: String) -> String {
+    if word == "opening" || word == "opened" || word == "opens" { return "open" }
+    if word == "approving" || word == "approved" || word == "approves" { return "approve" }
+    if word == "replying" || word == "replied" || word == "replies" { return "reply" }
+    return word
+  }
+}
+
 enum ScreenCaptureOutcome: String, Codable {
   case ignore
   case createDirect = "create_direct"

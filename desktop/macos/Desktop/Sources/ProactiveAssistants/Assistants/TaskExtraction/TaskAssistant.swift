@@ -603,6 +603,26 @@ actor TaskAssistant: ProactiveAssistant {
           try await StagedTaskStorage.shared.discardCanonicalOutbox(id: localID)
           return
         }
+
+        // The model's duplicate search is advisory. Repeated screenshots can
+        // paraphrase the same visible ask, and canonical exact-description
+        // identity will not merge those variants. Reconcile against a recent
+        // pending/accepted capture before issuing another backend create.
+        if let receipt = try await StagedTaskStorage.shared.recentEquivalentCanonicalReceipt(
+          for: localRecord,
+          excludingID: localID
+        ) {
+          try await StagedTaskStorage.shared.markCanonicalReceipt(
+            id: localID,
+            candidateID: receipt.candidateID,
+            status: receipt.status,
+            taskID: receipt.taskID
+          )
+          log(
+            "Task: Reused canonical capture candidate=\(receipt.candidateID) for semantically equivalent observation"
+          )
+          return
+        }
         let delivery = CanonicalScreenCandidateDelivery(
           client: APICanonicalScreenCandidateClient()
         )
@@ -1555,7 +1575,12 @@ actor TaskAssistant: ProactiveAssistant {
     var stagedTaskDescriptions: [String] = []
     do {
       let stagedTasks = try await StagedTaskStorage.shared.getAllStagedTasks(limit: 30)
-      stagedTaskDescriptions = stagedTasks.map { $0.description }
+      let canonicalCandidateDescriptions =
+        try await StagedTaskStorage.shared.getRecentCanonicalCandidateDescriptions(limit: 30)
+      var seen = Set<String>()
+      let distinctDescriptions = (stagedTasks.map { $0.description } + canonicalCandidateDescriptions)
+        .filter { seen.insert($0.lowercased()).inserted }
+      stagedTaskDescriptions = Array(distinctDescriptions.prefix(30))
     } catch {
       logError("Task: Failed to load staged tasks for context", error: error)
     }

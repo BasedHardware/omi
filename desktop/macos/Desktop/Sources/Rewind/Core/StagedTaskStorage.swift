@@ -241,6 +241,74 @@ actor StagedTaskStorage {
     }
   }
 
+  /// Find a recently reconciled screen capture that represents the same task.
+  /// Canonical create already coalesces exact descriptions, but repeated visual
+  /// observations often paraphrase the same request (for example "reply ... to
+  /// approve" versus "approve ..."). Reusing its receipt prevents each
+  /// paraphrase from becoming another Suggested Candidate.
+  func recentEquivalentCanonicalReceipt(
+    for record: StagedTaskRecord,
+    excludingID: Int64,
+    now: Date = Date()
+  ) async throws -> CanonicalCaptureReceipt? {
+    let db = try await ensureInitialized()
+    let cutoff = now.addingTimeInterval(-ScreenCandidateReconciliation.reuseWindow)
+    return try await db.read { database in
+      let recent =
+        try StagedTaskRecord
+        .filter(Column("source") == "candidate_outbox")
+        .filter(Column("backendSynced") == true)
+        .filter(Column("deleted") == false)
+        .filter(Column("id") != excludingID)
+        .filter(Column("createdAt") >= cutoff)
+        .order(Column("createdAt").desc)
+        .limit(100)
+        .fetchAll(database)
+
+      for candidate in recent where ScreenCandidateReconciliation.isEquivalent(record, candidate) {
+        guard let metadata = candidate.metadata,
+          let candidateID = metadata["canonical_candidate_id"] as? String,
+          let status = metadata["canonical_candidate_status"] as? String,
+          status == OmiAPI.CandidateStatus.pending.rawValue
+            || status == OmiAPI.CandidateStatus.accepted.rawValue
+        else { continue }
+        return CanonicalCaptureReceipt(
+          candidateID: candidateID,
+          status: status,
+          taskID: metadata["canonical_task_id"] as? String
+        )
+      }
+      return nil
+    }
+  }
+
+  /// Pending canonical Candidates are represented locally by completed outbox
+  /// rows: `completed` means delivery processing finished, not that the user's
+  /// task is complete. Surface their descriptions as already-captured evidence
+  /// so extraction does not mistake them for finished work or omit them.
+  func getRecentCanonicalCandidateDescriptions(limit: Int = 30) async throws -> [String] {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      let records =
+        try StagedTaskRecord
+        .filter(Column("source") == "candidate_outbox")
+        .filter(Column("backendSynced") == true)
+        .filter(Column("deleted") == false)
+        .order(Column("createdAt").desc)
+        .limit(limit * 3)
+        .fetchAll(database)
+
+      let descriptions: [String] = records.compactMap { record -> String? in
+        guard let status = record.metadata?["canonical_candidate_status"] as? String,
+          status == OmiAPI.CandidateStatus.pending.rawValue
+            || status == OmiAPI.CandidateStatus.accepted.rawValue
+        else { return nil }
+        return record.description
+      }
+      return Array(descriptions.prefix(limit))
+    }
+  }
+
   // MARK: - Read
 
   /// Get all active (non-completed, non-deleted) staged tasks

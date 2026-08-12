@@ -4281,6 +4281,7 @@ struct TasksPage: View {
           if !viewModel.showCompleted && !viewModel.isMultiSelectMode {
             SuggestedTasksSection(
               store: suggestedStore,
+              isExpanded: $suggestionsSectionExpanded,
               onCanonicalChange: {
                 await viewModel.loadTasks()
               }

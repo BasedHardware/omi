@@ -3270,6 +3270,7 @@ class FloatingControlBarManager {
     message: String,
     assistantId: String,
     sound: NotificationSound,
+    kind: ProactiveNotificationKind? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
@@ -3293,6 +3294,7 @@ class FloatingControlBarManager {
       title: title,
       message: message,
       assistantId: assistantId,
+      kind: kind,
       context: context,
       action: action,
       suggestionTelemetryIdentity: suggestionTelemetryIdentity,
@@ -4047,7 +4049,9 @@ class FloatingControlBarManager {
     // presentation surface while this async write is pending.
     let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
     let messageText = bodyText.isEmpty ? notification.title : bodyText
-    let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(id: notification.id)
+    let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(
+      id: notification.id,
+      kind: notification.kind)
     guard let authorizationSnapshot = notificationAuthorizationSnapshots[notification.id] else { return }
     pendingNotificationJournalWrites.insert(key)
     Task { @MainActor [weak self, weak provider] in

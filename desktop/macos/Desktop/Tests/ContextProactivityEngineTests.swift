@@ -3,6 +3,18 @@ import XCTest
 @testable import Omi_Computer
 
 final class ContextProactivityEngineTests: XCTestCase {
+  func testDwellAdmissionTracksVisitsInsteadOfSuppressingARevisitToTheSameBucket() {
+    var admission = ContextVisitDwellAdmission()
+
+    XCTAssertTrue(admission.begin(visitID: 41))
+    XCTAssertTrue(admission.begin(visitID: 42), "a new visit needs its own dwell timer")
+    XCTAssertFalse(admission.begin(visitID: 42), "the same visit must not be scheduled twice")
+
+    admission.finish(visitID: 41)
+    admission.finish(visitID: 42)
+    XCTAssertTrue(admission.begin(visitID: 42))
+  }
+
   func testDirectorDecisionClampsUntrustedOutputBeforeDatabaseQueriesAndPresentation() {
     let decision = ContextDirectorDecision(
       decision: "suggest",

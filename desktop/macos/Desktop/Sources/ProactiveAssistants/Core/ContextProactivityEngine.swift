@@ -52,7 +52,7 @@ actor ContextProactivityEngine {
   static let shared = ContextProactivityEngine(client: .shared, store: .shared)
   private let client: ProactiveLaneClient
   private let store: ContextBucketStore
-  private var inFlightBuckets: Set<String> = []
+  private var dwellAdmission = ContextVisitDwellAdmission()
   private let dwellNanoseconds: UInt64
 
   init(
@@ -66,13 +66,33 @@ actor ContextProactivityEngine {
   }
 
   func contextEntered(_ fence: ContextVisitFence) async {
-    guard let bucketID = fence.bucketID, !inFlightBuckets.contains(bucketID) else { return }
+    guard fence.bucketID != nil else { return }
     guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
-    inFlightBuckets.insert(bucketID)
-    defer { inFlightBuckets.remove(bucketID) }
+    guard dwellAdmission.begin(visitID: fence.visitID) else { return }
+    defer { dwellAdmission.finish(visitID: fence.visitID) }
     do { try await Task.sleep(nanoseconds: dwellNanoseconds) } catch { return }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     do { try await store.markVisitSettled(fence) } catch { return }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+    let gate = await MainActor.run { () -> ContextDeliveryGateInput in
+      let components = Calendar.current.dateComponents([.hour, .minute], from: Date())
+      let frequencyLevel = NotificationService.currentFrequencyLevel()
+      return ContextDeliveryGateInput(
+        masterEnabled: NotificationService.areNotificationsEnabled(),
+        frequencyLevel: frequencyLevel,
+        snoozed: FloatingControlBarManager.shared.isSnoozed,
+        paywalled: AppState.isPaywalledEffective,
+        minuteOfDay: (components.hour ?? 0) * 60 + (components.minute ?? 0),
+        activePeriod: NotificationService.currentActivePeriod(),
+        cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: frequencyLevel))
+    }
+    // Settle the visit so quiet-period activity remains part of the context ledger, then stop
+    // before snapshot assembly, frame lookup, task projection, or the director model request.
+    let preflightReason = ContextDeliveryBudget.freeGate(input: gate)
+    guard preflightReason == .allowed else {
+      log("Context director suppressed before preparation: \(preflightReason.rawValue)")
+      return
+    }
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.activeFenceIsValid(fence),
@@ -87,19 +107,12 @@ actor ContextProactivityEngine {
       })
     else { return }
 
-    let gate = await MainActor.run { () -> ContextDeliveryGateInput in
-      let components = Calendar.current.dateComponents([.hour, .minute], from: Date())
-      return ContextDeliveryGateInput(
-        masterEnabled: NotificationService.areNotificationsEnabled(),
-        frequencyLevel: NotificationService.currentFrequencyLevel(),
-        snoozed: FloatingControlBarManager.shared.isSnoozed,
-        paywalled: AppState.isPaywalledEffective,
-        minuteOfDay: (components.hour ?? 0) * 60 + (components.minute ?? 0),
-        cooldownSeconds: AssistantSettings.shared.cooldownIntervalSeconds)
-    }
     let attempt: ContextDeliveryAttempt
     do { attempt = try await store.beginDeliveryAttempt(fence: fence, snapshot: snapshot, gate: gate) } catch { return }
-    guard attempt.reason == .allowed, let deliveryID = attempt.id else { return }
+    guard attempt.reason == .allowed, let deliveryID = attempt.id else {
+      log("Context director suppressed: \(attempt.reason.rawValue)")
+      return
+    }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       await terminalize(
         deliveryID: deliveryID,
@@ -216,6 +229,7 @@ actor ContextProactivityEngine {
           ownerID: ownerID,
           title: decision.title,
           message: decision.message,
+          decisionType: decision.decision,
           context: context,
           onPresented: { [weak self] in
             guard let self else { return }
@@ -336,5 +350,17 @@ actor ContextProactivityEngine {
       "required": ["decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids"],
       "additionalProperties": false,
     ]
+  }
+}
+
+struct ContextVisitDwellAdmission {
+  private var inFlightVisitIDs: Set<Int64> = []
+
+  mutating func begin(visitID: Int64) -> Bool {
+    inFlightVisitIDs.insert(visitID).inserted
+  }
+
+  mutating func finish(visitID: Int64) {
+    inFlightVisitIDs.remove(visitID)
   }
 }

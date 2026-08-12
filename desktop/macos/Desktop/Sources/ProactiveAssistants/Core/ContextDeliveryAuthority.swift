@@ -7,7 +7,45 @@ struct ContextDeliveryGateInput: Equatable, Sendable {
   let snoozed: Bool
   let paywalled: Bool
   let minuteOfDay: Int
+  let activePeriod: NotificationActivePeriod
   let cooldownSeconds: TimeInterval
+
+  init(
+    masterEnabled: Bool,
+    frequencyLevel: Int,
+    snoozed: Bool,
+    paywalled: Bool,
+    minuteOfDay: Int,
+    activePeriod: NotificationActivePeriod = .defaultValue,
+    cooldownSeconds: TimeInterval
+  ) {
+    self.masterEnabled = masterEnabled
+    self.frequencyLevel = frequencyLevel
+    self.snoozed = snoozed
+    self.paywalled = paywalled
+    self.minuteOfDay = minuteOfDay
+    self.activePeriod = activePeriod
+    self.cooldownSeconds = cooldownSeconds
+  }
+}
+
+struct NotificationActivePeriod: Equatable, Sendable {
+  static let defaultValue = NotificationActivePeriod(startMinute: 8 * 60, endMinute: 22 * 60)
+
+  let startMinute: Int
+  let endMinute: Int
+
+  init(startMinute: Int, endMinute: Int) {
+    self.startMinute = min(max(0, startMinute), 1439)
+    self.endMinute = min(max(0, endMinute), 1439)
+  }
+
+  func contains(minuteOfDay: Int) -> Bool {
+    let minute = min(max(0, minuteOfDay), 1439)
+    if startMinute == endMinute { return true }
+    if startMinute < endMinute { return minute >= startMinute && minute < endMinute }
+    return minute >= startMinute || minute < endMinute
+  }
 }
 
 enum ContextDeliveryGateReason: String, Equatable, Sendable {
@@ -36,7 +74,17 @@ enum ContextDeliveryReconciliation {
 
 enum ContextDeliveryBudget {
   static func dailyLimit(frequencyLevel: Int) -> Int {
-    [0, 2, 4, 8, 12, 20][max(0, min(5, frequencyLevel))]
+    [0, 10, 20, 40, 60, 100][max(0, min(5, frequencyLevel))]
+  }
+
+  static func cooldownSeconds(frequencyLevel: Int) -> TimeInterval {
+    switch frequencyLevel {
+    case 1: return 60 * 60
+    case 2: return 30 * 60
+    case 3: return 10 * 60
+    case 4: return 3 * 60
+    default: return 0
+    }
   }
 
   static func freeGate(input: ContextDeliveryGateInput) -> ContextDeliveryGateReason {
@@ -44,7 +92,7 @@ enum ContextDeliveryBudget {
     if input.frequencyLevel == 0 { return .frequencyDisabled }
     if input.snoozed { return .snoozed }
     if input.paywalled { return .paywalled }
-    if input.minuteOfDay >= 22 * 60 || input.minuteOfDay < 8 * 60 { return .quietHours }
+    if !input.activePeriod.contains(minuteOfDay: input.minuteOfDay) { return .quietHours }
     return .allowed
   }
 

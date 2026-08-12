@@ -4,6 +4,21 @@ import XCTest
 @testable import Omi_Computer
 
 final class UserNotificationCallbackBridgeTests: XCTestCase {
+  func testNotificationPermissionPolicyUsesPromptOnlyForUndeterminedStatus() {
+    XCTAssertEqual(
+      NotificationPermissionPolicy.enableAction(for: .notDetermined), .requestSystemPrompt)
+    XCTAssertEqual(NotificationPermissionPolicy.enableAction(for: .denied), .openSystemSettings)
+    XCTAssertEqual(NotificationPermissionPolicy.enableAction(for: .authorized), .refresh)
+    XCTAssertEqual(NotificationPermissionPolicy.enableAction(for: .provisional), .refresh)
+  }
+
+  func testNotificationPermissionPolicyTreatsAllDeliverableStatusesAsGranted() {
+    XCTAssertFalse(NotificationPermissionPolicy.isGranted(.notDetermined))
+    XCTAssertFalse(NotificationPermissionPolicy.isGranted(.denied))
+    XCTAssertTrue(NotificationPermissionPolicy.isGranted(.authorized))
+    XCTAssertTrue(NotificationPermissionPolicy.isGranted(.provisional))
+  }
+
   func testDefaultNotificationSettingsHandoffMovesOffMainCallbackToMainActorInRelease() async {
     let snapshot = UserNotificationSettingsSnapshot(
       authorizationStatus: .notDetermined,

@@ -85,6 +85,11 @@ enum SettingsControlMetrics {
   static func dailySummaryHour(from date: Date, calendar: Calendar = .current) -> Int {
     calendar.component(.hour, from: date)
   }
+
+  static func notificationPeriodLabel(forMinute minute: Int) -> String {
+    let normalizedMinute = min(max(0, minute), 1439)
+    return String(format: "%02d:%02d", normalizedMinute / 60, normalizedMinute % 60)
+  }
 }
 
 struct SettingsMenuPicker<SelectionValue: Hashable, Content: View>: View {

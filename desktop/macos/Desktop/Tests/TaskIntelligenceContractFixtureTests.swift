@@ -413,6 +413,70 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
     XCTAssertEqual(snapshot.acceptCalls, 2)
   }
 
+  func testRepeatedParaphrasesReconcileButDistinctTasksRemainSeparate() {
+    let first = canonicalOutboxRecord(
+      "Reply to Hermes M4 MBA about opening the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let paraphrase = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let distinctTask = canonicalOutboxRecord(
+      "Follow up with Hermes M4 MBA about the staging deploy issue",
+      sourceApp: "Telegram"
+    )
+    let differentPR = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open dev-only PR 11434",
+      sourceApp: "Telegram"
+    )
+
+    XCTAssertTrue(ScreenCandidateReconciliation.isEquivalent(first, paraphrase))
+    XCTAssertFalse(ScreenCandidateReconciliation.isEquivalent(first, distinctTask))
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(
+        canonicalOutboxRecord("Approve Hermes PR 11433", sourceApp: "Telegram"),
+        differentPR
+      ),
+      "different task identifiers must never be merged")
+  }
+
+  func testPendingCanonicalReceiptIsAlreadyCapturedNotCompletedWork() async throws {
+    let candidateID = "candidate-pending-dedupe-\(UUID().uuidString)"
+    let inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      canonicalOutboxRecord(
+        "Approve Hermes M4 MBA to open the dev-only PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let id = try XCTUnwrap(inserted.id)
+
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: id,
+      candidateID: candidateID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+
+    let descriptions = try await StagedTaskStorage.shared.getRecentCanonicalCandidateDescriptions()
+    XCTAssertTrue(descriptions.contains(inserted.description))
+
+    let repeated = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      canonicalOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the dev-only PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let repeatedID = try XCTUnwrap(repeated.id)
+    let reused = try await StagedTaskStorage.shared.recentEquivalentCanonicalReceipt(
+      for: repeated,
+      excludingID: repeatedID
+    )
+    XCTAssertEqual(reused?.candidateID, candidateID)
+    try await StagedTaskStorage.shared.deleteById(repeatedID)
+    try await StagedTaskStorage.shared.deleteById(id)
+  }
+
   func testCanonicalTaskFieldsSurviveSwiftWireAndCacheRoundTrip() throws {
     let fixtureURL = repositoryRoot()
       .appendingPathComponent("backend/tests/unit/fixtures/task_intelligence/canonical_round_trip_v1.json")
@@ -495,6 +559,19 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
     )
     XCTAssertTrue(workstreamPatchJSON["next_review_at"] is NSNull)
     XCTAssertFalse(workstreamPatchJSON.keys.contains("objective"))
+  }
+
+  private func canonicalOutboxRecord(_ description: String, sourceApp: String) -> StagedTaskRecord {
+    var record = StagedTaskRecord(
+      description: description,
+      source: "candidate_outbox",
+      sourceApp: sourceApp
+    )
+    record.setMetadata([
+      "capture_kind": "direct_request",
+      "already_done": false,
+    ])
+    return record
   }
 
   func testCandidateTaskChangeUsesDiscriminatedGeneratedPayload() throws {
