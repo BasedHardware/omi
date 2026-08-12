@@ -14,7 +14,7 @@ from database.redis_db import (
 )
 from database.webhook_health import record_dev_webhook_failure, record_dev_webhook_success, _DEV_FAILURE_THRESHOLD
 from models.conversation import Conversation
-from models.users import WebhookType
+from models.users import WebhookType, webhook_url_from_setting
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.conversations.render import conversation_to_dict
 from utils.executors import db_executor, run_blocking
@@ -294,12 +294,13 @@ def get_audio_bytes_webhook_seconds(uid: str):
     toggled = user_webhook_status_db(uid, WebhookType.audio_bytes)
     if toggled:
         webhook_url = get_user_webhook_db(uid, WebhookType.audio_bytes)
-        if not webhook_url:
+        url = webhook_url_from_setting(WebhookType.audio_bytes, webhook_url)
+        if not url:
             return
         parts = webhook_url.split(',')
         if len(parts) == 2:
             try:
-                return int(parts[1])
+                return int(parts[1].strip())
             except ValueError:
                 pass
         return 5
@@ -313,9 +314,7 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
     toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.audio_bytes)
     if toggled:
         webhook_url = await run_blocking(db_executor, get_user_webhook_db, uid, WebhookType.audio_bytes)
-        if not webhook_url:
-            return
-        webhook_url = webhook_url.split(',')[0]
+        webhook_url = webhook_url_from_setting(WebhookType.audio_bytes, webhook_url)
         if not webhook_url:
             return
         webhook_url = _append_query_params(webhook_url, {'sample_rate': sample_rate, 'uid': uid})
@@ -357,8 +356,8 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
 
 def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:
     res = False
-    url = get_user_webhook_db(uid, wType)
-    if url == '' or url == ',':
+    url = webhook_url_from_setting(wType, get_user_webhook_db(uid, wType))
+    if not url:
         disable_user_webhook_db(uid, wType)
         res = False
     else:
