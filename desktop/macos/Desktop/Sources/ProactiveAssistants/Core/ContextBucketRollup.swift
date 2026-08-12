@@ -386,6 +386,14 @@ enum ContextBucketPurger {
             SET notifyWorthiness = COALESCE(
               (SELECT MAX(notifyWorthiness) FROM bucket_facts
                WHERE bucket_facts.bucketID = context_buckets.id AND validityState = 'validated'), 0),
+              visitCount = (
+                SELECT COUNT(*) FROM context_visits
+                WHERE context_visits.bucketID = context_buckets.id AND outcome = 'completed'
+              ),
+              lastVisitedAt = (
+                SELECT MAX(endedAt) FROM context_visits
+                WHERE context_visits.bucketID = context_buckets.id AND outcome = 'completed'
+              ),
               updatedAt = ?
             WHERE id = ?
             """,
@@ -463,7 +471,7 @@ actor ContextBucketRollupWriter {
         appName: frame.appName,
         rawContextKey: "\(frame.appName)\n\(frame.windowTitle ?? "")",
         normalizedContextKey: ContextTitleNormalizer.identityKey(
-          appName: frame.appName, windowTitle: frame.windowTitle))
+          appName: frame.appName, windowTitle: frame.windowTitle) ?? "")
     } catch {
       log("Context bucket extraction failed silently: \(error.localizedDescription)")
     }

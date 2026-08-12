@@ -3750,6 +3750,64 @@ describe("kernel conversation journal", () => {
     expect(delivery.payloadHash).toMatch(/^sha256:[a-f0-9]{64}$/);
     fixture.store.close();
   });
+
+  it("ties equal created_at_ms conversation tails by turn_seq rather than turn_id", () => {
+    const fixture = newSurface("main_chat", "chat", "tail-tie-break");
+    // Lexicographically larger older turn_id would win without a turn_seq tie-break.
+    recordTerminalQuestion(
+      fixture,
+      "turn_zzzz_older",
+      [
+        { optionId: "older:a", label: "Older A", preparedAnswer: "Older A" },
+        { optionId: "older:b", label: "Older B", preparedAnswer: "Older B" },
+      ],
+      100,
+    );
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn_aaaa_newer",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "Later answer without a question.",
+      contentBlocks: [
+        {
+          type: "text",
+          id: "later:text",
+          text: "Later answer without a question.",
+        },
+      ],
+      createdAtMs: 100,
+    });
+
+    expect(fixture.store.getRow(
+      `SELECT turn_id FROM conversation_turns
+       WHERE conversation_id = ?
+       ORDER BY created_at_ms DESC, turn_seq DESC, turn_id DESC LIMIT 1`,
+      [fixture.conversationId],
+    ).turn_id).toBe("turn_aaaa_newer");
+
+    // If the older unanswered question remained the tail (lexicographic turn_id),
+    // materialization would be suppressed.
+    const materialization = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-after-tie",
+      continuityKey: "intent-after-tie",
+      source: "daily_opener",
+      blocks: [{ type: "taskCard", task_id: "task-after-tie" }],
+      nowMs: 110,
+    });
+    expect(materialization).toMatchObject({
+      accepted: true,
+      suppressedByTailQuestion: false,
+      suppressedByStreamingTail: false,
+    });
+    fixture.store.close();
+  });
 });
 
 interface SurfaceFixture {

@@ -27,8 +27,8 @@ enum InsightSQLPrivacy {
   }
 
   private static let clauseKeywords: Set<String> = [
-    "as", "cross", "full", "group", "having", "inner", "join", "left", "limit", "natural", "on",
-    "order", "outer", "right", "union", "using", "where", "window",
+    "as", "cross", "except", "full", "group", "having", "inner", "intersect", "join", "left",
+    "limit", "natural", "on", "order", "outer", "right", "union", "using", "where", "window",
   ]
 
   static func filtered(_ query: String, excludedApps: Set<String>) -> String {
@@ -63,7 +63,13 @@ enum InsightSQLPrivacy {
 
       let table = tokens[significant[tablePosition]]
       guard isIdentifier(table), table.closed else { return failClosedQuery }
-      guard unquotedIdentifier(table.raw).lowercased() == "screenshots" else {
+      let tableName = unquotedIdentifier(table.raw).lowercased()
+      // Direct FTS (and related) access bypasses the screenshots appName filter. Fail closed
+      // rather than rewriting an unsupported surface; safe joins still go through `screenshots`.
+      if tableName != "screenshots" {
+        if tableName == "screenshots_fts" || tableName.hasPrefix("screenshots_fts") {
+          return failClosedQuery
+        }
         position += 1
         continue
       }

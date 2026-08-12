@@ -107,14 +107,14 @@ class TestMemoriesRateLimitWiring:
 
     def test_modify_endpoints_have_rate_limit(self):
         matches = _grep_router(r"with_rate_limit.*memories:modify")
-        assert len(matches) == 4, f"Edit/visibility/review/baseline must have memories:modify, found: {matches}"
+        assert len(matches) == 5, f"Edit/visibility/review/baseline/read must have memories:modify, found: {matches}"
 
     def test_all_write_endpoints_rate_limited(self):
         """Every write endpoint in memories.py must use with_rate_limit."""
         matches = _grep_router(r"with_rate_limit.*memories:")
         # extract, create, batch, review queue list/get/resolve, delete, delete_all, delete_batch,
-        # modify(review), modify(edit), modify(visibility), modify(baseline) = 13
-        assert len(matches) == 13, f"Expected 13 rate-limited endpoints, got {len(matches)}: {matches}"
+        # modify(review), modify(edit), modify(visibility), modify(baseline), modify(read) = 14
+        assert len(matches) == 14, f"Expected 14 rate-limited endpoints, got {len(matches)}: {matches}"
 
 
 # ---------------------------------------------------------------------------

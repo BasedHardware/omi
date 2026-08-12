@@ -9,6 +9,8 @@ struct ContextDeliveryGateInput: Equatable, Sendable {
   let minuteOfDay: Int
   let activePeriod: NotificationActivePeriod
   let cooldownSeconds: TimeInterval
+  let dailyLimit: Int
+  let lastGlobalPresentationAt: Date?
 
   init(
     masterEnabled: Bool,
@@ -17,7 +19,9 @@ struct ContextDeliveryGateInput: Equatable, Sendable {
     paywalled: Bool,
     minuteOfDay: Int,
     activePeriod: NotificationActivePeriod = .defaultValue,
-    cooldownSeconds: TimeInterval
+    cooldownSeconds: TimeInterval,
+    dailyLimit: Int? = nil,
+    lastGlobalPresentationAt: Date? = nil
   ) {
     self.masterEnabled = masterEnabled
     self.frequencyLevel = frequencyLevel
@@ -26,6 +30,10 @@ struct ContextDeliveryGateInput: Equatable, Sendable {
     self.minuteOfDay = minuteOfDay
     self.activePeriod = activePeriod
     self.cooldownSeconds = cooldownSeconds
+    self.dailyLimit = max(
+      0,
+      dailyLimit ?? ContextDeliveryBudget.dailyLimit(frequencyLevel: frequencyLevel))
+    self.lastGlobalPresentationAt = lastGlobalPresentationAt
   }
 }
 
@@ -40,10 +48,15 @@ struct NotificationActivePeriod: Equatable, Sendable {
     self.endMinute = min(max(0, endMinute), 1439)
   }
 
+  /// Equal endpoints are the explicit all-day encoding (any equal pair, including `00:00→00:00`
+  /// and `06:00→06:00`). This is not a zero-width window.
+  var isAllDay: Bool { startMinute == endMinute }
+
   func contains(minuteOfDay: Int) -> Bool {
     let minute = min(max(0, minuteOfDay), 1439)
-    if startMinute == endMinute { return true }
+    if isAllDay { return true }
     if startMinute < endMinute { return minute >= startMinute && minute < endMinute }
+    // Overnight wrap, e.g. 06:00→03:00: active across midnight; quiet is the complement.
     return minute >= startMinute || minute < endMinute
   }
 }
@@ -55,6 +68,18 @@ enum ContextDeliveryGateReason: String, Equatable, Sendable {
 struct ContextDeliveryAttempt: Equatable, Sendable {
   let id: String?
   let reason: ContextDeliveryGateReason
+}
+
+enum ContextDeliveryLifecycle {
+  /// Nonterminal ledger states that may still advance. Terminal
+  /// `failed`/`suppressed`/`delivered` rows are immutable.
+  static let advanceableStates: Set<String> = ["attempted", "model_completed", "policy_approved"]
+
+  static func canAdvance(from lifecycleState: String) -> Bool {
+    advanceableStates.contains(lifecycleState)
+  }
+
+  static let advanceableStateSQLList = "'attempted', 'model_completed', 'policy_approved'"
 }
 
 enum ContextDeliveryReconciliation {
@@ -70,11 +95,48 @@ enum ContextDeliveryReconciliation {
       arguments: [cutoff])
     return db.changesCount
   }
+
+  /// Fail-closed lifecycle update: never revive terminal failed/suppressed/delivered rows.
+  @discardableResult
+  static func complete(
+    in db: Database,
+    id: String,
+    decisionType: String,
+    provenanceJSON: String,
+    message: String?,
+    state: String,
+    timestampColumn: String?,
+    now: Date
+  ) throws -> Bool {
+    if let timestampColumn {
+      try db.execute(
+        sql: """
+          UPDATE proactive_deliveries
+          SET decisionType = ?, lifecycleState = ?, provenanceJson = ?, message = ?, \(timestampColumn) = ?
+          WHERE id = ? AND lifecycleState IN (\(ContextDeliveryLifecycle.advanceableStateSQLList))
+          """,
+        arguments: [decisionType, state, provenanceJSON, message, now, id])
+    } else {
+      try db.execute(
+        sql: """
+          UPDATE proactive_deliveries
+          SET decisionType = ?, lifecycleState = ?, provenanceJson = ?, message = ?
+          WHERE id = ? AND lifecycleState IN (\(ContextDeliveryLifecycle.advanceableStateSQLList))
+          """,
+        arguments: [decisionType, state, provenanceJSON, message, id])
+    }
+    return db.changesCount > 0
+  }
 }
 
 enum ContextDeliveryBudget {
-  static func dailyLimit(frequencyLevel: Int) -> Int {
-    [0, 10, 20, 40, 60, 100][max(0, min(5, frequencyLevel))]
+  /// Align the device-side director budget with the backend proactive facade's
+  /// 24-hour Redis window (`_QUOTA_WINDOW_SECONDS`), not local midnight.
+  static let dailyWindowSeconds: TimeInterval = 24 * 60 * 60
+
+  static func dailyLimit(frequencyLevel: Int, planMultiplier: Int = 1) -> Int {
+    let base = [0, 10, 20, 40, 60, 100][max(0, min(5, frequencyLevel))]
+    return base * max(1, planMultiplier)
   }
 
   static func cooldownSeconds(frequencyLevel: Int) -> TimeInterval {
@@ -96,9 +158,42 @@ enum ContextDeliveryBudget {
     return .allowed
   }
 
+  /// Cooldown holds on the latest successful delivery *or* an in-flight attempt so
+  /// concurrent visits cannot both reserve director quota in the same window.
+  static func cooldownAnchor(
+    lastDeliveredAt: Date?,
+    latestInFlightAttemptedAt: Date?,
+    lastGlobalPresentationAt: Date? = nil
+  ) -> Date? {
+    [lastDeliveredAt, latestInFlightAttemptedAt, lastGlobalPresentationAt]
+      .compactMap { $0 }
+      .max()
+  }
+
   static func isCoolingDown(lastDeliveredAt: Date?, now: Date, cooldownSeconds: TimeInterval) -> Bool {
-    guard cooldownSeconds > 0, let lastDeliveredAt else { return false }
-    return now.timeIntervalSince(lastDeliveredAt) < cooldownSeconds
+    isCoolingDown(
+      lastDeliveredAt: lastDeliveredAt,
+      latestInFlightAttemptedAt: nil,
+      now: now,
+      cooldownSeconds: cooldownSeconds)
+  }
+
+  static func isCoolingDown(
+    lastDeliveredAt: Date?,
+    latestInFlightAttemptedAt: Date?,
+    now: Date,
+    cooldownSeconds: TimeInterval
+  ) -> Bool {
+    guard cooldownSeconds > 0,
+      let anchor = cooldownAnchor(
+        lastDeliveredAt: lastDeliveredAt,
+        latestInFlightAttemptedAt: latestInFlightAttemptedAt)
+    else { return false }
+    return now.timeIntervalSince(anchor) < cooldownSeconds
+  }
+
+  static func dailyWindowStart(now: Date, windowSeconds: TimeInterval = dailyWindowSeconds) -> Date {
+    now.addingTimeInterval(-max(0, windowSeconds))
   }
 }
 
@@ -136,19 +231,31 @@ extension ContextBucketStore {
           sql: "SELECT EXISTS(SELECT 1 FROM proactive_deliveries WHERE visitID = ? AND bucketVersionID = ?)",
           arguments: [fence.visitID, snapshot.versionID]) ?? false
       guard !duplicate else { return ContextDeliveryAttempt(id: nil, reason: .duplicate) }
-      let startOfDay = Calendar.current.startOfDay(for: now)
       let lastDeliveredAt = try Date.fetchOne(
         db, sql: "SELECT MAX(deliveredAt) FROM proactive_deliveries")
+      let latestInFlightAttemptedAt = try Date.fetchOne(
+        db,
+        sql: """
+          SELECT MAX(attemptedAt) FROM proactive_deliveries
+          WHERE lifecycleState IN (\(ContextDeliveryLifecycle.advanceableStateSQLList))
+          """)
       guard
         !ContextDeliveryBudget.isCoolingDown(
-          lastDeliveredAt: lastDeliveredAt, now: now, cooldownSeconds: gate.cooldownSeconds)
+          lastDeliveredAt: ContextDeliveryBudget.cooldownAnchor(
+            lastDeliveredAt: lastDeliveredAt,
+            latestInFlightAttemptedAt: nil,
+            lastGlobalPresentationAt: gate.lastGlobalPresentationAt),
+          latestInFlightAttemptedAt: latestInFlightAttemptedAt,
+          now: now,
+          cooldownSeconds: gate.cooldownSeconds)
       else { return ContextDeliveryAttempt(id: nil, reason: .cooldown) }
-      let attemptedToday =
+      let windowStart = ContextDeliveryBudget.dailyWindowStart(now: now)
+      let attemptedInWindow =
         try Int.fetchOne(
           db,
           sql: "SELECT COUNT(*) FROM proactive_deliveries WHERE attemptedAt >= ?",
-          arguments: [startOfDay]) ?? 0
-      guard attemptedToday < ContextDeliveryBudget.dailyLimit(frequencyLevel: gate.frequencyLevel) else {
+          arguments: [windowStart]) ?? 0
+      guard attemptedInWindow < gate.dailyLimit else {
         return ContextDeliveryAttempt(id: nil, reason: .dailyBudget)
       }
       let id = UUID().uuidString.lowercased()
@@ -166,6 +273,9 @@ extension ContextBucketStore {
     }
   }
 
+  /// Advances a nonterminal delivery row. Returns `false` when the row is
+  /// missing or already terminal so late callbacks cannot revive it.
+  @discardableResult
   func completeDelivery(
     id: String,
     decisionType: String,
@@ -173,7 +283,7 @@ extension ContextBucketStore {
     message: String?,
     state: String,
     now: Date = Date()
-  ) async throws {
+  ) async throws -> Bool {
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
     let timestampColumn: String?
@@ -183,18 +293,16 @@ extension ContextBucketStore {
     case "delivered": timestampColumn = "deliveredAt"
     default: timestampColumn = nil
     }
-    try await pool.write { db in
-      if let timestampColumn {
-        try db.execute(
-          sql:
-            "UPDATE proactive_deliveries SET decisionType = ?, lifecycleState = ?, provenanceJson = ?, message = ?, \(timestampColumn) = ? WHERE id = ?",
-          arguments: [decisionType, state, provenanceJSON, message, now, id])
-      } else {
-        try db.execute(
-          sql:
-            "UPDATE proactive_deliveries SET decisionType = ?, lifecycleState = ?, provenanceJson = ?, message = ? WHERE id = ?",
-          arguments: [decisionType, state, provenanceJSON, message, id])
-      }
+    return try await pool.write { db in
+      try ContextDeliveryReconciliation.complete(
+        in: db,
+        id: id,
+        decisionType: decisionType,
+        provenanceJSON: provenanceJSON,
+        message: message,
+        state: state,
+        timestampColumn: timestampColumn,
+        now: now)
     }
   }
 

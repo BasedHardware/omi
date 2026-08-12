@@ -271,6 +271,12 @@ actor TaskAssistant: ProactiveAssistant {
     for await trigger in triggerStream {
       guard isRunning else { break }
 
+      // A prior capture may have been persisted while offline or left retryable
+      // after a transient delivery failure. Drain that durable outbox before
+      // extracting the new frame so an equivalent new observation can adopt or
+      // coalesce against a leader that has already had another delivery chance.
+      await retryCanonicalOutbox()
+
       let (frame, triggerType): (CapturedFrame, String) = {
         switch trigger {
         case .contextSwitch(let f): return (f, "context_switch")
@@ -606,22 +612,25 @@ actor TaskAssistant: ProactiveAssistant {
 
         // The model's duplicate search is advisory. Repeated screenshots can
         // paraphrase the same visible ask, and canonical exact-description
-        // identity will not merge those variants. Reconcile against a recent
-        // pending/accepted capture before issuing another backend create.
-        if let receipt = try await StagedTaskStorage.shared.recentEquivalentCanonicalReceipt(
+        // identity will not merge those variants. Resolve delivery in one DB
+        // transaction so dismiss-vs-reuse and first-writer dual-create cannot
+        // mint two Candidates for the same observation burst.
+        switch try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
           for: localRecord,
-          excludingID: localID
+          localOutboxID: localID
         ) {
-          try await StagedTaskStorage.shared.markCanonicalReceipt(
-            id: localID,
-            candidateID: receipt.candidateID,
-            status: receipt.status,
-            taskID: receipt.taskID
-          )
+        case .adoptedExistingReceipt(let receipt):
           log(
             "Task: Reused canonical capture candidate=\(receipt.candidateID) for semantically equivalent observation"
           )
           return
+        case .coalescedIntoDeliveryLeader:
+          log(
+            "Task: Coalesced equivalent capture into older delivery leader; skipping backend create"
+          )
+          return
+        case .proceedAsDeliveryLeader:
+          break
         }
         let delivery = CanonicalScreenCandidateDelivery(
           client: APICanonicalScreenCandidateClient()
@@ -1433,6 +1442,36 @@ actor TaskAssistant: ProactiveAssistant {
 
   // MARK: - Prompt Context
 
+  /// Merges legacy staged descriptions with canonical pending/accepted lines for
+  /// extraction dedup context. Reserves slots for canonical identity so a full
+  /// 30-item staged list cannot crowd pending candidates out of the prompt.
+  static func mergeDedupContextDescriptions(
+    staged: [String],
+    canonical: [String],
+    limit: Int = 30
+  ) -> [String] {
+    guard limit > 0 else { return [] }
+
+    func uniqued(_ values: [String], into seen: inout Set<String>) -> [String] {
+      values.filter { seen.insert($0.lowercased()).inserted }
+    }
+
+    var seen = Set<String>()
+    let distinctCanonical = uniqued(canonical, into: &seen)
+    seen.removeAll(keepingCapacity: true)
+    let distinctStaged = uniqued(staged, into: &seen).filter { description in
+      !distinctCanonical.contains { $0.caseInsensitiveCompare(description) == .orderedSame }
+    }
+
+    let reservedCanonical =
+      distinctCanonical.isEmpty ? 0 : min(distinctCanonical.count, max(1, limit / 3))
+    let stagedBudget = max(0, limit - reservedCanonical)
+    let stagedTake = Array(distinctStaged.prefix(stagedBudget))
+    let remaining = max(0, limit - stagedTake.count)
+    let canonicalTake = Array(distinctCanonical.prefix(remaining))
+    return stagedTake + canonicalTake
+  }
+
   /// Renders the task-context evidence block of the extraction prompt. Extracted
   /// as a pure function so the id contract is unit-testable: only ACTIVE TASKS
   /// carry an `[id:…]` the model may target with duplicate_of/refines_task;
@@ -1577,10 +1616,11 @@ actor TaskAssistant: ProactiveAssistant {
       let stagedTasks = try await StagedTaskStorage.shared.getAllStagedTasks(limit: 30)
       let canonicalCandidateDescriptions =
         try await StagedTaskStorage.shared.getRecentCanonicalCandidateDescriptions(limit: 30)
-      var seen = Set<String>()
-      let distinctDescriptions = (stagedTasks.map { $0.description } + canonicalCandidateDescriptions)
-        .filter { seen.insert($0.lowercased()).inserted }
-      stagedTaskDescriptions = Array(distinctDescriptions.prefix(30))
+      stagedTaskDescriptions = Self.mergeDedupContextDescriptions(
+        staged: stagedTasks.map(\.description),
+        canonical: canonicalCandidateDescriptions,
+        limit: 30
+      )
     } catch {
       logError("Task: Failed to load staged tasks for context", error: error)
     }

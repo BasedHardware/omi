@@ -6,7 +6,7 @@ Neutral ``product_memory_read_service`` is the source of truth. Legacy ``product
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, cast
+from typing import Any, Dict, Iterable, Iterator, List, Optional, cast
 
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -93,19 +93,25 @@ def fetch_archive_product_memory_search(
     }
 
 
-def fetch_authoritative_product_memory_items(uid: str, *, db_client: Any) -> List[MemoryItem]:
-    """Load and coerce all authoritative memory product memory item docs for one user."""
-
+def iter_authoritative_product_memory_items(uid: str, *, db_client: Any) -> Iterator[MemoryItem]:
+    """Stream validated authoritative memory items for one user."""
     collection_path = MemoryCollections(uid=uid).memory_items
-    items: List[MemoryItem] = []
     for snapshot in db_client.collection(collection_path).stream():
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
         item = MemoryItem.model_validate(payload)
         if item.uid != uid:
-            raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
-        items.append(item)
-    return sorted(items, key=_memory_item_sort_key)
+            raise ValueError(f"memory item uid mismatch: expected {uid}, got {item.uid}")
+        yield item
+
+
+def fetch_authoritative_product_memory_items(uid: str, *, db_client: Any) -> List[MemoryItem]:
+    """Load and coerce all authoritative memory product memory item docs for one user."""
+
+    return sorted(
+        iter_authoritative_product_memory_items(uid, db_client=db_client),
+        key=_memory_item_sort_key,
+    )
 
 
 def fetch_authoritative_product_memory_items_for_source(

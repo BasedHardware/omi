@@ -13,6 +13,9 @@ from typing import Any
 
 from google.api_core.exceptions import AlreadyExists, Conflict
 
+from database.account_deletion_projection_fence import (
+    read_account_deletion_projection_fence,
+)
 from database.memory_collections import MemoryCollections
 from models.memory_apply import MemoryControlState
 from utils.memory.memory_authority import (
@@ -42,6 +45,15 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
     validate_uid_for_memory_path(uid)
     if db_client is None:
         raise CanonicalApplyStateUnavailable("canonical apply control state requires a database client")
+
+    # Account deletion (or a completed wipe marker) must not re-enroll maintenance
+    # or recreate apply control under a fresh account_generation=1.
+    try:
+        deletion_fence = read_account_deletion_projection_fence(uid, db_client=db_client)
+    except Exception as exc:
+        raise CanonicalApplyStateUnavailable("canonical apply control state is unreadable") from exc
+    if deletion_fence.blocks_projection_writes:
+        raise CanonicalApplyStateUnavailable("canonical apply control refused during account deletion")
 
     ref = db_client.document(MemoryCollections(uid=uid).memory_apply_control_state)
 

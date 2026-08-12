@@ -568,6 +568,8 @@ class MemoryDB(Memory):
     app_id: Optional[str] = None
     data_protection_level: Optional[str] = None
     is_locked: bool = False
+    is_read: bool = False
+    is_dismissed: bool = False
     kg_extracted: bool = False
     is_baseline: bool = False
     evidence: List[Evidence] = Field(default_factory=list)

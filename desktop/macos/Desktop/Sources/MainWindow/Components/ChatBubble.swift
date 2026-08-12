@@ -3,8 +3,49 @@ import OmiTheme
 import SwiftUI
 
 enum ChatBubbleMetadataControlMetrics {
-  static let inset = OmiSpacing.xxs
+  static let leadingInset = OmiSpacing.xxs
+  static let topInset = leadingInset
   static let targetSize: CGFloat = 24
+}
+
+enum ChatBubbleMetadataHoverRegion {
+  case row
+  case controls
+}
+
+/// Hover ownership for the message and its metadata controls. AppKit can emit
+/// the row exit before SwiftUI delivers the controls entry; the release token
+/// bridges that event ordering without leaving the controls permanently shown.
+struct ChatBubbleMetadataHoverState {
+  private(set) var isRowHovering = false
+  private(set) var isControlsHovering = false
+  private(set) var holdsPointerTransition = false
+  private var releaseGeneration = 0
+
+  var keepsMetadataVisible: Bool {
+    isRowHovering || isControlsHovering || holdsPointerTransition
+  }
+
+  mutating func update(_ region: ChatBubbleMetadataHoverRegion, hovering: Bool) -> Int? {
+    switch region {
+    case .row: isRowHovering = hovering
+    case .controls: isControlsHovering = hovering
+    }
+
+    releaseGeneration += 1
+    if hovering {
+      holdsPointerTransition = true
+      return nil
+    }
+    guard !isRowHovering, !isControlsHovering else { return nil }
+    holdsPointerTransition = true
+    return releaseGeneration
+  }
+
+  mutating func completeRelease(_ generation: Int) {
+    guard generation == releaseGeneration, !isRowHovering, !isControlsHovering else { return }
+    holdsPointerTransition = false
+  }
 }
 
 // MARK: - Chat Bubble
@@ -25,6 +66,8 @@ struct ChatBubble: View {
   /// Nil for all existing Chat surfaces. Rich blocks are transcript data, but
   /// only the capability-gated main shell is allowed to turn them into controls.
   var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+  var metadataRevealOverrideForTesting: Bool? = nil
+  @State private var metadataHoverState = ChatBubbleMetadataHoverState()
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
@@ -181,6 +224,7 @@ struct ChatBubble: View {
       }
     }
     .contentShape(Rectangle())
+    .onHover { updateMetadataHover(.row, hovering: $0) }
   }
 
   @ViewBuilder
@@ -451,6 +495,10 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private func messageMetadataRow(includeRatingButtons: Bool, includeCopyButton: Bool) -> some View {
+    let isVisible =
+      metadataRevealOverrideForTesting
+      ?? (metadataHoverState.keepsMetadataVisible || isMetadataControlFocused || showRatingFeedback
+        || showCopied || showInfoPopover)
     // **One cluster under the message.** Controls far left and timestamp far right
     // of one line is how two halves of a row end up reading as page furniture.
     HStack(alignment: .center, spacing: OmiSpacing.sm) {
@@ -469,9 +517,20 @@ struct ChatBubble: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     // Keep the strip inside the row's real layout bounds. Drawing it below a
     // zero-height frame left visible pixels with no AppKit hit-test region.
-    .padding(.top, ChatBubbleMetadataControlMetrics.inset)
-    .padding(.leading, ChatBubbleMetadataControlMetrics.inset)
+    .padding(.top, ChatBubbleMetadataControlMetrics.topInset)
+    .padding(.leading, ChatBubbleMetadataControlMetrics.leadingInset)
     .contentShape(Rectangle())
+    .onHover { updateMetadataHover(.controls, hovering: $0) }
+    .opacity(isVisible ? 1 : 0)
+    .allowsHitTesting(isVisible)
+    .omiAnimation(.easeInOut(duration: 0.15), value: isVisible)
+  }
+
+  private func updateMetadataHover(_ region: ChatBubbleMetadataHoverRegion, hovering: Bool) {
+    guard let release = metadataHoverState.update(region, hovering: hovering) else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+      metadataHoverState.completeRelease(release)
+    }
   }
 
   @ViewBuilder

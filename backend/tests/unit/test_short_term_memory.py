@@ -271,7 +271,7 @@ def test_review_queue_reject_tombstones_through_universal_service(monkeypatch):
 
     assert result['decision'] == 'reject'
     assert result['item']['status'] == 'rejected'
-    service.delete.assert_called_once_with('uid-1', 'new')
+    service.delete_batch.assert_called_once_with('uid-1', ['new'])
     assert marked_short_term == [('st-new', 'commit-review')]
 
 

@@ -830,6 +830,7 @@ actor TaskContextualResurfacingService {
   private let debounceInterval: TimeInterval
   private let deviceID: () -> String
   private let ownerID: @Sendable () -> String?
+  private let contextBucketsEnabled: @Sendable () async -> Bool
   private let interruptionSender:
     @MainActor @Sendable (
       _ candidate: TaskInterruptionCandidate,
@@ -853,6 +854,9 @@ actor TaskContextualResurfacingService {
     debounceInterval: TimeInterval = 2,
     deviceIDProvider: @escaping () -> String = { ClientDeviceService.shared.clientDeviceId },
     ownerIDProvider: @escaping @Sendable () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
+    contextBucketsEnabled: @escaping @Sendable () async -> Bool = {
+      await MainActor.run { ContextBucketsFeature.isEnabled }
+    },
     interruptionSender:
       @escaping @MainActor @Sendable (
         TaskInterruptionCandidate,
@@ -868,6 +872,7 @@ actor TaskContextualResurfacingService {
     self.debounceInterval = debounceInterval
     self.deviceID = deviceIDProvider
     self.ownerID = ownerIDProvider
+    self.contextBucketsEnabled = contextBucketsEnabled
     self.interruptionSender = interruptionSender
   }
 
@@ -888,9 +893,10 @@ actor TaskContextualResurfacingService {
   }
 
   func observe(_ event: TaskLocalContextEvent) async {
-    if await MainActor.run(body: { ContextBucketsFeature.isEnabled }) {
+    if await contextBucketsEnabled() {
       // ContextProactivityEngine owns flag-on resurfacing and the delivery ledger.
-      // The legacy observer must not run a parallel lookup or notification path.
+      // Cancel any legacy debounce that was already scheduled before the flag flipped.
+      resetOwnerState()
       return
     }
     ensureOwnerChangeObserver()
@@ -923,6 +929,11 @@ actor TaskContextualResurfacingService {
   private func flush(lease: OwnerLease) async {
     debounceTask?.cancel()
     debounceTask = nil
+    if await contextBucketsEnabled() {
+      // Flag flipped on while the debounce was sleeping — abandon legacy flush.
+      resetOwnerState()
+      return
+    }
     guard isCurrent(lease), activeLease == lease else {
       resetOwnerState()
       return

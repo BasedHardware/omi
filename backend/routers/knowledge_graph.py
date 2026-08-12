@@ -91,27 +91,44 @@ class ExtractKnowledgeGraphResponse(BaseModel):
     edges: List[Dict[str, Any]]
 
 
-@router.get('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=KnowledgeGraphResponse)
+@router.get(
+    "/v1/knowledge-graph",
+    tags=["knowledge_graph"],
+    response_model=KnowledgeGraphResponse,
+)
 def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
+    # Hard page cap: this legacy GET has no cursor. Clients that need the full
+    # graph must page `/v1/knowledge-graph/canonical`. Always report the cap so
+    # truncated responses are distinguishable from complete small graphs.
+    page_limit = canonical_graph_service.MAX_CANONICAL_GRAPH_PAGE_LIMIT
     try:
         page = canonical_graph_service.get_canonical_knowledge_graph(
             uid,
-            limit=canonical_graph_service.MAX_CANONICAL_GRAPH_PAGE_LIMIT,
+            limit=page_limit,
             cursor=None,
         )
-        nodes = page.nodes
-        edges = page.edges
-        graph = {'truncated': bool(page.has_more), 'node_count': len(nodes), 'edge_count': len(edges)}
+        # One memory page may expand into more graph records than the memory
+        # page limit. Bound the returned graph itself, not only its source page.
+        nodes = page.nodes[:page_limit]
+        node_ids = {node.get("id") for node in nodes if node.get("id")}
+        bounded_edges = page.edges[:page_limit]
+        edges = [
+            edge for edge in bounded_edges if edge.get("source_id") in node_ids and edge.get("target_id") in node_ids
+        ]
+        dropped_edges = len(bounded_edges) - len(edges)
+        truncated = (
+            bool(page.has_more) or len(page.nodes) > page_limit or len(page.edges) > page_limit or dropped_edges > 0
+        )
     except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
-        raise HTTPException(status_code=503, detail='knowledge_graph_unavailable') from exc
+        raise HTTPException(status_code=503, detail="knowledge_graph_unavailable") from exc
     return KnowledgeGraphResponse(
         nodes=nodes,
         edges=edges,
-        truncated=bool(graph.get('truncated', False)),
-        node_count=graph.get('node_count', len(nodes)),
-        edge_count=graph.get('edge_count', len(edges)),
-        node_limit=graph.get('node_limit'),
-        edge_limit=graph.get('edge_limit'),
+        truncated=truncated,
+        node_count=len(nodes),
+        edge_count=len(edges),
+        node_limit=page_limit,
+        edge_limit=page_limit,
     )
 
 

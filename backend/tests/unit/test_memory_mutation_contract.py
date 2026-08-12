@@ -26,6 +26,7 @@ def client(monkeypatch):
         '_validate_mutable_memory',
         lambda *_args, **_kwargs: {'category': 'system'},
     )
+    monkeypatch.setattr(memories, 'submit_with_context', lambda *_args, **_kwargs: None)
 
     calls = []
 
@@ -40,9 +41,9 @@ def client(monkeypatch):
             calls.append(('visibility', uid, memory_id, value))
 
     monkeypatch.setattr(memories, 'MemoryService', _UniversalMemoryService)
-    test_client = TestClient(app)
-    test_client.memory_calls = calls
-    return test_client
+    with TestClient(app) as test_client:
+        test_client.memory_calls = calls
+        yield test_client
 
 
 def test_edit_memory_accepts_canonical_json_body(client, monkeypatch):

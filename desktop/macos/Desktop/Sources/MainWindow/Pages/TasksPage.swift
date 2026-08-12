@@ -4584,7 +4584,16 @@ struct TasksPage: View {
         selectTask(task)
         proxy.scrollTo(taskID, anchor: .center)
       case .candidate(let candidateID):
-        proxy.scrollTo("suggested-\(candidateID)", anchor: .center)
+        // Candidate cards only exist while Suggested is expanded. Expand first,
+        // then scroll on the next main-queue turn so the target id is mounted.
+        if SuggestedTasksPresentationPolicy.shouldExpandBeforeScrollingToCandidate(
+          isExpanded: suggestionsSectionExpanded
+        ) {
+          suggestionsSectionExpanded = true
+        }
+        DispatchQueue.main.async {
+          proxy.scrollTo("suggested-\(candidateID)", anchor: .center)
+        }
       }
     }
   }

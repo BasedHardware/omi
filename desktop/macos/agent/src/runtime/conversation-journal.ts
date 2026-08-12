@@ -3620,6 +3620,9 @@ function materializationTailState(
  * the immutable conversation-order key, or a late ACK for an older response
  * can make a newer question appear stale to the kernel while it remains the
  * visible tail in Chat.
+ *
+ * When two turns share `created_at_ms`, prefer the higher `turn_seq` so a
+ * lexicographically larger older `turn_id` cannot beat the later append.
  */
 function canonicalConversationTail(
   store: AgentStore,
@@ -3628,7 +3631,7 @@ function canonicalConversationTail(
   const row = store.getOptionalRow(
     `SELECT turn_id FROM conversation_turns
      WHERE conversation_id = ?
-     ORDER BY created_at_ms DESC, turn_id DESC LIMIT 1`,
+     ORDER BY created_at_ms DESC, turn_seq DESC, turn_id DESC LIMIT 1`,
     [conversationId],
   );
   return row ? requireJournalTurn(store, conversationId, String(row.turn_id)) : null;

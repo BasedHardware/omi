@@ -4,6 +4,68 @@ import XCTest
 @testable import Omi_Computer
 
 final class UserNotificationCallbackBridgeTests: XCTestCase {
+  func testVisibleNotificationSurfaceRequiresGrantAndBannerStyle() {
+    XCTAssertTrue(
+      NotificationPermissionPolicy.hasVisibleAlertSurface(
+        status: .authorized,
+        alertStyle: .banner))
+    XCTAssertTrue(
+      NotificationPermissionPolicy.hasVisibleAlertSurface(
+        status: .provisional,
+        alertStyle: .alert))
+    XCTAssertFalse(
+      NotificationPermissionPolicy.hasVisibleAlertSurface(
+        status: .denied,
+        alertStyle: .banner))
+    XCTAssertFalse(
+      NotificationPermissionPolicy.hasVisibleAlertSurface(
+        status: .authorized,
+        alertStyle: .none))
+  }
+
+  @MainActor
+  func testNotificationSettingsSyncJournalOnlyClearsMatchingRevision() throws {
+    let suiteName = "UserNotificationCallbackBridgeTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let first = NotificationService.beginNotificationSettingsSync(defaults: defaults)
+    let second = NotificationService.beginNotificationSettingsSync(defaults: defaults)
+    XCTAssertTrue(NotificationService.hasPendingNotificationSettingsSync(defaults: defaults))
+
+    NotificationService.completeNotificationSettingsSync(revision: first, defaults: defaults)
+    XCTAssertTrue(
+      NotificationService.hasPendingNotificationSettingsSync(defaults: defaults),
+      "an older PATCH must not clear a newer unsynced mutation")
+
+    NotificationService.completeNotificationSettingsSync(revision: second, defaults: defaults)
+    XCTAssertFalse(NotificationService.hasPendingNotificationSettingsSync(defaults: defaults))
+  }
+
+  @MainActor
+  func testNotificationHydrationPreservesNewerOrPreviouslyPendingLocalState() {
+    XCTAssertFalse(
+      NotificationService.shouldPreserveLocalNotificationSettings(
+        revisionAtLoadStart: 4,
+        currentRevision: 4,
+        pendingAtLoadStart: false,
+        pendingNow: false))
+    XCTAssertTrue(
+      NotificationService.shouldPreserveLocalNotificationSettings(
+        revisionAtLoadStart: 4,
+        currentRevision: 5,
+        pendingAtLoadStart: false,
+        pendingNow: false),
+      "a mutation racing the GET must win even if its PATCH already completed")
+    XCTAssertTrue(
+      NotificationService.shouldPreserveLocalNotificationSettings(
+        revisionAtLoadStart: 4,
+        currentRevision: 4,
+        pendingAtLoadStart: true,
+        pendingNow: false),
+      "a retry that completed while GET was in flight must not let stale hydration win")
+  }
+
   func testNotificationPermissionPolicyUsesPromptOnlyForUndeterminedStatus() {
     XCTAssertEqual(
       NotificationPermissionPolicy.enableAction(for: .notDetermined), .requestSystemPrompt)

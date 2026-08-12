@@ -1,11 +1,11 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1752,
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1652
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1792,
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1755
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Recent semantically equivalent screen captures must reuse their canonical receipt before the assistant issues another create, while the extraction prompt includes pending canonical descriptions so repeated observations do not fork Suggested candidates.",
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "Screen lock now interrupts the active context visit beside the existing capture-pause lifecycle boundary."
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Recent semantically equivalent screen captures elect one durable delivery leader and retry the complete owner-scoped outbox before new extraction, while prompt context prevents repeated observations from forking Suggested candidates.",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "Screen lock, sleep, wake, account-generation changes, capture leases, and context-visit interruption remain coordinated by the single plugin lifecycle authority."
   },
   "threshold": 1500
 }

@@ -128,7 +128,9 @@ def _call(limit, offset):
             x_app_platform=None,
             x_device_id_hash=None,
         )
-    return service.read.call_args.kwargs['limit'], service.read.call_args.kwargs['offset']
+    if service.read.called:
+        return service.read.call_args.kwargs['limit'], service.read.call_args.kwargs['offset']
+    return service.read_page.call_args.kwargs['limit'], 0
 
 
 def test_negative_offset_is_clamped_not_500():

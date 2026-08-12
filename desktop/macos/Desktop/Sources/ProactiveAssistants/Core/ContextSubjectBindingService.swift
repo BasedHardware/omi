@@ -4,6 +4,31 @@ import Foundation
 /// Database-backed replacement for the legacy UserDefaults matcher. Both the
 /// flag-on engine and the flag-off rollback path read the migrated binding row,
 /// so removing the old defaults key does not change today's behavior.
+/// SQL retention rules for subject bindings. Kept separate from the actor so age
+/// and overflow protection remain directly testable without RewindDatabase.
+enum ContextSubjectBindingRetention {
+  /// Drop only unbound rows. Bindings that still point at a bucket power visit
+  /// lookup and snapshots, so age/overflow must not remove them.
+  static func prune(in db: Database, now: Date) throws {
+    try db.execute(
+      sql: "DELETE FROM subject_bindings WHERE bucketID IS NULL AND updatedAt <= ?",
+      arguments: [now.addingTimeInterval(-30 * 24 * 60 * 60)])
+    let overflow = try String.fetchAll(
+      db,
+      sql: """
+        SELECT referenceHash FROM subject_bindings
+        WHERE bucketID IS NULL
+        ORDER BY updatedAt DESC
+        LIMIT -1 OFFSET 256
+        """)
+    for staleReference in overflow {
+      try db.execute(
+        sql: "DELETE FROM subject_bindings WHERE referenceHash = ?",
+        arguments: [staleReference])
+    }
+  }
+}
+
 actor ContextSubjectBindingService {
   static let shared = ContextSubjectBindingService()
 
@@ -131,17 +156,7 @@ actor ContextSubjectBindingService {
               updatedAt = excluded.updatedAt
             """,
           arguments: [referenceHash, subject.kind.rawValue, subject.id, subject.workstreamID, now, now])
-        try db.execute(
-          sql: "DELETE FROM subject_bindings WHERE updatedAt <= ?",
-          arguments: [now.addingTimeInterval(-30 * 24 * 60 * 60)])
-        let overflow = try String.fetchAll(
-          db,
-          sql: "SELECT referenceHash FROM subject_bindings ORDER BY updatedAt DESC LIMIT -1 OFFSET 256")
-        for staleReference in overflow {
-          try db.execute(
-            sql: "DELETE FROM subject_bindings WHERE referenceHash = ?",
-            arguments: [staleReference])
-        }
+        try ContextSubjectBindingRetention.prune(in: db, now: now)
       }
     }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }

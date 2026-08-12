@@ -81,7 +81,26 @@ final class MainChatNavigationRequestStoreTests: XCTestCase {
 final class ChatBubbleMetadataControlMetricsTests: XCTestCase {
   func testMetadataControlsUseStablePointerTargetsAndMatchingInsets() {
     XCTAssertGreaterThanOrEqual(ChatBubbleMetadataControlMetrics.targetSize, 24)
-    XCTAssertEqual(ChatBubbleMetadataControlMetrics.inset, OmiSpacing.xxs)
+    XCTAssertEqual(ChatBubbleMetadataControlMetrics.leadingInset, OmiSpacing.xxs)
+    XCTAssertEqual(ChatBubbleMetadataControlMetrics.topInset, ChatBubbleMetadataControlMetrics.leadingInset)
+  }
+
+  func testPointerCanCrossFromMessageIntoControlsWithoutHidingThem() throws {
+    var hover = ChatBubbleMetadataHoverState()
+
+    XCTAssertNil(hover.update(.row, hovering: true))
+    let rowExit = try XCTUnwrap(hover.update(.row, hovering: false))
+    XCTAssertTrue(hover.keepsMetadataVisible)
+
+    XCTAssertNil(hover.update(.controls, hovering: true))
+    hover.completeRelease(rowExit)
+    XCTAssertTrue(
+      hover.keepsMetadataVisible,
+      "a stale row-exit release must not hide buttons after the pointer enters them")
+
+    let controlsExit = try XCTUnwrap(hover.update(.controls, hovering: false))
+    hover.completeRelease(controlsExit)
+    XCTAssertFalse(hover.keepsMetadataVisible)
   }
 }
 
@@ -97,7 +116,7 @@ final class ChatBubbleMetadataBandLayoutTests: XCTestCase {
 
     XCTAssertGreaterThanOrEqual(
       synced - streaming,
-      ChatBubbleMetadataControlMetrics.targetSize + ChatBubbleMetadataControlMetrics.inset - 1,
+      ChatBubbleMetadataControlMetrics.targetSize + ChatBubbleMetadataControlMetrics.topInset - 1,
       "the metadata strip must remain inside the row's hit-test bounds")
   }
 
@@ -155,6 +174,21 @@ final class ChatRowPresentationTests: XCTestCase {
     XCTAssertEqual(ChatContinuityInvariants.proactiveNotificationKind(push), .insight)
     XCTAssertEqual(ProactiveNotificationBadge(kind: .insight).systemImage, "sparkles")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .insight).label, "Insight")
+  }
+
+  func testInsightGlyphIsSparklesAcrossSurfacesAndDoesNotCollideWithSuggestion() {
+    XCTAssertEqual(ProactiveNotificationBadge.insightSystemImage, "sparkles")
+    XCTAssertEqual(ProactiveNotificationBadge.suggestionSystemImage, "lightbulb")
+    XCTAssertEqual(
+      ProactiveNotificationBadge(kind: .insight).systemImage,
+      ProactiveNotificationBadge.insightSystemImage)
+    XCTAssertEqual(
+      ProactiveNotificationBadge(kind: .suggestion).systemImage,
+      ProactiveNotificationBadge.suggestionSystemImage)
+    XCTAssertNotEqual(
+      ProactiveNotificationBadge.insightSystemImage,
+      ProactiveNotificationBadge.suggestionSystemImage,
+      "Insight and Suggestion must keep distinct glyphs")
   }
 
   func testLegacyNotificationContinuityUsesTheNeutralBadge() {

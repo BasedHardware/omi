@@ -44,10 +44,12 @@ extension SettingsContentView {
       // even before the backend round-trip completes.
       UserDefaults.standard.set(frequency, forKey: NotificationService.frequencyDefaultsKey)
     }
+    let syncRevision = NotificationService.beginNotificationSettingsSync()
     Task {
       do {
         let _ = try await APIClient.shared.updateNotificationSettings(
           enabled: enabled, frequency: frequency)
+        NotificationService.completeNotificationSettingsSync(revision: syncRevision)
       } catch {
         logError("Failed to update notification settings", error: error)
       }

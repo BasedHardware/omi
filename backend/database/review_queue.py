@@ -835,7 +835,7 @@ def append_resolution_commit(
     correction: Optional[Dict[str, Any]],
     mutations: List[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    if decision == 'drop' or not mutations:
+    if decision == "drop" or not mutations:
         return None
     # Historical review rows remain readable, but their resolution may not
     # mutate the protected historical memory collection.  Import lazily to
@@ -844,23 +844,25 @@ def append_resolution_commit(
     from utils.memory.memory_service import MemoryService
 
     memory_service = MemoryService(db_client=db)
-    if decision == 'accept':
-        candidate_raw: object = item.get('candidate')
+    if decision == "accept":
+        candidate_raw: object = item.get("candidate")
         candidate: Dict[str, Any] = cast(Dict[str, Any], candidate_raw) if isinstance(candidate_raw, dict) else {}
-        conflict_with_raw: object = item.get('conflict_with')
+        conflict_with_raw: object = item.get("conflict_with")
         conflict_with: List[str] = cast(List[str], conflict_with_raw) if isinstance(conflict_with_raw, list) else []
         memory_service.write(uid, accepted_fact(candidate))
         _delete_review_conflicts_idempotently(memory_service, uid, conflict_with)
-    if decision == 'correct':
+    if decision == "correct":
         correction_dict: Dict[str, Any] = correction if correction is not None else {}
-        target_id: Any = correction_dict.get('target_fact_id') or item.get('fact_id')
-        arg_changes_raw: object = correction_dict.get('arg_changes')
+        target_id: Any = correction_dict.get("target_fact_id") or item.get("fact_id")
+        arg_changes_raw: object = correction_dict.get("arg_changes")
         arg_changes: Dict[str, Any] = cast(Dict[str, Any], arg_changes_raw) if isinstance(arg_changes_raw, dict) else {}
         if arg_changes:
             memory_service.refine(uid, str(target_id), arg_changes)
-    if decision == 'reject':
-        fact_id: Any = item.get('fact_id')
-        memory_service.delete(uid, str(fact_id))
+    if decision == "reject":
+        fact_id: Any = item.get("fact_id")
+        # Treat already-tombstoned identities as success so a retry after a
+        # committed tombstone + failed ledger write remains idempotent.
+        _delete_review_conflicts_idempotently(memory_service, uid, [str(fact_id)])
     return memory_ledger.append_commit(
         uid,
         None,

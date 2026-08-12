@@ -86,9 +86,42 @@ enum SettingsControlMetrics {
     calendar.component(.hour, from: date)
   }
 
+  /// Daily Summary persists hour only. Any minute the picker offers is snapped to `:00`
+  /// immediately so the control never shows a time that cannot round-trip.
+  static func canonicalizeDailySummaryTime(_ date: Date, calendar: Calendar = .current) -> Date {
+    dailySummaryDate(forHour: dailySummaryHour(from: date, calendar: calendar), referenceDate: date, calendar: calendar)
+  }
+
   static func notificationPeriodLabel(forMinute minute: Int) -> String {
     let normalizedMinute = min(max(0, minute), 1439)
     return String(format: "%02d:%02d", normalizedMinute / 60, normalizedMinute % 60)
+  }
+
+  /// Equal Active Period endpoints mean all-day delivery; surface that in the UI instead of
+  /// leaving `06:00 → 06:00` looking like a zero-width or single-minute window.
+  static func notificationActivePeriodSubtitle(startMinute: Int, endMinute: Int) -> String {
+    if NotificationActivePeriod(startMinute: startMinute, endMinute: endMinute).isAllDay {
+      return "All day — proactive notifications may appear any time"
+    }
+    return "When proactive notifications may appear (24-hour time)"
+  }
+
+  static func notificationActivePeriodSummaryLabel(startMinute: Int, endMinute: Int) -> String? {
+    NotificationActivePeriod(startMinute: startMinute, endMinute: endMinute).isAllDay ? "All day" : nil
+  }
+
+  /// General → Notifications mirrors macOS TCC/banner style only. Product enablement lives in
+  /// Notifications & Privacy (master + frequency).
+  static func generalNotificationPermissionStatusText(
+    hasPermission: Bool, bannersDisabled: Bool
+  ) -> String {
+    if !hasPermission {
+      return "macOS notification permission is off"
+    }
+    if bannersDisabled {
+      return "Permission granted, but macOS banners are off"
+    }
+    return "macOS banners enabled"
   }
 }
 

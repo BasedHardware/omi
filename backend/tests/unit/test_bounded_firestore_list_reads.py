@@ -291,7 +291,7 @@ def test_knowledge_graph_route_exposes_truncation(monkeypatch):
     response = TestClient(app).get('/v1/knowledge-graph')
 
     assert response.status_code == 200
-    assert response.json() == {**payload, 'node_limit': None, 'edge_limit': None}
+    assert response.json() == {**payload, 'node_limit': 500, 'edge_limit': 500}
 
 
 def test_knowledge_graph_route_keeps_firebase_auth_dependency():

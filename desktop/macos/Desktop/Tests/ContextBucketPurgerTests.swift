@@ -141,6 +141,110 @@ final class ContextBucketPurgerTests: XCTestCase {
     }
   }
 
+  func testPurgeRecomputesVisitCountAndLastVisitedAtFromSurvivingVisits() throws {
+    let db = try DatabaseQueue()
+    try db.write { database in
+      try database.create(table: "screenshots") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("timestamp", .datetime).notNull()
+        table.column("appName", .text).notNull()
+      }
+    }
+    var migrator = DatabaseMigrator()
+    ContextBucketSchema.registerMigration(on: &migrator, defaults: .standard, ownerID: "purge-visits")
+    try migrator.migrate(db)
+
+    let secretEnded = Date(timeIntervalSince1970: 1_725_000_100)
+    let keepEnded = Date(timeIntervalSince1970: 1_725_000_200)
+    let now = Date(timeIntervalSince1970: 1_725_000_300)
+    try db.write { database in
+      try database.execute(
+        sql: """
+          INSERT INTO context_buckets
+            (id, subjectKind, subjectID, visitCount, lastVisitedAt, createdAt, updatedAt)
+          VALUES ('bucket', 'task', 'task-1', 2, ?, ?, ?)
+          """,
+        arguments: [secretEnded, secretEnded, secretEnded])
+      try database.execute(
+        sql: """
+          INSERT INTO context_visits
+            (id, contextGeneration, poolEpoch, bucketID, appName, rawContextKey,
+             normalizedContextKey, referenceHash, startedAt, endedAt, outcome, createdAt, updatedAt)
+          VALUES
+            (1, 1, 1, 'bucket', 'Secret', 'raw', 'normalized', 'hash', ?, ?, 'completed', ?, ?),
+            (2, 1, 1, 'bucket', 'Keep', 'raw', 'normalized', 'hash-2', ?, ?, 'completed', ?, ?)
+          """,
+        arguments: [
+          secretEnded, secretEnded, secretEnded, secretEnded,
+          keepEnded, keepEnded, keepEnded, keepEnded,
+        ])
+      try database.execute(
+        sql: """
+          INSERT INTO bucket_entries
+            (id, bucketID, visitID, appName, rawContextKey, normalizedContextKey,
+             narrative, evidenceRefsJson, tokenCount, createdAt)
+          VALUES ('secret-entry', 'bucket', 1, 'Secret', 'raw', 'normalized',
+                  'excluded', '[]', 1, ?)
+          """,
+        arguments: [secretEnded])
+
+      _ = try ContextBucketPurger.deleteWithArtifacts(appName: "Secret", in: database, now: now)
+      let row = try Row.fetchOne(
+        database, sql: "SELECT visitCount, lastVisitedAt FROM context_buckets WHERE id = 'bucket'")
+      XCTAssertEqual(row?["visitCount"] as Int?, 1)
+      XCTAssertEqual(row?["lastVisitedAt"] as Date?, keepEnded)
+    }
+  }
+
+  func testPurgeClearsVisitStatsWhenNoCompletedVisitsRemain() throws {
+    let db = try DatabaseQueue()
+    try db.write { database in
+      try database.create(table: "screenshots") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("timestamp", .datetime).notNull()
+        table.column("appName", .text).notNull()
+      }
+    }
+    var migrator = DatabaseMigrator()
+    ContextBucketSchema.registerMigration(on: &migrator, defaults: .standard, ownerID: "purge-empty-visits")
+    try migrator.migrate(db)
+
+    let ended = Date(timeIntervalSince1970: 1_725_000_100)
+    let now = Date(timeIntervalSince1970: 1_725_000_300)
+    try db.write { database in
+      try database.execute(
+        sql: """
+          INSERT INTO context_buckets
+            (id, subjectKind, subjectID, visitCount, lastVisitedAt, createdAt, updatedAt)
+          VALUES ('bucket', 'task', 'task-1', 1, ?, ?, ?)
+          """,
+        arguments: [ended, ended, ended])
+      try database.execute(
+        sql: """
+          INSERT INTO context_visits
+            (id, contextGeneration, poolEpoch, bucketID, appName, rawContextKey,
+             normalizedContextKey, referenceHash, startedAt, endedAt, outcome, createdAt, updatedAt)
+          VALUES (1, 1, 1, 'bucket', 'Secret', 'raw', 'normalized', 'hash', ?, ?, 'completed', ?, ?)
+          """,
+        arguments: [ended, ended, ended, ended])
+      try database.execute(
+        sql: """
+          INSERT INTO bucket_entries
+            (id, bucketID, visitID, appName, rawContextKey, normalizedContextKey,
+             narrative, evidenceRefsJson, tokenCount, createdAt)
+          VALUES ('secret-entry', 'bucket', 1, 'Secret', 'raw', 'normalized',
+                  'excluded', '[]', 1, ?)
+          """,
+        arguments: [ended])
+
+      _ = try ContextBucketPurger.deleteWithArtifacts(appName: "Secret", in: database, now: now)
+      let row = try Row.fetchOne(
+        database, sql: "SELECT visitCount, lastVisitedAt FROM context_buckets WHERE id = 'bucket'")
+      XCTAssertEqual(row?["visitCount"] as Int?, 0)
+      XCTAssertNil(row?["lastVisitedAt"] as Date?)
+    }
+  }
+
   func testDeterministicGCExcludesBucketsWithActiveVisits() throws {
     let db = try DatabaseQueue()
     try db.write { database in

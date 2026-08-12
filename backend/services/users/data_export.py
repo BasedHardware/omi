@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from datetime import datetime
 from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence, cast
 
@@ -75,6 +76,27 @@ def _yield_json_array(items: Iterable[Mapping[str, Any]]) -> Iterator[str]:
     yield '\n  ]'
 
 
+def _spool_export_memories_json(uid: str) -> str:
+    """Materialize the memories JSON array before any bytes reach the client.
+
+    Spools to a bounded in-memory buffer with automatic disk spillover so large
+    exports stay scalable without emitting partial JSON when iteration fails.
+    """
+    # 8 MiB before spilling to disk keeps typical exports in memory while
+    # bounding resident size for very large accounts.
+    with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8") as spool:
+        spool.write("[\n")
+        first = True
+        for memory in MemoryService().iter_export_memories(uid, include_archive=True):
+            if not first:
+                spool.write(",\n")
+            first = False
+            spool.write("    " + json.dumps(memory.model_dump(mode="json"), default=_json_default, indent=4))
+        spool.write("\n  ]")
+        spool.seek(0)
+        return spool.read()
+
+
 def _iter_user_subcollection(uid: str, collection_name: str) -> Iterator[Mapping[str, Any]]:
     """Stream one user-owned primary collection without loading it in memory."""
 
@@ -108,10 +130,14 @@ def _iter_user_nested_subcollection(
 
 
 def iter_user_data_export(uid: str) -> Iterator[str]:
-    yield '{\n'
+    # Build the remote/authority-sensitive section before the first response
+    # byte. A canonical memory read failure can then become the real HTTP error
+    # instead of a 200 response containing truncated JSON.
+    memories_json = _spool_export_memories_json(uid)
+    yield "{\n"
 
     profile = cast(JsonRecord | None, get_user_profile(uid))
-    yield '  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ',\n'
+    yield ('  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ",\n")
 
     yield '  "conversations": [\n'
     first = True
@@ -119,34 +145,26 @@ def iter_user_data_export(uid: str) -> Iterator[str]:
         if conv is None:
             continue
         if not first:
-            yield ',\n'
+            yield ",\n"
         first = False
-        yield '    ' + json.dumps(conv, default=_json_default, indent=4)
-    yield '\n  ],\n'
+        yield "    " + json.dumps(conv, default=_json_default, indent=4)
+    yield "\n  ],\n"
 
-    yield '  "memories": '
-    # Export is an explicit Archive-capable operation. The universal service
-    # merges canonical and historical physical formats, applies tombstone and
-    # override suppression, and returns every live logical memory once without
-    # materializing historical rows.
-    exported_memories = (
-        memory.model_dump(mode='json') for memory in MemoryService().export_memories(uid, include_archive=True)
-    )
-    yield from _yield_json_array(exported_memories)
-    yield ',\n'
+    yield '  "memories": ' + memories_json + ",\n"
 
     people = cast(Sequence[Mapping[str, Any]], get_people(uid))
-    yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ',\n'
+    yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ",\n"
 
     yield '  "action_items": '
     yield from _yield_json_array(
         _iter_paginated(
             lambda limit, offset: cast(
-                Sequence[Mapping[str, Any]], get_standalone_action_items(uid, limit=limit, offset=offset)
+                Sequence[Mapping[str, Any]],
+                get_standalone_action_items(uid, limit=limit, offset=offset),
             )
         )
     )
-    yield ',\n'
+    yield ",\n"
 
     yield '  "task_data": {\n'
     task_export_sections = [
@@ -160,18 +178,18 @@ def iter_user_data_export(uid: str) -> Iterator[str]:
         for export_name, parent_collection_name, child_collection_name in TASK_NESTED_EXPORT_COLLECTIONS
     )
     for index, (collection_name, records) in enumerate(task_export_sections):
-        yield f'    {json.dumps(collection_name)}: '
+        yield f"    {json.dumps(collection_name)}: "
         yield from _yield_json_array(records)
-        yield ',\n' if index < len(task_export_sections) - 1 else '\n'
-    yield '  },\n'
+        yield ",\n" if index < len(task_export_sections) - 1 else "\n"
+    yield "  },\n"
 
     yield '  "chat_messages": [\n'
     first = True
     for msg in cast(Iterable[Mapping[str, Any]], chat_db.iter_all_messages(uid)):
         if not first:
-            yield ',\n'
+            yield ",\n"
         first = False
-        yield '    ' + json.dumps(msg, default=_json_default, indent=4)
-    yield '\n  ]\n'
+        yield "    " + json.dumps(msg, default=_json_default, indent=4)
+    yield "\n  ]\n"
 
-    yield '}\n'
+    yield "}\n"

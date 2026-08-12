@@ -902,7 +902,7 @@ struct DashboardPage: View {
   private func rollingSuggestionIcon(_ kind: HomeKnowsRowKind) -> String {
     switch kind {
     case .task: return "circle"
-    case .insight: return "lightbulb"
+    case .insight: return ProactiveNotificationBadge.insightSystemImage
     case .question: return "bubble.left"
     }
   }
@@ -2419,7 +2419,7 @@ private struct HomeKnowsRowView: View {
   private var leadingIcon: String {
     switch row.kind {
     case .task: return "circle"
-    case .insight: return "lightbulb"
+    case .insight: return ProactiveNotificationBadge.insightSystemImage
     case .question: return "bubble.left"
     }
   }

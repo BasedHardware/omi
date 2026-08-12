@@ -64,6 +64,11 @@ def _function_source_for_route(path: str, method: str) -> str:
     raise AssertionError(f'route not found: {method.upper()} {path}')
 
 
+def _compact_python(source: str) -> str:
+    """Make formatter-only line wrapping irrelevant to source contract checks."""
+    return "".join(source.split())
+
+
 def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captured_at=None, content=None, **overrides):
     return memory_item(
         memory_id,
@@ -82,77 +87,79 @@ def _enabled_rollout_doc(uid='u1'):
 
 def test_developer_route_reads_use_universal_service_without_legacy_fallback():
     contents = _developer_source()
-    assert 'service = MemoryService(db_client=db)' in contents
-    assert 'memories = service.read(uid, limit=limit, offset=offset)' in contents
-    assert 'MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))' in contents
-    assert 'read_default_read_rollout' not in contents
-    assert 'search_memory_default_developer_memories(' not in contents
-    assert 'memories_db' not in contents
+    compact = _compact_python(contents)
+    assert "service=MemoryService(db_client=db)" in compact
+    assert "memories=service.read(uid,limit=limit,offset=offset,include_pending_processing=True)" in compact
+    assert "MemoryService(db_client=db).search(uid,query,limit=min(limit,20))" in compact
+    assert "read_default_read_rollout" not in contents
+    assert "search_memory_default_developer_memories(" not in contents
+    assert "memories_db" not in contents
 
 
 def test_developer_vector_route_wires_app_key_scope_grant_before_memory_vector_reads():
-    route_source = _function_source_for_route('/v1/dev/user/memories/vector/search', 'get')
+    route_source = _function_source_for_route("/v1/dev/user/memories/vector/search", "get")
+    compact = _compact_python(route_source)
     auth_context_dependency = (
-        'auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context)'
+        "auth_context:ProductAuthorizationContext=Depends(get_developer_memory_default_memory_read_context)"
     )
-    uid_from_context = 'uid = auth_context.uid'
-    app_key_grant_call = 'app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)'
-    app_key_deny_check = 'if not app_key_grant.allowed:'
-    assert auth_context_dependency in route_source
-    assert app_key_grant_call in route_source
-    assert 'MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))' in route_source
-    assert 'read_default_read_rollout' not in route_source
-    assert 'search_memory_default_developer_memories_vector(' not in route_source
+    uid_from_context = "uid=auth_context.uid"
+    app_key_grant_call = "app_key_grant=authorize_memory_external_default_memory_read(auth_context,db_client=db)"
+    app_key_deny_check = "ifnotapp_key_grant.allowed:"
+    assert auth_context_dependency in compact
+    assert app_key_grant_call in compact
+    assert "MemoryService(db_client=db).search(uid,query,limit=min(limit,20))" in compact
+    assert "read_default_read_rollout" not in route_source
+    assert "search_memory_default_developer_memories_vector(" not in route_source
     assert (
-        route_source.index(auth_context_dependency)
-        < route_source.index(uid_from_context)
-        < route_source.index(app_key_grant_call)
-        < route_source.index(app_key_deny_check)
-        < route_source.index('MemoryService(db_client=db).search')
+        compact.index(auth_context_dependency)
+        < compact.index(uid_from_context)
+        < compact.index(app_key_grant_call)
+        < compact.index(app_key_deny_check)
+        < compact.index("MemoryService(db_client=db).search")
     )
 
 
 def test_developer_create_route_checks_scope_before_universal_write():
-    route_source = _function_source_for_route('/v1/dev/user/memories', 'post')
-    external_create = '.create_external_memory('
-    grant_call = 'authorize_memory_external_default_memory_write(auth_context, db_client=db)'
+    route_source = _compact_python(_function_source_for_route("/v1/dev/user/memories", "post"))
+    external_create = ".create_external_memory("
+    grant_call = "authorize_memory_external_default_memory_write(auth_context,db_client=db)"
     assert grant_call in route_source
     assert external_create in route_source
-    assert 'MemorySystem.CANONICAL' in route_source
+    assert "MemorySystem.CANONICAL" in route_source
     assert route_source.index(grant_call) < route_source.index(external_create)
 
 
 def test_developer_batch_create_route_checks_scope_before_universal_write():
-    route_source = _function_source_for_route('/v1/dev/user/memories/batch', 'post')
-    categorization = 'identify_category_for_memory(mem_req.content.strip())'
-    external_batch = '.create_external_memory_batch('
-    grant_call = 'authorize_memory_external_default_memory_write(auth_context, db_client=db)'
+    route_source = _compact_python(_function_source_for_route("/v1/dev/user/memories/batch", "post"))
+    categorization = "identify_category_for_memory(mem_req.content.strip())"
+    external_batch = ".create_external_memory_batch("
+    grant_call = "authorize_memory_external_default_memory_write(auth_context,db_client=db)"
     assert grant_call in route_source
     assert categorization in route_source
     assert external_batch in route_source
-    assert 'MemorySystem.CANONICAL' in route_source
+    assert "MemorySystem.CANONICAL" in route_source
     assert route_source.index(grant_call) < route_source.index(categorization)
     assert route_source.index(categorization) < route_source.index(external_batch)
 
 
 def test_developer_delete_route_checks_scope_before_universal_delete():
-    route_source = _function_source_for_route('/v1/dev/user/memories/{memory_id}', 'delete')
-    external_delete = '.delete_external_memory('
-    grant_call = 'authorize_memory_external_default_memory_write(auth_context, db_client=db)'
+    route_source = _compact_python(_function_source_for_route("/v1/dev/user/memories/{memory_id}", "delete"))
+    external_delete = ".delete_external_memory("
+    grant_call = "authorize_memory_external_default_memory_write(auth_context,db_client=db)"
     assert grant_call in route_source
     assert external_delete in route_source
-    assert 'MemorySystem.CANONICAL' in route_source
-    assert 'memories_db' not in route_source
+    assert "MemorySystem.CANONICAL" in route_source
+    assert "memories_db" not in route_source
     assert route_source.index(grant_call) < route_source.index(external_delete)
 
 
 def test_developer_update_route_checks_scope_before_universal_mutations():
-    route_source = _function_source_for_route('/v1/dev/user/memories/{memory_id}', 'patch')
-    grant_call = 'authorize_memory_external_default_memory_write(auth_context, db_client=db)'
+    route_source = _compact_python(_function_source_for_route("/v1/dev/user/memories/{memory_id}", "patch"))
+    grant_call = "authorize_memory_external_default_memory_write(auth_context,db_client=db)"
     assert grant_call in route_source
-    assert 'MemoryService(db_client=db)' in route_source
-    assert 'memories_db' not in route_source
-    assert route_source.index(grant_call) < route_source.index('MemoryService(db_client=db)')
+    assert "MemoryService(db_client=db)" in route_source
+    assert "memories_db" not in route_source
+    assert route_source.index(grant_call) < route_source.index("MemoryService(db_client=db)")
 
 
 def test_developer_routes_never_reach_legacy_after_universal_cutover():

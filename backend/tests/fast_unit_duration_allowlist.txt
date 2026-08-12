@@ -17,6 +17,10 @@ tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_deploy_workflows_bi
 tests/unit/test_rendered_deployment_contract.py::test_repository_charts_render_the_full_contract_when_helm_is_available
 # Builds 10,001 in-memory records to prove universal export has no historical-data cap.
 tests/unit/test_universal_memory_service.py::test_export_has_no_silent_record_cap
+# Intentionally crosses the legacy 6,000-row boundary to prove cursor paging has no hidden cap.
+tests/unit/test_universal_memory_list_cursor.py::test_cursor_pages_beyond_6000_historical_with_bounded_calls_no_cap
+# Boots the developer memory HTTP surface to verify pending canonical rows remain observable.
+tests/unit/test_memory_visibility_export_fixes.py::test_developer_list_requests_pending_processing
 # Exhaustive compatibility and deployment regressions intentionally traverse large synthetic
 # Firestore datasets or repository manifests while remaining hermetic unit tests.
 tests/services/users/test_data_export.py::test_iter_user_data_export_paginates_complete_collections
@@ -24,6 +28,11 @@ tests/unit/test_bounded_firestore_list_reads.py::test_knowledge_graph_route_expo
 tests/unit/test_memory_replace_policy.py::test_universal_reextract_failure_preserves_existing_memories
 tests/unit/test_backend_runtime_env_validator.py::test_runtime_manifest_rejects_retired_per_user_memory_inventory
 tests/unit/test_backend_runtime_env_validator.py::test_repo_parakeet_admission_deploy_contract_is_explicit
+# Repository-manifest render/validation paths parse the full checked-in runtime contract while
+# remaining hermetic; their CPU cost fluctuates narrowly around the unit guard threshold.
+tests/unit/test_backend_runtime_env_validator.py::test_repo_ilb_endpoints_use_http_scheme[prod]
+tests/unit/test_backend_runtime_env_validator.py::test_parakeet_admission_deploy_contract_rejects_missing_or_invalid_values[PARAKEET_STREAM_CAPACITY-0-PARAKEET_STREAM_CAPACITY must be an integer >= 1]
+tests/unit/test_render_backend_runtime_env.py::test_selected_job_renders_only_shared_network_and_named_job_outputs
 tests/unit/test_runtime_image_contracts.py::test_registered_runtime_image_sources_are_closed
 tests/unit/test_runtime_image_contracts.py::test_pusher_contract_rejects_omitted_shared_package
 tests/unit/test_runtime_image_contracts.py::test_pusher_dependency_probe_includes_jsonschema

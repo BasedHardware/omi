@@ -33,4 +33,13 @@ final class ContextTitleNormalizerTests: XCTestCase {
   func testUntitledDoesNotBecomeMergeableIdentity() {
     XCTAssertNil(ContextTitleNormalizer.normalize("   ", appName: "Safari"))
   }
+
+  func testBlankAndNoiseOnlyTitlesDoNotShareIdentityKey() {
+    XCTAssertNil(ContextTitleNormalizer.identityKey(appName: "Safari", windowTitle: "   "))
+    XCTAssertNil(ContextTitleNormalizer.identityKey(appName: "Safari", windowTitle: nil))
+    XCTAssertNil(ContextTitleNormalizer.identityKey(appName: "Safari", windowTitle: "✳ ◐"))
+    XCTAssertNotEqual(
+      ContextTitleNormalizer.identityKey(appName: "Safari", windowTitle: "Report"),
+      ContextTitleNormalizer.identityKey(appName: "Safari", windowTitle: "   "))
+  }
 }

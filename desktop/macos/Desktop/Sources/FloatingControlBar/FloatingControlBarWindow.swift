@@ -3287,6 +3287,7 @@ class FloatingControlBarManager {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
     else {
       log("FloatingControlBarManager: rejecting notification from stale runtime owner")
+      onDropped?()
       return .rejectedOwnerChange
     }
     let notification = FloatingBarNotification(
@@ -3303,6 +3304,7 @@ class FloatingControlBarManager {
     )
     guard let window else {
       log("FloatingControlBarManager: dropping notification because window is not set up")
+      onDropped?()
       return .windowUnavailable
     }
 
@@ -3310,6 +3312,7 @@ class FloatingControlBarManager {
       log(
         "FloatingControlBarManager: dropping notification because bar is snoozed until \(snoozedUntil?.description ?? "?")"
       )
+      onDropped?()
       return .suppressed
     }
     notificationAuthorizationSnapshots[notification.id] = authorizationSnapshot
@@ -3332,8 +3335,32 @@ class FloatingControlBarManager {
       return .queued
     }
 
-    presentNotification(notification, in: window)
+    if let onPresented {
+      notificationPresentationCallbacks[notification.id] = NotificationPresentationCallbacks(
+        onPresented: onPresented,
+        onDropped: onDropped ?? {}
+      )
+    }
+    guard presentNotification(notification, in: window) else {
+      return .rejectedOwnerChange
+    }
     return .presented
+  }
+
+  /// Read-only presentation check used before context-director candidate
+  /// graduation. It prevents expensive/durable work when the bar cannot accept
+  /// a notification, while `showNotification` remains the final race-safe gate.
+  func contextNotificationPreflight(
+    ownerID: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) -> OwnerBoundNotificationPresentationResult {
+    guard !ownerID.isEmpty,
+      authorizationSnapshot.ownerID == ownerID,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else { return .rejectedOwnerChange }
+    guard window != nil else { return .windowUnavailable }
+    guard !isSnoozed else { return .suppressed }
+    return .queued
   }
 
   func dismissCurrentNotification() {
@@ -3924,7 +3951,9 @@ class FloatingControlBarManager {
     _ = openNotificationConversation(notificationID: notification.id, in: window)
   }
 
-  private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
+  @discardableResult
+  private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) -> Bool
+  {
     guard
       let authorizationSnapshot = notificationAuthorizationSnapshots[notification.id],
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
@@ -3934,7 +3963,7 @@ class FloatingControlBarManager {
       notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
       log("FloatingControlBarManager: refusing to present stale-owner notification")
       Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .staleOwner)
-      return
+      return false
     }
     persistNotificationMessageIfNeeded(notification)
 
@@ -3984,6 +4013,7 @@ class FloatingControlBarManager {
     }
     notificationDismissWorkItem = dismissWorkItem
     DispatchQueue.main.asyncAfter(deadline: .now() + 6.0, execute: dismissWorkItem)
+    return true
   }
 
   private func dismissNotificationAndAdvanceQueue(trackDismissal: Bool) {

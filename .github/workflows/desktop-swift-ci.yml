@@ -91,7 +91,11 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
     runs-on: macos-15
-    timeout-minutes: 60
+    # A cold runner currently needs about 60 minutes for manifest checks,
+    # launcher coverage, the full debug suite, and the independent release-mode
+    # UserNotifications regression. Leave headroom so a successful final link
+    # is not cancelled by the job deadline.
+    timeout-minutes: 90
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

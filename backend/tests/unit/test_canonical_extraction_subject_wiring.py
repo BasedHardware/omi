@@ -117,6 +117,29 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
     assert stored["arguments"] == {"location": "San Francisco"}
 
 
+def test_memory_service_write_round_trips_locked_state(monkeypatch_trusted_account):
+    uid = "uid-lock-wire"
+    memory_db = MemoryDB.from_memory(
+        Memory(content="Locked canonical secret", category=MemoryCategory.interesting),
+        uid,
+        "conv-lock-wire",
+        False,
+    )
+    memory_db.id = "mem_lock_wire"
+    memory_db.memory_tier = MemoryTier.short_term
+    memory_db.is_locked = True
+    db = _FakeDb(_control_seed(uid))
+    service = MemoryService(db_client=db)
+
+    service.write(uid, memory_db.model_dump(mode="json"))
+
+    stored = db.docs[f"users/{uid}/memory_items/{memory_db.id}"]
+    assert stored["promotion"]["is_locked"] is True
+    canonical = read_canonical_memories(uid, db_client=db)
+    assert len(canonical) == 1
+    assert canonical[0].is_locked is True
+
+
 def test_extraction_memory_id_is_deterministic_and_partitions_non_user_subjects():
     identity = {
         "uid": "uid-subject-id",

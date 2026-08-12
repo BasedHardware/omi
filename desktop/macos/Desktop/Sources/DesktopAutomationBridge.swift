@@ -3459,6 +3459,12 @@ final class DesktopAutomationActionRegistry {
         enabled: enabled,
         frequency: frequency
       )
+      UserDefaults.standard.set(
+        response.enabled,
+        forKey: NotificationService.masterEnabledDefaultsKey)
+      UserDefaults.standard.set(
+        response.frequency,
+        forKey: NotificationService.frequencyDefaultsKey)
       return [
         "saved": "true",
         "enabled": response.enabled ? "true" : "false",

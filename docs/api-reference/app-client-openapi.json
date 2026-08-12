@@ -14592,9 +14592,19 @@
             "title": "Is Baseline",
             "type": "boolean"
           },
+          "is_dismissed": {
+            "default": false,
+            "title": "Is Dismissed",
+            "type": "boolean"
+          },
           "is_locked": {
             "default": false,
             "title": "Is Locked",
+            "type": "boolean"
+          },
+          "is_read": {
+            "default": false,
+            "title": "Is Read",
             "type": "boolean"
           },
           "kg_extracted": {
@@ -14856,6 +14866,36 @@
           "status"
         ],
         "title": "MemoryMutationResponse",
+        "type": "object"
+      },
+      "MemoryReadStatusRequest": {
+        "additionalProperties": false,
+        "description": "Durable UI read/dismiss mutation for a single memory.",
+        "properties": {
+          "is_dismissed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Dismissed"
+          },
+          "is_read": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Read"
+          }
+        },
+        "title": "MemoryReadStatusRequest",
         "type": "object"
       },
       "MemoryReviewItemResponse": {
@@ -57927,6 +57967,18 @@
             }
           },
           {
+            "description": "When true, include Archive-tier memories that are otherwise excluded from default reads.",
+            "in": "query",
+            "name": "include_archive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "When true, include Archive-tier memories that are otherwise excluded from default reads.",
+              "title": "Include Archive",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "query",
             "name": "device_scope",
             "required": false,
@@ -58884,6 +58936,106 @@
           }
         ],
         "summary": "Update Memory Baseline",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/v3/memories/{memory_id}/read": {
+      "patch": {
+        "description": "Persist durable insight/memory read and dismiss state for desktop clients.",
+        "operationId": "update_memory_read_status_v3_memories__memory_id__read_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryReadStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryDB"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Memory Read Status",
         "tags": [
           "memories"
         ]

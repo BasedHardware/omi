@@ -18,6 +18,11 @@ from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknow
 
 from config.memory_confidence import SOURCE_SIGNAL_CAPTURE_PRIORS
 from database import memory_ledger
+from database.firestore_index_registry import (
+    UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
+    UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
+)
+from database.memory_collections import MemoryCollections
 from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
@@ -278,6 +283,109 @@ def get_memories(
         if memory.get('user_review') is not False and (include_invalidated or memory.get('invalid_at') is None)
     ]
     return result
+
+
+_HISTORICAL_SCAN_PAGE_MAX = 500
+HistoricalScanCursor = tuple[datetime, str]
+
+
+def _coerce_historical_scan_time(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _historical_scan_page(
+    uid: str,
+    *,
+    order_field: str,
+    query_spec: Any,
+    limit: int,
+    start_after: Optional[HistoricalScanCursor],
+    firestore_client: Any,
+) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
+    """Shared bounded keyset scan for one historical order field.
+
+    Returns decrypted payloads (snapshot.id as ``id`` authority), the raw scan
+    cursors aligned 1:1 with those payloads, and whether the underlying query
+    is exhausted. Callers filter duplicates / visibility into None slots.
+    """
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    bounded_limit = max(1, min(int(limit or 100), _HISTORICAL_SCAN_PAGE_MAX))
+    query = query_spec.build(memories_ref, {}, field_filter_factory=FieldFilter)
+    query = query.order_by(order_field, direction=firestore.Query.DESCENDING).order_by('__name__')
+    if start_after is not None:
+        cursor_time, cursor_memory_id = start_after
+        if not cursor_memory_id.strip():
+            raise ValueError('historical scan cursor memory_id must not be blank')
+        query = query.start_after(
+            {
+                order_field: _coerce_historical_scan_time(cursor_time),
+                '__name__': memories_ref.document(cursor_memory_id),
+            }
+        )
+    snapshots = list(query.limit(bounded_limit).stream())
+    payloads: list[dict[str, Any]] = []
+    cursors: list[HistoricalScanCursor] = []
+    for snapshot in snapshots:
+        doc_id = getattr(snapshot, 'id', None)
+        if not isinstance(doc_id, str) or not doc_id.strip():
+            continue
+        payload = _typed_doc(snapshot)
+        payload['id'] = doc_id
+        order_raw = payload.get(order_field)
+        if isinstance(order_raw, datetime):
+            order_time = _coerce_historical_scan_time(order_raw)
+        else:
+            order_time = datetime.fromtimestamp(0, tz=timezone.utc)
+        decrypted = _prepare_memory_for_read(payload, uid) or payload
+        decrypted = dict(decrypted)
+        decrypted['id'] = doc_id
+        payloads.append(decrypted)
+        cursors.append((order_time, doc_id))
+    exhausted = len(snapshots) < bounded_limit
+    return payloads, cursors, exhausted
+
+
+def scan_memories_updated_at_page(
+    uid: str,
+    *,
+    limit: int = 100,
+    start_after: Optional[HistoricalScanCursor] = None,
+    firestore_client: Any = None,
+) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
+    """Bounded updated_at-present historical keyset page (updated_at DESC, __name__ ASC)."""
+    return _historical_scan_page(
+        uid,
+        order_field='updated_at',
+        query_spec=UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
+        limit=limit,
+        start_after=start_after,
+        firestore_client=firestore_client,
+    )
+
+
+def scan_memories_created_at_page(
+    uid: str,
+    *,
+    limit: int = 100,
+    start_after: Optional[HistoricalScanCursor] = None,
+    firestore_client: Any = None,
+) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
+    """Bounded created_at historical keyset page (created_at DESC, __name__ ASC).
+
+    Callers must filter updated_at-present duplicates so each document is owned
+    by exactly one of the dual streams.
+    """
+    return _historical_scan_page(
+        uid,
+        order_field='created_at',
+        query_spec=UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
+        limit=limit,
+        start_after=start_after,
+        firestore_client=firestore_client,
+    )
 
 
 @prepare_for_read(decrypt_func=cast(_DecryptFunc, _prepare_memory_for_read))
@@ -1016,25 +1124,42 @@ def delete_memories_for_conversation(uid: str, memory_id: str, *, firestore_clie
 
 def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
     """
-    Finds all memories for a user with is_locked: True and updates them to is_locked = False.
+    Unlock both released legacy rows and canonical product-memory rows.
     """
     database = _get_db(firestore_client)
-    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
-    locked_memories_query = memories_ref.where(filter=FieldFilter('is_locked', '==', True))
+    legacy_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    canonical_ref = database.collection(MemoryCollections(uid=uid).memory_items)
 
-    batch = database.batch()
-    docs = locked_memories_query.stream()
-    count = 0
-    for doc in docs:
-        batch.update(doc.reference, {'is_locked': False})
-        count += 1
-        if count >= 499:  # Firestore batch limit is 500
+    def commit_updates(docs: Any, update: Dict[str, Any]) -> int:
+        batch = database.batch()
+        count = 0
+        total = 0
+        for doc in docs:
+            batch.update(doc.reference, update)
+            count += 1
+            total += 1
+            if count >= 499:  # Firestore batch limit is 500
+                batch.commit()
+                batch = database.batch()
+                count = 0
+        if count > 0:
             batch.commit()
-            batch = database.batch()
-            count = 0
-    if count > 0:
-        batch.commit()
-    logger.info(f"Unlocked all memories for user {uid}")
+        return total
+
+    legacy_count = commit_updates(
+        legacy_ref.where(filter=FieldFilter('is_locked', '==', True)).stream(),
+        {'is_locked': False},
+    )
+    canonical_count = commit_updates(
+        canonical_ref.where(filter=FieldFilter('promotion.is_locked', '==', True)).stream(),
+        {'promotion.is_locked': False},
+    )
+    logger.info(
+        "Unlocked all memories for user %s legacy_count=%d canonical_count=%d",
+        uid,
+        legacy_count,
+        canonical_count,
+    )
 
 
 # **************************************

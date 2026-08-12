@@ -468,7 +468,6 @@ def test_canonical_account_delete_purge_emits_user_scoped_vector_outbox(monkeypa
     conversation_id = "conv-acct"
     content = "Canonical fact for account delete"
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
-    _mark_account_deletion_fenced(canonical_db, uid)
 
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
@@ -493,6 +492,7 @@ def test_canonical_account_delete_purge_emits_user_scoped_vector_outbox(monkeypa
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    _mark_account_deletion_fenced(canonical_db, uid)
     memory_id = payload["id"]
     item_path = f"users/{uid}/memory_items/{memory_id}"
     assert canonical_db.docs[item_path]["status"] == MemoryItemStatus.active.value
@@ -520,7 +520,6 @@ def test_canonical_account_delete_purge_raises_when_provider_is_unavailable(monk
     conversation_id = "conv-acct-partial"
     content = "Canonical fact for partial account delete"
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
-    _mark_account_deletion_fenced(canonical_db, uid)
 
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
@@ -533,6 +532,7 @@ def test_canonical_account_delete_purge_raises_when_provider_is_unavailable(monk
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    _mark_account_deletion_fenced(canonical_db, uid)
 
     with pytest.raises(RuntimeError, match="canonical vector purge could not reach the provider"):
         purge_canonical_derived_user_data(uid, db_client=canonical_db)

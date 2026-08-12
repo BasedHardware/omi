@@ -176,12 +176,16 @@ struct ProactiveNotificationBadge: Equatable {
   let label: String
   let systemImage: String
 
+  /// Shared glyph contract: Insight uses `sparkles` everywhere; Suggestion keeps `lightbulb`.
+  static let insightSystemImage = "sparkles"
+  static let suggestionSystemImage = "lightbulb"
+
   init(kind: ProactiveNotificationKind) {
     switch kind {
     case .suggestion:
-      (label, systemImage) = ("Suggestion", "lightbulb")
+      (label, systemImage) = ("Suggestion", Self.suggestionSystemImage)
     case .insight:
-      (label, systemImage) = ("Insight", "sparkles")
+      (label, systemImage) = ("Insight", Self.insightSystemImage)
     case .task:
       (label, systemImage) = ("Task", "checkmark.circle")
     case .memory:

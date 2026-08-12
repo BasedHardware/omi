@@ -67,9 +67,11 @@ def test_no_public_memory_mirror_delete_helpers_remain():
     assert "_purge_legacy_memories" not in source
 
 
-def test_v3_get_has_no_cutover_runtime_and_rejects_its_projection_cursor():
+def test_v3_get_has_no_cutover_runtime_and_exposes_mixed_view_cursor():
     source = (BACKEND / "routers/memories.py").read_text(encoding="utf-8")
     assert "production_runtime" not in source
     assert "composed_get_service" not in source
     assert "memory_runtime" not in source
-    assert "Memory cursor pagination is unavailable" in source
+    assert "X-Omi-Memory-Next-Cursor" in source
+    assert "read_page" in source
+    assert "Memory cursor pagination is unavailable" not in source

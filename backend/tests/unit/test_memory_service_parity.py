@@ -129,7 +129,7 @@ def service_mod(monkeypatch):
 def test_arbitrary_uids_share_one_universal_reader(service_mod):
     service = service_mod.MemoryService(db_client=_FirestoreFake())
     service._canonical.read = MagicMock(return_value=[])
-    service._history.read = MagicMock(return_value=[])
+    service.history.read = MagicMock(return_value=[])
 
     assert service.read("uid-a") == []
     assert service.read("uid-b") == []
@@ -139,7 +139,7 @@ def test_arbitrary_uids_share_one_universal_reader(service_mod):
 def test_memory_service_never_consults_per_user_store_selector(monkeypatch, service_mod):
     service = service_mod.MemoryService(db_client=_FirestoreFake())
     service._canonical.read = MagicMock(return_value=[])
-    service._history.read = MagicMock(return_value=[])
+    service.history.read = MagicMock(return_value=[])
     monkeypatch.setattr(
         service_mod,
         "resolve_memory_system",

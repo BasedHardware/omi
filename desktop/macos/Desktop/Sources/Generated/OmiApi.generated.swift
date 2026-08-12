@@ -2735,7 +2735,9 @@ public enum OmiAPI {
     public let id: String
     public let invalidAt: String?
     public let isBaseline: Bool?
+    public let isDismissed: Bool?
     public let isLocked: Bool?
+    public let isRead: Bool?
     public let kgExtracted: Bool?
     public let layer: String?
     public let manuallyAdded: Bool?
@@ -2776,7 +2778,9 @@ public enum OmiAPI {
       case id
       case invalidAt = "invalid_at"
       case isBaseline = "is_baseline"
+      case isDismissed = "is_dismissed"
       case isLocked = "is_locked"
+      case isRead = "is_read"
       case kgExtracted = "kg_extracted"
       case layer
       case manuallyAdded = "manually_added"
@@ -2819,7 +2823,9 @@ public enum OmiAPI {
       id = try c.decode(String.self, forKey: .id)
       invalidAt = try c.decodeIfPresent(String.self, forKey: .invalidAt)
       isBaseline = try c.decodeIfPresent(Bool.self, forKey: .isBaseline)
+      isDismissed = try c.decodeIfPresent(Bool.self, forKey: .isDismissed)
       isLocked = try c.decodeIfPresent(Bool.self, forKey: .isLocked)
+      isRead = try c.decodeIfPresent(Bool.self, forKey: .isRead)
       kgExtracted = try c.decodeIfPresent(Bool.self, forKey: .kgExtracted)
       layer = try c.decodeIfPresent(String.self, forKey: .layer)
       manuallyAdded = try c.decodeIfPresent(Bool.self, forKey: .manuallyAdded)
@@ -2844,7 +2850,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(String.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, captureConfidence: Double? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, headline: String? = nil, id: String, invalidAt: String? = nil, isBaseline: Bool? = nil, isLocked: Bool? = nil, kgExtracted: Bool? = nil, layer: String? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, supersededBy: String? = nil, tags: [String]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, veracity: Double? = nil, visibility: String? = nil) {
+    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, captureConfidence: Double? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, headline: String? = nil, id: String, invalidAt: String? = nil, isBaseline: Bool? = nil, isDismissed: Bool? = nil, isLocked: Bool? = nil, isRead: Bool? = nil, kgExtracted: Bool? = nil, layer: String? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, supersededBy: String? = nil, tags: [String]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, veracity: Double? = nil, visibility: String? = nil) {
       self.appId = appId
       self.arguments = arguments
       self.captureConfidence = captureConfidence
@@ -2861,7 +2867,9 @@ public enum OmiAPI {
       self.id = id
       self.invalidAt = invalidAt
       self.isBaseline = isBaseline
+      self.isDismissed = isDismissed
       self.isLocked = isLocked
+      self.isRead = isRead
       self.kgExtracted = kgExtracted
       self.layer = layer
       self.manuallyAdded = manuallyAdded
@@ -14357,7 +14365,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getMemoriesV3MemoriesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, cursor: String? = nil, deviceScope: String? = nil, clientDeviceId: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, authorization: String? = nil, xAppVersion: String? = nil) async throws -> [MemoryDB] {
+  public static func getMemoriesV3MemoriesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, cursor: String? = nil, includeArchive: Bool? = nil, deviceScope: String? = nil, clientDeviceId: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, authorization: String? = nil, xAppVersion: String? = nil) async throws -> [MemoryDB] {
     let _path = "/v3/memories"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14371,6 +14379,9 @@ public enum OmiAPI {
     }
     if let cursor {
       queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
+    }
+    if let includeArchive {
+      queryItems.append(URLQueryItem(name: "include_archive", value: String(includeArchive)))
     }
     if let deviceScope {
       queryItems.append(URLQueryItem(name: "device_scope", value: String(deviceScope)))
@@ -14669,6 +14680,32 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func updateMemoryReadStatusV3MemoriesMemoryIdReadPatch(client: OmiApiClient, memoryId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> MemoryDB {
+    let _path = "/v3/memories/\(memoryId)/read"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "PATCH"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(MemoryDB.self, from: data)
+  }
+
   public static func reviewMemoryV3MemoriesMemoryIdReviewPost(client: OmiApiClient, memoryId: String, value: Bool, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v3/memories/\(memoryId)/review"
     guard var components = URLComponents(string: client.baseURL + _path) else {
@@ -14859,5 +14896,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 399 Swift client methods generated.
+  // Total: 400 Swift client methods generated.
 }

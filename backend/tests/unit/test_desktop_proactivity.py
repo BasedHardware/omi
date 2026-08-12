@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import httpx
 import pytest
 
 from routers import desktop_proactivity
+from utils.subscription import NEO_DESKTOP_GRANDFATHER_CUTOFF
 
 
 def request(operation: str = "proactive_extraction", *, cache_key: str | None = None):
@@ -84,7 +86,8 @@ async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
         return function(*args)
 
     monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_proactivity.redis_db, "check_rate_limit", lambda *_: (False, 0, 19))
+    monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda _uid: None)
+    monkeypatch.setattr(desktop_proactivity.redis_db, "reserve_rate_limit", lambda *_: (False, 0, 19))
     with pytest.raises(desktop_proactivity.HTTPException) as exhausted:
         await desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
     assert exhausted.value.status_code == 429
@@ -92,7 +95,7 @@ async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
 
     monkeypatch.setattr(
         desktop_proactivity.redis_db,
-        "check_rate_limit",
+        "reserve_rate_limit",
         lambda *_: (_ for _ in ()).throw(RuntimeError("redis down")),
     )
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
@@ -114,12 +117,13 @@ async def test_quota_matches_expanded_director_budget(monkeypatch, operation, ex
     async def run_blocking(_, function, *args):
         return function(*args)
 
-    def check_rate_limit(uid, key, limit, window_seconds):
+    def reserve_rate_limit(uid, key, limit, window_seconds):
         observed.update(uid=uid, key=key, limit=limit, window_seconds=window_seconds)
         return True, 1, 0
 
     monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_proactivity.redis_db, "check_rate_limit", check_rate_limit)
+    monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda _uid: None)
+    monkeypatch.setattr(desktop_proactivity.redis_db, "reserve_rate_limit", reserve_rate_limit)
 
     await desktop_proactivity._consume_quota("user-1", operation)
 
@@ -127,6 +131,100 @@ async def test_quota_matches_expanded_director_budget(monkeypatch, operation, ex
     assert observed["key"] == f"desktop_{operation.value}"
     assert observed["limit"] == expected_limit
     assert observed["window_seconds"] == 24 * 60 * 60
+
+
+@pytest.mark.parametrize(
+    ("plan", "reasoning_limit", "extraction_limit"),
+    [
+        (desktop_proactivity.PlanType.basic, 100, 200),
+        (desktop_proactivity.PlanType.operator, 200, 400),
+        (desktop_proactivity.PlanType.architect, 400, 800),
+    ],
+)
+def test_quota_limit_scales_from_server_verified_subscription(plan, reasoning_limit, extraction_limit):
+    subscription = SimpleNamespace(plan=plan)
+    assert (
+        desktop_proactivity._quota_limit_for_subscription(
+            desktop_proactivity.ProactiveOperation.REASONING, subscription
+        )
+        == reasoning_limit
+    )
+    assert (
+        desktop_proactivity._quota_limit_for_subscription(
+            desktop_proactivity.ProactiveOperation.EXTRACTION, subscription
+        )
+        == extraction_limit
+    )
+
+
+def test_post_cutoff_neo_uses_free_quota_while_grandfathered_neo_keeps_full_quota():
+    cutoff = NEO_DESKTOP_GRANDFATHER_CUTOFF
+    post_cutoff = SimpleNamespace(plan=desktop_proactivity.PlanType.unlimited, current_period_start=cutoff)
+    grandfathered = SimpleNamespace(plan=desktop_proactivity.PlanType.unlimited, current_period_start=cutoff - 1)
+
+    assert (
+        desktop_proactivity._quota_limit_for_subscription(desktop_proactivity.ProactiveOperation.REASONING, post_cutoff)
+        == 100
+    )
+    assert (
+        desktop_proactivity._quota_limit_for_subscription(
+            desktop_proactivity.ProactiveOperation.REASONING, grandfathered
+        )
+        == 200
+    )
+
+
+@pytest.mark.asyncio
+async def test_offline_stub_honors_schema_without_gateway_or_quota(monkeypatch):
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("offline stub must bypass quota and gateway")
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: True)
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", forbidden)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", forbidden)
+
+    result = await desktop_proactivity.proactive_completion(request("proactive_reasoning"), uid="offline-user")
+
+    assert result.provider_model == "omi-offline-stub"
+    assert result.fallback_class == "offline_stub"
+    content = json.loads(result.response["choices"][0]["message"]["content"])
+    assert content == {"summary": ""}
+
+
+@pytest.mark.asyncio
+async def test_gateway_failure_releases_reserved_quota(monkeypatch):
+    released = []
+
+    class GatewayClient:
+        async def post(self, *_args, **_kwargs):
+            raise httpx.ConnectError("gateway unavailable")
+
+    class Semaphore:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    async def allow(*_):
+        return None
+
+    async def release(uid, operation):
+        released.append((uid, operation))
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", allow)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_base_url", lambda: "http://gateway")
+    monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+
+    with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
+        await desktop_proactivity.proactive_completion(request(), uid="user-1")
+
+    assert unavailable.value.status_code == 502
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
 
 
 @pytest.mark.asyncio
@@ -159,6 +257,7 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
     async def allow(*_):
         return None
 
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
     monkeypatch.setattr(desktop_proactivity, "_consume_quota", allow)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())

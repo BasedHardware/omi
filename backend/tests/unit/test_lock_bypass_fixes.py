@@ -927,19 +927,25 @@ class TestUsersLockEnforcement:
         from routers.users import delete_person_endpoint
         from fastapi import HTTPException
 
-        with patch('routers.users.get_conversation', return_value=_make_conversation(locked=True)):
+        with patch(
+            "routers.users.get_conversation",
+            return_value=_make_conversation(locked=True),
+        ):
             with pytest.raises(HTTPException) as exc_info:
-                delete_person_endpoint(memory_id='conv-1', uid='test-uid')
+                delete_person_endpoint(memory_id="conv-1", uid="test-uid")
             assert exc_info.value.status_code == 402
 
     def test_followup_question_allows_unlocked(self):
         """delete_person_endpoint should proceed for unlocked conversations."""
         from routers.users import delete_person_endpoint
 
-        with patch('routers.users.get_conversation', return_value=_make_conversation(locked=False)):
-            with patch('routers.users.followup_question_prompt', return_value='test result'):
-                result = delete_person_endpoint(memory_id='conv-1', uid='test-uid')
-        assert result['result'] == 'test result'
+        with patch(
+            "routers.users.get_conversation",
+            return_value=_make_conversation(locked=False),
+        ):
+            with patch("routers.users.followup_question_prompt", return_value="test result"):
+                result = delete_person_endpoint(memory_id="conv-1", uid="test-uid")
+        assert result["result"] == "test result"
 
     def test_daily_summary_excludes_locked(self):
         """L3: test_daily_summary must filter locked conversations before processing."""
@@ -949,70 +955,78 @@ class TestUsersLockEnforcement:
 
         data = [
             _make_conversation(locked=True),
-            _make_conversation(locked=False, conversation_id='conv-2'),
-            _make_conversation(locked=True, conversation_id='conv-3'),
+            _make_conversation(locked=False, conversation_id="conv-2"),
+            _make_conversation(locked=True, conversation_id="conv-3"),
         ]
         conversations_db.get_conversations = MagicMock(return_value=data)
         notification_db.get_user_time_zone = MagicMock(return_value=None)
-        notification_db.get_all_tokens = MagicMock(return_value=['token1'])
-        daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
+        notification_db.get_all_tokens = MagicMock(return_value=["token1"])
+        daily_summaries_db.create_daily_summary = MagicMock(return_value="summary-1")
 
         from routers.users import test_daily_summary
 
-        mock_gen = MagicMock(return_value={'headline': 'Test', 'overview': 'Overview'})
-        with patch('routers.users.generate_comprehensive_daily_summary', mock_gen):
-            with patch('routers.users.send_notification'):
-                result = test_daily_summary(uid='test-uid')
+        mock_gen = MagicMock(return_value={"headline": "Test", "overview": "Overview"})
+        with patch("routers.users.generate_comprehensive_daily_summary", mock_gen):
+            with patch("routers.users.send_notification"):
+                result = test_daily_summary(uid="test-uid")
 
         # Verify only unlocked conversations were passed to summary generation
         call_args = mock_gen.call_args
         conversations_passed = call_args[0][1]  # second positional arg
         assert len(conversations_passed) == 1
-        assert conversations_passed[0].id == 'conv-2'
+        assert conversations_passed[0].id == "conv-2"
 
     def test_gdpr_export_includes_locked(self):
         """H6: GDPR export must include locked conversations (Art. 15)."""
         import database.conversations as conversations_db
-        import database.memories as memories_db
         import database.chat as chat_db
 
         locked_conv = _make_conversation(locked=True)
-        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+        unlocked_conv = _make_conversation(locked=False, conversation_id="conv-2")
         conversations_db.iter_all_conversations = MagicMock(return_value=iter([locked_conv, unlocked_conv]))
-        memories_db.get_non_filtered_memories = MagicMock(return_value=[])
         chat_db.iter_all_messages = MagicMock(return_value=iter([]))
+
+        memory_service = MagicMock()
+        exported_memory = MagicMock(model_dump=MagicMock(return_value={"id": "mem-1"}))
+        memory_service.iter_export_memories.return_value = iter([exported_memory])
 
         # The export generator lives in services.users.data_export, which binds
         # these helpers at module level. Patch the service-level symbols so the
         # stub environment returns controlled data instead of MagicMock defaults.
         # Patches must stay active during body consumption since the generator is lazy.
-        with patch('services.users.data_export.get_user_profile', return_value={'name': 'Test'}):
-            with patch('services.users.data_export.get_people', return_value=[]):
-                with patch('services.users.data_export.get_standalone_action_items', return_value=[]):
-                    from routers.users import export_all_user_data
+        with patch("services.users.data_export.get_user_profile", return_value={"name": "Test"}):
+            with patch("services.users.data_export.get_people", return_value=[]):
+                with patch(
+                    "services.users.data_export.get_standalone_action_items",
+                    return_value=[],
+                ):
+                    with patch("services.users.data_export.MemoryService", return_value=memory_service):
+                        from routers.users import export_all_user_data
 
-                    response = export_all_user_data(uid='test-uid')
+                        response = export_all_user_data(uid="test-uid")
 
-                    # Consume body inside patches — the generator is lazy.
-                    # StreamingResponse wraps sync generators as async iterators,
-                    # so iterate the underlying generator directly.
-                    import asyncio
+                        # Consume body inside patches — the generator is lazy.
+                        # StreamingResponse wraps sync generators as async iterators,
+                        # so iterate the underlying generator directly.
+                        import asyncio
 
-                    async def _consume():
-                        parts = []
-                        async for chunk in response.body_iterator:
-                            parts.append(chunk)
-                        return ''.join(parts)
+                        async def _consume():
+                            parts = []
+                            async for chunk in response.body_iterator:
+                                parts.append(chunk)
+                            return "".join(parts)
 
-                    body = asyncio.run(_consume())
+                        body = asyncio.run(_consume())
 
         import json
 
         data = json.loads(body)
         # Both locked and unlocked conversations must be in the export
-        assert len(data['conversations']) == 2
-        assert data['conversations'][0]['is_locked'] is True
-        assert data['conversations'][1]['id'] == 'conv-2'
+        assert len(data["conversations"]) == 2
+        assert data["conversations"][0]["is_locked"] is True
+        assert data["conversations"][1]["id"] == "conv-2"
+        assert data["memories"] == [{"id": "mem-1"}]
+        memory_service.iter_export_memories.assert_called_once_with("test-uid", include_archive=True)
 
 
 # =============================================================================
@@ -1338,40 +1352,40 @@ class TestPromptDataLockFilter:
         from models.memories import MemoryDB
 
         locked_mem = {
-            'id': 'mem-1',
-            'uid': 'test-uid',
-            'content': 'LOCKED_SECRET',
-            'is_locked': True,
-            'manually_added': False,
-            'category': 'interesting',
-            'created_at': '2024-01-01T00:00:00+00:00',
-            'updated_at': '2024-01-01T00:00:00+00:00',
+            "id": "mem-1",
+            "uid": "test-uid",
+            "content": "LOCKED_SECRET",
+            "is_locked": True,
+            "manually_added": False,
+            "category": "interesting",
+            "created_at": "2024-01-01T00:00:00+00:00",
+            "updated_at": "2024-01-01T00:00:00+00:00",
         }
         unlocked_mem = {
-            'id': 'mem-2',
-            'uid': 'test-uid',
-            'content': 'VISIBLE_CONTENT',
-            'is_locked': False,
-            'manually_added': False,
-            'category': 'interesting',
-            'created_at': '2024-01-01T00:00:00+00:00',
-            'updated_at': '2024-01-01T00:00:00+00:00',
+            "id": "mem-2",
+            "uid": "test-uid",
+            "content": "VISIBLE_CONTENT",
+            "is_locked": False,
+            "manually_added": False,
+            "category": "interesting",
+            "created_at": "2024-01-01T00:00:00+00:00",
+            "updated_at": "2024-01-01T00:00:00+00:00",
         }
         with (
             patch(
-                'utils.llms.memory.MemoryService.export_memories',
+                "utils.llms.memory.MemoryService.read",
                 return_value=[MemoryDB(**locked_mem), MemoryDB(**unlocked_mem)],
             ),
-            patch('utils.llms.memory.get_user_name', return_value='Test'),
+            patch("utils.llms.memory.get_user_name", return_value="Test"),
         ):
             from utils.llms.memory import get_prompt_data
 
-            _, baseline, user_made, generated = get_prompt_data('test-uid')
+            _, baseline, user_made, generated = get_prompt_data("test-uid")
 
         # Only unlocked memory should appear
         all_mems = baseline + user_made + generated
         assert len(all_mems) == 1
-        assert all_mems[0].content == 'VISIBLE_CONTENT'
+        assert all_mems[0].content == "VISIBLE_CONTENT"
 
 
 # =============================================================================

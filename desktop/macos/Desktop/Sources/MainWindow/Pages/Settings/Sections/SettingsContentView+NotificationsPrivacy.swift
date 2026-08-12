@@ -36,10 +36,30 @@ extension SettingsContentView {
 
             settingRow(
               title: "Active Period",
-              subtitle: "When proactive notifications may appear (24-hour time)",
+              subtitle: SettingsControlMetrics.notificationActivePeriodSubtitle(
+                startMinute: notificationActiveStartMinute,
+                endMinute: notificationActiveEndMinute),
               settingId: "notifications.activeperiod"
             ) {
               HStack(spacing: OmiSpacing.sm) {
+                if let allDayLabel = SettingsControlMetrics.notificationActivePeriodSummaryLabel(
+                  startMinute: notificationActiveStartMinute,
+                  endMinute: notificationActiveEndMinute)
+                {
+                  Text(allDayLabel)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
+                    .foregroundColor(Ink.primary)
+                    .padding(.horizontal, OmiSpacing.sm)
+                    .padding(.vertical, OmiSpacing.xxs)
+                    .background(
+                      RoundedRectangle(
+                        cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous
+                      )
+                      .fill(Ink.accent.opacity(0.16))
+                    )
+                    .accessibilityLabel("Active period is all day")
+                }
+
                 notificationActivePeriodPicker(
                   selection: $notificationActiveStartMinute,
                   accessibilityLabel: "Active period start"
@@ -162,7 +182,7 @@ extension SettingsContentView {
             GlassSeparator()
 
             settingRow(
-              title: "Summary Time", subtitle: "When to send your daily summary",
+              title: "Summary Time", subtitle: "When to send your daily summary (hour only)",
               settingId: "notifications.summarytime"
             ) {
               DatePicker(
@@ -174,7 +194,13 @@ extension SettingsContentView {
               .labelsHidden()
               .fixedSize()
               .onChange(of: dailySummaryTime) { _, selectedTime in
-                let hour = SettingsControlMetrics.dailySummaryHour(from: selectedTime)
+                // Storage is hour-only; snap minutes to :00 in the control so 20:45 never
+                // appears as a saved value that reopens as 20:00.
+                let canonical = SettingsControlMetrics.canonicalizeDailySummaryTime(selectedTime)
+                if canonical != selectedTime {
+                  dailySummaryTime = canonical
+                }
+                let hour = SettingsControlMetrics.dailySummaryHour(from: canonical)
                 guard hour != dailySummaryHour else { return }
                 dailySummaryHour = hour
                 updateDailySummarySettings(hour: hour)

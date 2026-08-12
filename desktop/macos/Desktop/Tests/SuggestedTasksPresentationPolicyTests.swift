@@ -33,4 +33,22 @@ final class SuggestedTasksPresentationPolicyTests: XCTestCase {
         candidateCount: 2
       ))
   }
+
+  func testCollapsedDeepLinkRequiresExpandBeforeCandidateScrollTargetExists() {
+    XCTAssertTrue(
+      SuggestedTasksPresentationPolicy.shouldExpandBeforeScrollingToCandidate(isExpanded: false))
+    XCTAssertFalse(
+      SuggestedTasksPresentationPolicy.shouldExpandBeforeScrollingToCandidate(isExpanded: true))
+    XCTAssertFalse(
+      SuggestedTasksPresentationPolicy.showsCandidates(candidateCount: 1, isExpanded: false),
+      "collapsed section must not mount suggested-<id> scroll targets")
+    XCTAssertTrue(
+      SuggestedTasksPresentationPolicy.showsCandidates(candidateCount: 1, isExpanded: true))
+  }
+
+  func testDismissReasonChoicesPreserveAttributionContract() {
+    XCTAssertEqual(
+      SuggestedCandidateDismissReasons.choices.map(\.reason),
+      [.already_handled, .not_mine, .not_useful])
+  }
 }

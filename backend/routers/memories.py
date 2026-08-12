@@ -46,6 +46,15 @@ class MemoryValueRequest(BaseModel):
     value: str
 
 
+class MemoryReadStatusRequest(BaseModel):
+    """Durable UI read/dismiss mutation for a single memory."""
+
+    model_config = {"extra": "forbid"}
+
+    is_read: Optional[bool] = None
+    is_dismissed: Optional[bool] = None
+
+
 class ReviewResolutionResponse(BaseModel):
     model_config = {"extra": "allow"}
 
@@ -63,6 +72,7 @@ MEMORIES_BATCH_DELETE_MAX = 100
 _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER = 'X-Omi-Memory-Canonical-Lifecycle-Exposed'
 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'X-Omi-Memory-Device-Scope-Supported'
 _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER = 'X-Omi-Memory-Default-Delete-Supported'
+_MEMORY_NEXT_CURSOR_HEADER = 'X-Omi-Memory-Next-Cursor'
 
 
 class BatchMemoriesRequest(BaseModel):
@@ -338,15 +348,18 @@ async def create_memory(
 
 
 @router.post(
-    '/v3/memories/batch',
-    tags=['memories'],
+    "/v3/memories/batch",
+    tags=["memories"],
     response_model=BatchMemoriesResponse,
 )
 async def create_memories_batch(
     request_context: Request,
     request: BatchMemoriesRequest,
     uid: str = Depends(
-        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:batch"))
+        cast(
+            Callable[..., str],
+            _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:batch"),
+        )
     ),
 ):
     await _guard_import_memory_write(request_context, endpoint="/v3/memories/batch", uid=uid)
@@ -358,8 +371,8 @@ async def create_memories_batch(
     per user), blowing through the 120 req/min per-Authorization Cloud Armor
     rule and collaterally 429-ing unrelated calls (goals, sync, chat).
 
-    One HTTP request here = one Firestore batch write + one embeddings call +
-    one Pinecone upsert, regardless of batch size.
+    One HTTP request delegates the canonical batch write to MemoryService. The
+    canonical outbox owns vector projection; this route never writes Pinecone.
     """
     if not request.memories:
         return BatchMemoriesResponse(memories=[], created_count=0)
@@ -400,7 +413,7 @@ async def create_memories_batch(
             client_device_id=device_context.client_device_id,
         )
         memory_dbs.append(memory_db)
-        if memory.visibility == 'public':
+        if memory.visibility == "public":
             has_public = True
 
     parity_capture = _start_memory_parity_capture(
@@ -413,7 +426,7 @@ async def create_memories_batch(
     try:
         server_memories = await run_blocking(
             db_executor,
-            MemoryService(db_client=getattr(db_client_module, 'db', None)).create_external_memory_batch,
+            MemoryService(db_client=getattr(db_client_module, "db", None)).create_external_memory_batch,
             uid,
             memory_dbs,
             memory_system=MemorySystem.CANONICAL,
@@ -494,6 +507,10 @@ def get_memories(
     limit: int = 100,
     offset: int = 0,
     cursor: Optional[str] = None,
+    include_archive: bool = Query(
+        False,
+        description="When true, include Archive-tier memories that are otherwise excluded from default reads.",
+    ),
     device_scope: str = Query('all'),
     client_device_id: Optional[str] = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
@@ -511,33 +528,77 @@ def get_memories(
     _set_canonical_lifecycle_exposure_header(response, exposed=True)
     _set_default_delete_capability_header(response, supported=True)
     db_client = getattr(db_client_module, 'db', None)
+    bounded_limit = max(1, min(limit, 500))
+    bounded_offset = max(0, offset)
 
-    # The retired cutover projection cannot page the universal mixed view: it
-    # omits protected historical rows.  Fail explicitly instead of allowing a
-    # cursor to select a second memory authority. Released clients use offset
-    # paging; a future cursor must encode both canonical and historical streams.
-    if cursor is not None:
+    response_headers = {
+        _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'true',
+        _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'true',
+        _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'true',
+        'Cache-Control': 'no-store',
+    }
+
+    # Cursor and legacy offset paging are mutually exclusive. Cursor mode owns
+    # accounts beyond the bounded offset compatibility window.
+    if cursor is not None and bounded_offset != 0:
         raise HTTPException(
             status_code=400,
-            detail="Memory cursor pagination is unavailable; use limit and offset",
+            detail="Memory cursor pagination cannot be combined with offset",
         )
+
+    if cursor is not None:
+        page = MemoryService(db_client=db_client).read_page(
+            uid,
+            limit=bounded_limit,
+            cursor=cursor,
+            device_scope_request=scope_request,
+            include_pending_processing=True,
+            include_archive=include_archive,
+        )
+        if page.next_cursor:
+            response_headers[_MEMORY_NEXT_CURSOR_HEADER] = page.next_cursor
+        return memory_list_response(
+            page.memories,
+            MemoryApiExposure.CANONICAL,
+            headers=response_headers,
+        )
+
+    if bounded_offset == 0:
+        # Prefer the composite cursor on the first page so sync/export can continue
+        # past the legacy 5000 offset window without a second request shape.
+        try:
+            page = MemoryService(db_client=db_client).read_page(
+                uid,
+                limit=bounded_limit,
+                cursor=None,
+                device_scope_request=scope_request,
+                include_pending_processing=True,
+                include_archive=include_archive,
+            )
+        except HTTPException as exc:
+            if exc.status_code != 503 or exc.detail != "Memory cursor unavailable":
+                raise
+        else:
+            if page.next_cursor:
+                response_headers[_MEMORY_NEXT_CURSOR_HEADER] = page.next_cursor
+            return memory_list_response(
+                page.memories,
+                MemoryApiExposure.CANONICAL,
+                headers=response_headers,
+            )
 
     memories = MemoryService(db_client=db_client).read(
         uid,
-        limit=max(1, min(limit, 500)),
-        offset=max(0, offset),
+        limit=bounded_limit,
+        offset=bounded_offset,
         device_scope_request=scope_request,
         include_pending_processing=True,
+        include_archive=include_archive,
     )
     return memory_list_response(
         memories,
         MemoryApiExposure.CANONICAL,
-        headers={
-            _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'true',
-            _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'true',
-            _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'true',
-            'Cache-Control': 'no-store',
-        },
+        headers=response_headers,
     )
 
 
@@ -735,6 +796,32 @@ def update_memory_visibility(
     MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
     submit_with_context(postprocess_executor, update_personas_async, uid)
     return {'status': 'ok'}
+
+
+@router.patch('/v3/memories/{memory_id}/read', tags=['memories'], response_model=MemoryDB)
+def update_memory_read_status(
+    memory_id: str,
+    request: MemoryReadStatusRequest,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
+    ),
+):
+    """Persist durable insight/memory read and dismiss state for desktop clients."""
+
+    if request.is_read is None and request.is_dismissed is None:
+        raise HTTPException(status_code=422, detail="Missing memory read mutation value")
+    db_client = getattr(db_client_module, 'db', None)
+    _validate_mutable_memory(uid, memory_id, db_client=db_client)
+    try:
+        memory = MemoryService(db_client=db_client).update_read_status(
+            uid,
+            memory_id,
+            is_read=request.is_read,
+            is_dismissed=request.is_dismissed,
+        )
+    except ValueError:
+        raise HTTPException(status_code=404, detail='Memory not found')
+    return _memory_response(memory)
 
 
 @router.patch('/v3/memories/{memory_id}/baseline', tags=['memories'], response_model=MemoryMutationResponse)

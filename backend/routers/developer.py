@@ -334,26 +334,29 @@ def get_memories(
         raise HTTPException(
             status_code=app_key_grant.status_code,
             detail={
-                'enabled': False,
-                'reason': app_key_grant.reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-                'app_id': auth_context.app_id,
-                'key_id': auth_context.key_id,
+                "enabled": False,
+                "reason": app_key_grant.reason,
+                "consumer": "developer_api",
+                "archive_default_visible": False,
+                "archive_capability": False,
+                "app_id": auth_context.app_id,
+                "key_id": auth_context.key_id,
             },
         )
 
     service = MemoryService(db_client=db)
     allowed = {category.value for category in category_list} if category_list else None
     if allowed is None:
-        memories = service.read(uid, limit=limit, offset=offset)
+        # Developer creates go through required-processing and remain pending
+        # until promotion. List must include those just-created pending rows so
+        # create/list/fetch stay consistent on the same surface.
+        memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)
         valid_memories = []
         for memory in memories:
             try:
-                valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode='json')))
+                valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
             except (AttributeError, TypeError, ValidationError, ValueError):
-                logger.warning('Skipping malformed memory in Developer API list')
+                logger.warning("Skipping malformed memory in Developer API list")
         return valid_memories
     # Category is a sparse filter.  Read ordered universal pages until the
     # requested category page is filled instead of filtering after a raw page
@@ -364,26 +367,26 @@ def get_memories(
     max_scan = 5000
     while scan_offset < max_scan and len(matched) < target_end:
         batch_limit = min(500, max_scan - scan_offset)
-        batch = service.read(uid, limit=batch_limit, offset=scan_offset)
+        batch = service.read(uid, limit=batch_limit, offset=scan_offset, include_pending_processing=True)
         if not batch:
             break
         scan_offset += len(batch)
         if allowed is None:
             matched.extend(batch)
         else:
-            matched.extend(memory for memory in batch if getattr(memory.category, 'value', memory.category) in allowed)
+            matched.extend(memory for memory in batch if getattr(memory.category, "value", memory.category) in allowed)
         if len(batch) < batch_limit:
             break
     memories = matched[offset:target_end]
     valid_memories = []
     for memory in memories:
         try:
-            valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode='json')))
+            valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
         except (AttributeError, TypeError, ValidationError, ValueError):
             # MemoryService normally returns validated MemoryDB rows, but a
             # malformed historical adapter row must not turn this compatibility
             # endpoint into a 500 for every otherwise healthy memory.
-            logger.warning('Skipping malformed memory in Developer API list')
+            logger.warning("Skipping malformed memory in Developer API list")
     return valid_memories
 
 

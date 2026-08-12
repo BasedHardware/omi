@@ -55,6 +55,13 @@ enum NotificationPermissionPolicy {
     @unknown default: false
     }
   }
+
+  static func hasVisibleAlertSurface(
+    status: UNAuthorizationStatus,
+    alertStyle: UNAlertStyle
+  ) -> Bool {
+    isGranted(status) && alertStyle != .none
+  }
 }
 
 @MainActor

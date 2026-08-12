@@ -1186,7 +1186,7 @@ class MemoriesViewModel: ObservableObject {
 
     log("MemoriesViewModel: Starting one-time cache reconcile for user \(userId)")
 
-    var offset = 0
+    var cursor: String? = nil
     let batchSize = 500
     var backendIds = Set<String>()
     let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
@@ -1195,16 +1195,16 @@ class MemoriesViewModel: ObservableObject {
       while true {
         let page = try await APIClient.shared.getMemoriesPage(
           limit: batchSize,
-          offset: offset,
+          cursor: cursor,
           authorizationSnapshot: authorizationSnapshot)
         let batch = page.memories
-        if batch.isEmpty { break }
+        if batch.isEmpty && page.nextCursor == nil { break }
 
         try await MemoryStorage.shared.syncServerMemories(batch)
         for memory in batch { backendIds.insert(memory.id) }
-        offset += batch.count
 
-        if batch.count < batchSize { break }
+        guard let nextCursor = page.nextCursor, !nextCursor.isEmpty else { break }
+        cursor = nextCursor
       }
 
       // Guard against pruning on a partial/failed pull: only reconcile when the
@@ -1242,7 +1242,7 @@ class MemoriesViewModel: ObservableObject {
 
     log("MemoriesViewModel: Starting one-time default-scope sync for user \(userId)")
 
-    var offset = 0
+    var cursor: String? = nil
     var totalSynced = 0
     let batchSize = 500
     let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
@@ -1251,17 +1251,17 @@ class MemoriesViewModel: ObservableObject {
       while true {
         let page = try await APIClient.shared.getMemoriesPage(
           limit: batchSize,
-          offset: offset,
+          cursor: cursor,
           authorizationSnapshot: authorizationSnapshot)
         let batch = page.memories
-        if batch.isEmpty { break }
+        if batch.isEmpty && page.nextCursor == nil { break }
 
         try await MemoryStorage.shared.syncServerMemories(batch)
         totalSynced += batch.count
-        offset += batch.count
         log("MemoriesViewModel: Full sync progress - \(totalSynced) additional memories synced")
 
-        if batch.count < batchSize { break }
+        guard let nextCursor = page.nextCursor, !nextCursor.isEmpty else { break }
+        cursor = nextCursor
       }
 
       UserDefaults.standard.set(true, forKey: syncKey)

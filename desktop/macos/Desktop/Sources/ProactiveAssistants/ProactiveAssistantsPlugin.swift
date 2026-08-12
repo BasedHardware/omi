@@ -9,12 +9,30 @@ import CoreGraphics
 /// background-polling flags, every subsequent tick is gated off even though
 /// monitoring is nominally on.
 enum ProactiveCapturePolicy {
+  enum ResumeMode: Equatable {
+    case normalCapture
+    case backgroundPolling
+    case recovery
+    case paused
+  }
+
   static func captureTickAllowed(
     isMonitoring: Bool,
     isInRecoveryMode: Bool,
     isInBackgroundPolling: Bool
   ) -> Bool {
     isMonitoring && !isInRecoveryMode && !isInBackgroundPolling
+  }
+
+  static func resumeMode(
+    isMonitoring: Bool,
+    isInRecoveryMode: Bool,
+    isInBackgroundPolling: Bool
+  ) -> ResumeMode {
+    guard isMonitoring else { return .paused }
+    if isInBackgroundPolling { return .backgroundPolling }
+    if isInRecoveryMode { return .recovery }
+    return .normalCapture
   }
 }
 
@@ -72,6 +90,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var lastCaptureSucceeded = true
   private var wasMonitoringBeforeSleep = false
   private var wasMonitoringBeforeLock = false
+  private var isScreenLocked = false
   private var systemEventObservers: [NSObjectProtocol] = []
 
   // Video call throttling: reduce capture frequency when a call app is frontmost
@@ -422,6 +441,41 @@ public class ProactiveAssistantsPlugin: NSObject {
     log(
       "ProactiveAssistantsPlugin: Capture poll set to \(String(format: "%.1f", capturePollInterval))s, heartbeat \(String(format: "%.1f", heartbeat))s (\(reason))"
     )
+  }
+
+  /// Suspend every timer that can capture or distribute context while the
+  /// display is unavailable. Keeping the background-recovery mode flag lets
+  /// resume restore that mode without accidentally starting the 1 Hz capture
+  /// loop alongside its 60-second poller.
+  private func pauseCaptureForSystemInterruption() {
+    captureTimer?.invalidate()
+    captureTimer = nil
+    analysisDelayTimer?.invalidate()
+    analysisDelayTimer = nil
+    distributionDebounceTimer?.invalidate()
+    distributionDebounceTimer = nil
+    isInDelayPeriod = false
+    backgroundPollTimer?.invalidate()
+    backgroundPollTimer = nil
+  }
+
+  private func resumeCaptureAfterSystemInterruption(reason: String) {
+    switch ProactiveCapturePolicy.resumeMode(
+      isMonitoring: isMonitoring,
+      isInRecoveryMode: isInRecoveryMode,
+      isInBackgroundPolling: isInBackgroundPolling)
+    {
+    case .backgroundPolling:
+      scheduleBackgroundPollingTimer()
+      log("ProactiveAssistantsPlugin: Background polling resumed after \(reason)")
+    case .normalCapture:
+      restartCaptureTimer(reason: reason)
+    case .recovery:
+      scheduleRecoveryTimer()
+      log("ProactiveAssistantsPlugin: Recovery polling resumed after \(reason)")
+    case .paused:
+      break
+    }
   }
 
   /// Stop monitoring
@@ -1175,9 +1229,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         log(
           "ProactiveAssistantsPlugin: System going to sleep, wasMonitoring=\(self?.wasMonitoringBeforeSleep ?? false)")
 
-        // Pause the capture timer while sleeping (same as screen lock)
-        self?.captureTimer?.invalidate()
-        self?.captureTimer = nil
+        self?.pauseCaptureForSystemInterruption()
         ContextVisitCoordinator.interruptForSleepIfEnabled()
       }
     }
@@ -1228,8 +1280,17 @@ public class ProactiveAssistantsPlugin: NSObject {
     screenCaptureFailureTracker.reset()
     lastCaptureSucceeded = true
 
+    let shouldRearmVisit = ContextVisitSystemResumePolicy.shouldRearmContextVisit(
+      bucketsEnabled: ContextBucketsFeature.isEnabled,
+      wasMonitoringBeforeEvent: wasMonitoringBeforeSleep,
+      isMonitoring: isMonitoring,
+      appName: currentApp,
+      isAppExcluded: currentApp.map { RewindSettings.shared.isAppExcluded($0) } ?? true,
+      displayAvailable: !isScreenLocked
+    )
+
     // If we were monitoring before sleep, reinitialize capture service and restart timer
-    if wasMonitoringBeforeSleep && isMonitoring {
+    if wasMonitoringBeforeSleep && isMonitoring && !isScreenLocked {
       log("ProactiveAssistantsPlugin: Restarting screen capture after wake")
 
       // Reinitialize the screen capture service
@@ -1239,13 +1300,16 @@ public class ProactiveAssistantsPlugin: NSObject {
       refreshScreenRecordingPermission()
 
       // Restart capture timer after a brief delay to let the system settle
-      captureTimer?.invalidate()
-      captureTimer = nil
+      pauseCaptureForSystemInterruption()
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-        guard let self = self, self.isMonitoring else { return }
-        self.restartCaptureTimer(reason: "system wake")
-        log("ProactiveAssistantsPlugin: Capture timer restarted after wake")
+        guard let self = self, self.isMonitoring, !self.isScreenLocked else { return }
+        self.resumeCaptureAfterSystemInterruption(reason: "system wake")
+        log("ProactiveAssistantsPlugin: Capture scheduling resumed after wake")
       }
+    }
+
+    if shouldRearmVisit {
+      rearmContextVisitAfterSystemResume(reason: "system wake")
     }
 
     wasMonitoringBeforeSleep = false
@@ -1255,20 +1319,28 @@ public class ProactiveAssistantsPlugin: NSObject {
   private func handleScreenLock() {
     log("ProactiveAssistantsPlugin: Screen locked - pausing capture")
 
+    isScreenLocked = true
     wasMonitoringBeforeLock = isMonitoring
 
-    // Pause the capture timer while locked
-    captureTimer?.invalidate()
-    captureTimer = nil
+    pauseCaptureForSystemInterruption()
   }
 
   /// Handle screen unlock - resume capture
   private func handleScreenUnlock() {
     log("ProactiveAssistantsPlugin: Screen unlocked - resuming capture")
 
+    isScreenLocked = false
     // Reset failure counter
     screenCaptureFailureTracker.reset()
     lastCaptureSucceeded = true
+
+    let shouldRearmVisit = ContextVisitSystemResumePolicy.shouldRearmContextVisit(
+      bucketsEnabled: ContextBucketsFeature.isEnabled,
+      wasMonitoringBeforeEvent: wasMonitoringBeforeLock,
+      isMonitoring: isMonitoring,
+      appName: currentApp,
+      isAppExcluded: currentApp.map { RewindSettings.shared.isAppExcluded($0) } ?? true
+    )
 
     if wasMonitoringBeforeLock && isMonitoring {
       log("ProactiveAssistantsPlugin: Restarting capture timer after unlock")
@@ -1276,8 +1348,7 @@ public class ProactiveAssistantsPlugin: NSObject {
       // Reinitialize screen capture service to ensure fresh state
       screenCaptureService = ScreenCaptureService()
 
-      // Restart capture timer
-      restartCaptureTimer(reason: "screen unlock")
+      resumeCaptureAfterSystemInterruption(reason: "screen unlock")
     } else if wasMonitoringBeforeLock && !isMonitoring {
       // We stopped monitoring while locked, restart it
       log("ProactiveAssistantsPlugin: Restarting monitoring after unlock")
@@ -1288,7 +1359,29 @@ public class ProactiveAssistantsPlugin: NSObject {
       }
     }
 
+    if shouldRearmVisit {
+      rearmContextVisitAfterSystemResume(reason: "screen unlock")
+    }
+
     wasMonitoringBeforeLock = false
+  }
+
+  /// Sleep/lock finalizes the active visit. The next capture tick often sees the
+  /// same app/title, so context-switch detection will not open a new visit unless
+  /// we rearm explicitly for the still-frontmost context.
+  private func rearmContextVisitAfterSystemResume(reason: String) {
+    guard let appName = currentApp, !appName.isEmpty else { return }
+    let windowTitle = currentWindowTitle
+    Task {
+      do {
+        let fence = try await ContextVisitCoordinator.shared.rearmAfterSystemResume(
+          appName: appName, windowTitle: windowTitle)
+        await ContextProactivityEngine.shared.contextEntered(fence)
+        log("ProactiveAssistantsPlugin: Rearmed context visit after \(reason)")
+      } catch {
+        logError("ProactiveAssistantsPlugin: Failed to rearm context visit after \(reason)", error: error)
+      }
+    }
   }
 
   /// Handle repeated capture failures (likely permission issue)
@@ -1441,6 +1534,11 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     // Start recovery timer - check every 5 seconds if we can capture again
     // Using a slower interval than normal capture to reduce CPU overhead from repeated failed ScreenCaptureKit calls
+    scheduleRecoveryTimer()
+  }
+
+  private func scheduleRecoveryTimer() {
+    guard isInRecoveryMode, captureTimer == nil else { return }
     captureTimer = Timer.scheduledTimer(withTimeInterval: recoveryInterval, repeats: true) { [weak self] _ in
       Task { @MainActor in
         await self?.attemptRecovery()
@@ -1527,6 +1625,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     captureTimer?.invalidate()
     captureTimer = nil
 
+    scheduleBackgroundPollingTimer()
+  }
+
+  private func scheduleBackgroundPollingTimer() {
+    guard isInBackgroundPolling, backgroundPollTimer == nil else { return }
     backgroundPollTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
       Task { @MainActor in
         await self?.backgroundPollAttempt()

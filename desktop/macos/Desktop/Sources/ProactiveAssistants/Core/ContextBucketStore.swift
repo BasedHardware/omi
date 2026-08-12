@@ -61,6 +61,108 @@ enum ContextBucketGarbageCollection {
   }
 }
 
+/// Resolves the durable bucket for a visit identity. Extracted so subject/bucket
+/// consistency after explicit rebinding is testable without the singleton store.
+enum ContextBucketVisitResolver {
+  static func persistedBucketID(
+    in db: Database,
+    visitID: Int64,
+    contextGeneration: Int64,
+    poolEpoch: Int
+  ) throws -> String? {
+    try String.fetchOne(
+      db,
+      sql: """
+        SELECT bucketID FROM context_visits
+        WHERE id = ? AND contextGeneration = ? AND poolEpoch = ? AND outcome = 'active'
+        """,
+      arguments: [visitID, contextGeneration, poolEpoch])
+  }
+
+  static func resolveBucketID(
+    in db: Database,
+    referenceHash: String,
+    normalizedTitle: String?,
+    startedAt: Date
+  ) throws -> String? {
+    let binding = try Row.fetchOne(
+      db,
+      sql: "SELECT * FROM subject_bindings WHERE referenceHash = ?",
+      arguments: [referenceHash])
+    let subjectKind: String = binding?["subjectKind"] ?? "context"
+    let subjectID: String = binding?["subjectID"] ?? referenceHash
+    let workstreamID: String? = binding?["workstreamID"]
+    let confidence: Double = binding?["confidence"] ?? 0.5
+    let source: String = binding?["source"] ?? "repeat_cooccurrence"
+
+    if let existing: String = binding?["bucketID"] {
+      let consistent =
+        try Bool.fetchOne(
+          db,
+          sql: """
+            SELECT EXISTS(
+              SELECT 1 FROM context_buckets
+              WHERE id = ? AND subjectKind = ? AND subjectID = ? AND workstreamID IS ?
+            )
+            """,
+          arguments: [existing, subjectKind, subjectID, workstreamID]) ?? false
+      if consistent { return existing }
+      // Explicit rebinding can leave a stale bucketID pointing at the previous
+      // subject. Fall through and re-resolve for the binding's current subject.
+    }
+
+    guard normalizedTitle != nil else { return nil }
+    // A subject binding (including explicit_open) already owns this identity, so
+    // do not require a prior completed visit before attaching the subject bucket.
+    if binding == nil {
+      let recentCutoff = startedAt.addingTimeInterval(-7 * 24 * 60 * 60)
+      let previousVisits =
+        try Int.fetchOne(
+          db,
+          sql:
+            "SELECT COUNT(*) FROM context_visits WHERE referenceHash = ? AND outcome = 'completed' AND startedAt >= ?",
+          arguments: [referenceHash, recentCutoff]) ?? 0
+      guard previousVisits >= 1 else { return nil }
+    }
+
+    let id = UUID().uuidString.lowercased()
+    let existingSubjectBucket = try String.fetchOne(
+      db,
+      sql: """
+        SELECT id FROM context_buckets
+        WHERE subjectKind = ? AND subjectID = ? AND workstreamID IS ?
+        LIMIT 1
+        """,
+      arguments: [subjectKind, subjectID, workstreamID])
+    let resolvedBucketID = existingSubjectBucket ?? id
+    if existingSubjectBucket == nil {
+      try db.execute(
+        sql: """
+          INSERT INTO context_buckets
+            (id, subjectKind, subjectID, workstreamID, displayLabel, visitCount,
+             lastVisitedAt, createdAt, updatedAt)
+          VALUES (?, ?, ?, ?, NULL, 0, ?, ?, ?)
+          """,
+        arguments: [resolvedBucketID, subjectKind, subjectID, workstreamID, startedAt, startedAt, startedAt])
+    }
+    try db.execute(
+      sql: """
+        INSERT INTO subject_bindings
+          (referenceHash, bucketID, subjectKind, subjectID, confidence, source,
+           occurrenceCount, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, 2, ?, ?)
+        ON CONFLICT(referenceHash) DO UPDATE SET
+          bucketID = excluded.bucketID,
+          occurrenceCount = subject_bindings.occurrenceCount + 1,
+          updatedAt = excluded.updatedAt
+        """,
+      arguments: [
+        referenceHash, resolvedBucketID, subjectKind, subjectID, confidence, source, startedAt, startedAt,
+      ])
+    return resolvedBucketID
+  }
+}
+
 actor ContextBucketStore {
   static let shared = ContextBucketStore()
 
@@ -77,63 +179,17 @@ actor ContextBucketStore {
     let normalizedTitle = ContextTitleNormalizer.normalize(windowTitle, appName: appName)
     let normalizedKey = ContextTitleNormalizer.identityKey(appName: appName, windowTitle: windowTitle)
     let rawKey = "\(appName)\n\(windowTitle ?? "")"
-    let referenceHash = Self.referenceHash(normalizedKey)
+    // Blank/noise-only titles must not share `"app::"` → one referenceHash. Ephemeral
+    // hashes keep visit rows unique and skip durable binding/bucket lookup.
+    let referenceHash =
+      normalizedKey.map(Self.referenceHash) ?? "ephemeral:\(UUID().uuidString.lowercased())"
     let bucketID = try await pool.write { db -> String? in
-      let binding = try Row.fetchOne(
-        db,
-        sql: "SELECT * FROM subject_bindings WHERE referenceHash = ?",
-        arguments: [referenceHash])
-      let existing: String? = binding?["bucketID"]
-      if let existing { return existing }
-      guard normalizedTitle != nil else { return nil }
-      let recentCutoff = startedAt.addingTimeInterval(-7 * 24 * 60 * 60)
-      let previousVisits =
-        try Int.fetchOne(
-          db,
-          sql:
-            "SELECT COUNT(*) FROM context_visits WHERE referenceHash = ? AND outcome = 'completed' AND startedAt >= ?",
-          arguments: [referenceHash, recentCutoff]) ?? 0
-      guard previousVisits >= 1 else { return nil }
-      let id = UUID().uuidString.lowercased()
-      let subjectKind: String = binding?["subjectKind"] ?? "context"
-      let subjectID: String = binding?["subjectID"] ?? referenceHash
-      let workstreamID: String? = binding?["workstreamID"]
-      let confidence: Double = binding?["confidence"] ?? 0.5
-      let source: String = binding?["source"] ?? "repeat_cooccurrence"
-      let existingSubjectBucket = try String.fetchOne(
-        db,
-        sql: """
-          SELECT id FROM context_buckets
-          WHERE subjectKind = ? AND subjectID = ? AND workstreamID IS ?
-          LIMIT 1
-          """,
-        arguments: [subjectKind, subjectID, workstreamID])
-      let resolvedBucketID = existingSubjectBucket ?? id
-      if existingSubjectBucket == nil {
-        try db.execute(
-          sql: """
-            INSERT INTO context_buckets
-              (id, subjectKind, subjectID, workstreamID, displayLabel, visitCount,
-               lastVisitedAt, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, NULL, 0, ?, ?, ?)
-            """,
-          arguments: [resolvedBucketID, subjectKind, subjectID, workstreamID, startedAt, startedAt, startedAt])
-      }
-      try db.execute(
-        sql: """
-          INSERT INTO subject_bindings
-            (referenceHash, bucketID, subjectKind, subjectID, confidence, source,
-             occurrenceCount, createdAt, updatedAt)
-          VALUES (?, ?, ?, ?, ?, ?, 2, ?, ?)
-          ON CONFLICT(referenceHash) DO UPDATE SET
-            bucketID = excluded.bucketID,
-            occurrenceCount = subject_bindings.occurrenceCount + 1,
-            updatedAt = excluded.updatedAt
-          """,
-        arguments: [
-          referenceHash, resolvedBucketID, subjectKind, subjectID, confidence, source, startedAt, startedAt,
-        ])
-      return resolvedBucketID
+      guard normalizedKey != nil else { return nil }
+      return try ContextBucketVisitResolver.resolveBucketID(
+        in: db,
+        referenceHash: referenceHash,
+        normalizedTitle: normalizedTitle,
+        startedAt: startedAt)
     }
     let visitID = try await pool.write { db -> Int64 in
       try db.execute(
@@ -144,7 +200,7 @@ actor ContextBucketStore {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
           """,
         arguments: [
-          contextGeneration, poolEpoch, bucketID, appName, rawKey, normalizedKey,
+          contextGeneration, poolEpoch, bucketID, appName, rawKey, normalizedKey ?? "",
           referenceHash, startedAt, startedAt, startedAt,
         ])
       return db.lastInsertedRowID
@@ -271,44 +327,9 @@ actor ContextBucketStore {
                 WHERE referenceHash = ? AND bucketID IS NOT NULL
               """,
             arguments: [Self.referenceHash(key)]),
-          let version = try Row.fetchOne(
-            db,
-            sql: """
-                SELECT id, version, header, frozenRankedSegment
-                FROM bucket_versions WHERE bucketID = ? ORDER BY version DESC LIMIT 1
-              """,
-            arguments: [bucketID])
+          let snapshot = try Self.snapshot(in: db, bucketID: bucketID)
         else { return nil }
-        let tail = try String.fetchAll(
-          db,
-          sql: """
-            SELECT 'entry:' || id || ' ' || narrative FROM bucket_entries
-              WHERE bucketID = ? AND isCompacted = 0 ORDER BY createdAt DESC LIMIT 5
-            """,
-          arguments: [bucketID]
-        ).reversed()
-        let facts = try String.fetchAll(
-          db,
-          sql: """
-            SELECT 'fact:' || id || ' ' || statement ||
-              ' [evidence: ' || evidenceText || '; refs: ' || evidenceRefsJson || ']'
-            FROM bucket_facts
-              WHERE bucketID = ? AND validityState = 'validated'
-              ORDER BY createdAt DESC LIMIT 20
-            """,
-          arguments: [bucketID])
-        let worthiness =
-          try Double.fetchOne(
-            db, sql: "SELECT notifyWorthiness FROM context_buckets WHERE id = ?", arguments: [bucketID]) ?? 0
-        return ContextBucketSnapshot(
-          bucketID: bucketID,
-          versionID: version["id"],
-          version: version["version"],
-          header: version["header"],
-          frozenRankedSegment: version["frozenRankedSegment"],
-          tail: Array(tail),
-          validatedFacts: facts,
-          notifyWorthiness: worthiness)
+        return snapshot
       }
     } catch {
       logError("ContextBucketStore: failed to read snapshot", error: error)
@@ -316,18 +337,60 @@ actor ContextBucketStore {
     }
   }
 
+  private static func snapshot(in db: Database, bucketID: String) throws -> ContextBucketSnapshot? {
+    guard
+      let version = try Row.fetchOne(
+        db,
+        sql: """
+            SELECT id, version, header, frozenRankedSegment
+            FROM bucket_versions WHERE bucketID = ? ORDER BY version DESC LIMIT 1
+          """,
+        arguments: [bucketID])
+    else { return nil }
+    let tail = try String.fetchAll(
+      db,
+      sql: """
+        SELECT 'entry:' || id || ' ' || narrative FROM bucket_entries
+          WHERE bucketID = ? AND isCompacted = 0 ORDER BY createdAt DESC LIMIT 5
+        """,
+      arguments: [bucketID]
+    ).reversed()
+    let facts = try String.fetchAll(
+      db,
+      sql: """
+        SELECT 'fact:' || id || ' ' || statement ||
+          ' [evidence: ' || evidenceText || '; refs: ' || evidenceRefsJson || ']'
+        FROM bucket_facts
+          WHERE bucketID = ? AND validityState = 'validated'
+          ORDER BY createdAt DESC LIMIT 20
+        """,
+      arguments: [bucketID])
+    let worthiness =
+      try Double.fetchOne(
+        db, sql: "SELECT notifyWorthiness FROM context_buckets WHERE id = ?", arguments: [bucketID]) ?? 0
+    return ContextBucketSnapshot(
+      bucketID: bucketID,
+      versionID: version["id"],
+      version: version["version"],
+      header: version["header"],
+      frozenRankedSegment: version["frozenRankedSegment"],
+      tail: Array(tail),
+      validatedFacts: facts,
+      notifyWorthiness: worthiness)
+  }
+
   func snapshot(for fence: ContextVisitFence) async -> ContextBucketSnapshot? {
     let (pool, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let pool, generation == fence.poolEpoch else { return nil }
-    guard
-      let key = try? await pool.read({ db in
-        try String.fetchOne(
-          db,
-          sql: "SELECT normalizedContextKey FROM context_visits WHERE id = ? AND contextGeneration = ?",
-          arguments: [fence.visitID, fence.contextGeneration])
-      })
-    else { return nil }
-    return await snapshot(forNormalizedKey: key)
+    guard let pool, generation == fence.poolEpoch, let fenceBucketID = fence.bucketID else { return nil }
+    return try? await pool.read { db in
+      let persistedBucketID = try ContextBucketVisitResolver.persistedBucketID(
+        in: db,
+        visitID: fence.visitID,
+        contextGeneration: fence.contextGeneration,
+        poolEpoch: fence.poolEpoch)
+      guard persistedBucketID == fenceBucketID else { return nil }
+      return try Self.snapshot(in: db, bucketID: fenceBucketID)
+    }
   }
 
   func validatedEntryRefs(_ refs: [String], bucketID: String) async -> [String] {

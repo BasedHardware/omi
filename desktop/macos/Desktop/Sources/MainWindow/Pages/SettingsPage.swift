@@ -277,7 +277,7 @@ struct SettingsContentView: View {
   // so this glides freely while only the hour component is persisted.
   @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
     forHour: 22, referenceDate: Date())
-  @State var notificationsEnabled: Bool = true
+  @State var notificationsEnabled: Bool = NotificationService.areNotificationsEnabled()
   // Start from the synchronous persisted mirror so reopening Settings never flashes
   // Balanced while the authoritative backend value is still hydrating.
   @State var notificationFrequency: Int = NotificationService.currentFrequencyLevel()
@@ -504,7 +504,7 @@ struct SettingsContentView: View {
       case .stats: return "chart.bar"
       case .focusAssistant: return "eye.fill"
       case .taskAssistant: return "checklist"
-      case .insightAssistant: return "lightbulb.fill"
+      case .insightAssistant: return ProactiveNotificationBadge.insightSystemImage
       case .memoryAssistant: return "brain.head.profile"
       case .analysisThrottle: return "clock.arrow.2.circlepath"
       case .goals: return "target"
@@ -606,15 +606,12 @@ struct SettingsContentView: View {
     _systemAudioCaptureMode = State(initialValue: settings.systemAudioCaptureMode)
   }
 
-  /// Computed status text for notifications
+  /// Computed status text for notifications — OS permission/banner mirror only.
+  /// Product proactive enablement is owned by Notifications & Privacy.
   var notificationStatusText: String {
-    if !appState.hasNotificationPermission {
-      return "Notifications are disabled"
-    } else if appState.isNotificationBannerDisabled {
-      return "Enabled but banners are off"
-    } else {
-      return "Proactive alerts enabled"
-    }
+    SettingsControlMetrics.generalNotificationPermissionStatusText(
+      hasPermission: appState.hasNotificationPermission,
+      bannersDisabled: appState.isNotificationBannerDisabled)
   }
 
   /// Divider header used when two legacy sections are stacked on one merged

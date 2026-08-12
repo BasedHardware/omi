@@ -1,6 +1,23 @@
 import CoreGraphics
 import Foundation
 
+/// Converts a commit-lease result that was superseded by a queued owner
+/// transition into a capture-exclusion error so callers discard encoded bytes
+/// instead of publishing them into the next owner's session.
+enum RewindCaptureOwnerTransitionLease {
+  static func resultOrExcluded<T>(
+    value: T,
+    ownerTransitionQueued: Bool,
+    relativePath: String?,
+    snapshot: RewindCaptureExclusionSnapshot
+  ) throws -> T {
+    guard !ownerTransitionQueued else {
+      throw RewindCaptureExcludedError(relativePath: relativePath, snapshot: snapshot)
+    }
+    return value
+  }
+}
+
 extension RewindIndexer {
   /// Reconcile finalized chunks left by an excluded frame when a prior file
   /// delete failed. The owner-scoped journal is cleared only after both the DB
@@ -110,7 +127,10 @@ extension RewindIndexer {
     }
     let encoded: VideoChunkEncoder.EncodedFrame?
     do {
-      encoded = try await authorization.withCommitLease {
+      // Report whether an owner transition queued behind the lease. Returning a
+      // successful encode after that verdict would publish superseded pixels into
+      // the next owner's session; convert it to an exclusion so cleanup runs.
+      let (value, ownerTransitionQueued) = try await authorization.withCommitLeaseReportingOwnerTransition {
         guard RewindCaptureExclusionGeneration.begin(snapshot) else {
           throw RewindCaptureExcludedError(
             relativePath: nil, snapshot: snapshot)
@@ -118,6 +138,11 @@ extension RewindIndexer {
         defer { RewindCaptureExclusionGeneration.end(snapshot) }
         return try await VideoChunkEncoder.shared.addFrame(image: image, timestamp: timestamp)
       }
+      encoded = try RewindCaptureOwnerTransitionLease.resultOrExcluded(
+        value: value,
+        ownerTransitionQueued: ownerTransitionQueued,
+        relativePath: value?.videoChunkPath,
+        snapshot: snapshot)
     } catch let excluded as RewindCaptureExcludedError {
       throw excluded
     } catch {
@@ -145,7 +170,7 @@ extension RewindIndexer {
       RewindCaptureExclusionGeneration.isOwnerCurrent(snapshot)
     }
     do {
-      return try await authorization.withCommitLease {
+      let (value, ownerTransitionQueued) = try await authorization.withCommitLeaseReportingOwnerTransition {
         guard RewindCaptureExclusionGeneration.begin(snapshot) else {
           throw RewindCaptureExcludedError(
             relativePath: screenshot.videoChunkPath, snapshot: snapshot)
@@ -157,6 +182,11 @@ extension RewindIndexer {
         }
         return try await RewindDatabase.shared.insertScreenshot(screenshot)
       }
+      return try RewindCaptureOwnerTransitionLease.resultOrExcluded(
+        value: value,
+        ownerTransitionQueued: ownerTransitionQueued,
+        relativePath: value.videoChunkPath,
+        snapshot: snapshot)
     } catch let excluded as RewindCaptureExcludedError {
       throw excluded
     } catch {

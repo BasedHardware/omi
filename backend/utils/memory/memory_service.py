@@ -3,7 +3,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional, cast
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, cast
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -20,9 +20,11 @@ from models.product_memory import (
     MemoryItemStatus,
     MemoryTier,
 )
+from utils.log_sanitizer import sanitize_validation_error
 from utils.memory.canonical_memory_adapter import (
     CanonicalBatchMutationLimitError,
     CanonicalMemoryNotFoundError,
+    CanonicalScanCursor,
     delete_default_canonical_memories,
     delete_all_canonical_memories,
     delete_canonical_memory,
@@ -30,6 +32,7 @@ from utils.memory.canonical_memory_adapter import (
     memory_item_to_memorydb,
     read_canonical_memory_item,
     read_canonical_memories,
+    read_canonical_scan_page,
     refine_canonical_memory,
     replace_conversation_sourced_memories,
     retract_conversation_sourced_memories,
@@ -41,13 +44,21 @@ from utils.memory.canonical_memory_adapter import (
     update_canonical_memory_review,
     write_canonical_external_memory,
 )
-from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
+from utils.memory.product_memory_read_service import iter_authoritative_product_memory_items
 from utils.memory.required_promotion import required_processing_payload
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import memory_matches_device
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from utils.memory.universal_list_cursor import (
+    StreamKeyset,
+    UniversalListCursorError,
+    UniversalListCursorState,
+    cursor_secret,
+    decode_universal_list_cursor,
+    encode_universal_list_cursor,
+)
 from utils.metrics import (
     MEMORY_HISTORICAL_MATERIALIZATION_TOTAL,
     MEMORY_HISTORICAL_SUPPRESSION_TOTAL,
@@ -74,6 +85,14 @@ class ExternalMemoryWriteContext:
     legacy_write_detail: Any = None
 
 
+@dataclass(frozen=True)
+class UniversalMemoryListPage:
+    """One mixed-view page plus an opaque continuation cursor."""
+
+    memories: List[MemoryDB]
+    next_cursor: Optional[str]
+
+
 def resolve_external_memory_write_context(
     uid: str,
     *,
@@ -97,8 +116,12 @@ def _truncate_locked_preview_text(content: str) -> str:
 
 
 def truncate_locked_memory_preview(memory: MemoryDB) -> MemoryDB:
-    """Truncate locked-memory content to the legacy 70-char preview."""
-    if not memory.content:
+    """Truncate locked-memory content to the legacy 70-char preview.
+
+    Unlocked memories keep their full content. Only paid/locked rows are
+    preview-truncated for list surfaces that still expose a stub.
+    """
+    if not memory.is_locked or not memory.content:
         return memory
     truncated = _truncate_locked_preview_text(memory.content)
     if truncated == memory.content:
@@ -120,7 +143,9 @@ def fetch_memory_dict(uid: str, memory_id: str, *, db_client: Any) -> MemoryPayl
     return MemoryService(db_client=db_client).fetch(uid, memory_id).model_dump(mode="python")
 
 
-def _reject_legacy_device_scope(device_scope_request: Optional[DeviceScopeRequest]) -> None:
+def _reject_legacy_device_scope(
+    device_scope_request: Optional[DeviceScopeRequest],
+) -> None:
     scope = device_scope_request.device_scope if device_scope_request else "all"
     if scope and scope != "all":
         raise DeviceScopeNotSupportedError("device_scope filtering is unavailable for this request")
@@ -159,7 +184,9 @@ def _legacy_read_memories(uid: str, *, limit: int = 100, offset: int = 0) -> Lis
     return _validate_memory_list(memories)
 
 
-def _memory_ids_and_scores(matches: List[MemoryPayload]) -> tuple[List[str], Dict[str, float]]:
+def _memory_ids_and_scores(
+    matches: List[MemoryPayload],
+) -> tuple[List[str], Dict[str, float]]:
     memory_ids: List[str] = []
     scores_by_id: Dict[str, float] = {}
     for match in matches:
@@ -210,9 +237,11 @@ class LegacyMemoryBackend:
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
         include_pending_processing: bool = False,
+        include_archive: bool = False,
         now: Optional[datetime] = None,
     ) -> List[MemoryDB]:
         _reject_legacy_device_scope(device_scope_request)
+        del include_pending_processing, include_archive, now
         return _legacy_read_memories(uid, limit=limit, offset=offset)
 
     def search(
@@ -242,8 +271,10 @@ class LegacyMemoryBackend:
         tags: Optional[List[str]] = None,
         category: Optional[str] = None,
         is_baseline: Optional[bool] = None,
+        is_read: Optional[bool] = None,
+        is_dismissed: Optional[bool] = None,
     ) -> MemoryDB:
-        del uid, memory_id, tags, category, is_baseline
+        del uid, memory_id, tags, category, is_baseline, is_read, is_dismissed
         raise RuntimeError("historical memory adapter is read-only; use canonical apply")
 
     def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
@@ -283,20 +314,30 @@ class CanonicalMemoryBackend:
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
         include_pending_processing: bool = False,
+        include_archive: bool = False,
         now: Optional[datetime] = None,
     ) -> List[MemoryDB]:
-        return read_canonical_memories(
-            uid,
-            limit=limit,
-            offset=offset,
-            db_client=self._db_client,
-            device_scope_request=device_scope_request,
-            include_pending_processing=include_pending_processing,
-            now=now,
-        )
+        return [
+            truncate_locked_memory_preview(memory)
+            for memory in read_canonical_memories(
+                uid,
+                limit=limit,
+                offset=offset,
+                db_client=self._db_client,
+                device_scope_request=device_scope_request,
+                include_pending_processing=include_pending_processing,
+                include_archive=include_archive,
+                now=now,
+            )
+        ]
 
     def search(
-        self, uid: str, query: str, *, limit: int = 5, device_scope_request: Optional[DeviceScopeRequest] = None
+        self,
+        uid: str,
+        query: str,
+        *,
+        limit: int = 5,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
     ) -> List[MemorySearchMatch]:
         items = search_canonical_memories(
             uid,
@@ -310,6 +351,8 @@ class CanonicalMemoryBackend:
             if not item.get("memory_id"):
                 continue
             memory_obj = search_result_to_memorydb(uid, item)
+            if memory_obj.is_locked or memory_obj.user_review is False or memory_obj.invalid_at is not None:
+                continue
             raw_score = item.get("score") or item.get("relevance_score")
             try:
                 score = float(raw_score) if raw_score is not None else 1.0 - (position / max(len(items), 1))
@@ -332,6 +375,8 @@ class CanonicalMemoryBackend:
         tags: Optional[List[str]] = None,
         category: Optional[str] = None,
         is_baseline: Optional[bool] = None,
+        is_read: Optional[bool] = None,
+        is_dismissed: Optional[bool] = None,
     ) -> MemoryDB:
         item = update_canonical_memory_product_fields(
             uid,
@@ -339,6 +384,8 @@ class CanonicalMemoryBackend:
             tags=tags,
             category=category,
             is_baseline=is_baseline,
+            is_read=is_read,
+            is_dismissed=is_dismissed,
             db_client=self._db_client,
         )
         return memory_item_to_memorydb(item)
@@ -441,11 +488,28 @@ class HistoricalMemoryAdapter:
             return None
         try:
             memory = cls._historical_memory(raw, include_locked_content=include_locked_content)
-        except (ValidationError, TypeError, ValueError) as exc:
-            logger.warning("Skipping malformed historical memory uid=%s memory_id=%s: %s", uid, memory_id, exc)
+        except ValidationError as exc:
+            # Never log ValidationError.__str__ — it embeds input_value (memory content).
+            logger.warning(
+                "Skipping malformed historical memory uid=%s memory_id=%s: %s",
+                uid,
+                memory_id,
+                sanitize_validation_error(exc),
+            )
+            return None
+        except (TypeError, ValueError):
+            logger.warning(
+                "Skipping malformed historical memory uid=%s memory_id=%s type=adapt_error",
+                uid,
+                memory_id,
+            )
             return None
         if memory.visibility not in {"private", "public", "shared"}:
-            logger.warning("Skipping historical memory with unknown visibility uid=%s memory_id=%s", uid, memory_id)
+            logger.warning(
+                "Skipping historical memory with unknown visibility uid=%s memory_id=%s",
+                uid,
+                memory_id,
+            )
             return None
         return HistoricalMemoryRecord(
             memory=memory,
@@ -480,25 +544,148 @@ class HistoricalMemoryAdapter:
     ) -> List[HistoricalMemoryRecord]:
         bounded_limit = max(1, min(int(limit or 100), self.MAX_COMPATIBILITY_WINDOW))
         bounded_offset = max(0, int(offset or 0))
-        # Read one bounded prefix and merge/order it in the universal service;
-        # never scan the historical collection for a normal page.
-        fetch_limit = bounded_offset + bounded_limit
-        if fetch_limit > self.MAX_COMPATIBILITY_WINDOW:
+        needed = bounded_offset + bounded_limit
+        if needed > self.MAX_COMPATIBILITY_WINDOW:
             raise HTTPException(status_code=413, detail="Historical memory pagination window exceeded")
+        # Over-fetch when adapt/device filters skip rows so a page of N valid
+        # memories is not silently shortened by malformed documents.
+        records: List[HistoricalMemoryRecord] = []
+        db_offset = 0
+        while len(records) < needed:
+            remaining_window = self.MAX_COMPATIBILITY_WINDOW - db_offset
+            if remaining_window <= 0:
+                break
+            fetch_size = min(
+                max(needed - len(records), bounded_limit),
+                remaining_window,
+                self.MAX_PAGE_SIZE,
+            )
+            try:
+                raw_rows = memories_db.get_memories(
+                    uid,
+                    fetch_size,
+                    db_offset,
+                    sort="updated_or_created_desc",
+                    **self._firestore_kwargs(),
+                )
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+            if not raw_rows:
+                break
+            for raw in raw_rows:
+                record = self._adapt(uid, raw)
+                if record is None or not self.matches_device(record, device_scope_request):
+                    continue
+                records.append(record)
+                if len(records) >= needed:
+                    break
+            db_offset += len(raw_rows)
+            if len(raw_rows) < fetch_size:
+                break
+        records.sort(
+            key=lambda record: (
+                -self._timestamp(record.memory).timestamp(),
+                record.memory.id,
+            )
+        )
+        return records[bounded_offset : bounded_offset + bounded_limit]
+
+    def read_scan_page(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        scan_offset: int = 0,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
+    ) -> Tuple[List[Optional[HistoricalMemoryRecord]], int, bool]:
+        """Retired offset scan — cursor paging must use dual keyset streams.
+
+        Kept only so accidental callers fail loudly instead of silently
+        reintroducing the 5000/source-window offset race.
+        """
+        del uid, limit, scan_offset, device_scope_request
+        raise RuntimeError("historical offset scan is retired; use read_updated_scan_page / read_created_scan_page")
+
+    def _adapt_scan_payloads(
+        self,
+        uid: str,
+        payloads: List[Dict[str, Any]],
+        cursors: List[Tuple[datetime, str]],
+        *,
+        device_scope_request: Optional[DeviceScopeRequest],
+        drop_updated_at_present: bool = False,
+    ) -> List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]]:
+        slots: List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]] = []
+        for raw, scan_cursor in zip(payloads, cursors):
+            if drop_updated_at_present and raw.get('updated_at') is not None:
+                # Owned by the updated_at stream — advance created cursor only.
+                slots.append((None, scan_cursor))
+                continue
+            if raw.get('user_review') is False or raw.get('invalid_at') is not None:
+                slots.append((None, scan_cursor))
+                continue
+            record = self._adapt(uid, raw)
+            if record is None or not self.matches_device(record, device_scope_request):
+                slots.append((None, scan_cursor))
+            else:
+                slots.append((record, scan_cursor))
+        return slots
+
+    def read_updated_scan_page(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        start_after: Optional[Tuple[datetime, str]] = None,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
+    ) -> Tuple[List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]], bool]:
+        """Bounded updated_at-present historical keyset page."""
+        bounded_limit = max(1, min(int(limit or 100), self.MAX_PAGE_SIZE))
         try:
-            raw_rows = memories_db.get_memories(
+            payloads, cursors, exhausted = memories_db.scan_memories_updated_at_page(
                 uid,
-                fetch_limit,
-                0,
-                sort="updated_or_created_desc",
+                limit=bounded_limit,
+                start_after=start_after,
                 **self._firestore_kwargs(),
             )
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
-        records = [record for raw in raw_rows for record in [self._adapt(uid, raw)] if record is not None]
-        records = [record for record in records if self.matches_device(record, device_scope_request)]
-        records.sort(key=lambda record: (-self._timestamp(record.memory).timestamp(), record.memory.id))
-        return records
+        slots = self._adapt_scan_payloads(
+            uid,
+            payloads,
+            cursors,
+            device_scope_request=device_scope_request,
+            drop_updated_at_present=False,
+        )
+        return slots, exhausted
+
+    def read_created_scan_page(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        start_after: Optional[Tuple[datetime, str]] = None,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
+    ) -> Tuple[List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]], bool]:
+        """Bounded created_at historical keyset page with updated_at-present filtered out."""
+        bounded_limit = max(1, min(int(limit or 100), self.MAX_PAGE_SIZE))
+        try:
+            payloads, cursors, exhausted = memories_db.scan_memories_created_at_page(
+                uid,
+                limit=bounded_limit,
+                start_after=start_after,
+                **self._firestore_kwargs(),
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+        slots = self._adapt_scan_payloads(
+            uid,
+            payloads,
+            cursors,
+            device_scope_request=device_scope_request,
+            drop_updated_at_present=True,
+        )
+        return slots, exhausted
 
     def get(self, uid: str, memory_id: str) -> Optional[HistoricalMemoryRecord]:
         try:
@@ -555,12 +742,22 @@ class HistoricalMemoryAdapter:
             try:
                 delete_memory_vector(uid, memory_id)
             except Exception:
-                logger.exception("historical vector cleanup failed uid=%s memory_id=%s", uid, memory_id)
+                logger.exception(
+                    "historical vector cleanup failed uid=%s memory_id=%s",
+                    uid,
+                    memory_id,
+                )
 
-    def all_live(self, uid: str, *, page_size: int = 500) -> List[HistoricalMemoryRecord]:
-        """Enumerate historical live rows in bounded pages for explicit export only."""
+    def iter_all_live(
+        self,
+        uid: str,
+        *,
+        page_size: int = 500,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_locked_content: bool = True,
+    ) -> Iterator[HistoricalMemoryRecord]:
+        """Stream historical live rows in stable newest-first pages."""
         page_size = max(1, min(int(page_size or 500), self.MAX_PAGE_SIZE))
-        records: List[HistoricalMemoryRecord] = []
         offset = 0
         while True:
             try:
@@ -568,20 +765,38 @@ class HistoricalMemoryAdapter:
                     uid,
                     page_size,
                     offset,
+                    sort="updated_or_created_desc",
                     **self._firestore_kwargs(),
                 )
             except Exception as exc:
                 raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
             if not raw_rows:
                 break
+            page_records: List[HistoricalMemoryRecord] = []
             for raw in raw_rows:
-                record = self._adapt(uid, raw, include_locked_content=True)
-                if record is not None:
-                    records.append(record)
+                record = self._adapt(uid, raw, include_locked_content=include_locked_content)
+                if record is not None and self.matches_device(record, device_scope_request):
+                    page_records.append(record)
+            page_records.sort(
+                key=lambda record: (
+                    -self._timestamp(record.memory).timestamp(),
+                    record.memory.id,
+                )
+            )
+            yield from page_records
             offset += len(raw_rows)
             if len(raw_rows) < page_size:
                 break
-        records.sort(key=lambda record: (-self._timestamp(record.memory).timestamp(), record.memory.id))
+
+    def all_live(self, uid: str, *, page_size: int = 500) -> List[HistoricalMemoryRecord]:
+        """Enumerate historical live rows in bounded pages for explicit export only."""
+        records = list(self.iter_all_live(uid, page_size=page_size))
+        records.sort(
+            key=lambda record: (
+                -self._timestamp(record.memory).timestamp(),
+                record.memory.id,
+            )
+        )
         return records
 
     @staticmethod
@@ -593,7 +808,10 @@ class HistoricalMemoryAdapter:
         silently stop at an arbitrary compatibility cap.
         """
         try:
-            ids = memories_db.get_memory_ids(uid, **({"firestore_client": db_client} if db_client is not None else {}))
+            ids = memories_db.get_memory_ids(
+                uid,
+                **({"firestore_client": db_client} if db_client is not None else {}),
+            )
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
         start = max(0, offset)
@@ -612,6 +830,338 @@ class HistoricalMemoryAdapter:
             cls.cleanup(uid, memory_id, db_client=db_client)
 
 
+class _HistoricalRawStream:
+    """Peekable keyset stream over one historical Firestore order field."""
+
+    def __init__(
+        self,
+        *,
+        service: "MemoryService",
+        uid: str,
+        kind: str,
+        scan: Optional[StreamKeyset],
+        exhausted: bool,
+        device_scope_request: Optional[DeviceScopeRequest],
+        page_limit: int,
+    ) -> None:
+        self._service = service
+        self._uid = uid
+        self._kind = kind
+        self.scan_keyset = scan
+        self.exhausted = bool(exhausted)
+        self._device_scope_request = device_scope_request
+        self._page_limit = max(1, int(page_limit or 100))
+        self._peek: Optional[MemoryDB] = None
+        self._peek_keyset: Optional[StreamKeyset] = None
+        self._peek_scan: Optional[StreamKeyset] = None
+        self._slots: List[Tuple[Optional[HistoricalMemoryRecord], StreamKeyset]] = []
+        self._slot_index = 0
+        self._slots_exhausted = self.exhausted
+        self._chunk_statuses: Dict[str, MemoryItemStatus] = {}
+        self.identity_suppressed = 0
+        self.state_suppressed = 0
+
+    def _ensure_slots(self) -> None:
+        if self._slot_index < len(self._slots) or self.exhausted:
+            return
+        start_after: Optional[Tuple[datetime, str]] = None
+        if self.scan_keyset is not None:
+            start_after = self._service.stream_keyset_to_scan_cursor(self.scan_keyset)
+        reader = (
+            self._service.history.read_updated_scan_page
+            if self._kind == "updated"
+            else self._service.history.read_created_scan_page
+        )
+        try:
+            raw_slots, stream_exhausted = reader(
+                self._uid,
+                limit=max(self._page_limit, 50),
+                start_after=start_after,
+                device_scope_request=self._device_scope_request,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+        self._slots = [
+            (
+                record,
+                self._service.scan_cursor_to_stream_keyset(scan_cursor),
+            )
+            for record, scan_cursor in raw_slots
+        ]
+        self._slot_index = 0
+        self._slots_exhausted = stream_exhausted
+        # Batch canonical status suppression once per chunk, never per row.
+        visible_ids = [record.memory.id for record, _ in self._slots if record is not None]
+        self._chunk_statuses = self._service.canonical_statuses(self._uid, visible_ids) if visible_ids else {}
+        if not self._slots:
+            self.exhausted = True
+
+    def peek(self) -> Optional[MemoryDB]:
+        if self._peek is not None:
+            return self._peek
+        while True:
+            self._ensure_slots()
+            if self._slot_index >= len(self._slots):
+                self.exhausted = True
+                return None
+            record, scan_keyset = self._slots[self._slot_index]
+            if record is None:
+                self.scan_keyset = scan_keyset
+                self._advance_raw_slot()
+                continue
+            memory = truncate_locked_memory_preview(record.memory)
+            reason = self._service.historical_suppression_reason(
+                memory.id,
+                statuses=self._chunk_statuses,
+            )
+            if reason == "canonical_identity":
+                self.identity_suppressed += 1
+                self.scan_keyset = scan_keyset
+                self._advance_raw_slot()
+                continue
+            if reason == "canonical_state":
+                self.state_suppressed += 1
+                self.scan_keyset = scan_keyset
+                self._advance_raw_slot()
+                continue
+            self._peek = memory
+            self._peek_keyset = self._service.memory_keyset(memory)
+            self._peek_scan = scan_keyset
+            return memory
+
+    def _advance_raw_slot(self) -> None:
+        self._slot_index += 1
+        if self._slot_index >= len(self._slots):
+            self.exhausted = self._slots_exhausted
+            self._slots = []
+            self._slot_index = 0
+            self._chunk_statuses = {}
+
+    def consume(self) -> None:
+        if self._peek is None or self._peek_keyset is None or self._peek_scan is None:
+            raise RuntimeError("historical raw stream consume without peek")
+        self.scan_keyset = self._peek_scan
+        self._peek = None
+        self._peek_keyset = None
+        self._peek_scan = None
+        self._advance_raw_slot()
+
+    @property
+    def peek_keyset(self) -> Optional[StreamKeyset]:
+        return self._peek_keyset
+
+
+class _HistoricalCursorStream:
+    """Merge updated_at-present and created_at-only historical keyset streams."""
+
+    def __init__(
+        self,
+        *,
+        service: "MemoryService",
+        uid: str,
+        after: Optional[StreamKeyset],
+        updated_scan: Optional[StreamKeyset],
+        created_scan: Optional[StreamKeyset],
+        updated_exhausted: bool,
+        created_exhausted: bool,
+        device_scope_request: Optional[DeviceScopeRequest],
+        page_limit: int,
+    ) -> None:
+        self._service = service
+        self.consumed_keyset = after
+        self._updated = _HistoricalRawStream(
+            service=service,
+            uid=uid,
+            kind="updated",
+            scan=updated_scan,
+            exhausted=updated_exhausted,
+            device_scope_request=device_scope_request,
+            page_limit=page_limit,
+        )
+        self._created = _HistoricalRawStream(
+            service=service,
+            uid=uid,
+            kind="created",
+            scan=created_scan,
+            exhausted=created_exhausted,
+            device_scope_request=device_scope_request,
+            page_limit=page_limit,
+        )
+        self._peek_source: Optional[str] = None
+
+    @property
+    def updated_scan_keyset(self) -> Optional[StreamKeyset]:
+        return self._updated.scan_keyset
+
+    @property
+    def created_scan_keyset(self) -> Optional[StreamKeyset]:
+        return self._created.scan_keyset
+
+    @property
+    def updated_exhausted(self) -> bool:
+        return self._updated.exhausted and self._updated.peek() is None
+
+    @property
+    def created_exhausted(self) -> bool:
+        return self._created.exhausted and self._created.peek() is None
+
+    @property
+    def exhausted(self) -> bool:
+        return self.updated_exhausted and self.created_exhausted
+
+    @property
+    def identity_suppressed(self) -> int:
+        return self._updated.identity_suppressed + self._created.identity_suppressed
+
+    @property
+    def state_suppressed(self) -> int:
+        return self._updated.state_suppressed + self._created.state_suppressed
+
+    def peek(self) -> Optional[MemoryDB]:
+        updated_memory = self._updated.peek()
+        created_memory = self._created.peek()
+        if updated_memory is None and created_memory is None:
+            self._peek_source = None
+            return None
+        take_updated = created_memory is None or (
+            updated_memory is not None
+            and self._service.memory_cursor_sort_key(updated_memory)
+            <= self._service.memory_cursor_sort_key(created_memory)
+        )
+        if take_updated:
+            self._peek_source = "updated"
+            return updated_memory
+        self._peek_source = "created"
+        return created_memory
+
+    def consume(self) -> None:
+        if self._peek_source == "updated":
+            memory = self._updated.peek()
+            if memory is not None:
+                self.consumed_keyset = self._service.memory_keyset(memory)
+            self._updated.consume()
+        elif self._peek_source == "created":
+            memory = self._created.peek()
+            if memory is not None:
+                self.consumed_keyset = self._service.memory_keyset(memory)
+            self._created.consume()
+        else:
+            raise RuntimeError("historical cursor stream consume without peek")
+        self._peek_source = None
+
+
+class _CanonicalCursorStream:
+    """Peekable canonical stream over bounded Firestore keyset scan pages."""
+
+    def __init__(
+        self,
+        *,
+        service: "MemoryService",
+        uid: str,
+        emitted: Optional[StreamKeyset],
+        scan: Optional[StreamKeyset],
+        exhausted: bool,
+        device_scope_request: Optional[DeviceScopeRequest],
+        include_pending_processing: bool,
+        include_archive: bool,
+        now: Optional[datetime],
+        page_limit: int,
+    ) -> None:
+        self._service = service
+        self._uid = uid
+        self.emitted_keyset = emitted
+        self.scan_keyset = scan
+        self.exhausted = bool(exhausted)
+        self._device_scope_request = device_scope_request
+        self._include_pending_processing = include_pending_processing
+        self._include_archive = include_archive
+        self._now = now
+        self._page_limit = max(1, int(page_limit or 100))
+        self._peek: Optional[MemoryDB] = None
+        self._peek_keyset: Optional[StreamKeyset] = None
+        self._peek_scan: Optional[StreamKeyset] = None
+        self._slots: List[Tuple[Optional[MemoryDB], StreamKeyset]] = []
+        self._slot_index = 0
+        self._slots_exhausted = self.exhausted
+
+    def _ensure_slots(self) -> None:
+        if self._slot_index < len(self._slots) or self.exhausted:
+            return
+        start_after: Optional[CanonicalScanCursor] = None
+        if self.scan_keyset is not None:
+            start_after = self._service.stream_keyset_to_scan_cursor(self.scan_keyset)
+        try:
+            raw_slots, stream_exhausted = read_canonical_scan_page(
+                self._uid,
+                limit=max(self._page_limit, 50),
+                start_after=start_after,
+                db_client=self._service.db_client,
+                device_scope_request=self._device_scope_request,
+                include_pending_processing=self._include_pending_processing,
+                include_archive=self._include_archive,
+                now=self._now,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
+        self._slots = [
+            (
+                truncate_locked_memory_preview(memory) if memory is not None else None,
+                self._service.scan_cursor_to_stream_keyset(scan_cursor),
+            )
+            for memory, scan_cursor in raw_slots
+        ]
+        self._slot_index = 0
+        self._slots_exhausted = stream_exhausted
+        if not self._slots:
+            self.exhausted = True
+
+    def peek(self) -> Optional[MemoryDB]:
+        if self._peek is not None:
+            return self._peek
+        while True:
+            self._ensure_slots()
+            if self._slot_index >= len(self._slots):
+                self.exhausted = True
+                return None
+            memory, scan_keyset = self._slots[self._slot_index]
+            # Raw scan position advances for filtered rows too.
+            if memory is None:
+                self.scan_keyset = scan_keyset
+                self._advance_raw_slot()
+                continue
+            if self.emitted_keyset is not None and self._service.memory_cursor_sort_key(memory) <= (
+                self._service.keyset_sort_key(self.emitted_keyset)
+            ):
+                self.scan_keyset = scan_keyset
+                self._advance_raw_slot()
+                continue
+            self._peek = memory
+            self._peek_keyset = self._service.memory_keyset(memory)
+            self._peek_scan = scan_keyset
+            return memory
+
+    def _advance_raw_slot(self) -> None:
+        self._slot_index += 1
+        if self._slot_index >= len(self._slots):
+            self.exhausted = self._slots_exhausted
+            self._slots = []
+            self._slot_index = 0
+
+    def consume(self) -> None:
+        if self._peek is None or self._peek_keyset is None or self._peek_scan is None:
+            raise RuntimeError("canonical cursor stream consume without peek")
+        self.emitted_keyset = self._peek_keyset
+        self.scan_keyset = self._peek_scan
+        self._peek = None
+        self._peek_keyset = None
+        self._peek_scan = None
+        self._advance_raw_slot()
+
+
 class MemoryService:
     """Universal memory authority for every authenticated UID.
 
@@ -622,10 +1172,10 @@ class MemoryService:
     """
 
     def __init__(self, *, db_client: Any = None):
-        self._db_client = db_client
-        self._history = HistoricalMemoryAdapter(db_client=db_client)
+        self.db_client = db_client
+        self.history = HistoricalMemoryAdapter(db_client=db_client)
         # Keep these attributes for callers/tests that inspect the old seam.
-        self._legacy = self._history
+        self._legacy = self.history
         self._canonical = CanonicalMemoryBackend(db_client=db_client)
 
     def ensure_canonical_mutation_ready(self, uid: str) -> None:
@@ -646,7 +1196,7 @@ class MemoryService:
 
     def _canonical_status(self, uid: str, memory_id: str) -> Optional[MemoryItemStatus]:
         """Read one canonical status to suppress historical identity collisions."""
-        client = self._db_client if self._db_client is not None else default_db_client
+        client = self.db_client if self.db_client is not None else default_db_client
         try:
             from database.memory_collections import MemoryCollections
             from models.product_memory import MemoryItem
@@ -716,7 +1266,7 @@ class MemoryService:
                 return None
         return None
 
-    def _canonical_statuses(self, uid: str, memory_ids: List[str]) -> Dict[str, MemoryItemStatus]:
+    def canonical_statuses(self, uid: str, memory_ids: List[str]) -> Dict[str, MemoryItemStatus]:
         """Read canonical identity/suppression status in bounded batches.
 
         Firestore's ``get_all`` gives mixed reads a bounded read surface instead
@@ -727,7 +1277,7 @@ class MemoryService:
         normalized_ids = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
         if not normalized_ids:
             return {}
-        client = self._db_client if self._db_client is not None else default_db_client
+        client = self.db_client if self.db_client is not None else default_db_client
         get_all = getattr(client, "get_all", None)
         if callable(get_all):
             batch_get = cast(Callable[[List[Any]], Iterable[Any]], get_all)
@@ -786,7 +1336,7 @@ class MemoryService:
 
     def _write_historical_override(self, uid: str, memory_id: str, status: MemoryItemStatus) -> None:
         """Persist one idempotent canonical suppression/ownership record."""
-        client = self._db_client if self._db_client is not None else default_db_client
+        client = self.db_client if self.db_client is not None else default_db_client
         path = f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
         payload = {
             "uid": uid,
@@ -816,7 +1366,7 @@ class MemoryService:
         """Commit bounded idempotent override batches before legacy cleanup."""
         normalized = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
         bounded_batch_size = max(1, min(int(batch_size or 100), 500))
-        client = self._db_client if self._db_client is not None else default_db_client
+        client = self.db_client if self.db_client is not None else default_db_client
         for start in range(0, len(normalized), bounded_batch_size):
             chunk = normalized[start : start + bounded_batch_size]
             batch_factory = getattr(client, "batch", None)
@@ -853,6 +1403,7 @@ class MemoryService:
         offset: int,
         device_scope_request: Optional[DeviceScopeRequest],
         include_pending_processing: bool,
+        include_archive: bool,
         now: Optional[datetime],
     ) -> List[MemoryDB]:
         try:
@@ -865,6 +1416,7 @@ class MemoryService:
                 offset=0,
                 device_scope_request=device_scope_request,
                 include_pending_processing=include_pending_processing,
+                include_archive=include_archive,
                 now=now,
             )
         except HTTPException:
@@ -873,21 +1425,19 @@ class MemoryService:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
 
     @staticmethod
-    def _sort_memories(memories: List[MemoryDB]) -> None:
-        def timestamp(memory: MemoryDB) -> float:
-            value = getattr(memory, "updated_at", None) or getattr(memory, "created_at", None)
-            if value is None:
-                return float("-inf")
+    def _memory_sort_key(memory: MemoryDB) -> tuple[float, str]:
+        value = getattr(memory, "updated_at", None) or getattr(memory, "created_at", None)
+        if value is None:
+            timestamp = float("-inf")
+        else:
             if value.tzinfo is None:
                 value = value.replace(tzinfo=timezone.utc)
-            return value.timestamp()
+            timestamp = value.timestamp()
+        return (-timestamp, memory.id)
 
-        memories.sort(
-            key=lambda memory: (
-                -timestamp(memory),
-                memory.id,
-            )
-        )
+    @classmethod
+    def _sort_memories(cls, memories: List[MemoryDB]) -> None:
+        memories.sort(key=cls._memory_sort_key)
 
     def read(
         self,
@@ -897,6 +1447,7 @@ class MemoryService:
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
         include_pending_processing: bool = False,
+        include_archive: bool = False,
         now: Optional[datetime] = None,
     ) -> List[MemoryDB]:
         bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW))
@@ -910,38 +1461,286 @@ class MemoryService:
             offset=0,
             device_scope_request=device_scope_request,
             include_pending_processing=include_pending_processing,
+            include_archive=include_archive,
             now=now,
         )
-        historical = self._history.read(
-            uid,
-            limit=window,
-            offset=0,
-            device_scope_request=device_scope_request,
-        )
-        MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL.labels(origin="canonical").inc(len(canonical))
-        MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL.labels(origin="historical").inc(len(historical))
         canonical_ids = {memory.id for memory in canonical}
-        merged = list(canonical)
-        historical_statuses = self._canonical_statuses(uid, [record.memory.id for record in historical])
-        for record in historical:
-            if record.memory.id in canonical_ids:
-                MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_identity").inc()
+        # Adaptive historical scan: a suppressed newest-first prefix must not
+        # hide later visible historical rows that belong in this merged page.
+        historical_limit = window
+        historical: List[HistoricalMemoryRecord] = []
+        merged: List[MemoryDB] = list(canonical)
+        identity_suppressed = 0
+        state_suppressed = 0
+        historical_kept = 0
+        while True:
+            historical = self.history.read(
+                uid,
+                limit=historical_limit,
+                offset=0,
+                device_scope_request=device_scope_request,
+            )
+            merged = list(canonical)
+            identity_suppressed = 0
+            state_suppressed = 0
+            historical_kept = 0
+            statuses = self.canonical_statuses(uid, [record.memory.id for record in historical])
+            for record in historical:
+                if record.memory.id in canonical_ids:
+                    identity_suppressed += 1
+                    continue
+                if statuses.get(record.memory.id) in {
+                    MemoryItemStatus.active,
+                    MemoryItemStatus.tombstoned,
+                    MemoryItemStatus.hidden,
+                    MemoryItemStatus.superseded,
+                }:
+                    state_suppressed += 1
+                    continue
+                merged.append(record.memory)
+                historical_kept += 1
+            self._sort_memories(merged)
+
+            historical_exhausted = len(historical) < historical_limit
+            at_max_window = historical_limit >= HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW
+            if historical_exhausted or at_max_window:
+                break
+
+            if len(merged) < window:
+                missing = window - len(merged)
+                historical_limit = min(
+                    HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
+                    historical_limit + max(missing, bounded_limit),
+                )
                 continue
-            status = historical_statuses.get(record.memory.id)
-            if status in {
-                MemoryItemStatus.active,
-                MemoryItemStatus.tombstoned,
-                MemoryItemStatus.hidden,
-                MemoryItemStatus.superseded,
-            }:
-                # Active canonical rows are authoritative even if a bounded
-                # canonical page did not contain the ID; non-active rows are
-                # durable suppressions of the historical identity.
-                MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_state").inc()
-                continue
-            merged.append(record.memory)
-        self._sort_memories(merged)
+
+            # Page is full, but the oldest scanned historical row may still be
+            # newer than the cutoff. Further visible rows could then belong in
+            # the page, so keep expanding within the compatibility window.
+            cutoff = merged[window - 1]
+            oldest_scanned = historical[-1].memory
+            if self._memory_sort_key(oldest_scanned) >= self._memory_sort_key(cutoff):
+                break
+            historical_limit = min(
+                HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
+                historical_limit + max(bounded_limit, window),
+            )
+
+        # Emit telemetry once for the final scan only — retries must not
+        # double-count origin or suppression counters.
+        MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL.labels(origin="canonical").inc(len(canonical))
+        MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL.labels(origin="historical").inc(historical_kept)
+        if identity_suppressed:
+            MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_identity").inc(identity_suppressed)
+        if state_suppressed:
+            MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_state").inc(state_suppressed)
         return merged[bounded_offset : bounded_offset + bounded_limit]
+
+    @classmethod
+    def _datetime_to_us(cls, value: datetime) -> int:
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        else:
+            value = value.astimezone(timezone.utc)
+        # Exact UTC microsecond key — avoid float timestamp truncation.
+        epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        delta = value - epoch
+        return delta.days * 86_400_000_000 + delta.seconds * 1_000_000 + delta.microseconds
+
+    @classmethod
+    def _us_to_datetime(cls, updated_at_us: int) -> datetime:
+        seconds, micro = divmod(max(0, int(updated_at_us)), 1_000_000)
+        return datetime.fromtimestamp(seconds, tz=timezone.utc).replace(microsecond=micro)
+
+    @classmethod
+    def memory_keyset(cls, memory: MemoryDB) -> StreamKeyset:
+        value = getattr(memory, "updated_at", None) or getattr(memory, "created_at", None)
+        if value is None:
+            updated_at_us = 0
+        else:
+            updated_at_us = max(0, cls._datetime_to_us(value))
+        return StreamKeyset(updated_at_us=updated_at_us, memory_id=memory.id)
+
+    @classmethod
+    def scan_cursor_to_stream_keyset(cls, scan_cursor: CanonicalScanCursor) -> StreamKeyset:
+        updated_at, memory_id = scan_cursor
+        return StreamKeyset(
+            updated_at_us=max(0, cls._datetime_to_us(updated_at)),
+            memory_id=memory_id,
+        )
+
+    @classmethod
+    def stream_keyset_to_scan_cursor(cls, keyset: StreamKeyset) -> CanonicalScanCursor:
+        return (
+            cls._us_to_datetime(keyset.updated_at_us),
+            keyset.memory_id,
+        )
+
+    @classmethod
+    def keyset_sort_key(cls, keyset: StreamKeyset) -> Tuple[int, str]:
+        # Newest-first public order mirrored as (-updated_at_us, memory_id).
+        return (-keyset.updated_at_us, keyset.memory_id)
+
+    @classmethod
+    def memory_cursor_sort_key(cls, memory: MemoryDB) -> Tuple[int, str]:
+        return cls.keyset_sort_key(cls.memory_keyset(memory))
+
+    def historical_suppression_reason(
+        self,
+        memory_id: str,
+        *,
+        statuses: Dict[str, MemoryItemStatus],
+    ) -> Optional[str]:
+        """Classify historical suppression from batched canonical status alone.
+
+        Active canonical authority is ``canonical_identity``; terminal/hidden
+        ownership states are ``canonical_state``. A full visible-ID set is not
+        required — ``canonical_statuses`` already distinguishes identity.
+        """
+        status = statuses.get(memory_id)
+        if status == MemoryItemStatus.active:
+            return "canonical_identity"
+        if status in {
+            MemoryItemStatus.tombstoned,
+            MemoryItemStatus.hidden,
+            MemoryItemStatus.superseded,
+        }:
+            return "canonical_state"
+        return None
+
+    def read_page(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        cursor: Optional[str] = None,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
+        include_archive: bool = False,
+        now: Optional[datetime] = None,
+    ) -> UniversalMemoryListPage:
+        """Page the mixed newest-first view with an opaque composite cursor.
+
+        Legacy offset paging remains on ``read``. This path advances independent
+        canonical and historical positions, walks through suppressed historical
+        rows without emitting them, and refuses scope/archive authority changes
+        midstream via the signed cursor claims. Canonical continuation uses a
+        bounded Firestore keyset scan — never a full-set reload.
+        """
+        bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_PAGE_SIZE))
+        device_scope = device_scope_request.device_scope if device_scope_request is not None else "all"
+        client_device_id = device_scope_request.client_device_id if device_scope_request is not None else None
+        try:
+            secret = cursor_secret()
+        except UniversalListCursorError as exc:
+            raise HTTPException(status_code=503, detail="Memory cursor unavailable") from exc
+
+        if cursor:
+            try:
+                claims = decode_universal_list_cursor(
+                    cursor,
+                    uid=uid,
+                    include_archive=include_archive,
+                    include_pending_processing=include_pending_processing,
+                    device_scope=device_scope,
+                    client_device_id=client_device_id,
+                    secret=secret,
+                )
+            except UniversalListCursorError as exc:
+                raise HTTPException(status_code=400, detail=f"invalid_or_stale_cursor:{exc.reason}") from exc
+            state = claims.state
+        else:
+            state = UniversalListCursorState(
+                uid=uid,
+                include_archive=bool(include_archive),
+                include_pending_processing=bool(include_pending_processing),
+                device_scope=device_scope,
+                client_device_id=client_device_id,
+                canonical=None,
+                canonical_scan=None,
+                historical=None,
+                historical_updated_scan=None,
+                historical_created_scan=None,
+                canonical_exhausted=False,
+                historical_updated_exhausted=False,
+                historical_created_exhausted=False,
+            )
+
+        canonical = _CanonicalCursorStream(
+            service=self,
+            uid=uid,
+            emitted=state.canonical,
+            scan=state.canonical_scan,
+            exhausted=state.canonical_exhausted,
+            device_scope_request=device_scope_request,
+            include_pending_processing=include_pending_processing,
+            include_archive=include_archive,
+            now=now,
+            page_limit=bounded_limit,
+        )
+        historical = _HistoricalCursorStream(
+            service=self,
+            uid=uid,
+            after=state.historical,
+            updated_scan=state.historical_updated_scan,
+            created_scan=state.historical_created_scan,
+            updated_exhausted=state.historical_updated_exhausted,
+            created_exhausted=state.historical_created_exhausted,
+            device_scope_request=device_scope_request,
+            page_limit=bounded_limit,
+        )
+
+        page: List[MemoryDB] = []
+        canonical_kept = 0
+        historical_kept = 0
+
+        while len(page) < bounded_limit:
+            canonical_memory = canonical.peek()
+            historical_memory = historical.peek()
+            if canonical_memory is None and historical_memory is None:
+                break
+            take_canonical = historical_memory is None or (
+                canonical_memory is not None
+                and self.memory_cursor_sort_key(canonical_memory) <= self.memory_cursor_sort_key(historical_memory)
+            )
+            if take_canonical:
+                assert canonical_memory is not None
+                page.append(canonical_memory)
+                canonical.consume()
+                canonical_kept += 1
+                continue
+            assert historical_memory is not None
+            page.append(historical_memory)
+            historical.consume()
+            historical_kept += 1
+
+        MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL.labels(origin="canonical").inc(canonical_kept)
+        MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL.labels(origin="historical").inc(historical_kept)
+        if historical.identity_suppressed:
+            MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_identity").inc(historical.identity_suppressed)
+        if historical.state_suppressed:
+            MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_state").inc(historical.state_suppressed)
+
+        has_more = canonical.peek() is not None or historical.peek() is not None
+        next_cursor = None
+        if has_more:
+            next_state = UniversalListCursorState(
+                uid=uid,
+                include_archive=bool(include_archive),
+                include_pending_processing=bool(include_pending_processing),
+                device_scope=device_scope,
+                client_device_id=client_device_id,
+                canonical=canonical.emitted_keyset,
+                canonical_scan=canonical.scan_keyset,
+                historical=historical.consumed_keyset,
+                historical_updated_scan=historical.updated_scan_keyset,
+                historical_created_scan=historical.created_scan_keyset,
+                canonical_exhausted=canonical.exhausted and canonical.peek() is None,
+                historical_updated_exhausted=historical.updated_exhausted,
+                historical_created_exhausted=historical.created_exhausted,
+            )
+            next_cursor = encode_universal_list_cursor(next_state, secret=secret)
+        return UniversalMemoryListPage(memories=page, next_cursor=next_cursor)
 
     def read_pinned(
         self,
@@ -952,6 +1751,7 @@ class MemoryService:
         *,
         device_scope_request: Optional[DeviceScopeRequest] = None,
         include_pending_processing: bool = False,
+        include_archive: bool = False,
         now: Optional[datetime] = None,
     ) -> List[MemoryDB]:
         # The pin is a released compatibility argument, never a product selector.
@@ -962,12 +1762,19 @@ class MemoryService:
             offset=offset,
             device_scope_request=device_scope_request,
             include_pending_processing=include_pending_processing,
+            include_archive=include_archive,
             now=now,
         )
 
-    def fetch(self, uid: str, memory_id: str, *, device_scope_request: Optional[DeviceScopeRequest] = None) -> MemoryDB:
+    def fetch(
+        self,
+        uid: str,
+        memory_id: str,
+        *,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
+    ) -> MemoryDB:
         try:
-            item = read_canonical_memory_item(uid, memory_id, db_client=self._db_client)
+            item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
         if item is not None:
@@ -977,11 +1784,14 @@ class MemoryService:
                 and not memory_matches_device(item, device_scope_request.client_device_id or "")
             ):
                 raise HTTPException(status_code=404, detail="Memory not found")
-            return memory_item_to_memorydb(item)
+            memory = memory_item_to_memorydb(item)
+            if memory.is_locked:
+                raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+            return memory
         status = self._canonical_status(uid, memory_id)
         if status is not None:
             raise HTTPException(status_code=404, detail="Memory not found")
-        record = self._history.get(uid, memory_id)
+        record = self.history.get(uid, memory_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Memory not found")
         if record.memory.is_locked:
@@ -1001,14 +1811,20 @@ class MemoryService:
         capped = max(1, min(int(limit or 5), 20))
         try:
             canonical = self._canonical.search(
-                uid, query, limit=min(capped * 3, 60), device_scope_request=device_scope_request
+                uid,
+                query,
+                limit=min(capped * 3, 60),
+                device_scope_request=device_scope_request,
             )
         except HTTPException:
             raise
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory search unavailable") from exc
-        historical = self._history.search(
-            uid, query, limit=min(capped * 3, 60), device_scope_request=device_scope_request
+        historical = self.history.search(
+            uid,
+            query,
+            limit=min(capped * 3, 60),
+            device_scope_request=device_scope_request,
         )
         by_id: Dict[str, MemorySearchMatch] = {}
         for match in canonical:
@@ -1154,6 +1970,63 @@ class MemoryService:
             "archive_default_visible": False,
         }
 
+    def iter_export_memories(
+        self,
+        uid: str,
+        *,
+        include_archive: bool = True,
+        page_size: int = 500,
+    ) -> Iterator[MemoryDB]:
+        """Stream each live logical memory once for account export.
+
+        Yields without building one giant merged list. Canonical active rows are
+        emitted first; historical pages follow with per-page suppression checks.
+        No export read performs materialization, LLM work, embedding, or graph
+        admission.
+        """
+        archive_explicit = include_archive
+        page_size = max(1, min(int(page_size or 500), 500))
+        client = self.db_client if self.db_client is not None else default_db_client
+        try:
+            canonical_items = iter_authoritative_product_memory_items(uid=uid, db_client=client)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
+
+        canonical_ids: set[str] = set()
+        for item in canonical_items:
+            canonical_ids.add(item.memory_id)
+            if item.status != MemoryItemStatus.active:
+                continue
+            if item.tier == MemoryTier.archive and not archive_explicit:
+                continue
+            yield memory_item_to_memorydb(item)
+
+        pending_historical: List[HistoricalMemoryRecord] = []
+        for record in self.history.iter_all_live(uid, page_size=page_size):
+            if record.memory.id in canonical_ids:
+                continue
+            pending_historical.append(record)
+            if len(pending_historical) < page_size:
+                continue
+            yield from self._export_unsuppressed_historical(uid, pending_historical)
+            pending_historical = []
+        if pending_historical:
+            yield from self._export_unsuppressed_historical(uid, pending_historical)
+
+    def _export_unsuppressed_historical(
+        self,
+        uid: str,
+        records: List[HistoricalMemoryRecord],
+    ) -> Iterator[MemoryDB]:
+        historical_statuses = self.canonical_statuses(uid, [record.memory.id for record in records])
+        for record in records:
+            # Suppression overrides are canonical authority even when the
+            # canonical item itself has already been physically cleaned up.
+            if historical_statuses.get(record.memory.id) is not None:
+                MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_state").inc()
+                continue
+            yield record.memory
+
     def export_memories(
         self,
         uid: str,
@@ -1163,53 +2036,22 @@ class MemoryService:
     ) -> List[MemoryDB]:
         """Return each live logical memory once for account export.
 
-        Export is an explicit capability, so it reads active canonical Archive
-        rows as well as default layers when ``include_archive`` is true.  A
-        historical row is omitted whenever canonical state (active or
-        tombstoned) owns the same stable public ID.  No export read performs
-        materialization, LLM work, embedding, or graph admission.
+        Prefer ``iter_export_memories`` for large accounts so the response path
+        can stream. This list helper remains for callers that need a snapshot.
         """
-        archive_explicit = include_archive
-        page_size = max(1, min(int(page_size or 500), 500))
-        client = self._db_client if self._db_client is not None else default_db_client
-        try:
-            canonical_items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
-        except Exception as exc:
-            raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
-
-        canonical_rows: List[MemoryDB] = []
-        canonical_ids: set[str] = set()
-        for item in canonical_items:
-            canonical_ids.add(item.memory_id)
-            if item.status != MemoryItemStatus.active:
-                continue
-            if item.tier == MemoryTier.archive and not archive_explicit:
-                continue
-            canonical_rows.append(memory_item_to_memorydb(item))
-
-        historical_rows = self._history.all_live(uid, page_size=page_size)
-        merged = list(canonical_rows)
-        historical_statuses = self._canonical_statuses(uid, [record.memory.id for record in historical_rows])
-        for record in historical_rows:
-            if record.memory.id not in canonical_ids:
-                # Suppression overrides are canonical authority even when the
-                # canonical item itself has already been physically cleaned up.
-                if historical_statuses.get(record.memory.id) is not None:
-                    MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_state").inc()
-                    continue
-                merged.append(record.memory)
+        merged = list(self.iter_export_memories(uid, include_archive=include_archive, page_size=page_size))
         self._sort_memories(merged)
         return merged
 
     def list_historical_memory_ids(self, uid: str, *, limit: Optional[int] = None, offset: int = 0) -> List[str]:
         """IDs-only compatibility seam for complete privacy operations."""
-        return self._history.ids(uid, limit=limit, offset=offset, db_client=self._db_client)
+        return self.history.ids(uid, limit=limit, offset=offset, db_client=self.db_client)
 
     def _canonical_write(self, uid: str, data: Dict[str, Any], *, source_surface: str) -> MemoryDB:
         self.ensure_canonical_mutation_ready(uid)
         payload = required_processing_payload(data, source_surface=source_surface)
         committed_id = self._canonical.write(uid, payload)
-        item = read_canonical_memory_item(uid, committed_id or str(data.get("id") or ""), db_client=self._db_client)
+        item = read_canonical_memory_item(uid, committed_id or str(data.get("id") or ""), db_client=self.db_client)
         if item is None:
             raise HTTPException(status_code=503, detail="Canonical memory write readback unavailable")
         return memory_item_to_memorydb(item)
@@ -1226,7 +2068,7 @@ class MemoryService:
         status = self._canonical_status(uid, memory_id)
         if status is not None:
             raise HTTPException(status_code=404, detail="Memory not found")
-        record = self._history.get(uid, memory_id)
+        record = self.history.get(uid, memory_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Memory not found")
         if record.memory.is_locked:
@@ -1236,7 +2078,10 @@ class MemoryService:
             {
                 "id": memory_id,
                 "uid": uid,
-                "promotion": {"historical_materialization": True, "lifecycle": "grandfathered_long_term"},
+                "promotion": {
+                    "historical_materialization": True,
+                    "lifecycle": "grandfathered_long_term",
+                },
                 "manually_added": bool(payload.get("manually_added")),
                 "user_asserted": bool(payload.get("manually_added")),
             }
@@ -1250,9 +2095,17 @@ class MemoryService:
 
     def _ensure_canonical_target(self, uid: str, memory_id: str) -> bool:
         try:
-            if read_canonical_memory_item(uid, memory_id, db_client=self._db_client) is not None:
+            canonical_item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
+            if canonical_item is not None:
+                if memory_item_to_memorydb(canonical_item).is_locked:
+                    raise HTTPException(
+                        status_code=402,
+                        detail="A paid plan is required to access this memory.",
+                    )
                 MEMORY_HISTORICAL_MATERIALIZATION_TOTAL.labels(outcome="not_needed").inc()
                 return False
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
         self._materialize_legacy(uid, memory_id)
@@ -1267,18 +2120,18 @@ class MemoryService:
         except ValueError as exc:
             raise HTTPException(status_code=404, detail="Memory not found") from exc
         if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self._db_client)
+            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
         return updated
 
     def refine(self, uid: str, memory_id: str, arg_changes: Dict[str, Any]) -> MemoryDB:
         self.ensure_canonical_mutation_ready(uid)
         materialized = self._ensure_canonical_target(uid, memory_id)
         try:
-            updated = refine_canonical_memory(uid, memory_id, arg_changes, db_client=self._db_client)
+            updated = refine_canonical_memory(uid, memory_id, arg_changes, db_client=self.db_client)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail="Memory not found") from exc
         if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self._db_client)
+            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
         return memory_item_to_memorydb(updated)
 
     def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
@@ -1286,14 +2139,14 @@ class MemoryService:
         materialized = self._ensure_canonical_target(uid, memory_id)
         self._canonical.update_visibility(uid, memory_id, visibility)
         if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self._db_client)
+            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
 
     def review(self, uid: str, memory_id: str, value: bool) -> None:
         self.ensure_canonical_mutation_ready(uid)
         materialized = self._ensure_canonical_target(uid, memory_id)
         self._canonical.review(uid, memory_id, value)
         if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self._db_client)
+            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
 
     def update_product_fields(
         self,
@@ -1303,6 +2156,8 @@ class MemoryService:
         tags: Optional[List[str]] = None,
         category: Optional[str] = None,
         is_baseline: Optional[bool] = None,
+        is_read: Optional[bool] = None,
+        is_dismissed: Optional[bool] = None,
     ) -> MemoryDB:
         self.ensure_canonical_mutation_ready(uid)
         materialized = self._ensure_canonical_target(uid, memory_id)
@@ -1312,10 +2167,26 @@ class MemoryService:
             tags=tags,
             category=category,
             is_baseline=is_baseline,
+            is_read=is_read,
+            is_dismissed=is_dismissed,
         )
         if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self._db_client)
+            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
         return updated
+
+    def update_read_status(
+        self,
+        uid: str,
+        memory_id: str,
+        *,
+        is_read: Optional[bool] = None,
+        is_dismissed: Optional[bool] = None,
+    ) -> MemoryDB:
+        """Persist durable UI read/dismiss state through canonical product metadata."""
+
+        if is_read is None and is_dismissed is None:
+            raise HTTPException(status_code=422, detail="Missing memory read mutation value")
+        return self.update_product_fields(uid, memory_id, is_read=is_read, is_dismissed=is_dismissed)
 
     def update_baseline(self, uid: str, memory_id: str, value: bool) -> MemoryDB:
         """Preserve the released baseline mutation through canonical metadata."""
@@ -1324,10 +2195,15 @@ class MemoryService:
 
     def delete(self, uid: str, memory_id: str) -> None:
         try:
-            canonical_item = read_canonical_memory_item(uid, memory_id, db_client=self._db_client)
+            canonical_item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
         if canonical_item is not None:
+            if memory_item_to_memorydb(canonical_item).is_locked:
+                raise HTTPException(
+                    status_code=402,
+                    detail="A paid plan is required to access this memory.",
+                )
             # Write the historical suppression first. Tombstones are privacy
             # operations, not intake, so this path stays available while the
             # global write fence is paused and a cleanup failure cannot expose
@@ -1338,16 +2214,19 @@ class MemoryService:
             status = self._canonical_status(uid, memory_id)
             if status is not None:
                 raise HTTPException(status_code=404, detail="Memory not found")
-            record = self._history.get(uid, memory_id)
+            record = self.history.get(uid, memory_id)
             if record is None:
                 raise HTTPException(status_code=404, detail="Memory not found")
             if record.memory.is_locked:
-                raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+                raise HTTPException(
+                    status_code=402,
+                    detail="A paid plan is required to access this memory.",
+                )
             # A historical-only deletion does not need to manufacture an
             # active canonical item.  The durable canonical suppression record
             # is the authoritative privacy tombstone.
         self._write_historical_override(uid, memory_id, MemoryItemStatus.tombstoned)
-        HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self._db_client)
+        HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
 
     def delete_batch(self, uid: str, memory_ids: List[str]) -> None:
         """Delete canonical and historical memories with all-or-nothing validation.
@@ -1367,10 +2246,15 @@ class MemoryService:
         # do not materialize the first historical ID before checking later IDs.
         for memory_id in requested:
             try:
-                canonical_item = read_canonical_memory_item(uid, memory_id, db_client=self._db_client)
+                canonical_item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
             except Exception as exc:
                 raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
             if canonical_item is not None:
+                if memory_item_to_memorydb(canonical_item).is_locked:
+                    raise HTTPException(
+                        status_code=402,
+                        detail="A paid plan is required to access this memory.",
+                    )
                 canonical_ids.append(memory_id)
                 continue
 
@@ -1379,17 +2263,20 @@ class MemoryService:
                 # A previous attempt may have committed the canonical tombstone
                 # and failed before cleanup/ledger completion. Preserve the
                 # identity in this retry so the suppression write is replayed.
-                record = self._history.get(uid, memory_id)
+                record = self.history.get(uid, memory_id)
                 if record is not None:
                     historical_ids.append(memory_id)
                 continue
             if status is not None:
                 raise HTTPException(status_code=404, detail="Memory not found")
-            record = self._history.get(uid, memory_id)
+            record = self.history.get(uid, memory_id)
             if record is None:
                 raise HTTPException(status_code=404, detail="Memory not found")
             if record.memory.is_locked:
-                raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+                raise HTTPException(
+                    status_code=402,
+                    detail="A paid plan is required to access this memory.",
+                )
             historical_ids.append(memory_id)
 
         # Suppression is committed before the canonical tombstone and cleanup so
@@ -1411,29 +2298,41 @@ class MemoryService:
             raise HTTPException(status_code=404, detail="Memory not found") from exc
 
         for memory_id in historical_ids:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self._db_client)
+            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
 
     def delete_all(self, uid: str) -> None:
-        historical_ids = self._history.ids(uid, db_client=self._db_client)
+        historical_ids = self.history.ids(uid, db_client=self.db_client)
         # Commit the historical privacy fence before canonical cleanup. A retry
         # can safely repeat this idempotent batch if canonical deletion fails.
         self._write_historical_overrides(uid, historical_ids, MemoryItemStatus.tombstoned)
         self._canonical.delete_all(uid)
         # Cleanup is intentionally after canonical tombstones and is never the
         # success condition.  The protected adapter remains read-only.
-        self._history.cleanup_all(uid, db_client=self._db_client)
+        self.history.cleanup_all(uid, db_client=self.db_client)
 
     def delete_default(self, uid: str) -> None:
-        historical_ids = self._history.ids(uid, db_client=self._db_client)
+        historical_ids = self.history.ids(uid, db_client=self.db_client)
         self._write_historical_overrides(uid, historical_ids, MemoryItemStatus.tombstoned)
         self._canonical.delete_default(uid)
-        self._history.cleanup_all(uid, db_client=self._db_client)
+        self.history.cleanup_all(uid, db_client=self.db_client)
 
-    def retract_conversation_memories(self, uid: str, conversation_id: str) -> Optional[Dict[str, Any]]:
-        result = retract_conversation_sourced_memories(uid, conversation_id, db_client=self._db_client)
+    def retract_conversation_memories(
+        self,
+        uid: str,
+        conversation_id: str,
+        *,
+        on_authoritative_commit: Optional[Callable[[], None]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        result = retract_conversation_sourced_memories(uid, conversation_id, db_client=self.db_client)
+        # Canonical retraction is irreversible even if the historical scan or
+        # suppression write below fails. Advance the merge compensation fence
+        # immediately so failure handling preserves the already-built merged
+        # target instead of deleting both source and target memories.
+        if on_authoritative_commit is not None:
+            on_authoritative_commit()
         historical_ids = [
             record.memory.id
-            for record in self._history.all_live(uid)
+            for record in self.history.all_live(uid)
             if record.memory.conversation_id == conversation_id
             or any(
                 evidence.source_type == "conversation" and evidence.source_id == conversation_id
@@ -1443,9 +2342,14 @@ class MemoryService:
         retracted_ids = list(dict.fromkeys(list(result.get("retracted_memory_ids") or []) if result else []))
         all_ids = list(dict.fromkeys(retracted_ids + historical_ids))
         if all_ids:
+            # Historical suppression must commit before the authoritative fence
+            # advances. A suppression failure leaves the callback unfired so
+            # merge source-deletion does not proceed on a partial retract.
             self._write_historical_overrides(uid, all_ids, MemoryItemStatus.tombstoned)
-            for memory_id in historical_ids:
-                HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self._db_client)
+        # Physical historical cleanup is best effort and must not affect the
+        # already-advanced irreversible compensation fence.
+        for memory_id in historical_ids:
+            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
         return result
 
     def replace_conversation_memories(
@@ -1455,7 +2359,7 @@ class MemoryService:
         items: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         self.ensure_canonical_mutation_ready(uid)
-        result = replace_conversation_sourced_memories(uid, conversation_id, items, db_client=self._db_client)
+        result = replace_conversation_sourced_memories(uid, conversation_id, items, db_client=self.db_client)
         retracted = list(result.get("retracted_memory_ids") or [])
         if retracted:
             self._write_historical_overrides(uid, retracted, MemoryItemStatus.tombstoned)
@@ -1495,9 +2399,12 @@ class MemoryService:
         ids = self._canonical.write_batch(uid, payloads)
         results: List[MemoryDB] = []
         for memory_id in ids:
-            item = read_canonical_memory_item(uid, memory_id, db_client=self._db_client)
+            item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
             if item is None:
-                raise HTTPException(status_code=503, detail="Canonical memory write readback unavailable")
+                raise HTTPException(
+                    status_code=503,
+                    detail="Canonical memory write readback unavailable",
+                )
             results.append(memory_item_to_memorydb(item))
         self._write_historical_overrides(uid, ids, MemoryItemStatus.active)
         return results
@@ -1518,23 +2425,31 @@ class MemoryService:
             return
 
         try:
-            canonical_item = read_canonical_memory_item(uid, memory_id, db_client=self._db_client)
+            canonical_item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
         if canonical_item is not None:
+            if memory_item_to_memorydb(canonical_item).is_locked:
+                raise HTTPException(
+                    status_code=402,
+                    detail="A paid plan is required to access this memory.",
+                )
             self._write_historical_override(uid, memory_id, MemoryItemStatus.tombstoned)
             self._canonical.delete(uid, memory_id)
         else:
             status = self._canonical_status(uid, memory_id)
             if status is not None:
                 raise HTTPException(status_code=404, detail="Memory not found")
-            record = self._history.get(uid, memory_id)
+            record = self.history.get(uid, memory_id)
             if record is None:
                 raise HTTPException(status_code=404, detail="Memory not found")
             if record.memory.is_locked:
-                raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+                raise HTTPException(
+                    status_code=402,
+                    detail="A paid plan is required to access this memory.",
+                )
         self._write_historical_override(uid, memory_id, MemoryItemStatus.tombstoned)
-        HistoricalMemoryAdapter.cleanup(uid, memory_id, delete_vector=False, db_client=self._db_client)
+        HistoricalMemoryAdapter.cleanup(uid, memory_id, delete_vector=False, db_client=self.db_client)
 
     def update_external_memory_content(
         self,
@@ -1555,5 +2470,5 @@ class MemoryService:
         except ValueError as exc:
             raise HTTPException(status_code=404, detail="Memory not found") from exc
         if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self._db_client)
+            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
         return updated

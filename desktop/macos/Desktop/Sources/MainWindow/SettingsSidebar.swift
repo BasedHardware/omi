@@ -29,8 +29,9 @@ struct SettingsSearchItem: Identifiable {
         "speaker",
       ], section: .general, icon: "speaker.wave.2", settingId: "general.systemaudio"),
     SettingsSearchItem(
-      name: "Notifications", subtitle: "Proactive alerts and status",
-      keywords: ["alerts", "notify"], section: .general, icon: "gearshape",
+      name: "Notifications", subtitle: "macOS permission and banner status",
+      keywords: ["alerts", "notify", "banners", "system settings", "permission"], section: .general,
+      icon: "gearshape",
       settingId: "general.notifications"),
     SettingsSearchItem(
       name: "Ask omi", subtitle: "Show or hide the floating chat bar",
@@ -138,7 +139,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["daily", "summary", "digest", "end of day"], section: .notifications, icon: "bell",
       settingId: "notifications.dailysummary"),
     SettingsSearchItem(
-      name: "Summary Time", subtitle: "When to send your daily summary",
+      name: "Summary Time", subtitle: "When to send your daily summary (hour only)",
       keywords: ["time", "schedule", "when", "hour"], section: .notifications, icon: "bell",
       settingId: "notifications.summarytime"),
 

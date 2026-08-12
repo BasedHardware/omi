@@ -36,8 +36,11 @@ enum ContextTitleNormalizer {
     return result.isEmpty ? nil : result
   }
 
-  static func identityKey(appName: String, windowTitle: String?) -> String {
-    "\(appName.lowercased())::\((normalize(windowTitle, appName: appName) ?? "").lowercased())"
+  /// Returns nil when the title normalizes to blank/noise-only so untitled windows of the
+  /// same app never share a colliding `"app::"` identity or reference hash.
+  static func identityKey(appName: String, windowTitle: String?) -> String? {
+    guard let normalized = normalize(windowTitle, appName: appName) else { return nil }
+    return "\(appName.lowercased())::\(normalized.lowercased())"
   }
 
   /// Exact pre-flag TaskAssistant dedupe semantics, centralized here so the
