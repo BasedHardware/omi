@@ -190,17 +190,24 @@ export const predicateBatchWorkInputManifest = (
   ]);
 };
 
-const assertSnapshot = (
+export const assertPredicateBatchInputSnapshotMatchesJob = (
   snapshot: Readonly<PredicateBatchInputSnapshot>,
   job: Readonly<DurableMemoryWorkJob>,
-  strategy: Readonly<RegisteredMemoryStrategy>,
-): { request: ReturnType<typeof preparePredicateAlignmentQuestion>["request"]; prompt_cost: number } => {
+): void => {
   if (snapshot.owner_account_id !== job.owner_account_id || snapshot.job_id !== job.job_id
     || snapshot.input_frontier !== job.input_frontier
     || snapshot.predicates.some((predicate) => predicate.owner_account_id !== job.owner_account_id)
     || durableMemoryWorkInputManifestDigest(predicateBatchWorkInputManifest(snapshot)) !== job.input_digest) {
     fail("input_job_mismatch");
   }
+};
+
+const assertSnapshot = (
+  snapshot: Readonly<PredicateBatchInputSnapshot>,
+  job: Readonly<DurableMemoryWorkJob>,
+  strategy: Readonly<RegisteredMemoryStrategy>,
+): { request: ReturnType<typeof preparePredicateAlignmentQuestion>["request"]; prompt_cost: number } => {
+  assertPredicateBatchInputSnapshotMatchesJob(snapshot, job);
   const prepared = preparePredicateAlignmentQuestion(snapshot.predicates, job.owner_account_id);
   if (prepared.excluded_predicates.length || prepared.request.predicates.length < 2
     || predicateAlignmentBatchDigest(predicateBatchAdjudicationContract(strategy), prepared.request)

@@ -28,6 +28,10 @@ import {
 } from "./predicate-batch-contract";
 import { definePredicateBatchWorkAdapter } from "./predicate-batch-work-adapter";
 import {
+  definePredicateBatchWorkInputRepository,
+  materializeStagedPredicateBatchWorkInput,
+} from "./predicate-batch-work-input-repository";
+import {
   MAX_PREDICATE_JOBS_PER_SCHEDULING_CALL,
   PREDICATE_BATCH_SCHEDULING_SNAPSHOT_VERSION,
   definePredicateBatchWorkScheduler,
@@ -162,10 +166,36 @@ const memoryAcceptance = () => {
   return { repository, requests };
 };
 
+const memoryInput = () => {
+  const stored = new Map<string, ReturnType<typeof materializeStagedPredicateBatchWorkInput>>();
+  const requests: Parameters<ReturnType<typeof definePredicateBatchWorkInputRepository>["stage"]>[1][] = [];
+  const repository = definePredicateBatchWorkInputRepository({
+    async stage(_authorized, request) {
+      requests.push(request);
+      const expected = materializeStagedPredicateBatchWorkInput(request);
+      const prior = stored.get(expected.job_id);
+      if (prior) return JSON.stringify(prior) === JSON.stringify(expected)
+        ? { kind: "replayed", input: prior }
+        : { kind: "idempotency_conflict" };
+      stored.set(expected.job_id, expected);
+      return { kind: "staged", input: expected };
+    },
+    async load(_authorized, job) {
+      const input = stored.get(job.job_id);
+      return input ? { kind: "found", input } : { kind: "not_found" };
+    },
+  });
+  return { repository, requests, stored };
+};
+
+const schedulerFor = (repository: ReturnType<typeof memoryAcceptance>["repository"]) =>
+  definePredicateBatchWorkScheduler(repository, memoryInput().repository);
+
 describe("predicate batch work scheduler", () => {
   test("accepts deterministic jobs, replays them, and emits adapter-consumable manifests", async () => {
     const store = memoryAcceptance();
-    const scheduler = definePredicateBatchWorkScheduler(store.repository);
+    const inputs = memoryInput();
+    const scheduler = definePredicateBatchWorkScheduler(store.repository, inputs.repository);
     const input = snapshot();
     const first = await scheduler.schedule(context(), request(input));
     expect(first.kind).toBe("accepted");
@@ -180,6 +210,8 @@ describe("predicate batch work scheduler", () => {
     expect(second.scheduled.map(({ job_id, batch_question_digest }) => ({ job_id, batch_question_digest })))
       .toEqual(first.scheduled.map(({ job_id, batch_question_digest }) => ({ job_id, batch_question_digest })));
     expect(second.scheduled.every((item) => item.acceptance === "replayed")).toBe(true);
+    expect(inputs.requests).toHaveLength(first.scheduled.length * 2);
+    expect(inputs.stored.size).toBe(first.scheduled.length);
 
     const accepted = store.requests[0]!;
     const revisionIds = new Set(accepted.input_manifest
@@ -216,7 +248,7 @@ describe("predicate batch work scheduler", () => {
     expect(plan.questions).toHaveLength(1);
     expect(plan.coverage.remaining_pairs_after_plan).toBeGreaterThan(0);
     const store = memoryAcceptance();
-    const scheduler = definePredicateBatchWorkScheduler(store.repository);
+    const scheduler = schedulerFor(store.repository);
     const first = await scheduler.schedule(context(), request(input, { max_jobs_per_invocation: 1 }));
     const replay = await scheduler.schedule(context(), request(input, { max_jobs_per_invocation: 1 }));
     expect(replay.scheduled[0]?.job_id).toBe(first.scheduled[0]?.job_id);
@@ -239,7 +271,7 @@ describe("predicate batch work scheduler", () => {
 
   test("changed schedule bytes conflict with the existing deterministic job identity", async () => {
     const store = memoryAcceptance();
-    const scheduler = definePredicateBatchWorkScheduler(store.repository);
+    const scheduler = schedulerFor(store.repository);
     const first = await scheduler.schedule(context(), request());
     expect(first.kind).toBe("accepted");
     const changed = await scheduler.schedule(context(), request(snapshot(), { accepted_at_event_time: 101 }));
@@ -262,6 +294,7 @@ describe("predicate batch work scheduler", () => {
         calls += 1;
         return { kind: "accepted", job: accepted.pending_job };
       }),
+      memoryInput().repository,
     );
     const outcome = await scheduler.schedule(context(), request(input, {
       max_jobs_per_invocation: MAX_PREDICATE_JOBS_PER_SCHEDULING_CALL,
@@ -286,6 +319,7 @@ describe("predicate batch work scheduler", () => {
           }
           return { kind: "accepted", job: accepted.pending_job };
         }),
+        memoryInput().repository,
       );
       const outcome = await scheduler.schedule(context(), request(input, { max_jobs_per_invocation: 8 }));
       expect(outcome.kind).toBe("halted");
@@ -293,6 +327,35 @@ describe("predicate batch work scheduler", () => {
       expect(outcome.halt?.code).toBe(mode === "throw" ? "repository_unavailable" : "serialization_retryable");
       expect(JSON.stringify(outcome)).not.toContain("SECRET");
       expect(calls).toBe(2);
+    }
+  });
+
+  test("input staging refusal or failure prevents work acceptance", async () => {
+    for (const mode of ["refuse", "throw"] as const) {
+      let acceptanceCalls = 0;
+      let stagingCalls = 0;
+      const acceptance = defineDurableMemoryWorkAcceptanceRepository(async (_authorized, accepted) => {
+        acceptanceCalls += 1;
+        return { kind: "accepted", job: accepted.pending_job };
+      });
+      const inputs = definePredicateBatchWorkInputRepository({
+        async stage() {
+          stagingCalls += 1;
+          if (mode === "throw") throw new Error("SECRET input store detail");
+          return { kind: "idempotency_conflict" };
+        },
+        async load() { return { kind: "not_found" }; },
+      });
+      const outcome = await definePredicateBatchWorkScheduler(acceptance, inputs)
+        .schedule(context(), request());
+      expect(outcome).toMatchObject({
+        kind: "halted",
+        scheduled: [],
+        halt: { code: mode === "throw" ? "repository_unavailable" : "idempotency_conflict" },
+      });
+      expect(JSON.stringify(outcome)).not.toContain("SECRET");
+      expect(stagingCalls).toBe(1);
+      expect(acceptanceCalls).toBe(0);
     }
   });
 
@@ -315,6 +378,7 @@ describe("predicate batch work scheduler", () => {
     let calls = 0;
     const scheduler = definePredicateBatchWorkScheduler(
       defineDurableMemoryWorkAcceptanceRepository(async () => { calls += 1; throw new Error("unused"); }),
+      memoryInput().repository,
     );
     const outcome = await scheduler.schedule(context(), request(snapshot(predicates, successes)));
     expect(outcome).toMatchObject({ kind: "already_complete", planned_jobs: 0, scheduled: [], halt: null });
@@ -329,6 +393,7 @@ describe("predicate batch work scheduler", () => {
         calls += 1;
         return { kind: "accepted", job: accepted.pending_job };
       }),
+      memoryInput().repository,
     );
     await expect(scheduler.schedule(context("memories.work.execute"), request()))
       .rejects.toThrow("capability_denied");
@@ -382,6 +447,7 @@ describe("predicate batch work scheduler", () => {
         calls += 1;
         return { kind: "accepted", job: accepted.pending_job };
       }),
+      memoryInput().repository,
     );
     const huge = names(2, 11_000).map(predicate);
     await expect(scheduler.schedule(context(), request(snapshot(huge))))

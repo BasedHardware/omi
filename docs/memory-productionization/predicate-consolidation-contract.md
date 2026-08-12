@@ -1,6 +1,6 @@
 # Predicate identity and bounded consolidation contract
 
-Status: P1 preregistration, 2026-08-11
+Status: P1 core implemented; P3 exact-input persistence qualified; activation remains blocked, 2026-08-12
 
 ## Scope
 

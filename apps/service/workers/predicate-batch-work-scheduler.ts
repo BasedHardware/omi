@@ -44,6 +44,11 @@ import {
   predicateBatchWorkInputManifest,
   type PredicateBatchInputSnapshot,
 } from "./predicate-batch-work-adapter";
+import {
+  predicateBatchWorkInputStageRequestDigest,
+  type PredicateBatchWorkInputRepository,
+  type PredicateBatchWorkInputStageOutcome,
+} from "./predicate-batch-work-input-repository";
 
 const SCHEDULER_PORT: unique symbol = Symbol("predicate-batch-work-scheduler");
 export const PREDICATE_BATCH_SCHEDULING_SNAPSHOT_VERSION =
@@ -218,8 +223,17 @@ const haltCode = (outcome: DurableMemoryWorkAcceptanceOutcome): PredicateBatchSc
   return fail("invalid_acceptance_outcome");
 };
 
+const inputHaltCode = (
+  outcome: PredicateBatchWorkInputStageOutcome,
+): PredicateBatchSchedulingHaltCode => {
+  if (outcome.kind === "idempotency_conflict" || outcome.kind === "serialization_retryable"
+    || outcome.kind === "stale_context" || outcome.kind === "authorization_denied") return outcome.kind;
+  return fail("invalid_input_outcome");
+};
+
 export const definePredicateBatchWorkScheduler = (
   repository: DurableMemoryWorkAcceptanceRepository,
+  inputRepository: PredicateBatchWorkInputRepository,
 ): PredicateBatchWorkScheduler => Object.freeze({
   [SCHEDULER_PORT]: true as const,
   async schedule(
@@ -305,6 +319,39 @@ export const definePredicateBatchWorkScheduler = (
         max_attempts: executionPolicy.max_attempts,
       };
       const pending = acceptDurableMemoryWork(acceptedWork);
+      let inputOutcome: PredicateBatchWorkInputStageOutcome;
+      try {
+        const stageBody = Object.freeze({ pending_job: pending, snapshot: input });
+        inputOutcome = await inputRepository.stage(context, {
+          ...stageBody,
+          request_digest: predicateBatchWorkInputStageRequestDigest(stageBody),
+        });
+      } catch {
+        return Object.freeze({
+          kind: "halted" as const,
+          planned_jobs: plan.questions.length,
+          scheduled: Object.freeze([...scheduled]),
+          coverage: plan.coverage,
+          halt: Object.freeze({
+            job_id: jobId,
+            batch_question_digest: question.batch_question_digest,
+            code: "repository_unavailable" as const,
+          }),
+        });
+      }
+      if (inputOutcome.kind !== "staged" && inputOutcome.kind !== "replayed") {
+        return Object.freeze({
+          kind: "halted" as const,
+          planned_jobs: plan.questions.length,
+          scheduled: Object.freeze([...scheduled]),
+          coverage: plan.coverage,
+          halt: Object.freeze({
+            job_id: jobId,
+            batch_question_digest: question.batch_question_digest,
+            code: inputHaltCode(inputOutcome),
+          }),
+        });
+      }
       let outcome: DurableMemoryWorkAcceptanceOutcome;
       try {
         outcome = await repository.accept(context, {

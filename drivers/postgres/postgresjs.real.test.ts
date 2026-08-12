@@ -25,6 +25,14 @@ import {
 } from "../../apps/service/workers/formation-work-input-repository";
 import { DURABLE_MEMORY_GRAPH_PLAN_VERSION } from "../../apps/service/workers/durable-memory-graph-plan";
 import {
+  PREDICATE_BATCH_SCHEDULING_SNAPSHOT_VERSION,
+  definePredicateBatchWorkScheduler,
+} from "../../apps/service/workers/predicate-batch-work-scheduler";
+import {
+  definePredicateBatchWorkInputRepository,
+  materializeStagedPredicateBatchWorkInput,
+} from "../../apps/service/workers/predicate-batch-work-input-repository";
+import {
   FORMATION_INPUT_SNAPSHOT_VERSION,
   formationWorkInputManifest,
   parseFormationInputSnapshot,
@@ -34,6 +42,7 @@ import {
   formationCandidateManifestDigest,
   parseFormationOutcomeEnvelope,
 } from "../../core/consolidate/formation-outcome";
+import { predicateIdForName, predicateRevisionForObservation } from "../../core/consolidate/predicate-identity";
 import {
   DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
   registerDurableMemoryWorkExecutionPolicy,
@@ -55,7 +64,7 @@ import {
 } from "../../core/extract/grounded";
 import { prepareDerivation, type AtomicGraphTransition } from "../../core/ledger";
 import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
-import type { IdentityAuthorization, IdentityConstraint, ProvisionalClaim } from "../../core/schema";
+import type { IdentityAuthorization, IdentityConstraint, Predicate, ProvisionalClaim } from "../../core/schema";
 import {
   createPostgresAuthoritativeLedgerRepository,
   createPostgresSuccessfulEmptyLedgerRepository,
@@ -68,6 +77,7 @@ import { createPostgresDurableMemoryWorkResultRepository } from "./durable-memor
 import { createPostgresDurableMemoryWorkSuccessRepository } from "./durable-memory-work-success";
 import { createPostgresFormationWorkInputRepository } from "./formation-work-input";
 import { createPostgresFormationOneShotRuntime } from "./formation-one-shot-runtime";
+import { createPostgresPredicateBatchWorkInputRepository } from "./predicate-batch-work-input";
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
@@ -1413,6 +1423,174 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       staged_results: 1, successes: 1, success_outbox: 1,
       formation_outcomes: 1, graph_sequence: "2",
     }]);
+
+    const predicateStrategy = registerMemoryStrategy({
+      version: MEMORY_STRATEGY_VERSION,
+      strategy_id: `strategy:predicate:${suffix}`,
+      work_kind: "predicate_batch",
+      coordinates: {
+        strategy_version: "predicate-alignment-v3",
+        model_version: "model:qualification:v1",
+        prompt_version: "predicate-prompt-v2",
+        policy_version: "predicate-policy-v1",
+        code_version: "relations-exhaustive-v3",
+        schema_version: "predicate-response-v2",
+        tokenizer_version: "none",
+        tool_version: "none",
+        result_contract_version: DURABLE_MEMORY_GRAPH_PLAN_VERSION,
+        speaker_strategy_version: "none",
+        boundary_strategy_version: "none",
+      },
+    });
+    const predicatePolicy = defineMemoryStrategyAssignmentPolicy({
+      policy_id: `policy:predicate:${suffix}`,
+      work_kind: "predicate_batch",
+      unit_kind: "account",
+      key_version: "assignment-key:qualification:v1",
+      authority_strategy_id: predicateStrategy.strategy_id,
+      shadow_candidates: [],
+    }, [predicateStrategy]);
+    const predicateAssignment = createMemoryStrategyAssigner(new Uint8Array(32).fill(29)).assign({
+      owner_account_id: accountId,
+      unit_ref: accountId,
+      policy: predicatePolicy,
+      strategies: [predicateStrategy],
+    });
+    const predicateExecutionPolicy = registerDurableMemoryWorkExecutionPolicy({
+      version: DURABLE_MEMORY_WORK_EXECUTION_POLICY_VERSION,
+      policy_id: `execution-policy:predicate:${suffix}`,
+      work_kind: "predicate_batch",
+      execution_contract_digest: predicateStrategy.execution_contract_digest,
+      max_attempts: 2,
+      lease_duration_seconds: 30,
+      retry_delays_seconds: [1],
+    });
+    const predicate = (name: string): Predicate => predicateRevisionForObservation({
+      owner_account_id: accountId,
+      predicate_id: predicateIdForName(name),
+      display_name: name,
+      roles: ["subject"],
+      lifecycle: "canonical",
+    }).predicate;
+    const predicateSnapshot = {
+      version: PREDICATE_BATCH_SCHEDULING_SNAPSHOT_VERSION,
+      owner_account_id: accountId,
+      input_frontier: "graph:predicate:qualification:one",
+      predicates: [predicate("uses"), predicate("works_with")],
+      successful_questions: [],
+    } as const;
+    const predicateInputRepository = createPostgresPredicateBatchWorkInputRepository({
+      pool: appRolePool,
+    });
+    const predicateScheduler = definePredicateBatchWorkScheduler(
+      repository,
+      predicateInputRepository,
+    );
+    const predicateScheduleRequest = {
+      snapshot: predicateSnapshot,
+      strategy_assignment: predicateAssignment,
+      execution_policy: predicateExecutionPolicy,
+      accepted_at_event_time: now,
+      max_jobs_per_invocation: 1,
+    } as const;
+
+    const missingInputScheduler = definePredicateBatchWorkScheduler(
+      repository,
+      definePredicateBatchWorkInputRepository({
+        async stage(_authorized, request) {
+          return { kind: "staged", input: materializeStagedPredicateBatchWorkInput(request) };
+        },
+        async load() { return { kind: "not_found" }; },
+      }),
+    );
+    const missingInput = await missingInputScheduler.schedule(context, predicateScheduleRequest);
+    expect(missingInput).toMatchObject({
+      kind: "halted", scheduled: [], halt: { code: "repository_unavailable" },
+    });
+    const missingInputJobId = missingInput.halt?.job_id;
+    if (!missingInputJobId) throw new Error("qualification_missing_unstaged_predicate_job");
+    const rejectedUnstaged = await ownerSql.unsafe<{
+      staged_inputs: number; acceptances: number;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_predicate_batch_work_inputs
+          WHERE account_id = $1 AND job_id = $2) AS staged_inputs,
+        (SELECT count(*)::int FROM omi_memory.memory_work_acceptances
+          WHERE account_id = $1 AND job_id = $2) AS acceptances
+    `, [accountId, missingInputJobId]);
+    expect([...rejectedUnstaged]).toEqual([{ staged_inputs: 0, acceptances: 0 }]);
+
+    try {
+      await ownerSql.unsafe(`
+        CREATE OR REPLACE FUNCTION omi_memory.qualification_reject_predicate_acceptance()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'qualification injected predicate acceptance rollback'; END
+        $$;
+        DROP TRIGGER IF EXISTS reject_predicate_acceptance
+          ON omi_memory.memory_work_state_revisions;
+        CREATE TRIGGER reject_predicate_acceptance
+        AFTER INSERT ON omi_memory.memory_work_state_revisions
+        FOR EACH ROW EXECUTE FUNCTION omi_memory.qualification_reject_predicate_acceptance()
+      `, [], { prepare: false });
+      await expect(predicateScheduler.schedule(context, predicateScheduleRequest))
+        .resolves.toMatchObject({
+          kind: "halted",
+          scheduled: [],
+          halt: { code: "repository_unavailable" },
+        });
+    } finally {
+      await ownerSql.unsafe(`
+        DROP TRIGGER IF EXISTS reject_predicate_acceptance
+          ON omi_memory.memory_work_state_revisions;
+        DROP FUNCTION IF EXISTS omi_memory.qualification_reject_predicate_acceptance()
+      `, [], { prepare: false });
+    }
+    const predicateJob = (await predicateScheduler.schedule(context, predicateScheduleRequest));
+    expect(predicateJob).toMatchObject({
+      kind: "accepted",
+      scheduled: [{ acceptance: "accepted" }],
+    });
+    const predicateJobId = predicateJob.scheduled[0]?.job_id;
+    if (!predicateJobId) throw new Error("qualification_missing_predicate_job");
+    expect(predicateJobId).toBe(missingInputJobId);
+    const predicatePersisted = await ownerSql.unsafe<{
+      staged_inputs: number; acceptances: number;
+    }[]>(`
+      SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_predicate_batch_work_inputs
+          WHERE account_id = $1 AND job_id = $2) AS staged_inputs,
+        (SELECT count(*)::int FROM omi_memory.memory_work_acceptances
+          WHERE account_id = $1 AND job_id = $2) AS acceptances
+    `, [accountId, predicateJobId]);
+    expect([...predicatePersisted]).toEqual([{ staged_inputs: 1, acceptances: 1 }]);
+    await expect(predicateScheduler.schedule(context, predicateScheduleRequest))
+      .resolves.toMatchObject({ scheduled: [{ job_id: predicateJobId, acceptance: "replayed" }] });
+    await expect(predicateScheduler.schedule(context, {
+      ...predicateScheduleRequest,
+      accepted_at_event_time: now + 1,
+    })).resolves.toMatchObject({
+      kind: "halted",
+      scheduled: [],
+      halt: { job_id: predicateJobId, code: "idempotency_conflict" },
+    });
+
+    const predicateLease = await executionRepository.leaseNext(executionContext, {
+      work_kinds: ["predicate_batch"],
+    });
+    expect(predicateLease).toMatchObject({
+      kind: "leased", job: { job_id: predicateJobId, state: "leased" },
+    });
+    if (predicateLease.kind !== "leased") throw new Error("qualification_missing_predicate_lease");
+    await expect(predicateInputRepository.load(executionContext, predicateLease.job))
+      .resolves.toMatchObject({
+        kind: "found",
+        snapshot: { job_id: predicateJobId, predicates: [{}, {}] },
+      });
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(`SELECT * FROM omi_memory.memory_predicate_batch_work_inputs
+        WHERE account_id = $1`, [accountId]);
+    })).rejects.toMatchObject({ code: "42501" });
 
     const rollbackSuccessSuffix = `${suffix}:success-rollback`;
     const rollbackSuccessAcceptance = durableWorkAcceptanceRequest(
