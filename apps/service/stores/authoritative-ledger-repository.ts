@@ -64,7 +64,7 @@ export type AuthoritativeLedgerAppendOutcome =
   | { readonly kind: "idempotency_conflict" }
   | { readonly kind: "stale_parent" }
   | { readonly kind: "stale_context"; readonly reason: "expired_context" | "stale_epoch" | "destination_inactive" | "lifecycle_inactive" }
-  | { readonly kind: "authorization_denied"; readonly reason: "credential_inactive" | "grant_inactive" | "capability_denied" }
+  | { readonly kind: "authorization_denied"; readonly reason: "authorization_state_denied" | "credential_inactive" | "grant_inactive" | "capability_denied" }
   | { readonly kind: "serialization_retryable" };
 
 export interface AuthoritativeLedgerRepository {

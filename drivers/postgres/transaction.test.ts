@@ -138,7 +138,9 @@ test("exposes only frozen revalidated metadata from one checked-out serializable
   expect(connection.statements[1]?.values).toEqual([
     "account:alice", "principal:alice", "app:desktop", "credential:one", 4, "memories.write", "grant:one",
   ]);
-  expect(connection.statements[1]?.text).toContain("omi_memory.lock_authority_state($1, $2, $3, $4, $5, $6, $7)");
+  expect(connection.statements[1]?.text).toContain(
+    "omi_memory.lock_unfenced_authority_state($1, $2, $3, $4, $5, $6, $7)",
+  );
   expect(connection.localAccount).toBeNull();
 });
 

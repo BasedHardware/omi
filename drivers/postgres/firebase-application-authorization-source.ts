@@ -11,7 +11,7 @@ const DIGEST = /^[a-f0-9]{64}$/;
 
 export const LOOKUP_FIREBASE_APPLICATION_AUTHORIZATION: SqlStatement["text"] = `
 SELECT *
-FROM omi_memory.lookup_firebase_application_authorization($1, $2, $3, $4)
+FROM omi_memory.lookup_unfenced_firebase_application_authorization($1, $2, $3, $4)
 `;
 
 export interface FirebaseApplicationAuthorizationQueryPort {

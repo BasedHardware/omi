@@ -253,6 +253,29 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(restoreSql).toContain("set_config('omi.restore_id', p_restore_id, true)");
   });
 
+  test("makes retained restore tombstones deny both application authorization phases", () => {
+    const gateSql = migrationSql.find((migration) =>
+      migration.fileName === "0028-restored-terminal-application-gate.sql")?.sql;
+    expect(gateSql).toBeDefined();
+    expect(gateSql).toContain(
+      "CREATE FUNCTION omi_memory.lookup_unfenced_firebase_application_authorization(",
+    );
+    expect(gateSql).toContain("CREATE FUNCTION omi_memory.lock_unfenced_authority_state(");
+    expect(gateSql).toContain("omi_memory.account_restored_terminal_fences");
+    expect(gateSql).toContain(
+      "PERFORM pg_advisory_xact_lock(hashtextextended(requested_account_id, 731027))",
+    );
+    expect(gateSql).toContain(
+      "REVOKE EXECUTE ON FUNCTION omi_memory.lookup_firebase_application_authorization(",
+    );
+    expect(gateSql).toContain(
+      "REVOKE EXECUTE ON FUNCTION omi_memory.lock_authority_state(",
+    );
+    expect(gateSql).toContain("TO omi_platform_application;");
+    expect(gateSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*account_restored_terminal_fences/s);
+    expect(gateSql).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
+  });
+
   test("orders every cross-surface foreign key child before its parent", () => {
     const tableSurface = new Map(Object.entries(POSTGRES_DELETION_SURFACE_TABLES)
       .flatMap(([surface, names]) => names.map((name) => [name, surface] as const)));

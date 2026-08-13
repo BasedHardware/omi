@@ -169,4 +169,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0027-restore-replay-checkpoint-candidates.sql",
     sha256: "ad6a52c08d618cc0de1fd77919e2d392aa75bf5161ca1950c97a896b9bd7f403",
   }),
+  Object.freeze({
+    version: 28,
+    name: "restored-terminal-application-gate",
+    fileName: "0028-restored-terminal-application-gate.sql",
+    sha256: "ce7fa406eee3cc1acd3906acbfe411f44c187da25fbee9ce6f0352938baabb9c",
+  }),
 ]);

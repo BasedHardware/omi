@@ -973,6 +973,8 @@ const appendAuthorized = async (
         return Object.freeze({ kind: "stale_context" as const, reason: error.code });
       case "credential_inactive":
         return Object.freeze({ kind: "authorization_denied" as const, reason: "credential_inactive" as const });
+      case "authorization_state_denied":
+        return Object.freeze({ kind: "authorization_denied" as const, reason: "authorization_state_denied" as const });
       case "grant_inactive":
         return Object.freeze({ kind: "authorization_denied" as const, reason: "grant_inactive" as const });
       case "capability_denied":

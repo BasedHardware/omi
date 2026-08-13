@@ -617,9 +617,9 @@ test("does not mislabel a generic authority-state denial as a credential failure
     control_conflict_at_revision: 17,
   });
   await expect(createPostgresSuccessfulEmptyLedgerRepository({ pool: new FakePool(connection) })
-    .append(context(), request())).rejects.toEqual(
-      expect.objectContaining({ code: "authorization_state_denied" }),
-    );
+    .append(context(), request())).resolves.toEqual({
+      kind: "authorization_denied", reason: "authorization_state_denied",
+    });
   expect(connection.statements.map((statement) => statement.name)).toEqual([
     "authority.set_local", "authority.lock_and_revalidate",
   ]);

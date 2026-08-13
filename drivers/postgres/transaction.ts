@@ -82,7 +82,7 @@ SELECT
 
 export const LOCK_AUTHORITY_STATE: SqlStatement["text"] = `
 SELECT *
-FROM omi_memory.lock_authority_state($1, $2, $3, $4, $5, $6, $7)
+FROM omi_memory.lock_unfenced_authority_state($1, $2, $3, $4, $5, $6, $7)
 `;
 
 /** Exact digest minted from the persisted revisions that authorize the context. */

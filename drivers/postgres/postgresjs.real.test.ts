@@ -3046,6 +3046,53 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     await expect(repository.append(context, first)).resolves.toEqual({
       kind: "authorization_denied", reason: "grant_inactive",
     });
+
+    // A retained restore tombstone is checked twice: the Firebase lookup omits
+    // the account, and a context minted before replay is denied again before
+    // even an idempotent receipt can be returned.
+    const restoredFenceTarget = createPostgresTombstoneRestoreTarget(pool);
+    const restoredFenceRestore = Object.freeze({
+      restore_id: `restore:application-gate:${suffix}`,
+      restore_scope: "postgresql" as const,
+      restored_snapshot_digest: sha256CanonicalContent({ suffix, restoredFence: true }),
+      restore_completed_at_epoch_seconds: 1_800_000_000,
+    });
+    await expect(restoredFenceTarget.applyTerminalRecord({
+      restore: restoredFenceRestore,
+      terminal_record: {
+        account_id: accountB, control_revision: 17, deletion_epoch: 90,
+        terminal_record_digest: sha256CanonicalContent({ suffix, restoredFence: "account-b" }),
+      },
+    })).resolves.toMatchObject({ result: "applied", account_id: accountB });
+    await expect(repository.append(contextB, sameKeyOtherAccount)).resolves.toEqual({
+      kind: "authorization_denied", reason: "authorization_state_denied",
+    });
+
+    await expect(restoredFenceTarget.applyTerminalRecord({
+      restore: restoredFenceRestore,
+      terminal_record: {
+        account_id: accountId, control_revision: 17, deletion_epoch: 91,
+        terminal_record_digest: sha256CanonicalContent({ suffix, restoredFence: "account-a" }),
+      },
+    })).resolves.toMatchObject({ result: "applied", account_id: accountId });
+    const postRestoreLookup = await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      return transaction.unsafe<{ count: number }[]>(`SELECT count(*)::int AS count
+        FROM omi_memory.lookup_unfenced_firebase_application_authorization($1, $2, $3, $4)`,
+      [firebaseProjectId, firebaseUid, applicationId, "memories.write"]);
+    });
+    expect([...postRestoreLookup]).toEqual([{ count: 0 }]);
+    for (const bypass of [
+      ["SELECT * FROM omi_memory.lookup_firebase_application_authorization($1, $2, $3, $4)",
+        [firebaseProjectId, firebaseUid, applicationId, "memories.write"]],
+      ["SELECT * FROM omi_memory.lock_authority_state($1, $2, $3, $4, $5, $6, $7)",
+        [accountB, principalB, applicationId, credentialB, 4, "memories.write", grantB]],
+    ] as const) {
+      await expect(ownerSql.begin(async (transaction) => {
+        await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+        await transaction.unsafe(bypass[0], [...bypass[1]]);
+      })).rejects.toMatchObject({ code: "42501" });
+    }
   }, 120_000);
 
   test("Firebase-authorized reads and writes fail closed across the real lifecycle matrix", async () => {
