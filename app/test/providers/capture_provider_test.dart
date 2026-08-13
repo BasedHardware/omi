@@ -99,6 +99,7 @@ class _GatedSocketCaptureProvider extends CaptureProvider {
     required String language,
     required bool force,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
   }) async {
     final gate = Completer<void>();
