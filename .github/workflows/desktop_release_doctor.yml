@@ -123,6 +123,15 @@ jobs:
                 'Proactive delivery health: MONITOR_ERROR' \
                 'The bounded PostHog query failed; inspect this workflow run.' \
                 > /tmp/proactive-delivery-health.txt
+              python3 - > /tmp/proactive-delivery-health.json <<'PY'
+          import json
+
+          print(json.dumps({
+              "metric": "proactive_delivery",
+              "status": "monitor_error",
+              "privacy": {"user_identifiers_included": False, "content_included": False},
+          }, indent=2, sort_keys=True))
+          PY
             else
               status="$(python3 -c 'import json; print(json.load(open("/tmp/proactive-delivery-health.json", encoding="utf-8"))["status"])')"
             fi

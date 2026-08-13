@@ -131,6 +131,7 @@ class ProactiveDeliveryHealthTests(unittest.TestCase):
         self.assertIn("required_config=(POSTHOG_PERSONAL_API_KEY POSTHOG_PROJECT_ID POSTHOG_HOST)", scheduled_job)
         self.assertIn("status=unconfigured", scheduled_job)
         self.assertIn("No health alarm was created or updated.", scheduled_job)
+        self.assertIn('"status": "monitor_error"', scheduled_job)
         self.assertNotIn("steps.health.outputs.status == 'unconfigured'", scheduled_job)
 
 
