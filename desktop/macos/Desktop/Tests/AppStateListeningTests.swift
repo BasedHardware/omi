@@ -33,4 +33,19 @@ final class AppStateListeningTests: XCTestCase {
     XCTAssertTrue(reloadedAppState.isConversationListening)
     XCTAssertEqual(UserDefaults.standard.object(forKey: listeningDefaultsKey) as? Bool, true)
   }
+
+  @MainActor
+  func testPausedListeningDropsAudioFrames() {
+    let appState = AppState()
+    let frame = Data([1, 2, 3, 4])
+    var forwardedFrames: [Data] = []
+
+    appState.setConversationListeningSnapshot(false)
+    appState.forwardConversationAudio(frame) { forwardedFrames.append($0) }
+    XCTAssertTrue(forwardedFrames.isEmpty)
+
+    appState.setConversationListeningSnapshot(true)
+    appState.forwardConversationAudio(frame) { forwardedFrames.append($0) }
+    XCTAssertEqual(forwardedFrames, [frame])
+  }
 }
