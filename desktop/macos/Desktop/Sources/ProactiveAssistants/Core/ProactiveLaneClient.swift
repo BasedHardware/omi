@@ -17,18 +17,93 @@ struct ProactiveLaneResult: Equatable, Sendable {
 
 enum ProactiveLaneClientError: LocalizedError {
   case invalidResponse
-  case http(Int)
+  case http(status: Int, retryAfterSeconds: Int?)
   case ownerChanged
 
   var errorDescription: String? {
     switch self {
     case .invalidResponse:
       return "proactive_invalid_response"
-    case .http(let statusCode):
+    case .http(let statusCode, _):
       return "proactive_http_error status=\(statusCode)"
     case .ownerChanged:
       return "proactive_owner_changed"
     }
+  }
+}
+
+/// Bounded failure class recorded on a director delivery when the lane call
+/// or decision decode fails. Prompt and response bodies never enter this JSON.
+struct ProactiveLaneFailureClassification: Equatable, Sendable {
+  let failure: String
+  let status: Int?
+  let errorType: String?
+
+  var provenanceJSON: String {
+    var object: [String: Any] = ["failure": failure]
+    if let status {
+      object["status"] = status
+    }
+    if let errorType {
+      object["error_type"] = errorType
+    }
+    guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "{\"failure\":\"network\"}"
+    }
+    return json
+  }
+
+  var logDescription: String {
+    switch failure {
+    case "http_error":
+      return "http_error status=\(status ?? 0)"
+    case "network":
+      return "network error_type=\(errorType ?? "unknown")"
+    default:
+      return failure
+    }
+  }
+
+  static func classify(_ error: Error) -> ProactiveLaneFailureClassification {
+    if let laneError = error as? ProactiveLaneClientError {
+      switch laneError {
+      case .http(let status, _):
+        return ProactiveLaneFailureClassification(failure: "http_error", status: status, errorType: nil)
+      case .invalidResponse:
+        return ProactiveLaneFailureClassification(failure: "invalid_response", status: nil, errorType: nil)
+      case .ownerChanged:
+        return ProactiveLaneFailureClassification(failure: "owner_changed", status: nil, errorType: nil)
+      }
+    }
+    if error is DecodingError {
+      return ProactiveLaneFailureClassification(failure: "decode", status: nil, errorType: nil)
+    }
+    return ProactiveLaneFailureClassification(
+      failure: "network", status: nil, errorType: boundedNetworkErrorType(error))
+  }
+
+  static func boundedNetworkErrorType(_ error: Error) -> String {
+    if let urlError = error as? URLError {
+      switch urlError.code {
+      case .timedOut: return "timed_out"
+      case .notConnectedToInternet: return "not_connected"
+      case .networkConnectionLost: return "connection_lost"
+      case .cannotFindHost: return "cannot_find_host"
+      case .cannotConnectToHost: return "cannot_connect"
+      case .dnsLookupFailed: return "dns_lookup_failed"
+      case .secureConnectionFailed: return "secure_connection_failed"
+      default: return "url_error"
+      }
+    }
+    let typeName = String(describing: type(of: error))
+    let collapsed = typeName.map { character -> Character in
+      character.isLetter || character.isNumber ? character : "_"
+    }
+    let trimmed = String(collapsed).split(separator: "_").joined(separator: "_")
+    let bounded = String(trimmed.prefix(40))
+    return bounded.isEmpty ? "unknown" : bounded
   }
 }
 
@@ -118,12 +193,20 @@ actor ProactiveLaneClient {
       }
     }
     guard let http = response as? HTTPURLResponse else { throw ProactiveLaneClientError.invalidResponse }
-    guard (200..<300).contains(http.statusCode) else { throw ProactiveLaneClientError.http(http.statusCode) }
+    guard (200..<300).contains(http.statusCode) else {
+      throw ProactiveLaneClientError.http(status: http.statusCode, retryAfterSeconds: nil)
+    }
     return try Self.parseEnvelope(data)
   }
 
   static func parseEnvelope(_ data: Data) throws -> ProactiveLaneResult {
-    guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+    let object: Any
+    do {
+      object = try JSONSerialization.jsonObject(with: data)
+    } catch {
+      throw ProactiveLaneClientError.invalidResponse
+    }
+    guard let root = object as? [String: Any],
       let operation = root["operation"] as? String,
       let lane = root["lane"] as? String,
       let providerModel = root["provider_model"] as? String,

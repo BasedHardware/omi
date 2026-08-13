@@ -26,7 +26,20 @@ final class ProactiveLaneClientTests: XCTestCase {
 
   func testClientErrorsExposeOnlyStableSafeClassifications() {
     XCTAssertEqual(ProactiveLaneClientError.invalidResponse.localizedDescription, "proactive_invalid_response")
-    XCTAssertEqual(ProactiveLaneClientError.http(429).localizedDescription, "proactive_http_error status=429")
+    XCTAssertEqual(
+      ProactiveLaneClientError.http(status: 429, retryAfterSeconds: nil).localizedDescription,
+      "proactive_http_error status=429")
     XCTAssertEqual(ProactiveLaneClientError.ownerChanged.localizedDescription, "proactive_owner_changed")
+  }
+
+  func testGarbageEnvelopeThrowsInvalidResponseNotARawSerializationError() {
+    do {
+      _ = try ProactiveLaneClient.parseEnvelope(Data("not-json".utf8))
+      XCTFail("expected invalid_response")
+    } catch ProactiveLaneClientError.invalidResponse {
+      // Expected: envelope parse failures are a bounded class, not a Cocoa error.
+    } catch {
+      XCTFail("unexpected error: \(error)")
+    }
   }
 }
