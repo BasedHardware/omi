@@ -275,6 +275,12 @@ class TestExtractedMemoryValidation:
         if not hasattr(llm_usage, 'record_llm_usage'):
             llm_usage.record_llm_usage = lambda *args, **kwargs: None
 
+        llm_oauth = sys.modules.get('database.llm_oauth')
+        if llm_oauth is None:
+            llm_oauth = ModuleType('database.llm_oauth')
+            sys.modules['database.llm_oauth'] = llm_oauth
+            database.llm_oauth = llm_oauth
+
         tiktoken = sys.modules.get('tiktoken')
         if tiktoken is None:
             tiktoken = ModuleType('tiktoken')
