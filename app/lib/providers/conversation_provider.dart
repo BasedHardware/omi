@@ -36,6 +36,17 @@ DateTime conversationLocalDayKey(DateTime timestamp) {
   return DateTime(local.year, local.month, local.day);
 }
 
+/// Search results keep server rank: day buckets appear in first-hit order,
+/// and items inside a day stay in ranked order (no recency re-sort).
+Map<DateTime, List<ServerConversation>> groupSearchResultsPreservingRank(Iterable<ServerConversation> source) {
+  final grouped = <DateTime, List<ServerConversation>>{};
+  for (final conversation in source) {
+    final date = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
+    grouped.putIfAbsent(date, () => []).add(conversation);
+  }
+  return grouped;
+}
+
 class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
   List<ServerConversation> searchedConversations = [];
@@ -233,7 +244,6 @@ class ConversationProvider extends ChangeNotifier {
     );
     if (generation != _sessionGeneration || !_isSignedIn()) return;
     searchedConversations.addAll(newConvos);
-    searchedConversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     totalSearchPages = total;
     currentSearchPage = current;
     groupSearchConvosByDate();
@@ -676,7 +686,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void _groupSearchConvosByDateWithoutNotify() {
-    groupedConversations = _buildGroupedByDate(_filterOutConvos(searchedConversations));
+    groupedConversations = groupSearchResultsPreservingRank(_filterOutConvos(searchedConversations));
   }
 
   void _groupConversationsByDateWithoutNotify() {
