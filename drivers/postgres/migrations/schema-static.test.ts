@@ -48,6 +48,7 @@ const expectedTables = [
   "account_control_heads",
   "account_control_revisions",
   "account_deletion_surface_receipts",
+  "account_gcs_deletion_receipts",
   "account_pinecone_deletion_receipts",
   "account_typesense_deletion_receipts",
   "account_restore_terminal_application_receipts",
@@ -271,6 +272,31 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(sql).not.toContain("TO omi_platform_application;");
     expect(sql).not.toMatch(
       /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|TRUNCATE|ALL)[^;]*account_pinecone_deletion_receipts/s,
+    );
+    expect(sql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
+  });
+
+  test("retains GCS cleanup receipts without object names or application access", () => {
+    const sql = migrationSql.find((migration) => migration.version === 39)?.sql;
+    expect(sql).toBeDefined();
+    expect(sql).toContain("CREATE TABLE omi_memory.account_gcs_deletion_receipts");
+    for (const role of [
+      "speech_profiles", "conversation_recordings", "private_sync_chunks",
+      "private_sync_audio", "private_sync_merged", "private_sync_playback",
+      "temporal_sync", "chat_files",
+    ]) expect(sql).toContain(`'${role}'`);
+    expect(sql).toContain("PRIMARY KEY (account_id, deletion_epoch, operation_ref, resource_role, bucket_name)");
+    expect(sql).toContain("policy_digest text NOT NULL");
+    expect(sql).toContain("owner_mapping_digest text NOT NULL");
+    expect(sql).toContain("prefix_digest text NOT NULL");
+    expect(sql).not.toMatch(/object_name|generation bigint|metadata json|content json/);
+    expect(sql).toContain("SECURITY DEFINER\nSET search_path = pg_catalog, omi_memory");
+    expect(sql).toContain("GRANT EXECUTE ON FUNCTION omi_memory.load_gcs_deletion_receipt(");
+    expect(sql).toContain("GRANT EXECUTE ON FUNCTION omi_memory.record_gcs_deletion_receipt(");
+    expect(sql?.match(/TO omi_platform_cleanup;/g)).toHaveLength(2);
+    expect(sql).not.toContain("TO omi_platform_application;");
+    expect(sql).not.toMatch(
+      /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|TRUNCATE|ALL)[^;]*account_gcs_deletion_receipts/s,
     );
     expect(sql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
   });

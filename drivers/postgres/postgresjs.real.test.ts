@@ -123,6 +123,8 @@ import { createPostgresTypesenseDeletionReceiptRepository } from
   "./typesense-deletion-receipt-repository";
 import { createPostgresPineconeDeletionReceiptRepository } from
   "./pinecone-deletion-receipt-repository";
+import { createPostgresGcsDeletionReceiptRepository } from
+  "./gcs-deletion-receipt-repository";
 import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatement } from "./connection";
 import { createPostgresDurableMemoryWorkAcceptanceRepository } from "./durable-memory-work-acceptance";
 import { createPostgresDurableMemoryWorkBacklogSource } from "./durable-memory-work-backlog";
@@ -5791,6 +5793,112 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         [
           accountId, 8, 12, operationRef, eligibilityDigest, registryDigest,
           "memory_vectors", "memories-backend", "ns2",
+        ],
+      );
+    })).rejects.toMatchObject({ code: "42501" });
+  }, 120_000);
+
+  test("GCS cleanup receipts bind policy and prefix coordinates and remain cleanup-role only", async () => {
+    const suffix = randomUUID();
+    const accountId = `account:gcs-receipt:${suffix}`;
+    const operationRef = `opref1_${sha256CanonicalContent({ suffix, operation: "gcs" })}`;
+    const eligibilityDigest = sha256CanonicalContent({ suffix, eligibility: "gcs" });
+    const registryDigest = sha256CanonicalContent({ suffix, registry: "gcs" });
+    const policyDigest = sha256CanonicalContent({ suffix, policy: "gcs" });
+    const prefixDigest = sha256CanonicalContent({ suffix, prefix: "gcs" });
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(
+        "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)", [accountId],
+      );
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+        (account_id, control_revision, account_generation, account_epoch, lifecycle_state,
+         deletion_epoch, observed_at, record_schema_version, record_json, content_hash)
+        VALUES ($1, 9, 'new', 5, 'deleted', 13, transaction_timestamp(),
+                'control-v1', '{}'::jsonb, $2)`, [accountId, "1".repeat(64)]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+        (account_id, control_revision, activated_epoch, activation_control_revision)
+        VALUES ($1, 9, NULL, NULL)`, [accountId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_terminal_deletion_exports
+        (account_id, deletion_epoch, export_contract_version, transitioned_at,
+         account_generation, terminal_lifecycle_state, stranded_data_present,
+         control_revision, content_hash)
+        VALUES ($1, 13, 'terminal-v1', transaction_timestamp(), 'new', 'deleted', false, 9, $2)`,
+      [accountId, "2".repeat(64)]);
+    });
+
+    const receiptCore = Object.freeze({
+      version: "gcs-deletion-receipt-key-v1" as const,
+      account_id: accountId,
+      control_revision: 9,
+      deletion_epoch: 13,
+      operation_ref: operationRef,
+      eligibility_digest: eligibilityDigest,
+      registry_digest: registryDigest,
+      policy_digest: policyDigest,
+      owner_mapping_digest: sha256CanonicalContent({ suffix, owner_mapping: "gcs" }),
+      role: "private_sync_chunks" as const,
+      bucket_name: "omi-private-cloud-sync",
+      prefix_digest: prefixDigest,
+      result: "disposed" as const,
+      pre_delete_count: 3,
+      pre_delete_set_digest: "3".repeat(64),
+      provider_receipt_digest: "4".repeat(64),
+    });
+    const storedReceipt = Object.freeze({
+      ...receiptCore,
+      receipt_digest: createHash("sha256").update(JSON.stringify({
+        contract_version: "gcs-deletion-stored-receipt-v1",
+        receipt: receiptCore,
+      })).digest("hex"),
+    });
+    const repository = createPostgresGcsDeletionReceiptRepository(pool);
+    const key = Object.freeze({
+      version: storedReceipt.version,
+      account_id: storedReceipt.account_id,
+      control_revision: storedReceipt.control_revision,
+      deletion_epoch: storedReceipt.deletion_epoch,
+      operation_ref: storedReceipt.operation_ref,
+      eligibility_digest: storedReceipt.eligibility_digest,
+      registry_digest: storedReceipt.registry_digest,
+      policy_digest: storedReceipt.policy_digest,
+      owner_mapping_digest: storedReceipt.owner_mapping_digest,
+      role: storedReceipt.role,
+      bucket_name: storedReceipt.bucket_name,
+      prefix_digest: storedReceipt.prefix_digest,
+    });
+    await expect(repository.load(key)).resolves.toEqual({ kind: "missing" });
+    await expect(repository.record(storedReceipt)).resolves.toEqual(storedReceipt);
+    await expect(repository.record(storedReceipt)).resolves.toEqual(storedReceipt);
+    await expect(repository.load(key)).resolves.toEqual({ kind: "found", receipt: storedReceipt });
+
+    const changedCore = Object.freeze({ ...receiptCore, provider_receipt_digest: "5".repeat(64) });
+    const changed = Object.freeze({
+      ...changedCore,
+      receipt_digest: createHash("sha256").update(JSON.stringify({
+        contract_version: "gcs-deletion-stored-receipt-v1", receipt: changedCore,
+      })).digest("hex"),
+    });
+    await expect(repository.record(changed)).rejects.toMatchObject({ code: "receipt_conflict" });
+
+    const counts = await ownerSql.unsafe<{ count: number }[]>(`
+      SELECT count(*)::int AS count FROM omi_memory.account_gcs_deletion_receipts
+      WHERE account_id = $1`, [accountId]);
+    expect([...counts]).toEqual([{ count: 1 }]);
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(
+        "SELECT * FROM omi_memory.account_gcs_deletion_receipts WHERE account_id = $1",
+        [accountId],
+      );
+    })).rejects.toMatchObject({ code: "42501" });
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(
+        "SELECT * FROM omi_memory.load_gcs_deletion_receipt($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+        [
+          accountId, 9, 13, operationRef, eligibilityDigest, registryDigest,
+          policyDigest, storedReceipt.owner_mapping_digest, "private_sync_chunks",
+          "omi-private-cloud-sync", prefixDigest,
         ],
       );
     })).rejects.toMatchObject({ code: "42501" });
