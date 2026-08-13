@@ -65,8 +65,8 @@ describe("complete-source inventory", () => {
     expect(forward.report).toEqual(reversed.report);
     expect(forward.verified_inventory).toEqual(reversed.verified_inventory);
     expect(forward.report).toMatchObject({
-      supplied_source_count: 10,
-      required_source_count: 10,
+      supplied_source_count: 11,
+      required_source_count: 11,
       missing_surfaces: [],
       unfenced_surfaces: [],
       blockers: [],
@@ -100,11 +100,19 @@ describe("complete-source inventory", () => {
 
   test("released scan fences block without erasing otherwise complete counts", () => {
     const released = receipts();
-    released[2] = { ...released[2]!, scan_fence_state: "released" };
-    released[9] = { ...released[9]!, scan_fence_state: "released" };
+    const experimentIndex = released.findIndex((row) => row.surface === "experiment_results");
+    const externalIndex = released.findIndex((row) => row.surface === "external_objects");
+    released[experimentIndex] = {
+      ...released[experimentIndex]!,
+      scan_fence_state: "released",
+    };
+    released[externalIndex] = {
+      ...released[externalIndex]!,
+      scan_fence_state: "released",
+    };
     const result = verifyDeletionCleanupInventory(input(released));
     expect(result.report).toMatchObject({
-      supplied_source_count: 10,
+      supplied_source_count: 11,
       missing_surfaces: [],
       unfenced_surfaces: ["experiment_results", "external_objects"],
       blockers: ["source_fence_not_held"],

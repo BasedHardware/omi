@@ -3,12 +3,13 @@ import { isProxy } from "node:util/types";
 
 import { isWellFormedAccountId } from "./account-control";
 
-export const DELETION_INVENTORY_CONTRACT_VERSION = "deletion-cleanup-inventory-v1" as const;
-export const DELETION_INVENTORY_SOURCE_RECEIPT_VERSION = "deletion-inventory-source-receipt-v1" as const;
+export const DELETION_INVENTORY_CONTRACT_VERSION = "deletion-cleanup-inventory-v2" as const;
+export const DELETION_INVENTORY_SOURCE_RECEIPT_VERSION = "deletion-inventory-source-receipt-v2" as const;
 
 export const DELETION_CLEANUP_SURFACES = Object.freeze([
   "durable_work",
   "staged_results",
+  "authoritative_memory",
   "experiment_results",
   "product_projections",
   "search_documents",

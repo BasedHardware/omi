@@ -1,6 +1,6 @@
 # Deletion cleanup inventory completeness contract
 
-Status: pre-registered production-neutral P7 contract. No scanner, persistence,
+Status: implemented production-neutral P7 v2 contract. No scanner, persistence,
 cleanup, deletion, export, or runtime composition is implemented here.
 
 ## Problem
@@ -20,6 +20,8 @@ The versioned source set is:
 
 - durable work;
 - staged model/grounding results;
+- authoritative memory ledger content, including evidence, claims, mentions,
+  identities, authorizations, adjacency, liveness, and derivation history;
 - isolated experiment results;
 - product projections and payloads;
 - search documents;
@@ -29,7 +31,9 @@ The versioned source set is:
 - stranded new-generation product data; and
 - externally inventoried objects.
 
-The terminal control tombstone and terminal export/replay receipts are not
+Version 2 adds `authoritative_memory`; version 1 is not accepted because it
+could report complete while the canonical ledger still retained user-derived
+content. The terminal control tombstone and terminal export/replay receipts are not
 cleanup surfaces and can never appear in this list. Adding or removing a
 surface requires a new inventory contract version and re-verification.
 
@@ -66,7 +70,7 @@ The verified inventory contains the exact terminal coordinates, canonical
 surface/count rows, and an aggregate digest covering all scanner/frontier/
 authorization/fence/set receipts. The deletion planner accepts `null` or this
 runtime-verified artifact only. For terminal cleanup, `null` becomes the closed
-`cleanup_inventory_unverified` blocker; it never becomes ten zeroes.
+`cleanup_inventory_unverified` blocker; it never becomes eleven zeroes.
 
 The runtime brand is a composition fence, not persistence authority. After a
 process restart, stored receipts must be reloaded from the future authorized
@@ -85,7 +89,7 @@ opens product traffic and never grants scanner or deletion authority.
 Reports expose versions, counts, closed surface/blocker codes, and digests only;
 they contain no account id, object id, path, memory, evidence, prompt, model
 output, provider/database error, or free-form reason. Work is bounded by the
-fixed ten-source set and deterministic canonical ordering. Core reads no clock,
+fixed eleven-source set and deterministic canonical ordering. Core reads no clock,
 environment, filesystem, database, network, model, route, worker, or QA store.
 
 ## Human and runtime gates

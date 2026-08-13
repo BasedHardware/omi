@@ -106,6 +106,8 @@ The planner enumerates closed cleanup surfaces instead of executing them:
 
 - durable work payloads and leases;
 - staged model/grounding results and isolated experiment results;
+- authoritative ledger evidence, claims, mentions, identity support,
+  derivation history, and graph vocabulary;
 - product projections and payloads;
 - search documents, vector embeddings, and rebuildable groups/indexes;
 - migration mappings and item-copy state, subject to the approved disposition;
