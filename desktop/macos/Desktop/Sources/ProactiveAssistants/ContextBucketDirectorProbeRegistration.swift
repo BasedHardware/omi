@@ -22,6 +22,7 @@
         }
         return try await ContextBucketDirectorProbe().run(params: params)
       }
+      registerProactiveCaptureStatusSnapshot()
     }
   }
 #else

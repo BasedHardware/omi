@@ -1026,7 +1026,6 @@ final class DesktopAutomationActionRegistry {
     }
 
     registerContextBucketDirectorProbe()
-    registerProactiveCaptureStatusSnapshot()
     register(
       name: "set_contextual_task_focus",
       summary: "Set deterministic focus suppression for contextual task interruptions",

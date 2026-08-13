@@ -60,7 +60,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private(set) var isMonitoring = false
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
   private var _hasScreenRecordingPermission: Bool?  // Cached permission state
-  private var currentApp: String?
+  var currentApp: String?
   private var currentAppBundleID: String?
   private var currentWindowID: CGWindowID?
   private var currentWindowTitle: String?
@@ -590,59 +590,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     return (isMonitoring, currentApp)
   }
 
-  /// Read-only, privacy-safe state for named-bundle QA. This intentionally exposes only
-  /// coarse buckets and fixed gate labels: callers must be able to tell whether capture
-  /// can run without receiving the active app, window title, exact idle duration, or any
-  /// screenshot content.
-  func automationCaptureStatusSnapshot() -> ProactiveCaptureStatusSnapshot {
-    ProactiveCaptureStatusSnapshot(
-      isMonitoring: isMonitoring,
-      hasScreenRecordingPermission: hasScreenRecordingPermission,
-      screenAnalysisEnabled: AssistantSettings.shared.screenAnalysisEnabled,
-      captureHealth: screenCaptureHealth.rawValue,
-      captureGate: automationCaptureGateLabel,
-      systemIdleBucket: Self.automationSystemIdleBucket(for: systemIdleSeconds()),
-      currentAppExcluded: currentApp.map { RewindSettings.shared.isAppExcluded($0) }
-    )
-  }
-
-  /// Stable, non-sensitive representation of the last capture gate. The nested optional
-  /// distinguishes "no tick has run yet" from an observed flowing tick.
-  private var automationCaptureGateLabel: String {
-    switch lastCaptureGateReason {
-    case .none:
-      return "unknown"
-    case .some(.none):
-      return "flowing"
-    case .some(.some(let reason)):
-      switch reason {
-      case "idle", "excluded_app", "waiting_for_user_window", "no_window_id", "external_capture_yield":
-        return reason
-      default:
-        return "other"
-      }
-    }
-  }
-
-  static func automationSystemIdleBucket(for seconds: TimeInterval) -> String {
-    guard seconds.isFinite, seconds >= 0 else { return "unknown" }
-    switch seconds {
-    case ..<3:
-      return "active"
-    case ..<15:
-      return "recent"
-    case ..<60:
-      return "settling"
-    default:
-      return "idle"
-    }
-  }
-
   /// Which silent gate is currently skipping capture ticks, or nil when frames flow.
   /// Logged only on transition: the gates above return without a trace, and a stuck
   /// gate (idle misread, phantom screen share, excluded frontmost app) reads exactly
   /// like a healthy quiet pipeline — that ambiguity cost a full debugging session.
-  private var lastCaptureGateReason: String??
+  var lastCaptureGateReason: String??
 
   private func logCaptureGate(_ reason: String?) {
     guard lastCaptureGateReason != reason else { return }
@@ -702,7 +654,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// grows without bound and the 60s idle gate silently swallowed every capture tick
   /// while the user was actively typing (measured live: `.null` reported 322s idle at
   /// the same instant the any-input sentinel reported 0.00006s).
-  private func systemIdleSeconds() -> TimeInterval {
+  func systemIdleSeconds() -> TimeInterval {
     TimeInterval(
       CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: Self.anyInputEventType))
   }
