@@ -12,8 +12,8 @@ final class TaskChatKernelIdentityTests: XCTestCase {
 
   func testTaskChatStateUsesSharedRuntimeNotPerTaskBridge() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+    XCTAssertTrue(source.contains("try await queryOperation("))
     XCTAssertTrue(source.contains("TaskChatRuntime.query("))
-    XCTAssertTrue(source.contains("producingTurnId: aiMessageId"))
     XCTAssertFalse(source.contains("private var agentBridge"))
     XCTAssertFalse(source.contains("ensureBridgeStarted"))
   }
@@ -46,8 +46,9 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
     let runtime = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift")
 
-    XCTAssertTrue(source.contains("prompt: trimmedText"))
-    XCTAssertTrue(source.contains("taskContext: taskContext"))
+    XCTAssertTrue(
+      source.contains("try await queryOperation(\n        trimmedText,\n        workstreamId,\n        aiMessageId,"))
+    XCTAssertTrue(source.contains("taskContext,\n        lease.authorizationSnapshot,"))
     XCTAssertTrue(runtime.contains("source: source"))
     XCTAssertTrue(runtime.contains("expectedContext: snapshot.freshness"))
     XCTAssertFalse(runtime.contains("surfaceContextJson"))
