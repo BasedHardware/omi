@@ -254,6 +254,39 @@ html[data-platform="mobile"] .settings-header {
   gap: var(--space-md);
 }
 
+html[data-platform="mobile"] .settings-production-shell.is-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  align-items: end;
+  max-width: none;
+  padding: 0;
+}
+
+html[data-platform="mobile"] .settings-sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--surface-scrim) 72%, transparent);
+}
+
+html[data-platform="mobile"] .settings-sheet-panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - var(--space-xl));
+  overflow: auto;
+  padding: var(--space-md) var(--space-lg) calc(var(--space-xl) + env(safe-area-inset-bottom, 0px));
+  border: 1px solid var(--border);
+  border-block-end: 0;
+  border-radius: var(--radius-window) var(--radius-window) 0 0;
+  background: var(--surface-raised);
+  box-shadow: 0 calc(var(--space-xl) * -1) var(--space-xxxl) var(--surface-scrim);
+}
+
+.settings-sheet-toolbar { display: flex; justify-content: flex-end; }
+.settings-sheet-close { display: inline-flex; min-height: var(--min-tap-target); align-items: center; gap: var(--space-xs); padding: 0 var(--space-sm); border-radius: var(--radius-control); color: var(--content-primary); text-decoration: none; }
+
 html[data-platform="mobile"] .settings-section {
   padding: var(--space-md);
 }

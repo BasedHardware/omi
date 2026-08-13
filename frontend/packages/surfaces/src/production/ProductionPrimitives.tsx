@@ -335,18 +335,20 @@ export function ProductionPageHeader({
   description,
   actions,
   className = "",
+  titleId,
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
   actions?: ReactNode;
   className?: string;
+  titleId?: string;
 }): React.JSX.Element {
   return (
     <header className={`production-page-header${className ? ` ${className}` : ""}`}>
       <div className="production-page-heading">
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
-        <h1>{title}</h1>
+        <h1 id={titleId}>{title}</h1>
         {description && <p className="production-page-description">{description}</p>}
       </div>
       {actions && <div className="production-page-actions">{actions}</div>}

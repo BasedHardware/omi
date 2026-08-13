@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   generationMismatch,
   resolveProductionRoute,
+  resolveSettingsReturnRoute,
 } from "../src/production/production-routing.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -82,6 +83,15 @@ test("an unknown explicit route is unsupported instead of falling through", () =
   assert.equal(route("memroies", null, "platform"), "unsupported");
   // red-proof: return Home or Memories from the unknown-route branch. This
   // reproduces a truthful-looking page for a destination the host never loaded.
+});
+
+test("mobile Settings return routes fail closed to Home", () => {
+  for (const destination of ["home", "memories", "conversations", "folders", "tasks", "rewind", "apps", "brain-map", "listen", "chat"]) {
+    assert.equal(resolveSettingsReturnRoute(destination), destination);
+  }
+  for (const unsafe of [null, "", "settings", "unsupported", "__proto__", "https://example.com/"]) {
+    assert.equal(resolveSettingsReturnRoute(unsafe), "home");
+  }
 });
 
 // ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, Memory } from "@omi-core/contracts";
 import { formatDate, formatNumber, t } from "@omi-core/i18n";
 import type { RefreshStatus, StoreStatus } from "@omi-core/domain";
-import { ProductionChrome } from "./ProductionChrome.js";
+import { ProductionChrome, productionRouteHref } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, type ProductionAnnouncementScheduler, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { ProductionIcon } from "./ProductionIcon.js";
 import { presentMemoryContent } from "./memory-presentation.js";
@@ -163,7 +163,6 @@ export function HomeProduction({ sources, source, locale = "en", onReady, initia
             <ProductionIcon name="search" className="home-query-mark" size={22} />
             <input
               ref={searchRef}
-              autoFocus
               type="search"
               value={query}
               placeholder={t(locale, "home.searchPlaceholder")}
@@ -178,6 +177,15 @@ export function HomeProduction({ sources, source, locale = "en", onReady, initia
             {query && <button type="button" className="home-search-clear" onClick={() => { setQuery(""); searchRef.current?.focus(); }} aria-label={t(locale, "common.clearSearch")}><ProductionIcon name="close" size={18} /></button>}
           </label>
         </section>
+
+        <a className="home-chat-entry" href={productionRouteHref("chat")}>
+          <span className="home-chat-entry-icon"><ProductionIcon name="conversations" size={20} /></span>
+          <span className="home-chat-entry-copy">
+            <strong>{t(locale, "chat.title")}</strong>
+            <small>{t(locale, "chat.subtitle")}</small>
+          </span>
+          <ProductionIcon name="send" className="home-chat-entry-action" size={20} />
+        </a>
 
         <section className="home-results-panel" aria-label={t(locale, "common.search")}>
           <ProductionDataSourceBadge source={dataSource} locale={locale} />

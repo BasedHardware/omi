@@ -96,7 +96,8 @@ test("home search source stays a memory-and-conversation chronological projectio
   assert.doesNotMatch(source, /kind: "task"/);
   assert.match(source, /sort\(\(left, right\) => right\.timestamp - left\.timestamp\)/);
   assert.match(source, /\["all", "conversation", "memory"\]/);
-  assert.match(styles, /grid-template-rows:\s*auto 12px minmax\(0,1fr\)/);
+  assert.match(styles, /grid-template-rows:\s*auto auto minmax\(0,1fr\)/);
+  assert.match(styles, /\.home-chat-entry \{ grid-row: 2;/);
   assert.match(styles, /height:\s*64px/);
   assert.doesNotMatch(styles, /@media\s*\(/);
   assert.doesNotMatch(styles, /#(?:[0-9a-f]{3,8})\b/i);
@@ -105,14 +106,16 @@ test("home search source stays a memory-and-conversation chronological projectio
   // search, clear, focus, filter, and row hierarchy execute below.
 });
 
-test("home does not fabricate ask, chat, send, or mutation affordances", async () => {
-  // RETAINED-SOURCE-ASSERTION: capability absence is an API and dependency boundary, not one fixture's rendered state.
+test("home pushes to the real Chat route without fabricating model or mutation work", async () => {
+  // RETAINED-SOURCE-ASSERTION: Home owns navigation only; Chat owns the actual
+  // gateway-backed interaction and loaded projections remain read-only here.
   const source = await read("src/production/HomeProduction.tsx");
-  assert.doesNotMatch(source, /store\.create|store\.patch|store\.delete|\b(?:ask|chat|send)\b/i);
+  assert.doesNotMatch(source, /store\.create|store\.patch|store\.delete|openChat|sendMessage|generate/i);
+  assert.match(source, /href=\{productionRouteHref\("chat"\)\}/);
   assert.match(source, /href=\{conversationHref\(row\.value\.id\)\}/);
   assert.doesNotMatch(source, /href=\{.*memory|href=\{.*task/i);
-  // red-proof: adding an Ask button or clickable memory/task destination would
-  // claim behavior the current loaded projections do not provide.
+  // red-proof: moving model work into Home or making memory/task projection rows
+  // clickable would claim behavior this surface does not own.
 });
 
 test("home empty kinds distinguish true-empty from filter-miss", () => {
@@ -220,13 +223,16 @@ test("HomeProduction renders a merged searchable spine with clear, filter, and k
   try {
     const input = rendered.container.querySelector('input[type="search"]');
     assert.ok(input);
-    assert.equal(rendered.window.document.activeElement, input, "search is focused on entry");
+    assert.notEqual(rendered.window.document.activeElement, input, "fixture entry does not steal focus or summon a keyboard");
+    const askOmi = rendered.container.querySelector("a.home-chat-entry");
+    assert.ok(askOmi, "Home exposes the shipped push affordance into Chat");
+    assert.ok(askOmi.getAttribute("href")?.includes("route=chat"));
+    assert.ok(askOmi.textContent?.includes(EN_MESSAGES["chat.subtitle"]));
     const rows = [...rendered.container.querySelectorAll(".home-result-row")];
     assert.ok(rows.some((row) => row.matches("article")), "merged spine contains memories");
     assert.ok(rows.some((row) => row.matches("a")), "merged spine contains conversations");
     assert.equal(rows[0].textContent?.includes("Keep the morning review short"), true, "rows render newest-first");
 
-    input.blur();
     await rendered.act(async () => {
       rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
     });

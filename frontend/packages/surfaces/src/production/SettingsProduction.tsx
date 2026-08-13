@@ -6,6 +6,7 @@ import { entitlementNotice, usageLabelArgs } from "./settings-merge.js";
 import type { ProductionSettingsStore } from "./ProductionSettingsStore.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
+import { ProductionIcon } from "./ProductionIcon.js";
 import { ProductionDataSourceBadge, ProductionDisabledControl, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader } from "./ProductionPrimitives.js";
 import "./settings.css";
 
@@ -52,12 +53,14 @@ function limitPresentation(
   return notice.upgrade === "route" ? "reached-upgrade" : "reached-no-upgrade";
 }
 
-export function SettingsProduction({ store, fixture, locale = "en", onReady, onUpgrade }: {
+export function SettingsProduction({ store, fixture, locale = "en", onReady, onUpgrade, presentation = "page", returnHref = "?route=home" }: {
   store: ProductionSettingsStore;
   fixture?: string;
   locale?: Locale;
   onReady?: () => void;
   onUpgrade?: (limitKey: string) => void;
+  presentation?: "page" | "sheet";
+  returnHref?: string;
 }): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
   const [dead, setDead] = useState<Awaited<ReturnType<ProductionSettingsStore["deadLetters"]>>>([]);
@@ -130,6 +133,7 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
   // before the surface is ready to stand behind it.
   const showAppearance = snapshot !== null && (account === "signed-in" || account === "signed-out");
   const showPlan = account === "signed-in";
+  const isSheet = presentation === "sheet";
 
   const changeAppearance = async (selection: AppearanceSelection): Promise<void> => {
     if (!snapshot || snapshot.appearance === selection) return;
@@ -159,10 +163,17 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
         : null;
 
   return (
-    <main className="production-shell settings-production-shell" aria-label={t(locale, "settings.title")} data-production-shell="true" data-route="settings" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={"settings:sections:account-plan-appearance:appearance-control:" + (showAppearance ? "shown" : "hidden") + ":signout-control:" + (showPlan ? "shown" : "hidden")}>
-      <ProductionChrome locale={locale} active="settings" placement="top" />
-      <section className="desktop-page-panel">
-        <ProductionPageHeader className="settings-header" eyebrow={t(locale, "nav.settings")} title={t(locale, "settings.title")} description={t(locale, "settings.subtitle")} />
+    <main className={"production-shell settings-production-shell" + (isSheet ? " is-sheet" : "")} aria-label={t(locale, "settings.title")} data-production-shell="true" data-route="settings" data-settings-presentation={presentation} data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={"settings:sections:account-plan-appearance:appearance-control:" + (showAppearance ? "shown" : "hidden") + ":signout-control:" + (showPlan ? "shown" : "hidden")}>
+      {!isSheet && <ProductionChrome locale={locale} active="settings" placement="top" />}
+      {isSheet && <div className="settings-sheet-scrim" aria-hidden="true" />}
+      <section className={"desktop-page-panel" + (isSheet ? " settings-sheet-panel" : "")} role={isSheet ? "dialog" : undefined} aria-modal={isSheet ? true : undefined} aria-labelledby={isSheet ? "settings-sheet-title" : undefined}>
+        {isSheet && <header className="settings-sheet-toolbar">
+          <a className="settings-sheet-close" href={returnHref} aria-label={t(locale, "common.close")}>
+            <ProductionIcon name="close" size={20} />
+            <span>{t(locale, "common.close")}</span>
+          </a>
+        </header>}
+        <ProductionPageHeader className="settings-header" eyebrow={t(locale, "nav.settings")} title={t(locale, "settings.title")} description={t(locale, "settings.subtitle")} {...(isSheet ? { titleId: "settings-sheet-title" } : {})} />
         <ProductionDataSourceBadge source={fixture ? { kind: "fixture", fixture } : { kind: "live", origin: "bridge" }} locale={locale} />
         <ProductionLifecycleRegion
           className="surface-notices"
@@ -354,7 +365,7 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
           </section>
         )}
       </section>
-      <ProductionChrome locale={locale} active="settings" placement="bottom" />
+      {!isSheet && <ProductionChrome locale={locale} active="settings" placement="bottom" />}
     </main>
   );
 }

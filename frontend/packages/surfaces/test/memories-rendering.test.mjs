@@ -100,6 +100,11 @@ test("shared chrome mirrors the shipped destination hierarchy without fake conte
     assert.ok(microphone?.getAttribute("href")?.includes("route=listen"));
     const screen = rendered.container.querySelector(`button.nav-icon-control[title="${EN_MESSAGES["nav.screenCapture"]}"]`);
     assert.equal(screen?.getAttribute("aria-disabled"), "true", "screen capture remains visibly parked");
+    const mobileSettings = rendered.container.querySelector(`.mobile-topbar a[title="${EN_MESSAGES["nav.settings"]}"]`);
+    const settingsHref = mobileSettings?.getAttribute("href") ?? "";
+    assert.match(settingsHref, /route=settings/);
+    assert.match(settingsHref, /presentation=sheet/);
+    assert.match(settingsHref, /return=memories/);
   } finally {
     await rendered.cleanup();
   }
