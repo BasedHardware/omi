@@ -99,6 +99,8 @@ import {
   createPostgresSuccessfulEmptyLedgerRepository,
 } from "./authoritative-ledger-repository";
 import { createPostgresAuthoritativeGraphSnapshotRepository } from "./authoritative-graph-snapshot";
+import { createPostgresDeletionCleanupParticipant } from
+  "./account-deletion-cleanup-participant";
 import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatement } from "./connection";
 import { createPostgresDurableMemoryWorkAcceptanceRepository } from "./durable-memory-work-acceptance";
 import { createPostgresDurableMemoryWorkBacklogSource } from "./durable-memory-work-backlog";
@@ -619,7 +621,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     await ownerSql?.end({ timeout: 5 });
   });
 
-  test("runs the pinned server, creates only the test role, and reapplies all migrations as no-ops", async () => {
+  test("runs the pinned server, creates only the test roles, and reapplies all migrations as no-ops", async () => {
     const version = await ownerSql.unsafe<{ server_version_num: string }[]>("SHOW server_version_num");
     expect(Number(version[0]?.server_version_num)).toBe(180004);
     expect(process.env["OMI_TEST_POSTGRES_IMAGE"]).toBe(
@@ -630,6 +632,9 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'omi_platform_application') THEN
           CREATE ROLE omi_platform_application NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'omi_platform_cleanup') THEN
+          CREATE ROLE omi_platform_cleanup NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
         END IF;
       END
       $role$
@@ -3960,5 +3965,96 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         await transaction.unsafe(forbiddenSql, [accountId]);
       })).rejects.toMatchObject({ code: "42501" });
     }
+  }, 120_000);
+
+  test("cleanup role scans, atomically disposes, receipts, rolls back, and retains tombstones", async () => {
+    const suffix = randomUUID();
+    const accountId = `account:cleanup:${suffix}`;
+    const inputId = `fwi1_${sha256CanonicalContent({ suffix, input: true })}`;
+    const jobId = `cleanup-job:${suffix}`;
+    const operationRef = `opref1_${sha256CanonicalContent({ suffix, operation: true })}`;
+    const eligibility = sha256CanonicalContent({ suffix, eligibility: true });
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)", [accountId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+        (account_id, control_revision, account_generation, account_epoch, lifecycle_state,
+         deletion_epoch, observed_at, record_schema_version, record_json, content_hash)
+        VALUES ($1, 7, 'new', 3, 'deleted', 11, transaction_timestamp(),
+                'control-v1', '{}'::jsonb, $2)`, [accountId, "a".repeat(64)]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+        (account_id, control_revision, activated_epoch, activation_control_revision)
+        VALUES ($1, 7, NULL, NULL)`, [accountId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_terminal_deletion_exports
+        (account_id, deletion_epoch, export_contract_version, transitioned_at,
+         account_generation, terminal_lifecycle_state, stranded_data_present,
+         control_revision, content_hash)
+        VALUES ($1, 11, 'terminal-v1', transaction_timestamp(), 'new', 'deleted', false, 7, $2)`,
+      [accountId, "b".repeat(64)]);
+      await transaction.unsafe(`INSERT INTO omi_memory.memory_formation_work_inputs
+        (account_id, staged_input_id, job_id, input_version, account_epoch,
+         accepted_work_digest, input_frontier, input_digest, execution_contract_digest,
+         snapshot_digest, snapshot_version, snapshot_json, stage_request_digest, content_hash)
+        VALUES ($1, $2, $3, 'formation-work-staged-input-v1', 3, $4, '0', $5, $6,
+                $7, 'formation-input-snapshot-v1', '{}'::jsonb, $8, $9)`, [
+        accountId, inputId, jobId, "c".repeat(64), "d".repeat(64), "e".repeat(64),
+        "f".repeat(64), "1".repeat(64), "2".repeat(64),
+      ]);
+    });
+
+    const cleanup = createPostgresDeletionCleanupParticipant(pool);
+    await expect(cleanup.withHeldDatabaseFence(
+      { account_id: accountId, control_revision: 7, deletion_epoch: 11 },
+      operationRef,
+      eligibility,
+      async (session) => {
+        const before = await session.scanOwned();
+        expect(before.find((row) => row.surface === "staged_results")?.remaining_count).toBe(1);
+        const disposed = await session.dispose(["durable_work", "staged_results"]);
+        expect(disposed.map((row) => [row.surface, row.result])).toEqual([
+          ["durable_work", "already_absent"], ["staged_results", "disposed"],
+        ]);
+        const replay = await session.dispose(["durable_work", "staged_results"]);
+        expect(replay).toEqual(disposed);
+        const after = await session.scanOwned();
+        expect(after.find((row) => row.surface === "staged_results")?.remaining_count).toBe(0);
+        throw new Error("qualification rollback after cleanup");
+      },
+    )).rejects.toMatchObject({ code: "persistence_failed" });
+
+    let counts = await ownerSql.unsafe<{ inputs: number; receipts: number }[]>(`SELECT
+      (SELECT count(*)::int FROM omi_memory.memory_formation_work_inputs WHERE account_id = $1) inputs,
+      (SELECT count(*)::int FROM omi_memory.account_deletion_surface_receipts WHERE account_id = $1) receipts`,
+    [accountId]);
+    expect([...counts]).toEqual([{ inputs: 1, receipts: 0 }]);
+
+    await cleanup.withHeldDatabaseFence(
+      { account_id: accountId, control_revision: 7, deletion_epoch: 11 },
+      operationRef,
+      eligibility,
+      async (session) => {
+        await session.dispose(["durable_work", "staged_results"]);
+      },
+    );
+    counts = await ownerSql.unsafe<{ inputs: number; receipts: number }[]>(`SELECT
+      (SELECT count(*)::int FROM omi_memory.memory_formation_work_inputs WHERE account_id = $1) inputs,
+      (SELECT count(*)::int FROM omi_memory.account_deletion_surface_receipts WHERE account_id = $1) receipts`,
+    [accountId]);
+    expect([...counts]).toEqual([{ inputs: 0, receipts: 2 }]);
+    const safety = await ownerSql.unsafe<{ controls: number; exports: number }[]>(`SELECT
+      (SELECT count(*)::int FROM omi_memory.account_control_revisions WHERE account_id = $1) controls,
+      (SELECT count(*)::int FROM omi_memory.account_terminal_deletion_exports WHERE account_id = $1) exports`,
+    [accountId]);
+    expect([...safety]).toEqual([{ controls: 1, exports: 1 }]);
+
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe("SELECT * FROM omi_memory.scan_deleted_account_surface('staged_results')");
+    })).rejects.toMatchObject({ code: "42501" });
+    await expect(cleanup.withHeldDatabaseFence(
+      { account_id: accountId, control_revision: 6, deletion_epoch: 11 },
+      `opref1_${"9".repeat(64)}`,
+      eligibility,
+      async () => undefined,
+    )).rejects.toMatchObject({ code: "terminal_coordinate_denied" });
   }, 120_000);
 });

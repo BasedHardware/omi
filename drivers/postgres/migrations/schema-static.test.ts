@@ -46,6 +46,7 @@ const tables = tableDefinitions(allSql);
 const expectedTables = [
   "account_control_heads",
   "account_control_revisions",
+  "account_deletion_surface_receipts",
   "account_terminal_deletion_exports",
   "application_credential_heads",
   "application_credential_revisions",
@@ -156,6 +157,27 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
       .toContain("account_terminal_deletion_exports");
     expect(disposalRows.map((row) => row.name))
       .not.toContain("account_terminal_deletion_exports");
+  });
+
+  test("keeps the cleanup security-definer registry identical to the typed registry", () => {
+    const cleanupSql = migrationSql.find((migration) =>
+      migration.fileName === "0025-account-deletion-cleanup-runtime.sql")?.sql;
+    expect(cleanupSql).toBeDefined();
+    const block = cleanupSql!.match(
+      /CREATE FUNCTION omi_memory\.cleanup_surface_tables\(p_surface text\)[\s\S]*?FROM \(VALUES([\s\S]*?)\) AS mapping\(surface, table_name\)/,
+    );
+    expect(block).not.toBeNull();
+    const sqlRows = [...block![1]!.matchAll(/\('([a-z0-9_]+)', '([a-z0-9_]+)'\)/g)]
+      .map((match) => ({ surface: match[1]!, table: match[2]! }))
+      .sort((left, right) => `${left.surface}:${left.table}`.localeCompare(
+        `${right.surface}:${right.table}`,
+      ));
+    const typedRows = Object.entries(POSTGRES_DELETION_SURFACE_TABLES)
+      .flatMap(([surface, names]) => names.map((table) => ({ surface, table })))
+      .sort((left, right) => `${left.surface}:${left.table}`.localeCompare(
+        `${right.surface}:${right.table}`,
+      ));
+    expect(sqlRows).toEqual(typedRows);
   });
 
   test("orders every cross-surface foreign key child before its parent", () => {
