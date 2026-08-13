@@ -635,7 +635,9 @@ def test_universal_purge_keeps_historical_provider_batch_cleanup_separate(monkey
 def test_memory_service_retract_records_empty_source_replacement():
     db = _legacy_db_with_control()
     assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.CANONICAL
-    result = MemoryService(db_client=db).retract_conversation_memories(LEGACY_UID, "conv-x")
+    service = MemoryService(db_client=db)
+    service.history.iter_all_live = MagicMock(return_value=iter(()))
+    result = service.retract_conversation_memories(LEGACY_UID, "conv-x")
 
     assert result["retracted_memory_ids"] == []
     assert result["committed_memory_ids"] == []
