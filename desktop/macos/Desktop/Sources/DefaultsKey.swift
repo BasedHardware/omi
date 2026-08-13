@@ -72,6 +72,8 @@ enum DefaultsKey: String {
   /// One-shot marker: the PTT-only microphone choice has been folded into the shared
   /// `preferredMicrophoneDeviceUID`, so it is never carried over twice.
   case shortcutPTTMicrophoneMergedIntoPreferred = "shortcut_pttMicrophoneMergedIntoPreferred"
+  case shortcutToggleListeningEnabled = "shortcut_toggleListeningEnabled"
+  case shortcutToggleListeningKey = "shortcut_toggleListeningKey"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"

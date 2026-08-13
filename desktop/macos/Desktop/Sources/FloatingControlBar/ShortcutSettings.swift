@@ -343,7 +343,7 @@ class ShortcutSettings: ObservableObject {
 
   @Published var toggleListeningEnabled: Bool {
     didSet {
-      UserDefaults.standard.set(toggleListeningEnabled, forKey: "shortcut_toggleListeningEnabled")
+      UserDefaults.standard.set(toggleListeningEnabled, forKey: .shortcutToggleListeningEnabled)
       postToggleListeningShortcutChangedIfNeeded()
     }
   }
@@ -648,7 +648,7 @@ class ShortcutSettings: ObservableObject {
   }
 
   private static let askOmiShortcutDefaultsKey = "shortcut_askOmiKey"
-  private static let toggleListeningShortcutDefaultsKey = "shortcut_toggleListeningKey"
+  private static let toggleListeningShortcutDefaultsKey = DefaultsKey.shortcutToggleListeningKey.rawValue
   private static let pttShortcutDefaultsKey = "shortcut_pttKey"
 
   private init() {
@@ -678,7 +678,7 @@ class ShortcutSettings: ObservableObject {
 
     self.askOmiEnabled = UserDefaults.standard.object(forKey: "shortcut_askOmiEnabled") as? Bool ?? true
     self.toggleListeningEnabled =
-      UserDefaults.standard.object(forKey: "shortcut_toggleListeningEnabled") as? Bool ?? true
+      UserDefaults.standard.object(forKey: .shortcutToggleListeningEnabled) as? Bool ?? true
     self.floatingBarNotificationPreviewsEnabled =
       UserDefaults.standard.object(forKey: .floatingBarNotificationPreviewsEnabled) as? Bool ?? true
     self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true

@@ -41,6 +41,11 @@ extension AppState {
     conversationListeningSnapshotLock.unlock()
   }
 
+  nonisolated func forwardConversationAudio(_ audioData: Data, to handler: (Data) -> Void) {
+    guard snapshotIsConversationListening() else { return }
+    handler(audioData)
+  }
+
   func toggleTranscription() {
     if isTranscribing {
       AssistantSettings.shared.audioRecordingMode = .off
@@ -462,8 +467,7 @@ extension AppState {
     // instances so transcripts are diarized by source (mic = you, system = another speaker).
     if !sttSession.useLocalSTT {
       audioMixer?.start { [weak self, weak transcriptionService] monoMixed in
-        guard self?.snapshotIsConversationListening() == true else { return }
-        transcriptionService?.sendAudio(monoMixed)
+        self?.forwardConversationAudio(monoMixed) { transcriptionService?.sendAudio($0) }
       }
     }
 
@@ -908,8 +912,7 @@ extension AppState {
         }
       },
       conversationAudioHandler: { [weak self, weak transcriptionService] audioData in
-        guard self?.snapshotIsConversationListening() == true else { return }
-        transcriptionService?.sendAudio(audioData)
+        self?.forwardConversationAudio(audioData) { transcriptionService?.sendAudio($0) }
       }
     )
 

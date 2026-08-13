@@ -74,7 +74,7 @@ enum NotchChromeLayout {
 /// Main floating control bar SwiftUI view composing all sub-views.
 struct FloatingControlBarView: View {
   @EnvironmentObject var state: FloatingControlBarState
-  @ObservedObject var appState: AppState = AppState.current ?? AppState()
+  @ObservedObject var appState: AppState
   @ObservedObject private var shortcutSettings = ShortcutSettings.shared
   @ObservedObject private var agentPills = AgentPillsManager.shared
   weak var window: NSWindow?
