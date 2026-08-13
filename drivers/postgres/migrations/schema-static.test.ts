@@ -48,6 +48,7 @@ const expectedTables = [
   "account_control_heads",
   "account_control_revisions",
   "account_deletion_surface_receipts",
+  "account_typesense_deletion_receipts",
   "account_restore_terminal_application_receipts",
   "account_restored_terminal_fences",
   "account_terminal_deletion_exports",
@@ -231,6 +232,24 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
         `${right.surface}:${right.table}`,
       ));
     expect(sqlRows).toEqual(typedRows);
+  });
+
+  test("retains Typesense cleanup receipts behind cleanup-only named operations", () => {
+    const sql = migrationSql.find((migration) => migration.version === 37)?.sql;
+    expect(sql).toBeDefined();
+    expect(sql).toContain("CREATE TABLE omi_memory.account_typesense_deletion_receipts");
+    expect(sql).toContain("PRIMARY KEY (account_id, deletion_epoch, operation_ref, resource_role)");
+    expect(sql).toContain("(result = 'disposed' AND affected_count > 0)");
+    expect(sql).toContain("(result = 'already_absent' AND affected_count = 0)");
+    expect(sql).toContain("SECURITY DEFINER\nSET search_path = pg_catalog, omi_memory");
+    expect(sql).toContain("GRANT EXECUTE ON FUNCTION omi_memory.load_typesense_deletion_receipt(");
+    expect(sql).toContain("GRANT EXECUTE ON FUNCTION omi_memory.record_typesense_deletion_receipt(");
+    expect(sql?.match(/TO omi_platform_cleanup;/g)).toHaveLength(2);
+    expect(sql).not.toContain("TO omi_platform_application;");
+    expect(sql).not.toMatch(
+      /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|TRUNCATE|ALL)[^;]*account_typesense_deletion_receipts/s,
+    );
+    expect(sql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
   });
 
   test("keeps Listen capture account authority behind fixed named operations", () => {

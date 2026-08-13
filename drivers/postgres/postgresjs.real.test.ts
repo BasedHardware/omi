@@ -119,6 +119,8 @@ import {
 import { createPostgresAuthoritativeGraphSnapshotRepository } from "./authoritative-graph-snapshot";
 import { createPostgresDeletionCleanupParticipant } from
   "./account-deletion-cleanup-participant";
+import { createPostgresTypesenseDeletionReceiptRepository } from
+  "./typesense-deletion-receipt-repository";
 import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatement } from "./connection";
 import { createPostgresDurableMemoryWorkAcceptanceRepository } from "./durable-memory-work-acceptance";
 import { createPostgresDurableMemoryWorkBacklogSource } from "./durable-memory-work-backlog";
@@ -5590,6 +5592,107 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       eligibility,
       async () => undefined,
     )).rejects.toMatchObject({ code: "terminal_coordinate_denied" });
+  }, 120_000);
+
+  test("Typesense cleanup receipts are retained, exact, replayable, and cleanup-role only", async () => {
+    const suffix = randomUUID();
+    const accountId = `account:typesense-receipt:${suffix}`;
+    const operationRef = `opref1_${sha256CanonicalContent({ suffix, operation: true })}`;
+    const eligibilityDigest = sha256CanonicalContent({ suffix, eligibility: true });
+    const registryDigest = sha256CanonicalContent({ suffix, registry: true });
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(
+        "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)", [accountId],
+      );
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+        (account_id, control_revision, account_generation, account_epoch, lifecycle_state,
+         deletion_epoch, observed_at, record_schema_version, record_json, content_hash)
+        VALUES ($1, 7, 'new', 3, 'deleted', 11, transaction_timestamp(),
+                'control-v1', '{}'::jsonb, $2)`, [accountId, "a".repeat(64)]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+        (account_id, control_revision, activated_epoch, activation_control_revision)
+        VALUES ($1, 7, NULL, NULL)`, [accountId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_terminal_deletion_exports
+        (account_id, deletion_epoch, export_contract_version, transitioned_at,
+         account_generation, terminal_lifecycle_state, stranded_data_present,
+         control_revision, content_hash)
+        VALUES ($1, 11, 'terminal-v1', transaction_timestamp(), 'new', 'deleted', false, 7, $2)`,
+      [accountId, "b".repeat(64)]);
+    });
+
+    const receiptCore = Object.freeze({
+      version: "typesense-deletion-receipt-key-v1" as const,
+      account_id: accountId,
+      control_revision: 7,
+      deletion_epoch: 11,
+      operation_ref: operationRef,
+      eligibility_digest: eligibilityDigest,
+      registry_digest: registryDigest,
+      role: "legacy_conversations" as const,
+      collection_name: "conversations",
+      result: "disposed" as const,
+      affected_count: 2,
+      provider_receipt_digest: "c".repeat(64),
+    });
+    const storedReceipt = Object.freeze({
+      ...receiptCore,
+      receipt_digest: createHash("sha256").update(JSON.stringify({
+        contract_version: "typesense-deletion-stored-receipt-v1",
+        receipt: receiptCore,
+      })).digest("hex"),
+    });
+    const repository = createPostgresTypesenseDeletionReceiptRepository(pool);
+    const key = Object.freeze({
+      version: storedReceipt.version,
+      account_id: storedReceipt.account_id,
+      control_revision: storedReceipt.control_revision,
+      deletion_epoch: storedReceipt.deletion_epoch,
+      operation_ref: storedReceipt.operation_ref,
+      eligibility_digest: storedReceipt.eligibility_digest,
+      registry_digest: storedReceipt.registry_digest,
+      role: storedReceipt.role,
+      collection_name: storedReceipt.collection_name,
+    });
+    await expect(repository.load(key)).resolves.toEqual({ kind: "missing" });
+    await expect(repository.record(storedReceipt)).resolves.toEqual(storedReceipt);
+    await expect(repository.record(storedReceipt)).resolves.toEqual(storedReceipt);
+    await expect(repository.load(key)).resolves.toEqual({ kind: "found", receipt: storedReceipt });
+
+    const changedCore = Object.freeze({
+      ...receiptCore,
+      provider_receipt_digest: "d".repeat(64),
+    });
+    const changed = Object.freeze({
+      ...changedCore,
+      receipt_digest: createHash("sha256").update(JSON.stringify({
+        contract_version: "typesense-deletion-stored-receipt-v1",
+        receipt: changedCore,
+      })).digest("hex"),
+    });
+    await expect(repository.record(changed)).rejects.toMatchObject({ code: "receipt_conflict" });
+
+    const counts = await ownerSql.unsafe<{ count: number }[]>(`
+      SELECT count(*)::int AS count
+      FROM omi_memory.account_typesense_deletion_receipts
+      WHERE account_id = $1`, [accountId]);
+    expect([...counts]).toEqual([{ count: 1 }]);
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(
+        "SELECT * FROM omi_memory.account_typesense_deletion_receipts WHERE account_id = $1",
+        [accountId],
+      );
+    })).rejects.toMatchObject({ code: "42501" });
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(
+        "SELECT * FROM omi_memory.load_typesense_deletion_receipt($1,$2,$3,$4,$5,$6,$7,$8)",
+        [
+          accountId, 7, 11, operationRef, eligibilityDigest, registryDigest,
+          "legacy_conversations", "conversations",
+        ],
+      );
+    })).rejects.toMatchObject({ code: "42501" });
   }, 120_000);
 
   test("restore role installs retained terminal fences with exact replay and rollback", async () => {

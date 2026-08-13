@@ -223,4 +223,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0036-gcp-operator-restore-admission.sql",
     sha256: "ab6b18bff5d8a28a7e38d2946b2a39ce5e0b67c3eaa596c6ed4bda3ce333250f",
   }),
+  Object.freeze({
+    version: 37,
+    name: "typesense-deletion-receipts",
+    fileName: "0037-typesense-deletion-receipts.sql",
+    sha256: "ea5a09d5c09df06fe16de18bb7f54c432b4f353fe2a887efbf4965e3eba5d9f4",
+  }),
 ]);
