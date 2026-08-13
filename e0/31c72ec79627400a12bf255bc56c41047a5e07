@@ -1,0 +1,21 @@
+desktop/context-for-claude/scripts/package-dmg.sh
+  s_d58145f2e376ea::t_dea8599bd6d279 220-237,252,256
+  s_d58145f2e376ea::t_8ba37f81730691 238-246
+  s_d58145f2e376ea::t_b2c4122e52b9f9 205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "e031c72ec79627400a12bf255bc56c41047a5e07",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
