@@ -138,6 +138,36 @@ void main() {
       'acquisition_source': 'mobile_oauth',
     });
   });
+
+  test('search events share a content-free result schema', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().searchQueryEntered('  two   words  ', 3);
+    AnalyticsManager().memorySearched('one', 1);
+    AnalyticsManager().conversationDetailSearchQueryEntered(
+      conversationId: 'conversation-1',
+      query: 'three word query',
+      resultsCount: 4,
+      activeTab: 'Transcript',
+    );
+    AnalyticsManager().appsSearched(searchTerm: 'private app name', resultCount: 2);
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events, hasLength(4));
+    for (final event in adapter.events) {
+      expect(
+        event.properties.keys,
+        containsAll(['query_length', 'query_word_count', 'results_count', 'search_surface']),
+      );
+      expect(event.properties, isNot(contains('query')));
+      expect(event.properties, isNot(contains('search_query')));
+      expect(event.properties, isNot(contains('search_term')));
+    }
+    expect(adapter.events.first.properties, containsPair('query_word_count', 2));
+    expect(adapter.events.last.properties, containsPair('search_surface', 'apps'));
+  });
 }
 
 class _FakeAnalyticsAdapter implements AnalyticsAdapter {
