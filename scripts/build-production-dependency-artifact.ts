@@ -4,6 +4,9 @@ import { dirname, resolve } from "node:path";
 
 import {
   PRODUCTION_ARTIFACT_BUN_VERSION,
+  PRODUCTION_ARTIFACT_COMMAND_MAX_BUFFER_BYTES,
+  PRODUCTION_ARTIFACT_COMMAND_TIMEOUT_MS,
+  PRODUCTION_ARTIFACT_MAX_ALLOCATED_KIB,
   productionDependencyArtifactPlan,
 } from "./production-dependency-artifact";
 
@@ -23,6 +26,9 @@ const run = (command: string, args: readonly string[], cwd: string): string => {
       encoding: "utf8",
       env: { ...process.env },
       stdio: ["ignore", "pipe", "pipe"],
+      timeout: PRODUCTION_ARTIFACT_COMMAND_TIMEOUT_MS,
+      maxBuffer: PRODUCTION_ARTIFACT_COMMAND_MAX_BUFFER_BYTES,
+      killSignal: "SIGKILL",
     }).trim();
   } catch {
     return fail("production_artifact_command_failed");
@@ -55,12 +61,21 @@ try {
   run("tar", ["-xf", archivePath, "-C", outputRoot], projectRoot);
   rmSync(archivePath);
   run("bun", ["install", "--production", "--omit", "optional", "--frozen-lockfile"], outputRoot);
+  const allocatedKiBText = run("du", ["-sk", outputRoot], projectRoot).split(/\s+/, 1)[0];
+  const allocatedKiB = Number(allocatedKiBText);
+  if (!Number.isSafeInteger(allocatedKiB) || allocatedKiB < 0
+    || allocatedKiB > PRODUCTION_ARTIFACT_MAX_ALLOCATED_KIB) {
+    fail("production_artifact_size_limit_exceeded");
+  }
   const verification = run("node", ["scripts/verify-production-dependency-closure.mjs", "--root", outputRoot], outputRoot);
   run("bun", ["scripts/verify-firebase-auth-runtime.mjs"], outputRoot);
   writeFileSync(`${outputRoot}/PRODUCTION_DEPENDENCY_ARTIFACT.json`, `${JSON.stringify({
     version: plan.version,
     source_commit: plan.source_commit,
     bun_version: PRODUCTION_ARTIFACT_BUN_VERSION,
+    allocated_kib: allocatedKiB,
+    max_allocated_kib: PRODUCTION_ARTIFACT_MAX_ALLOCATED_KIB,
+    command_timeout_ms: PRODUCTION_ARTIFACT_COMMAND_TIMEOUT_MS,
     dependency_verification: JSON.parse(verification),
   }, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
   process.stdout.write(`${JSON.stringify({

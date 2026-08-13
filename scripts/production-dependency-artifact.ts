@@ -4,12 +4,20 @@ import { types } from "node:util";
 
 export const PRODUCTION_ARTIFACT_VERSION = "production-dependency-artifact-v1" as const;
 export const PRODUCTION_ARTIFACT_BUN_VERSION = "1.3.14" as const;
+export const PRODUCTION_ARTIFACT_COMMAND_TIMEOUT_MS = 600_000 as const;
+export const PRODUCTION_ARTIFACT_COMMAND_MAX_BUFFER_BYTES = 8 * 1_024 * 1_024;
+export const PRODUCTION_ARTIFACT_MAX_ALLOCATED_KIB = 512 * 1_024;
 
 export interface ProductionDependencyArtifactPlan {
   readonly version: typeof PRODUCTION_ARTIFACT_VERSION;
   readonly project_root: string;
   readonly output_root: string;
   readonly source_commit: string;
+  readonly limits: {
+    readonly command_timeout_ms: typeof PRODUCTION_ARTIFACT_COMMAND_TIMEOUT_MS;
+    readonly command_max_buffer_bytes: number;
+    readonly max_allocated_kib: number;
+  };
   readonly commands: readonly (readonly string[])[];
 }
 
@@ -74,6 +82,11 @@ export const productionDependencyArtifactPlan = (input: Readonly<{
     project_root: projectRoot,
     output_root: outputRoot,
     source_commit: sourceCommit,
+    limits: Object.freeze({
+      command_timeout_ms: PRODUCTION_ARTIFACT_COMMAND_TIMEOUT_MS,
+      command_max_buffer_bytes: PRODUCTION_ARTIFACT_COMMAND_MAX_BUFFER_BYTES,
+      max_allocated_kib: PRODUCTION_ARTIFACT_MAX_ALLOCATED_KIB,
+    }),
     commands: Object.freeze([
       Object.freeze(["git", "archive", "--format=tar", sourceCommit]),
       Object.freeze(["tar", "-xf", "<archive>", "-C", outputRoot]),

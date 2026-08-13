@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import {
   PRODUCTION_ARTIFACT_BUN_VERSION,
+  PRODUCTION_ARTIFACT_COMMAND_MAX_BUFFER_BYTES,
+  PRODUCTION_ARTIFACT_COMMAND_TIMEOUT_MS,
+  PRODUCTION_ARTIFACT_MAX_ALLOCATED_KIB,
   PRODUCTION_ARTIFACT_VERSION,
   productionDependencyArtifactPlan,
 } from "./production-dependency-artifact";
@@ -20,6 +23,14 @@ describe("production dependency artifact plan", () => {
       worktree_status: "",
     });
     expect(plan.version).toBe(PRODUCTION_ARTIFACT_VERSION);
+    expect(plan.limits).toEqual({
+      command_timeout_ms: 600_000,
+      command_max_buffer_bytes: 8 * 1_024 * 1_024,
+      max_allocated_kib: 512 * 1_024,
+    });
+    expect(PRODUCTION_ARTIFACT_COMMAND_TIMEOUT_MS).toBe(600_000);
+    expect(PRODUCTION_ARTIFACT_COMMAND_MAX_BUFFER_BYTES).toBe(8 * 1_024 * 1_024);
+    expect(PRODUCTION_ARTIFACT_MAX_ALLOCATED_KIB).toBe(512 * 1_024);
     expect(plan.commands).toEqual([
       ["git", "archive", "--format=tar", commit],
       ["tar", "-xf", "<archive>", "-C", output],
@@ -28,6 +39,7 @@ describe("production dependency artifact plan", () => {
       ["bun", "scripts/verify-firebase-auth-runtime.mjs"],
     ]);
     expect(Object.isFrozen(plan)).toBe(true);
+    expect(Object.isFrozen(plan.limits)).toBe(true);
     expect(Object.isFrozen(plan.commands)).toBe(true);
   });
 
