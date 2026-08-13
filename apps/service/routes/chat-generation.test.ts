@@ -27,6 +27,7 @@ import {
   type ChatGenerationContextSource,
 } from "../chat/generation-context";
 import {
+  createGatewayChatGenerationSource,
   createScriptedChatGenerationSource,
   type ChatGenerationScheduler,
   type ChatGenerationSource,
@@ -2083,6 +2084,200 @@ describe("ratified chat generation wire red proofs", () => {
     const replay = await agentEvents(local, admission.generation.id, events.at(-1)!.eventId);
     expect((await replay.text())).toContain("event: terminal");
     db.close();
+  });
+
+  test("gateway-backed app admission joins canonical and agent SSE through SQLite replay", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "omi-gateway-generation-acceptance-"));
+    const path = join(directory, "service.sqlite");
+    const gatewayToken = "loopback-gateway-token-must-not-escape";
+    const privateProviderField = "provider-private-value-must-not-escape";
+    const rawProviderField = "raw-provider-value-must-not-escape";
+    let gatewayRequest: Readonly<{
+      authorization: string | null;
+      caller: string | null;
+      user: string | null;
+      feature: string | null;
+      body: Record<string, unknown>;
+    }> | null = null;
+    const gateway = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        gatewayRequest = Object.freeze({
+          authorization: request.headers.get("authorization"),
+          caller: request.headers.get("x-omi-service-caller"),
+          user: request.headers.get("x-omi-user-uid"),
+          feature: request.headers.get("x-omi-llm-feature"),
+          body: await request.json() as Record<string, unknown>,
+        });
+        return new Response([
+          `data: ${JSON.stringify({
+            choices: [{ delta: { content: "Gateway-backed " } }],
+            private: privateProviderField,
+          })}\n\n`,
+          `data: ${JSON.stringify({
+            choices: [{ delta: { content: "answer." } }],
+            raw: { value: rawProviderField },
+            usage: { prompt_tokens: 11, completion_tokens: 2, total_tokens: 13 },
+          })}\n\n`,
+          "data: [DONE]\n\n",
+        ].join(""), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      },
+    });
+    const context = createDeterministicChatGenerationContextSource({
+      candidates: [{
+        sourceKind: "memory",
+        sourceId: "memory:gateway-acceptance",
+        claimId: "claim:gateway-acceptance",
+        evidenceId: "evidence:gateway-acceptance",
+        ownerAccountId: ACCOUNT,
+        sourceHash: `sha256:${"d".repeat(64)}`,
+        capturedAt: 1,
+        expiresAt: null,
+        redactedPreview: "The user prefers concise action plans.",
+        tokenEstimate: 6,
+        inclusionReason: "authorized acceptance context",
+        policyDecision: "included",
+      }],
+    });
+    const source = createGatewayChatGenerationSource({
+      gatewayUrl: `http://127.0.0.1:${gateway.port}`,
+      laneId: "omi:auto:chat-agent",
+      serviceToken: gatewayToken,
+    });
+    const publicBodies: string[] = [];
+
+    try {
+      const firstDb = new Database(path);
+      const firstStores = createSqliteLocalServiceStores(firstDb);
+      const first = createLocalDevService({
+        db: firstDb,
+        stores: firstStores,
+        ownerAccountId: ACCOUNT,
+        memoryCount: 0,
+        accountTimezone: "UTC",
+        devSecretLabel: "gateway-generation-acceptance-proof",
+        generationSource: source,
+        generationContext: context,
+      });
+
+      const admittedResponse = await post(first, create("gateway-joined-acceptance"));
+      expect(admittedResponse.status).toBe(201);
+      expect(admittedResponse.headers.get("content-type")).toContain("application/json");
+      const admission = await readAdmission(admittedResponse);
+      const generationId = admission.generation.id;
+      const canonicalInitialBody = await (await generationEvents(first, generationId)).text();
+      publicBodies.push(canonicalInitialBody);
+      const canonicalInitial = parseSse(canonicalInitialBody);
+      expect(canonicalInitial.filter((frame) => ["done", "failed", "cancelled"].includes(frame.event)))
+        .toHaveLength(1);
+      expect(canonicalInitial.at(-1)?.data).toMatchObject({
+        kind: "done",
+        message: { text: "Gateway-backed answer.", generationOutcome: "completed" },
+      });
+
+      const agentInitialBody = await (await agentEvents(first, generationId)).text();
+      publicBodies.push(agentInitialBody);
+      const agentInitial = agentInitialBody.split("\n\n")
+        .filter((block) => block.trim().length > 0)
+        .map((block) => JSON.parse(block.split("\n")
+          .find((line) => line.startsWith("data: "))!.slice(6)) as Record<string, unknown>);
+      expect(agentInitial.every((event) => event.runId === generationId)).toBe(true);
+      expect(agentInitial).toContainEqual(expect.objectContaining({
+        kind: "capability_receipt",
+        details: {
+          tier: "real-provider",
+          adapter: "omi-llm-gateway",
+          deterministic: false,
+        },
+      }));
+      expect(agentInitial).toContainEqual(expect.objectContaining({
+        kind: "context_receipt",
+        details: expect.objectContaining({
+          sourceKind: "context-packet",
+          policyDecision: "included",
+          tokenEstimate: 6,
+        }),
+      }));
+      expect(agentInitial).toContainEqual(expect.objectContaining({
+        kind: "usage",
+        details: expect.objectContaining({
+          inputTokens: 11,
+          outputTokens: 2,
+          totalTokens: 13,
+        }),
+      }));
+      expect(agentInitial.filter((event) => event.kind === "terminal")).toHaveLength(1);
+      expect(agentInitial.at(-1)).toMatchObject({
+        kind: "terminal",
+        details: {
+          terminalOutcome: "completed",
+          terminalCode: "completed",
+          retryable: false,
+          recoveryAction: null,
+        },
+      });
+
+      expect(gatewayRequest).toMatchObject({
+        authorization: `Bearer ${gatewayToken}`,
+        caller: "platform",
+        user: ACCOUNT,
+        feature: "rewrite_chat",
+      });
+      expect(gatewayRequest?.body).toMatchObject({
+        model: "omi:auto:chat-agent",
+        stream: true,
+        stream_options: { include_usage: true },
+      });
+      expect(JSON.stringify(gatewayRequest?.body.messages)).toContain(
+        "The user prefers concise action plans.",
+      );
+
+      const canonicalReplayBefore = await (await generationEvents(first, generationId)).text();
+      const agentReplayBefore = await (await agentEvents(first, generationId)).text();
+      const historyBefore = await history(first);
+      const agentSnapshotBefore = firstStores.agentRunEvents!.snapshot();
+      publicBodies.push(canonicalReplayBefore, agentReplayBefore, JSON.stringify(historyBefore));
+      expect(parseSse(canonicalReplayBefore).filter((frame) =>
+        ["done", "failed", "cancelled"].includes(frame.event))).toHaveLength(1);
+      firstDb.close();
+
+      const secondDb = new Database(path);
+      const secondStores = createSqliteLocalServiceStores(secondDb);
+      const second = createLocalDevService({
+        db: secondDb,
+        stores: secondStores,
+        ownerAccountId: ACCOUNT,
+        memoryCount: 0,
+        accountTimezone: "UTC",
+        devSecretLabel: "gateway-generation-acceptance-proof",
+        generationSource: source,
+        generationContext: context,
+      });
+      const canonicalReplayAfter = await (await generationEvents(second, generationId)).text();
+      const agentReplayAfter = await (await agentEvents(second, generationId)).text();
+      const historyAfter = await history(second);
+      publicBodies.push(canonicalReplayAfter, agentReplayAfter, JSON.stringify(historyAfter));
+      expect(canonicalReplayAfter).toBe(canonicalReplayBefore);
+      expect(agentReplayAfter).toBe(agentReplayBefore);
+      expect(historyAfter).toEqual(historyBefore);
+      expect(secondStores.agentRunEvents!.snapshot()).toEqual(agentSnapshotBefore);
+      expect(secondStores.agentRunEvents!.list(generationId)
+        .filter((event) => event.kind === "terminal")).toHaveLength(1);
+      secondDb.close();
+
+      const publicProjection = publicBodies.join("\n");
+      expect(publicProjection).not.toContain(gatewayToken);
+      expect(publicProjection).not.toContain(privateProviderField);
+      expect(publicProjection).not.toContain(rawProviderField);
+      expect(publicProjection).not.toMatch(/"(?:private|raw|arguments|credentials?)"\s*:/u);
+    } finally {
+      gateway.stop(true);
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   test("real provider failure emits one failed agent terminal with no tool or approval claims", async () => {
