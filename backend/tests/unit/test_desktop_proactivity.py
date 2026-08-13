@@ -213,6 +213,7 @@ async def test_gateway_failure_releases_reserved_quota(monkeypatch):
         released.append((uid, operation))
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
     monkeypatch.setattr(desktop_proactivity, "_consume_quota", allow)
     monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
@@ -225,6 +226,38 @@ async def test_gateway_failure_releases_reserved_quota(monkeypatch):
 
     assert unavailable.value.status_code == 502
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+
+
+def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "dev-provider-key")
+
+    url, headers, payload = desktop_proactivity._proactive_provider_request(
+        request("proactive_extraction"), "user-1", "request-1"
+    )
+
+    assert url == "https://api.openai.com/v1/chat/completions"
+    assert headers == {"Authorization": "Bearer dev-provider-key", "Content-Type": "application/json"}
+    assert payload["model"] == "gpt-5-nano"
+    assert "prompt_cache_options" not in payload
+
+
+def test_configured_gateway_remains_authoritative(monkeypatch):
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://172.16.63.232/")
+    monkeypatch.setattr(
+        desktop_proactivity,
+        "llm_gateway_headers",
+        lambda **_: {"Authorization": "Bearer gateway"},
+    )
+
+    url, headers, payload = desktop_proactivity._proactive_provider_request(
+        request("proactive_reasoning"), "user-1", "request-1"
+    )
+
+    assert url == "http://172.16.63.232/v1/chat/completions"
+    assert headers["X-Omi-User-Uid"] == "user-1"
+    assert headers["X-Omi-Request-ID"] == "request-1"
+    assert payload["model"] == "omi:auto:desktop-proactive-reasoning"
 
 
 @pytest.mark.asyncio
@@ -258,6 +291,7 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
         return None
 
     monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
     monkeypatch.setattr(desktop_proactivity, "_consume_quota", allow)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())

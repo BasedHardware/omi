@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Mapping
 from enum import Enum
 from typing import Any
@@ -42,6 +43,34 @@ _OPERATION_LANES = {
     "proactive_extraction": "omi:auto:desktop-proactive-extraction",
     "proactive_reasoning": "omi:auto:desktop-proactive-reasoning",
 }
+_DIRECT_MODELS = {
+    "proactive_extraction": "gpt-5-nano",
+    "proactive_reasoning": "gpt-5.6-luna",
+}
+
+
+def _proactive_provider_request(
+    request: "ProactiveCompletionRequest", uid: str, request_id: str
+) -> tuple[str, dict[str, str], dict[str, Any]]:
+    payload = _gateway_payload(request)
+    gateway_url = os.getenv("OMI_LLM_GATEWAY_URL", "").strip()
+    if gateway_url:
+        headers = llm_gateway_headers(feature=f"desktop_{request.operation.value}")
+        headers["X-Omi-User-Uid"] = uid
+        headers["X-Omi-Request-ID"] = request_id
+        return f"{gateway_url.rstrip('/')}/v1/chat/completions", headers, payload
+
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Proactive model provider is not configured")
+    payload["model"] = _DIRECT_MODELS[request.operation.value]
+    # These are gateway cache extensions, not OpenAI request fields.
+    payload.pop("prompt_cache_options", None)
+    return (
+        "https://api.openai.com/v1/chat/completions",
+        {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        payload,
+    )
 
 
 def _quota_limit_for_subscription(operation: ProactiveOperation, subscription: Subscription | None) -> int:
@@ -303,15 +332,13 @@ async def proactive_completion(
 
     await _consume_quota(uid, request.operation)
     request_id = str(uuid4())
-    headers = llm_gateway_headers(feature=f"desktop_{operation}")
-    headers["X-Omi-User-Uid"] = uid
-    headers["X-Omi-Request-ID"] = request_id
+    provider_url, headers, payload = _proactive_provider_request(request, uid, request_id)
     try:
         async with get_llm_gateway_semaphore():
             response = await get_llm_gateway_client().post(
-                f"{get_llm_gateway_base_url()}/v1/chat/completions",
+                provider_url,
                 headers=headers,
-                json=_gateway_payload(request),
+                json=payload,
             )
         response.raise_for_status()
         response_body = response.json()
