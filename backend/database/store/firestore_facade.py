@@ -358,10 +358,16 @@ class _FacadeTransaction:
 
     # --- lifecycle (driven by the decorator/wrapper) ---
     def _begin(self, retry_id: Any = None) -> None:
-        mongo = self._client._store._mongo_client  # facade is Mongo-only (Firestore keeps the SDK client)
-        self._session = mongo.start_session()
-        self._session.start_transaction()
-        self._id = id(self._session)
+        # Mongo: a real replica-set session transaction. A store without a Mongo client (the neutral
+        # FakeDocumentStore in unit tests) runs session-less — writes apply directly, no atomicity,
+        # which is what a hermetic unit test asserting domain logic needs.
+        mongo = getattr(self._client._store, "_mongo_client", None)
+        if mongo is not None:
+            self._session = mongo.start_session()
+            self._session.start_transaction()
+        else:
+            self._session = None
+        self._id = id(self)
 
     def _commit(self) -> Any:
         if self._session is None:

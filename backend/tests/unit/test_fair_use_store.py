@@ -11,15 +11,15 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import database.fair_use as fair_use_db
-from tests.store_fakes import FakeDocumentStore
+import database.fair_use as fair_use_db  # noqa: F401  (kept: some tests reference module symbols)
+from tests.store_fakes import install_fake_db_client
 
 
 @pytest.fixture
 def store(monkeypatch):
-    fake = FakeDocumentStore()
-    monkeypatch.setattr(fair_use_db, '_store', lambda: fake)
-    return fake
+    # ADR-0044: fair_use threads the raw ``db`` client; inject the neutral facade over a fake so the
+    # real read/write logic runs against ``fake._docs`` (was the retired ``_store`` seam).
+    return install_fake_db_client(monkeypatch)
 
 
 class TestFairUseState:

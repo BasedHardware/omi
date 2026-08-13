@@ -176,6 +176,23 @@ class FakeDocumentStore:
         self._docs.pop(path, None)
         self._updated.pop(path, None)
 
+    # Session-aware private aliases so the neutral db_client facade's transaction (which threads
+    # ``session=`` to the store) can run over this fake session-less — hermetic, no real atomicity.
+    def _get(self, path: str, *, fields: Optional[Sequence[str]] = None, session: Any = None) -> StoredDocument:
+        return self.get(path, fields=fields)
+
+    def _set(self, path: str, data: Dict[str, Any], *, merge: bool = False, session: Any = None) -> None:
+        self.set(path, data, merge=merge)
+
+    def _update(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
+        self.update(path, data)
+
+    def _create(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
+        self.create(path, data)
+
+    def _delete(self, path: str, *, session: Any = None) -> None:
+        self.delete(path)
+
     def query(
         self,
         collection: str,
@@ -331,4 +348,22 @@ class FakeDocumentStore:
         return _FakeBatch(self)
 
 
-__all__ = ["FakeDocumentStore"]
+def install_fake_db_client(monkeypatch: Any, backing: Optional[Dict[str, Dict[str, Any]]] = None) -> "FakeDocumentStore":
+    """Inject the neutral ``db_client`` facade over a fresh ``FakeDocumentStore`` for domain modules
+    that thread the raw client (``from database._client import db``) under ADR-0044.
+
+    The merge adopted upstream's ``db``/``db_client`` idiom wholesale, so ``database.*`` modules no
+    longer expose a ``_store`` seam to monkeypatch; instead patch the client accessor so
+    ``db.collection(...)`` / ``@transactional`` run through the facade against this fake. Returns the
+    fake so tests seed/assert on ``fake._docs`` exactly as they did against the old ``_store`` seam."""
+    from database import _client
+    from database.store.firestore_facade import NeutralFirestoreClient
+
+    fake = FakeDocumentStore(backing=backing)
+    client = NeutralFirestoreClient(fake)
+    monkeypatch.setattr(_client, "get_firestore_client", lambda: client)
+    monkeypatch.setattr(_client, "_firestore_client", client, raising=False)
+    return fake
+
+
+__all__ = ["FakeDocumentStore", "install_fake_db_client"]
