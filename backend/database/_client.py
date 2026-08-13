@@ -82,6 +82,15 @@ _firestore_client_lock = Lock()
 
 
 def _build_firestore_client() -> Any:
+    # On-prem (ADR-0044): when the storage backend is not Firestore, ``db_client`` is a neutral
+    # Firestore-Client-shaped facade over the store port (Mongo), so upstream code that threads a
+    # ``db_client`` runs unchanged. Firestore stays the real SDK client below.
+    if (os.environ.get("STORAGE_BACKEND") or "firestore").strip().lower() != "firestore":
+        from database.store.factory import get_document_store
+        from database.store.firestore_facade import NeutralFirestoreClient
+
+        return NeutralFirestoreClient(get_document_store())
+
     # Production safety: only override project/database when pointed at a local
     # Firestore emulator. Without FIRESTORE_EMULATOR_HOST set (i.e. real Firestore),
     # never let bare GOOGLE_CLOUD_PROJECT (often the GKE compute project) repoint
