@@ -2034,7 +2034,7 @@ class CaptureController extends ChangeNotifier
     }
 
     externalActions.upsertConversation(conversation);
-    PlatformManager.instance.analytics.conversationCreated(conversation);
+    PlatformManager.instance.analytics.conversationCreated(conversation, recordingDevice: _recordingDevice);
   }
 
   Future<void> _handleLastConvoEvent(String memoryId) async {

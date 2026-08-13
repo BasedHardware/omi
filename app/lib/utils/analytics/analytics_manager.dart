@@ -633,7 +633,7 @@ class AnalyticsManager {
     return properties;
   }
 
-  void conversationCreated(ServerConversation conversation) {
+  void conversationCreated(ServerConversation conversation, {BtDevice? recordingDevice}) {
     var properties = getConversationEventProperties(conversation);
     properties['memory_result'] = conversation.discarded ? 'discarded' : 'saved';
     properties['action_items_count'] = conversation.structured.actionItems.length;
@@ -643,6 +643,7 @@ class AnalyticsManager {
     properties['conversation_source'] = conversation.source?.toString().split('.').last ?? 'unknown';
     properties['duration_seconds'] = conversation.getDurationInSeconds();
     properties['timestamp'] = conversation.createdAt.toIso8601String();
+    properties.addAll(recordingDeviceProperties(recordingDevice));
 
     // Get the summarized app info if available
     if (conversation.appResults.isNotEmpty) {
@@ -654,6 +655,12 @@ class AnalyticsManager {
 
     track('Memory Created', properties: properties);
   }
+
+  @visibleForTesting
+  static Map<String, Object> recordingDeviceProperties(BtDevice? device) => {
+        'recording_hardware_type': device?.type.name ?? 'phone',
+        'recording_firmware_revision': device == null ? 'not_applicable' : _knownDeviceValue(device.firmwareRevision),
+      };
 
   void conversationListItemClicked(ServerConversation conversation, int idx) =>
       track('Memory List Item Clicked', properties: getConversationEventProperties(conversation));

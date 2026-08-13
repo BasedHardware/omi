@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -92,6 +93,19 @@ void main() {
 
     expect(AnalyticsManager.queuedEventCountForTesting, 200);
     expect(AnalyticsManager.droppedEventCountForTesting, 5);
+  });
+
+  test('memory telemetry carries the recording device firmware context', () {
+    final device = BtDevice(id: 'device-id', name: 'Omi', type: DeviceType.omi, rssi: -50, firmwareRevision: '3.2.1');
+
+    expect(AnalyticsManager.recordingDeviceProperties(device), {
+      'recording_hardware_type': 'omi',
+      'recording_firmware_revision': '3.2.1',
+    });
+    expect(AnalyticsManager.recordingDeviceProperties(null), {
+      'recording_hardware_type': 'phone',
+      'recording_firmware_revision': 'not_applicable',
+    });
   });
 }
 
