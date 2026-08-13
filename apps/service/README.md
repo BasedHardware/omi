@@ -314,7 +314,7 @@ If any non-loopback IPv4 address on the host can reach `/health`, `lanProbe.stat
   `/v1/memories` route and Hono `/mcp` root, but it chooses no listener,
   deployment credentials, MCP API-key adapter, or cohort. Conversations and the
   other local domains remain SQLite-only here.
-- **No production Chat model adapter.** Local Chat generation uses the deterministic timed script; the production LLM remains a later source adapter.
+- **Gateway-required Chat model composition.** The registered service uses the authenticated LLM gateway semantic lane and fails closed when gateway configuration is absent. Provider/model selection and credentials remain gateway-owned; deterministic scripted generation is limited to explicit hermetic tests.
 - **Provisional served-memory selection.** The composition serves temporal **leaf** nodes (one synthesized memory per local day). That aligns with a timeline UI and the seeded fixture layout, but it is a QA composition choice, not a ratified product rule (`composition/memory-read.ts` documents this).
 - **No field negotiation** for optional response fields such as citations or provenance — clients receive the full ratified wire shape.
 - **Dev auth is a seam, not an auth system.** A fixed, committed signing label issues bearer tokens for loopback testing. A real deployment replaces this entire mechanism.
