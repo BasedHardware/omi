@@ -84,11 +84,13 @@ TranscriptSegment _segment(String id, String text) {
 BtDevice _device({required String id, required DeviceType type, String name = 'TestDevice'}) =>
     BtDevice(id: id, name: name, type: type, rssi: -50);
 
-/// CaptureProvider whose socket opening is held on a gate, so a connection
-/// attempt can be kept in flight while another caller tries to start one.
+/// CaptureProvider whose socket opening is held on a per-call gate, so a
+/// connection attempt can be kept in flight while another caller tries to
+/// start one, and each attempt can be released independently.
 class _GatedSocketCaptureProvider extends CaptureProvider {
-  int openCalls = 0;
-  Completer<void> gate = Completer<void>();
+  final List<Completer<void>> gates = [];
+
+  int get openCalls => gates.length;
 
   @override
   Future<TranscriptSegmentSocketService?> openConversationSocket({
@@ -99,9 +101,18 @@ class _GatedSocketCaptureProvider extends CaptureProvider {
     String? source,
     CustomSttConfig? customSttConfig,
   }) async {
-    openCalls++;
+    final gate = Completer<void>();
+    gates.add(gate);
     await gate.future;
     return null;
+  }
+
+  void release(int attempt) => gates[attempt].complete();
+
+  void releaseAll() {
+    for (final gate in gates) {
+      if (!gate.isCompleted) gate.complete();
+    }
   }
 }
 
@@ -1231,13 +1242,16 @@ void main() {
       await startAttempt(provider);
       expect(provider.openCalls, 1, reason: 'an overlapping attempt must not open a second socket');
 
-      provider.gate.complete();
+      provider.release(0);
       await first;
 
       // The guard clears once the attempt finishes, so reconnects still work.
-      provider.gate = Completer<void>()..complete();
-      await startAttempt(provider);
+      final next = startAttempt(provider);
+      await settle();
       expect(provider.openCalls, 2, reason: 'a later attempt must connect again');
+
+      provider.releaseAll();
+      await next;
       provider.dispose();
     });
 
@@ -1255,8 +1269,34 @@ void main() {
       await settle();
       expect(provider.openCalls, 2, reason: 'a forced reconnect must not be gated');
 
-      provider.gate.complete();
+      provider.releaseAll();
       await first;
+      await forced;
+      provider.dispose();
+    });
+
+    test('stays gated while a forced attempt with the same parameters runs', () async {
+      final provider = _GatedSocketCaptureProvider();
+
+      final first = startAttempt(provider);
+      await settle();
+      expect(provider.openCalls, 1);
+
+      // Same parameters as the attempt in flight, so both share a guard key.
+      provider.updateRecordingState(RecordingState.record);
+      final forced = provider.onTranscriptionSettingsChanged();
+      await settle();
+      expect(provider.openCalls, 2);
+
+      // The first attempt finishing must not ungate the forced one still
+      // connecting, or the next keep-alive tick opens a third socket.
+      provider.release(0);
+      await first;
+
+      await startAttempt(provider);
+      expect(provider.openCalls, 2, reason: 'a repeat must stay gated while the forced attempt is in flight');
+
+      provider.releaseAll();
       await forced;
       provider.dispose();
     });
@@ -1274,7 +1314,7 @@ void main() {
       await settle();
       expect(provider.openCalls, 2, reason: 'a differently configured attempt must not be gated');
 
-      provider.gate.complete();
+      provider.releaseAll();
       await first;
       await other;
       provider.dispose();
