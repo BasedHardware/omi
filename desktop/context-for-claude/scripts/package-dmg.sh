@@ -202,6 +202,7 @@ notarize_path() {
     local payload="$target"
     local key_path=""
     local temporary_payload=0
+    local created_key=0
 
     # Apple accepts an app only inside a ZIP for notarization, while the DMG must be submitted as
     # the disk image itself so the stapled ticket belongs to the downloadable DMG.
@@ -216,19 +217,43 @@ notarize_path() {
             die "notarization failed for $(basename "$target")"
         fi
     else
-        key_path="$(mktemp /tmp/context-app-store-connect-key.XXXXXX)"
-        chmod 600 "$key_path"
-        printf '%s\n' "$ASC_PRIVATE_KEY" > "$key_path"
+        # The App Store Connect key arrives in one of three shapes, and every working Omi
+        # notarization step in codemagic.yaml handles all three: a filesystem path, an `@file:` path,
+        # or the PEM body itself — stored with *literal* `\n` escapes rather than real newlines, which
+        # is why those steps use `echo -e` and this one must not use `printf '%s'`. Writing an
+        # unexpanded single-line key here failed only when `notarytool` rejected it, roughly forty
+        # minutes into a release, after the app had already been built and signed.
+        if [[ "$ASC_PRIVATE_KEY" == /* ]] || [[ "$ASC_PRIVATE_KEY" == @file:* ]]; then
+            key_path="${ASC_PRIVATE_KEY#@file:}"
+            [[ -r "$key_path" ]] \
+                || die "CFC_ASC_PRIVATE_KEY names a key file that cannot be read: $key_path"
+        else
+            key_path="$(mktemp /tmp/context-app-store-connect-key.XXXXXX)"
+            chmod 600 "$key_path"
+            created_key=1
+            # %b expands the `\n` escapes; a PEM that already has real newlines passes through
+            # unchanged, because a base64 key body carries no other backslash sequences.
+            printf '%b\n' "$ASC_PRIVATE_KEY" > "$key_path"
+        fi
+        # Fail on a malformed key now rather than after the submission round-trip. Both conditions
+        # matter: the header proves it is a key at all, and the line count proves the newlines
+        # survived — a PEM collapsed onto one line still contains "PRIVATE KEY" and is still rejected
+        # by notarytool, which is the exact failure this branch exists to prevent.
+        if ! grep -q 'BEGIN .*PRIVATE KEY' "$key_path" || [[ "$(wc -l < "$key_path")" -lt 2 ]]; then
+            [[ "$created_key" -eq 0 ]] || rm -f "$key_path"
+            [[ "$temporary_payload" -eq 0 ]] || rm -f "$payload"
+            die "the App Store Connect key is not a usable multi-line PEM; check how $([[ -n "${CFC_ASC_PRIVATE_KEY:-}" ]] && echo CFC_ASC_PRIVATE_KEY || echo 'the key') is stored (literal \\n escapes, real newlines, or a file path are all accepted)"
+        fi
         if ! xcrun notarytool submit "$payload" \
             --key "$key_path" \
             --key-id "$ASC_KEY_ID" \
             --issuer "$ASC_ISSUER_ID" \
             --wait; then
-            rm -f "$key_path"
+            [[ "$created_key" -eq 0 ]] || rm -f "$key_path"
             [[ "$temporary_payload" -eq 0 ]] || rm -f "$payload"
             die "notarization failed for $(basename "$target")"
         fi
-        rm -f "$key_path"
+        [[ "$created_key" -eq 0 ]] || rm -f "$key_path"
     fi
     [[ "$temporary_payload" -eq 0 ]] || rm -f "$payload"
 }
