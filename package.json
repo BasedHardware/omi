@@ -19,6 +19,7 @@
     "lint:imports": "bun run scripts/lint-import-graph.ts",
     "qa:contracts": "bun run scripts/qa-contracts.ts",
     "qa:production-deps": "node scripts/verify-production-dependency-closure.mjs",
+    "qa:production-qualification": "bun run scripts/validate-production-qualification-manifest.ts",
     "build:production-deps": "bun run scripts/build-production-dependency-artifact.ts"
   },
   "dependencies": {
