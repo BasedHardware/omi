@@ -229,4 +229,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0037-typesense-deletion-receipts.sql",
     sha256: "ea5a09d5c09df06fe16de18bb7f54c432b4f353fe2a887efbf4965e3eba5d9f4",
   }),
+  Object.freeze({
+    version: 38,
+    name: "pinecone-deletion-receipts",
+    fileName: "0038-pinecone-deletion-receipts.sql",
+    sha256: "59fd1c25eca903ce31bc8901936fdd7eda9c7d237602aec261fa79a746a8e876",
+  }),
 ]);

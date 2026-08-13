@@ -48,6 +48,7 @@ const expectedTables = [
   "account_control_heads",
   "account_control_revisions",
   "account_deletion_surface_receipts",
+  "account_pinecone_deletion_receipts",
   "account_typesense_deletion_receipts",
   "account_restore_terminal_application_receipts",
   "account_restored_terminal_fences",
@@ -248,6 +249,28 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(sql).not.toContain("TO omi_platform_application;");
     expect(sql).not.toMatch(
       /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|TRUNCATE|ALL)[^;]*account_typesense_deletion_receipts/s,
+    );
+    expect(sql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
+  });
+
+  test("retains Pinecone cleanup receipts for every fixed legacy namespace", () => {
+    const sql = migrationSql.find((migration) => migration.version === 38)?.sql;
+    expect(sql).toBeDefined();
+    expect(sql).toContain("CREATE TABLE omi_memory.account_pinecone_deletion_receipts");
+    expect(sql).toContain("index_name text NOT NULL CHECK (index_name = 'memories-backend')");
+    for (const namespace of [
+      "ns1", "ns2", "ns3", "ns4", "ns_tchunks", "ns_x", "workstream-association-v1",
+    ]) expect(sql).toContain(`'${namespace}'`);
+    expect(sql).toContain("PRIMARY KEY (account_id, deletion_epoch, operation_ref, resource_role)");
+    expect(sql).toContain("(result = 'disposed' AND pre_delete_count > 0)");
+    expect(sql).toContain("(result = 'already_absent' AND pre_delete_count = 0)");
+    expect(sql).toContain("SECURITY DEFINER\nSET search_path = pg_catalog, omi_memory");
+    expect(sql).toContain("GRANT EXECUTE ON FUNCTION omi_memory.load_pinecone_deletion_receipt(");
+    expect(sql).toContain("GRANT EXECUTE ON FUNCTION omi_memory.record_pinecone_deletion_receipt(");
+    expect(sql?.match(/TO omi_platform_cleanup;/g)).toHaveLength(2);
+    expect(sql).not.toContain("TO omi_platform_application;");
+    expect(sql).not.toMatch(
+      /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|TRUNCATE|ALL)[^;]*account_pinecone_deletion_receipts/s,
     );
     expect(sql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
   });

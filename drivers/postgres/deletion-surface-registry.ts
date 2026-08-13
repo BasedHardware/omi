@@ -75,6 +75,7 @@ export const POSTGRES_RETAINED_DELETION_SAFETY_TABLES = Object.freeze([
   "account_terminal_deletion_exports",
   "account_deletion_surface_receipts",
   "account_typesense_deletion_receipts",
+  "account_pinecone_deletion_receipts",
   "account_restored_terminal_fences",
   "account_restore_terminal_application_receipts",
 ]);
