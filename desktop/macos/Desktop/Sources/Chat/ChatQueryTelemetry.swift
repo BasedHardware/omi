@@ -191,6 +191,16 @@ enum ChatTelemetryDimension {
       ? normalized
       : ScreenContextFailureCode.unknown.rawValue
   }
+
+  static func modelName(_ rawValue: String?) -> String {
+    guard let rawValue else { return "unknown" }
+    let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-_.:/")
+    guard !normalized.isEmpty, normalized.count <= 128,
+      normalized.unicodeScalars.allSatisfy(allowed.contains)
+    else { return "unknown" }
+    return normalized
+  }
 }
 
 struct ChatQueryCompletionMetrics: Equatable, Sendable {
@@ -204,6 +214,7 @@ struct ChatQueryCompletionMetrics: Equatable, Sendable {
   let screenToolFailureCodes: [String]
   let runtimeRunId: String?
   let runtimeAttemptId: String?
+  let modelName: String
 
   init(
     toolCallCount: Int,
@@ -215,7 +226,8 @@ struct ChatQueryCompletionMetrics: Equatable, Sendable {
     screenToolApprovalRequired: Bool,
     screenToolFailureCodes: [String],
     runtimeRunId: String? = nil,
-    runtimeAttemptId: String? = nil
+    runtimeAttemptId: String? = nil,
+    modelName: String? = nil
   ) {
     self.toolCallCount = max(0, toolCallCount)
     self.toolNames = Array(Set(toolNames.map(ChatTelemetryDimension.toolName))).sorted().prefix(20).map { $0 }
@@ -229,6 +241,7 @@ struct ChatQueryCompletionMetrics: Equatable, Sendable {
     ).sorted().prefix(20).map { $0 }
     self.runtimeRunId = runtimeRunId.map { String($0.prefix(128)) }
     self.runtimeAttemptId = runtimeAttemptId.map { String($0.prefix(128)) }
+    self.modelName = ChatTelemetryDimension.modelName(modelName)
   }
 }
 
@@ -388,6 +401,7 @@ extension ChatQueryTelemetryEvent {
         "screen_tool_succeeded": metrics.screenToolSucceeded,
         "screen_tool_approval_required": metrics.screenToolApprovalRequired,
         "screen_tool_failure_codes": metrics.screenToolFailureCodes.joined(separator: ","),
+        "model_name": metrics.modelName,
       ]
       if let runtimeRunId = metrics.runtimeRunId {
         properties["runtime_run_id"] = runtimeRunId
