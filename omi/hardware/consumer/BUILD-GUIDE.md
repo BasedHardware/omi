@@ -255,8 +255,7 @@ All SWD pads are on the **bottom** side of the mainboard:
 ### Step 18: Flash Firmware
 
 ```bash
-# Install Nordic tools
-pip install nrfutil
+# Install Nordic tools (download standalone nrfutil from nordicsemi.com/Products/Development-tools/nRF-Util)
 nrfutil install device
 
 # Flash NETWORK core FIRST (BLE/802.15.4)
@@ -303,7 +302,7 @@ Build firmware from `omi/firmware/` following its README. The hex files come fro
 1. Place mainboard in case-b (back cover)
 2. Insulate battery from aluminium with **Kapton tape** — prevent shorts
 3. Secure battery with **foam tape** (3M VHB or equivalent)
-4. Bend FPC to route from mainboard to charger position (≥1.8mm bend radius)
+4. Bend FPC to route from mainboard to charger position (≥2.2mm bend radius)
 5. Place charger board in position, connect FPC
 6. Close case-a (front cover)
 7. Verify microphone ports align with enclosure acoustic holes

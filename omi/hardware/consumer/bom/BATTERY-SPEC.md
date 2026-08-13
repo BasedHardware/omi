@@ -81,7 +81,7 @@ Any LiPo cell meeting these criteria will work:
   - **PI965 Section IB** applies for larger quantities: cargo-aircraft-only by default, Dangerous Goods documentation required, ship at ≤30% SoC
   - UN38.3 test summary must accompany all lithium cell shipments regardless of section
 - **Cells packed with equipment: UN3481 / PI966 Section II** — passenger aircraft permitted with restrictions
-- This cell is ~0.56Wh (150mAh × 3.7V), well under the 100Wh limit
+- This cell is ~0.56Wh (150mAh × 3.7V), well under the 20Wh per-cell limit for Section II (battery packs have a separate 100Wh limit)
 - **Request the supplier provide the UN38.3 test summary** — required for all lithium cell shipments
 - Request seller ship via battery-approved carriers (SF Express, DHL with DG service)
 - **Do not order batteries in the same package as assembled PCBs** — customs may flag the entire shipment

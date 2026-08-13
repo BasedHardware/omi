@@ -74,7 +74,7 @@ When ordering PCBs from JLCPCB, select the closest standard stackup:
 | Layers | 4 |
 | Board thickness | **0.6mm** |
 | Outer copper | 1 oz (35µm) |
-| Inner copper | ⅓ oz (12µm) — JLCPCB default for 4L |
+| Inner copper | ⅓ oz (12µm) — design intent; JLCPCB standard inner copper is 0.5 oz (17.5µm), so specify ⅓ oz explicitly or accept 0.5 oz and request updated impedance simulation |
 | Material | FR4 (standard) |
 | Surface finish | **ENIG** |
 | Impedance control | **Yes** — specify 50Ω single-ended microstrip |
@@ -101,6 +101,8 @@ When ordering PCBs from JLCPCB, select the closest standard stackup:
 | Lamination cycles | **3** | (1) Core L2–L3 with buried vias, (2) add L1 prepreg+copper with blind L1–L2, (3) add L4 prepreg+copper with blind L3–L4 |
 
 **Note:** HDI PCBs with via-in-pad, blind/buried vias, ENIG, and impedance control at 0.6mm are not a standard product. Not all fabs support HDI Type II — verify the fab handles sequential lamination with 3 cycles. Request a quote — pricing depends heavily on capabilities and panel utilization. Expect 2–3× cost and 1–2 week longer lead time vs standard 4-layer boards.
+
+**⚠ JLCPCB ordering note:** JLCPCB's standard service does **not** support blind/buried vias. You must select their **HDI** or **Advanced** PCB service to get blind/buried via capability. When uploading gerbers with blind/buried drill files, JLCPCB will prompt you to upgrade to the HDI process — confirm this and verify the via stack (L1–L2 blind, L3–L4 blind, L2–L3 buried) is correctly recognized. The annular ring minimum of 0.1mm applies to through-hole vias; for 0.102mm laser-drilled microvias (blind L1–L2 and L3–L4), JLCPCB's HDI process has its own annular ring rules — confirm with their HDI DFM check.
 
 ## Charger Board Stackup
 

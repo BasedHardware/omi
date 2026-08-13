@@ -51,7 +51,7 @@ nRF7002 (WiFi 5GHz) ────────────────────
 | HIGH | RF2 → WiFi 2.4GHz (nRF7002 → switch → diplexer) | Set by coexistence logic when WiFi needs antenna |
 
 - Control signal is `SW_CTRL0` from the nRF7002 coexistence interface, not a direct nRF5340 GPIO
-- Switching time: typically <100ns for SPDT RF switches — fast enough for packet-level coexistence
+- Switching time: budget SPDT switches like FM8625H are typically 2–20 µs (verify from FUMAN datasheet) — fast enough for packet-level coexistence (BLE packet duration ≥80 µs)
 - During WiFi 5GHz operation, the 2.4GHz switch position does not matter (5GHz bypasses U10)
 
 ### RF Path Loss Budget
@@ -59,7 +59,7 @@ nRF7002 (WiFi 5GHz) ────────────────────
 | Path | Components in Chain | Estimated Insertion Loss | Source / Basis |
 |------|---------------------|--------------------------|----------------|
 | BLE 2.4GHz | L3/L4 match (~0.2 dB) + RF switch U10 (~0.5 dB) + diplexer U3 low-band (~0.4 dB) | **~1.1 dB typical** | FM8625H: IL typ 0.45 dB at 2.4 GHz (datasheet); LFD182G45: IL max 0.35 dB at 2.4 GHz low band (Murata datasheet); L3/L4: estimated from inductor Q |
-| WiFi 2.4GHz | RF switch U10 (~0.5 dB) + diplexer U3 low-band (~0.4 dB) | **~0.9 dB typical** | Same switch + diplexer; nRF7002 has internal matching (no external network loss) |
+| WiFi 2.4GHz | RF switch U10 (~0.5 dB) + diplexer U3 low-band (~0.4 dB) | **~0.9 dB typical** | Same switch + diplexer; nRF7002 WiFi 2.4 GHz path has no external matching inductors (unlike the nRF5340 BLE path which uses L3/L4), but PCB trace and transition losses still apply |
 | WiFi 5GHz | Diplexer U3 high-band only (~0.5 dB) | **~0.5 dB typical** | LFD182G45: IL max 0.45 dB at 5 GHz high band (Murata datasheet); shortest path |
 
 **⚠ Inductor Q and matching loss estimates need measurement.** Request S-parameter data from Murata (U3) and FUMAN (U10) for exact values. Measure actual end-to-end insertion loss with a VNA on populated boards — the values above are typical datasheet numbers and do not include PCB trace loss, connector transitions, or manufacturing variation.
@@ -146,7 +146,7 @@ The Omi uses **three RF paths** through the aluminium enclosure:
 
 **⚠ If using a different enclosure:** The RF matching network may need re-tuning. This requires a VNA (Vector Network Analyzer) and expertise in antenna matching. Without re-tuning, expect degraded BLE range and WiFi throughput.
 
-**⚠ Regulatory:** Any change to the antenna, enclosure, or RF matching network invalidates the original FCC/CE/IC certification (if one exists). A modified design requires re-testing per FCC Part 15.247 (2.4 GHz), Part 15.407 (5 GHz UNII), and ETSI EN 300 328 / EN 301 893. Budget $5–15K for a pre-scan at an accredited test lab before production.
+**⚠ Regulatory:** Any change to the antenna, enclosure, or RF matching network invalidates the original FCC grant, IC certification, and CE declaration of conformity (if they exist). A modified design requires re-testing per FCC Part 15.247 (2.4 GHz), Part 15.407 (5 GHz UNII), and ETSI EN 300 328 / EN 301 893. Budget $5–15K for a pre-scan at an accredited test lab before production.
 
 ### Antenna Testing
 

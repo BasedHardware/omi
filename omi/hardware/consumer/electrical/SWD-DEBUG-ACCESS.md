@@ -147,7 +147,9 @@ nrfjprog -f NRF53 --program app_core.hex --sectorerase --verify --reset
 **Option B — nrfutil (recommended for new projects):**
 ```bash
 # Nordic recommends nrfutil device as the successor to nrfjprog.
-# Install: pip install nrfutil; nrfutil install device
+# Install: download standalone nrfutil from https://www.nordicsemi.com/Products/Development-tools/nRF-Util
+# Then: nrfutil install device
+# (Legacy `pip install nrfutil` installs v6.x which uses different syntax — avoid.)
 
 # List connected devices
 nrfutil device list
@@ -167,7 +169,7 @@ nrfutil device program --firmware app_core.hex --core Application --verify --res
 ```bash
 # nrfjprog:
 nrfjprog -f NRF53 --clockspeed 1000 --program app_core.hex --sectorerase --verify --reset
-# nrfutil:
+# nrfutil (verify exact flag name with `nrfutil device program --help` — varies by version):
 nrfutil device program --firmware app_core.hex --core Application --verify --reset --jlink-speed 1000
 ```
 

@@ -29,9 +29,9 @@ The Omi FPC (Flexible Printed Circuit) connects the mainboard to the charger boa
 | PI core | Polyimide | **203.2µm (8 mil)** | Base dielectric (per KiCad stackup) |
 | Bottom copper | Cu (RA preferred) | 35µm (1 oz) | Ground/signal layer (per KiCad design) |
 | Bottom coverlay | PI 25µm + adhesive 25µm | ~50µm | Laser-cut openings for pads |
-| **Total (flex only)** | | **~0.29mm** | Matches KiCad 0.2932mm. Stiffener adds 0.3mm in stiffened zones. |
+| **Total (flex only)** | | **~0.37mm** | KiCad laminate stack reports 0.2932mm (copper + PI core), but IPC-2223C bend radius uses the **total flex thickness including coverlay**: 50 + 35 + 203.2 + 35 + 50 = 373.2µm ≈ 0.37mm. Stiffener adds 0.3mm in stiffened zones. |
 
-**Note:** Bend radius calculations apply to the **flex-only thickness (~0.29mm)**, not the stiffened zones. Stiffened areas must not overlap with or extend into the bend zone.
+**Note:** Bend radius calculations apply to the **total flex thickness including coverlay (~0.37mm)**, not the stiffened zones. Stiffened areas must not overlap with or extend into the bend zone.
 
 ## Components
 
@@ -56,7 +56,7 @@ The FPC gerber zip includes a file `OMI-FPC-Enhance.gbr`. This is the **stiffene
 | **Thickness** | **0.3mm** | Per KiCad annotation: "Total Thickness = 0.3mm" — this likely means stiffener alone (flex is 0.29mm, total with stiffener ~0.59mm). Confirm interpretation with fab. |
 | **Applied to** | **Bottom side** (same side as J3 BTB connector) | Stiffener backs the connector for insertion force resistance |
 | **Location** | **Defined by `OMI-FPC-Enhance.gbr`** — stiffener zones under BTB connector (J3) and charging ring (J1) areas | Fab must use the Enhance layer as stiffener outline; do not guess placement |
-| **Adhesive** | 3M 467 or equivalent PSA (~50µm), thermally cured | Standard FPC stiffener bonding. Adhesive adds ~0.05mm to stiffened zone thickness. |
+| **Adhesive** | 3M 467 or equivalent PSA (~50µm), pressure-laminated (not thermally cured — 3M 467 is a pressure-sensitive adhesive) | Standard FPC stiffener bonding. Adhesive adds ~0.05mm to stiffened zone thickness. |
 | **Registration** | ±0.2mm to `Enhance` layer outline | Misregistered stiffener can overhang into bend zone or leave connector area unsupported |
 | **Setback from bend zone** | ≥1.0mm from bend transition edge | Stiffener edge must NOT extend into or overlap the bend zone — abrupt stiffness transition causes stress concentration and cracking |
 
@@ -95,9 +95,9 @@ These are **minimum design targets** per IPC-2223C (Sectional Design Standard fo
 
 | Condition | Minimum Bend Radius | Notes |
 |-----------|---------------------|-------|
-| **Static bend (installed)** | ≥6× flex thickness = **~1.8mm** | Bend held permanently in the assembled device. Based on ~0.29mm flex-only thickness. |
-| **Dynamic bend (repeated)** | ≥12× flex thickness = **~3.5mm** | If FPC is flexed during operation or service |
-| **Assembly bend** | ≥6× flex thickness = **~1.8mm** | One-time bend during device assembly. IPC-2223 recommends ≥6× for 1oz copper; 3× is too aggressive and risks cracking. |
+| **Static bend (installed)** | ≥6× total flex thickness = **~2.2mm** | Bend held permanently in the assembled device. Based on ~0.37mm total flex thickness (including coverlay per IPC-2223C §4.3.2). |
+| **Dynamic bend (repeated)** | ≥12× total flex thickness = **~4.5mm** | If FPC is flexed during operation or service. With 1oz copper, 12× is the IPC minimum — 15-20× preferred for >1,000 flex cycles. |
+| **Assembly bend** | ≥6× total flex thickness = **~2.2mm** | One-time bend during device assembly. IPC-2223 recommends ≥6× for 1oz copper; 3× is too aggressive and risks cracking. |
 
 **⚠ These values are for 1 oz RA copper (per KiCad design).** RA copper is **required** in bend zones — ED (electrodeposited) copper has inferior bend fatigue and must not be used where the FPC flexes. If the fab substitutes ED copper, increase bend radii by 50% minimum or reject the substitution for bend zones. 1 oz copper is stiffer than ½ oz — verify bend fatigue life with fab for the installed bend radius.
 

@@ -137,6 +137,7 @@ WLCSP and BGA joints are hidden under the package — visual inspection cannot v
 |---------------|--------------|
 | U1 (nRF5340) ball joints | All 95 balls present, uniform spherical shape, no bridges. Voiding <25% of projected joint area. |
 | U2 (nRF7002) ball joints | All 81 balls uniform, voiding <25% of projected joint area. |
+| U4 (TXS0104E, DSBGA-12) | All 12 balls connected, no opens, no solder wicking into vias. |
 | U15/U13/U6/U11 (DSBGA) | All balls connected, no opens, no solder wicking into vias. |
 | Head-in-pillow defects | No partial reflow (balls sitting on paste without wetting — visible as double-outline in X-ray). |
 | Shorts/bridges | No solder bridges between adjacent balls. |
@@ -185,7 +186,7 @@ When ordering turnkey PCBA, provide the CM with this complete package:
 | Solder paste | Type 5 SAC305, no-clean |
 | IPC class | Class 2 (standard commercial) |
 | SPI | Required before placement |
-| X-ray | Required for U1, U2 (WLCSP), and all DSBGA packages |
+| X-ray | Required for U1, U2 (WLCSP), U4 (DSBGA-12), U14 (WLCSP-4), and all DSBGA packages (U6, U11, U13, U15) |
 | No-substitution list | See RF-critical and IC parts in BOM — marked DO NOT SUBSTITUTE |
 | First-article report | Request photos, SPI report, X-ray images, and reflow profile plot |
 
@@ -212,7 +213,8 @@ Request a DFM (Design for Manufacturability) review from the CM before build. **
 | IPC-7525 | Stencil design guidelines, area ratio calculations |
 | IPC-J-STD-001 | Soldering requirements, acceptance criteria |
 | IPC-A-610 | Visual acceptance criteria for electronic assemblies |
-| IPC-7095 | BGA/WLCSP design and assembly (area ratio, voiding) |
+| IPC-7094 | WLCSP-specific design and assembly guidelines |
+| IPC-7095 | BGA design and assembly (area ratio, voiding) |
 | IPC-4761 | Via-in-pad fill and cap requirements (Type VII) |
 | J-STD-020 | Moisture sensitivity level (MSL) classification |
 | J-STD-033 | Handling, packing, shipping of moisture-sensitive devices |
