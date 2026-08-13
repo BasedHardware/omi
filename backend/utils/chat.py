@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 def acquire_chat_session(uid: str, app_id: Optional[str] = None):
     chat_session = chat_db.get_chat_session(uid, app_id=app_id)
     if chat_session is None:
-        cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc))
+        cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), app_id=app_id)
         chat_session = chat_db.add_chat_session(uid, cs.model_dump())
     return chat_session
 
@@ -651,6 +651,7 @@ def _chat_message_notification(
     return NotificationMessage(
         id=message_id,
         text=message,
+        plugin_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',
