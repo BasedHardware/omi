@@ -464,7 +464,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
+    // `respectFrequency` is the existing proactive/functional split: assistants leave it
+    // true; functional notices (onboarding test, screen-repair prompts) pass false and
+    // must never be spoken.
+    let speech = NotificationSpeechOnDelivery(message: message, isProactive: respectFrequency)
     let recordPresentation = { [weak self] in
+      speech.notificationWasPresented()
       if respectFrequency {
         self?.recordProactiveNotificationPresented(
           assistantId: assistantId,
@@ -657,7 +662,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let deliverSystemBanner = FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
       previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled, deliverSystemBanner: false)
 
+    let speech = NotificationSpeechOnDelivery(message: message, isProactive: true)
     let recordPresented = { [weak self] in
+      speech.notificationWasPresented()
       self?.recordProactiveNotificationPresented(
         assistantId: "context-director",
         authorizationSnapshot: authorizationSnapshot)
