@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -19,6 +19,7 @@ const root = path.resolve(import.meta.dirname, "../..");
 const producer = path.join(root, "shells/tools/capture-native-runtime.mjs");
 const coreSha = spawnSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
 const platformSha = "1".repeat(40);
+mkdirSync(path.join(root, ".build"), { recursive: true });
 
 function manifest(overrides = {}) {
   return {
@@ -36,11 +37,19 @@ function marker(m, events = [{ type: "lifecycle", name: "state", value: m.state,
 }
 
 function writePreparation(file, m, artifactPath, artifactBytes) {
+  const guard = path.join(root, "shells/tools/macos-foreground-guard.mjs");
+  const guarded = m.shell === "macos"
+    ? ["/bin/bash", path.join(root, "shells/macos/scripts/dev-run-macos.sh"), "--fixture", runtimeFixtureName(m.domain), "--run-id", m.run_id]
+    : ["xcodebuild", "-only-testing:RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence"];
   writeFileSync(file, `${JSON.stringify({
     schema: "omi.polish.runtime-preparation/v1",
     domain: m.domain, shell: m.shell, state: m.state, theme: m.theme, width: m.width, accessibility: m.accessibility,
     run_id: m.run_id, source_shas: m.source_shas, capture_class: m.capture_class, source_tier: m.source_tier,
-    command: { argv: ["fixture"], cwd: ".", cwd_root: "core", exit_code: 0 },
+    command: {
+      argv: [process.execPath, guard, "--result", "guard.json", "--stdout", "stdout.log", "--stderr", "stderr.log", "--timeout", "300", "--forbid-bundle-ids", "com.apple.iphonesimulator,me.omi.proto.omiWebviewProto,me.omi.shell.core-tasks.prototype", "--", ...guarded],
+      cwd: ".", cwd_root: "core", exit_code: 0, timeout_seconds: 310,
+      stdout_sha256: "0".repeat(64), stderr_sha256: "0".repeat(64),
+    },
     foreground_custody: {
       schema: "omi.macos-foreground-guard/v1", status: 0, signal: null, error: null, monitor_error: null,
       target_interval_milliseconds: 20, probe_timeout_milliseconds: 250, sample_count: 2, max_sample_gap_milliseconds: 20,
@@ -190,6 +199,11 @@ test("canonical runtime replay emits gate-shaped input set, receipt, and coverag
     assert.equal(existsSync(outputPath), true);
     const preparationPath = path.join(scratch, "runtime-preparation-receipt.json");
     const preparation = JSON.parse(readFileSync(preparationPath, "utf8"));
+    writeFileSync(preparationPath, `${JSON.stringify({ ...preparation, command: { ...preparation.command, argv: ["fixture"] } })}\n`);
+    assert.throws(() => gateReplay(m, manifestPath, inputPath, path.join(scratch, "unguarded.json"), outDir), /guarded launcher/);
+    writeFileSync(preparationPath, `${JSON.stringify({ ...preparation, artifact: { ...preparation.artifact, path: "other.json" } })}\n`);
+    assert.throws(() => gateReplay(m, manifestPath, inputPath, path.join(scratch, "wrong-path.json"), outDir), /artifact authority/);
+    writeFileSync(preparationPath, `${JSON.stringify(preparation)}\n`);
     writeFileSync(preparationPath, `${JSON.stringify({ ...preparation, foreground_custody: { ...preparation.foreground_custody, monitor_error: "changed" } })}\n`);
     assert.throws(() => gateReplay(m, manifestPath, inputPath, path.join(scratch, "custody-tampered.json"), outDir), /foreground custody/);
     writeFileSync(preparationPath, `${JSON.stringify(preparation)}\n`);
