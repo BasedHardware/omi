@@ -196,11 +196,9 @@ struct DesktopHomeView: View {
       .onAppear {
         log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
 
-        // Post-onboarding guidance. The popup's overlay is this view's
-        // (`mainContentWithOverlays`), so arming it is this view's job too. While the only trigger
-        // was `DashboardPage.onAppear`, the default Home — which is no longer `DashboardPage` —
-        // never fired it, and a user who had just finished setup was handed a silent app.
-        if PostOnboardingPromptSuggestions.shouldArmPopup() {
+        // Chat-first renders starter prompts in main chat; only legacy may arm the floating popup.
+        FloatingPrimaryTextInputRouting.configure(routesToMainApp: usesChatFirstShell)
+        if !usesChatFirstShell && PostOnboardingPromptSuggestions.shouldArmPopup() {
           showTryAskingPopup = true
         }
         updatePolicyManager.refresh(force: true)
@@ -1125,20 +1123,19 @@ struct DesktopHomeView: View {
         GoalCelebrationView()
       }
       .overlay {
-        if showTryAskingPopup {
+        if !usesChatFirstShell && showTryAskingPopup {
           let suggestions = PostOnboardingPromptSuggestions.suggestions()
           if !suggestions.isEmpty {
             TryAskingPopupView(
               suggestions: suggestions,
               onAsk: { suggestion in
                 showTryAskingPopup = false
-                PostOnboardingPromptSuggestions.shouldShowPopup = false
+                PostOnboardingPromptSuggestions.consume()
                 FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
               },
               onDismiss: {
                 showTryAskingPopup = false
-                PostOnboardingPromptSuggestions.shouldShowPopup = false
-                PostOnboardingPromptSuggestions.isDismissed = true
+                PostOnboardingPromptSuggestions.consume()
               }
             )
           }
@@ -1149,6 +1146,7 @@ struct DesktopHomeView: View {
   private func mainContentWithNotifications<Content: View>(_ content: Content) -> some View {
     content
       .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
+        guard !usesChatFirstShell else { return }
         showTryAskingPopup = true
       }
       .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
@@ -1242,6 +1240,8 @@ struct DesktopHomeView: View {
       .onChange(of: chatFirstNavigation.visibleRoute) { _, _ in reportAutomationState() }
       .onChange(of: chatFirstNavigation.isSidebarCollapsed) { _, _ in reportAutomationState() }
       .onChange(of: useLegacyHomeDesign) { _, newValue in
+        FloatingPrimaryTextInputRouting.configure(routesToMainApp: usesChatFirstShell)
+        if usesChatFirstShell { showTryAskingPopup = false }
         OmiMotion.withGated(.easeInOut(duration: 0.2)) {
           isSidebarCollapsed = !newValue
         }
@@ -1559,6 +1559,11 @@ private struct PageContentView: View {
 /// so tapping a row navigates to the detail view.
 struct ConversationsPageHost: View {
   let appState: AppState
+  /// Optional exact record supplied by a Chat-first conversation deep-link.
+  /// The normal Conversations page still owns list loading and row selection;
+  /// this value only seeds selection when a link fetched a record that is not
+  /// present in the current page.
+  var initialConversation: ServerConversation? = nil
   @State private var selectedConversation: ServerConversation? = nil
   @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
 
@@ -1582,6 +1587,14 @@ struct ConversationsPageHost: View {
       // account's conversation after an in-place account switch.
       .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
         selectedConversation = nil
+      }
+      .onAppear {
+        if let initialConversation {
+          selectedConversation = initialConversation
+        }
+      }
+      .onChange(of: initialConversation?.id) { _, _ in
+        selectedConversation = initialConversation
       }
   }
 }

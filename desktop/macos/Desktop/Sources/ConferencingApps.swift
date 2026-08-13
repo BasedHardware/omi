@@ -6,7 +6,7 @@ import Foundation
 /// window (or the whole screen) indicates an active call ("meeting").
 ///
 /// Single source of truth shared by:
-///  - `MeetingDetector`, which gates system-audio capture in "Only during meetings" mode, and
+///  - `MeetingDetector`, which gates meetings-only capture and rotates Always-mode conversations, and
 ///  - `ProactiveAssistantsPlugin`, which throttles screen capture while a call app is frontmost.
 enum ConferencingApps {
 

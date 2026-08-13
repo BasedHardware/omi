@@ -90,6 +90,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/workstreams',
     '/v1/what-matters-now',
     '/v2/apps',
+    '/v2/chat/materialize-prompts',
     '/v2/files',
     '/v2/firmware',
     '/v2/initial-message',

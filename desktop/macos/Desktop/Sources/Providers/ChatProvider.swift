@@ -337,6 +337,7 @@ enum ChatContentBlock: Identifiable {
   case taskCard(id: String, taskId: String)
   case goalLink(id: String, goalId: String, summary: String)
   case captureLink(id: String, conversationId: String, momentTimestampMs: Int?, summary: String)
+  case conversationLink(id: String, conversationId: String, summary: String)
   case memoryLink(id: String, memoryId: String, summary: String)
   case agentSpawn(
     id: String,
@@ -368,6 +369,7 @@ enum ChatContentBlock: Identifiable {
     case .taskCard(let id, _): return id
     case .goalLink(let id, _, _): return id
     case .captureLink(let id, _, _, _): return id
+    case .conversationLink(let id, _, _): return id
     case .memoryLink(let id, _, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
@@ -982,7 +984,8 @@ extension ChatContentBlock {
       return trimmed.isEmpty ? nil : trimmed
     case .taskCard:
       return nil
-    case .goalLink(_, _, let summary), .captureLink(_, _, _, let summary), .memoryLink(_, _, let summary):
+    case .goalLink(_, _, let summary), .captureLink(_, _, _, let summary),
+      .conversationLink(_, _, let summary), .memoryLink(_, _, let summary):
       let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? nil : trimmed
     case .agentSpawn(_, _, _, _, let title, let objective, _):

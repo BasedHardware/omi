@@ -58,9 +58,16 @@ slices is split into as many slices as it has words.
 Every `/v4/listen` stream receives a durable, user-scoped `recording_session`
 resource before it creates or resumes a conversation. A client-generated
 `client_conversation_id` remains that resource's ID when present; legacy
-clients receive a server-generated UUID. The resource atomically binds the
-recording to exactly one conversation, so reconnects return the original
-canonical mapping rather than falling back to a user-global Redis pointer.
+clients receive a server-generated UUID. The optional
+`conversation_role=meeting` marker is supplied by desktop after a
+machine-observed call-start boundary; omitted or invalid values remain
+`ambient`. That bounded marker is persisted with the conversation so the
+post-finalization Chat receipt can distinguish meeting notes from ordinary
+always-on ambient chunks without inspecting transcript text.
+
+The resource atomically binds the recording to exactly one conversation, so
+reconnects return the original canonical mapping rather than falling back to a
+user-global Redis pointer.
 
 The backend emits a `conversation_session` event carrying that recording
 identity:
