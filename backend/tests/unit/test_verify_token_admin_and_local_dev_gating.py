@@ -27,6 +27,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from testing.import_isolation import stub_modules
+from utils.auth.errors import InvalidToken  # neutral taxonomy (ADR-0034) verify_token now raises
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -122,7 +123,7 @@ def test_admin_key_path_disabled_when_flag_is_false(monkeypatch):
     monkeypatch.setenv('ADMIN_KEY_AUTH_ENABLED', 'false')
 
     token = ADMIN_KEY + 'target-uid'  # would impersonate 'target-uid' if the gate were open
-    with pytest.raises(InvalidIdTokenError):
+    with pytest.raises(InvalidToken):
         verify_token(token)
 
 
@@ -149,7 +150,7 @@ def test_non_matching_token_falls_through_to_firebase_even_when_enabled(monkeypa
     monkeypatch.setenv('ADMIN_KEY', ADMIN_KEY)
     monkeypatch.setenv('ADMIN_KEY_AUTH_ENABLED', 'true')
 
-    with pytest.raises(InvalidIdTokenError):
+    with pytest.raises(InvalidToken):
         verify_token('a-token-that-does-not-start-with-the-admin-key')
 
 
@@ -172,7 +173,7 @@ def test_local_development_inert_when_service_account_json_is_set(monkeypatch):
     monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
     monkeypatch.setenv('SERVICE_ACCOUNT_JSON', '{"type": "service_account"}')
 
-    with pytest.raises(InvalidIdTokenError):
+    with pytest.raises(InvalidToken):
         verify_token('any-invalid-token')
 
 
@@ -182,7 +183,7 @@ def test_local_development_inert_when_google_application_credentials_is_set(monk
     monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
     monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', '/tmp/fake-service-account.json')
 
-    with pytest.raises(InvalidIdTokenError):
+    with pytest.raises(InvalidToken):
         verify_token('any-invalid-token')
 
 
@@ -192,7 +193,7 @@ def test_local_development_inert_when_firebase_auth_credentials_path_is_set(monk
     monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
     monkeypatch.setenv('FIREBASE_AUTH_CREDENTIALS_PATH', '/tmp/firebase-auth.json')
 
-    with pytest.raises(InvalidIdTokenError):
+    with pytest.raises(InvalidToken):
         verify_token('any-invalid-token')
 
 
@@ -200,5 +201,5 @@ def test_local_development_flag_off_raises_regardless_of_credentials(monkeypatch
     _clear_admin_env(monkeypatch)
     _clear_local_dev_env(monkeypatch)
 
-    with pytest.raises(InvalidIdTokenError):
+    with pytest.raises(InvalidToken):
         verify_token('any-invalid-token')
