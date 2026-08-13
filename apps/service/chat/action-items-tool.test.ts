@@ -96,7 +96,6 @@ describe("get_action_items gateway tool", () => {
           return service.app.fetch(request);
         },
         bearerToken: service.devToken,
-        ownerAccountId,
         nowEpochMilliseconds: () => 1,
         agentRunEvents: service.writePath.agentRunEvents,
       });
@@ -106,6 +105,68 @@ describe("get_action_items gateway tool", () => {
       expect(result.summary).toContain("File the quarterly report");
       expect(result.summary).toContain("open");
       expect(readCalls).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("accepts the canonical 4,096-code-point description bound and refuses 4,097", async () => {
+    const { db, service } = makeService();
+    try {
+      await addActionItem(service, "seed");
+      const canonical = await service.app.fetch(new Request("http://omi.local/v1/tasks", {
+        headers: { authorization: `Bearer ${service.devToken}` },
+      }));
+      const page = JSON.parse(await canonical.text()) as { items: Array<Record<string, unknown>> };
+      const emoji = "🧩";
+      const executeWithDescription = async (description: string): Promise<void> => {
+        const body = JSON.stringify({
+          ...page,
+          items: [{ ...page.items[0], description }],
+        });
+        const tool = createGetActionItemsTool({
+          fetch: () => new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+          bearerToken: service.devToken,
+          nowEpochMilliseconds: () => 1,
+          agentRunEvents: service.writePath.agentRunEvents,
+        });
+        await tool.execute({}, { cancelled: false, cancel() {} });
+      };
+      await executeWithDescription(emoji.repeat(4_096));
+      await expect(executeWithDescription(emoji.repeat(4_097))).rejects.toThrow(
+        "canonical tasks read returned invalid data",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  test("refuses malformed or contradictory canonical page envelopes before summarizing", async () => {
+    const { db, service } = makeService();
+    try {
+      await addActionItem(service, "Validate the envelope");
+      const canonical = await service.app.fetch(new Request("http://omi.local/v1/tasks", {
+        headers: { authorization: `Bearer ${service.devToken}` },
+      }));
+      const page = JSON.parse(await canonical.text()) as Record<string, unknown>;
+      const malformed: unknown[] = [
+        (() => { const copy = { ...page }; delete copy.absence; return copy; })(),
+        { ...page, total: 1 },
+        { ...page, items: [], absence: null },
+        { ...page, items: [], window: { ...(page.window as object), hasMore: true } },
+        { ...page, window: { ...(page.window as object), status: "incomplete", complete: false } },
+      ];
+      for (const body of malformed) {
+        const tool = createGetActionItemsTool({
+          fetch: () => new Response(JSON.stringify(body), { status: 200 }),
+          bearerToken: service.devToken,
+          nowEpochMilliseconds: () => 1,
+          agentRunEvents: service.writePath.agentRunEvents,
+        });
+        await expect(tool.execute({}, { cancelled: false, cancel() {} })).rejects.toThrow(
+          "canonical tasks read returned invalid data",
+        );
+      }
     } finally {
       db.close();
     }
@@ -134,7 +195,6 @@ describe("get_action_items gateway tool", () => {
         readOnlyToolLoop: createGetActionItemsToolLoop({
           fetch: (request) => service.app.fetch(request),
           bearerToken: service.devToken,
-          ownerAccountId,
           nowEpochMilliseconds: () => 2,
           agentRunEvents: service.writePath.agentRunEvents,
         }),
@@ -171,7 +231,6 @@ describe("get_action_items gateway tool", () => {
           return createGetActionItemsToolLoop({
             fetch: (request) => service.app.fetch(request),
             bearerToken: service.devToken,
-            ownerAccountId,
             nowEpochMilliseconds: () => 2,
             agentRunEvents: service.writePath.agentRunEvents,
           });
@@ -195,4 +254,3 @@ describe("get_action_items gateway tool", () => {
     }
   });
 });
-

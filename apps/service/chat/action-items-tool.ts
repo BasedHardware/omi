@@ -2,6 +2,8 @@
 
 import { isProxy } from "node:util/types";
 
+import { parseTaskPageJson, type TaskRead } from "@omi-core/ratified-contracts/projections/tasks";
+
 import type { AgentRunEventStore } from "./agent-run-events";
 import {
   createAgentToolRegistry,
@@ -35,8 +37,6 @@ export interface GetActionItemsToolRuntime {
   readonly fetch: (request: Request) => Response | Promise<Response>;
   /** The only bearer credential used by the app-facing local composition. */
   readonly bearerToken: string;
-  /** Bound to the authenticated service identity, never supplied by the model. */
-  readonly ownerAccountId: string;
   readonly nowEpochMilliseconds: () => number;
   readonly agentRunEvents: AgentRunEventStore;
 }
@@ -67,7 +67,7 @@ const emptyObject = (value: unknown): boolean => {
 };
 
 const boundedText = (value: unknown, max: number): value is string =>
-  typeof value === "string" && value.length <= max && !/[\u0000-\u001f\u007f]/u.test(value);
+  typeof value === "string" && [...value].length <= max && !/[\u0000-\u001f\u007f]/u.test(value);
 
 interface ReadItem {
   readonly description: string;
@@ -82,20 +82,22 @@ interface ReadPage {
   readonly complete: boolean;
 }
 
-const parseReadPage = (value: unknown): ReadPage | null => {
-  const page = ownPlainRecord(value);
-  if (page === null || !Array.isArray(page.items) || page.items.length > GET_ACTION_ITEMS_MAX_ITEMS) return null;
-  const window = ownPlainRecord(page.window);
-  const completeness = ownPlainRecord(page.completeness);
-  if (window === null || completeness === null
-    || typeof window.hasMore !== "boolean" || typeof window.complete !== "boolean"
-    || (completeness.status !== "complete" && completeness.status !== "incomplete")) return null;
+const truncateCodeUnits = (value: string, max: number): string => {
+  let result = "";
+  for (const character of value) {
+    if (result.length + character.length > max) break;
+    result += character;
+  }
+  return result;
+};
+
+const parseReadPage = (page: TaskRead.Page): ReadPage | null => {
+  if (page.items.length > GET_ACTION_ITEMS_MAX_ITEMS
+    || (page.items.length === 0 && page.window.hasMore)
+    || (page.items.length === 0 && page.absence === null)) return null;
   const items: ReadItem[] = [];
-  for (const raw of page.items) {
-    const item = ownPlainRecord(raw);
-    if (item === null || !boundedText(item.description, 4_096)
-      || typeof item.completed !== "boolean"
-      || (item.dueAt !== null && !(typeof item.dueAt === "number" && Number.isSafeInteger(item.dueAt)))) {
+  for (const item of page.items) {
+    if (!boundedText(item.description, 4_096)) {
       return null;
     }
     items.push(Object.freeze({
@@ -106,9 +108,9 @@ const parseReadPage = (value: unknown): ReadPage | null => {
   }
   return Object.freeze({
     items: Object.freeze(items),
-    absence: page.absence ?? null,
-    hasMore: window.hasMore,
-    complete: completeness.status === "complete" && window.complete,
+    absence: page.absence,
+    hasMore: page.window.hasMore,
+    complete: page.completeness.status === "complete" && page.window.complete,
   });
 };
 
@@ -120,7 +122,7 @@ const summaryFor = (page: ReadPage): string => {
   }
   const previews = page.items.slice(0, 3).map((item) => {
     const status = item.completed ? "done" : "open";
-    const description = item.description.replace(/\s+/gu, " ").trim().slice(0, 54);
+    const description = truncateCodeUnits(item.description.replace(/\s+/gu, " ").trim(), 54);
     return `${status}: ${description}`;
   });
   const qualifiers = [
@@ -130,12 +132,12 @@ const summaryFor = (page: ReadPage): string => {
   ].filter((value): value is string => value !== null);
   const suffix = qualifiers.length > 0 ? ` (${qualifiers.join(", ")})` : "";
   const summary = `Action items (${page.items.length}): ${previews.join("; ")}${suffix}`;
-  return summary.length <= 240 ? summary : `${summary.slice(0, 237)}...`;
+  return summary.length <= 240 ? summary : `${truncateCodeUnits(summary, 237)}...`;
 };
 
 const readActionItems = async (
   runtime: GetActionItemsToolRuntime,
-): Promise<{ readonly items: readonly ReadItem[]; readonly absence: unknown }> => {
+): Promise<ReadPage> => {
   const request = new Request(`http://omi.local${TASKS_READ_PATH}?limit=${GET_ACTION_ITEMS_MAX_ITEMS}`, {
     method: "GET",
     headers: {
@@ -146,13 +148,13 @@ const readActionItems = async (
   });
   const response = await runtime.fetch(request);
   if (!response.ok) throw new Error("canonical tasks read unavailable");
-  let body: unknown;
+  let rawBody: string;
   try {
-    body = await response.json();
+    rawBody = await response.text();
   } catch {
     throw new Error("canonical tasks read returned invalid data");
   }
-  const page = ownPlainRecord(body);
+  const page = parseTaskPageJson(rawBody);
   if (page === null) throw new Error("canonical tasks read returned invalid data");
   const parsed = parseReadPage(page);
   if (parsed === null) throw new Error("canonical tasks read returned invalid data");

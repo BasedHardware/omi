@@ -183,7 +183,6 @@ const main = (): void => {
         return createGetActionItemsToolLoop({
           fetch: (request) => service.app.fetch(request),
           bearerToken: service.devToken,
-          ownerAccountId,
           nowEpochMilliseconds: () => Date.parse(QA_FIXTURE_TIME_ANCHOR_UTC),
           agentRunEvents: service.writePath.agentRunEvents,
         });
