@@ -98,6 +98,22 @@ assert wrong_type["decision_matched"] is False
 assert wrong_type["failure_reasons"] == ["decision"]
 assert wrong_type["matched"] is False
 
+horizon_case = {
+    **case,
+    "synthetic": {
+        **case["synthetic"],
+        "tasks": [
+            {"description": "overdue", "status": "open", "dueAt": "2026-08-13T15:00:00Z"},
+            {"description": "near", "status": "open", "dueAt": "2026-08-15T16:00:00Z"},
+            {"description": "far", "status": "open", "dueAt": "2026-08-15T16:00:01Z"},
+            {"description": "undated", "status": "open"},
+            {"description": "done", "status": "completed", "dueAt": "2026-08-13T17:00:00Z"},
+        ],
+    },
+}
+mapped_tasks = __import__("json").loads(benchmark.map_case(horizon_case)["tasks"])
+assert [task["description"] for task in mapped_tasks] == ["overdue", "near", "undated"]
+
 envelope["result"]["detail"]["decision"] = "unexpected"
 with patch.object(benchmark.request, "urlopen", return_value=Response()):
     try:
