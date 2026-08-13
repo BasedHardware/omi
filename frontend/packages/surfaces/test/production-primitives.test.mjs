@@ -224,6 +224,17 @@ test("shared primitives expose the complete pointer, touch, keyboard, selection,
   }
 });
 
+test("production dates keep a localized date primary and exact time in secondary detail", async () => {
+  const conversations = await read("src/production/ConversationsProduction.tsx");
+  const memories = await read("src/production/MemoriesProduction.tsx");
+  const tasks = await read("src/production/TasksProduction.tsx");
+  assert.match(conversations, /dateStyle: "medium", timeStyle: "short"/, "conversation detail exposes localized date and exact time");
+  assert.match(conversations, /dateStyle: "medium"/, "conversation groups remain plain-language dates");
+  assert.match(conversations, /timeStyle: "short"/, "row time stays secondary rather than competing with the day label");
+  assert.match(memories, /formatDate\(memory\.updatedAt, locale\)/, "memory metadata uses the shared localized medium date");
+  assert.match(tasks, /dateStyle: "medium"/, "task due dates use localized medium date granularity");
+});
+
 test("shared primitive/static CSS contract covers provenance, focus, motion, transparency, and non-live lists", async () => {
   const primitives = await read("src/production/ProductionPrimitives.tsx");
   const styles = await read("src/production/styles.css");
@@ -238,6 +249,11 @@ test("shared primitive/static CSS contract covers provenance, focus, motion, tra
   assert.match(styles, /prefers-reduced-transparency/);
   assert.match(styles, /data-source-badge/);
   assert.doesNotMatch(styles, /\.data-source-badge\s*\{[^}]*display:\s*none/i);
+  assert.match(styles, /\.production-page-heading h1 \{[^}]*max-width: var\(--measure-title\)/);
+  assert.match(styles, /\.production-page-description \{[^}]*max-width: var\(--measure-body\)/);
+  assert.match(styles, /\.memory-meta \{[^}]*font-family: var\(--type-meta-family\)/);
+  assert.doesNotMatch(styles, /\.eyebrow, \.memory-meta, \.qa-label[^}]*text-transform: uppercase/);
+  assert.match(styles, /\.dead-letter-payload \{[^}]*font-family: var\(--type-code-family\)/);
 });
 
 test("desktop route polish preserves semantic themes and 44-point interaction targets", async () => {

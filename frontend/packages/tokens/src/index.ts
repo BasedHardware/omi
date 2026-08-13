@@ -80,9 +80,41 @@ export type TypographyTokens = {
   body: TypographyRole;
   row: TypographyRole;
   label: TypographyRole;
+  meta: TypographyRole;
   button: TypographyRole;
   code: TypographyRole;
 };
+
+export type TypographyContentPolicy = {
+  readonly measureCh: number;
+  readonly overflow: "wrap" | "single-line-ellipsis" | "scroll";
+  readonly maxLines: number | null;
+};
+
+/**
+ * Content behavior belongs to semantic type roles, not individual routes.
+ * `measureCh` is a readable upper bound rather than a forced width. Labels and
+ * metadata stay one line only in compact rows; body/title content wraps; code
+ * remains horizontally inspectable instead of being silently truncated.
+ */
+export const TYPOGRAPHY_CONTENT_POLICY = Object.freeze({
+  display: { measureCh: 32, overflow: "wrap", maxLines: 2 },
+  title: { measureCh: 40, overflow: "wrap", maxLines: 2 },
+  heading: { measureCh: 48, overflow: "wrap", maxLines: 3 },
+  body: { measureCh: 68, overflow: "wrap", maxLines: null },
+  row: { measureCh: 56, overflow: "single-line-ellipsis", maxLines: 1 },
+  label: { measureCh: 32, overflow: "single-line-ellipsis", maxLines: 1 },
+  meta: { measureCh: 44, overflow: "single-line-ellipsis", maxLines: 1 },
+  button: { measureCh: 28, overflow: "wrap", maxLines: 2 },
+  code: { measureCh: 96, overflow: "scroll", maxLines: null },
+} satisfies Readonly<Record<keyof TypographyTokens, TypographyContentPolicy>>);
+
+/** Locale-aware dates are human-readable first; exact time is secondary detail. */
+export const DATE_PRESENTATION_POLICY = Object.freeze({
+  primary: "localized-medium-date",
+  secondary: "localized-medium-date-short-time",
+  exactTimePlacement: "secondary-detail",
+} as const);
 
 export type MotionTokens = {
   duration: {
@@ -217,6 +249,7 @@ const mobileDark: SemanticTheme = {
     body: { family: "system", size: 15, weight: 400, lineHeight: 1.4, tracking: 0 },
     row: { family: "system", size: 15, weight: 500, lineHeight: 1.4, tracking: 0 },
     label: { family: "system", size: 12, weight: 500, lineHeight: 1.2, tracking: 0 },
+    meta: { family: "system", size: 12, weight: 400, lineHeight: 1.35, tracking: 0 },
     button: { family: "system", size: 15, weight: 600, lineHeight: 1.2, tracking: 0 },
     code: { family: "mono", size: 13, weight: 500, lineHeight: 1.4, tracking: 0 },
   },
@@ -324,6 +357,7 @@ const desktopLightGlass: SemanticTheme = {
     body: { family: "system", size: 17, weight: 400, lineHeight: 1.55, tracking: -0.17 },
     row: { family: "system", size: 15, weight: 500, lineHeight: 1.4, tracking: -0.15 },
     label: { family: "system", size: 12, weight: 500, lineHeight: 1.2, tracking: 0 },
+    meta: { family: "system", size: 12, weight: 400, lineHeight: 1.35, tracking: 0 },
     button: { family: "system", size: 15, weight: 600, lineHeight: 1.2, tracking: 0 },
     code: { family: "mono", size: 13, weight: 500, lineHeight: 1.4, tracking: 0 },
   },

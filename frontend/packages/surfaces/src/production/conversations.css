@@ -132,11 +132,14 @@
 }
 .conversation-row-meta {
   display: flex;
+  max-width: var(--measure-meta);
   flex-wrap: wrap;
   gap: 0;
   margin-top: var(--space-xs);
   color: var(--content-tertiary);
-  font-size: var(--type-label-size);
+  font-family: var(--type-meta-family);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line);
 }
 .conversation-row-meta span + span::before { margin: 0 var(--space-sm); content: "·"; }
 .conversation-row-actions { display: flex; align-items: center; justify-content: flex-end; }

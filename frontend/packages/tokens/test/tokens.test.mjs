@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getTheme, SEMANTIC_TOKENS, themeNameFor, typographyFamilyStack } from "../dist/index.js";
+import { DATE_PRESENTATION_POLICY, getTheme, SEMANTIC_TOKENS, themeNameFor, TYPOGRAPHY_CONTENT_POLICY, typographyFamilyStack } from "../dist/index.js";
 
 test("exposes platform geometry in explicit light and dark modes", () => {
   assert.deepEqual(Object.keys(SEMANTIC_TOKENS), ["mobileDark", "mobileLight", "desktopLightGlass", "desktopDarkGlass"]);
@@ -44,6 +44,7 @@ test("ships a complete visual-state token contract without an unbundled font", (
     assert.ok(theme.motion.duration.standard > theme.motion.duration.fast);
     assert.ok(theme.motion.duration.deliberate > theme.motion.duration.standard);
     assert.equal(theme.typography.code.family, "mono");
+    assert.equal(theme.typography.meta.family, "system");
     assert.ok(theme.layout.contentWidth.compact < theme.layout.contentWidth.regular);
     assert.ok(theme.layout.contentWidth.regular < theme.layout.contentWidth.wide);
     assert.ok(theme.layout.readableMeasure <= theme.layout.contentWidth.regular);
@@ -53,4 +54,19 @@ test("ships a complete visual-state token contract without an unbundled font", (
   assert.match(typographyFamilyStack("system"), /-apple-system/);
   assert.match(typographyFamilyStack("rounded"), /ui-rounded/);
   assert.match(typographyFamilyStack("mono"), /ui-monospace/);
+});
+
+test("defines one executable content role, measure, truncation, and date-granularity matrix", () => {
+  assert.deepEqual(Object.keys(TYPOGRAPHY_CONTENT_POLICY), ["display", "title", "heading", "body", "row", "label", "meta", "button", "code"]);
+  assert.deepEqual(TYPOGRAPHY_CONTENT_POLICY.body, { measureCh: 68, overflow: "wrap", maxLines: null });
+  assert.deepEqual(TYPOGRAPHY_CONTENT_POLICY.meta, { measureCh: 44, overflow: "single-line-ellipsis", maxLines: 1 });
+  assert.deepEqual(TYPOGRAPHY_CONTENT_POLICY.code, { measureCh: 96, overflow: "scroll", maxLines: null });
+  assert.deepEqual(DATE_PRESENTATION_POLICY, {
+    primary: "localized-medium-date",
+    secondary: "localized-medium-date-short-time",
+    exactTimePlacement: "secondary-detail",
+  });
+  for (const theme of Object.values(SEMANTIC_TOKENS)) {
+    assert.deepEqual(Object.keys(theme.typography), Object.keys(TYPOGRAPHY_CONTENT_POLICY));
+  }
 });

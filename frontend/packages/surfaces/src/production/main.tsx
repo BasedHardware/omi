@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { t } from "@omi-core/i18n";
-import { getTheme, themeNameFor, typographyFamilyStack, type ColorMode, type ThemeName } from "@omi-core/tokens";
+import { getTheme, themeNameFor, TYPOGRAPHY_CONTENT_POLICY, typographyFamilyStack, type ColorMode, type ThemeName } from "@omi-core/tokens";
 import { realEnv } from "@omi-core/kernel";
 import { openOnDiskFallbackSink } from "@omi-core/sync";
 import {
@@ -181,6 +181,9 @@ const applyTheme = (name: ThemeName): void => {
     set(`--type-${token}-line`, role.lineHeight);
     set(`--type-${token}-tracking`, `${role.tracking}px`);
     set(`--type-${token}-family`, typographyFamilyStack(role.family));
+  }
+  for (const [role, policy] of Object.entries(TYPOGRAPHY_CONTENT_POLICY)) {
+    set(`--measure-${role}`, `${policy.measureCh}ch`);
   }
 };
 applyTheme(themeName);
