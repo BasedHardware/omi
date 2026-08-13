@@ -33,9 +33,11 @@ function textOf(rendered) {
 
 test("mobile Settings renders as a dismissible sheet without persistent navigation", async () => {
   const returnHref = "?platform=mobile&route=home";
+  let dismissals = 0;
   const rendered = await renderSettings("signed-in", {
     presentation: "sheet",
     returnHref,
+    onDismiss: () => { dismissals += 1; },
   });
   try {
     const main = rendered.container.querySelector('main[data-settings-presentation="sheet"]');
@@ -48,6 +50,10 @@ test("mobile Settings renders as a dismissible sheet without persistent navigati
     assert.equal(close?.getAttribute("href"), returnHref);
     assert.equal(rendered.container.querySelector(".production-nav"), null, "sheet presentation does not invent a second persistent navigation layer");
     assert.notEqual(rendered.window.document.activeElement, close, "opening the fixture does not steal host focus");
+    await rendered.act(async () => {
+      rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    });
+    assert.equal(dismissals, 1, "hardware Escape dismisses the pushed Settings presentation");
   } finally {
     await rendered.cleanup();
   }
