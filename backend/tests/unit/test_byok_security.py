@@ -1237,6 +1237,31 @@ class TestWSAuthDependencyBYOK:
 
         asyncio.run(authenticate_and_assert_context())
 
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
+    @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({}, None))
+    @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
+    def test_ws_listen_propagates_oauth_provider_so_credential_resolves(
+        self, _mock_auth, _mock_validate, _mock_deletion
+    ):
+        """WebSocket listen carries X-BYOK-LLM-Provider for OAuth-backed BYOK.
+
+        The listen WS path never sees x-byok-* key headers for ChatGPT/Grok; the
+        selected provider header must be propagated to the request context so
+        downstream get_llm() can resolve the stored OAuth credential by uid.
+        """
+        import asyncio
+        from utils.byok import get_byok_llm_provider, get_byok_uid
+        from utils.other.endpoints import get_current_user_uid_ws_listen
+
+        ws = self._make_ws({'x-byok-llm-provider': 'chatgpt'})
+
+        async def authenticate_and_assert_context():
+            await get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok')
+            assert get_byok_llm_provider() == 'chatgpt'
+            assert get_byok_uid() == 'ws-uid'
+
+        asyncio.run(authenticate_and_assert_context())
+
 
 class TestActivationCacheInvalidation:
     """Verify activate/deactivate endpoints invalidate BYOK state cache."""
