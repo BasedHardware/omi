@@ -197,10 +197,9 @@ struct SettingsContentView: View {
   @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
   var chatScreenshotSharingEnabled: Bool = true
 
-  // Transcription state
-  @State var isTranscribing: Bool
-  @State var isTogglingTranscription: Bool = false
-  @State var transcriptionError: String?
+  // The sole ambient-audio preference. Runtime activity remains on AppState.
+  @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) var audioRecordingModeRaw =
+    AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
 
   // Log export state
 
@@ -358,7 +357,6 @@ struct SettingsContentView: View {
   @State var transcriptionAutoDetect: Bool = true
   @State var transcriptionLanguage: String = "en"
   @State var vadGateEnabled: Bool = false
-  @State var systemAudioCaptureMode: AssistantSettings.SystemAudioCaptureMode = .always
 
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") var multiChatEnabled = false
@@ -568,7 +566,6 @@ struct SettingsContentView: View {
     let settings = AssistantSettings.shared
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
     _screenCaptureHealth = State(initialValue: ProactiveAssistantsPlugin.shared.screenCaptureHealth)
-    _isTranscribing = State(initialValue: appState.isTranscribing)
     _glowOverlayEnabled = State(initialValue: settings.glowOverlayEnabled)
     _analysisDelay = State(initialValue: settings.analysisDelay)
     _liveSuggestionsEnabled = State(initialValue: SuggestionAssistantSettings.shared.isEnabled)
@@ -598,7 +595,6 @@ struct SettingsContentView: View {
     _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
     _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
     _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
-    _systemAudioCaptureMode = State(initialValue: settings.systemAudioCaptureMode)
   }
 
   /// Computed status text for notifications — OS permission/banner mirror only.
@@ -669,8 +665,6 @@ struct SettingsContentView: View {
       }
       loadBackendSettings()
       loadSubscriptionInfo()
-      // Sync transcription state with appState
-      isTranscribing = appState.isTranscribing
       // Sync floating bar state with persisted preference (not transient visibility)
       showAskOmiBar = FloatingControlBarManager.shared.isEnabled
       playwrightExtensionToken =
@@ -686,9 +680,6 @@ struct SettingsContentView: View {
         isMonitoring = state
       }
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
-    }
-    .onChange(of: appState.isTranscribing) { _, newValue in
-      isTranscribing = newValue
     }
     .onChange(of: selectedSection) { _, newValue in
       if AppBuild.isProductionBundle && newValue == .aiChat {

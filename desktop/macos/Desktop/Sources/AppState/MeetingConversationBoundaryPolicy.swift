@@ -25,4 +25,17 @@ enum MeetingConversationBoundaryPolicy {
   static func committedRole(previousRole: Role, transition: Transition, rotationSucceeded: Bool) -> Role {
     rotationSucceeded ? transition.nextRole : previousRole
   }
+
+  static func shouldFinishConversation(
+    mode: AssistantSettings.AudioRecordingMode,
+    meetingStateReady: Bool,
+    shouldCapture: Bool,
+    segmentCount: Int,
+    hasSpeakerSegments: Bool
+  ) -> Bool {
+    mode == .onlyMeetings
+      && meetingStateReady
+      && !shouldCapture
+      && (segmentCount > 0 || hasSpeakerSegments)
+  }
 }

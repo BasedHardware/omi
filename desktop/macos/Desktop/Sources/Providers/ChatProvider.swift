@@ -5575,7 +5575,7 @@ class ChatProvider: ObservableObject {
   func presentOnboardingOpener() {
     let name = Self.firstName(AuthService.shared.givenName)
     let mode: OnboardingOpenerComposer.ListeningMode =
-      AssistantSettings.shared.systemAudioCaptureMode == .always ? .always : .meetingsOnly
+      AssistantSettings.shared.audioRecordingMode == .always ? .always : .meetingsOnly
     let baseStarters = HomeSuggestionComposer.compose(
       personalized: HomeSuggestionsStore.shared.personalizedQuestions,
       onboarding: PostOnboardingPromptSuggestions.suggestions())

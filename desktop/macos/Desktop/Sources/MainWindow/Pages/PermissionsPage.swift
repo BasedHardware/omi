@@ -666,14 +666,6 @@ struct SystemAudioPermissionSection: View {
     appState.systemAudioPermissionStatus
   }
 
-  private var mode: AssistantSettings.SystemAudioCaptureMode {
-    appState.effectiveSystemAudioMode
-  }
-
-  private var isDisabledBySetting: Bool {
-    mode == .never
-  }
-
   private var isGranted: Bool {
     status == .granted
   }
@@ -774,10 +766,6 @@ struct SystemAudioPermissionSection: View {
   }
 
   private var descriptionText: String {
-    if isDisabledBySetting {
-      return "Disabled in Settings > General"
-    }
-
     switch status {
     case .granted:
       return "Captures audio from calls, videos, and other apps"
@@ -791,9 +779,6 @@ struct SystemAudioPermissionSection: View {
   }
 
   private var systemAudioStatusBadge: some View {
-    if isDisabledBySetting {
-      return SettingsStatusChip(text: "Disabled", tint: Ink.secondary)
-    }
     switch status {
     case .granted: return SettingsStatusChip(text: "Granted", tint: Ink.listeningGreen)
     case .denied: return SettingsStatusChip(text: "Not Granted", tint: SettingsInk.notice)
@@ -804,11 +789,7 @@ struct SystemAudioPermissionSection: View {
 
   private var expandedContent: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-      if isDisabledBySetting {
-        Text("System audio capture is set to Never in Settings > General. Change that setting before testing access.")
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(Ink.primary)
-      } else if status == .unsupported {
+      if status == .unsupported {
         Text("System audio capture requires macOS 14.4 or later.")
           .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(Ink.primary)
@@ -854,8 +835,8 @@ struct SystemAudioPermissionSection: View {
         )
       }
       .buttonStyle(.plain)
-      .disabled(isTesting || isDisabledBySetting || status == .unsupported)
-      .opacity((isTesting || isDisabledBySetting || status == .unsupported) ? 0.6 : 1)
+      .disabled(isTesting || status == .unsupported)
+      .opacity((isTesting || status == .unsupported) ? 0.6 : 1)
     }
   }
 

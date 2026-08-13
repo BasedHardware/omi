@@ -1,14 +1,14 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 2023,
-    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": 1607,
+    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": 1595,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3433,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4318,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4280,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3468,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": 4399,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift": 1636,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 6806,
-    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1505
+    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1501
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "Assistant metadata controls now occupy a real in-layout hit-test strip with shared top/leading insets and stable pointer targets; chat-first blocks, timestamps, ratings, and copy/context actions remain one row-level rendering boundary rather than parallel transcript renderers. +15 projects the typed conversationLink through the existing exhaustive row grouping and rendering switches; the card view itself remains extracted in ChatFirstContentBlockViews.",

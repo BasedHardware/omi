@@ -62,20 +62,17 @@ final class DashboardCaptureStateTests: XCTestCase {
     )
   }
 
-  func testListeningPillShowsAndTogglesCaptureMode() throws {
+  func testListeningPillReflectsTheUnifiedAudioRecordingMode() throws {
     let source = try dashboardSource()
     let logic = try captureLogicSource()
 
-    XCTAssertTrue(source.contains("@AppStorage(\"systemAudioCaptureMode\")"))
+    XCTAssertTrue(source.contains("@AppStorage(AssistantSettings.audioRecordingModeDefaultsKey)"))
     XCTAssertTrue(source.contains("private var listeningModeTitle: String"))
-    XCTAssertTrue(logic.contains("return appState.isAwaitingMeeting ? \"Meetings only\" : \"In meeting\""))
+    XCTAssertTrue(logic.contains("return appState.isAwaitingMeeting ? \"Only Meetings\" : \"In Meeting\""))
     XCTAssertTrue(source.contains("HomeListeningStatusButton("))
-    XCTAssertTrue(source.contains("modeAction: toggleListeningMode"))
-    XCTAssertTrue(logic.contains("AssistantSettings.shared.systemAudioCaptureMode = nextMode"))
-    XCTAssertTrue(source.contains("Image(systemName: isMeetingsOnly ? \"person.2.fill\" : \"person.fill\")"))
-    XCTAssertTrue(source.contains("private var modeIconColor: Color"))
+    XCTAssertFalse(source.contains("modeAction: toggleListeningMode"))
+    XCTAssertFalse(logic.contains("toggleListeningMode"))
     XCTAssertTrue(source.contains(".frame(height: 34)"))
-    XCTAssertFalse(source.contains("Image(systemName: isMeetingsOnly ? \"person.2.fill\" : \"infinity\")"))
     XCTAssertFalse(source.contains("Circle()\n                    .fill(status.indicator)"))
     XCTAssertFalse(source.contains("OmiColors.purplePrimary"))
   }
