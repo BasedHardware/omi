@@ -124,6 +124,8 @@ import { createPostgresDurableMemoryWorkResultRepository } from "./durable-memor
 import { createPostgresDurableMemoryWorkSuccessRepository } from "./durable-memory-work-success";
 import { createPostgresFormationWorkInputRepository } from "./formation-work-input";
 import { createPostgresFormationOneShotRuntime } from "./formation-one-shot-runtime";
+import { createPostgresModelPipelineExclusivity } from "./model-pipeline-exclusivity";
+import { MODEL_PIPELINE_RESOURCE_VERSION } from "../../apps/service/workers/model-pipeline-exclusivity";
 import {
   createPostgresFirebaseAuthorizedGraphSnapshotRuntime,
   projectFirebaseAuthorizedGraphSnapshotLoad,
@@ -654,6 +656,7 @@ const durableWorkFormationSnapshot = (
 realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
   let ownerSql: Sql<Record<string, never>>;
   let pool: CloseablePostgresTransactionPool;
+  let modelLockPool: CloseablePostgresTransactionPool;
 
   beforeAll(() => {
     if (!explicitTestUrl) throw new Error("OMI_TEST_POSTGRES_URL is required");
@@ -663,10 +666,12 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     }
     ownerSql = postgres(explicitTestUrl, { max: 2, prepare: true });
     pool = createPostgresJsTransactionPool({ connectionString: explicitTestUrl, maxConnections: 1 });
+    modelLockPool = createPostgresJsTransactionPool({ connectionString: explicitTestUrl, maxConnections: 1 });
   });
 
   afterAll(async () => {
     await pool?.close();
+    await modelLockPool?.close();
     await ownerSql?.end({ timeout: 5 });
   });
 
@@ -1355,6 +1360,48 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         expect(rows[0]?.local_account).toBeNull();
       },
     );
+  });
+
+  test("model pipeline advisory locks exclude the same resource across independent pools", async () => {
+    const contenderPool = createPostgresJsTransactionPool({
+      connectionString: explicitTestUrl!, maxConnections: 1,
+    });
+    try {
+      const holder = createPostgresModelPipelineExclusivity(modelLockPool);
+      const contender = createPostgresModelPipelineExclusivity(contenderPool);
+      const same = Object.freeze({
+        version: MODEL_PIPELINE_RESOURCE_VERSION,
+        resource_digest: "9".repeat(64),
+      });
+      const different = Object.freeze({
+        version: MODEL_PIPELINE_RESOURCE_VERSION,
+        resource_digest: "8".repeat(64),
+      });
+      let entered!: () => void;
+      const enteredPromise = new Promise<void>((resolve) => { entered = resolve; });
+      let release!: () => void;
+      const releasePromise = new Promise<void>((resolve) => { release = resolve; });
+      const held = holder.runExclusive(same, async () => {
+        entered();
+        await releasePromise;
+        return "holder";
+      });
+      await enteredPromise;
+      let sameCalls = 0;
+      await expect(contender.runExclusive(same, async () => {
+        sameCalls += 1;
+        return "overlap";
+      })).resolves.toEqual({ kind: "busy" });
+      expect(sameCalls).toBe(0);
+      await expect(contender.runExclusive(different, async () => "different"))
+        .resolves.toEqual({ kind: "completed", value: "different" });
+      release();
+      await expect(held).resolves.toEqual({ kind: "completed", value: "holder" });
+      await expect(contender.runExclusive(same, async () => "next"))
+        .resolves.toEqual({ kind: "completed", value: "next" });
+    } finally {
+      await contenderPool.close();
+    }
   });
 
   test("backend termination rolls back the first write and the size-one pool reconnects", async () => {
@@ -2133,6 +2180,11 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       pool: appRolePool,
       strategies: [runtimeStrategy],
       resolve_model: async () => runtimeModel,
+      model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+      resolve_model_pipeline_resource: async () => Object.freeze({
+        version: MODEL_PIPELINE_RESOURCE_VERSION,
+        resource_digest: "a".repeat(64),
+      }),
       max_parent_rematerializations: 3,
       observability: {
         telemetry: createOperationalTelemetryEmitter((event) => {
@@ -2449,6 +2501,11 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         predicateModelCalls += 1;
         return { assertions: [] };
       }),
+      model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+      resolve_model_pipeline_resource: async () => Object.freeze({
+        version: MODEL_PIPELINE_RESOURCE_VERSION,
+        resource_digest: "b".repeat(64),
+      }),
       max_parent_rematerializations: 3,
     });
     const predicateRuntimeRequest = {
@@ -2582,6 +2639,11 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
             { from_slot_id: "tool", to_slot_id: "tool" },
           ],
         }] };
+      }),
+      model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+      resolve_model_pipeline_resource: async () => Object.freeze({
+        version: MODEL_PIPELINE_RESOURCE_VERSION,
+        resource_digest: "c".repeat(64),
       }),
       max_parent_rematerializations: 3,
     });

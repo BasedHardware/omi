@@ -259,6 +259,7 @@ describe("production-neutral durable memory work runner", () => {
     const recovered = expireDurableMemoryWorkLease(firstLease, 121, 122);
     const laterLease = leaseDurableMemoryWork(recovered, "worker:two", 122, 20);
     let modelCalls = 0;
+    let exclusivityCalls = 0;
     const replayRepository = defineDurableMemoryWorkResultRepository({
       load: async () => ({ kind: "found", result: stored }),
       stage: async () => ({ kind: "idempotency_conflict" }),
@@ -272,6 +273,10 @@ describe("production-neutral durable memory work runner", () => {
         modelCalls += 1;
         throw new Error("must not call model");
       },
+      produce_exclusive: async (_context, _job, _strategy, produce) => {
+        exclusivityCalls += 1;
+        return produce();
+      },
       materialize: async () => ({
         kind: "ready", result_kind: "successful_empty", authoritative_append: null,
       }),
@@ -282,6 +287,37 @@ describe("production-neutral durable memory work runner", () => {
       outcome: { commit_id: null, sequence: null },
     });
     expect(modelCalls).toBe(0);
+    expect(exclusivityCalls).toBe(0);
+  });
+
+  test("a busy model resource records retryable failure before model resolution", async () => {
+    const failures: string[] = [];
+    let producerCalls = 0;
+    const runner = defineDurableMemoryWorkRunner({
+      work_repository: workRepository(failures),
+      result_repository: defineDurableMemoryWorkResultRepository({
+        load: async () => ({ kind: "missing" }),
+        stage: async () => { throw new Error("must not stage"); },
+      }),
+      success_repository: successRepository({ remaining: 0 }),
+      resolve_strategy: async () => registeredStrategy,
+      produce: async () => {
+        producerCalls += 1;
+        throw new Error("must not call model producer");
+      },
+      produce_exclusive: async () => Object.freeze({
+        kind: "failed" as const,
+        error_code: "model_rate_limited" as const,
+      }),
+      materialize: async () => { throw new Error("must not materialize"); },
+      max_parent_rematerializations: 1,
+    });
+    await expect(runner.run(context(), leased())).resolves.toMatchObject({
+      kind: "failure_recorded", error_code: "model_rate_limited", producer_calls: 1,
+      materialization_attempts: 0,
+    });
+    expect(producerCalls).toBe(0);
+    expect(failures).toEqual(["model_rate_limited"]);
   });
 
   test("bounded stale-parent exhaustion records a closed failure without another producer call", async () => {

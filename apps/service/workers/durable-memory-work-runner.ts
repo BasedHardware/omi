@@ -74,6 +74,14 @@ export interface DurableMemoryWorkRunnerDependencies {
     job: Readonly<DurableMemoryWorkJob>,
     strategy: Readonly<RegisteredMemoryStrategy>,
   ) => Promise<DurableMemoryWorkProduceOutcome>;
+  /** Optional at the generic kernel; production model-backed compositions make
+   * this mandatory and use it only on a durable-result cache miss. */
+  readonly produce_exclusive?: (
+    context: AuthorizedLedgerWriteContext,
+    job: Readonly<DurableMemoryWorkJob>,
+    strategy: Readonly<RegisteredMemoryStrategy>,
+    produce: () => Promise<DurableMemoryWorkProduceOutcome>,
+  ) => Promise<DurableMemoryWorkProduceOutcome>;
   readonly materialize: (
     context: AuthorizedLedgerWriteContext,
     job: Readonly<DurableMemoryWorkJob>,
@@ -335,7 +343,12 @@ export const defineDurableMemoryWorkRunner = (
           producerCalls = 1;
           let rawProduced: unknown;
           try {
-            rawProduced = await dependencies.produce(context, leasedJob, resolvedStrategy);
+            const produce = () => dependencies.produce(context, leasedJob, resolvedStrategy);
+            rawProduced = dependencies.produce_exclusive
+              ? await dependencies.produce_exclusive(
+                context, leasedJob, resolvedStrategy, produce,
+              )
+              : await produce();
           } catch {
             return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
           }

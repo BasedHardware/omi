@@ -68,6 +68,7 @@ export interface ConsolidationWorkServiceDependencies {
   ) => Promise<RegisteredMemoryStrategy | null>;
   readonly adapters: Readonly<Record<ConsolidationWorkKind, ConsolidationWorkAdapter>>;
   readonly max_parent_rematerializations: number;
+  readonly produce_exclusive?: NonNullable<Parameters<typeof defineDurableMemoryWorkRunner>[0]["produce_exclusive"]>;
   readonly worker_observability?: DurableMemoryWorkRunnerObservability;
 }
 
@@ -239,6 +240,8 @@ export const defineConsolidationWorkService = (
     "resolve_strategy", "adapters", "max_parent_rematerializations",
     ...(Object.prototype.hasOwnProperty.call(dependenciesValue, "worker_observability")
       ? ["worker_observability"] : []),
+    ...(Object.prototype.hasOwnProperty.call(dependenciesValue, "produce_exclusive")
+      ? ["produce_exclusive"] : []),
   ], "invalid_dependencies");
   const maximum = dependencies["max_parent_rematerializations"];
   if (!Number.isSafeInteger(maximum) || (maximum as number) < 1
@@ -267,6 +270,11 @@ export const defineConsolidationWorkService = (
       success_repository: successRepository,
       resolve_strategy: resolveStrategy,
       produce: adapter.produce,
+      ...(dependencies["produce_exclusive"]
+        ? { produce_exclusive: callable(
+          dependencies["produce_exclusive"], "invalid_producer_exclusivity",
+        ) as NonNullable<ConsolidationWorkServiceDependencies["produce_exclusive"]> }
+        : {}),
       materialize: adapter.materialize,
       max_parent_rematerializations: maximum as number,
       ...(dependencies["worker_observability"]

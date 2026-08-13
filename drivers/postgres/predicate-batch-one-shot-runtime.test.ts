@@ -8,6 +8,10 @@ import {
 } from "../../core/consolidate/strategy-assignment";
 import type { PostgresTransactionPool } from "./connection";
 import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
+import {
+  defineModelPipelineExclusivity,
+  MODEL_PIPELINE_RESOURCE_VERSION,
+} from "../../apps/service/workers/model-pipeline-exclusivity";
 
 const strategy = registerMemoryStrategy({
   version: MEMORY_STRATEGY_VERSION,
@@ -31,6 +35,15 @@ const strategy = registerMemoryStrategy({
 const unusedPool: PostgresTransactionPool = Object.freeze({
   withTransaction: async () => { throw new Error("constructor_must_not_open_postgres"); },
 });
+const exclusivity = defineModelPipelineExclusivity(async (_resource, callback) =>
+  Object.freeze({ kind: "completed" as const, value: await callback() }));
+const pipeline = {
+  model_pipeline_exclusivity: exclusivity,
+  resolve_model_pipeline_resource: async () => Object.freeze({
+    version: MODEL_PIPELINE_RESOURCE_VERSION,
+    resource_digest: "b".repeat(64),
+  }),
+};
 
 describe("PostgreSQL predicate-batch one-shot runtime", () => {
   test("constructs inertly and exposes only bounded operations", () => {
@@ -38,6 +51,7 @@ describe("PostgreSQL predicate-batch one-shot runtime", () => {
       pool: unusedPool,
       strategies: [strategy],
       resolve_model: async () => null,
+      ...pipeline,
       max_parent_rematerializations: 2,
     });
     expect(Object.keys(runtime)).toEqual(["schedule", "runNext", "recoverExpired"]);
@@ -52,11 +66,18 @@ describe("PostgreSQL predicate-batch one-shot runtime", () => {
         pool: unusedPool,
         strategies,
         resolve_model: async () => null,
+        ...pipeline,
         max_parent_rematerializations: retries,
       });
     expect(() => construct([])).toThrow("invalid_strategy_registry");
     expect(() => construct([strategy, strategy])).toThrow("invalid_strategy_registry");
     expect(() => construct([strategy], 0)).toThrow("invalid_parent_retry_bound");
+    expect(() => createPostgresPredicateBatchOneShotRuntime({
+      pool: unusedPool, strategies: [strategy], resolve_model: async () => null,
+      model_pipeline_exclusivity: {} as never,
+      resolve_model_pipeline_resource: pipeline.resolve_model_pipeline_resource,
+      max_parent_rematerializations: 2,
+    })).toThrow("invalid_port");
     const retrieval = registerMemoryStrategy({
       version: MEMORY_STRATEGY_VERSION,
       strategy_id: "strategy:retrieval:test",

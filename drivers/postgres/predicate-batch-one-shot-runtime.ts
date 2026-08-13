@@ -25,6 +25,12 @@ import {
 } from "../../core/consolidate/strategy-assignment";
 import type { DurableMemoryWorkJob } from "../../core/consolidate/state-machine";
 import type { ModelPort } from "../model/port";
+import type {
+  ModelPipelineExclusivity,
+  ModelPipelineResource,
+} from "../../apps/service/workers/model-pipeline-exclusivity";
+import { assertModelPipelineExclusivity } from "../../apps/service/workers/model-pipeline-exclusivity";
+import { isProxy } from "node:util/types";
 import type { PostgresTransactionPool } from "./connection";
 import { createPostgresAuthoritativeGraphSnapshotRepository } from "./authoritative-graph-snapshot";
 import { createPostgresDurableMemoryWorkAcceptanceRepository } from "./durable-memory-work-acceptance";
@@ -45,6 +51,12 @@ export interface PostgresPredicateBatchOneShotRuntimeOptions {
     job: Readonly<DurableMemoryWorkJob>,
     strategy: Readonly<RegisteredMemoryStrategy>,
   ) => Promise<ModelPort | null>;
+  readonly model_pipeline_exclusivity: ModelPipelineExclusivity;
+  readonly resolve_model_pipeline_resource: (
+    context: AuthorizedLedgerWriteContext,
+    job: Readonly<DurableMemoryWorkJob>,
+    strategy: Readonly<RegisteredMemoryStrategy>,
+  ) => Promise<Readonly<ModelPipelineResource> | null>;
   readonly max_parent_rematerializations: number;
   readonly observability?: PostgresTransactionObservability;
 }
@@ -96,6 +108,11 @@ const unsupportedAdapter = (kind: Exclude<ConsolidationWorkKind, "predicate_batc
 export const createPostgresPredicateBatchOneShotRuntime = (
   options: PostgresPredicateBatchOneShotRuntimeOptions,
 ): PostgresPredicateBatchOneShotRuntime => {
+  const modelPipelineExclusivity = assertModelPipelineExclusivity(options.model_pipeline_exclusivity);
+  if (typeof options.resolve_model_pipeline_resource !== "function"
+    || isProxy(options.resolve_model_pipeline_resource)) {
+    throw new TypeError("postgres predicate runtime invalid_model_pipeline_resource_resolver");
+  }
   const strategies = strategyRegistry(options.strategies);
   const repositoryOptions = {
     pool: options.pool,
@@ -128,6 +145,23 @@ export const createPostgresPredicateBatchOneShotRuntime = (
       identity_cluster: unsupportedAdapter("identity_cluster"),
       predicate_batch: predicateAdapter,
       promotion: unsupportedAdapter("promotion"),
+    },
+    produce_exclusive: async (context, job, strategy, produce) => {
+      let resource: Readonly<ModelPipelineResource> | null;
+      try {
+        resource = await options.resolve_model_pipeline_resource(context, job, strategy);
+      } catch {
+        return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" as const });
+      }
+      if (resource === null) {
+        return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" as const });
+      }
+      const outcome = await modelPipelineExclusivity.runExclusive(resource, produce);
+      if (outcome.kind === "completed") return outcome.value;
+      return Object.freeze({
+        kind: "failed" as const,
+        error_code: outcome.kind === "busy" ? "model_rate_limited" as const : "dependency_unavailable" as const,
+      });
     },
     max_parent_rematerializations: options.max_parent_rematerializations,
     ...(options.observability ? { worker_observability: options.observability } : {}),

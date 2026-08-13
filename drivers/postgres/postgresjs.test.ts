@@ -70,6 +70,54 @@ describe("Postgres.js transaction adapter", () => {
     expect(calls.at(-1)).toBe("end");
   });
 
+  test("holds a session advisory lock on one reserved connection without a transaction", async () => {
+    const calls: string[] = [];
+    const reserved = {
+      unsafe: async (text: string) => {
+        calls.push(text);
+        if (text.includes("try_advisory")) return [{ acquired: true }];
+        return [{ unlocked: true }];
+      },
+      release: () => { calls.push("release"); },
+    } as unknown as ReservedSql<Record<string, never>>;
+    const pool = bindPostgresJsTransactionPool({
+      reserve: async () => reserved,
+      end: async () => undefined,
+    } as unknown as Sql<Record<string, never>>);
+    await expect(pool.tryWithSessionAdvisoryLock([7, -8], async () => {
+      calls.push("callback");
+      return "complete";
+    })).resolves.toEqual({ acquired: true, value: "complete" });
+    expect(calls).toEqual([
+      "select pg_try_advisory_lock($1::integer, $2::integer) as acquired",
+      "callback",
+      "select pg_advisory_unlock($1::integer, $2::integer) as unlocked",
+      "release",
+    ]);
+  });
+
+  test("session advisory contention never calls back and callback failure still unlocks", async () => {
+    const calls: string[] = [];
+    const reservations = [false, true].map((acquired) => ({
+      unsafe: async (text: string) => text.includes("try_advisory")
+        ? [{ acquired }] : [{ unlocked: true }],
+      release: () => { calls.push(`release:${acquired}`); },
+    } as unknown as ReservedSql<Record<string, never>>));
+    const pool = bindPostgresJsTransactionPool({
+      reserve: async () => reservations.shift()!,
+      end: async () => undefined,
+    } as unknown as Sql<Record<string, never>>);
+    let callbacks = 0;
+    await expect(pool.tryWithSessionAdvisoryLock([1, 2], async () => { callbacks += 1; }))
+      .resolves.toEqual({ acquired: false });
+    await expect(pool.tryWithSessionAdvisoryLock([1, 2], async () => {
+      callbacks += 1;
+      throw new Error("model failed");
+    })).rejects.toThrow("model failed");
+    expect(callbacks).toBe(1);
+    expect(calls).toEqual(["release:false", "release:true"]);
+  });
+
   test("supports an explicit serializable read-only lease", async () => {
     const calls: string[] = [];
     const reserved = {

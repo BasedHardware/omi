@@ -11,6 +11,12 @@ import {
   defineFormationWorkService,
 } from "../../apps/service/workers/formation-work-service";
 import type { ModelPort } from "../model/port";
+import type {
+  ModelPipelineExclusivity,
+  ModelPipelineResource,
+} from "../../apps/service/workers/model-pipeline-exclusivity";
+import { assertModelPipelineExclusivity } from "../../apps/service/workers/model-pipeline-exclusivity";
+import { isProxy } from "node:util/types";
 import {
   parseRegisteredMemoryStrategy,
   type RegisteredMemoryStrategy,
@@ -41,6 +47,12 @@ export interface PostgresFormationOneShotRuntimeOptions {
     job: Readonly<DurableMemoryWorkJob>,
     strategy: Readonly<RegisteredMemoryStrategy>,
   ) => Promise<ModelPort | null>;
+  readonly model_pipeline_exclusivity: ModelPipelineExclusivity;
+  readonly resolve_model_pipeline_resource: (
+    context: AuthorizedLedgerWriteContext,
+    job: Readonly<DurableMemoryWorkJob>,
+    strategy: Readonly<RegisteredMemoryStrategy>,
+  ) => Promise<Readonly<ModelPipelineResource> | null>;
   readonly max_parent_rematerializations: number;
   readonly observability?: PostgresTransactionObservability;
 }
@@ -86,6 +98,11 @@ const strategyRegistry = (
 export const createPostgresFormationOneShotRuntime = (
   options: PostgresFormationOneShotRuntimeOptions,
 ): PostgresFormationOneShotRuntime => {
+  const modelPipelineExclusivity = assertModelPipelineExclusivity(options.model_pipeline_exclusivity);
+  if (typeof options.resolve_model_pipeline_resource !== "function"
+    || isProxy(options.resolve_model_pipeline_resource)) {
+    throw new TypeError("postgres formation runtime invalid_model_pipeline_resource_resolver");
+  }
   const strategies = strategyRegistry(options.strategies);
   const repositoryOptions = {
     pool: options.pool,
@@ -107,6 +124,23 @@ export const createPostgresFormationOneShotRuntime = (
     formation: {
       resolve_model: options.resolve_model,
       load_current_parent: (context) => graphRepository.loadCurrentParent(context),
+    },
+    produce_exclusive: async (context, job, strategy, produce) => {
+      let resource: Readonly<ModelPipelineResource> | null;
+      try {
+        resource = await options.resolve_model_pipeline_resource(context, job, strategy);
+      } catch {
+        return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" as const });
+      }
+      if (resource === null) {
+        return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" as const });
+      }
+      const outcome = await modelPipelineExclusivity.runExclusive(resource, produce);
+      if (outcome.kind === "completed") return outcome.value;
+      return Object.freeze({
+        kind: "failed" as const,
+        error_code: outcome.kind === "busy" ? "model_rate_limited" as const : "dependency_unavailable" as const,
+      });
     },
     max_parent_rematerializations: options.max_parent_rematerializations,
     ...(options.observability ? { worker_observability: options.observability } : {}),

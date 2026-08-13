@@ -41,6 +41,7 @@ export interface FormationWorkServiceDependencies {
     job: Readonly<DurableMemoryWorkJob>,
   ) => Promise<RegisteredMemoryStrategy | null>;
   readonly formation: Omit<FormationWorkAdapterDependencies, "load_input">;
+  readonly produce_exclusive?: NonNullable<Parameters<typeof defineDurableMemoryWorkRunner>[0]["produce_exclusive"]>;
   readonly max_parent_rematerializations: number;
   readonly worker_observability?: DurableMemoryWorkRunnerObservability;
 }
@@ -91,6 +92,7 @@ export const defineFormationWorkService = (
     success_repository: dependencies.success_repository,
     resolve_strategy: dependencies.resolve_strategy,
     produce: adapter.produce,
+    ...(dependencies.produce_exclusive ? { produce_exclusive: dependencies.produce_exclusive } : {}),
     materialize: adapter.materialize,
     max_parent_rematerializations: dependencies.max_parent_rematerializations,
     ...(dependencies.worker_observability

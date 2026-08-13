@@ -47,6 +47,24 @@ export interface PostgresTransactionPool {
   ): Promise<Result>;
 }
 
+export type PostgresSessionAdvisoryLockOutcome<Result> =
+  | Readonly<{ acquired: false }>
+  | Readonly<{ acquired: true; value: Result }>;
+
+/**
+ * Session-scoped coordination for work that must not hold a database
+ * transaction open (notably a provider model call). The callback receives no
+ * SQL capability. Implementations must release the exact lock and reserved
+ * connection only after the callback settles; a lost connection must never be
+ * returned to the pool.
+ */
+export interface PostgresSessionAdvisoryLockPool {
+  tryWithSessionAdvisoryLock<Result>(
+    key: readonly [number, number],
+    callback: () => Promise<Result>,
+  ): Promise<PostgresSessionAdvisoryLockOutcome<Result>>;
+}
+
 export const REAL_POSTGRES_ACTIVATION = Object.freeze({
   supported: false as const,
   reasonCode: "postgres_runtime_not_qualified" as const,

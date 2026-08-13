@@ -2,6 +2,7 @@ import postgres, { type ReservedSql, type Sql } from "postgres";
 
 import type {
   CheckedOutPostgresConnection,
+  PostgresSessionAdvisoryLockPool,
   PostgresTransactionPool,
   SerializableTransactionOptions,
   SqlMutationResult,
@@ -19,7 +20,8 @@ export interface PostgresJsPoolOptions {
   readonly connectTimeoutSeconds?: number;
 }
 
-export interface CloseablePostgresTransactionPool extends PostgresTransactionPool {
+export interface CloseablePostgresTransactionPool extends PostgresTransactionPool,
+  PostgresSessionAdvisoryLockPool {
   close(): Promise<void>;
 }
 
@@ -115,6 +117,59 @@ export const bindPostgresJsTransactionPool = (
   sql: Sql<Record<string, never>>,
   binding: PostgresJsBindingOptions = {},
 ): CloseablePostgresTransactionPool => Object.freeze({
+  async tryWithSessionAdvisoryLock<Result>(
+    key: readonly [number, number],
+    callback: () => Promise<Result>,
+  ) {
+    if (!Array.isArray(key) || key.length !== 2
+      || key.some((part) => !Number.isSafeInteger(part) || part < -2147483648 || part > 2147483647)
+      || typeof callback !== "function") {
+      throw new TypeError("invalid_postgres_session_lock_request");
+    }
+    const reserved = await sql.reserve();
+    const leaseGeneration = binding.leaseGeneration?.();
+    const assertLeaseHealthy = (): void => {
+      if (leaseGeneration !== undefined && binding.leaseGeneration?.() !== leaseGeneration) {
+        throw new PostgresJsLeaseLostError();
+      }
+    };
+    let leaseDestroyed = false;
+    let acquired = false;
+    try {
+      assertLeaseHealthy();
+      const rows = await reserved.unsafe<{ acquired: boolean }[]>(
+        "select pg_try_advisory_lock($1::integer, $2::integer) as acquired",
+        [key[0], key[1]],
+        { prepare: true },
+      );
+      assertLeaseHealthy();
+      acquired = rows.length === 1 && rows[0]?.acquired === true;
+      if (!acquired) return Object.freeze({ acquired: false as const });
+      const value = await callback();
+      assertLeaseHealthy();
+      return Object.freeze({ acquired: true as const, value });
+    } catch (error) {
+      leaseDestroyed = destroysConnectionLease(error);
+      throw error;
+    } finally {
+      if (acquired && !leaseDestroyed) {
+        try {
+          const rows = await reserved.unsafe<{ unlocked: boolean }[]>(
+            "select pg_advisory_unlock($1::integer, $2::integer) as unlocked",
+            [key[0], key[1]],
+            { prepare: true },
+          );
+          assertLeaseHealthy();
+          if (rows.length !== 1 || rows[0]?.unlocked !== true) leaseDestroyed = true;
+        } catch {
+          // Unlock failure makes the session lock state unknowable. Quarantine
+          // the reserved connection instead of returning it to the pool.
+          leaseDestroyed = true;
+        }
+      }
+      if (!leaseDestroyed) reserved.release();
+    }
+  },
   async withTransaction<Result>(
     options: SerializableTransactionOptions,
     callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
