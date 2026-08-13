@@ -16,7 +16,7 @@ The Omi mainboard uses advanced packages that **require professional PCBA assemb
 | TXS0104EYZTR (U4) | DSBGA-12 | 0.5mm ball pitch | Very difficult to hand-solder |
 | Most passives | 0201 (0.6mm × 0.3mm) | N/A | Requires pick-and-place machine |
 
-**Recommendation:** Order turnkey PCBA from JLCPCB (Standard assembly, not Economic), PCBWay, or equivalent. Do NOT attempt hand assembly.
+**Recommendation:** Order turnkey PCBA from a CM with **verified** WLCSP capability (at JLCPCB: Standard/Advanced tier, not Economic; or PCBWay, AllPCB, etc.). **Before ordering, obtain written confirmation** that the CM supports: 0.35mm pitch WLCSP placement, Type 5 solder paste, 75µm electropolished stencil, SPI, X-ray, and dual-side reflow with bottom-side ICs. Do NOT attempt hand assembly.
 
 ## Stencil Specifications
 
@@ -24,10 +24,12 @@ The Omi mainboard uses advanced packages that **require professional PCBA assemb
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
-| **Thickness** | **0.075mm (3 mil)** preferred; 0.10mm (4 mil) only with CM-proven process | Required for 0.35mm pitch WLCSP. Use step-down stencil if CM supports it (0.075mm in WLCSP/0201 regions, 0.10–0.12mm for larger parts). |
+| **Thickness** | **0.075mm (3 mil)** in WLCSP/0201 regions | Required for 0.35mm pitch WLCSP. **Step stencil recommended:** 0.075mm in WLCSP and 0201 zones, 0.10–0.12mm for larger parts (connectors, crystals, pogo pads). If CM cannot do step stencil, use 0.075mm everywhere — CM must validate paste volume on larger pads. |
 | Material | Stainless steel, **laser-cut + electropolished** | Electropolish/nano-coat required for reliable paste release at area ratio <0.66. |
-| WLCSP aperture | Rounded-square or square, sized to match PCB land pattern | Typically 1:1 to 5–10% reduced from PCB pad. Validate by area ratio and SPI. |
-| 0201 aperture | 10–20% reduction from pad, or home-plate/reverse-home-plate | Prevents bridging while maintaining adequate paste volume. |
+| WLCSP aperture (U1) | **160µm rounded-square** (1:1 to PCB pad) | Area ratio at 75µm: 0.160/(4×0.075) = 0.53. Requires electropolish + nano-coat for release. Corners radiused R=20–30µm. |
+| WLCSP aperture (U2) | **200µm rounded-square** (1:1 to PCB pad) | Area ratio at 75µm: 0.200/(4×0.075) = 0.67 (passes IPC ≥0.66). |
+| DSBGA aperture | **250–300µm** (per DSBGA pad, 5–10% reduction) | 0.5mm pitch — adequate margin at 75µm stencil. |
+| 0201 aperture | **Home-plate or 10–20% reduced from pad** | Prevents bridging while maintaining adequate paste volume. |
 | Fiducial openings | Yes — match PCB fiducials | Required for stencil-to-PCB alignment. |
 | **SPI validation** | **Required** | Solder paste inspection for height/volume/alignment acceptance before placement. |
 
@@ -63,7 +65,9 @@ FPC flex board has only 2 SMD connectors (J1, J3). Stencil may not be needed if 
 
 ## Reflow Profile
 
-### Lead-Free SAC305 Reflow (recommended)
+### Lead-Free SAC305 Reflow (baseline — defer to paste datasheet)
+
+**⚠ The profile below is a starting point.** The CM must derive the actual profile from the selected paste's datasheet (soak range, TAL, peak) intersected with component max profiles (Nordic PS §6.2 for nRF5340/nRF7002). Run a profiling board with thermocouples before production.
 
 | Phase | Temperature | Duration | Notes |
 |-------|------------|----------|-------|
@@ -90,7 +94,7 @@ FPC flex board has only 2 SMD connectors (J1, J3). Stencil may not be needed if 
    - **Pass 1:** Print paste on bottom, place bottom components, reflow
    - **Pass 2:** Print paste on top, place top components, reflow
    - Bottom components are held by surface tension during second reflow
-   - **⚠ Bottom-side includes U7 (NAND flash, LGA-8, 8×6mm) and U5 (IMU, LGA-14, 2.5×3mm)** — verify these are within the CM's bottom-side reflow capability. Large bottom-side LGA packages may need adhesive or process validation.
+   - **⚠ Bottom-side includes U7 (NAND flash, LGA-8, 8×6mm) and U5 (IMU, LGA-14, 2.5×3mm)** — verify these are within the CM's bottom-side reflow capability. U7 (8×6mm) has significant mass-to-pad-area ratio; CM must evaluate: (1) is surface tension sufficient to hold U7 during second reflow, or (2) is adhesive (epoxy dot) required? Request the CM's written assessment for bottom-side U7 hold-down strategy.
    - **U14 (GLF73910, WLCSP-4, 0.97×0.97mm)** is on the bottom — requires X-ray inspection on this side too.
    - Verify all bottom-side parts are rated for minimum 2× reflow cycles per their datasheets
 
@@ -216,7 +220,7 @@ Request a DFM (Design for Manufacturability) review from the CM before build. **
 ### Post-Assembly Functional Test
 
 After visual/X-ray inspection, verify basic functionality:
-1. **Power-on:** Apply 3.7V to VBAT — current draw should be <5mA (sleep) or ~15mA (active BLE)
+1. **Power-on:** Apply 3.7V to VBAT — current draw should be 1–5mA (sleep, no firmware running) or 10–20mA (active BLE advertising). Measure at stable battery voltage (3.7V ±0.1V). Current >50mA with no firmware indicates a short — disconnect immediately.
 2. **SWD connection:** Connect J-Link — nRF5340 should respond (see `SWD-DEBUG-ACCESS.md`)
 3. **BLE advertising:** After firmware flash, device should appear in nRF Connect app scan
 4. **IMU response:** Read LSM6DS3TR-C WHO_AM_I register (0x0F) via SWD — should return 0x69
