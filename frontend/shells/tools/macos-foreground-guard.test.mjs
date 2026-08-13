@@ -27,7 +27,7 @@ test("foreground guard fails closed on timeout and writes a terminal result", ()
   const scratch = mkdtempSync(path.join(tmpdir(), "omi-focus-timeout-"));
   try {
     const result = path.join(scratch, "result.json"); const stdout = path.join(scratch, "stdout"); const stderr = path.join(scratch, "stderr");
-    const run = spawnSync(process.execPath, [helper, "--result", result, "--stdout", stdout, "--stderr", stderr, "--timeout", "1", "--", "/bin/sh", "-c", "sleep 5"], { encoding: "utf8", timeout: 5_000 });
+    const run = spawnSync(process.execPath, [helper, "--result", result, "--stdout", stdout, "--stderr", stderr, "--timeout", "1", "--", "/bin/sh", "-c", "trap '' TERM; sleep 5"], { encoding: "utf8", timeout: 5_000 });
     assert.notEqual(run.status, 0);
     const receipt = JSON.parse(readFileSync(result, "utf8"));
     assert.equal(receipt.monitor_error, "guarded command timed out");
