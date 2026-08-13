@@ -239,6 +239,7 @@ def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
     assert url == "https://api.openai.com/v1/chat/completions"
     assert headers == {"Authorization": "Bearer dev-provider-key", "Content-Type": "application/json"}
     assert payload["model"] == "gpt-5-nano"
+    assert "prompt_cache_key" not in payload
     assert "prompt_cache_options" not in payload
 
 

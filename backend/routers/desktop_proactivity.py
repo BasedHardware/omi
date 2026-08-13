@@ -65,6 +65,8 @@ def _proactive_provider_request(
         raise HTTPException(status_code=503, detail="Proactive model provider is not configured")
     payload["model"] = _DIRECT_MODELS[request.operation.value]
     # These are gateway cache extensions, not OpenAI request fields.
+    payload["messages"] = request.messages
+    payload.pop("prompt_cache_key", None)
     payload.pop("prompt_cache_options", None)
     return (
         "https://api.openai.com/v1/chat/completions",
