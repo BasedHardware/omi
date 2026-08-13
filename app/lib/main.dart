@@ -176,7 +176,12 @@ Future _init() async {
 
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
   if (isAuth) {
-    PlatformManager.instance.analytics.identify();
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    PlatformManager.instance.analytics.identify(
+      authMethod:
+          firebaseUser == null || firebaseUser.providerData.isEmpty ? null : firebaseUser.providerData.first.providerId,
+      userCreatedAt: firebaseUser?.metadata.creationTime,
+    );
     // Restore onboarding state from server if not already set locally
     // This handles the case where cached credentials are used on startup
     if (!SharedPreferencesUtil().onboardingCompleted) {
