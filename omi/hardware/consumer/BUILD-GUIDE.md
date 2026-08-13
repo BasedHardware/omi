@@ -1,10 +1,10 @@
 # Build Your Own Omi
 
-↑ **[Consumer README](README.md)** | **[Kit Assembly](KIT-ASSEMBLY.md)** | **[Readiness Checklist](INDIE-MAKER-CHECKLIST.md)**
+↑ **[README](README.md)** | **[Kit Assembly](KIT-ASSEMBLY.md)** | **[Readiness Checklist](INDIE-MAKER-CHECKLIST.md)**
 
 **This guide helps you pick the right build path based on your experience.**
 
-The Omi consumer device is an advanced wearable (nRF5340 + nRF7002, WLCSP packages, HDI PCB, CNC aluminium enclosure). The electronics **cannot be hand-soldered** — WLCSP at 0.35mm ball pitch requires professional pick-and-place and reflow. Choose the path that matches your skills.
+The Omi Consumer device is an advanced wearable (nRF5340 + nRF7002, WLCSP packages, HDI PCB, CNC aluminium enclosure). The electronics **cannot be hand-soldered** — WLCSP at 0.35mm ball pitch requires professional pick-and-place and reflow. Choose the path that matches your skills.
 
 ---
 
@@ -114,7 +114,7 @@ Pricing depends on quantity. Expect ~$80–120/unit at 10+ units.
 9. Receive boards → inspect → X-ray verify WLCSP joints
 10. Flash firmware via J-Link SWD — [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md)
 11. Solder battery, connect FPC, assemble into enclosure
-12. Test (BLE, WiFi, mic, IMU, charging)
+12. Test (BLE, Wi-Fi, mic, IMU, charging)
 
 ### Engineering Reference Docs
 
@@ -188,7 +188,7 @@ nrfutil device program --firmware app_core.hex --core Application --verify --res
 |------|--------|------|
 | Power-on | Apply 3.7V to VBAT, measure current | 1–5mA (sleep) or 10–20mA (BLE advertising only) |
 | BLE | nRF Connect app scan | RSSI > -70 dBm at 1m |
-| WiFi | Firmware log | Connects to 2.4GHz AP (note: Wi-Fi TX draws 191–260mA) |
+| Wi-Fi | Firmware log | Connects to 2.4 GHz AP (note: Wi-Fi TX draws 191–260mA) |
 | Microphone | Record via app | Non-zero audio signal |
 | IMU | Read WHO_AM_I | Returns 0x69 |
 | Charging | Connect to dock | LED indicates charging |

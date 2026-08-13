@@ -1,10 +1,10 @@
 # Kit Assembly Guide
 
-↑ **[Build Guide](BUILD-GUIDE.md)** | **[Consumer README](README.md)**
+↑ **[Build Guide](BUILD-GUIDE.md)** | **[README](README.md)**
 
 **Assemble an Omi device from a pre-built electronics kit.**
 
-This guide is for Kit Build buyers. You received assembled PCBAs, battery, enclosure, and hardware — all you need to do is flash, connect, and assemble.
+This guide is for kit buyers. You received assembled PCBAs, battery, enclosure, and hardware — all you need to do is flash, connect, and assemble.
 
 **Time:** 1–2 hours | **Skill:** Basic soldering (4 wires) | **Tools:** J-Link, soldering iron, multimeter
 
@@ -49,7 +49,7 @@ Open the kit and verify all items are present:
 
 ⚠ **If any item is missing or damaged, contact the Omi team before proceeding.**
 
-📷 **Reference photos:** See `assembly/photos/` in this repo for exploded view, component identification, and materials-labeled images.
+📷 **Reference photos:** See `assembly/photos/` in this repo for exploded view, component identification, and materials-labelled images.
 
 ---
 
@@ -65,7 +65,7 @@ Solder all connections **before** connecting the battery. Working on an unpowere
 
 ## Step 2: Connect FPC
 
-The FPC (Flexible Printed Circuit) carries the charging contact ring and BTB connector. The contact ring on the FPC magnetically aligns with the charger dock's pogo pins for wireless charging.
+The FPC (Flexible Printed Circuit) carries the charging contact ring and BTB connector. The contact ring on the FPC magnetically aligns with the charger dock's pogo pins for pogo-pin dock charging.
 
 1. **Locate the BTB connector** on the mainboard (small, low-profile, one side)
 2. **Look for the keying mark** — one side of the connector has a small alignment feature or dot

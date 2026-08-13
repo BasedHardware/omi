@@ -1,6 +1,6 @@
 # Omi Consumer — Indie Maker Readiness
 
-↑ **[Build Guide](BUILD-GUIDE.md)** | **[Kit Assembly](KIT-ASSEMBLY.md)** | **[Consumer README](README.md)**
+↑ **[Build Guide](BUILD-GUIDE.md)** | **[Kit Assembly](KIT-ASSEMBLY.md)** | **[README](README.md)**
 
 **Can an indie maker build their own Omi device?** Yes — with the right path.
 
@@ -11,7 +11,7 @@
 
 ## Honest Assessment
 
-The Omi consumer is **not a weekend project**. It uses WLCSP packages at 0.35mm ball pitch, a 4-layer HDI PCB with blind/buried vias, and a CNC aluminium enclosure. The electronics cannot be hand-soldered.
+The Omi Consumer is **not a weekend project**. It uses WLCSP packages at 0.35mm ball pitch, a 4-layer HDI PCB with blind/buried vias, and a CNC aluminium enclosure. The electronics cannot be hand-soldered.
 
 But you don't need to build it from scratch. The Omi factory already produces these boards — ordering pre-assembled subassemblies makes indie building realistic.
 
@@ -29,7 +29,7 @@ But you don't need to build it from scratch. The Omi factory already produces th
 
 ## What's in the Repo
 
-Design files and manufacturing references for the Omi consumer device are open-source (MIT license). Some components must be obtained separately — see "What's NOT in the Repo" below.
+Design files and manufacturing references for the Omi Consumer device are open-source (MIT license). Some components must be obtained separately — see "What's NOT in the Repo" below.
 
 ### For Kit Builders
 
@@ -92,7 +92,7 @@ Things to be aware of that these docs cannot solve:
 | R1 | FPC trace routing "parallel to bend" → "perpendicular to bend axis" | Cracked flex traces |
 | R1 | J-Link pin 19 listed as GND → "DO NOT CONNECT" (5V supply) | Potential board damage |
 | R2 | PI965 Section II → Section IB (cargo-only) | Shipping rejection |
-| R2 | WiFi TX current 100mA → 191–260mA per Nordic PS | Undersized battery protection |
+| R2 | Wi-Fi TX current 100mA → 191–260mA per Nordic PS | Undersized battery protection |
 | R3 | SI1308EDL listed as P-ch → actually N-ch | Wrong polarity MOSFET |
 | R3 | FC-12M crystal package wrong → 2.05×1.2mm not 1.6×1.0mm | Wrong footprint |
 | R3 | Mic listed as top-port → corrected to bottom-port | Blocked audio path |

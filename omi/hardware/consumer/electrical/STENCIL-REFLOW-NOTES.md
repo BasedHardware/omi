@@ -1,6 +1,6 @@
 # Stencil & Reflow Assembly Notes — Omi Consumer
 
-↑ **[Build Guide](../BUILD-GUIDE.md)** | **[Consumer README](../README.md)**
+↑ **[Build Guide](../BUILD-GUIDE.md)** | **[README](../README.md)**
 
 **Sources:** KiCad PCB (`OMI.kicad_pcb` — layer assignments, pad sizes), factory BOM (`omi-bom.csv`), gerber drill files
 

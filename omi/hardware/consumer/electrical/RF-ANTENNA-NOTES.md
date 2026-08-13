@@ -1,6 +1,6 @@
 # RF & Antenna Notes — Omi Consumer Mainboard
 
-↑ **[Build Guide](../BUILD-GUIDE.md)** | **[Consumer README](../README.md)**
+↑ **[Build Guide](../BUILD-GUIDE.md)** | **[README](../README.md)**
 
 **Sources:** KiCad PCB (`OMI.kicad_pcb`), KiCad schematic (`nRF7002.kicad_sch`, `nRF5340.kicad_sch`), factory BOM (`omi-bom.csv`)
 
