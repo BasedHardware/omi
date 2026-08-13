@@ -10,6 +10,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -523,20 +524,37 @@ class AnalyticsManager {
 
   void deviceConnected(BtDevice device) {
     final vendor = device.type.analyticsVendor;
-    track('Device Connected', properties: {...device.toJson(), 'type': device.type.name, 'device_vendor': vendor});
+    final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
+    track(
+      'Device Connected',
+      properties: {
+        ...device.toJson(),
+        'type': device.type.name,
+        'device_vendor': vendor,
+        'hardware_family': hardwareFamily,
+      },
+    );
     setUserProperty('device_vendor', vendor);
+    setUserProperty('hardware_family', hardwareFamily);
   }
 
   void devicePaired(String firstPairedAt) {
     final device = _preferences.btDevice;
+    final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
     track(
       'Device Paired',
-      properties: {...device.toJson(), 'type': device.type.name, 'device_vendor': device.type.analyticsVendor},
+      properties: {
+        ...device.toJson(),
+        'type': device.type.name,
+        'device_vendor': device.type.analyticsVendor,
+        'hardware_family': hardwareFamily,
+      },
     );
     _setUserPropertiesBatch({
       'has_paired_device': true,
       'first_paired_at': firstPairedAt,
       'device_vendor': device.type.analyticsVendor,
+      'hardware_family': hardwareFamily,
     });
   }
 
@@ -547,6 +565,7 @@ class AnalyticsManager {
       'duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
       'reason': _knownDeviceValue(reason ?? ''),
       'device_vendor': device.type.analyticsVendor,
+      'hardware_family': DeviceUtils.analyticsHardwareFamily(device),
       'model': _knownDeviceValue(device.modelNumber),
       'firmware_revision': _knownDeviceValue(device.firmwareRevision),
     };

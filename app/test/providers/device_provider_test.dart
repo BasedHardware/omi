@@ -61,7 +61,9 @@ void main() {
     expect(connectedProperties['firmwareRevision'], device.firmwareRevision);
     expect(connectedProperties['type'], 'fieldy');
     expect(connectedProperties['device_vendor'], 'fieldlabs');
+    expect(connectedProperties['hardware_family'], 'fieldy');
     expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);
+    expect(analytics.personProperties.any((properties) => properties['hardware_family'] == 'fieldy'), isTrue);
   });
 
   test('Device Paired is deduped by user and device while connections recur', () async {
@@ -148,6 +150,7 @@ void main() {
     expect(sessionEvents.single, containsPair('reason', 'connection_timeout'));
     expect(sessionEvents.single, containsPair('hci_reason_code', 8));
     expect(sessionEvents.single, containsPair('device_vendor', 'omi'));
+    expect(sessionEvents.single, containsPair('hardware_family', 'omi_devkit'));
     expect(sessionEvents.single, containsPair('model', 'Omi DevKit 2'));
     expect(sessionEvents.single, containsPair('firmware_revision', '3.0.20'));
     expect(sessionEvents.single, isNot(contains('reconnect_attempt_count')));
