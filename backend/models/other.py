@@ -13,6 +13,15 @@ class FcmTokenResponse(BaseModel):
     status: str
 
 
+class SaveUnifiedPushEndpointRequest(BaseModel):
+    endpoint: str
+    time_zone: str
+    # WebPush keys (optional): present when the app registers an encrypted endpoint. They flow through
+    # to storage so the send channel can encrypt the payload (aes128gcm); absent = plaintext POST.
+    p256dh: Optional[str] = None
+    auth: Optional[str] = None
+
+
 class SendNotificationRequest(BaseModel):
     uid: str
     title: str

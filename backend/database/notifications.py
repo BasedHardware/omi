@@ -14,10 +14,101 @@ from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
 from ._client import db
 from .cache import get_memory_cache
+from database.store import get_document_store
+from dataclasses import dataclass
+from datetime import datetime, timezone
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# UnifiedPush endpoints (ADR-0011) — the on-prem push counterpart of FCM tokens.
+# Stored at users/{uid}/unifiedpush_endpoints/{device_key} through the neutral store port (so it runs
+# on Mongo/Firestore alike), mirroring the FCM-token subcollection shape one-for-one.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class UnifiedPushEndpoint:
+    """A registered UnifiedPush delivery endpoint. ``url`` is the distributor POST target; ``p256dh``/
+    ``auth`` are the optional WebPush encryption keys (absent = plaintext POST)."""
+
+    url: str
+    device_key: str = ''
+    time_zone: Optional[str] = None
+    p256dh: Optional[str] = None
+    auth: Optional[str] = None
+
+
+_UNIFIEDPUSH_COLLECTION = 'unifiedpush_endpoints'
+
+
+def _endpoint_from_doc(doc: Any) -> UnifiedPushEndpoint:
+    d = doc.to_dict() or {}
+    return UnifiedPushEndpoint(
+        url=str(d.get('endpoint', '')),
+        device_key=str(d.get('device_key', '')),
+        time_zone=d.get('time_zone'),
+        p256dh=d.get('p256dh'),
+        auth=d.get('auth'),
+    )
+
+
+def save_endpoint(uid: str, data: Dict[str, Any]) -> None:
+    """Register/replace a UnifiedPush endpoint for one device (keyed by device_key, like fcm_tokens).
+
+    Mirrors the endpoint's ``time_zone`` onto the user doc (parity with ``save_token``) so the
+    daily-summary timezone queries see UnifiedPush-only users too.
+    """
+    device_key = str(data.get('device_key') or 'unknown_default')
+    store = get_document_store()
+    store.set(
+        f'users/{uid}/{_UNIFIEDPUSH_COLLECTION}/{device_key}',
+        {
+            'endpoint': data['endpoint'],
+            'device_key': device_key,
+            'time_zone': data.get('time_zone'),
+            'p256dh': data.get('p256dh'),
+            'auth': data.get('auth'),
+            'created_at': datetime.now(timezone.utc),
+        },
+    )
+    time_zone = data.get('time_zone')
+    if time_zone:
+        store.set(f'users/{uid}', {'time_zone': time_zone}, merge=True)
+
+
+def get_all_endpoints(uid: str) -> List[UnifiedPushEndpoint]:
+    store = get_document_store()
+    return [_endpoint_from_doc(doc) for doc in store.query(f'users/{uid}/{_UNIFIEDPUSH_COLLECTION}')]
+
+
+def remove_bulk_endpoints(urls: List[str]) -> None:
+    """Delete every stored endpoint whose url is in ``urls``, across all users (dead-endpoint cleanup
+    on 404/410). Collection-group scan so a distributor URL retired on one device is purged
+    everywhere it was registered."""
+    if not urls:
+        return
+    dead = set(urls)
+    store = get_document_store()
+    for doc in store.query_group(_UNIFIEDPUSH_COLLECTION):
+        if (doc.to_dict() or {}).get('endpoint') in dead:
+            store.delete(doc.path)
+
+
+def get_users_endpoints_in_timezones(time_zones: List[str]) -> List[UnifiedPushEndpoint]:
+    """UnifiedPush endpoints of every user whose ``time_zone`` is in ``time_zones`` (daily-summary
+    fan-out parity with the FCM token path)."""
+    if not time_zones:
+        return []
+    wanted = set(time_zones)
+    store = get_document_store()
+    endpoints: List[UnifiedPushEndpoint] = []
+    for user in store.query('users', filters=[('time_zone', 'in', list(wanted))]):
+        endpoints.extend(get_all_endpoints(user.id))
+    return endpoints
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:

@@ -13,7 +13,7 @@ from utils.apps import (
 )
 from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
-from models.other import FcmTokenResponse, SaveFcmTokenRequest
+from models.other import FcmTokenResponse, SaveFcmTokenRequest, SaveUnifiedPushEndpointRequest
 from models.integrations import IntegrationNotificationResponse
 from utils.notifications import (
     send_notification,
@@ -82,6 +82,26 @@ def save_token(
     token_data['device_key'] = device_key
 
     notification_db.save_token(uid, token_data)
+    return FcmTokenResponse(status='Ok')
+
+
+@router.post('/v1/users/unifiedpush-endpoint', response_model=FcmTokenResponse)
+def save_unifiedpush_endpoint(
+    data: SaveUnifiedPushEndpointRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
+) -> FcmTokenResponse:
+    # Same device-key composition as fcm-token (ios_abc123 / android_xyz456) so a device's UnifiedPush
+    # endpoint and FCM token share a key namespace and replace-per-device semantics.
+    platform = x_app_platform or 'unknown'
+    device_hash = x_device_id_hash or 'default'
+    device_key = f"{platform}_{device_hash}"
+
+    endpoint_data: Dict[str, Any] = data.model_dump()
+    endpoint_data['device_key'] = device_key
+
+    notification_db.save_endpoint(uid, endpoint_data)
     return FcmTokenResponse(status='Ok')
 
 
