@@ -386,14 +386,35 @@ async def proactive_completion(
         raise
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         await _release_quota(uid, request.operation)
+        if isinstance(exc, httpx.HTTPStatusError):
+            logger.warning(
+                "desktop_proactivity_provider_http_error operation=%s fallback_class=%s status=%s",
+                operation,
+                provider_request.fallback_class,
+                exc.response.status_code,
+            )
+        else:
+            logger.warning(
+                "desktop_proactivity_provider_error operation=%s fallback_class=%s error_type=%s",
+                operation,
+                provider_request.fallback_class,
+                type(exc).__name__,
+            )
         raise HTTPException(status_code=502, detail="Proactive model unavailable") from exc
     if not isinstance(response_body, dict):
         await _release_quota(uid, request.operation)
         raise HTTPException(status_code=502, detail="Proactive model returned an invalid response")
     try:
         _validate_gateway_output(response_body, request)
-    except HTTPException:
+    except HTTPException as exc:
         await _release_quota(uid, request.operation)
+        logger.warning(
+            "desktop_proactivity_invalid_structured_output operation=%s fallback_class=%s provider_model=%s detail=%s",
+            operation,
+            provider_request.fallback_class,
+            response_body.get("model", "unknown"),
+            exc.detail,
+        )
         raise
     usage = _usage_envelope(response_body)
     provider_model = response_body.get("model")
