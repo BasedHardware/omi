@@ -26,7 +26,11 @@ const coreRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const macRoot = path.join(coreRoot, "shells/macos");
 const iosRoot = path.join(coreRoot, "shells/ios");
 const foregroundGuard = path.join(coreRoot, "shells/tools/macos-foreground-guard.mjs");
-const forbiddenForegroundBundleIds = ["com.apple.iphonesimulator", "me.omi.proto.omiWebviewProto"];
+const forbiddenForegroundBundleIds = [
+  "com.apple.iphonesimulator",
+  "me.omi.proto.omiWebviewProto",
+  "me.omi.shell.core-tasks.prototype",
+];
 const safeId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
 const sha = /^[0-9a-f]{40}$/;
 const domains = new Set(["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"]);
@@ -236,17 +240,44 @@ function runMac(manifest, outputDir) {
   env.OMI_PROBE_RETRY_INTERVAL = "0.1";
   env.OMI_ACCEPTANCE_WAIT_SECONDS = "30";
   const args = ["--fixture", runtimeFixtureName(manifest.domain), "--state", manifest.state, "--theme", manifest.theme, "--accessibility", manifest.accessibility, "--run-id", manifest.run_id, "--capture-out", screenshot, "--viewport-width", String(manifest.viewport.width), "--viewport-height", String(manifest.viewport.height)];
+  const guardResult = path.join(outputDir, "foreground-guard.json");
+  const stdoutPath = path.join(outputDir, "foreground-guard.stdout.log");
+  const stderrPath = path.join(outputDir, "foreground-guard.stderr.log");
+  const guardArgs = [
+    foregroundGuard,
+    "--result", guardResult,
+    "--stdout", stdoutPath,
+    "--stderr", stderrPath,
+    "--timeout", "300",
+    "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","),
+    "--", "/bin/bash", launcher, ...args,
+  ];
   const started = new Date();
-  const result = spawnSync("/bin/bash", [launcher, ...args], { cwd: coreRoot, env, encoding: "utf8", timeout: 300_000, maxBuffer: 64 * 1024 * 1024 });
+  const guarded = spawnSync(process.execPath, guardArgs, { cwd: coreRoot, env, encoding: "utf8", timeout: 310_000, maxBuffer: 64 * 1024 * 1024 });
   const finished = new Date();
+  if (!existsSync(guardResult)) throw new Error("macOS runtime foreground guard produced no terminal receipt");
+  const custody = readJson(guardResult, "macOS runtime foreground guard");
+  validateForegroundCustody(custody);
+  if (guarded.status !== 0) throw new Error(`macOS native runtime foreground custody failed (${custody.monitor_error || custody.error || custody.status || guarded.status})`);
+  const stdout = readFileSync(stdoutPath, "utf8");
+  const stderr = readFileSync(stderrPath, "utf8");
   const log = path.join(coreRoot, ".build/polish-fixture", `${env.OMI_APP_NAME}.run.log`);
-  const combined = `${result.stdout || ""}\n${result.stderr || ""}\n${existsSync(log) ? readFileSync(log, "utf8") : ""}`;
-  if (result.status !== 0) throw new Error(`macOS native runtime launcher failed (${result.status ?? result.error?.message ?? "signal"})`);
+  const combined = `${stdout}\n${stderr}\n${existsSync(log) ? readFileSync(log, "utf8") : ""}`;
   const marker = parseMacProbe(combined, manifest);
   // The PNG exists only to drive the fixture launcher's bounded exit path; it
   // is deliberately not retained or presented as runtime evidence.
   rmSync(screenshot, { force: true });
-  return { marker, started, finished, argv: ["/bin/bash", launcher, ...args], stdout: result.stdout || "", stderr: result.stderr || "", probe: runtimeProbeScript(manifest) };
+  return {
+    marker,
+    started,
+    finished,
+    argv: [process.execPath, ...guardArgs],
+    stdout,
+    stderr,
+    probe: runtimeProbeScript(manifest),
+    foregroundCustody: custody,
+    commandTimeoutSeconds: 310,
+  };
 }
 
 function inputEntry(file, relative) {
@@ -278,7 +309,7 @@ export function gateReplay(manifest, manifestPath, inputPath, outputPath, output
   if (!existsSync(preparationPath)) throw new Error("runtime replay requires its preparation receipt");
   const preparation = readJson(preparationPath, "runtime preparation receipt");
   if (preparation.schema !== "omi.polish.runtime-preparation/v1" || preparation.run_id !== manifest.run_id || JSON.stringify(preparation.source_shas) !== JSON.stringify(manifest.source_shas) || preparation.capture_class !== manifest.capture_class || preparation.source_tier !== manifest.source_tier || preparation.artifact?.sha256 !== sha256(inputBytes)) throw new Error("runtime preparation receipt does not match replay artifact");
-  if (manifest.shell === "ios") validateForegroundCustody(preparation.foreground_custody);
+  validateForegroundCustody(preparation.foreground_custody);
   const artifactBytes = Buffer.from(stable(artifact));
   if (sha256(artifactBytes) !== sha256(inputBytes)) throw new Error("replay input must use canonical JSON formatting");
   mkdirSync(path.dirname(output.resolved), { recursive: true });
@@ -286,10 +317,8 @@ export function gateReplay(manifest, manifestPath, inputPath, outputPath, output
   const producerFile = relativeCore(path.resolve(fileURLToPath(import.meta.url)), "producer script");
   const preparationFile = relativeCore(preparationPath, "preparation receipt");
   const entries = [inputEntry(manifestFile.resolved, manifestFile.relative), inputEntry(producerFile.resolved, producerFile.relative), inputEntry(input.resolved, input.relative), inputEntry(preparationFile.resolved, preparationFile.relative)];
-  if (manifest.shell === "ios") {
-    const guardFile = relativeCore(foregroundGuard, "foreground guard");
-    entries.push(inputEntry(guardFile.resolved, guardFile.relative));
-  }
+  const guardFile = relativeCore(foregroundGuard, "foreground guard");
+  entries.push(inputEntry(guardFile.resolved, guardFile.relative));
   const inputSet = makeInputSet(entries);
   const outputHash = sha256(artifactBytes);
   const command = `node ${path.relative(coreRoot, producerFile.resolved)} --manifest ${manifestFile.relative} --replay-input ${input.relative} --replay-output ${output.relative} --emit-gate-records false`;
