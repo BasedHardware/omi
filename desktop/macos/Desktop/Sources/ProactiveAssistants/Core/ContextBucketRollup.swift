@@ -93,6 +93,93 @@ enum ContextBucketPromptAssembler {
   }
 }
 
+struct ContextDirectorTaskContext: Equatable, Sendable {
+  static let maximumDescriptionLength = 600
+
+  let description: String
+  let dueAt: Date?
+
+  init(description: String, dueAt: Date?) {
+    self.description = String(description.prefix(Self.maximumDescriptionLength))
+    self.dueAt = dueAt
+  }
+}
+
+enum ContextProactivityPromptBuilder {
+  static func extractionPrompt(frame: CapturedFrame, fence: ContextVisitFence) -> String {
+    let evidenceRef = frame.screenshotId.map { "screenshot:\($0)" } ?? "visit:\(fence.visitID)"
+    return extractionPrompt(appName: frame.appName, windowTitle: frame.windowTitle, evidenceRef: evidenceRef)
+  }
+
+  static func extractionPrompt(appName: String, windowTitle: String?, evidenceRef: String) -> String {
+    """
+    \(ScreenDerivedContent.untrustedPreamble)
+    Produce a 150-400 token ambient narrative and discrete factual records. Facts are
+    proposals; include an identifier, surviving evidence text, and evidence ref for each.
+    App: \(appName)
+    Window: \(windowTitle ?? "")
+    Evidence ref: \(evidenceRef)
+    """
+  }
+
+  static func directorPrompt(
+    snapshot: ContextBucketSnapshot,
+    tasks: [ContextDirectorTaskContext],
+    frame: CapturedFrame
+  ) -> String {
+    "\(directorStablePrompt(snapshot: snapshot))\n\n\(directorVolatilePrompt(tasks: tasks, frame: frame))"
+  }
+
+  static func directorStablePrompt(snapshot: ContextBucketSnapshot) -> String {
+    let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
+    return """
+      \(ScreenDerivedContent.untrustedPreamble)
+      Decide whether interrupting now adds concrete value. Return silence unless the validated
+      facts support a specific, timely action. Use only supplied bucket-entry refs.
+
+      \(stableBucket)
+      """
+  }
+
+  static func directorVolatilePrompt(
+    tasks: [ContextDirectorTaskContext],
+    frame: CapturedFrame
+  ) -> String {
+    let taskLines: [String] = tasks.prefix(20).map { task -> String in
+      guard let dueAt = task.dueAt else { return "- \(task.description)" }
+      return "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))"
+    }
+    let taskContext = taskLines.joined(separator: "\n")
+    return """
+      == OPEN OR OVERDUE TASKS ==
+      \(taskContext)
+
+      == CURRENT FRAME METADATA ==
+      App: \(frame.appName)
+      Window: \(frame.windowTitle ?? "")
+      Captured at (UTC): \(utcTimestamp(frame.captureTime))
+      """
+  }
+
+  private static func utcTimestamp(_ date: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    return formatter.string(from: date)
+  }
+}
+
+enum ContextBucketCompactionPolicy {
+  static let retainedTailCount = 5
+
+  static func shouldCompact(uncompressedCount: Int) -> Bool {
+    // Snapshot reads retain only the newest tail. Compact as soon as an older
+    // entry would fall outside that read window, even when narratives are
+    // short, so context cannot disappear between the tail and frozen segment.
+    return uncompressedCount > retainedTailCount
+  }
+}
+
 extension ContextBucketStore {
   func writeExtraction(
     _ extraction: BucketExtraction,
@@ -252,9 +339,8 @@ extension ContextBucketStore {
           WHERE bucketID = ? AND isCompacted = 0 ORDER BY createdAt ASC
         """,
       arguments: [bucketID])
-    let total = uncompressed.reduce(0) { $0 + ($1["tokenCount"] as Int? ?? 0) }
-    if total > ContextBucketPromptAssembler.ambientTailCompactionThreshold, uncompressed.count > 5 {
-      let compacted = uncompressed.dropLast(5)
+    if ContextBucketCompactionPolicy.shouldCompact(uncompressedCount: uncompressed.count) {
+      let compacted = uncompressed.dropLast(ContextBucketCompactionPolicy.retainedTailCount)
       var rankedLines = (String(data: frozen, encoding: .utf8) ?? "")
         .split(separator: "\n", omittingEmptySubsequences: true)
         .map { String($0) + "\n" }
@@ -395,11 +481,12 @@ enum ContextBucketPurger {
                 lastVisitedAt = (SELECT MAX(endedAt) FROM context_visits WHERE bucketID = ? AND outcome = 'completed'),
                 notifyWorthiness = COALESCE(
                   (SELECT MAX(notifyWorthiness) FROM bucket_facts
-                   WHERE bucket_facts.bucketID = context_buckets.id AND validityState = 'validated'), 0),
+                   WHERE bucket_facts.bucketID = context_buckets.id AND validityState = 'validated'
+                     AND (expiresAt IS NULL OR expiresAt > ?)), 0),
                 updatedAt = ?
             WHERE id = ?
             """,
-          arguments: [survivingCount, bucketID, now, bucketID])
+          arguments: [survivingCount, bucketID, now, now, bucketID])
       }
     }
     if try db.tableExists("ocr_texts"), try db.tableExists("ocr_occurrences") {
@@ -444,15 +531,7 @@ actor ContextBucketRollupWriter {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceIsValid(fence)
     else { return }
-    let evidenceRef = frame.screenshotId.map { "screenshot:\($0)" } ?? "visit:\(fence.visitID)"
-    let prompt = """
-      \(ScreenDerivedContent.untrustedPreamble)
-      Produce a 150-400 token ambient narrative and discrete factual records. Facts are
-      proposals; include an identifier, surviving evidence text, and evidence ref for each.
-      App: \(frame.appName)
-      Window: \(frame.windowTitle ?? "")
-      Evidence ref: \(evidenceRef)
-      """
+    let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
     do {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.extractionOperation,

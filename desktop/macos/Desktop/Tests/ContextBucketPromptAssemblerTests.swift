@@ -3,6 +3,108 @@ import XCTest
 @testable import Omi_Computer
 
 final class ContextBucketPromptAssemblerTests: XCTestCase {
+  func testCompactionStartsBeforeAnEntryFallsOutsideTheRetainedTail() {
+    XCTAssertFalse(
+      ContextBucketCompactionPolicy.shouldCompact(uncompressedCount: 5))
+    XCTAssertTrue(
+      ContextBucketCompactionPolicy.shouldCompact(uncompressedCount: 6),
+      "The sixth short narrative must move into frozen context instead of disappearing")
+  }
+
+  func testExtractionPromptPreservesSafetyPreambleAndScreenshotEvidenceRef() {
+    let frame = CapturedFrame(
+      jpegData: Data(), appName: "Xcode", windowTitle: "PR-123", frameNumber: 7, screenshotId: 42)
+    let fence = ContextVisitFence(
+      visitID: 99, contextGeneration: 3, poolEpoch: 4, bucketID: "bucket", startedAt: Date(timeIntervalSince1970: 1))
+
+    let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
+    let expected = [
+      ScreenDerivedContent.untrustedPreamble,
+      "Produce a 150-400 token ambient narrative and discrete factual records. Facts are",
+      "proposals; include an identifier, surviving evidence text, and evidence ref for each.",
+      "App: Xcode",
+      "Window: PR-123",
+      "Evidence ref: screenshot:42",
+    ].joined(separator: "\n")
+
+    XCTAssertEqual(prompt, expected)
+  }
+
+  func testExtractionPromptFallsBackToVisitEvidenceRefWithoutScreenshot() {
+    let frame = CapturedFrame(jpegData: Data(), appName: "Safari", frameNumber: 8)
+    let fence = ContextVisitFence(
+      visitID: 123, contextGeneration: 3, poolEpoch: 4, bucketID: "bucket", startedAt: Date(timeIntervalSince1970: 1))
+
+    let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
+
+    XCTAssertTrue(prompt.hasSuffix("App: Safari\nWindow: \nEvidence ref: visit:123"))
+  }
+
+  func testDirectorPromptContainsSafetyPreambleBucketTasksAndFrameMetadata() {
+    let capturedAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let dueAt = Date(timeIntervalSince1970: 1_700_003_600)
+    let snapshot = ContextBucketSnapshot(
+      bucketID: "bucket", versionID: 5, version: 2, header: "Persistent work context; 2 qualifying visits.",
+      frozenRankedSegment: Data("frozen:entry-1\n".utf8),
+      tail: ["tail:entry-2"],
+      validatedFacts: ["fact:PR-123"],
+      notifyWorthiness: 1)
+    let frame = CapturedFrame(
+      jpegData: Data(), appName: "Terminal", windowTitle: "deploy.sh", frameNumber: 9,
+      captureTime: capturedAt)
+    let prompt = ContextProactivityPromptBuilder.directorPrompt(
+      snapshot: snapshot,
+      tasks: [
+        ContextDirectorTaskContext(description: "Review PR-123", dueAt: dueAt),
+        ContextDirectorTaskContext(description: "Send release notes", dueAt: nil),
+      ],
+      frame: frame)
+    let bucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
+    let expected = [
+      ScreenDerivedContent.untrustedPreamble,
+      "Decide whether interrupting now adds concrete value. Return silence unless the validated",
+      "facts support a specific, timely action. Use only supplied bucket-entry refs.",
+      "",
+      bucket,
+      "",
+      "== OPEN OR OVERDUE TASKS ==",
+      "- Review PR-123\n  Due at (UTC): 2023-11-14T23:13:20.000Z\n- Send release notes",
+      "",
+      "== CURRENT FRAME METADATA ==",
+      "App: Terminal",
+      "Window: deploy.sh",
+      "Captured at (UTC): 2023-11-14T22:13:20.000Z",
+    ].joined(separator: "\n")
+
+    XCTAssertEqual(prompt, expected)
+    XCTAssertTrue(prompt.contains("== BUCKET HEADER ==\nPersistent work context; 2 qualifying visits."))
+    XCTAssertTrue(prompt.contains("== FROZEN RANKED CONTEXT ==\nfrozen:entry-1"))
+    XCTAssertTrue(prompt.contains("== RECENT TAIL ==\ntail:entry-2"))
+    XCTAssertTrue(prompt.contains("== VALIDATED FACTS ==\nfact:PR-123"))
+  }
+
+  func testDirectorTaskContextBoundsDescription() {
+    let task = ContextDirectorTaskContext(
+      description: String(repeating: "x", count: ContextDirectorTaskContext.maximumDescriptionLength + 10),
+      dueAt: nil)
+
+    XCTAssertEqual(task.description.count, ContextDirectorTaskContext.maximumDescriptionLength)
+  }
+
+  func testDirectorTaskSelectionIncludesNearFutureAndUndatedButExcludesFarFutureAndCompleted() {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let tasks = [
+      task("tomorrow", dueAt: now.addingTimeInterval(24 * 60 * 60)),
+      task("undated", dueAt: nil),
+      task("far", dueAt: now.addingTimeInterval(72 * 60 * 60)),
+      task("done", completed: true, dueAt: now.addingTimeInterval(60)),
+    ]
+
+    XCTAssertEqual(
+      ContextDirectorTaskSelection.select(from: tasks, now: now).map(\.description),
+      ["tomorrow", "undated"])
+  }
+
   func testFrozenRankedSegmentIsConcatenatedByteForByte() {
     let frozen = Data([0x2D, 0x20, 0xC3, 0xA9, 0x0A])
     let snapshot = ContextBucketSnapshot(
@@ -51,5 +153,19 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     XCTAssertLessThanOrEqual(assembled.count, ContextBucketPromptAssembler.injectionTokenBudget * 4)
     XCTAssertTrue(assembled.contains(snapshot.frozenRankedSegment))
     XCTAssertNotNil(String(data: assembled, encoding: .utf8))
+  }
+
+  private func task(
+    _ description: String,
+    completed: Bool = false,
+    dueAt: Date?
+  ) -> TaskActionItem {
+    TaskActionItem(
+      id: description,
+      description: description,
+      completed: completed,
+      createdAt: Date(timeIntervalSince1970: 1_699_999_000),
+      dueAt: dueAt,
+      source: "manual")
   }
 }
