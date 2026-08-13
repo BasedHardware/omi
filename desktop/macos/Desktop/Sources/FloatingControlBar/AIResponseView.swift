@@ -118,6 +118,9 @@ struct AIResponseView: View {
         return ["chatFirstConversation", id].joined(separator: "\u{1E}")
       case .memoryLink(let id, _, _):
         return ["chatFirstMemory", id].joined(separator: "\u{1E}")
+      case .citation(let id, let reference):
+        return ["citation", id, String(reference.ordinal), reference.sourceID]
+          .joined(separator: "\u{1E}")
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):

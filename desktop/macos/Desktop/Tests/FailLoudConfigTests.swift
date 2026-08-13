@@ -108,7 +108,7 @@ final class FailLoudConfigTests: XCTestCase {
     let src = try source(relativePath: "Sources/MainWindow/Pages/PermissionsPage.swift")
 
     XCTAssertTrue(src.contains("SystemAudioPermissionSection(appState: appState)"))
-    XCTAssertTrue(src.contains("Text(\"System Audio\")"))
+    XCTAssertTrue(src.contains("title: \"System Audio\""))
     XCTAssertTrue(src.contains("appState.systemAudioPermissionStatus"))
     XCTAssertTrue(src.contains("appState.triggerSystemAudioPermission()"))
   }

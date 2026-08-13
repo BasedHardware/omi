@@ -56,6 +56,7 @@ struct ChatBubble: View {
   let showsOmiMark: Bool
   let onRate: (Int?) -> Void
   var onCitationTap: ((Citation) -> Void)? = nil
+  var onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil
   var isDuplicate: Bool = false
   /// Optional cancel action for stalled tool-call banners, threaded
   /// down to `ToolCallsGroup`. Optional so existing callers compile
@@ -77,7 +78,9 @@ struct ChatBubble: View {
 
   init(
     message: ChatMessage, app: OmiApp?, showsOmiMark: Bool, onRate: @escaping (Int?) -> Void,
-    onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false,
+    onCitationTap: ((Citation) -> Void)? = nil,
+    onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil,
+    isDuplicate: Bool = false,
     onCancelTurn: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
     onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil,
@@ -88,6 +91,7 @@ struct ChatBubble: View {
     self.showsOmiMark = showsOmiMark
     self.onRate = onRate
     self.onCitationTap = onCitationTap
+    self.onOpenInlineCitation = onOpenInlineCitation
     self.isDuplicate = isDuplicate
     self.onCancelTurn = onCancelTurn
     self.onOpenAgent = onOpenAgent
@@ -236,6 +240,9 @@ struct ChatBubble: View {
         TypingIndicator()
       }
     } else if message.sender == .ai && !message.contentBlocks.isEmpty {
+      if groupedBlocks.isEmpty, !message.text.isEmpty {
+        messageTextBubble(message.text)
+      }
       ForEach(groupedBlocks) { group in
         groupView(group)
       }
@@ -353,8 +360,13 @@ struct ChatBubble: View {
         text: text,
         kind: ChatContinuityInvariants.proactiveNotificationKind(message) ?? .general)
     } else {
-      OmiMarkdown(text: text, sender: message.sender)
-        .chatMessageBlock(filled: presentation.isFilled)
+      OmiMarkdown(
+        text: text,
+        sender: message.sender,
+        citations: citationReferencesForThisSurface,
+        onOpenCitation: onOpenInlineCitation
+      )
+      .chatMessageBlock(filled: presentation.isFilled)
     }
   }
 
@@ -381,7 +393,14 @@ struct ChatBubble: View {
       }
       // The glass is the ground for an assistant block — so no fill, and
       // therefore none of a container's padding either.
-      return AnyView(OmiMarkdown(text: text, sender: .ai).chatMessageBlock(filled: false))
+      return AnyView(
+        OmiMarkdown(
+          text: text,
+          sender: .ai,
+          citations: citationReferencesForThisSurface,
+          onOpenCitation: onOpenInlineCitation
+        )
+        .chatMessageBlock(filled: false))
     case .toolCalls(_, let calls):
       return AnyView(
         ToolCallsGroup(
@@ -501,6 +520,11 @@ struct ChatBubble: View {
         )
       )
     }
+  }
+
+  private var citationReferencesForThisSurface: [ChatCitationReference] {
+    guard message.sender == .ai, !message.isStreaming, onOpenInlineCitation != nil else { return [] }
+    return message.inlineCitationReferences
   }
 
   @ViewBuilder
@@ -1203,6 +1227,9 @@ enum ContentBlockGroup: Identifiable {
         flushToolCalls()
         guard richBlockRenderingEnabled else { continue }
         groups.append(.memoryLink(id: id, memoryID: memoryID, summary: summary))
+      case .citation:
+        // Answer-level provenance is rendered by OmiMarkdown at the inline marker.
+        continue
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):

@@ -115,7 +115,7 @@ enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
     case .dashboard: return "house.fill"
     case .rewind: return "clock.arrow.circlepath"
     case .apps: return "puzzlepiece.fill"
-    case .permissions: return "exclamationmark.triangle.fill"
+    case .permissions: return PermissionNavSymbol.filled
     case .settings: return "gearshape.fill"
     }
   }
