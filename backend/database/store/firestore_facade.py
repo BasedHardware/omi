@@ -16,7 +16,10 @@ emulate Firestore". Paths are logical ("users/{uid}/people/{pid}"); payloads are
 from __future__ import annotations
 
 import contextlib
-from typing import Any, Dict, Iterable, List, Optional
+import secrets
+import string
+from datetime import datetime, timezone
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from google.api_core import exceptions as _gexc
 
@@ -39,6 +42,15 @@ except Exception:  # pragma: no cover
 
 # Firestore query direction constants, resolved defensively.
 _DESCENDING = getattr(getattr(_fs, "Query", None), "DESCENDING", "DESCENDING") if _fs else "DESCENDING"
+
+_AUTO_ID_ALPHABET = string.ascii_letters + string.digits
+
+
+def _auto_id() -> str:
+    """A Firestore-style random 20-char document id. Must be RANDOM, not derived from the collection
+    path: a deterministic id makes every no-id ``document()``/``add()`` collide and overwrite the
+    previous record (fair-use events, action-item creates)."""
+    return "".join(secrets.choice(_AUTO_ID_ALPHABET) for _ in range(20))
 
 # Firestore comparison op strings -> neutral store ops (ports.Filter). The store's Mongo adapter
 # accepts these directly; unsupported ops surface as a clear error rather than silently mis-querying.
@@ -153,9 +165,9 @@ class _DocRef:
         return _CollRef(self._client, f"{self.path}/{sub}")
 
     def collections(self) -> Iterable["_CollRef"]:
-        # Subcollections are not enumerable from a document in the neutral port; the domain addresses
-        # them by known name. Return empty so recursive-delete helpers terminate rather than crash.
-        return []
+        # Enumerate real subcollections so recursive-delete helpers (account / conversation deletion)
+        # descend into them on Mongo instead of silently leaving orphaned descendant data.
+        return [_CollRef(self._client, f"{self.path}/{name}") for name in self._client._store.list_subcollections(self.path)]
 
     def get(self, transaction: Optional["_FacadeTransaction"] = None, *, timeout: Any = None, **_: Any) -> _Snapshot:
         # ``timeout``/other Firestore read kwargs (retry, ...) are network-RPC concerns; a Mongo point
@@ -247,6 +259,32 @@ class _Query:
         # Projection is a read optimisation; the neutral store returns full docs. Safe to ignore.
         return self
 
+    def _resolve_start_after(self) -> Optional[Dict[str, Any]]:
+        """Translate a Firestore ``start_after`` cursor into the store's ``{value, id}`` keyset.
+
+        The store supports a single order field plus a document-id tiebreak. A snapshot cursor yields
+        its order-field value + id; a ``{'__name__': ref}`` cursor is a document-name keyset. A
+        multi-field ``order_by`` cannot be represented by this shape (ports.py notes the same gap), so
+        reject it rather than page incorrectly."""
+        cur = self._start_after
+        if cur is None:
+            return None
+        if len(self._order_by) > 1:
+            raise NotImplementedError("start_after with a multi-field order_by is not representable by the store cursor")
+        order_field = self._order_by[0][0] if self._order_by else None
+        if hasattr(cur, "to_dict"):  # a DocumentSnapshot
+            data = cur.to_dict() or {}
+            doc_id = getattr(cur, "id", None)
+            return {"value": data.get(order_field) if order_field else doc_id, "id": doc_id}
+        if isinstance(cur, dict) and "__name__" in cur:  # document-name keyset
+            ref = cur["__name__"]
+            doc_id = getattr(ref, "id", None) or str(ref).rsplit("/", 1)[-1]
+            return {"value": doc_id, "id": doc_id}
+        if isinstance(cur, dict):  # already a {value, id} keyset
+            return cur
+        # a bare cursor value (single-field): pair it with an empty id lower bound
+        return {"value": cur, "id": ""}
+
     def _run(self) -> List[StoredDocument]:
         order = None
         direction = "asc"
@@ -262,7 +300,11 @@ class _Query:
             direction=direction,
             limit=self._limit,
             offset=self._offset,
+            start_after=self._resolve_start_after(),
         )
+
+    def count(self) -> int:
+        return self._client._store.count(self._collection, filters=self._filters or None)
 
     def stream(self, transaction: Optional["_FacadeTransaction"] = None) -> Iterable[_Snapshot]:
         for stored in self._run():
@@ -275,20 +317,27 @@ class _Query:
 class _CollRef(_Query):
     """Firestore ``CollectionReference``: a query plus document addressing."""
 
-    def document(self, doc_id: Optional[str] = None) -> _DocRef:
-        if doc_id is None:
-            from database.document_ids import document_id_from_seed  # local: avoids import cycle
+    @property
+    def id(self) -> str:
+        return self._collection.rsplit("/", 1)[-1]
 
-            doc_id = document_id_from_seed(self._collection)
-        return _DocRef(self._client, f"{self._collection}/{doc_id}")
+    @property
+    def path(self) -> str:
+        return self._collection
+
+    def document(self, doc_id: Optional[str] = None) -> _DocRef:
+        # No id -> a fresh random auto-id (Firestore semantics), never a deterministic derivation.
+        return _DocRef(self._client, f"{self._collection}/{doc_id or _auto_id()}")
 
     def list_documents(self) -> List[_DocRef]:
         return [_DocRef(self._client, s.path) for s in self._run()]
 
-    def add(self, data: Dict[str, Any]) -> _DocRef:
+    def add(self, data: Dict[str, Any]) -> Tuple[datetime, _DocRef]:
+        # Firestore's add() returns ``(write_time, DocumentReference)``; callers index ``[1]`` for the
+        # ref (e.g. desktop release publishing), so preserve that shape.
         ref = self.document()
         ref.create(data)
-        return ref
+        return datetime.now(timezone.utc), ref
 
 
 class _FacadeTransaction:
@@ -417,13 +466,31 @@ class NeutralFirestoreClient:
 
 
 class _GroupQuery:
-    """Firestore ``collection_group`` shape over the neutral ``query_group`` (cross-parent sweep)."""
+    """Firestore ``collection_group`` shape over the neutral ``query_group`` (cross-parent sweep).
+
+    ``query_group``'s cursor is a document-name keyset (a full logical path), so ``order_by`` here
+    tracks the requested single field + direction and ``start_after`` a document-name; on-prem
+    cross-parent jobs (memory vector repair, projection sync) use both."""
 
     def __init__(self, client: "NeutralFirestoreClient", group: str, **kw: Any) -> None:
         self._client = client
         self._group = group
         self._filters: List[Any] = kw.get("filters", [])
         self._limit = kw.get("limit")
+        self._order_by = kw.get("order_by")
+        self._direction = kw.get("direction", "asc")
+        self._start_after = kw.get("start_after")
+
+    def _clone(self, **kw: Any) -> "_GroupQuery":
+        base = dict(
+            filters=self._filters,
+            limit=self._limit,
+            order_by=self._order_by,
+            direction=self._direction,
+            start_after=self._start_after,
+        )
+        base.update(kw)
+        return _GroupQuery(self._client, self._group, **base)
 
     def where(self, field_path: Any = None, op_string: Any = None, value: Any = None, *, filter: Any = None) -> "_GroupQuery":
         if filter is not None:
@@ -433,13 +500,29 @@ class _GroupQuery:
         op = _OP_MAP.get(op_string)
         if op is None:
             raise NotImplementedError(f"unsupported query operator: {op_string!r}")
-        return _GroupQuery(self._client, self._group, filters=self._filters + [(field_path, op, value)], limit=self._limit)
+        return self._clone(filters=self._filters + [(field_path, op, value)])
+
+    def order_by(self, field_path: str, direction: Any = "ASCENDING") -> "_GroupQuery":
+        d = "desc" if direction == _DESCENDING or str(direction).lower().startswith("desc") else "asc"
+        return self._clone(order_by=field_path, direction=d)
 
     def limit(self, count: int) -> "_GroupQuery":
-        return _GroupQuery(self._client, self._group, filters=self._filters, limit=count)
+        return self._clone(limit=count)
+
+    def start_after(self, cursor: Any) -> "_GroupQuery":
+        # query_group's cursor is a full document path (name keyset); accept a snapshot or a path.
+        path = getattr(getattr(cursor, "reference", None), "path", None) or getattr(cursor, "path", None) or cursor
+        return self._clone(start_after=path)
 
     def stream(self, transaction: Optional[_FacadeTransaction] = None) -> Iterable[_Snapshot]:
-        for stored in self._client._store.query_group(self._group, filters=self._filters or None, limit=self._limit):
+        for stored in self._client._store.query_group(
+            self._group,
+            filters=self._filters or None,
+            order_by=self._order_by,
+            direction=self._direction,
+            limit=self._limit,
+            start_after=self._start_after,
+        ):
             yield _Snapshot(_DocRef(self._client, stored.path), stored)
 
 

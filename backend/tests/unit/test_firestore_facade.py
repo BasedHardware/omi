@@ -88,3 +88,56 @@ def test_get_all_returns_snapshots_in_order():
     snaps = list(c.get_all(refs))
     assert [s.exists for s in snaps] == [True, False, True]
     assert snaps[0].to_dict() == {"v": 1}
+
+
+def test_no_id_document_and_add_get_unique_random_ids():
+    # Cubic PR 10887 A1/A4: a no-id document()/add() must generate a RANDOM id (else every call
+    # collides and overwrites); add() returns Firestore's (write_time, DocumentReference).
+    c = _client()
+    col = c.collection("users/u1/fair_use_events")
+    ids = {col.document().id for _ in range(50)}
+    assert len(ids) == 50  # all distinct
+    write_time, ref = col.add({"n": 1})
+    assert isinstance(ref.id, str) and len(ref.id) == 20
+    assert col.add({"n": 2})[1].id != ref.id  # a second add creates a new doc, not an overwrite
+    assert ref.get().to_dict() == {"n": 1}
+
+
+def test_count_over_filters():
+    c = _client()
+    for i, s in enumerate(["a", "b", "a"]):
+        c.document(f"users/u1/goals/g{i}").set({"status": s})
+    assert c.collection("users/u1/goals").count() == 3
+    assert c.collection("users/u1/goals").where(filter=FieldFilter("status", "==", "a")).count() == 2
+
+
+def test_collections_enumerates_subcollections_for_recursive_delete():
+    # Cubic PR 10887 A2: collections() must expose real subcollections so account/conversation
+    # deletion descends into them instead of orphaning descendant data.
+    c = _client()
+    c.document("users/u1").set({"name": "x"})
+    c.document("users/u1/conversations/c1").set({"t": 1})
+    c.document("users/u1/memories/m1").set({"t": 2})
+    subs = {ref.id for ref in c.document("users/u1").collections()}
+    assert subs == {"conversations", "memories"}
+
+
+def test_start_after_advances_pagination():
+    # Cubic PR 10887 A5: _Query must forward start_after or paginated reads loop / duplicate page one.
+    c = _client()
+    for i in range(5):
+        c.document(f"users/u1/goals/g{i}").set({"rank": i})
+    first_two = list(c.collection("users/u1/goals").order_by("rank").limit(2).stream())
+    assert [s.id for s in first_two] == ["g0", "g1"]
+    after = c.collection("users/u1/goals").order_by("rank").start_after(first_two[-1]).limit(2)
+    assert [s.id for s in after.stream()] == ["g2", "g3"]  # advances, does not repeat
+
+
+def test_group_query_supports_order_by_and_start_after():
+    c = _client()
+    c.document("users/u1/events/e1").set({"ts": 1})
+    c.document("users/u2/events/e2").set({"ts": 2})
+    q = c.collection_group("events").order_by("ts")
+    ids = {s.id for s in q.stream()}
+    assert ids == {"e1", "e2"}  # cross-parent sweep with order_by + start_after wired (no crash)
+    assert list(q.start_after("users/u1/events/e1").stream())  # start_after accepted

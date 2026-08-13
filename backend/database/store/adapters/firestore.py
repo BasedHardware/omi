@@ -307,6 +307,9 @@ class FirestoreDocumentStore:
     def list_ids(self, collection: str) -> List[str]:
         return [snapshot.id for snapshot in self._client.collection(collection).stream()]
 
+    def list_subcollections(self, doc_path: str) -> List[str]:
+        return [sub.id for sub in self._client.document(doc_path).collections()]
+
     def delete_recursive(self, path: str) -> None:
         """Delete the document at ``path`` and every subcollection beneath it.
 

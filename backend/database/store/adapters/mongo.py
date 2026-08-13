@@ -130,7 +130,10 @@ class _MongoBatch:
         for collection_name, op in self._ops:
             by_collection[collection_name].append(op)
         for collection_name, ops in by_collection.items():
-            self._store._db[collection_name].bulk_write(ops, ordered=False)
+            # Ordered: within one collection, queued writes to the SAME document must apply in order
+            # (a set then update, or set then delete) — ordered=False lets Mongo reorder and lose the
+            # later write or resurrect a deleted doc.
+            self._store._db[collection_name].bulk_write(ops, ordered=True)
         self._ops = []
 
 
@@ -370,6 +373,21 @@ class MongoDocumentStore:
         prefix = re.compile("^" + re.escape(path) + "/")
         for collection_name in self._db.list_collection_names():
             self._db[collection_name].delete_many({"$or": [{"_id": path}, {"_id": {"$regex": prefix}}]})
+
+    def list_subcollections(self, doc_path: str) -> List[str]:
+        """Return the immediate child collection names under a document (Firestore
+        ``DocumentReference.collections()``). A subcollection ``{doc_path}/{name}`` holds docs whose
+        ``_parent`` is exactly that collection path, so the distinct one-segment-deeper ``_parent``
+        values name the subcollections."""
+        base_depth = len(doc_path.split("/"))
+        prefix = re.compile("^" + re.escape(doc_path) + "/")
+        names: set[str] = set()
+        for collection_name in self._db.list_collection_names():
+            for parent in self._db[collection_name].distinct("_parent", {"_parent": {"$regex": prefix}}):
+                segments = str(parent).split("/")
+                if len(segments) == base_depth + 1:  # a direct subcollection, not a nested one
+                    names.add(segments[-1])
+        return sorted(names)
 
     def run_transaction(self, fn: Callable[[_MongoTransaction], Any], *, attempts: int = 3) -> Any:
         """Run ``fn`` inside a replica-set transaction.

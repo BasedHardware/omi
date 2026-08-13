@@ -310,6 +310,15 @@ class FakeDocumentStore:
             if path.rsplit("/", 1)[0] == collection
         ]
 
+    def list_subcollections(self, doc_path: str) -> List[str]:
+        base = doc_path.split("/")
+        names = set()
+        for key in self._docs:
+            segs = key.split("/")
+            if len(segs) > len(base) and segs[: len(base)] == base:
+                names.add(segs[len(base)])
+        return sorted(names)
+
     def delete_recursive(self, path: str) -> None:
         for key in [k for k in self._docs if k == path or k.startswith(path + "/")]:
             del self._docs[key]
