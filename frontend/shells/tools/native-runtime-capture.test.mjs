@@ -7,12 +7,14 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
   gateReplay,
+  assertIosOutputDirCustody,
   cleanupIosIntermediates,
   macRuntimeAppName,
   parseMacProbe,
   runtimeProbeScript,
   runtimeFixtureName,
   requireIosDiskHeadroom,
+  withIosCaptureLock,
   validateHostMarker,
   validateManifest,
 } from "./capture-native-runtime.mjs";
@@ -146,12 +148,30 @@ test("iOS native runtime intermediates are bounded and cleaned without touching 
     }
     assert.ok(requireIosDiskHeadroom(scratch, 1) > 0);
     assert.throws(() => requireIosDiskHeadroom(scratch, Number.MAX_SAFE_INTEGER), /requires at least/);
+    assert.doesNotThrow(() => assertIosOutputDirCustody(scratch));
+    assert.throws(() => withIosCaptureLock(() => withIosCaptureLock(() => null)), /already active/);
     cleanupIosIntermediates(scratch);
     assert.equal(readFileSync(evidence, "utf8"), "evidence\n");
     for (const relative of ["DerivedData", "Runner.xcresult", "attachments", "home"]) {
       assert.equal(existsSync(path.join(scratch, relative)), false);
     }
   } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test("iOS cleanup rejects symlinked output authority", () => {
+  const scratch = mkdtempSync(path.join(root, ".build", "runtime-ios-symlink-test-"));
+  const outside = mkdtempSync(path.join(tmpdir(), "runtime-ios-outside-"));
+  try {
+    const link = path.join(scratch, "linked");
+    assert.equal(spawnSync("ln", ["-s", outside, link]).status, 0);
+    assert.throws(() => assertIosOutputDirCustody(link), /symlink/);
+    assert.throws(() => cleanupIosIntermediates(link), /symlink/);
+    writeFileSync(path.join(outside, "preserved"), "outside\n");
+    assert.equal(readFileSync(path.join(outside, "preserved"), "utf8"), "outside\n");
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
 });
 
 test("macOS scratch app name binds arbitrary matrix run IDs without weakening launcher grammar", () => {
