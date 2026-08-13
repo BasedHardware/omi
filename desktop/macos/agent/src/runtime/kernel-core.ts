@@ -1146,9 +1146,17 @@ export class KernelCore {
           );
         }, adapterId === "pi-mono" ? {
           recycleWorkerOnError: true,
-          shouldRecycleWorkerOnError: () => adapterDispatchStarted,
-          onWorkerRecycled: () => {
+          shouldRecycleWorkerOnError: () => (
+            adapterDispatchStarted
+            && !input.authoritySignal?.aborted
+            && !abortController.signal.aborted
+            && this.runStatus(accepted.run.runId) !== "cancelling"
+            && this.readAttempt(attempt.attemptId).status !== "cancelling"
+          ),
+          onWorkerBindingInvalidated: () => {
             this.markBindingStale(binding, attempt, "pinned_worker_recycled_after_execution_error");
+          },
+          onWorkerRecycled: (_bindingId, outcome) => {
             this.appendEvent({
               sessionId: accepted.session.sessionId,
               runId: accepted.run.runId,
@@ -1157,6 +1165,12 @@ export class KernelCore {
               payload: {
                 adapterId,
                 recoveryAction: "worker_recycled",
+                recoveryOutcome: !outcome.stopSucceeded
+                  ? "stop_failed"
+                  : outcome.bindingInvalidationSucceeded
+                    ? "recovered"
+                    : "binding_stale_failed",
+                bindingStalePersisted: outcome.bindingInvalidationSucceeded,
                 retryDisposition: "next_send",
               },
             });
@@ -1205,9 +1219,13 @@ export class KernelCore {
           }
           break;
         }
-        if (isStaleBindingError(error)) {
-          this.markBindingStale(binding, attempt, messageFrom(error));
-          const failure = failureFromError(error, {
+        const workerRecovery = error instanceof AdapterWorkerRecycledError ? error : null;
+        const executionError = workerRecovery?.originalError ?? error;
+        if (isStaleBindingError(executionError)) {
+          if (!workerRecovery?.bindingInvalidationSucceeded) {
+            this.markBindingStale(binding, attempt, messageFrom(executionError));
+          }
+          const failure = failureFromError(executionError, {
             code: "stale_binding",
             source: "adapter_execution",
             adapterId: attempt.adapterId,
@@ -1218,7 +1236,6 @@ export class KernelCore {
           resumeFromAttemptId = attempt.attemptId;
           continue;
         }
-        const workerRecovery = error instanceof AdapterWorkerRecycledError ? error : null;
         if (
           !workerRecovery
           && await this.tryRecoverAttempt(input, attempt, error, "adapter_execution_failed", attemptNo < maxAttempts)
@@ -1243,7 +1260,11 @@ export class KernelCore {
           userMessage: "The local agent reset its session after an error. Send your message again.",
           retryable: true,
           recoveryAction: "worker_recycled" as const,
-          recoveryOutcome: workerRecovery.stopSucceeded ? "recovered" as const : "stop_failed" as const,
+          recoveryOutcome: !workerRecovery.stopSucceeded
+            ? "stop_failed" as const
+            : workerRecovery.bindingInvalidationSucceeded
+              ? "recovered" as const
+              : "binding_stale_failed" as const,
           retryDisposition: "next_send" as const,
         } : baseFailure;
         this.finishAttemptAndRun({

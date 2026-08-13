@@ -285,7 +285,7 @@ struct ChatQueryErrorDetail: Equatable, Sendable {
         adapterId: failure.adapterId,
         provider: failure.provider,
         recoveryAction: failure.recoveryAction == "worker_recycled" ? "worker_recycled" : nil,
-        recoveryOutcome: ["recovered", "stop_failed"].contains(failure.recoveryOutcome ?? "")
+        recoveryOutcome: ["recovered", "stop_failed", "binding_stale_failed"].contains(failure.recoveryOutcome ?? "")
           ? failure.recoveryOutcome : nil,
         retryDisposition: failure.retryDisposition == "next_send" ? "next_send" : nil)
     default:
@@ -310,6 +310,7 @@ func recordAgentRuntimeRecoveryDiagnostics(_ error: Error?) -> ChatQueryErrorDet
       reason: "local_heal",
       outcome: detail?.recoveryOutcome == "recovered" ? .degraded : .exhausted,
       extra: [
+        "recovery_action": "worker_recycled",
         "retry_disposition": detail?.retryDisposition ?? "unknown",
         "recovery_outcome": detail?.recoveryOutcome ?? "unknown",
       ]

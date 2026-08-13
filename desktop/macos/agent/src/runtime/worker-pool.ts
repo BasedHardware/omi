@@ -140,19 +140,30 @@ interface WorkerLeaseOptions {
   protectPinnedBindingAfterWork?: boolean;
   recycleWorkerOnError?: boolean;
   shouldRecycleWorkerOnError?: (error: unknown) => boolean;
-  onWorkerRecycled?: (bindingId: string | null) => void;
+  onWorkerBindingInvalidated?: (bindingId: string | null) => void;
+  onWorkerRecycled?: (
+    bindingId: string | null,
+    outcome: { stopSucceeded: boolean; bindingInvalidationSucceeded: boolean }
+  ) => void;
 }
 
 export class AdapterWorkerRecycledError extends Error {
   readonly bindingId: string | null;
   readonly stopSucceeded: boolean;
+  readonly bindingInvalidationSucceeded: boolean;
   readonly originalError: unknown;
 
-  constructor(originalError: unknown, bindingId: string | null, stopSucceeded: boolean) {
+  constructor(
+    originalError: unknown,
+    bindingId: string | null,
+    stopSucceeded: boolean,
+    bindingInvalidationSucceeded: boolean
+  ) {
     super(originalError instanceof Error ? originalError.message : String(originalError));
     this.name = "AdapterWorkerRecycledError";
     this.bindingId = bindingId;
     this.stopSucceeded = stopSucceeded;
+    this.bindingInvalidationSucceeded = bindingInvalidationSucceeded;
     this.originalError = originalError;
   }
 }
@@ -277,12 +288,13 @@ export class AdapterWorkerPool {
       if (index >= 0) this.workers.splice(index, 1);
       if (bindingId) this.protectedPinnedBindingIds.delete(bindingId);
       this.rejectWaitersForRecycledBinding(bindingId);
+      let bindingInvalidationSucceeded = true;
       try {
-        options.onWorkerRecycled?.(bindingId);
+        options.onWorkerBindingInvalidated?.(bindingId);
       } catch {
-        // Cleanup must not depend on persistence/telemetry recovery succeeding.
-        // Removing the worker still makes the old binding self-heal as stale on
-        // its next resolution.
+        bindingInvalidationSucceeded = false;
+        // Keep this bounded: persistence exceptions may contain database paths.
+        console.error("[agent-runtime] worker recovery binding invalidation failed");
       }
       let stopSucceeded = true;
       try {
@@ -290,7 +302,22 @@ export class AdapterWorkerPool {
       } catch {
         stopSucceeded = false;
       }
-      throw new AdapterWorkerRecycledError(error, bindingId, stopSucceeded);
+      try {
+        options.onWorkerRecycled?.(bindingId, {
+          stopSucceeded,
+          bindingInvalidationSucceeded,
+        });
+      } catch {
+        // Telemetry must not prevent deterministic worker cleanup. The thrown
+        // recovery error still carries both bounded lifecycle outcomes.
+        console.error("[agent-runtime] worker recovery event persistence failed");
+      }
+      throw new AdapterWorkerRecycledError(
+        error,
+        bindingId,
+        stopSucceeded,
+        bindingInvalidationSucceeded
+      );
     } finally {
       if (succeeded && options?.protectPinnedBindingAfterWork) {
         this.protectPinnedBinding(worker.idlePinnedBindingId);

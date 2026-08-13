@@ -7,7 +7,6 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/ChatTurnFailureNotice.swift
   - desktop/macos/Desktop/Sources/Theme/OmiTextEditor.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimePayload.swift
-  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeFailure.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContinuityInvariants.swift
   - desktop/macos/Desktop/Sources/AnalyticsManager.swift
   - desktop/macos/Desktop/Sources/APIClient+AuthPolicy.swift

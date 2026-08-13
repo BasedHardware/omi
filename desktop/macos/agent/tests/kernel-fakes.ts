@@ -62,6 +62,7 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     | {
         promise: Promise<AdapterAttemptResult>;
         resolve: (result: AdapterAttemptResult) => void;
+        reject: (error: unknown) => void;
       }
     | undefined;
 
@@ -177,8 +178,9 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
 
   deferResult(): void {
     this.pendingResult = {} as typeof this.pendingResult;
-    this.pendingResult!.promise = new Promise<AdapterAttemptResult>((resolve) => {
+    this.pendingResult!.promise = new Promise<AdapterAttemptResult>((resolve, reject) => {
       this.pendingResult!.resolve = resolve;
+      this.pendingResult!.reject = reject;
     });
   }
 
@@ -192,6 +194,14 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
       terminalStatus: result.terminalStatus ?? "cancelled",
       ...result,
     });
+    this.pendingResult = undefined;
+  }
+
+  rejectDeferred(error: unknown): void {
+    if (!this.pendingResult) {
+      throw new Error("No deferred result exists");
+    }
+    this.pendingResult.reject(error);
     this.pendingResult = undefined;
   }
 

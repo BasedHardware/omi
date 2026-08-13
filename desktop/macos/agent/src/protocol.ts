@@ -813,7 +813,7 @@ export interface RuntimeFailurePayload {
   provider?: string;
   retryable?: boolean;
   recoveryAction?: "worker_recycled";
-  recoveryOutcome?: "recovered" | "stop_failed";
+  recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
   retryDisposition?: "next_send";
 }
 

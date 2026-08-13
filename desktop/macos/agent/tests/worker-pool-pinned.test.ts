@@ -439,6 +439,7 @@ describe("AdapterWorkerPool pinned workers", () => {
 
   it("still removes a poisoned worker when recovery bookkeeping and stop fail", async () => {
     let stopCount = 0;
+    let reportedOutcome: { stopSucceeded: boolean; bindingInvalidationSucceeded: boolean } | undefined;
     const pool = new AdapterWorkerPool(() => ({
       ...pinnedAdapter(),
       stop: async () => {
@@ -451,12 +452,18 @@ describe("AdapterWorkerPool pinned workers", () => {
       throw new Error("adapter wedged");
     }, {
       recycleWorkerOnError: true,
-      onWorkerRecycled: () => { throw new Error("persistence failed"); },
+      onWorkerBindingInvalidated: () => { throw new Error("persistence failed"); },
+      onWorkerRecycled: (_bindingId, outcome) => { reportedOutcome = outcome; },
     })).rejects.toMatchObject({
       name: "AdapterWorkerRecycledError",
       stopSucceeded: false,
+      bindingInvalidationSucceeded: false,
     });
     expect(stopCount).toBe(1);
+    expect(reportedOutcome).toEqual({
+      stopSucceeded: false,
+      bindingInvalidationSucceeded: false,
+    });
     expect(pool.size).toBe(0);
   });
 

@@ -26,7 +26,8 @@ final class MemoryExportSetupTests: XCTestCase {
         fallbackOpened.fulfill()
       })
     var model: MemoryExportDestinationSheetModel? = MemoryExportDestinationSheetModel(workspace: workspace)
-    weak var weakModel = model
+    weak var weakModel: MemoryExportDestinationSheetModel?
+    weakModel = model
 
     model?.openDestination(for: .chatgpt, url: exportURL)
     model = nil

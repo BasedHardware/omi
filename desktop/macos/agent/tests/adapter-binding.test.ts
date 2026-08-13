@@ -179,6 +179,85 @@ describe("AgentRuntimeKernel adapter binding resolution", () => {
         expect.objectContaining({ status: "active" }),
       ]);
     expect(store.allRows("SELECT type FROM events WHERE type = 'worker.recycled'")).toHaveLength(1);
+    expect(JSON.parse(store.getRow(
+      "SELECT payload_json FROM events WHERE type = 'worker.recycled'",
+    ).payload_json)).toMatchObject({
+      recoveryOutcome: "recovered",
+      bindingStalePersisted: true,
+    });
+    store.close();
+  });
+
+  it("unwraps a stale-binding execution failure and retries on a fresh pi-mono worker", async () => {
+    const adapters: FakeRuntimeAdapter[] = [];
+    const makeAdapter = () => {
+      const adapter = new FakeRuntimeAdapter("pi-mono");
+      Object.assign(adapter.capabilities, {
+        resumeFidelity: "none",
+        supportsNativeResume: false,
+        requiresPinnedWorker: true,
+        restartBehavior: "process_local_bindings_stale",
+      });
+      adapters.push(adapter);
+      return adapter;
+    };
+    const { store, adapter, kernel } = createKernelHarness(
+      newDatabasePath(), "pi-mono", 1, undefined, undefined, makeAdapter,
+    );
+    adapter.failNextExecutionAsStale = true;
+
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-stale-during-execution",
+      maxAttempts: 2,
+    });
+
+    expect(result.terminalStatus).toBe("succeeded");
+    expect(adapters).toHaveLength(2);
+    expect(adapter.stopped).toBe(1);
+    expect(store.allRows("SELECT payload_json FROM events WHERE type = 'binding.stale'")
+      .map((row) => JSON.parse(row.payload_json as string))
+      .filter((payload) => payload.reason === "pinned_worker_recycled_after_execution_error"))
+      .toHaveLength(1);
+    expect(store.allRows(
+      "SELECT status FROM adapter_bindings ORDER BY binding_generation",
+    )).toEqual([
+      expect.objectContaining({ status: "closed" }),
+      expect.objectContaining({ status: "active" }),
+    ]);
+    store.close();
+  });
+
+  it("does not recycle a pi-mono worker when cancellation rejects in-flight execution", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+    adapter.deferResult();
+
+    const execution = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-cancelled-in-flight",
+    });
+    while (adapter.executed.length === 0) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    const runId = store.getRow("SELECT run_id FROM runs ORDER BY created_at_ms DESC LIMIT 1").run_id as string;
+    await kernel.cancelRun(runId);
+    adapter.rejectDeferred(new Error("adapter abort rejection"));
+
+    const result = await execution;
+    expect(result.terminalStatus).toBe("cancelled");
+    expect(adapter.stopped).toBe(0);
+    expect(store.getRow("SELECT status FROM adapter_bindings").status).toBe("active");
+    expect(store.allRows("SELECT type FROM events WHERE type = 'worker.recycled'")).toHaveLength(0);
     store.close();
   });
 });
