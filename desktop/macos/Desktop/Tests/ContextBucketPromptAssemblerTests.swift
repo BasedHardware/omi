@@ -135,7 +135,7 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
   func testCanonicalIdentifierSetKeyIsNormalizationOnlyAndKeepsDistinctSetsSeparate() {
     XCTAssertEqual(
       BucketFactValidator.canonicalIdentifierSetKey([" Handoff-013 ", "handoff-013", ""]),
-      "handoff-013")
+      "[\"handoff-013\"]")
     XCTAssertEqual(
       BucketFactValidator.canonicalIdentifierSetKey(["task-014", "task-013"]),
       BucketFactValidator.canonicalIdentifierSetKey([" TASK-013 ", "task-014 "]))

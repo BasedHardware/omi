@@ -56,7 +56,9 @@ enum BucketFactValidator {
     }
     let unique = Set(normalized)
     guard !unique.isEmpty else { return nil }
-    return unique.sorted().joined(separator: "\u{1F}")
+    let sorted = unique.sorted()
+    guard let encoded = try? JSONEncoder().encode(sorted) else { return nil }
+    return String(data: encoded, encoding: .utf8)
   }
 
   static func hasParaphraseMatch(
