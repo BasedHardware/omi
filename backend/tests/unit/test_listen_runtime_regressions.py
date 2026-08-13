@@ -566,6 +566,14 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
     return processor, delivered, flushed
 
 
+class _ProductTelemetryClient:
+    def __init__(self):
+        self.events = []
+
+    def capture(self, **event):
+        self.events.append(event)
+
+
 @pytest.mark.anyio
 async def test_transcript_delivery_marks_live_transcription_success_only_after_a_nonempty_client_send(monkeypatch):
     class WebSocket:
@@ -615,6 +623,25 @@ async def test_transcript_loop_still_flushes_speaker_assignments_when_the_client
     # Nothing reached the client, so the live-transcription attempt is not a success.
     assert delivered == []
     assert processor.host.state.active is False
+
+
+@pytest.mark.anyio
+async def test_transcript_loop_emits_diarization_completion_after_terminal_flush(monkeypatch):
+    from utils.product_telemetry import set_product_telemetry_client_for_tests
+
+    websocket = SimpleNamespace(send_json=lambda _payload: _async_result(None))
+    processor, _delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.segment_buffer[0]['speaker_id'] = 2
+    processor.host.recording_session_id = 'recording-1'
+    telemetry = _ProductTelemetryClient()
+    set_product_telemetry_client_for_tests(telemetry)
+
+    await processor.process_loop()
+
+    assert flushed == ['conversation-1']
+    assert telemetry.events[0]['event'] == 'Diarization Completed'
+    assert telemetry.events[0]['properties']['speaker_count'] == 1
+    assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
 
 
 async def _async_result(value):
