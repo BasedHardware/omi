@@ -111,11 +111,11 @@ describe("account deletion cleanup cycle", () => {
     }, fixture.adapter);
     expect(outcome).toMatchObject({
       kind: "complete",
-      disposed_surfaces: ["authoritative_memory", "account_access", "product_projections"],
+      disposed_surfaces: ["product_projections", "authoritative_memory", "account_access"],
     });
     expect(fixture.calls).toEqual([
-      "scan", "dispose:authoritative_memory", "dispose:account_access",
-      "dispose:product_projections", "scan", "release",
+      "scan", "dispose:product_projections", "dispose:authoritative_memory",
+      "dispose:account_access", "scan", "release",
     ]);
     expect(JSON.stringify(outcome)).not.toContain(ACCOUNT);
   });

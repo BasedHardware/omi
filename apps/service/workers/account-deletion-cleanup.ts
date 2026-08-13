@@ -14,6 +14,26 @@ import {
 
 const OPERATION_REF = /^opref1_[0-9a-f]{64}$/;
 
+/** Child/derived surfaces precede their authoritative inputs. */
+export const DELETION_DISPOSAL_ORDER = Object.freeze([
+  "external_objects",
+  "search_documents",
+  "vector_embeddings",
+  "rebuildable_groups_indexes",
+  "product_projections",
+  "experiment_results",
+  "staged_results",
+  "durable_work",
+  "authoritative_memory",
+  "migration_state",
+  "stranded_product_data",
+  "account_access",
+] as const satisfies readonly DeletionCleanupSurface[]);
+
+const disposalRank = new Map<DeletionCleanupSurface, number>(
+  DELETION_DISPOSAL_ORDER.map((surface, index) => [surface, index]),
+);
+
 export interface DeletionCleanupDispositionReceipt {
   readonly version: "deletion-cleanup-disposition-v1";
   readonly surface: DeletionCleanupSurface;
@@ -201,7 +221,9 @@ export const runAccountDeletionCleanupCycle = async (
     if (beforePlan.mode !== "deleted_cleanup_ready") return retryable("postcondition_failed");
 
     const dispositions: DeletionCleanupDispositionReceipt[] = [];
-    for (const surface of beforePlan.cleanup.remaining_surfaces) {
+    const orderedSurfaces = [...beforePlan.cleanup.remaining_surfaces]
+      .sort((left, right) => disposalRank.get(left)! - disposalRank.get(right)!);
+    for (const surface of orderedSurfaces) {
       let receipt: DeletionCleanupDispositionReceipt;
       try {
         receipt = await session.dispose(surface);
