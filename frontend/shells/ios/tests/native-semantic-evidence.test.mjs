@@ -179,4 +179,7 @@ test("native semantic wrapper has explicit credential-free environment and no br
   assert.match(source, /testIdentifier/);
   assert.match(source, /platform_root|OMI_PLATFORM_ROOT/);
   assert.match(source, /source_root/);
+  assert.match(source, /macos-foreground-guard\.mjs/);
+  assert.match(source, /foreground_custody/);
+  assert.match(source, /monitor_error !== null/);
 });
