@@ -145,6 +145,17 @@ enum ScreenDerivedContent {
 }
 
 enum ContextProactivityTelemetry {
+  /// Shadow-only repetition signal. The event intentionally carries no
+  /// identifier, statement, bucket, app, or owner data; it is never consulted
+  /// for fact validity, delivery, or candidate graduation.
+  static func recordFactIdentityShadow() async {
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "context_bucket_fact_identity_shadow",
+        properties: ["classification": "same_identifier_different_statement"])
+    }
+  }
+
   static func boundedProviderModel(_ value: String) -> String {
     switch value.lowercased() {
     case "gpt-5.6-luna": "gpt-5.6-luna"

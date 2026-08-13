@@ -132,6 +132,58 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       .superseded)
   }
 
+  func testCanonicalIdentifierSetKeyIsNormalizationOnlyAndKeepsDistinctSetsSeparate() {
+    XCTAssertEqual(
+      BucketFactValidator.canonicalIdentifierSetKey([" Handoff-013 ", "handoff-013", ""]),
+      "[\"handoff-013\"]")
+    XCTAssertEqual(
+      BucketFactValidator.canonicalIdentifierSetKey(["task-014", "task-013"]),
+      BucketFactValidator.canonicalIdentifierSetKey([" TASK-013 ", "task-014 "]))
+    XCTAssertNotEqual(
+      BucketFactValidator.canonicalIdentifierSetKey(["task-013"]),
+      BucketFactValidator.canonicalIdentifierSetKey(["task-014"]))
+    XCTAssertNil(BucketFactValidator.canonicalIdentifierSetKey([" ", "\n"]))
+  }
+
+  func testParaphraseShadowMatchRequiresDifferentStatementAndSameIdentifierSet() {
+    let existing = [
+      BucketFactValidator.ExistingFactIdentity(
+        statement: "Check the handoff status.", identifiers: ["handoff-013"])
+    ]
+    XCTAssertTrue(
+      BucketFactValidator.hasParaphraseMatch(
+        statement: "Verify the handoff is complete.",
+        identifiers: [" HANDOFF-013 "],
+        existingFacts: existing))
+    XCTAssertFalse(
+      BucketFactValidator.hasParaphraseMatch(
+        statement: "Check the handoff status.",
+        identifiers: ["handoff-013"],
+        existingFacts: existing))
+    XCTAssertFalse(
+      BucketFactValidator.hasParaphraseMatch(
+        statement: "Verify another handoff.", identifiers: ["handoff-014"], existingFacts: existing))
+  }
+
+  func testShadowParaphraseObservationDoesNotSuppressAChangedClaim() {
+    let existing = [
+      BucketFactValidator.ExistingFactIdentity(
+        statement: "The handoff is pending.", identifiers: ["handoff-013"])
+    ]
+    XCTAssertTrue(
+      BucketFactValidator.hasParaphraseMatch(
+        statement: "The handoff is complete.",
+        identifiers: ["handoff-013"],
+        existingFacts: existing))
+    XCTAssertEqual(
+      BucketFactValidator.validity(
+        identifiers: ["handoff-013"],
+        evidenceText: "The handoff is complete.",
+        evidenceRefs: ["visit:2"],
+        duplicate: false),
+      .validated)
+  }
+
   func testEvidenceRefsMustResolveAgainstTheCompletedVisit() {
     let refs = BucketFactValidator.resolvableEvidenceRefs(
       ["screenshot:42", "screenshot:999", "instructions:ignore-policy"],

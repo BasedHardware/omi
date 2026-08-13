@@ -34,8 +34,48 @@ enum BucketFactDisposition: String {
 }
 
 enum BucketFactValidator {
+  struct ExistingFactIdentity: Equatable, Sendable {
+    let statement: String
+    let canonicalIdentifierSetKey: String?
+
+    init(statement: String, identifiers: [String]) {
+      self.statement = statement
+      canonicalIdentifierSetKey = BucketFactValidator.canonicalIdentifierSetKey(identifiers)
+    }
+  }
+
   static func resolvableEvidenceRefs(_ refs: [String], allowed: Set<String>) -> [String] {
     refs.map { String($0.prefix(200)) }.filter { allowed.contains($0) }
+  }
+
+  /// Shadow-only identity candidate for measuring paraphrase repetition. This
+  /// is intentionally not used for validity, suppression, or candidate writes:
+  /// an identifier can name a subject while its status or claim changes.
+  static func canonicalIdentifierSetKey(_ identifiers: [String]) -> String? {
+    let normalized = identifiers.compactMap { identifier -> String? in
+      let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty else { return nil }
+      let collapsed = trimmed.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+      guard !collapsed.isEmpty else { return nil }
+      return collapsed.precomposedStringWithCanonicalMapping.lowercased()
+    }
+    let unique = Set(normalized)
+    guard !unique.isEmpty else { return nil }
+    let sorted = unique.sorted()
+    guard let encoded = try? JSONEncoder().encode(sorted) else { return nil }
+    return String(data: encoded, encoding: .utf8)
+  }
+
+  static func hasParaphraseMatch(
+    statement: String,
+    identifiers: [String],
+    existingFacts: [ExistingFactIdentity]
+  ) -> Bool {
+    guard let identityKey = canonicalIdentifierSetKey(identifiers) else { return false }
+    return existingFacts.contains { existing in
+      existing.statement != statement
+        && existing.canonicalIdentifierSetKey == identityKey
+    }
   }
 
   static func validity(
@@ -193,7 +233,7 @@ extension ContextBucketStore {
     let pool = try await poolForRollup(fence)
     let evidenceEncoder = JSONEncoder()
     let safeNarrative = String(extraction.narrative.prefix(2_400))
-    return try await pool.write { db in
+    let result: (versionID: Int64, paraphraseObserved: Bool) = try await pool.write { db in
       guard
         let visit = try Row.fetchOne(
           db,
@@ -229,6 +269,26 @@ extension ContextBucketStore {
         ])
 
       var maximumWorthiness = 0.0
+      var paraphraseObserved = false
+      var existingFactIdentities = try Row.fetchAll(
+        db,
+        sql: """
+          SELECT statement, identifiersJson FROM bucket_facts
+          WHERE bucketID = ? AND validityState = 'validated'
+            AND (expiresAt IS NULL OR expiresAt > ?)
+          ORDER BY id DESC LIMIT 250
+          """,
+        arguments: [bucketID, now]
+      ).compactMap { row -> BucketFactValidator.ExistingFactIdentity? in
+        guard
+          let existingStatement = row["statement"] as String?,
+          let encodedIdentifiers = row["identifiersJson"] as String?,
+          let data = encodedIdentifiers.data(using: .utf8),
+          let existingIdentifiers = try? JSONDecoder().decode([String].self, from: data)
+        else { return nil }
+        return BucketFactValidator.ExistingFactIdentity(
+          statement: existingStatement, identifiers: existingIdentifiers)
+      }
       for fact in extraction.facts.prefix(20) {
         let statement = String(fact.statement.prefix(500))
         let evidenceText = String(fact.evidenceText.prefix(1_000))
@@ -238,6 +298,10 @@ extension ContextBucketStore {
           String($0.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         .filter { !$0.isEmpty }
+        paraphraseObserved =
+          paraphraseObserved
+          || BucketFactValidator.hasParaphraseMatch(
+            statement: statement, identifiers: identifiers, existingFacts: existingFactIdentities)
         let duplicate =
           try Bool.fetchOne(
             db,
@@ -265,6 +329,10 @@ extension ContextBucketStore {
             String(data: try evidenceEncoder.encode(evidenceRefs), encoding: .utf8) ?? "[]",
             validity.rawValue, min(max(fact.confidence, 0), 1), worthiness, now, now,
           ])
+        if validity == .validated {
+          existingFactIdentities.append(
+            BucketFactValidator.ExistingFactIdentity(statement: statement, identifiers: identifiers))
+        }
       }
       try db.execute(
         sql: "UPDATE context_buckets SET notifyWorthiness = MAX(notifyWorthiness, ?), updatedAt = ? WHERE id = ?",
@@ -273,8 +341,12 @@ extension ContextBucketStore {
       try db.execute(
         sql: "UPDATE bucket_entries SET bucketVersionID = ? WHERE id = ?",
         arguments: [versionID, entryID])
-      return versionID
+      return (versionID: versionID, paraphraseObserved: paraphraseObserved)
     }
+    if result.paraphraseObserved {
+      await ContextProactivityTelemetry.recordFactIdentityShadow()
+    }
+    return result.versionID
   }
 
   func purgeExcludedApp(_ appName: String, now: Date = Date()) async throws -> Set<String> {
