@@ -204,9 +204,10 @@ async def _execute_file_chat_stream(
         yield None
     except Exception as error:
         logger.error(
-            'file chat stream failed route=file uid=%s reason=stream_failure error_type=%s',
+            'file chat stream failed route=file uid=%s reason=stream_failure error_type=%s error=%s',
             uid,
             type(error).__name__,
+            error,
         )
         if callback_data is not None:
             callback_data['error'] = 'stream_failure'

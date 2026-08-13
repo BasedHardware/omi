@@ -104,6 +104,36 @@ def get_all_staged_tasks_for_migration(uid: str) -> List[dict]:
     return items
 
 
+def get_active_staged_tasks_for_compatibility(uid: str) -> List[dict]:
+    """Read every active historical row for complete released compatibility."""
+
+    # Do not filter in Firestore: old rows may predate the ``completed`` field,
+    # and a field predicate would silently hide exactly the data this adapter
+    # exists to preserve.
+    query = _user_col(uid, 'staged_tasks').order_by('__name__')
+    items: List[dict] = []
+    for snapshot in query.stream():
+        data = snapshot.to_dict() or {}
+        if data.get('completed'):
+            continue
+        data['id'] = snapshot.id
+        items.append(data)
+    return items
+
+
+def get_staged_task_for_compatibility(uid: str, staged_id: str) -> Optional[dict]:
+    """Point-read one active historical row without scanning the account."""
+
+    snapshot = _user_col(uid, 'staged_tasks').document(staged_id).get()
+    if not snapshot.exists:
+        return None
+    data = snapshot.to_dict() or {}
+    if data.get('completed'):
+        return None
+    data['id'] = snapshot.id
+    return data
+
+
 def get_top_staged_task_for_promotion(uid: str) -> Optional[dict]:
     """Select the exact active row that a fenced write-mode promotion will mutate."""
 

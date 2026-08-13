@@ -241,7 +241,17 @@ extension APIClient {
 
 extension APIClient {
   func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl {
-    try await get("v1/candidates/control")
+    try await getCandidateWorkflowControl(expectedOwnerId: nil, authorizationSnapshot: nil)
+  }
+
+  func getCandidateWorkflowControl(
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> OmiAPI.TaskWorkflowControl {
+    try await get(
+      "v1/candidates/control",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func getCandidateWorkflowControl(
@@ -259,14 +269,18 @@ extension APIClient {
   func createCanonicalCandidate(
     _ candidate: OmiAPI.CandidateCreate,
     idempotencyKey: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> OmiAPI.CandidateRecord {
     try await taskIntelligenceMutation(
       endpoint: "v1/candidates",
       method: "POST",
       body: candidate,
       idempotencyKey: idempotencyKey,
-      accountGeneration: accountGeneration
+      accountGeneration: accountGeneration,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 

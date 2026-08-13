@@ -141,6 +141,28 @@ enum QueryShellMode: Equatable, Sendable {
   static let homeDefault: QueryShellMode = .answer
 }
 
+/// The `home_*` bridge actions, as the search-text transition each one promises.
+///
+/// Home's mode is derived from the search text, so a bridge action that promises the conversation
+/// (`home_open_chat`, `home_ask`, `home_close_panel`) must clear the search — otherwise it reports
+/// success while its effect stays hidden behind the results panel the user was filtering. One pure
+/// function, so the handlers and the tests cannot disagree about which actions collapse the search.
+enum HomeBridgeIntent: CaseIterable, Sendable {
+  case openChat
+  case ask
+  case closePanel
+  case attach
+
+  /// The search text after this intent runs. Everything that lands the user in the conversation
+  /// clears it; staging an attachment narrows nothing and keeps the search where it was.
+  func searchTextAfter(_ current: String) -> String {
+    switch self {
+    case .openChat, .ask, .closePanel: return ""
+    case .attach: return current
+    }
+  }
+}
+
 /// **Where the one composer is standing.**
 ///
 /// While you are searching, a field above the panel is the right arrangement: you type at the top

@@ -556,13 +556,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     migrateAppName()
 
     updateOnboardingLifecyclePolicy(reason: "launch")
+    // `queue: nil` + explicit hop, never `queue: .main`: synchronous main-queue delivery makes
+    // every background `UserDefaults.set` wait on the main thread, which deadlocked the app when
+    // an auth commit held the session fence while posting and the main thread wanted that fence
+    // (frozen sign-in screen, #11374).
     userDefaultsObserver = NotificationCenter.default.addObserver(
       forName: UserDefaults.didChangeNotification,
       object: nil,
-      queue: .main
+      queue: nil
     ) { [weak self] _ in
-      MainActor.assumeIsolated {
-        self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated {
+          self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+        }
       }
     }
 

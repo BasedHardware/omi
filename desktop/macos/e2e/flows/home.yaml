@@ -28,20 +28,20 @@ steps:
         - Chat
 
   - id: S2
-    name: Verify the query bar is a composer
-    do: "Verify the query bar carries every control needed to hold a conversation: the text field, a paperclip (Attach files), the two keyboard hints ('⏎ Search' and '⌘⏎ Ask'), and the push-to-talk microphone disc."
+    name: Verify the two inputs are distinct
+    do: "Verify the search bar above the panel is pure search (magnifying glass, no send control) and the chat composer inside the panel carries the conversation controls: text field, paperclip (Attach files), microphone, and the send disc."
     expect:
       interactive_count: { min: 4 }
 
   - id: S2b
     name: Ask, then stop
-    do: "Type a question and press ⌘⏎. The panel swaps to the answer thread. While the answer is still streaming, verify the '⌘⏎ Ask' hint has been replaced by a 'Stop' button in the same slot, and click it. The turn ends without an error card."
+    do: "Type a question in the chat composer and press ⏎. The answer streams into the transcript. While it is still streaming, verify the send disc has been replaced by a Stop control in the same slot, and click it. The turn ends without an error card."
     expect:
       interactive_count: { min: 2 }
 
   - id: S2c
     name: Conversation menu and the way back
-    do: "In answer mode, open the '…' menu next to '‹ Results' and verify it offers Copy conversation, Clear conversation and AI settings. Click '‹ Results', then navigate to Conversations and back to Home: the panel's corner now offers a 'Chat ›' chip. Click it and verify the same conversation is still there with no duplicated turns."
+    do: "Open the '…' menu in the panel's corner and verify it offers Copy conversation, Clear conversation and AI settings. Type in the search bar and verify the panel shows live-narrowing results; clear it (or press esc) and verify the same conversation returns with no duplicated turns."
     expect:
       interactive_count: { min: 2 }
 

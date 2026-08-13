@@ -14,7 +14,7 @@ import 'device_transport.dart';
 class NativeBleTransport extends DeviceTransport {
   final String _peripheralUuid;
   final bool requiresBond;
-  final BleHostApi _hostApi = BleHostApi();
+  final BleHostApi _hostApi;
   final StreamController<DeviceTransportState> _connectionStateController =
       StreamController<DeviceTransportState>.broadcast();
 
@@ -28,7 +28,8 @@ class NativeBleTransport extends DeviceTransport {
 
   DeviceTransportState _state = DeviceTransportState.disconnected;
 
-  NativeBleTransport(this._peripheralUuid, {this.requiresBond = false}) {
+  NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
+      : _hostApi = hostApi ?? BleHostApi() {
     BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
       onConnectionState: _handleConnectionState,
@@ -114,7 +115,7 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Future<bool> isConnected() async {
     try {
-      return _hostApi.isPeripheralConnected(_peripheralUuid);
+      return await _hostApi.isPeripheralConnected(_peripheralUuid);
     } catch (e) {
       return false;
     }
@@ -123,7 +124,7 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Future<bool> ping() async {
     try {
-      return _hostApi.isPeripheralConnected(_peripheralUuid);
+      return await _hostApi.isPeripheralConnected(_peripheralUuid);
     } catch (e) {
       return false;
     }
@@ -298,7 +299,7 @@ class NativeBleTransport extends DeviceTransport {
     try {
       _services = services;
 
-      // Re-create stream controllers and re-subscribe to previously active characteristics
+      // Native re-emits ready for a link that is already up, so keep live controllers.
       for (final key in _activeSubscriptionKeys) {
         final parts = key.split(':');
         if (parts.length == 2) {

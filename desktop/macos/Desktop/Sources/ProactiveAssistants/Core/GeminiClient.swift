@@ -357,6 +357,11 @@ actor GeminiClient {
     }
     self.model = model
     self.fallbackModel = fallbackModel
+    // Which model a proactive assistant actually runs on is a product decision with a
+    // measurable click-through cost, and until now it was invisible at runtime — the model
+    // appears only inside the request URL, so a tier change could not be confirmed on a
+    // real machine. Model IDs are non-sensitive and low-cardinality.
+    log("GeminiClient: model=\(model) fallback=\(fallbackModel ?? "none")")
   }
 
   /// Get Firebase auth header for proxy requests
