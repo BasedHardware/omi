@@ -25,12 +25,34 @@ swiftc -O -framework AppKit -framework ApplicationServices -framework CoreGraphi
 ```
 
 Matrix evidence must be run through `native-semantic-evidence-batch.mjs` with an
-exact `omi.polish.matrix-manifest/v1` coordinate. The coordinator prepares and
-hashes an immutable input set, writes verifier-shaped AX/keyboard members and a
-receipt, and rejects unbound PIDs, bundles, source SHAs, landmarks, or keyboard
-transitions. Keyboard coverage is accepted only when every target transition is
-observed, Escape restores the bound focus identity, and the previously
-frontmost app is restored. AX coverage never passes `--activate`.
+exact `omi.polish.matrix-manifest/v1` coordinate and a prepared scratch `.app`:
 
-The coordinator reports `blocked_gui_locked` (exit 3) when `lsappinfo front` is
-`loginwindow`; this is an honest red result, not a fixture or browser substitute.
+```sh
+node shells/macos/probes/native-semantic-evidence-batch.mjs \
+  --manifest .build/semantic/matrix.json \
+  --out-root .build/semantic \
+  --probe .build/semantic/native-semantic-evidence \
+  --fixture-app .build/native-fixture/build/macos/omi-on-polish-batch.app \
+  --prepare
+node shells/macos/probes/native-semantic-evidence-batch.mjs \
+  --manifest .build/semantic/matrix.json \
+  --out-root .build/semantic \
+  --prepared-input-set .build/semantic/prepared-input-set.json \
+  --replay-proof
+```
+
+Preparation binds every regular bundle file, `Info.plist` bundle identity, and
+the exact `omi-on-*` executable into the immutable input set. Capture launches
+that executable directly with a fixture-only surface query and an isolated
+runtime home, waits a bounded time for its `background-semantic` readiness
+signal, probes the launched runtime PID, and terminates that exact child. It
+never uses `open`, AppleScript, a pre-existing PID, a shipping bundle, API
+configuration, or broad process-name kills. Runtime PIDs are checked but
+redacted from evidence, sidecars, batch results, and receipts, so replaying
+copied inputs recreates the target while retaining byte-identical canonical
+artifacts. `native_live` manifests fail closed at this producer boundary.
+
+Keyboard coverage is accepted only when every target transition is observed,
+Escape restores the bound focus identity, and the previously frontmost app is
+restored. AX coverage never passes `--activate`; the coordinator also verifies
+that the foreground application is unchanged across launch, probe, and cleanup.
