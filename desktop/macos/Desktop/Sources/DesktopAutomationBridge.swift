@@ -1027,6 +1027,24 @@ final class DesktopAutomationActionRegistry {
       )
     }
 
+    #if DEBUG
+      register(
+        name: "probe_context_bucket_director",
+        summary: "Replay a synthetic context bucket through the director model boundary without delivery",
+        params: ["bucket_id", "version", "header", "frozen", "tail", "validated_facts", "tasks", "app", "window"],
+        safety: "network_or_model",
+        sideEffects: [
+          "may call model/backend services",
+          "does not write the database, change gates/settings, graduate tasks, or deliver notifications",
+        ]
+      ) { params in
+        guard AppBuild.isNonProduction else {
+          return ["error": "probe_context_bucket_director is disabled on production bundles"]
+        }
+        return try await ContextBucketDirectorProbe().run(params: params)
+      }
+    #endif
+
     register(
       name: "set_contextual_task_focus",
       summary: "Set deterministic focus suppression for contextual task interruptions",
