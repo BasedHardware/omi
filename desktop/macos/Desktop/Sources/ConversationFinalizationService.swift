@@ -6,8 +6,15 @@ actor ConversationFinalizationService {
   private let maxRetries = 5
   private let maxLocalFallbackRetries = 3
   private var apiClient = APIClient.shared
+  private var meetingCompletionNotificationTask: Task<Void, Never>?
+  private var pendingMeetingCompletionConversationIDs = Set<String>()
+  private var pendingFinalizationProjectionPolls = Set<String>()
 
   private init() {}
+
+  deinit {
+    meetingCompletionNotificationTask?.cancel()
+  }
 
   func setAPIClientForTesting(_ client: APIClient?) {
     apiClient = client ?? APIClient.shared
@@ -186,7 +193,8 @@ actor ConversationFinalizationService {
       finished_at: bundle.session.finishedAt.map { iso.string(from: $0) },
       language: bundle.session.language,
       client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId),
-      conversation_role: bundle.session.conversationRole.rawValue
+      conversation_role: bundle.session.conversationRole.rawValue,
+      conversation_finalization_reason: bundle.session.finalizationReason?.rawValue
     )
     let response = try await apiClient.createConversationFromSegments(request)
     let status = LocalConversationStatus(rawValue: response.status) ?? .processing
@@ -568,11 +576,122 @@ actor ConversationFinalizationService {
       guard let completed = try await TranscriptionStorage.shared.getSession(id: sessionId),
         completed.status == .completed, completed.backendSynced, completed.backendId?.isEmpty == false
       else { return }
-      await MainActor.run {
-        NotificationCenter.default.post(name: .desktopMeetingConversationDidComplete, object: nil)
-      }
+      guard let conversationID = completed.backendId else { return }
+      guard
+        await waitForFinalizationProjectionIfNeeded(
+          conversationID: conversationID,
+          strategy: completed.finalizationStrategy ?? defaultStrategy(for: completed)
+        )
+      else { return }
+      scheduleMeetingCompletionNotification(conversationID: conversationID)
     } catch {
       logError("ConversationFinalization: Failed to verify meeting completion \(sessionId)", error: error)
+    }
+  }
+
+  /// Cloud finalization marks the conversation completed before its durable
+  /// worker finishes fanout. Do not wake Chat during that gap: the first
+  /// materialization would consume its debounce window while no meeting intent
+  /// exists. Legacy/no-job conversations keep the historical behavior.
+  private func waitForFinalizationProjectionIfNeeded(
+    conversationID: String,
+    strategy: TranscriptionFinalizationStrategy
+  ) async -> Bool {
+    guard strategy == .cloudReconcile else { return true }
+
+    // The first probe is immediate; subsequent bounded delays cover the normal
+    // Cloud Tasks admission/worker/fanout path without keeping recovery alive
+    // indefinitely. A missing projection is an older inline-finalization path.
+    let delays: [UInt64] = [0, 250_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 4_000_000_000]
+    for delay in delays {
+      if delay > 0 {
+        try? await Task.sleep(nanoseconds: delay)
+      }
+      do {
+        let status = try await apiClient.getConversationFinalizationStatus(id: conversationID)
+        if status.status == "completed" {
+          return true
+        }
+        if status.status == "dead_letter" {
+          log("ConversationFinalization: Skipping meeting wake for dead-letter conversation \(conversationID)")
+          return false
+        }
+      } catch APIError.httpError(statusCode: 404, detail: _) {
+        return true
+      } catch {
+        // Transient status-read failures should not make a completed meeting
+        // permanently silent; continue through the bounded retry window.
+      }
+    }
+    log("ConversationFinalization: Finalization projection not terminal for \(conversationID); deferring Chat wake")
+    scheduleFinalizationProjectionPoll(conversationID: conversationID)
+    return false
+  }
+
+  /// Keep a slow Cloud Tasks fanout from becoming permanently silent after the
+  /// foreground debounce has been consumed. Poll only the affected conversation
+  /// and coalesce duplicate recovery attempts by conversation id.
+  private func scheduleFinalizationProjectionPoll(conversationID: String) {
+    guard pendingFinalizationProjectionPolls.insert(conversationID).inserted else { return }
+    Task { [weak self] in
+      defer {
+        Task { [weak self] in
+          await self?.clearFinalizationProjectionPoll(conversationID: conversationID)
+        }
+      }
+      let delays: [UInt64] = [5_000_000_000, 15_000_000_000, 30_000_000_000, 60_000_000_000, 120_000_000_000]
+      for delay in delays {
+        try? await Task.sleep(nanoseconds: delay)
+        guard !Task.isCancelled else { return }
+        do {
+          let status = try await self?.apiClient.getConversationFinalizationStatus(id: conversationID)
+          if status?.status == "completed" {
+            await self?.scheduleMeetingCompletionNotification(conversationID: conversationID)
+            return
+          }
+          if status?.status == "dead_letter" { return }
+        } catch APIError.httpError(statusCode: 404, detail: _) {
+          // Legacy inline finalization has no projection; wake Chat normally.
+          await self?.scheduleMeetingCompletionNotification(conversationID: conversationID)
+          return
+        } catch {
+          continue
+        }
+      }
+    }
+  }
+
+  private func clearFinalizationProjectionPoll(conversationID: String) {
+    pendingFinalizationProjectionPolls.remove(conversationID)
+  }
+
+  /// Coalesce recovery completions arriving in one burst into one Chat wake.
+  /// The materializer fetches all ready receipts, so one notification is enough
+  /// and avoids bypassing its foreground debounce once per stale session.
+  private func scheduleMeetingCompletionNotification(conversationID: String) {
+    pendingMeetingCompletionConversationIDs.insert(conversationID)
+    guard meetingCompletionNotificationTask == nil else { return }
+    meetingCompletionNotificationTask = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 250_000_000)
+      guard !Task.isCancelled else { return }
+      await self?.flushMeetingCompletionNotifications()
+    }
+  }
+
+  private func flushMeetingCompletionNotifications() {
+    guard !pendingMeetingCompletionConversationIDs.isEmpty else {
+      meetingCompletionNotificationTask = nil
+      return
+    }
+    let conversationIDs = Array(pendingMeetingCompletionConversationIDs).sorted()
+    pendingMeetingCompletionConversationIDs.removeAll()
+    meetingCompletionNotificationTask = nil
+    let notification = MeetingCompletionNotification(conversationIDs: conversationIDs)
+    Task { @MainActor in
+      NotificationCenter.default.post(
+        name: .desktopMeetingConversationDidComplete,
+        object: notification
+      )
     }
   }
 
@@ -604,6 +723,10 @@ struct ConversationCreatedTelemetry: Equatable, Sendable {
       max(0, Int($0.timeIntervalSince(session.startedAt)))
     }
   }
+}
+
+struct MeetingCompletionNotification: Sendable, Equatable {
+  let conversationIDs: [String]
 }
 
 struct ReconciliationFailureDiagnostics {

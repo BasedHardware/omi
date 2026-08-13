@@ -436,6 +436,7 @@ struct ConversationLinkView: View {
   private func openConversation() {
     guard !isOpening else { return }
     isOpening = true
+    let resolutionGeneration = navigation.beginConversationLinkResolution()
     Task { @MainActor in
       defer { isOpening = false }
       do {
@@ -448,7 +449,11 @@ struct ConversationLinkView: View {
         else {
           throw URLError(.cannotParseResponse)
         }
-        navigation.open(conversation: conversation)
+        guard
+          navigation.completeConversationLinkResolution(
+            conversation: conversation,
+            generation: resolutionGeneration)
+        else { return }
         AnalyticsManager.shared.chatFirst(
           .richBlock(kind: .conversationLink, outcome: .acted, action: .open)
         )

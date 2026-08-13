@@ -204,6 +204,7 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
 
     assert response.id == 'random-process-id'
     assert isinstance(captured['conversation'], CreateConversation)
+    assert captured['conversation'].external_data == {'conversation_role': 'meeting'}
     conversations_db.get_conversation.assert_not_called()
     claim.assert_not_called()
     arrival.assert_called_once_with(

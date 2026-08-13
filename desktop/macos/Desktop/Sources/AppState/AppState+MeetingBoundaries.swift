@@ -23,10 +23,16 @@ extension AppState {
     guard meetingDetector == nil, audioSource == .microphone else { return }
 
     let meetingProbe: @Sendable () -> Bool = {
-      if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { return true }
-      // Browser titles are useful for an explicit meetings-only capture gate,
-      // but too weak to mint notes-ready boundaries in Always mode.
-      return mode == .onlyDuringMeetings && ConferencingApps.browserCallWindowPresent()
+      if #available(macOS 14.4, *) {
+        if ConferencingApps.callAppIsUsingMicrophone() { return true }
+        // On modern macOS, browser titles are only a capture-gating fallback;
+        // Always mode keeps the stronger CoreAudio mic signal authoritative.
+        return mode == .onlyDuringMeetings && ConferencingApps.browserCallWindowPresent()
+      }
+      // macOS 14.0-14.3 has no CoreAudio process-input API. Keep the browser
+      // title signal for Always and meetings-only capture, but never construct
+      // meeting provenance while system-audio capture is disabled.
+      return mode != .never && ConferencingApps.browserCallWindowPresent()
     }
     let detector = MeetingDetector(
       isMeetingNow: meetingProbe,

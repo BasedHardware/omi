@@ -1135,6 +1135,20 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
     client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
     conversation_role: Literal['ambient', 'meeting'] = 'ambient'
+    # Optional for backwards compatibility. When supplied, rotation fragments
+    # are persisted but do not create a notes-ready receipt.
+    conversation_finalization_reason: (
+        Literal[
+            'user_stop',
+            'finish_and_continue',
+            'meeting_started',
+            'meeting_ended',
+            'max_duration_rotation',
+            'crash_recovery',
+            'retry',
+        ]
+        | None
+    ) = None
 
     @field_validator('client_session_id')
     @classmethod
@@ -1576,6 +1590,11 @@ def _create_conversation_from_segments(
                 'from_segments_client_session_id': request.client_session_id,
                 'from_segments_claimed_at': datetime.now(timezone.utc),
                 'conversation_role': request.conversation_role,
+                **(
+                    {'conversation_finalization_reason': request.conversation_finalization_reason}
+                    if request.conversation_finalization_reason is not None
+                    else {}
+                ),
             },
             status=ConversationStatus.processing,
         )
@@ -1603,6 +1622,14 @@ def _create_conversation_from_segments(
             source=source,
             client_device_id=resolved_client_device_id,
             client_platform=resolved_client_platform,
+            external_data={
+                'conversation_role': request.conversation_role,
+                **(
+                    {'conversation_finalization_reason': request.conversation_finalization_reason}
+                    if request.conversation_finalization_reason is not None
+                    else {}
+                ),
+            },
         )
 
     # Process conversation. The idempotent (client_session_id) path creates a
@@ -1628,7 +1655,15 @@ def _create_conversation_from_segments(
         )
         lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
 
-    conversation.external_data = {**(conversation.external_data or {}), 'conversation_role': request.conversation_role}
+    conversation.external_data = {
+        **(conversation.external_data or {}),
+        'conversation_role': request.conversation_role,
+        **(
+            {'conversation_finalization_reason': request.conversation_finalization_reason}
+            if request.conversation_finalization_reason is not None
+            else {}
+        ),
+    }
     persist_desktop_meeting_arrival_best_effort(uid, conversation)
 
     return ConversationResponse(

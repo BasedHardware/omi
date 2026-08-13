@@ -196,6 +196,10 @@ def wake_after_commit(
             selection is None
             or not selection.blocks
             or not any(block.type == 'questionCard' for block in selection.blocks)
+            # Meeting receipts are server-finalized capture facts. Agent/tool
+            # output must not be able to mint a conversationLink for an
+            # ambient or otherwise unrelated conversation.
+            or any(block.type == 'conversationLink' for block in selection.blocks)
         ):
             _meter('judgment_declined', 'agent_judgment')
             return ProactiveWakeResult(outcome='declined')
@@ -341,6 +345,8 @@ def persist_desktop_meeting_arrival(uid: str, conversation) -> None:
     source = getattr(source, 'value', source)
     status = getattr(status, 'value', status)
     if (external_data or {}).get('conversation_role') != 'meeting':
+        return
+    if (external_data or {}).get('conversation_finalization_reason') == 'max_duration_rotation':
         return
     if source != 'desktop' or discarded or status != 'completed':
         return

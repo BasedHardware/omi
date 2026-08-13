@@ -728,6 +728,7 @@ routes:
       auth:
         mechanisms:
           - firebase_id_token
+          - admin_key_uid_prefix
         placement: dependency
         scopes: []
       byok: validated_when_headers_present
@@ -774,6 +775,7 @@ routes:
       auth:
         mechanisms:
           - firebase_id_token
+          - admin_key_uid_prefix
         placement: dependency
         scopes: []
       byok: validated_when_headers_present

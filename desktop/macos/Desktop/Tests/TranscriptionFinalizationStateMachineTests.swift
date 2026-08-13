@@ -12,6 +12,7 @@ private struct FinalizationRecoveryRequest {
 private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
   private nonisolated(unsafe) static var _requests: [FinalizationRecoveryRequest] = []
+  private nonisolated(unsafe) static var _finalizationStatusBodies: [Data] = []
 
   static var requests: [FinalizationRecoveryRequest] {
     lock.lock()
@@ -22,7 +23,21 @@ private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendabl
   static func reset() {
     lock.lock()
     _requests.removeAll()
+    _finalizationStatusBodies.removeAll()
     lock.unlock()
+  }
+
+  static func setFinalizationStatusBodies(_ bodies: [Data]) {
+    lock.lock()
+    _finalizationStatusBodies = bodies
+    lock.unlock()
+  }
+
+  private static func nextFinalizationStatusBody() -> Data? {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !_finalizationStatusBodies.isEmpty else { return nil }
+    return _finalizationStatusBodies.removeFirst()
   }
 
   private static func record(_ request: FinalizationRecoveryRequest) {
@@ -142,6 +157,10 @@ private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendabl
           """.utf8
         )
       )
+    } else if path.hasSuffix("/finalization"), let body = Self.nextFinalizationStatusBody() {
+      let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+      client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+      client?.urlProtocol(self, didLoad: body)
     } else {
       let response = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -535,7 +554,14 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     let getRequests = requests.filter { $0.method == "GET" }
     XCTAssertEqual(postRequests.count, 1)
     XCTAssertEqual(postRequests.first?.url.path, "/v1/conversations/from-segments")
-    XCTAssertEqual(getRequests.map(\.url.path), ["/v1/conversations/local-fallback-conversation"])
+    XCTAssertEqual(
+      getRequests.filter { !$0.url.path.hasSuffix("/finalization") }.map(\.url.path),
+      ["/v1/conversations/local-fallback-conversation"]
+    )
+    XCTAssertEqual(
+      getRequests.filter { $0.url.path.hasSuffix("/finalization") }.map(\.url.path),
+      ["/v1/conversations/local-fallback-conversation/finalization"]
+    )
 
     let body = try XCTUnwrap(postRequests.first?.body)
     let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
@@ -585,10 +611,21 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     let body = try XCTUnwrap(postRequests.first?.body)
     let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertEqual(json["conversation_role"] as? String, "meeting")
+    XCTAssertEqual(json["conversation_finalization_reason"] as? String, "max_duration_rotation")
   }
 
   func testRetryingMeetingFinalizationRecoversExactIdAndWakesChat() async throws {
     FinalizationRecoveryURLStub.reset()
+    FinalizationRecoveryURLStub.setFinalizationStatusBodies([
+      Data(
+        #"{"job_id":"job-1","status":"queued","terminal":false,"retryable":true,"attempt_count":1,"task_retry_count":0}"#
+          .utf8
+      ),
+      Data(
+        #"{"job_id":"job-1","status":"completed","terminal":true,"retryable":false,"attempt_count":1,"task_retry_count":0}"#
+          .utf8
+      ),
+    ])
     setenv("OMI_PYTHON_API_URL", "https://finalization-recovery.test/", 1)
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [FinalizationRecoveryURLStub.self]
@@ -632,8 +669,15 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     XCTAssertEqual(session.backendId, "client-recording-id")
     XCTAssertTrue(session.backendSynced)
     XCTAssertEqual(
-      FinalizationRecoveryURLStub.requests.map(\.url.path),
+      FinalizationRecoveryURLStub.requests.filter { $0.method == "POST" }.map(\.url.path),
       ["/v1/conversations/client-recording-id/finalize"]
+    )
+    XCTAssertEqual(
+      FinalizationRecoveryURLStub.requests.filter { $0.method == "GET" }.map(\.url.path),
+      [
+        "/v1/conversations/client-recording-id/finalization",
+        "/v1/conversations/client-recording-id/finalization",
+      ]
     )
   }
 

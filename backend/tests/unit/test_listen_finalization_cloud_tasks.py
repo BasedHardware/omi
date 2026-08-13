@@ -1022,19 +1022,27 @@ async def test_finalizer_never_logs_a_provider_exception_body(monkeypatch, caplo
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    ('source', 'external_data', 'expected_intent_kwargs'),
+    ('source', 'external_data', 'discarded', 'expected_intent_kwargs'),
     [
-        ('omi', None, {'conversation_id': 'conversation-1', 'summary': 'Captured title'}),
+        ('omi', None, False, {'conversation_id': 'conversation-1', 'summary': 'Captured title'}),
         (
             'desktop',
             {'conversation_role': 'meeting'},
+            False,
             {'conversation_id': 'conversation-1', 'summary': 'Captured title', 'is_desktop_meeting': True},
         ),
-        ('desktop', {'conversation_role': 'ambient'}, None),
+        ('desktop', {'conversation_role': 'ambient'}, False, None),
+        (
+            'desktop',
+            {'conversation_role': 'meeting', 'conversation_finalization_reason': 'max_duration_rotation'},
+            False,
+            None,
+        ),
+        ('desktop', {'conversation_role': 'meeting'}, True, None),
     ],
 )
 async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
-    monkeypatch, source, external_data, expected_intent_kwargs
+    monkeypatch, source, external_data, discarded, expected_intent_kwargs
 ):
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
@@ -1045,6 +1053,7 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
         language='en',
         source=SimpleNamespace(value=source),
         external_data=external_data,
+        discarded=discarded,
         structured=SimpleNamespace(title='Captured title', overview='Captured overview'),
     )
     integrations = AsyncMock(return_value=[])
@@ -1083,7 +1092,10 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
         idempotency_key='conversation:conversation-1:finalization',
         require_delivery=True,
     )
-    extracted.assert_called_once_with('uid-1', conversation)
+    if discarded:
+        extracted.assert_not_called()
+    else:
+        extracted.assert_called_once_with('uid-1', conversation)
     assert disposition == ConversationFinalizationDisposition.completed
     completed.assert_called_once_with('job-1', 2, 3)
     if expected_intent_kwargs is None:

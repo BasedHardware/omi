@@ -179,8 +179,13 @@ async def finalize_persisted_conversation(
         source = getattr(conversation, 'source', None)
         source_value = getattr(source, 'value', source)
         external_data = getattr(conversation, 'external_data', None) or {}
-        is_desktop_meeting = source_value == 'desktop' and external_data.get('conversation_role') == 'meeting'
-        if source_value == 'omi' or is_desktop_meeting:
+        is_desktop_meeting = (
+            source_value == 'desktop'
+            and external_data.get('conversation_role') == 'meeting'
+            and external_data.get('conversation_finalization_reason') != 'max_duration_rotation'
+            and not getattr(conversation, 'discarded', False)
+        )
+        if (source_value == 'omi' and not getattr(conversation, 'discarded', False)) or is_desktop_meeting:
             try:
                 structured = getattr(conversation, 'structured', None)
                 summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''

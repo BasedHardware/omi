@@ -4,6 +4,7 @@ The local kernel owns its journal. This route validates capability and
 canonical references only; it never creates, updates, or syncs a chat row.
 """
 
+import inspect
 from typing import Annotated, Any
 
 from datetime import datetime, timezone
@@ -261,6 +262,7 @@ def validate_chat_first_blocks(
     '/v1/chat/materialize-prompts',
     response_model=LegacyMaterializePromptsResponse,
     tags=['chat-first'],
+    operation_id='materialize_prompts_v1_chat_materialize_prompts_post',
 )
 def materialize_prompts_v1(
     request: MaterializePromptsRequest,
@@ -268,7 +270,12 @@ def materialize_prompts_v1(
 ) -> LegacyMaterializePromptsResponse:
     """Preserve the released block union; new receipt types remain pending for v2 clients."""
 
-    response = _materialize_prompts(request, uid)
+    # Keep the narrow unit-test seam backwards-compatible with older callers
+    # that monkeypatch this helper with its original two-argument signature.
+    if 'exclude_block_types' in inspect.signature(_materialize_prompts).parameters:
+        response = _materialize_prompts(request, uid, exclude_block_types={'conversationLink'})
+    else:
+        response = _materialize_prompts(request, uid)
     compatible = [
         LegacyProactiveIntent.model_validate(intent.model_dump())
         for intent in response.intents
@@ -289,7 +296,12 @@ def materialize_prompts(
     return _materialize_prompts(request, uid)
 
 
-def _materialize_prompts(request: MaterializePromptsRequest, uid: str) -> MaterializePromptsResponse:
+def _materialize_prompts(
+    request: MaterializePromptsRequest,
+    uid: str,
+    *,
+    exclude_block_types: set[str] | frozenset[str] | None = None,
+) -> MaterializePromptsResponse:
     """Fetch ready intents and accept kernel receipts; never writes a Chat row."""
 
     _require_materialization_capability(
@@ -358,6 +370,7 @@ def _materialize_prompts(request: MaterializePromptsRequest, uid: str) -> Materi
         intents = chat_first_intents_db.fetch_ready_intents(
             uid,
             account_generation=request.control_generation,
+            exclude_block_types=exclude_block_types,
         )
     except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc

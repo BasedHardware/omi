@@ -219,6 +219,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   private let defaults: UserDefaults
   private let analytics: @MainActor (ChatFirstAnalyticsEvent) -> Void
   private var goalLinkResolutionGeneration: UInt = 0
+  private var conversationLinkResolutionGeneration: UInt = 0
 
   init(
     defaults: UserDefaults = .standard,
@@ -259,11 +260,11 @@ final class ChatFirstShellNavigation: ObservableObject {
     // used to leave the automation state permanently "not visible" because
     // SwiftUI correctly did not remount the unchanged destination.
     if route == destination {
-      invalidateGoalLinkResolutions()
+      invalidateLinkResolutions()
       clearFocus()
       return
     }
-    invalidateGoalLinkResolutions()
+    invalidateLinkResolutions()
     route = destination
     visibleRoute = nil
     clearFocus()
@@ -281,11 +282,11 @@ final class ChatFirstShellNavigation: ObservableObject {
   func selectMore(_ page: ChatFirstMorePage) {
     pendingConversation = nil
     if route == .more(page) {
-      invalidateGoalLinkResolutions()
+      invalidateLinkResolutions()
       clearFocus()
       return
     }
-    invalidateGoalLinkResolutions()
+    invalidateLinkResolutions()
     route = .more(page)
     visibleRoute = nil
     clearFocus()
@@ -305,7 +306,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   func open(focus: ChatFirstPendingFocus, destination: ChatFirstRoute) {
     guard destination.isPrimaryDestination else { return }
     pendingConversation = nil
-    invalidateGoalLinkResolutions()
+    invalidateLinkResolutions()
     route = destination
     visibleRoute = nil
     pendingFocus = focus
@@ -321,7 +322,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// present it even when the paginated list does not currently contain it.
   func open(conversation: ServerConversation) {
     guard !conversation.id.isEmpty else { return }
-    invalidateGoalLinkResolutions()
+    invalidateLinkResolutions()
     route = .conversations
     visibleRoute = nil
     pendingFocus = nil
@@ -337,7 +338,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// root navigation owner fences overlapping link validations so a late result
   /// cannot replace the route selected by a newer link request.
   func beginGoalLinkResolution() -> UInt {
-    invalidateGoalLinkResolutions()
+    invalidateLinkResolutions()
     return goalLinkResolutionGeneration
   }
 
@@ -349,6 +350,28 @@ final class ChatFirstShellNavigation: ObservableObject {
   func completeGoalLinkResolution(goalID: String, generation: UInt) -> Bool {
     guard isCurrentGoalLinkResolution(generation) else { return false }
     open(focus: .goal(id: goalID))
+    return true
+  }
+
+  /// A conversation detail fetch can outlive the user's current route. The
+  /// generation belongs to the root navigation owner so a late response
+  /// cannot pull the user back to Conversations after a newer selection.
+  func beginConversationLinkResolution() -> UInt {
+    invalidateConversationLinkResolutions()
+    return conversationLinkResolutionGeneration
+  }
+
+  func isCurrentConversationLinkResolution(_ generation: UInt) -> Bool {
+    conversationLinkResolutionGeneration == generation
+  }
+
+  @discardableResult
+  func completeConversationLinkResolution(
+    conversation: ServerConversation,
+    generation: UInt
+  ) -> Bool {
+    guard isCurrentConversationLinkResolution(generation) else { return false }
+    open(conversation: conversation)
     return true
   }
 
@@ -419,8 +442,13 @@ final class ChatFirstShellNavigation: ObservableObject {
     isFocusedEntityAcknowledged = false
   }
 
-  private func invalidateGoalLinkResolutions() {
+  private func invalidateLinkResolutions() {
     goalLinkResolutionGeneration &+= 1
+    conversationLinkResolutionGeneration &+= 1
+  }
+
+  private func invalidateConversationLinkResolutions() {
+    conversationLinkResolutionGeneration &+= 1
   }
 
 }

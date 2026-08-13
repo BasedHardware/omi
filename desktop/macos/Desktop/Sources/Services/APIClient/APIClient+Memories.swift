@@ -422,6 +422,15 @@ extension APIClient {
     )
     return response.conversation
   }
+
+  /// Read the durable finalization projection for a specific conversation.
+  /// A completed job means the backend fanout (including proactive intent
+  /// publication) has finished; callers can safely wake Chat afterward.
+  func getConversationFinalizationStatus(
+    id conversationId: String
+  ) async throws -> ConversationFinalizationStatusResponse {
+    try await get("v1/conversations/\(conversationId)/finalization")
+  }
 }
 
 // MARK: - Create Conversation From Segments (on-device transcription upload)
@@ -454,6 +463,8 @@ extension APIClient {
     let client_conversation_id: String?
     // swift-format-ignore
     let conversation_role: String
+    // swift-format-ignore
+    let conversation_finalization_reason: String?
   }
 
   struct CreateConversationFromSegmentsResponse: Decodable {

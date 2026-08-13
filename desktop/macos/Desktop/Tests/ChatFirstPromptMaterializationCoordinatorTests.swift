@@ -3,6 +3,18 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
+  func testMaterializationFallsBackOnlyWhenV2RouteIsMissing() {
+    XCTAssertTrue(
+      ChatFirstMaterializationEndpointPolicy.shouldFallbackToV1(
+        for: APIError.httpError(statusCode: 404)))
+    XCTAssertFalse(
+      ChatFirstMaterializationEndpointPolicy.shouldFallbackToV1(
+        for: APIError.httpError(statusCode: 401)))
+    XCTAssertFalse(
+      ChatFirstMaterializationEndpointPolicy.shouldFallbackToV1(
+        for: APIError.httpError(statusCode: 500)))
+  }
+
   func testPolicyRequiresTranscriptReadinessAndDebouncesForegroundFlapping() {
     let now = Date(timeIntervalSinceReferenceDate: 10_000)
 
@@ -172,7 +184,32 @@ final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
   }
 
   @MainActor
-  func testMeetingCompletionPassesActualForegroundStateToMaterialization() async {
+  func testBackgroundCompletionDuringFetchWaitsForForegroundForFollowUp() async {
+    let driver = FakePromptMaterializationDriver(
+      context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
+      pendingReceipts: .empty,
+      response: ChatFirstMaterializePromptsResponse(intents: [])
+    )
+    driver.suspendNextFetch = true
+    let coordinator = ChatFirstPromptMaterializationCoordinator()
+    coordinator.activate(driver: driver)
+
+    coordinator.chatTranscriptFirstPageDidLoad()
+    for _ in 0..<20 where !driver.isFetchSuspended { await Task.yield() }
+    XCTAssertEqual(driver.fetchReceiptBatches.count, 1)
+    XCTAssertTrue(coordinator.meetingConversationDidComplete(windowForeground: false))
+
+    driver.resumeFetch()
+    for _ in 0..<40 { await Task.yield() }
+    XCTAssertEqual(driver.windowForegroundValues, [true])
+
+    XCTAssertTrue(coordinator.mainWindowDidBecomeForeground())
+    for _ in 0..<40 where driver.windowForegroundValues.count < 2 { await Task.yield() }
+    XCTAssertEqual(driver.windowForegroundValues, [true, true])
+  }
+
+  @MainActor
+  func testBackgroundMeetingCompletionWaitsForForegroundWithoutSpendingDebounce() async {
     let driver = FakePromptMaterializationDriver(
       context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
       pendingReceipts: .empty,
@@ -186,8 +223,15 @@ final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
     XCTAssertEqual(driver.windowForegroundValues, [true])
 
     XCTAssertTrue(coordinator.meetingConversationDidComplete(windowForeground: false))
+    // A background completion is queued locally. The backend intentionally
+    // returns no intents for a background request, so it must not consume the
+    // coordinator's 60-second foreground debounce window.
+    for _ in 0..<20 { await Task.yield() }
+    XCTAssertEqual(driver.windowForegroundValues, [true])
+
+    XCTAssertTrue(coordinator.mainWindowDidBecomeForeground())
     for _ in 0..<20 where driver.windowForegroundValues.count < 2 { await Task.yield() }
-    XCTAssertEqual(driver.windowForegroundValues, [true, false])
+    XCTAssertEqual(driver.windowForegroundValues, [true, true])
   }
 
   func testArrivalScrollPolicyFollowsFreshChatButPreservesScrollback() {

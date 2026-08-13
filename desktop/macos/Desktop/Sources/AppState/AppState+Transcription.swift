@@ -1101,7 +1101,13 @@ extension AppState {
       }
     }
 
-    // Reconnect transcription service for the next conversation
+    // Reconnect transcription service for the next conversation. A stop can
+    // arrive while an awaited local tail flush/rebuild is suspended; it bumps
+    // recordingGeneration and tears down the capture stack. Re-check before
+    // reconnecting so a stale boundary cannot resurrect a stopped session.
+    guard isTranscribing, recordingGeneration == rotationGeneration else {
+      return .error("transcription session changed before reconnect")
+    }
     let nextClientConversationId = sttSession.useLocalSTT ? nil : UUID().uuidString.lowercased()
     currentClientConversationId = nextClientConversationId
     do {
@@ -1130,6 +1136,9 @@ extension AppState {
         // tap starts. Rebuild them so audio reaches these fresh services rather
         // than the retired instances whose tails were just flushed.
         await rebuildCoreAudioCaptureStack(reason: "local_conversation_rotation")
+        guard isTranscribing, recordingGeneration == rotationGeneration else {
+          return .error("transcription session changed during reconnect")
+        }
         log("Transcription: Re-armed on-device Parakeet (mic + system) for next conversation")
       } else {
         transcriptionService = try TranscriptionService(

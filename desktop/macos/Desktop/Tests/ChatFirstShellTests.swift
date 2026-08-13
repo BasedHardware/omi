@@ -343,6 +343,46 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertEqual(events, [.routeEntered(route: .goals, origin: .chatDeeplink)])
   }
 
+  func testNewerConversationLinkResolutionPreventsAStaleCompletionFromNavigating() throws {
+    let suiteName = "ChatFirstShellTests.conversation-link-resolution.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+
+    let staleResolution = navigation.beginConversationLinkResolution()
+    let currentResolution = navigation.beginConversationLinkResolution()
+
+    XCTAssertFalse(
+      navigation.completeConversationLinkResolution(
+        conversation: conversation(id: "meeting-old"),
+        generation: staleResolution))
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertNil(navigation.pendingConversation)
+    XCTAssertTrue(
+      navigation.completeConversationLinkResolution(
+        conversation: conversation(id: "meeting-new"),
+        generation: currentResolution))
+    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.pendingConversation?.id, "meeting-new")
+  }
+
+  func testDirectNavigationInvalidatesAnInFlightConversationLinkResolution() throws {
+    let suiteName = "ChatFirstShellTests.conversation-link-direct-navigation.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+
+    let resolution = navigation.beginConversationLinkResolution()
+    navigation.selectPrimary(.tasks)
+
+    XCTAssertFalse(
+      navigation.completeConversationLinkResolution(
+        conversation: conversation(id: "meeting-old"),
+        generation: resolution))
+    XCTAssertEqual(navigation.route, .tasks)
+    XCTAssertNil(navigation.pendingConversation)
+  }
+
   func testDirectNavigationInvalidatesAnInFlightGoalLinkResolution() throws {
     let suiteName = "ChatFirstShellTests.goal-link-direct-navigation.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
