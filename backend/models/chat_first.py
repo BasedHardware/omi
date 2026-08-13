@@ -93,6 +93,11 @@ ChatFirstBlockSpec = Annotated[
     Field(discriminator='type'),
 ]
 
+LegacyChatFirstBlockSpec = Annotated[
+    Union[QuestionCardSpec, TaskCardSpec, GoalLinkSpec, CaptureLinkSpec, MemoryLinkSpec],
+    Field(discriminator='type'),
+]
+
 
 class ChatFirstBlockValidationRequest(_StrictModel):
     source_surface: Literal['main_chat']
@@ -223,6 +228,14 @@ class MaterializePromptsRequest(_StrictModel):
 
 class MaterializePromptsResponse(_StrictModel):
     intents: list[ProactiveIntent] = Field(default_factory=list)
+
+
+class LegacyProactiveIntent(ProactiveIntent):
+    blocks: list[LegacyChatFirstBlockSpec] = Field(min_length=1, max_length=8)
+
+
+class LegacyMaterializePromptsResponse(_StrictModel):
+    intents: list[LegacyProactiveIntent] = Field(default_factory=list)
 
 
 class DeferralCreateRequest(_StrictModel):

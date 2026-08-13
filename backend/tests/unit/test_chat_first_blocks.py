@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from models.task_intelligence import TaskWorkflowControl
+from models.chat_first import MaterializePromptsRequest, MaterializePromptsResponse, ProactiveIntent
 import routers.chat_first as chat_first_router
 from tests.unit.universal_memory_test_helpers import configure_universal_memory
 
@@ -40,6 +41,35 @@ def _request(*, generation: int = 7, blocks: list[dict] | None = None) -> dict:
         'attempt_id': 'attempt-1',
         'blocks': blocks or [{'type': 'taskCard', 'task_id': 'task-1'}],
     }
+
+
+def test_materialization_v1_suppresses_conversation_links_while_v2_returns_them(monkeypatch):
+    intent = ProactiveIntent.model_validate(
+        {
+            'intent_id': 'intent-1',
+            'continuity_key': 'capture:conversation-1',
+            'account_generation': 7,
+            'source': 'capture_arrival',
+            'blocks': [
+                {
+                    'type': 'conversationLink',
+                    'conversation_id': 'conversation-1',
+                    'summary': 'Meeting notes ready',
+                }
+            ],
+            'created_at': '2026-08-13T00:00:00Z',
+        }
+    )
+    response = MaterializePromptsResponse(intents=[intent])
+    monkeypatch.setattr(chat_first_router, '_materialize_prompts', lambda request, uid: response)
+    request = MaterializePromptsRequest(
+        source_surface='main_chat',
+        control_generation=7,
+        owner_fence='user-1',
+    )
+
+    assert chat_first_router.materialize_prompts_v1(request, 'user-1').intents == []
+    assert chat_first_router.materialize_prompts(request, 'user-1') == response
 
 
 def test_chat_first_validate_admits_canonical_blocks_with_retry_stable_ids(monkeypatch):

@@ -28,6 +28,7 @@ from models.chat_first import (
     DeferralCreateRequest,
     DeferralReceipt,
     GoalLinkSpec,
+    LegacyMaterializePromptsResponse,
     MaterializePromptsRequest,
     MaterializePromptsResponse,
     MemoryLinkSpec,
@@ -256,6 +257,24 @@ def validate_chat_first_blocks(
 
 @router.post(
     '/v1/chat/materialize-prompts',
+    response_model=LegacyMaterializePromptsResponse,
+    tags=['chat-first'],
+)
+def materialize_prompts_v1(
+    request: MaterializePromptsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+) -> LegacyMaterializePromptsResponse:
+    """Preserve the released block union; new receipt types remain pending for v2 clients."""
+
+    response = _materialize_prompts(request, uid)
+    compatible = [
+        intent for intent in response.intents if all(block.type != 'conversationLink' for block in intent.blocks)
+    ]
+    return LegacyMaterializePromptsResponse(intents=compatible)
+
+
+@router.post(
+    '/v2/chat/materialize-prompts',
     response_model=MaterializePromptsResponse,
     tags=['chat-first'],
 )
@@ -263,6 +282,10 @@ def materialize_prompts(
     request: MaterializePromptsRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ) -> MaterializePromptsResponse:
+    return _materialize_prompts(request, uid)
+
+
+def _materialize_prompts(request: MaterializePromptsRequest, uid: str) -> MaterializePromptsResponse:
     """Fetch ready intents and accept kernel receipts; never writes a Chat row."""
 
     _require_materialization_capability(

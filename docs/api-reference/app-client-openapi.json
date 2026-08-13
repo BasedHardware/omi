@@ -7374,36 +7374,6 @@
         "title": "ConversationFinalizationStatusResponse",
         "type": "object"
       },
-      "ConversationLinkSpec": {
-        "additionalProperties": false,
-        "properties": {
-          "conversation_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-            "title": "Conversation Id",
-            "type": "string"
-          },
-          "summary": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Summary",
-            "type": "string"
-          },
-          "type": {
-            "const": "conversationLink",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "conversation_id",
-          "summary"
-        ],
-        "title": "ConversationLinkSpec",
-        "type": "object"
-      },
       "ConversationMutationResponse": {
         "description": "Canonical conversation snapshot returned after a user mutation.",
         "properties": {
@@ -13388,6 +13358,181 @@
         "title": "KnowledgeGraphResponse",
         "type": "object"
       },
+      "LegacyMaterializePromptsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "intents": {
+            "items": {
+              "$ref": "#/components/schemas/LegacyProactiveIntent"
+            },
+            "title": "Intents",
+            "type": "array"
+          }
+        },
+        "title": "LegacyMaterializePromptsResponse",
+        "type": "object"
+      },
+      "LegacyProactiveIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "captureLink": "#/components/schemas/CaptureLinkSpec",
+                  "goalLink": "#/components/schemas/GoalLinkSpec",
+                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
+                  "questionCard": "#/components/schemas/QuestionCardSpec",
+                  "taskCard": "#/components/schemas/TaskCardSpec"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/QuestionCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/TaskCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/CaptureLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/MemoryLinkSpec"
+                }
+              ]
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "cold_start_sequence_terminal_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal Receipt Id"
+          },
+          "cold_start_sequence_terminal_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "abandoned"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal State"
+          },
+          "continuity_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Continuity Key",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "delivery_state": {
+            "default": "ready",
+            "enum": [
+              "ready",
+              "pending_kernel_receipt",
+              "delivered"
+            ],
+            "title": "Delivery State",
+            "type": "string"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "materialization_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialization Receipt Id"
+          },
+          "source": {
+            "enum": [
+              "daily_opener",
+              "capture_arrival",
+              "deferral_reraise",
+              "agent_judgment",
+              "cold_start_rich",
+              "cold_start_sparse"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatFirstSubject"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "intent_id",
+          "continuity_key",
+          "account_generation",
+          "source",
+          "blocks",
+          "created_at"
+        ],
+        "title": "LegacyProactiveIntent",
+        "type": "object"
+      },
       "LinkCalendarEventRequest": {
         "properties": {
           "event_id": {
@@ -13605,20 +13750,6 @@
           "owner_fence"
         ],
         "title": "MaterializePromptsRequest",
-        "type": "object"
-      },
-      "MaterializePromptsResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "intents": {
-            "items": {
-              "$ref": "#/components/schemas/ProactiveIntent"
-            },
-            "title": "Intents",
-            "type": "array"
-          }
-        },
-        "title": "MaterializePromptsResponse",
         "type": "object"
       },
       "McpAddServerResponse": {
@@ -16770,172 +16901,6 @@
           "private_cloud_sync_enabled"
         ],
         "title": "PrivateCloudSyncResponse",
-        "type": "object"
-      },
-      "ProactiveIntent": {
-        "additionalProperties": false,
-        "description": "A server-side instruction, not a Chat transcript row.\n\nThe local desktop kernel is the sole writer of the visible assistant turn.\nThis record remains deliverable until that kernel has committed and\nacknowledged its stable ``intent_id``; cold-start intents make that\nexplicit as ``pending_kernel_receipt``.",
-        "properties": {
-          "account_generation": {
-            "minimum": 0.0,
-            "title": "Account Generation",
-            "type": "integer"
-          },
-          "blocks": {
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "captureLink": "#/components/schemas/CaptureLinkSpec",
-                  "conversationLink": "#/components/schemas/ConversationLinkSpec",
-                  "goalLink": "#/components/schemas/GoalLinkSpec",
-                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
-                  "questionCard": "#/components/schemas/QuestionCardSpec",
-                  "taskCard": "#/components/schemas/TaskCardSpec"
-                },
-                "propertyName": "type"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/QuestionCardSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/TaskCardSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/GoalLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/CaptureLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/ConversationLinkSpec"
-                },
-                {
-                  "$ref": "#/components/schemas/MemoryLinkSpec"
-                }
-              ]
-            },
-            "maxItems": 8,
-            "minItems": 1,
-            "title": "Blocks",
-            "type": "array"
-          },
-          "cold_start_sequence_terminal_receipt_id": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cold Start Sequence Terminal Receipt Id"
-          },
-          "cold_start_sequence_terminal_state": {
-            "anyOf": [
-              {
-                "enum": [
-                  "completed",
-                  "abandoned"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cold Start Sequence Terminal State"
-          },
-          "continuity_key": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-            "title": "Continuity Key",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "delivered_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Delivered At"
-          },
-          "delivery_state": {
-            "default": "ready",
-            "enum": [
-              "ready",
-              "pending_kernel_receipt",
-              "delivered"
-            ],
-            "title": "Delivery State",
-            "type": "string"
-          },
-          "intent_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-            "title": "Intent Id",
-            "type": "string"
-          },
-          "materialization_receipt_id": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Materialization Receipt Id"
-          },
-          "source": {
-            "enum": [
-              "daily_opener",
-              "capture_arrival",
-              "deferral_reraise",
-              "agent_judgment",
-              "cold_start_rich",
-              "cold_start_sparse"
-            ],
-            "title": "Source",
-            "type": "string"
-          },
-          "subject": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ChatFirstSubject"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "intent_id",
-          "continuity_key",
-          "account_generation",
-          "source",
-          "blocks",
-          "created_at"
-        ],
-        "title": "ProactiveIntent",
         "type": "object"
       },
       "ProactiveMaterializationReceipt": {
@@ -32552,8 +32517,8 @@
     },
     "/v1/chat/materialize-prompts": {
       "post": {
-        "description": "Fetch ready intents and accept kernel receipts; never writes a Chat row.",
-        "operationId": "materialize_prompts_v1_chat_materialize_prompts_post",
+        "description": "Preserve the released block union; new receipt types remain pending for v2 clients.",
+        "operationId": "materialize_prompts_v1_v1_chat_materialize_prompts_post",
         "parameters": [
           {
             "in": "header",
@@ -32607,7 +32572,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MaterializePromptsResponse"
+                  "$ref": "#/components/schemas/LegacyMaterializePromptsResponse"
                 }
               }
             },
@@ -32632,7 +32597,7 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Materialize Prompts",
+        "summary": "Materialize Prompts V1",
         "tags": [
           "chat-first"
         ]

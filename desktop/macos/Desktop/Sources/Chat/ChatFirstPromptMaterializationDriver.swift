@@ -251,7 +251,7 @@ extension APIClient {
       }
     )
     return try await post(
-      "v1/chat/materialize-prompts",
+      "v2/chat/materialize-prompts",
       body: body,
       includeBYOK: false,
       expectedOwnerId: ownerID
