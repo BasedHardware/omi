@@ -108,15 +108,41 @@ The mainboard uses a PCB trace antenna (no external antenna connector). The ante
 
 ### Enclosure Effect
 
-The Omi device uses a **CNC aluminium enclosure** (front cover case-a, back cover case-b). Metal enclosures significantly affect antenna performance:
+The Omi device uses a **CNC AL6061-T6 aluminium enclosure** (front cover case-a `323050581`, back cover case-b `323050582`). Metal enclosures significantly affect antenna performance:
 
 - **Detuning:** Metal near the antenna shifts the resonant frequency. The antenna feed was tuned for the production enclosure geometry.
 - **Absorption:** Aluminium absorbs and reflects RF energy, reducing antenna efficiency.
-- **RF window/slot strategy:** The CNC aluminum enclosure must have deliberate RF apertures to allow 2.4 GHz and 5 GHz signals to radiate. Potential RF paths include:
-  - **Acoustic ports** (microphone holes) — may serve as RF apertures; do not block with conductive material
-  - **Deliberate slots or gaps** in the enclosure aligned with the antenna radiation pattern
-  - **Non-conductive sections** (plastic inserts, anodized gaps) that break the enclosure shielding
-  - **⚠ This strategy is not documented in the design files.** Measure S11 with a VNA inside the final enclosure to verify the antenna resonates at 2.4 GHz and 5 GHz. Without a verified RF window, the metal enclosure will severely attenuate all wireless signals.
+
+### Enclosure RF Window Strategy
+
+**Sources:** Mechanical drawings (`omi-2d-drawings.pdf`), mechanical BOM (`mechanical-bom.csv`), exploded-view assembly (`manufacturing-specifications.png`), factory laser parameters (Jack Deng, confirmed by Thinh Nguyen 2026-08-13)
+
+The Omi uses **three RF paths** through the aluminium enclosure:
+
+| Path | Part / Feature | Material | RF Role |
+|------|----------------|----------|---------|
+| **1. Plastic wrapper (primary)** | Middle frame `322081191`, PC+ABS, injection molded, 23.2mm×6.35mm, 1.49mm wall | PC+ABS (RF-transparent) | **Main RF window** — continuous plastic ring between case-a and case-b |
+| **2. Mic port** | Hole in case-b, R0.78mm (1.56mm diameter) + acoustic dust mesh | Air / mesh (RF-transparent) | Secondary aperture |
+| **3. LED guide** | Polycarbonate light pipe `322081192`, D6×H1.9mm | Polycarbonate (RF-transparent) | Small aperture |
+
+**Primary RF window — PC+ABS wrapper:** The injection-molded wrapper sits at the parting line between the two CNC aluminium halves, creating an RF-transparent ring around the full device circumference. Effective aperture: π × 25.5mm × 1.49mm ≈ 119 mm². At 2.4 GHz (λ ≈ 125mm), this slot aperture provides the dominant RF exit path. The wrapper also provides structural connection between the two case halves.
+
+**Laser engraving on case-a (supplementary):** The production top cover receives fiber laser engraving (Yb³⁺ 1064nm, 20W at 45% power, 1000 mm/s, single pass) that improves RF performance through **surface current disruption**:
+
+- **Mechanism:** At 2.4 GHz, RF skin depth in AL6061 is ~1.67 μm — surface currents flow in the top ~8 μm (5δ) of the metal. The laser etches grooves ~10–30 μm deep into the aluminium, exceeding the current penetration depth. Induced surface currents on case-a's inner wall must detour around the grooves, increasing the effective surface impedance. This reduces the magnitude of image currents that oppose the PCB antenna's radiation, improving antenna efficiency.
+- **Estimated improvement:** 0.5–2 dB (10–25% range improvement). Real and measurable, but secondary to the plastic wrapper window.
+- **What it does NOT do:** The grooves do not make the aluminium RF-transparent. The case-a wall is ~1.45mm thick (~870 skin depths) — solid aluminium blocks RF completely regardless of surface engraving. The improvement comes entirely from weakening the antenna-enclosure coupling, not from energy passing through the metal.
+
+**Optimization notes for the laser engraving:**
+
+| Parameter | Production spec | For maximum RF benefit |
+|-----------|----------------|------------------------|
+| Location | (confirm with factory) | Inside of case-a, directly over the PCB antenna trace area |
+| Orientation | (confirm with factory) | Grooves perpendicular to antenna's dominant current |
+| Depth | ~10–30 μm (single pass) | 20–50 μm preferred (2–3 passes at 500 mm/s) |
+| Pattern | (confirm with factory) | Grid or concentric rings disrupt currents in all polarizations |
+
+**Verification:** To quantify the actual RF benefit, measure S11 return loss and total radiated power (TRP) on two identical units — one with engraving, one without — using a VNA and anechoic chamber or GTEM cell. The difference appears as improved S11 match at 2.4/5 GHz and higher TRP.
 
 **⚠ If using a different enclosure:** The RF matching network may need re-tuning. This requires a VNA (Vector Network Analyzer) and expertise in antenna matching. Without re-tuning, expect degraded BLE range and WiFi throughput.
 
