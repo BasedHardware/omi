@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 const source = await Bun.file(new URL("./dev-server.ts", import.meta.url)).text();
+const appFacingSource = await Bun.file(new URL("../app-facing.ts", import.meta.url)).text();
 
 const occurrences = (pattern: RegExp): number => source.match(pattern)?.length ?? 0;
 
@@ -25,6 +26,10 @@ test("dev-server routes generation through the gateway or fails closed without o
   expect(source).toContain("createGatewayChatGenerationSource");
   expect(source).toContain("createGatewayRequiredChatGenerationSource");
   expect(source).not.toContain("createScriptedChatGenerationSource");
+  expect(appFacingSource).toContain(
+    "generationSource: options.generationSource ?? createGatewayRequiredChatGenerationSource()",
+  );
+  expect(appFacingSource).not.toContain("createScriptedChatGenerationSource");
 });
 
 test("producer evidence has one composition site: the registered local service", async () => {

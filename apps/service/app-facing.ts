@@ -75,7 +75,7 @@ import {
   type ChatGenerationContextSource,
 } from "./chat/generation-context";
 import {
-  createScriptedChatGenerationSource,
+  createGatewayRequiredChatGenerationSource,
   type ChatGenerationSource,
 } from "./chat/generation-source";
 import { createChatHistoryCursorCodec } from "./chat/history-cursor";
@@ -412,7 +412,7 @@ export type LocalDevServiceOptions = Omit<
   | "generationSource"
   | "generationContext"
 > & {
-  /** Explicit dev/test override; omission selects the named scripted adapter. */
+  /** Explicit dev/test override; omission fails Chat closed until a gateway is configured. */
   readonly transcriptionSource?: TranscriptionSource;
   readonly conversationProcessorFactory?: ListenConversationProcessorFactory;
   readonly generationSource?: ChatGenerationSource;
@@ -431,7 +431,7 @@ export const createLocalDevService = (options: LocalDevServiceOptions): LocalSer
     transcriptionSource: options.transcriptionSource ?? createScriptedTranscriptionSource(),
     conversationProcessorFactory: options.conversationProcessorFactory
       ?? createDeterministicListenConversationProcessor,
-    generationSource: options.generationSource ?? createScriptedChatGenerationSource(),
+    generationSource: options.generationSource ?? createGatewayRequiredChatGenerationSource(),
     generationContext: options.generationContext ?? createEmptyChatGenerationContextSource(),
   });
 };
