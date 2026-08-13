@@ -19,6 +19,7 @@ const scheme = "Runner";
 const testIdentifier = "test://com.apple.xcode/Runner/RunnerUITests/NativeSemanticEvidenceUITests/testChatReadySemanticEvidence";
 const testOnly = "RunnerUITests/NativeSemanticEvidenceUITests/testChatReadySemanticEvidence";
 const foregroundGuard = path.join(coreRoot, "shells/tools/macos-foreground-guard.mjs");
+const forbiddenForegroundBundleIds = ["com.apple.iphonesimulator", "me.omi.proto.omiWebviewProto"];
 const domains = new Set(["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"]);
 const states = new Set(["loading", "empty", "ready", "error", "offline", "busy", "complete", "cancelled"]);
 const themes = new Set(["light", "dark"]);
@@ -222,7 +223,7 @@ function runForegroundGuarded(command, args, options, outputDir) {
   const guardResult = path.join(outputDir, "foreground-guard.json");
   const stdoutPath = path.join(outputDir, "xcodebuild.stdout");
   const stderrPath = path.join(outputDir, "xcodebuild.stderr");
-  const guardArgs = [foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--", command, ...args];
+  const guardArgs = [foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","), "--", command, ...args];
   const wrapped = spawnSync(process.execPath, guardArgs, { ...options, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 310_000, maxBuffer: 16 * 1024 * 1024 });
   if (wrapped.error?.code === "ETIMEDOUT") throw new Error("iOS semantic foreground guard timed out");
   if (!existsSync(guardResult)) throw new Error("iOS semantic foreground guard produced no terminal receipt");
@@ -234,7 +235,7 @@ function runForegroundGuarded(command, args, options, outputDir) {
 
 function validateForegroundCustody(custody) {
   if (!custody || custody.schema !== "omi.macos-foreground-guard/v1" || custody.status !== 0 || custody.error !== null || custody.monitor_error !== null) throw new Error("preparation receipt lacks successful foreground custody");
-  if (custody.policy !== "sampled-macos-foreground-custody-20ms-target-250ms-probe-timeout-no-activation-request" || custody.target_interval_milliseconds !== 20 || custody.probe_timeout_milliseconds !== 250 || !Number.isInteger(custody.sample_count) || custody.sample_count < 1 || !Number.isFinite(custody.max_sample_gap_milliseconds) || custody.max_sample_gap_milliseconds < 0) throw new Error("preparation receipt foreground custody policy is malformed");
+  if (custody.policy !== "sampled-macos-forbidden-fixture-foreground-detection-20ms-target-250ms-probe-timeout-no-activation-request" || JSON.stringify(custody.forbidden_bundle_ids) !== JSON.stringify([...forbiddenForegroundBundleIds].sort()) || custody.target_interval_milliseconds !== 20 || custody.probe_timeout_milliseconds !== 250 || !Number.isInteger(custody.sample_count) || custody.sample_count < 1 || !Number.isFinite(custody.max_sample_gap_milliseconds) || custody.max_sample_gap_milliseconds < 0) throw new Error("preparation receipt foreground custody policy is malformed");
 }
 
 function relativeCore(file, label) {

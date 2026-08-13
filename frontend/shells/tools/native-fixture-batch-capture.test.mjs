@@ -10,7 +10,7 @@ import test from "node:test";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const producer = path.join(root, "shells/tools/capture-native-fixture-batch.mjs");
-const { assertForegroundMonitorCompletionForTest, assertMacForegroundProbeTransitionForTest, canonicalizeScreenshotForTest, iosFocusPolicyForTest } = await import(producer);
+const { assertForegroundMonitorCompletionForTest, assertMacForegroundProbeTransitionForTest, canonicalizeScreenshotForTest, nativeFocusPolicyForTest } = await import(producer);
 const coreSha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const platformSha = "1".repeat(40);
 
@@ -290,14 +290,15 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(iosProject, /CaptureFlutterViewController\.swift in Sources/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /\/usr\/bin\/lsappinfo/);
-  assert.match(source, /macForegroundApplication\(`\$\{coordinate\.run_id\}: preflight`\)/);
-  assert.match(source, /assertMacForegroundUnchanged\(foreground, `\$\{coordinate\.run_id\}: simulator launch`\)/);
-  assert.match(source, /assertMacForegroundUnchanged\(foreground, `\$\{coordinate\.run_id\}: simulator screenshot`\)/);
-  assert.match(source, /assertMacForegroundUnchanged\(foreground, `\$\{coordinate\.run_id\}: cleanup`\)/);
-  assert.match(source, /assertMacForegroundUnchanged\(foreground, `\$\{coordinate\.run_id\}: iOS fixture preparation`\)/);
-  assert.match(source, /bounded-20ms-macos-foreground-change-detection-no-activation-request/);
-  assert.match(source, /startForegroundMonitor/);
-  assert.match(source, /iOS batch final restoration/);
+  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: preflight`\)/);
+  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: simulator launch`\)/);
+  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: simulator screenshot`\)/);
+  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: cleanup`\)/);
+  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: iOS fixture preparation`\)/);
+  assert.match(source, /sampled-20ms-forbidden-fixture-foreground-detection-no-activation-request/);
+  assert.match(source, /startForbiddenForegroundMonitor/);
+  assert.match(source, /native batch final restoration/);
+  assert.match(source, /artifacts\.macos\.bundleId/);
   assert.doesNotMatch(source, /open(?:Sync)?\([^\n]*Simulator/);
   assert.doesNotMatch(source, /osascript/);
   assert.match(source, /elapsedSeconds/);
@@ -314,19 +315,19 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.doesNotMatch(source, /OMI_API_TOKEN/);
 });
 
-test("iOS foreground guard fails closed against fake probe errors and focus changes", () => {
+test("iOS foreground guard allows user app switching but rejects fixture foreground", () => {
   const front = { status: 0, signal: null, stdout: "ASN:0x0-0x1001:\n" };
-  assert.doesNotThrow(() => assertMacForegroundProbeTransitionForTest(front, { ...front }));
+  const userInfo = { status: 0, signal: null, stdout: '\"CFBundleIdentifier\"=\"com.openai.codex\"\n' };
+  const otherInfo = { status: 0, signal: null, stdout: '\"CFBundleIdentifier\"=\"com.anthropic.claudefordesktop\"\n' };
+  const fixtureInfo = { status: 0, signal: null, stdout: '\"CFBundleIdentifier\"=\"com.apple.iphonesimulator\"\n' };
+  assert.doesNotThrow(() => assertMacForegroundProbeTransitionForTest(front, userInfo, { ...front, stdout: "ASN:0x0-0x2002:\n" }, otherInfo));
+  assert.throws(() => assertMacForegroundProbeTransitionForTest(front, userInfo, front, fixtureInfo), /forbidden fixture application/);
   assert.throws(
-    () => assertMacForegroundProbeTransitionForTest(front, { ...front, stdout: "ASN:0x0-0x2002:\n" }),
-    /foreground application changed during headless iOS fixture capture/,
-  );
-  assert.throws(
-    () => assertMacForegroundProbeTransitionForTest(front, { ...front, status: 1, stdout: "" }),
+    () => assertMacForegroundProbeTransitionForTest(front, userInfo, { ...front, status: 1, stdout: "" }, otherInfo),
     /unable to bind the current macOS foreground application/,
   );
   assert.throws(
-    () => assertMacForegroundProbeTransitionForTest({ ...front, error: { code: "ETIMEDOUT" } }, front),
+    () => assertMacForegroundProbeTransitionForTest({ ...front, error: { code: "ETIMEDOUT" } }, userInfo, front, otherInfo),
     /foreground-app probe timed out/,
   );
 });
@@ -341,10 +342,11 @@ test("iOS continuous foreground monitor observes the real host without activatin
     const stop = path.join(scratch, "stop");
     const violation = path.join(scratch, "violation.json");
     const done = path.join(scratch, "done.json");
-    const monitor = spawnSync(process.execPath, [producer, "--foreground-monitor", "ASN:0x0-0xdead:", ready, stop, violation, done], { encoding: "utf8", timeout: 5_000 });
+    writeFileSync(stop, "stop\n");
+    const monitor = spawnSync(process.execPath, [producer, "--foreground-monitor", JSON.stringify(["com.example.never-front"]), ready, stop, violation, done], { encoding: "utf8", timeout: 5_000 });
     assert.equal(monitor.status, 0, monitor.stderr);
-    assert.equal(existsSync(violation), true);
-    assert.match(JSON.parse(readFileSync(violation, "utf8")).reason, /foreground application changed/);
+    assert.equal(existsSync(violation), false);
+    assert.equal(existsSync(done), true);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -439,7 +441,7 @@ test("assemble-receipt binds result manifest separately from replay artifacts", 
     const value = manifest([coordinate]);
     writeFileSync(matrix, JSON.stringify(value));
     const members = { m0000: { coordinate: ["screenshot", coordinate.domain, coordinate.shell, coordinate.state, coordinate.theme, coordinate.width, "none"], run_id: coordinate.run_id, evidence: { root: "core", path: path.relative(root, image), sha256: sha256(png) }, sidecar: { root: "core", path: path.relative(root, sidecar), sha256: sha256(readFileSync(sidecar)) } } };
-    const authority = { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { ios: iosFocusPolicyForTest() }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } };
+    const authority = { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { macos: nativeFocusPolicyForTest(), ios: nativeFocusPolicyForTest() }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } };
     const result = { schema: "omi.polish.native-fixture-batch-result/v1", source_shas: value.source_shas, manifest_path: `core:${path.relative(root, matrix)}`, manifest_sha256: sha256(readFileSync(matrix)), command: "node capture-native-fixture-batch.mjs", argv: ["node", "capture-native-fixture-batch.mjs"], input_set: { id: `input-v1-${"a".repeat(64)}`, entries: [], tree_sha256: "a".repeat(64) }, members, timeout_seconds: 300, wait_seconds: 1, stdout_sha256: sha256("NATIVE_FIXTURE_BATCH_COMPLETE members=1\n"), stderr_sha256: sha256(""), authority };
     writeFileSync(resultPath, JSON.stringify(result, null, 2));
     const forged = { ...result, authority: { fixture: true } };
@@ -474,6 +476,9 @@ test("one manifest-scoped prepared app can capture a later coordinate determinis
     const resources = path.join(app, "Contents/Resources");
     mkdirSync(path.dirname(executable), { recursive: true });
     mkdirSync(resources, { recursive: true });
+    writeFileSync(path.join(app, "Contents/Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>me.omi.capture.test</string></dict></plist>\n`);
     const fakeImage = path.join(resources, "fake.png");
     writeFileSync(fakeImage, uniformFixturePng(960, 671));
     writeFileSync(path.join(resources, "omi-build-stamp.json"), "{\"fixture\":true}\n");
@@ -482,8 +487,8 @@ test("one manifest-scoped prepared app can capture a later coordinate determinis
     const preparedPath = path.join(outRoot, "prepared-input-set.json");
     const descriptor = {
       schema: "omi.polish.native-fixture-prepared/v1", source_shas: { core: coreSha, platform: platformSha }, manifest_path: `core:${path.relative(root, matrix)}`, manifest_sha256: sha256(readFileSync(matrix)), shell: "macos", scope: "manifest-shell", coordinate_run_ids: [coordinate.run_id, secondCoordinate.run_id],
-      artifacts: { macos: { shell: "macos", app: `core:${path.relative(root, app)}`, build_dir: `core:${path.relative(root, path.join(outRoot, "build/macos"))}`, stamp: `core:${path.relative(root, path.join(app, "Contents/Resources/omi-build-stamp.json"))}`, stamp_sha256: sha256(readFileSync(path.join(app, "Contents/Resources/omi-build-stamp.json"))), bundle_id: null } },
-      authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { ios: iosFocusPolicyForTest() }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
+      artifacts: { macos: { shell: "macos", app: `core:${path.relative(root, app)}`, build_dir: `core:${path.relative(root, path.join(outRoot, "build/macos"))}`, stamp: `core:${path.relative(root, path.join(app, "Contents/Resources/omi-build-stamp.json"))}`, stamp_sha256: sha256(readFileSync(path.join(app, "Contents/Resources/omi-build-stamp.json"))), bundle_id: "me.omi.capture.test" } },
+      authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { macos: nativeFocusPolicyForTest(), ios: nativeFocusPolicyForTest() }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
     };
     descriptor.input_set = inputEntriesForFake(matrix, app);
     mkdirSync(outRoot, { recursive: true });

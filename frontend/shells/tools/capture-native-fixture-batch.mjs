@@ -45,7 +45,8 @@ const safeRunId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
 const safeLocale = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/;
 const maxCoordinates = 1236;
 const maxBatchCoordinates = 32;
-const iosFocusPolicy = "bounded-20ms-macos-foreground-change-detection-no-activation-request";
+export const nativeForbiddenForegroundPolicy = "sampled-20ms-forbidden-fixture-foreground-detection-no-activation-request";
+const simulatorBundleId = "com.apple.iphonesimulator";
 const widthPolicy = {
   macos: {
     compact: { width: 760, height: 671, scale: 2, orientation: "landscape" },
@@ -368,11 +369,20 @@ function foregroundApplicationFromProbe(result, label) {
   return result.stdout.trim();
 }
 
+function foregroundBundleFromProbes(front, info, label) {
+  const identity = foregroundApplicationFromProbe(front, label);
+  if (info.error?.code === "ETIMEDOUT" || info.signal === "SIGTERM") fail(`${label}: foreground metadata probe timed out`);
+  const match = info.status === 0 && typeof info.stdout === "string" ? info.stdout.match(/"CFBundleIdentifier"="([A-Za-z0-9.-]+)"/) : null;
+  if (!match) fail(`${label}: unable to bind the foreground application bundle`);
+  return { identity, bundleId: match[1] };
+}
+
 function sleepSync(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
-function foregroundMonitorMain(expected, readyPath, stopPath, violationPath, donePath) {
+function foregroundMonitorMain(forbiddenJson, readyPath, stopPath, violationPath, donePath) {
+  const forbidden = new Set(JSON.parse(forbiddenJson));
   try {
     while (!existsSync(stopPath)) {
       let observed;
@@ -381,29 +391,29 @@ function foregroundMonitorMain(expected, readyPath, stopPath, violationPath, don
         writeAtomic(violationPath, { reason: error.message });
         return;
       }
-      if (observed !== expected) {
-        writeAtomic(violationPath, { reason: "macOS foreground application changed", expected, observed });
+      if (forbidden.has(observed.bundleId)) {
+        writeAtomic(violationPath, { reason: "a forbidden fixture application became foreground", observed_bundle_id: observed.bundleId });
         return;
       }
-      if (!existsSync(readyPath)) writeAtomic(readyPath, { expected });
+      if (!existsSync(readyPath)) writeAtomic(readyPath, { forbidden_bundle_ids: [...forbidden].sort() });
       sleepSync(20);
     }
   } finally {
-    if (!existsSync(readyPath)) writeAtomic(readyPath, { expected, failed: true });
+    if (!existsSync(readyPath)) writeAtomic(readyPath, { forbidden_bundle_ids: [...forbidden].sort(), failed: true });
     writeAtomic(donePath, { stopped: true });
   }
 }
 
-function startForegroundMonitor(expected, outRoot) {
+export function startForbiddenForegroundMonitor(forbiddenBundleIds, outRoot) {
   const monitorRoot = path.join(outRoot, `.focus-monitor-${process.pid}-${randomBytes(4).toString("hex")}`);
   mkdirSync(monitorRoot, { recursive: true });
   const readyPath = path.join(monitorRoot, "ready.json");
   const stopPath = path.join(monitorRoot, "stop");
   const violationPath = path.join(monitorRoot, "violation.json");
   const donePath = path.join(monitorRoot, "done.json");
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--foreground-monitor", expected, readyPath, stopPath, violationPath, donePath], {
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--foreground-monitor", JSON.stringify([...forbiddenBundleIds].sort()), readyPath, stopPath, violationPath, donePath], {
     cwd: coreRoot,
-    env: allowedEnvironment(monitorRoot, "ios"),
+    env: allowedEnvironment(monitorRoot, "macos"),
     stdio: "ignore",
   });
   const deadline = Date.now() + 5_000;
@@ -412,12 +422,12 @@ function startForegroundMonitor(expected, outRoot) {
     try { child.kill("SIGTERM"); } catch {}
     const detail = existsSync(violationPath) ? JSON.parse(readFileSync(violationPath, "utf8")).reason : "monitor did not become ready";
     rmSync(monitorRoot, { recursive: true, force: true });
-    fail(`iOS foreground monitor unavailable: ${detail}`);
+    fail(`native foreground monitor unavailable: ${detail}`);
   }
   return { child, monitorRoot, stopPath, violationPath, donePath };
 }
 
-function stopForegroundMonitor(monitor) {
+export function stopForbiddenForegroundMonitor(monitor) {
   if (!monitor) return;
   writeFileSync(monitor.stopPath, "stop\n", { mode: 0o600 });
   const deadline = Date.now() + 2_000;
@@ -436,33 +446,47 @@ function stopForegroundMonitor(monitor) {
 }
 
 function assertForegroundMonitorCompletion(completed, violation) {
-  if (!completed) fail("iOS fixture capture focus custody failed: foreground monitor stopped without a terminal receipt");
-  if (violation) fail(`iOS fixture capture focus custody failed: ${violation.reason}`);
+  if (!completed) fail("native fixture capture focus custody failed: foreground monitor stopped without a terminal receipt");
+  if (violation) fail(`native fixture capture focus custody failed: ${violation.reason}`);
 }
 
 function macForegroundApplication(label) {
-  return foregroundApplicationFromProbe(spawnSync("/usr/bin/lsappinfo", ["front"], {
+  const front = spawnSync("/usr/bin/lsappinfo", ["front"], {
     cwd: coreRoot,
     encoding: "utf8",
     timeout: 5_000,
     stdio: ["ignore", "pipe", "pipe"],
-  }), label);
+  });
+  const identity = foregroundApplicationFromProbe(front, label);
+  const info = spawnSync("/usr/bin/lsappinfo", ["info", "-only", "bundleID", "-app", identity], { cwd: coreRoot, encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "pipe"] });
+  return foregroundBundleFromProbes(front, info, label);
 }
 
-function assertMacForegroundUnchanged(expected, label) {
+function assertNoForbiddenForeground(forbiddenBundleIds, label) {
   const observed = macForegroundApplication(label);
-  if (observed !== expected) {
-    fail(`${label}: macOS foreground application changed during headless iOS fixture capture`);
-  }
+  if (forbiddenBundleIds.has(observed.bundleId)) fail(`${label}: a forbidden fixture application became foreground`);
 }
 
-export function assertMacForegroundProbeTransitionForTest(before, after) {
-  const expected = foregroundApplicationFromProbe(before, "test preflight");
-  const observed = foregroundApplicationFromProbe(after, "test cleanup");
-  if (observed !== expected) fail("test cleanup: macOS foreground application changed during headless iOS fixture capture");
+export function assertMacForegroundProbeTransitionForTest(beforeFront, beforeInfo, afterFront, afterInfo, forbidden = new Set([simulatorBundleId, "me.omi.capture"])) {
+  const before = foregroundBundleFromProbes(beforeFront, beforeInfo, "test preflight");
+  const after = foregroundBundleFromProbes(afterFront, afterInfo, "test cleanup");
+  if (forbidden.has(before.bundleId) || forbidden.has(after.bundleId)) fail("test cleanup: a forbidden fixture application became foreground");
 }
 
-export function iosFocusPolicyForTest() { return iosFocusPolicy; }
+export function nativeFocusPolicyForTest() { return nativeForbiddenForegroundPolicy; }
+
+function bundleIdentifierForApp(app, label) {
+  const plist = path.join(app, "Contents/Info.plist");
+  const result = spawnSync("/usr/bin/plutil", ["-extract", "CFBundleIdentifier", "raw", "-o", "-", plist], {
+    cwd: coreRoot,
+    encoding: "utf8",
+    timeout: 5_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const bundleId = result.status === 0 && typeof result.stdout === "string" ? result.stdout.trim() : "";
+  if (!/^[A-Za-z0-9][A-Za-z0-9.-]{1,127}$/.test(bundleId)) fail(`${label}: app bundle identifier is unavailable`);
+  return bundleId;
+}
 export function assertForegroundMonitorCompletionForTest(completed, violation = null) { assertForegroundMonitorCompletion(completed, violation); }
 
 function writeAtomic(file, value) {
@@ -717,7 +741,7 @@ function buildMac(manifest, outRoot, batchId) {
   runCommand(commandSpec("/bin/bash", [path.join(coreRoot, "shells/macos/scripts/build-shell.sh")], coreRoot, env, 300), "macOS one-time build");
   const app = path.join(buildDir, "omi-on-polish-batch.app");
   if (!existsSync(path.join(app, "Contents/MacOS/omi-on-polish-batch"))) fail("macOS build did not produce the scratch app");
-  return { shell: "macos", buildDir, app, env, batchId, stamp: path.join(app, "Contents/Resources/omi-build-stamp.json") };
+  return { shell: "macos", buildDir, app, bundleId: bundleIdentifierForApp(app, "macOS build"), env, batchId, stamp: path.join(app, "Contents/Resources/omi-build-stamp.json") };
 }
 
 function buildIos(manifest, outRoot, batchId) {
@@ -786,7 +810,7 @@ function writePreparedInputSet(file, manifestPath, manifest, coordinates, outRoo
     scope: "manifest-shell",
     coordinate_run_ids: coordinates.map((coordinate) => coordinate.run_id),
     artifacts: Object.fromEntries(Object.entries(artifacts).map(([name, artifact]) => [name, artifactDescriptor(artifact)])),
-    authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { ios: iosFocusPolicy }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
+    authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { macos: nativeForbiddenForegroundPolicy, ios: nativeForbiddenForegroundPolicy }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
   };
   writeAtomic(file, descriptor);
   // The descriptor is an immutable input to capture, but deliberately does
@@ -798,11 +822,12 @@ function resolvePreparedArtifact(descriptor, name) {
   const item = descriptor.artifacts?.[name];
   if (!item || typeof item.app !== "string" || !item.app.startsWith("core:")) fail(`prepared input set is missing ${name} app`);
   if (name === "ios" && item.bundle_id !== "me.omi.proto.omiWebviewProto") fail("prepared iOS bundle id is not the capture shell");
-  if (name === "macos" && item.bundle_id !== null) fail("prepared macOS bundle id must be null");
+  if (name === "macos" && !/^[A-Za-z0-9][A-Za-z0-9.-]{1,127}$/.test(item.bundle_id || "")) fail("prepared macOS bundle id is invalid");
   const app = ensureCoreDirectory(item.app.slice("core:".length), `${name} app`);
   const buildDir = ensureCoreDirectory(String(item.build_dir || "").replace(/^core:/, ""), `${name} build_dir`);
   const stamp = ensureCoreFile(String(item.stamp || "").replace(/^core:/, ""), `${name} stamp`);
   if (!existsSync(app) || !lstatSync(app).isDirectory()) fail(`prepared ${name} app is unavailable`);
+  if (name === "macos" && bundleIdentifierForApp(app, "prepared macOS app") !== item.bundle_id) fail("prepared macOS bundle id changed");
   if (!existsSync(stamp) || !lstatSync(stamp).isFile()) fail(`prepared ${name} build stamp is unavailable`);
   if (item.stamp_sha256 && hashFile(stamp) !== item.stamp_sha256) fail(`prepared ${name} build stamp changed`);
   if (!existsSync(buildDir) || !lstatSync(buildDir).isDirectory()) fail(`prepared ${name} build directory is unavailable`);
@@ -819,7 +844,7 @@ function loadPreparedInputSet(file, manifestPath, manifest, shell) {
   if (descriptor.manifest_path !== `core:${authorityRelative(manifestPath)}` || descriptor.manifest_sha256 !== hashFile(manifestPath)) fail("prepared input set manifest binding is stale");
   if (descriptor.shell !== shell && descriptor.shell !== "both") fail("prepared input set shell does not cover capture shell");
   if (descriptor.scope !== "manifest-shell") fail("prepared input set scope is invalid");
-  const expectedAuthority = { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { ios: iosFocusPolicy }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } };
+  const expectedAuthority = { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { macos: nativeForbiddenForegroundPolicy, ios: nativeForbiddenForegroundPolicy }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } };
   if (canonical(descriptor.authority) !== canonical(expectedAuthority)) fail("prepared input set authority/focus policy is invalid");
   const expectedRunIds = manifest.coordinates
     .filter((coordinate) => shell === "both" || coordinate.shell === shell)
@@ -989,17 +1014,17 @@ function captureMac(coordinate, artifact, output, timeoutSeconds) {
 
 function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
   // `simctl` talks directly to an already-Booted CoreSimulator device and does
-  // not need Simulator.app to launch or activate. Bind the user's current
-  // frontmost application before any device mutation and fail the coordinate
-  // if it changes. We deliberately do not try to "restore" focus: doing so
-  // would itself be an activating UI operation and could mask a regression.
-  const foreground = macForegroundApplication(`${coordinate.run_id}: preflight`);
+  // not need Simulator.app to launch or activate. Sample the foreground and
+  // reject only the exact Simulator/fixture bundles. Ordinary user switching
+  // remains allowed. We never restore focus because that would activate UI.
+  const forbiddenForeground = new Set([simulatorBundleId, artifact.bundleId]);
+  assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: preflight`);
   verifyIosDevice(coordinate, artifact.env);
   if (!artifact.appearanceByDevice.has(coordinate.device.udid)) artifact.appearanceByDevice.set(coordinate.device.udid, queryIosAppearance(coordinate.device.udid, artifact.env));
   if (!artifact.geometryByDevice.has(coordinate.device.udid)) artifact.geometryByDevice.set(coordinate.device.udid, queryIosGeometry(coordinate.device.udid, artifact.env));
   setIosAppearance(coordinate.device.udid, coordinate.theme, artifact.env);
   setIosGeometry(coordinate.device.udid, coordinate.viewport, artifact.env);
-  assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: simulator configuration`);
+  assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator configuration`);
   terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: terminate prior app`);
   const stdoutPath = `${output}.app.stdout`;
   const stderrPath = `${output}.app.stderr`;
@@ -1016,7 +1041,7 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
   try {
     launched = true;
     runCommand(commandSpec("xcrun", ["simctl", "launch", `--stdout=${stdoutPath}`, `--stderr=${stderrPath}`, coordinate.device.udid, artifact.bundleId, `--omi-capture-query=${coordinate.surface_query}`, `--omi-capture-run-id=${coordinate.run_id}`, `--omi-capture-nonce=${readinessNonce}`], coreRoot, artifact.env, 30), `${coordinate.run_id}: launch capture app`);
-    assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: simulator launch`);
+    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator launch`);
     waitForIosReadiness(coordinate, artifact, markerPath, readinessNonce, waitSeconds);
     // CoreSimulator can report DOM readiness one compositor frame before its
     // text/glyph surfaces settle. Capture and discard that first native frame
@@ -1026,32 +1051,33 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
     const warmupOutput = `${output}.warmup.png`;
     rmSync(warmupOutput, { force: true });
     runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", warmupOutput], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: settle simulator compositor`);
-    assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: simulator warmup screenshot`);
+    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator warmup screenshot`);
     rmSync(warmupOutput, { force: true });
     runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", output], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: simulator screenshot`);
-    assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: simulator screenshot`);
+    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator screenshot`);
   } finally {
     if (launched) terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: cleanup app`);
     rmSync(stdoutPath, { force: true });
     rmSync(stderrPath, { force: true });
-    assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: cleanup`);
+    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: cleanup`);
   }
 }
 
 function prepareIosArtifact(artifact, coordinates) {
-  const foreground = macForegroundApplication("iOS fixture preparation preflight");
+  const forbiddenForeground = new Set([simulatorBundleId, artifact.bundleId]);
+  assertNoForbiddenForeground(forbiddenForeground, "iOS fixture preparation preflight");
   for (const coordinate of coordinates.filter((entry) => entry.shell === "ios")) {
     if (!artifact.installedDevices.has(coordinate.device.udid)) {
       verifyIosDevice(coordinate, artifact.env);
       runCommand(commandSpec("xcrun", ["simctl", "install", coordinate.device.udid, artifact.app], coreRoot, artifact.env, 120), `${coordinate.run_id}: install capture app once for device`);
-      assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: simulator install`);
+      assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator install`);
       artifact.installedDevices.add(coordinate.device.udid);
     }
     if (!artifact.frozenDevices.has(coordinate.device.udid)) {
       freezeIosStatusBar(coordinate.device.udid, artifact.env);
       artifact.frozenDevices.add(coordinate.device.udid);
     }
-    assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: iOS fixture preparation`);
+    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: iOS fixture preparation`);
   }
 }
 
@@ -1067,7 +1093,7 @@ function assembleReceipt(resultPath, outRoot, manifestPath, manifest, args) {
   if (result.source_shas?.core !== manifest.source_shas.core || result.source_shas?.platform !== manifest.source_shas.platform) fail("batch result source SHAs are stale");
   if (result.manifest_path !== `core:${authorityRelative(manifestPath)}` || result.manifest_sha256 !== hashFile(manifestPath)) fail("batch result manifest binding is stale");
   if (typeof result.command !== "string" || !Array.isArray(result.argv) || !result.input_set || !result.members || typeof result.members !== "object") fail("batch result is missing command/input/member bindings");
-  const expectedAuthority = { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { ios: iosFocusPolicy }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } };
+  const expectedAuthority = { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { macos: nativeForbiddenForegroundPolicy, ios: nativeForbiddenForegroundPolicy }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } };
   if (canonical(result.authority) !== canonical(expectedAuthority)) fail("batch result authority/focus policy is invalid");
   const members = result.members;
   const memberIds = Object.keys(members).sort();
@@ -1183,7 +1209,7 @@ function main() {
     coordinate_count: coordinates.length,
     build_once: ["macos", "ios"].filter((name) => coordinates.some((coordinate) => coordinate.shell === name)),
     coordinates: coordinates.map((coordinate) => ({ run_id: coordinate.run_id, shell: coordinate.shell, device: coordinate.device, viewport: coordinate.viewport, surface_query: coordinate.surface_query, kind: coordinate.kind })),
-    authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { ios: iosFocusPolicy }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
+    authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { macos: nativeForbiddenForegroundPolicy, ios: nativeForbiddenForegroundPolicy }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
     replay_proof: Boolean(args.replay_proof),
     prepared_input_set: args.prepare ? null : authorityRelative(preparedPath),
     estimated_seconds: estimatedSeconds,
@@ -1208,8 +1234,12 @@ function main() {
   Object.assign(artifacts, loadedArtifacts);
   const startedAt = new Date().toISOString();
   const captureStarted = process.hrtime.bigint();
-  const foreground = artifacts.ios ? macForegroundApplication("iOS batch foreground preflight") : null;
-  let foregroundMonitor = artifacts.ios ? startForegroundMonitor(foreground, outRoot) : null;
+  const forbiddenForeground = new Set([
+    ...(artifacts.macos ? [artifacts.macos.bundleId] : []),
+    ...(artifacts.ios ? [simulatorBundleId, artifacts.ios.bundleId] : []),
+  ]);
+  assertNoForbiddenForeground(forbiddenForeground, "native batch foreground preflight");
+  let foregroundMonitor = startForbiddenForegroundMonitor(forbiddenForeground, outRoot);
   try {
     if (artifacts.ios) prepareIosArtifact(artifacts.ios, coordinates);
   } catch (error) {
@@ -1218,9 +1248,9 @@ function main() {
         clearIosStatusBar(device, artifacts.ios.env);
         restoreIosDevice(device, artifacts.ios);
       }
-      if (foreground) assertMacForegroundUnchanged(foreground, "iOS fixture preparation cleanup");
+      assertNoForbiddenForeground(forbiddenForeground, "native fixture preparation cleanup");
     } finally {
-      try { stopForegroundMonitor(foregroundMonitor); }
+      try { stopForbiddenForegroundMonitor(foregroundMonitor); }
       finally {
         foregroundMonitor = null;
         for (const artifact of Object.values(artifacts)) cleanupEnvironment(artifact.env);
@@ -1325,9 +1355,9 @@ function main() {
           restoreIosDevice(device, artifacts.ios);
         }
       }
-      if (foreground) assertMacForegroundUnchanged(foreground, "iOS batch final restoration");
+      assertNoForbiddenForeground(forbiddenForeground, "native batch final restoration");
     } finally {
-      try { stopForegroundMonitor(foregroundMonitor); }
+      try { stopForbiddenForegroundMonitor(foregroundMonitor); }
       finally {
         foregroundMonitor = null;
         for (const artifact of Object.values(artifacts)) cleanupEnvironment(artifact.env);

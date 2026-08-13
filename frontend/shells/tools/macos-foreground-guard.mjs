@@ -17,7 +17,12 @@ function probeForeground() {
       if (error) return reject(new Error("foreground probe failed"));
       const value = stdout.trim();
       if (!asn.test(value)) return reject(new Error("foreground probe returned an invalid application identity"));
-      resolve(value);
+      execFile("/usr/bin/lsappinfo", ["info", "-only", "bundleID", "-app", value], { encoding: "utf8", timeout: 250 }, (infoError, infoStdout) => {
+        if (infoError) return reject(new Error("foreground metadata probe failed"));
+        const match = infoStdout.match(/"CFBundleIdentifier"="([A-Za-z0-9.-]+)"/);
+        if (!match) return reject(new Error("foreground metadata probe returned no bundle identity"));
+        resolve({ identity: value, bundleId: match[1] });
+      });
     });
   });
 }
@@ -33,12 +38,43 @@ function parse(argv) {
   }
   const timeout = Number(options.timeout || 300);
   if (!options.result || !options.stdout || !options.stderr || !Number.isInteger(timeout) || timeout < 1 || timeout > 300) throw new Error("guard result/stdout/stderr and bounded timeout are required");
-  return { ...options, timeout, command: argv[separator + 1], args: argv.slice(separator + 2) };
+  const forbiddenBundleIds = String(options["forbid-bundle-ids"] || "").split(",").filter(Boolean);
+  if (!forbiddenBundleIds.length || forbiddenBundleIds.some((value) => !/^[A-Za-z0-9][A-Za-z0-9.-]{1,127}$/.test(value))) throw new Error("guard requires bounded --forbid-bundle-ids");
+  return { ...options, timeout, forbiddenBundleIds, command: argv[separator + 1], args: argv.slice(separator + 2) };
 }
 
 export async function guardedRun(spec) {
-  const expected = await probeForeground();
   const started = new Date();
+  let initial;
+  try {
+    initial = await probeForeground();
+  } catch (error) {
+    return {
+      terminal: {
+        schema: "omi.macos-foreground-guard/v1", status: 2, signal: null, error: null,
+        monitor_error: error.message, target_interval_milliseconds: 20,
+        probe_timeout_milliseconds: 250, sample_count: 0,
+        max_sample_gap_milliseconds: 0, forbidden_bundle_ids: [...spec.forbiddenBundleIds].sort(),
+        policy: "sampled-macos-forbidden-fixture-foreground-detection-20ms-target-250ms-probe-timeout-no-activation-request",
+        started_at: started.toISOString(), finished_at: new Date().toISOString(),
+      },
+      stdout: Buffer.alloc(0), stderr: Buffer.alloc(0),
+    };
+  }
+  if (spec.forbiddenBundleIds.includes(initial.bundleId)) {
+    return {
+      terminal: {
+        schema: "omi.macos-foreground-guard/v1", status: 2, signal: null, error: null,
+        monitor_error: "a forbidden fixture application is already foreground",
+        target_interval_milliseconds: 20, probe_timeout_milliseconds: 250,
+        sample_count: 1, max_sample_gap_milliseconds: 0,
+        forbidden_bundle_ids: [...spec.forbiddenBundleIds].sort(),
+        policy: "sampled-macos-forbidden-fixture-foreground-detection-20ms-target-250ms-probe-timeout-no-activation-request",
+        started_at: started.toISOString(), finished_at: new Date().toISOString(),
+      },
+      stdout: Buffer.alloc(0), stderr: Buffer.alloc(0),
+    };
+  }
   const stdout = [];
   const stderr = [];
   let terminal = null;
@@ -83,8 +119,8 @@ export async function guardedRun(spec) {
     sampleCount += 1;
     try {
       const observed = await probeForeground();
-      if (observed !== expected) {
-        monitorFault = "macOS foreground application changed";
+      if (spec.forbiddenBundleIds.includes(observed.bundleId)) {
+        monitorFault = "a forbidden fixture application became foreground";
         stopChild();
       }
     } catch (error) {
@@ -132,7 +168,8 @@ export async function guardedRun(spec) {
     probe_timeout_milliseconds: 250,
     sample_count: sampleCount,
     max_sample_gap_milliseconds: maxSampleGapMilliseconds,
-    policy: "sampled-macos-foreground-custody-20ms-target-250ms-probe-timeout-no-activation-request",
+    forbidden_bundle_ids: [...spec.forbiddenBundleIds].sort(),
+    policy: "sampled-macos-forbidden-fixture-foreground-detection-20ms-target-250ms-probe-timeout-no-activation-request",
     started_at: started.toISOString(),
     finished_at: new Date().toISOString(),
   };
@@ -142,7 +179,7 @@ export async function guardedRun(spec) {
 async function main() {
   const options = parse(process.argv.slice(2));
   for (const file of [options.result, options.stdout, options.stderr]) mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
-  const run = await guardedRun({ command: options.command, args: options.args, cwd: process.cwd(), env: process.env, timeoutSeconds: options.timeout });
+  const run = await guardedRun({ command: options.command, args: options.args, cwd: process.cwd(), env: process.env, timeoutSeconds: options.timeout, forbiddenBundleIds: options.forbiddenBundleIds });
   writeFileSync(options.stdout, run.stdout, { mode: 0o600 });
   writeFileSync(options.stderr, run.stderr, { mode: 0o600 });
   writeFileSync(options.result, `${JSON.stringify(run.terminal)}\n`, { mode: 0o600 });

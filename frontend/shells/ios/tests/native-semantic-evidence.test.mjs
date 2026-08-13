@@ -143,7 +143,8 @@ test("prepared matrix AX replay emits gate-shaped input-set and batch receipt", 
         schema: "omi.macos-foreground-guard/v1", status: 0, signal: null, error: null, monitor_error: null,
         target_interval_milliseconds: 20, probe_timeout_milliseconds: 250, sample_count: 2,
         max_sample_gap_milliseconds: 20,
-        policy: "sampled-macos-foreground-custody-20ms-target-250ms-probe-timeout-no-activation-request",
+        forbidden_bundle_ids: ["com.apple.iphonesimulator", "me.omi.proto.omiWebviewProto"],
+        policy: "sampled-macos-forbidden-fixture-foreground-detection-20ms-target-250ms-probe-timeout-no-activation-request",
       },
     }));
     const result = gateReplayForTest(manifest, manifestPath, inputPath, outputPath, rootScratch);

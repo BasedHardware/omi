@@ -15,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const coreRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const wrapperPath = path.resolve(fileURLToPath(import.meta.url));
+const nativeForbiddenForegroundPolicy = "sampled-20ms-forbidden-fixture-foreground-detection-no-activation-request";
 const domains = new Set(["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"]);
 const states = new Set(["ready", "error", "empty"]);
 const themes = new Set(["light", "dark"]);
@@ -200,23 +201,82 @@ function runtimeEnvironment(coordinate, outRoot) {
     OMI_RUN_CLIENT_ID: coordinate.run_id,
   };
 }
-export function foregroundApplicationFromResults(front, info) {
+export function foregroundApplicationFromResults(front, info, bundleInfo) {
   const identity = front?.status === 0 && typeof front.stdout === "string" ? front.stdout.trim() : "";
   if (!/^ASN:0x[0-9a-f]+-0x[0-9a-f]+:$/i.test(identity)) fail("macOS foreground application identity is unavailable");
   if (info?.status !== 0 || typeof info.stdout !== "string") fail("macOS foreground application metadata is unavailable");
   const match = info.stdout.match(/["']?LSDisplayName["']?\s*=\s*"([^"\n]+)"/);
   if (!match?.[1]?.trim()) fail("macOS foreground application name is unavailable");
-  return { identity, name: match[1].trim() };
+  if (bundleInfo?.status !== 0 || typeof bundleInfo.stdout !== "string") fail("macOS foreground application bundle metadata is unavailable");
+  const bundleMatch = bundleInfo.stdout.match(/"CFBundleIdentifier"="([A-Za-z0-9.-]+)"/);
+  if (!bundleMatch) fail("macOS foreground application bundle identity is unavailable");
+  return { identity, name: match[1].trim(), bundleId: bundleMatch[1] };
 }
 function foregroundApplication() {
   const front = spawnSync("/usr/bin/lsappinfo", ["front"], { encoding: "utf8", timeout: 5_000 });
   const identity = front.status === 0 ? front.stdout.trim() : "";
   const info = identity ? spawnSync("/usr/bin/lsappinfo", ["info", "-only", "name", "-app", identity], { encoding: "utf8", timeout: 5_000 }) : { status: 1, stdout: "" };
-  return foregroundApplicationFromResults(front, info);
+  const bundleInfo = identity ? spawnSync("/usr/bin/lsappinfo", ["info", "-only", "bundleID", "-app", identity], { encoding: "utf8", timeout: 5_000 }) : { status: 1, stdout: "" };
+  return foregroundApplicationFromResults(front, info, bundleInfo);
 }
-function assertForeground(expected, coordinate, stage) {
+function assertFixtureNotForeground(bundleId, coordinate, stage) {
   const observed = foregroundApplication();
-  if (observed.identity !== expected.identity) fail(`${coordinate.run_id}: foreground application changed during ${stage}`);
+  if (observed.bundleId === bundleId) fail(`${coordinate.run_id}: semantic fixture became foreground during ${stage}`);
+}
+function sleepSync(milliseconds) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds); }
+function foregroundMonitorMain(bundleId, readyPath, stopPath, violationPath, donePath) {
+  try {
+    while (!existsSync(stopPath)) {
+      try {
+        const observed = foregroundApplication();
+        if (observed.bundleId === bundleId) {
+          writeAtomic(violationPath, { reason: "semantic fixture became foreground", observed_bundle_id: bundleId });
+          return;
+        }
+      } catch (error) {
+        writeAtomic(violationPath, { reason: error.message });
+        return;
+      }
+      if (!existsSync(readyPath)) writeAtomic(readyPath, { forbidden_bundle_id: bundleId });
+      sleepSync(20);
+    }
+  } finally {
+    if (!existsSync(readyPath)) writeAtomic(readyPath, { forbidden_bundle_id: bundleId, failed: true });
+    writeAtomic(donePath, { stopped: true });
+  }
+}
+function startForbiddenForegroundMonitor(bundleId, outRoot, runIdValue) {
+  const monitorRoot = path.join(outRoot, `.semantic-focus-monitor-${process.pid}-${runIdValue}`);
+  rmSync(monitorRoot, { recursive: true, force: true });
+  mkdirSync(monitorRoot, { recursive: true });
+  const readyPath = path.join(monitorRoot, "ready.json"); const stopPath = path.join(monitorRoot, "stop");
+  const violationPath = path.join(monitorRoot, "violation.json"); const donePath = path.join(monitorRoot, "done.json");
+  const child = spawn(process.execPath, [wrapperPath, "--foreground-monitor", bundleId, readyPath, stopPath, violationPath, donePath], { cwd: coreRoot, env: safeEnvironment(), stdio: "ignore" });
+  const deadline = Date.now() + 5_000;
+  while (!existsSync(readyPath) && !existsSync(violationPath) && Date.now() < deadline) sleepSync(10);
+  if (!existsSync(readyPath) || existsSync(violationPath)) {
+    try { child.kill("SIGTERM"); } catch {}
+    const detail = existsSync(violationPath) ? JSON.parse(readFileSync(violationPath, "utf8")).reason : "monitor did not become ready";
+    rmSync(monitorRoot, { recursive: true, force: true });
+    fail(`semantic foreground monitor unavailable: ${detail}`);
+  }
+  return { child, monitorRoot, stopPath, violationPath, donePath };
+}
+function stopForbiddenForegroundMonitor(monitor) {
+  if (!monitor) return;
+  writeFileSync(monitor.stopPath, "stop\n", { mode: 0o600 });
+  const deadline = Date.now() + 2_000;
+  while (!existsSync(monitor.donePath) && Date.now() < deadline) sleepSync(10);
+  const completed = existsSync(monitor.donePath);
+  let violation = null;
+  if (existsSync(monitor.violationPath)) {
+    try { violation = JSON.parse(readFileSync(monitor.violationPath, "utf8")); }
+    catch { violation = { reason: "semantic foreground monitor wrote malformed evidence" }; }
+  }
+  if (!completed) { try { monitor.child.kill("SIGTERM"); } catch {} }
+  rmSync(monitor.monitorRoot, { recursive: true, force: true });
+  if (!completed) fail("semantic foreground monitor stopped without a terminal receipt");
+  if (violation) fail(`semantic foreground custody failed: ${violation.reason}`);
 }
 export function lockedGuiBlock(foreground, sourceShas, coordinates) {
   if (foreground.name !== "loginwindow") return null;
@@ -304,7 +364,7 @@ function sidecarDocument(coordinate, probe, evidence) {
   return { schema: "omi.native-semantic-sidecar/v1", coordinate: coordinateKey(coordinate), run_id: coordinate.run_id, source_shas: coordinate.source_shas, capture_class: coordinate.capture_class, source_tier: coordinate.source_tier, target: { bundle_id: coordinate.target.bundle_id, process_name: coordinate.target.process_name, process_name_bound: true, runtime_pid_redacted: true }, evidence_schema: evidence.schema, matrix_eligible: probe.matrixEligible === true, domain_landmark: coordinate.landmark, frontmost_restored: coordinate.kind === "keyboard_trace" ? probe.frontmostRestored === true : null };
 }
 function writePrepared(file, manifestPath, manifest, probePath, fixture, offset, limit) {
-  const descriptor = { schema: "omi.native-semantic-prepared/v2", source_shas: manifest.source_shas, manifest_path: `core:${authorityRelative(manifestPath)}`, manifest_sha256: hashFile(manifestPath), shell: "macos", offset, limit, coordinate_run_ids: manifest.coordinates.slice(offset, offset + limit).map((coordinate) => coordinate.run_id), capture_class: manifest.capture_class, probe: `core:${authorityRelative(probePath)}`, fixture_app: `core:${authorityRelative(fixture.app)}`, fixture_executable: `core:${authorityRelative(fixture.executable)}`, bundle_id: fixture.bundleId, process_name: fixture.executableName, launch: { method: "direct-executable", activation_policy: "accessory", readiness: "stderr:display-mode: background-semantic" }, authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false }, input_set: inputSet(manifestPath, probePath, fixture.files) };
+  const descriptor = { schema: "omi.native-semantic-prepared/v2", source_shas: manifest.source_shas, manifest_path: `core:${authorityRelative(manifestPath)}`, manifest_sha256: hashFile(manifestPath), shell: "macos", offset, limit, coordinate_run_ids: manifest.coordinates.slice(offset, offset + limit).map((coordinate) => coordinate.run_id), capture_class: manifest.capture_class, probe: `core:${authorityRelative(probePath)}`, fixture_app: `core:${authorityRelative(fixture.app)}`, fixture_executable: `core:${authorityRelative(fixture.executable)}`, bundle_id: fixture.bundleId, process_name: fixture.executableName, launch: { method: "direct-executable", activation_policy: "accessory", readiness: "stderr:display-mode: background-semantic" }, authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { ax: nativeForbiddenForegroundPolicy, keyboard: "explicit-temporary-focus-consent-and-proven-restoration" } }, input_set: inputSet(manifestPath, probePath, fixture.files) };
   writeAtomic(file, descriptor);
   return descriptor;
 }
@@ -317,7 +377,7 @@ function loadPrepared(file, manifestPath, manifest, offset, limit) {
   const descriptor = JSON.parse(readFileSync(file, "utf8"));
   const descriptorKeys = ["authority", "bundle_id", "capture_class", "coordinate_run_ids", "fixture_app", "fixture_executable", "input_set", "launch", "limit", "manifest_path", "manifest_sha256", "offset", "probe", "process_name", "schema", "shell", "source_shas"];
   if (descriptor.schema !== "omi.native-semantic-prepared/v2" || Object.keys(descriptor).sort().join(",") !== descriptorKeys.sort().join(",") || descriptor.source_shas.core !== manifest.source_shas.core || descriptor.source_shas.platform !== manifest.source_shas.platform || descriptor.manifest_path !== `core:${authorityRelative(manifestPath)}` || descriptor.manifest_sha256 !== hashFile(manifestPath) || descriptor.capture_class !== manifest.capture_class || descriptor.shell !== "macos" || descriptor.offset !== offset || descriptor.limit !== limit) fail("prepared semantic input set is stale");
-  if (manifest.capture_class !== "native_fixture" || canonical(descriptor.authority) !== canonical({ fixture: true, bridge: "disabled", credentials: false, production_api: false })) fail("prepared semantic authority is not fixture-only");
+  if (manifest.capture_class !== "native_fixture" || canonical(descriptor.authority) !== canonical({ fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { ax: nativeForbiddenForegroundPolicy, keyboard: "explicit-temporary-focus-consent-and-proven-restoration" } })) fail("prepared semantic authority is not fixture-only");
   if (canonical(descriptor.launch) !== canonical({ method: "direct-executable", activation_policy: "accessory", readiness: "stderr:display-mode: background-semantic" })) fail("prepared semantic launch policy is invalid");
   const expectedRunIds = manifest.coordinates.slice(offset, offset + limit).map((coordinate) => coordinate.run_id);
   if (canonical(descriptor.coordinate_run_ids) !== canonical(expectedRunIds)) fail("prepared semantic coordinate range is stale");
@@ -361,10 +421,13 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
   const records = {}; const captureRoot = path.join(outRoot, "captures", "macos"); mkdirSync(captureRoot, { recursive: true });
   const stdoutLine = `NATIVE_SEMANTIC_BATCH_COMPLETE members=${limit}\n`;
   const observe = async (coordinate) => {
-    const foreground = foregroundApplication();
-    const child = await launchFixture(prepared, coordinate, outRoot, readinessTimeoutMs);
+    const foregroundMonitor = coordinate.kind === "ax_snapshot"
+      ? startForbiddenForegroundMonitor(prepared.fixture.bundleId, outRoot, coordinate.run_id)
+      : null;
+    let child = null;
     try {
-      assertForeground(foreground, coordinate, "fixture launch");
+      child = await launchFixture(prepared, coordinate, outRoot, readinessTimeoutMs);
+      assertFixtureNotForeground(prepared.fixture.bundleId, coordinate, "fixture launch");
       const probeArgs = ["--pid", String(child.pid), "--bundle-id", coordinate.target.bundle_id, "--expected-bundle-id", coordinate.target.bundle_id, "--expected-process-name", coordinate.target.process_name, "--run-id", coordinate.run_id, "--source-core-sha", coordinate.source_shas.core, "--source-platform-sha", coordinate.source_shas.platform, "--coordinate", coordinateKey(coordinate), "--kind", coordinate.kind, "--landmark", coordinate.landmark, "--require-matrix", "--json"];
       if (coordinate.kind === "keyboard_trace") probeArgs.push("--expect-after", coordinate.expected_after.map((value) => value || "-").join(","), "--activate", "--keys", coordinate.keys.join(","));
       const result = spawnSync(prepared.probePath, probeArgs, { cwd: coreRoot, env: safeEnvironment(), encoding: "utf8", timeout: 120_000 });
@@ -375,8 +438,12 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
       const evidence = evidenceDocument(coordinate, probe);
       return { evidence, sidecar: sidecarDocument(coordinate, probe, evidence) };
     } finally {
-      await terminateExactChild(child);
-      assertForeground(foreground, coordinate, "semantic cleanup");
+      try {
+        if (child) await terminateExactChild(child);
+        assertFixtureNotForeground(prepared.fixture.bundleId, coordinate, "semantic cleanup");
+      } finally {
+        stopForbiddenForegroundMonitor(foregroundMonitor);
+      }
     }
   };
   for (const [index, coordinate] of selectedCoordinates.entries()) {
@@ -390,7 +457,7 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
     records[`m${String(index).padStart(4, "0")}`] = { coordinate: [coordinate.kind, coordinate.domain, coordinate.shell, coordinate.state, coordinate.theme, coordinate.width, coordinate.accessibility], run_id: coordinate.run_id, evidence: { root: "core", path: authorityRelative(evidencePath), sha256: hashFile(evidencePath) }, sidecar: { root: "core", path: authorityRelative(sidecarPath), sha256: hashFile(sidecarPath) } };
   }
   const resultPath = path.join(outRoot, "batch-result.json");
-  writeAtomic(resultPath, { schema: "omi.polish.native-semantic-batch-result/v1", source_shas: manifest.source_shas, manifest_path: `core:${authorityRelative(manifestPath)}`, manifest_sha256: hashFile(manifestPath), command, argv: ["node", "shells/macos/probes/native-semantic-evidence-batch.mjs", "--manifest", authorityRelative(manifestPath), "--out-root", authorityRelative(outRoot), "--offset", String(offset), "--limit", String(limit), "--prepared-input-set", authorityRelative(preparedPath), "--readiness-timeout-ms", String(readinessTimeoutMs), ...(args.replay_proof ? ["--replay-proof"] : [])], input_set: prepared.input, members: records, coordinate_count: Object.keys(records).length, stdout_sha256: sha256(stdoutLine), stderr_sha256: sha256(""), authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false }, replay_proof: Boolean(args.replay_proof) });
+  writeAtomic(resultPath, { schema: "omi.polish.native-semantic-batch-result/v1", source_shas: manifest.source_shas, manifest_path: `core:${authorityRelative(manifestPath)}`, manifest_sha256: hashFile(manifestPath), command, argv: ["node", "shells/macos/probes/native-semantic-evidence-batch.mjs", "--manifest", authorityRelative(manifestPath), "--out-root", authorityRelative(outRoot), "--offset", String(offset), "--limit", String(limit), "--prepared-input-set", authorityRelative(preparedPath), "--readiness-timeout-ms", String(readinessTimeoutMs), ...(args.replay_proof ? ["--replay-proof"] : [])], input_set: prepared.input, members: records, coordinate_count: Object.keys(records).length, stdout_sha256: sha256(stdoutLine), stderr_sha256: sha256(""), authority: prepared.descriptor.authority, replay_proof: Boolean(args.replay_proof) });
   process.stdout.write(stdoutLine);
 }
 function assemble(args, manifestPath, manifest, outRoot) {
@@ -425,5 +492,6 @@ async function main() {
   return await capture(args, manifestPath, manifest, outRoot, coreFile(args.prepared_input_set, "--prepared-input-set"));
 }
 if (import.meta.url === pathToFileURL(process.argv[1] || "").href) {
-  try { await main(); } catch (error) { console.error(`ERROR: ${error.message}`); process.exitCode = error.exitCode || 2; }
+  if (process.argv[2] === "--foreground-monitor") foregroundMonitorMain(...process.argv.slice(3, 8));
+  else try { await main(); } catch (error) { console.error(`ERROR: ${error.message}`); process.exitCode = error.exitCode || 2; }
 }
