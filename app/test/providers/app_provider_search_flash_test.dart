@@ -20,21 +20,21 @@ typedef RenderedState = ({bool isSearching, int resultCount});
 SearchResponse _response(List<App> apps) => (apps: apps, pagination: <String, dynamic>{}, filters: null);
 
 App _app(String id, String name) => App(
-  id: id,
-  name: name,
-  author: 'tester',
-  description: 'test',
-  image: '',
-  capabilities: {'memories'},
-  status: 'approved',
-  category: 'test',
-  approved: true,
-  ratingCount: 0,
-  enabled: false,
-  deleted: false,
-  isPaid: false,
-  isUserPaid: false,
-);
+      id: id,
+      name: name,
+      author: 'tester',
+      description: 'test',
+      image: '',
+      capabilities: {'memories'},
+      status: 'approved',
+      category: 'test',
+      approved: true,
+      ratingCount: 0,
+      enabled: false,
+      deleted: false,
+      isPaid: false,
+      isUserPaid: false,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -58,21 +58,20 @@ void main() {
       final secondRequest = Completer<SearchResponse>();
       var requestCount = 0;
 
-      provider.searchAppsOverride =
-          ({
-            String? query,
-            String? category,
-            double? minRating,
-            String? capability,
-            String? sort,
-            bool? myApps,
-            bool? installedApps,
-            int offset = 0,
-            int limit = 50,
-          }) {
-            requestCount++;
-            return requestCount == 1 ? firstRequest.future : secondRequest.future;
-          };
+      provider.searchAppsOverride = ({
+        String? query,
+        String? category,
+        double? minRating,
+        String? capability,
+        String? sort,
+        bool? myApps,
+        bool? installedApps,
+        int offset = 0,
+        int limit = 50,
+      }) {
+        requestCount++;
+        return requestCount == 1 ? firstRequest.future : secondRequest.future;
+      };
 
       final rendered = <RenderedState>[];
       provider.addListener(
@@ -110,21 +109,20 @@ void main() {
       final secondRequest = Completer<SearchResponse>();
       var requestCount = 0;
 
-      provider.searchAppsOverride =
-          ({
-            String? query,
-            String? category,
-            double? minRating,
-            String? capability,
-            String? sort,
-            bool? myApps,
-            bool? installedApps,
-            int offset = 0,
-            int limit = 50,
-          }) {
-            requestCount++;
-            return requestCount == 1 ? firstRequest.future : secondRequest.future;
-          };
+      provider.searchAppsOverride = ({
+        String? query,
+        String? category,
+        double? minRating,
+        String? capability,
+        String? sort,
+        bool? myApps,
+        bool? installedApps,
+        int offset = 0,
+        int limit = 50,
+      }) {
+        requestCount++;
+        return requestCount == 1 ? firstRequest.future : secondRequest.future;
+      };
 
       provider.searchApps('a');
       await Future<void>.delayed(Duration.zero);
@@ -148,22 +146,21 @@ void main() {
       final categoriesRequested = <String?>[];
       var requestCount = 0;
 
-      provider.searchAppsOverride =
-          ({
-            String? query,
-            String? category,
-            double? minRating,
-            String? capability,
-            String? sort,
-            bool? myApps,
-            bool? installedApps,
-            int offset = 0,
-            int limit = 50,
-          }) {
-            requestCount++;
-            categoriesRequested.add(category);
-            return requestCount == 1 ? firstRequest.future : secondRequest.future;
-          };
+      provider.searchAppsOverride = ({
+        String? query,
+        String? category,
+        double? minRating,
+        String? capability,
+        String? sort,
+        bool? myApps,
+        bool? installedApps,
+        int offset = 0,
+        int limit = 50,
+      }) {
+        requestCount++;
+        categoriesRequested.add(category);
+        return requestCount == 1 ? firstRequest.future : secondRequest.future;
+      };
 
       provider.searchApps('adhd');
       await Future<void>.delayed(Duration.zero);
@@ -190,21 +187,20 @@ void main() {
       final inFlight = Completer<SearchResponse>();
       var requestCount = 0;
 
-      provider.searchAppsOverride =
-          ({
-            String? query,
-            String? category,
-            double? minRating,
-            String? capability,
-            String? sort,
-            bool? myApps,
-            bool? installedApps,
-            int offset = 0,
-            int limit = 50,
-          }) {
-            requestCount++;
-            return inFlight.future;
-          };
+      provider.searchAppsOverride = ({
+        String? query,
+        String? category,
+        double? minRating,
+        String? capability,
+        String? sort,
+        bool? myApps,
+        bool? installedApps,
+        int offset = 0,
+        int limit = 50,
+      }) {
+        requestCount++;
+        return inFlight.future;
+      };
 
       provider.searchApps('adhd');
       await Future<void>.delayed(Duration.zero);
@@ -220,18 +216,18 @@ void main() {
     });
 
     test('a single search still settles out of the searching state', () async {
-      provider.searchAppsOverride =
-          ({
-            String? query,
-            String? category,
-            double? minRating,
-            String? capability,
-            String? sort,
-            bool? myApps,
-            bool? installedApps,
-            int offset = 0,
-            int limit = 50,
-          }) async => _response([_app('adhd-assistant', 'ADHD Assistant')]);
+      provider.searchAppsOverride = ({
+        String? query,
+        String? category,
+        double? minRating,
+        String? capability,
+        String? sort,
+        bool? myApps,
+        bool? installedApps,
+        int offset = 0,
+        int limit = 50,
+      }) async =>
+          _response([_app('adhd-assistant', 'ADHD Assistant')]);
 
       provider.searchApps('adhd');
       await Future<void>.delayed(Duration.zero);
