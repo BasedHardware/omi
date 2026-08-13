@@ -94,3 +94,17 @@ test("native fixture helpers cannot take focus unless headed mode is explicit", 
   assert.match(baseline, /window\.orderBack\(nil\)/);
   assert.match(baseline, /if CommandLine\.arguments\.dropFirst\(\)\.contains\("--headed"\)/);
 });
+
+test("fixture shells keep WebKit state in scratch custody and never show a modal bind error", async () => {
+  const shell = await read("shell/Sources/OmiShell/main.swift");
+
+  assert.match(shell, /config\.websiteDataStore = \.nonPersistent\(\)/);
+  assert.match(shell, /ephemeral: fixtureCapture \|\| semanticWindow/);
+  assert.match(
+    shell,
+    /if fixtureCapture \|\| semanticWindow \{[\s\S]*?LOOPBACK: failed port=[\s\S]*?Darwin\.exit\(1\)/,
+  );
+  assert.match(shell, /let alert = NSAlert\(\)/);
+  // The alert remains available for an explicitly headed developer shell,
+  // but automation exits before reaching it.
+});
