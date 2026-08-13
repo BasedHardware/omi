@@ -4,11 +4,13 @@ action_items collection (unbounded memory/latency for large accounts).
 The overall bucket previously streamed every document into process just to count it. The fix uses
 store.count() with a deleted-subset subtraction (mirroring get_action_items_count_by_conversation).
 This test asserts the counts stay correct AND that no unbounded, unfiltered scan of the collection
-is issued for the overall bucket. Exercised through the real _store() seam via FakeDocumentStore.
+is issued for the overall bucket. Exercised through the ADR-0044 facade seam
+(install_fake_db_client): db.collection().count() lands on store.count(), db...stream() on
+store.query(), so a recording fake proves the overall bucket never issues an unfiltered query().
 """
 
 from database import action_items as action_items_db
-from tests.store_fakes import FakeDocumentStore
+from tests.store_fakes import FakeDocumentStore, install_fake_db_client
 
 _UID = 'uid'
 _PATH = f'users/{_UID}/action_items'
@@ -39,7 +41,7 @@ def test_overall_scores_exclude_deleted_and_avoid_full_scan(monkeypatch):
     # Deleted items must be excluded from both total and completed.
     _seed(store, 'd1', completed=True, deleted=True)
     _seed(store, 'd2', completed=False, deleted=True)
-    monkeypatch.setattr(action_items_db, '_store', lambda: store)
+    install_fake_db_client(monkeypatch, store=store)
 
     scores = action_items_db.get_scores(_UID, date='2026-01-15')
 
