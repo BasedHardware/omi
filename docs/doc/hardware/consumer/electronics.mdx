@@ -1,7 +1,7 @@
 ---
 title: "Electronics"
 icon: "bolt"
-description: "PCB design files for the Omi mainboard, charger board, and flexible PCB — Altium source, Gerber files, and schematics."
+description: "PCB design files for the Omi mainboard, charger board, and flexible PCB — KiCad 9 source, Gerber files, and schematics."
 ---
 
 ## Board Overview
@@ -26,7 +26,7 @@ The Omi uses three interconnected PCBs:
     |----|----------|
     | nRF5340-CLAA | Dual-core Bluetooth LE SoC (application + network cores) |
     | nRF7002-CEAA-R7 | Wi-Fi 6 companion IC |
-    | CSNP4GCR01-DPW | 8GB NAND Flash |
+    | CSNP4GCR01-DPW | 4Gbit (512MB) SD NAND Flash |
     | LSM6DS3TR-C | 6-axis IMU |
     | BQ25101YFPR | Li-Ion/Li-Poly battery charger |
     | TPS628438YKAR | DC-DC buck converter |
@@ -38,10 +38,10 @@ The Omi uses three interconnected PCBs:
     |------|-------------|
     | [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/mainboard/schematic.pdf) | Full schematic |
     | [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/gerbers) | Gerber + drill files for PCB fabrication |
-    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/altium) | Altium Designer source project |
+    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/altium) | KiCad 9 source project (zip is labeled "altium" but contains KiCad 9 `.kicad_pcb` / `.kicad_sch` files; Chinese folder names are from the factory) |
 
     <Warning>
-    The nRF5340 (WLCSP-95, 4.4x4.0mm) and nRF7002 (WLCSP-81, 3.75x3.4mm) are fine-pitch wafer-level packages. Requires stencil + solder paste + reflow. Do not hand solder.
+    The nRF5340 (WLCSP-95, 4.4×4.0mm, 0.35mm pitch) and nRF7002 (WLCSP-81, 3.75×3.4mm, 0.35mm pitch) are fine-pitch wafer-level packages. Requires stencil (0.075mm) + Type 5 solder paste + reflow + X-ray inspection. Do not hand solder. See [stencil/reflow notes](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/STENCIL-REFLOW-NOTES.md).
     </Warning>
   </Tab>
   <Tab title="Charger Board" icon="plug">
@@ -60,7 +60,7 @@ The Omi uses three interconnected PCBs:
     |------|-------------|
     | [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/charger-board/schematic.pdf) | Schematic |
     | [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/gerbers) | Gerber files |
-    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/altium) | Altium source |
+    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/altium) | KiCad 9 source (labeled "altium" — contains KiCad files) |
 
     <Tip>The charger board is the simplest of the 3 — a good starting point if you're new to PCB assembly.</Tip>
   </Tab>
@@ -80,7 +80,7 @@ The Omi uses three interconnected PCBs:
     |------|-------------|
     | [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/fpc-board/schematic.pdf) | Schematic |
     | [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/gerbers) | Gerber files |
-    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/altium) | Altium source |
+    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/altium) | KiCad 9 source (labeled "altium" — contains KiCad files) |
 
     <Warning>FPC is delicate — handle with care during assembly. The board-to-board connector has a limited insertion cycle count.</Warning>
   </Tab>
@@ -90,7 +90,11 @@ The Omi uses three interconnected PCBs:
 
 ## How to Order PCBs
 
-Upload the Gerber ZIP to any PCB manufacturer. Use the exact specs below per board:
+<Warning>
+The mainboard is an **HDI (High-Density Interconnect) PCB** with WLCSP components at 0.35mm pitch. It requires an HDI-capable PCB fabricator and PCBA assembler with: blind/buried via capability, via-in-pad (filled and capped), controlled-impedance stackup, fine stencil (0.075mm), and X-ray inspection. Many low-cost PCB services will reject this board or silently alter the stackup. The charger board and FPC are simpler and can be ordered from standard PCB services.
+</Warning>
+
+Upload the Gerber ZIP along with the BOM CSV and CPL (pick-and-place) CSV to your PCB manufacturer. Use the exact specs below per board:
 
 | Parameter | Mainboard | Charger Board | FPC |
 |-----------|-----------|---------------|-----|
@@ -108,12 +112,27 @@ The mainboard has blind vias (L1-L2, L3-L4) and buried vias (L2-L3) — confirm 
 </Warning>
 
 <Tip>
-Use **ENIG** surface finish for all boards. HASL causes bridging on the nRF5340 and nRF7002 fine-pitch pads (0.4mm).
+Use **ENIG** surface finish for all boards. HASL causes bridging on the nRF5340 and nRF7002 fine-pitch pads (0.35mm ball pitch).
 </Tip>
 
 <Card title="View Full BOM" icon="list" href="/doc/hardware/consumer/assembly">
   See the complete Bill of Materials with all 88 components
 </Card>
+
+### Additional Manufacturing Documentation
+
+These files are in `omi/hardware/consumer/` in the repository:
+
+| Document | Description |
+|----------|-------------|
+| [`bom/LCSC-SOURCING.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/LCSC-SOURCING.md) | LCSC/JLCPCB part numbers, stock status, sourcing guide |
+| [`bom/BATTERY-SPEC.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/BATTERY-SPEC.md) | Battery procurement spec (GRP1654M1, 3.7V 150mAh LiPo) |
+| [`bom/ALTERNATES.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/ALTERNATES.md) | Alternate parts list with substitution risk ratings |
+| [`electrical/SWD-DEBUG-ACCESS.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/SWD-DEBUG-ACCESS.md) | SWD debug wiring for initial firmware flash |
+| [`electrical/STENCIL-REFLOW-NOTES.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/STENCIL-REFLOW-NOTES.md) | Stencil, solder paste, and reflow profile specs |
+| [`electrical/RF-ANTENNA-NOTES.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/RF-ANTENNA-NOTES.md) | RF architecture, antenna notes, DO NOT SUBSTITUTE list |
+| [`electrical/IMPEDANCE-STACKUP.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/IMPEDANCE-STACKUP.md) | PCB stackup and impedance targets |
+| [`electrical/FPC-FLEX-FAB-NOTES.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/FPC-FLEX-FAB-NOTES.md) | FPC flex fabrication, stiffener, coverlay specs |
 
 ---
 
@@ -121,15 +140,18 @@ Use **ENIG** surface finish for all boards. HASL causes bridging on the nRF5340 
 
 <Steps>
   <Step title="Visual Inspection">
-    Check for solder bridges on QFN pads with a microscope or loupe. Verify all passives are placed correctly (check orientation of polarized capacitors).
+    Inspect visible passives and connectors for solder bridges, tombstones, and missing parts under a microscope or loupe. **WLCSP joints (nRF5340, nRF7002) are hidden under the package** — visual inspection cannot verify them. Request X-ray inspection from your assembler, or proceed to electrical bring-up and diagnose from there. Check orientation of polarized capacitors and ICs.
   </Step>
   <Step title="Power Rails">
-    Connect bench supply (set to 3.7V, current limit 100mA). Measure VBAT (3.7V at battery input), VDD_nRF (1.0V for nRF5340 core), and VDDH (3.3V for nRF5340 I/O).
+    Connect bench supply (set to 3.7V, current limit 100mA) to VBAT (TP9, bottom side) and GND (TP12, top side or TP18, bottom side). Measure:
+    - **VBAT** at TP9: 3.7V (battery input)
+    - **VDD_3V3** at U16 output: 3.3V (nRF5340 I/O rail)
+    - **VDD (nRF5340 core regulator decoupling):** ~1.0V at the DEC1–DEC4 decoupling capacitors near the nRF5340 (these are the internal regulator outputs, not directly measurable at a pin — check with a fine probe on the decoupling caps)
 
-    <Warning>If current draw exceeds 50mA before firmware flash, disconnect immediately — likely a short.</Warning>
+    <Warning>If current draw exceeds 50mA before firmware flash, disconnect immediately — likely a short. Do not connect a bench supply while a battery or USB charger is also connected unless you understand the BQ25101 power path.</Warning>
   </Step>
   <Step title="Flash Firmware">
-    Connect SWD debugger (J-Link or nRF DK). Flash using nRF Connect SDK. See [firmware guide](/doc/developer/firmware/Compile_firmware).
+    Connect SWD debugger (J-Link) to test points: SWDIO→TP3, SWDCLK→TP8, GND→TP18, VTref→VDD_3V3 rail (sense input, not power — J-Link uses this to set I/O voltage levels), optional RESET→TP14 (all bottom side except TP12). Flash network core first, then application core. See [SWD debug guide](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/SWD-DEBUG-ACCESS.md) and [firmware guide](/doc/developer/firmware/Compile_firmware).
   </Step>
   <Step title="Verify BLE">
     Open nRF Connect mobile app. The device should appear advertising as "Omi". If not, check 32MHz crystal and antenna matching network.
@@ -142,16 +164,22 @@ Use **ENIG** surface finish for all boards. HASL causes bridging on the nRF5340 
 
 <AccordionGroup>
   <Accordion title="Board doesn't power on" icon="bolt">
-    Check BQ25101 output (3.7-4.2V). Verify TPS628438 buck converter has correct input. Look for solder bridges on QFN pads with microscope. Measure resistance between VCC and GND — should be more than 1k ohm before power.
+    Check BQ25101 output (3.7-4.2V). Verify TPS628438 buck converter has correct input. Inspect visible solder joints under microscope; WLCSP joints require X-ray or electrical bring-up checks. Measure resistance between VBAT and GND — should be more than 1kΩ before power.
   </Accordion>
   <Accordion title="No BLE advertising" icon="bluetooth">
-    Verify 32MHz crystal is soldered (not just tacked). Check 32.768kHz crystal for RTC. Measure nRF5340 VDDH (should be 3.3V) and VDD (1.0V). Check antenna trace and matching network.
+    Verify 32MHz crystal is soldered (not just tacked). Check 32.768kHz crystal for RTC. Measure nRF5340 VDDH (should be 3.3V) and DEC capacitor voltage (~1.0V). **Do not modify antenna trace or matching network** (L3, L4, C12, C15) — these are tuned for the production enclosure. If using a different enclosure, expect detuning and plan for VNA measurement and re-matching.
   </Accordion>
   <Accordion title="No Wi-Fi scan results" icon="wifi">
     nRF7002 requires its own 40MHz crystal. Check BUCKA/BUCKB rails. Verify SPI connection between nRF5340 and nRF7002. Wi-Fi requires firmware support enabled.
   </Accordion>
   <Accordion title="Poor or no audio" icon="microphone">
-    T5838 microphones are top-port — verify sound inlet faces the enclosure acoustic holes. Check PDM clock (1-3.25MHz) and data lines. Both mics must be in the correct PDM channel (L/R).
+    TDK T5838 (MMICT5838-00-012) microphones are **bottom-port** per TDK distributor data — the sound inlet is on the underside of the component facing the PCB. Sound enters through an acoustic hole in the PCB beneath the mic. Verify:
+    - The PCB acoustic holes under MIC1/MIC2 are clear (not blocked by solder paste, adhesive, or debris)
+    - The enclosure acoustic holes align with the PCB acoustic vias so the sound path is unobstructed
+    - Dust filter (5.8×4.0×0.1mm, BOM item 74) covers the enclosure acoustic holes but does not block the sound path
+    - PDM clock (1–3.25MHz) and data lines are connected correctly
+    - MIC1 and MIC2 are in the correct PDM L/R channels (check CLK polarity)
+    - No flux residue or solder paste in the microphone sound port
   </Accordion>
   <Accordion title="Charging doesn't work" icon="battery-half">
     Check pogo pin contact resistance (less than 0.5 ohm). Verify FPC connection. Measure charger board USB-C VBUS (5V). Check TPS25200 eFuse output. Verify magnet polarity alignment.

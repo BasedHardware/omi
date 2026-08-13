@@ -1,0 +1,59 @@
+ID,SKU,Description,Manufacturer,MPN,Designator,Qty,Board,Category,Populate,LCSC_PN,JLC_Status,Stock_Note
+1,202004235,PCBA;Oni2 Main Board,,,,1,mainboard,pcba-reference,n/a,,,
+2,319016327, ,,,,1,mainboard,assembly-header,n/a,,,
+3,303011668,SMD Inductor 2.2nH-0.1nH-500mA;0201,Chilisin,CHQ0603T-2N2B-HU,"L3,L4",2,mainboard,component,yes,,N/A,Other values in series available; find equivalent 2.2nH 0201
+4,306011365,SMD Crystal 40MHz-10pF-10ppm-80R;4P-L1.6*W1.2mm,CJ,CJ17-400001010B20,X3,1,mainboard,component,yes,C2875272,Extended,Out of stock
+5,310091764,SMD IC SD Nand Flash;LGA8_8*6*0.85mm,CS,CSNP4GCR01-DPW,U7,1,mainboard,component,yes,,N/A,Source from manufacturer or Alibaba
+6,304020922,SMD DIODE SCHOTTKY 40V-250mA;SOD523,Diodes,SDM20U40-7,"D1,D3,D4",3,mainboard,component,yes,C139439,Extended,In stock
+7,306011503,SMD Crystal 32MHz-8pF-10ppm-70R;4P-L1.6*W1.2*H0.35mm,Faith Long,1S32000049,X2,1,mainboard,component,yes,,N/A,Not on LCSC
+8,302012960,SMD CAP Ceramic 2.2uF-6.3V-20%-X5R;0201,FH,0201X225M6R3NT,"C18,C23,C25,C27,C37,C38,C41,C42,C44",9,mainboard,component,yes,C285111,Extended,In stock
+9,310033132,SMD IC PMIC;Battery Protection IC Lithium Ion/Polymer;4-WLCSP (0.97x0.97),GLF,GLF73910-BD01,U14,1,mainboard,component,yes,,N/A,Source from DigiKey or Alibaba
+10,305031523,SMD MOSFET P-CH 20V-660mA;SOT-523,JCET,CJE3139K,Q7,1,mainboard,component,yes,C70991,Extended,In stock
+11,306011045,SMD Crystal 32.768KHz-12.5pF-20ppm-70KR;2P-1.6*1.0*0.5mm,KDS,DST1610A,X1,1,mainboard,component,yes,C93230,Extended,Out of stock
+12,305031600,SMD MOSFET N-CH 30V-1.5A;SOT-883,LRC,LN237N3T5G,"Q1,Q2",2,mainboard,component,yes,C383245,Extended,Out of stock
+13,314110114,SMD RES Thermistor NTC 10K-1%;0402,Murata,NCP15XH103F03RC,R28,1,mainboard,component,yes,C77131,Extended,Out of stock
+14,303011995,SMD Inductor 3.3uH-20%-700mA-DCR350mR;0603,MuRata,LQM18PN3R3MFRL,L5,1,mainboard,component,yes,,N/A,Other values available; source directly or find equivalent 3.3uH 0603
+15,303011855,SMD Inductor;1uH-20%-950mA;0603,Murata,LQM18PN1R0MFRL,L6,1,mainboard,component,yes,C307603,Extended,In stock
+16,310061002,SMD IC Diplexer;1.6*0.8*0.7mm,Murata,LFD182G45DCHD277,U3,1,mainboard,component,yes,C2917904,Extended,In stock
+17,302013247,SMD CAP Ceramic 4.7uF-6.3V-20%-X5R;0201,Murata,GRM035R60J475ME15D,"C17,C28,C31,C32",4,mainboard,component,yes,C335103,Extended,In stock
+18,302010730,SMD CAP Ceramic 1uF-10V-20%-X5R;0201,Murata,GRM033R61A105ME44D,"C1,C2,C3,C5,C7,C13,C20,C22,C29,C43,C53",11,mainboard,component,yes,C76935,Extended,In stock
+19,302011841,SMD CAP Ceramic 22nF-16V-10%-X5R;0201,Murata Electronics North America,GRM033R61C223KE84D,C21,1,mainboard,component,yes,C161473,Extended,In stock
+20,310061001,SMD IC RF WiFi Transceiver;WLCSP_81;3.75*3.385mm,Nordic,nRF7002-CEAA-R7,U2,1,mainboard,component,yes,,N/A,Only QFAA-R variant available; source from DigiKey/Mouser
+21,310060960,SMD IC RF;WLCSP-95;4.4*4.0mm,Nordic,nRF5340-CLAA,U1,1,mainboard,component,yes,C3606597,Extended,Out of stock — backup: DigiKey 5765-NRF5340-CLAA-R-ND
+22,310091605,SMD IC Memory;16Mbit-SPI-USON-8-2*3mm,Puya,P25Q16SH-UXH-IR,U12,1,mainboard,component,yes,,N/A,Different suffix variants available; verify package
+23,310032919,SMD IC PMIC;Low Noise LDO-3.3V-300mA;XTDFN-1*1-4L,SGMICRO,SGM2036S-3.3XXDH4G/TR,U16,1,mainboard,component,yes,C5152997,Extended,Out of stock
+24,310032813,SMD IC PMIC;LDO-1.8V-300mA;XTDFN-1*1-4L,SGMICRO,SGM2036S-1.8XXDH4G/TR,U8,1,mainboard,component,yes,C5152991,Extended,In stock
+25,310051410,SMD IC Logic;Single 2-Input NAND Gate-SC70-5,SGMICRO,74LVC1G00XC5G/TR,U9,1,mainboard,component,yes,C5153132,Extended,Out of stock
+26,314040211,SMD 6 Axis  Acceleration Sensor;LGA-14L,ST,LSM6DS3TR-C,U5,1,mainboard,component,yes,C967633,Extended,In stock
+27,303011999,SMD Inductor 10uH-20%-280mA;0603,Sunlord,MWSD1608FE100KT,"L1,L2",2,mainboard,component,yes,,N/A,Not on LCSC
+28,320210762,SMD BTB Female CONN;6+4P-0.25;L3.16*W1.5*H0.6mm,Suntech,ST-BTB-K3570606F,J1,1,mainboard,component,yes,,N/A,Not on LCSC
+29,312030662,SMD Mic OMNI -41dB;SMD-7P-L3.5*W2.65*H0.98mm,TDK,MMICT5838-00-012,"MIC1,MIC2",2,mainboard,component,yes,,N/A,MMICT5848 variant exists on LCSC; verify compatibility
+30,310051453,SMD IC Logic;DSBGA-12,TI,TXS0104EYZTR,U4,1,mainboard,component,yes,C478473,Extended,In stock
+31,310033052,"SMD IC PMIC;DCDC Buck-600mA,Vin 1.8V to 5.5V,Vout 1.8V to 3.6V;DSBGA-6",TI,TPS628438YKAR,U13,1,mainboard,component,yes,C18197908,Extended,In stock
+32,310031638,SMD IC LOW RON LOAD SWITCH;5.5V-2A;4-DSBGA,TI,TPS22916CYFPR,"U6,U11",2,mainboard,component,yes,C2680319,Extended,In stock
+33,310032402,SMD PMIC;BQ25101;1.60mm*0.90mm;DSBGA-6,TI,BQ25101YFPR,U15,1,mainboard,component,yes,C478468,Extended,In stock
+34,301010885,SMD RES 5.1K-1%-1/20W;0201,YAGEO,RC0201FR-075K1L,R41,1,mainboard,component,yes,C274341,Extended,In stock
+35,301012912,SMD RES 499K-1%-1/20W;0201,Yageo,RC0201FR-07499KL,R10,1,mainboard,component,yes,C138138,Extended,In stock
+36,301013740,SMD RES 330R-1%-1/20W;0201,YAGEO,RC0201FR-07330RL,R24,1,mainboard,component,yes,C274872,Extended,In stock
+37,301010753,SMD RES 2.2K-1%-1/20W;0201,YAGEO,RC0201FR-072K2L,"R1,R3,R19,R31,R33",5,mainboard,component,yes,C142018,Extended,In stock
+38,301013554,SMD RES 249K-1%-1/20W;0201,YAGEO,RC0201FR-07249KL,"R18,R20",2,mainboard,component,yes,C273273,Extended,In stock
+39,301011319,SMD RES 200K-1%-1/20W;0201,YAGEO,RC0201FR-07200KL,"R42,R43,R44",3,mainboard,component,yes,C138163,Extended,In stock
+40,301012633,SMD RES 1MR-1%-1/20W;0201,Yageo,RC0201FR-071ML,R9,1,mainboard,component,yes,C295786,Extended,In stock
+41,301010523,SMD RES 1K-±1%-1/20W;0201,YAGEO,RC0201FR-071KL,"R8,R29",2,mainboard,component,yes,C138165,Extended,In stock
+42,301010526,SMD RES 10K-±1%-1/20W;0201,YAGEO,RC0201FR-0710KL,"R2,R4,R5,R6,R11,R12,R26,R27,R32,R38,R39,R40",12,mainboard,component,yes,C106225,Extended,In stock
+43,301010765,SMD RES 100K-±1%-1/20W;0201,YAGEO,RC0201FR-07100KL,"R7,R13,R14,R15,R16,R17,R23,R30",8,mainboard,component,yes,C106224,Extended,In stock
+44,301010525,SMD RES 0R-±1%-1/20W;0201,YAGEO,RC0201FR-070RL,"R25,R34,R35,R36,R37,R45,R46,R47,R48",9,mainboard,component,yes,C106227,Extended,In stock
+45,302010519,SMD CAP Ceramic 10uF-10V-20%-X5R;0402,YAGEO,CC0402MRX5R6BB106,C47,1,mainboard,component,yes,C962143,Extended,In stock
+46,302010407,SMD CAP Ceramic 4.7uF-10V-10%-X5R;0402,YAGEO,CC0402KRX5R6BB475,C46,1,mainboard,component,yes,C326586,Extended,In stock
+47,302010431,SMD CAP Ceramic 10nF-16V-10%-X7R;0201,YAGEO,CC0201KRX7R7BB103,C24,1,mainboard,component,yes,C272853,Extended,In stock
+48,302010426,SMD CAP 2.2nF-10V-10%-X7R;0201,YAGEO,CC0201KRX7R6BB222,C6,1,mainboard,component,yes,C526951,Extended,Out of stock
+49,302012841,SMD CAP Ceramic;220nF-10V-10%-X5R;0201,YAGEO,CC0201KRX5R6BB224,C30,1,mainboard,component,yes,C326658,Extended,In stock
+50,302010271,SMD CAP Ceramic 100nF-10V-10%-X5R;0201,YAGEO,CC0201KRX5R6BB104,"C4,C8,C9,C10,C11,C14,C16,C26,C34,C35,C36,C39,C40,C48,C51,C52,C54",17,mainboard,component,yes,C190183,Extended,In stock
+51,302012521,SMD CAP Ceramic;470nF-6.3V;0201,YAGEO,CC0201KRX5R5BB474,"C19,C33",2,mainboard,component,yes,C326573,Extended,In stock
+52,302010420,SMD CAP Ceramic 100pF-50V-5%-NP0;0201,YAGEO,CC0201JRNPO9BN101,C45,1,mainboard,component,yes,C272870,Extended,In stock
+53,302013030,SMD CAP Ceramic 0.7pF-50V-0.1pF-NPO;0201,YAGEO,CC0201BRNPO9BNR70,"C12,C15,C49,C50",4,mainboard,component,yes,C576685,Extended,Out of stock
+54,310100689,SMD IC Analog; SPDT RF Switch;DFN-6(0.7x1.1),FUMAN,FM8625H,U10,1,mainboard,component,yes,C2857391,Extended,In stock
+55,304092128,SMD LED RGB;4P-L0.69*W0.69*H0.48mm,MEIHUA,MHPA0606RGBDT,"D2,D7",2,mainboard,component,yes,,N/A,Larger sizes (0808/1010) available
+56,311021801,SMD Top Button 163gf:4P-2.6*1.6*0.53mm,JINBEILI,TS-1001S,K2,1,mainboard,component,yes,,N/A,Not on LCSC
+57,320991624,SMD PogoPin WH1.5mm;1.4*1.4*2.0mm,JINLANTIAN,CA02-PG07,"PP1,PP2,PP3,PP4,PP5,PP6",6,mainboard,component,yes,,N/A,Not on LCSC
+88,301010185,SMD RES 10R-±1%;0603,YAGEO,RC0603FR-0710RL,R21,1,mainboard,component,yes,C109318,Extended,In stock
