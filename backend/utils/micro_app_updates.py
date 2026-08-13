@@ -148,7 +148,14 @@ def _release_signature(release: MicroAppRelease, metadata: Mapping[str, Any]) ->
     return ""
 
 
-def _release_asset(config: MicroAppConfig, release: MicroAppRelease) -> tuple[str, str] | None:
+def _release_asset(config: MicroAppConfig, release: MicroAppRelease) -> tuple[str, str, str] | None:
+    """The signed enclosure: its name, download URL, and byte length.
+
+    The length is the asset's ``size`` when GitHub reports a usable one, and ``""`` otherwise.  It is
+    optional to Sparkle but not cosmetic: without it the update sheet can only show an indeterminate
+    progress bar, and a signature failure loses the "downloaded file differs from the signed file"
+    hint that distinguishes a truncated download from a wrong key.
+    """
     assets = release.get("assets")
     if not isinstance(assets, Sequence) or isinstance(assets, (str, bytes, bytearray)):
         return None
@@ -161,7 +168,9 @@ def _release_asset(config: MicroAppConfig, release: MicroAppRelease) -> tuple[st
             continue
         if not isinstance(url, str) or not url.strip() or not url.startswith("https://"):
             continue
-        return name, url.strip()
+        size = asset.get("size")
+        length = str(size) if isinstance(size, int) and not isinstance(size, bool) and size > 0 else ""
+        return name, url.strip(), length
     return None
 
 
@@ -255,6 +264,10 @@ def generate_micro_app_appcast(config: MicroAppConfig, items: Sequence[Mapping[s
         url = escape(_xml_safe(item.get("url", "")), quote=True)
         signature = escape(_xml_safe(item.get("ed_signature", "")), quote=True)
         release_notes_url = item.get("release_notes_url")
+        # Omitted rather than sent as 0: Sparkle treats a missing length as "unknown" and falls back
+        # to the HTTP Content-Length, while a zero would assert an empty artifact.
+        length = _xml_safe(str(item.get("length", "")))
+        length_attribute = f' length="{escape(length, quote=True)}"' if length.isdigit() else ""
 
         lines.extend(
             [
@@ -264,7 +277,7 @@ def generate_micro_app_appcast(config: MicroAppConfig, items: Sequence[Mapping[s
                 f"      <sparkle:shortVersionString>{version}</sparkle:shortVersionString>",
                 f"      <description><![CDATA[{notes}]]></description>",
                 f"      <pubDate>{pub_date}</pubDate>",
-                f'      <enclosure url="{url}" type="application/octet-stream" sparkle:os="macos" sparkle:edSignature="{signature}" sparkle:minimumSystemVersion="{escape(_xml_safe(config.minimum_system_version), quote=True)}" />',
+                f'      <enclosure url="{url}"{length_attribute} type="application/octet-stream" sparkle:os="macos" sparkle:edSignature="{signature}" sparkle:minimumSystemVersion="{escape(_xml_safe(config.minimum_system_version), quote=True)}" />',
             ]
         )
         if isinstance(release_notes_url, str) and release_notes_url.strip():
@@ -307,6 +320,7 @@ def _release_to_item(config: MicroAppConfig, release: MicroAppRelease, channel: 
         "notes_html": _release_notes_html(config, release),
         "pub_date": _format_pub_date(published_at),
         "url": asset[1],
+        "length": asset[2],
         "ed_signature": signature,
         "release_notes_url": release_notes_url,
         "channel": channel,
