@@ -1223,11 +1223,12 @@ void main() {
       _GatedSocketCaptureProvider provider, {
       BleAudioCodec codec = BleAudioCodec.pcm16,
       int sampleRate = 16000,
-    }) => provider.changeAudioRecordProfile(
-      audioCodec: codec,
-      sampleRate: sampleRate,
-      source: ConversationSource.phone.name,
-    );
+    }) =>
+        provider.changeAudioRecordProfile(
+          audioCodec: codec,
+          sampleRate: sampleRate,
+          source: ConversationSource.phone.name,
+        );
 
     test('drops a reconnect attempt while one is still in flight', () async {
       final provider = _GatedSocketCaptureProvider();

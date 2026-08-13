@@ -10,7 +10,9 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 Future<void> _pumpLoadingState(WidgetTester tester) async {
   await tester.pumpWidget(
     const MaterialApp(
-      home: Scaffold(body: CustomScrollView(slivers: [SearchLoadingSliver()])),
+      home: Scaffold(
+        body: CustomScrollView(slivers: [SearchLoadingSliver()]),
+      ),
     ),
   );
 }
