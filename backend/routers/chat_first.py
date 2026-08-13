@@ -29,6 +29,7 @@ from models.chat_first import (
     DeferralReceipt,
     GoalLinkSpec,
     LegacyMaterializePromptsResponse,
+    LegacyProactiveIntent,
     MaterializePromptsRequest,
     MaterializePromptsResponse,
     MemoryLinkSpec,
@@ -268,7 +269,9 @@ def materialize_prompts_v1(
 
     response = _materialize_prompts(request, uid)
     compatible = [
-        intent for intent in response.intents if all(block.type != 'conversationLink' for block in intent.blocks)
+        LegacyProactiveIntent.model_validate(intent.model_dump())
+        for intent in response.intents
+        if all(block.type != 'conversationLink' for block in intent.blocks)
     ]
     return LegacyMaterializePromptsResponse(intents=compatible)
 

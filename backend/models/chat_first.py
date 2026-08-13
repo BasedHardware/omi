@@ -230,8 +230,19 @@ class MaterializePromptsResponse(_StrictModel):
     intents: list[ProactiveIntent] = Field(default_factory=list)
 
 
-class LegacyProactiveIntent(ProactiveIntent):
+class LegacyProactiveIntent(_StrictModel):
+    intent_id: StableId
+    continuity_key: StableId
+    account_generation: int = Field(ge=0)
+    source: ProactiveIntentSource
+    subject: ChatFirstSubject | None = None
     blocks: list[LegacyChatFirstBlockSpec] = Field(min_length=1, max_length=8)
+    delivery_state: ProactiveIntentDeliveryState = 'ready'
+    created_at: datetime
+    delivered_at: datetime | None = None
+    materialization_receipt_id: StableId | None = None
+    cold_start_sequence_terminal_state: ColdStartSequenceTerminalState | None = None
+    cold_start_sequence_terminal_receipt_id: StableId | None = None
 
 
 class LegacyMaterializePromptsResponse(_StrictModel):
