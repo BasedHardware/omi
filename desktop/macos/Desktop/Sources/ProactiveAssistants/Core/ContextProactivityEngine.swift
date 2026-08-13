@@ -191,8 +191,8 @@ actor ContextProactivityEngine {
       return
     }
     // Settings can change while snapshot/frame/task context is assembled. Rebuild the
-    // free gate immediately before the paid model call so entering quiet hours, disabling
-    // notifications, snoozing, or becoming paywalled never spends director budget.
+    // free gate immediately before the paid model call so disabling notifications,
+    // snoozing, or becoming paywalled never spends director budget.
     let evaluationGate = await MainActor.run { Self.liveDeliveryGateInput() }
     let evaluationReason = ContextDeliveryBudget.freeGate(input: evaluationGate)
     guard evaluationReason == .allowed else {
@@ -324,8 +324,8 @@ actor ContextProactivityEngine {
         return
       }
       // Graduation and system-surface preflight can both await. Rebuild every
-      // free gate once more at the actual handoff so master-off, quiet hours,
-      // snooze, paywall, or another proactive presentation wins the race.
+      // free gate once more at the actual handoff so master-off, snooze, paywall,
+      // or another proactive presentation wins the race.
       let handoffGate = await MainActor.run { Self.liveDeliveryGateInput() }
       guard ContextDeliveryBudget.freeGate(input: handoffGate) == .allowed else {
         try await store.completeDelivery(
@@ -445,16 +445,13 @@ actor ContextProactivityEngine {
   }
 
   @MainActor
-  static func liveDeliveryGateInput(now: Date = Date()) -> ContextDeliveryGateInput {
-    let components = Calendar.current.dateComponents([.hour, .minute], from: now)
+  static func liveDeliveryGateInput() -> ContextDeliveryGateInput {
     let frequencyLevel = NotificationService.currentFrequencyLevel()
     return ContextDeliveryGateInput(
       masterEnabled: NotificationService.areNotificationsEnabled(),
       frequencyLevel: frequencyLevel,
       snoozed: FloatingControlBarManager.shared.isSnoozed,
       paywalled: AppState.isPaywalledEffective,
-      minuteOfDay: (components.hour ?? 0) * 60 + (components.minute ?? 0),
-      activePeriod: NotificationService.currentActivePeriod(),
       cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: frequencyLevel),
       dailyLimit: ContextDeliveryBudget.dailyLimit(
         frequencyLevel: frequencyLevel,

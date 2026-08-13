@@ -268,6 +268,13 @@ class ShortcutSettings: ObservableObject {
     }
   }
 
+  /// PTT is observed system-wide. A bare character would start a voice turn whenever the user types
+  /// that character in another app, so every PTT binding needs at least one modifier. Modifier-only
+  /// presets (Option, Fn, Control, or Right Command) remain valid.
+  static func isSafePushToTalkShortcut(_ shortcut: KeyboardShortcut) -> Bool {
+    !shortcut.modifiers.isEmpty
+  }
+
   static let askOmiCommandOShortcut = KeyboardShortcut(keyCode: 31, keyDisplay: "O", modifiers: .command)
   static let askOmiCommandReturnShortcut = KeyboardShortcut(keyCode: 36, keyDisplay: "↩", modifiers: .command)
   static let askOmiCommandShiftReturnShortcut = KeyboardShortcut(
@@ -580,11 +587,13 @@ class ShortcutSettings: ObservableObject {
   private static let pttShortcutDefaultsKey = "shortcut_pttKey"
 
   private init() {
+    let restoredPTT = Self.loadShortcut(
+      forKey: Self.pttShortcutDefaultsKey,
+      legacyMapper: Self.legacyPTTShortcut
+    )
     self.pttShortcut =
-      Self.loadShortcut(
-        forKey: Self.pttShortcutDefaultsKey,
-        legacyMapper: Self.legacyPTTShortcut
-      ) ?? Self.pttPresets[0]
+      restoredPTT.flatMap { Self.isSafePushToTalkShortcut($0) ? $0 : nil }
+      ?? Self.pttPresets[0]
 
     // A saved ⌘O binding is honored as-is — no ⌘O → ⌃⌥O migration. It does register and it does
     // fire globally; what it also does is consume ⌘O before any other app sees it. That is a cost

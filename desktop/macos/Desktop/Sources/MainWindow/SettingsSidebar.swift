@@ -115,11 +115,6 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["frequency", "how often", "interval"], section: .notifications, icon: "bell",
       settingId: "notifications.frequency"),
     SettingsSearchItem(
-      name: "Notification Active Period", subtitle: "Choose when proactive notifications may appear",
-      keywords: ["active period", "quiet hours", "schedule", "24 hour", "time"],
-      section: .notifications, icon: "bell",
-      settingId: "notifications.activeperiod"),
-    SettingsSearchItem(
       name: "Task Notifications",
       subtitle: "Allow interruptions when a task needs attention",
       keywords: ["task", "action item", "notify task", "interruption", "proactive"],
