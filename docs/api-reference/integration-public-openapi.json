@@ -1095,9 +1095,19 @@
             "title": "Is Baseline",
             "type": "boolean"
           },
+          "is_dismissed": {
+            "default": false,
+            "title": "Is Dismissed",
+            "type": "boolean"
+          },
           "is_locked": {
             "default": false,
             "title": "Is Locked",
+            "type": "boolean"
+          },
+          "is_read": {
+            "default": false,
+            "title": "Is Read",
             "type": "boolean"
           },
           "kg_extracted": {

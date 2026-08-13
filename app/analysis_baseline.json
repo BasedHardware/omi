@@ -13,7 +13,7 @@
   "no_leading_underscores_for_local_identifiers": 5,
   "non_constant_identifier_names": 1,
   "overridden_fields": 1,
-  "prefer_final_fields": 4,
+  "prefer_final_fields": 3,
   "prefer_function_declarations_over_variables": 1,
   "prefer_interpolation_to_compose_strings": 5,
   "prefer_is_empty": 1,

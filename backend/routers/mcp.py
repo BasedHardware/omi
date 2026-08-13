@@ -7,7 +7,6 @@ from utils.mcp_data import date_only_to_utc_epoch
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-import database.memories as memories_db
 import database.conversations as conversations_db
 import database.users as users_db
 import database.action_items as action_items_db
@@ -21,19 +20,20 @@ from firebase_admin import auth as firebase_auth
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
-from database.vector_db import upsert_memory_vector, delete_memory_vector
 import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
 from models.conversation import AppResult
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
+from utils.conversations.mcp_transcript_search import (
+    attach_match_snippets_to_conversations,
+    resolve_mcp_conversation_search_ids,
+)
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
-from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from dependencies import (
     get_uid_from_mcp_api_key,
     get_current_user_id,
@@ -42,11 +42,6 @@ from dependencies import (
 )
 from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
-from utils.memory.default_read_rollout import (
-    MemoryReadDecision,
-    guard_legacy_memory_write,
-    read_default_read_rollout,
-)
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_external_default_memory_read,
@@ -56,14 +51,10 @@ from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, 
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
-    list_default_mcp_memories,
-    mcp_denied_read_payload,
-    mcp_legacy_read_authorized,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
-    search_default_mcp_memories_vector,
 )
 import database.mcp_oauth as mcp_oauth_db
 import logging
@@ -129,14 +120,13 @@ def create_memory(
             detail=write_grant.observability,
         )
     uid = auth_context.uid
-    memory_system = pin_memory_system(uid, db_client=db)
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memory_service = MemoryService(db_client=db)
     memory_db = memory_service.create_external_memory(
         uid,
         memory_db,
-        memory_system=memory_system,
+        memory_system=MemorySystem.CANONICAL,
         consumer='mcp',
         operation="mcp_memory_create",
         require_canonical_promotion=True,
@@ -169,13 +159,10 @@ def delete_memory(
             detail=write_grant.observability,
         )
     uid = auth_context.uid
-    memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system != MemorySystem.CANONICAL:
-        _validate_mcp_memory(uid, memory_id)
     MemoryService(db_client=db).delete_external_memory(
         uid,
         memory_id,
-        memory_system=memory_system,
+        memory_system=MemorySystem.CANONICAL,
         consumer='mcp',
         operation="mcp_memory_delete",
     )
@@ -197,13 +184,12 @@ def edit_memory(
             detail=write_grant.observability,
         )
     uid = auth_context.uid
-    memory_system = pin_memory_system(uid, db_client=db)
     _validate_mcp_memory(uid, memory_id)
     MemoryService(db_client=db).update_external_memory_content(
         uid,
         memory_id,
         value,
-        memory_system=memory_system,
+        memory_system=MemorySystem.CANONICAL,
         consumer='mcp',
         operation="mcp_memory_edit",
     )
@@ -293,28 +279,7 @@ def search_memories(
     uid = auth_context.uid
     logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
     limit = max(1, min(limit, 20))
-    memory_system = pin_memory_system(uid, db_client=db)
     memory_service = MemoryService(db_client=db)
-
-    if memory_system == MemorySystem.CANONICAL:
-        return memory_service.search_mcp(uid, query, limit=limit)
-
-    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')
-    vector_search_results = search_default_mcp_memories_vector(
-        uid=uid,
-        query=query,
-        limit=limit,
-        db_client=db,
-        rollout_decision=memory_rollout,
-    )
-    if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
-        return vector_search_results.memories
-    if not mcp_legacy_read_authorized(vector_search_results):
-        denied = mcp_denied_read_payload(vector_search_results)
-        if denied is not None:
-            raise HTTPException(status_code=403, detail=denied)
-        return []
-
     return memory_service.search_mcp(uid, query, limit=limit)
 
 
@@ -354,11 +319,6 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    memory_system = pin_memory_system(uid, db_client=db)
-
-    # Fail closed: authorize memory read before any system branch, matching
-    # the search route. Legacy keys without persisted memories.read scope
-    # cannot list canonical memories.
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
@@ -366,58 +326,11 @@ def get_memories(
             detail=app_key_grant.observability,
         )
 
-    if memory_system == MemorySystem.CANONICAL:
-        # Over-fetch then apply the same filters the legacy path applies, so
-        # canonical callers honoring categories/reviewed/sensitive/sort never
-        # receive memories they explicitly excluded. The fetch lambda returns
-        # raw (unfiltered) batches so collect_filtered_memories can advance by
-        # raw page size — filtering inside the lambda would make short batches
-        # look like end-of-source.
-        filtered = collect_filtered_memories(
-            lambda batch_offset, batch_limit: [
-                m.model_dump(mode='json')
-                for m in MemoryService(db_client=db).read_pinned(uid, memory_system, batch_limit, batch_offset)
-            ],
-            limit=limit,
-            offset=offset,
-            reviewed=reviewed,
-            manually_added=manually_added,
-            include_activity=include_activity,
-            include_sensitive=include_sensitive,
-            updated_after=parsed_updated_after,
-            sort=sort,
-            categories=[c.value for c in category_list] if category_list else None,
-        )
-        memories = filtered['memories']
-        for memory in memories:
-            if memory.get('is_locked', False):
-                content = memory.get('content', '')
-                memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-        return memories
-
-    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')
-    memory_list_results = list_default_mcp_memories(
-        uid=uid,
-        limit=limit,
-        offset=offset,
-        db_client=db,
-        rollout_decision=memory_rollout,
-        categories=[category.value for category in category_list],
-        reviewed=reviewed,
-        manually_added=manually_added,
-    )
-    if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
-        return memory_list_results.memories
-    if not mcp_legacy_read_authorized(memory_list_results):
-        denied = mcp_denied_read_payload(memory_list_results)
-        if denied is not None:
-            raise HTTPException(status_code=403, detail=denied)
-        return []
-
     result = collect_filtered_memories(
-        lambda batch_offset, batch_limit: memories_db.get_memories(
-            uid, batch_limit, batch_offset, [c.value for c in category_list], sort=sort
-        ),
+        lambda batch_offset, batch_limit: [
+            memory.model_dump(mode='json')
+            for memory in MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
+        ],
         limit=limit,
         offset=offset,
         reviewed=reviewed,
@@ -426,6 +339,7 @@ def get_memories(
         include_sensitive=include_sensitive,
         updated_after=parsed_updated_after,
         sort=sort,
+        categories=[category.value for category in category_list] if category_list else None,
     )
     memories = result["memories"]
     for memory in memories:
@@ -450,6 +364,18 @@ class SimpleTranscriptSegment(BaseModel):
     end: float
 
 
+class TranscriptMatchSnippet(BaseModel):
+    """Grep-style transcript evidence for MCP search hits (#6621)."""
+
+    text: str
+    segment_id: Optional[str] = None
+    start: Optional[float] = None
+    end: Optional[float] = None
+    start_ms: Optional[int] = None
+    end_ms: Optional[int] = None
+    speaker_id: Optional[int] = None
+
+
 class SimpleConversation(BaseModel):
     id: str
     started_at: Optional[datetime]
@@ -457,6 +383,7 @@ class SimpleConversation(BaseModel):
     structured: SimpleStructured
     language: Optional[str] = None
     apps_results: List[AppResult] = []
+    match_snippets: List[TranscriptMatchSnippet] = []
 
 
 class FullConversation(SimpleConversation):
@@ -542,12 +469,25 @@ def search_conversations(
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
 
-    conversation_ids = vector_db.query_vectors(query, uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+    # Summary vectors miss transcript-only phrases; merge transcript-chunk hits and
+    # attach grep-style snippets from hydrated segments (#6621).
+    conversation_ids = resolve_mcp_conversation_search_ids(
+        uid,
+        query,
+        limit=limit,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        query_vectors=vector_db.query_vectors,
+        search_transcript_chunks=vector_db.search_transcript_chunks,
+        embed_query=vector_db.embeddings.embed_query,
+    )
     if not conversation_ids:
         return []
 
     conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
     redact_conversations_for_list(conversations)
+    # Snippets after redaction so locked list rows never leak transcript evidence (#6621).
+    conversations = attach_match_snippets_to_conversations(conversations, query)
     valid = []
     for conv in conversations:
         try:

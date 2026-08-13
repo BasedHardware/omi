@@ -53,6 +53,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// The Settings page writes this on load and on slider change; `sendNotification`
   /// reads it synchronously to throttle proactive notifications.
   static let frequencyDefaultsKey = "notification_frequency"
+  static let settingsPendingSyncDefaultsKey = "notification_settings_pending_sync"
+  static let settingsSyncRevisionDefaultsKey = "notification_settings_sync_revision"
 
   /// One-time migration flag: when set, the notifications-off-by-default migration
   /// has already run for this install, so we never re-disable a user who opted back in.
@@ -64,6 +66,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// master Notifications switch off — without waiting for a backend round-trip. Defaults to
   /// `true` when the key is absent (first run before the Settings page hydrates).
   static let masterEnabledDefaultsKey = "notifications_enabled"
+
+  /// Device-local active period for proactive interruptions, stored as minutes since midnight.
+  /// The setting follows the Mac's local clock and defaults to 08:00–22:00.
+  static let activePeriodStartDefaultsKey = "notification_active_period_start_minute"
+  static let activePeriodEndDefaultsKey = "notification_active_period_end_minute"
 
   /// Default level used when the key has never been written (e.g. first run before
   /// the Settings page has hydrated from the backend). Mirrors the backend default.
@@ -242,8 +249,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         switch Self.openAction(assistantId: assistantId, title: title) {
         case .resetScreenCapture:
           self.handleScreenCaptureResetAction(source: "notification_click")
-        case .openSupportThread:
-          self.openSupportThread(source: "notification_click")
         case .none:
           break
         }
@@ -292,19 +297,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     case none
     /// The screen-recording repair, which is an action rather than a page.
     case resetScreenCapture
-    /// The founder/support thread the reply arrived in.
-    case openSupportThread
   }
 
   /// Resolve the tap destination from the notification's provenance.
   ///
-  /// Support replies are matched on `assistantId`, not on their display title, because the title is
-  /// user-visible copy: renaming the banner must not silently disconnect its tap. The
-  /// screen-capture case still matches on title only because that is how its own delivery gates
+  /// The screen-capture case matches on title because that is how its own delivery gates
   /// (`screenCaptureResetShownKey`) already identify it — changing that identity is a separate
   /// change with its own suppression-state migration.
   static func openAction(assistantId: String, title: String) -> OpenAction {
-    if assistantId == SupportThreadRoute.assistantId { return .openSupportThread }
     if title == screenCaptureResetTitle { return .resetScreenCapture }
     return .none
   }
@@ -316,22 +316,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     ScreenCaptureService.resetScreenCapturePermissionAndRestart()
   }
 
-  /// Bring up the support thread the tapped reply belongs to.
-  ///
-  /// The window is revealed first because a banner can arrive with the main window closed, which is
-  /// exactly when a founder reply is worth surfacing. Non-`private` so a test can drive this
-  /// without a real `UNUserNotificationCenter` delivery.
-  func openSupportThread(source: String) {
-    log("Support thread open requested from \(source)")
-    SupportThreadRoute.open()
-  }
-
   /// Send a notification via the floating bar, and optionally as a native macOS system banner.
   ///
   /// `deliverSystemBanner` defaults to `false` because proactive AI notifications are
   /// floating-bar only by default — users who disabled the floating bar reported clicking
   /// the top-right system banner and getting no conversation context, which was confusing.
-  /// Functional notifications (Crisp support replies, screen-recording permission
+  /// Functional notifications (screen-recording permission
   /// prompts with a repair action) must pass `deliverSystemBanner: true` so they
   /// still surface as a system banner — they either have no floating-bar equivalent
   /// or must reach the user even when the floating bar is hidden/snoozed.
@@ -344,6 +334,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// for that explicit opt-out, not by default. Disabling the Floating Bar itself does
   /// *not* force a banner: floating-bar-only notifications stay silent in that case, same
   /// as before this policy existed, per the contentless-banner confusion noted above.
+  /// `insightDeliveryID`, when present, is an opaque Advice correlation key. It records only
+  /// bounded delivery outcomes and never carries notification text or window context.
   func sendNotification(
     ownerID: String,
     title: String,
@@ -353,6 +345,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     deliverSystemBanner: Bool = false,
     respectFrequency: Bool = true,
@@ -365,6 +358,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
     else {
       log("NotificationService: rejecting notification from stale runtime owner")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .staleOwner
+      )
       return
     }
     prepareOwnerScopedState(for: authorizationSnapshot)
@@ -391,6 +389,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // macOS banner — the user opted into "no notifications for 2h".
     if FloatingControlBarManager.shared.isSnoozed {
       log("NotificationService: suppressing notification because floating bar is snoozed")
+      recordInsightDeliveryOutcome(insightDeliveryID, outcome: .suppressed, reason: .snoozed)
       return
     }
 
@@ -401,6 +400,22 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // to bypass this, matching the frequency gate below.
     if respectFrequency && !Self.areNotificationsEnabled() {
       log("NotificationService: suppressing \(assistantId) notification because notifications are disabled")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .masterNotificationsDisabled
+      )
+      return
+    }
+
+    // Device-local active period gates every proactive path (not only the director).
+    if respectFrequency && !Self.isWithinActivePeriod(now: Date()) {
+      log("NotificationService: suppressing \(assistantId) notification outside active period")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .frequencyThrottled
+      )
       return
     }
 
@@ -408,34 +423,52 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // notifications (Crisp support replies, screen-recording permission prompts,
     // onboarding test) pass `respectFrequency: false` to bypass the gate.
     if respectFrequency
-      && !shouldAllowProactiveNotification(
+      && !isProactiveNotificationEligible(
         assistantId: assistantId,
+        now: Date(),
         authorizationSnapshot: authorizationSnapshot
       )
     {
       log("NotificationService: throttled \(assistantId) notification (frequency=\(Self.currentFrequencyLevel()))")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: Self.currentFrequencyLevel() == 0 ? .frequencyOff : .frequencyThrottled
+      )
       return
     }
 
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       log("NotificationService: owner changed before notification presentation")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .staleOwner
+      )
       return
     }
 
-    // Mark the screen-capture reset notice as shown only now that it has passed
-    // every suppression gate and is actually being delivered — so a snoozed (or
-    // otherwise gated) attempt does not permanently suppress it for the episode.
-    if title == Self.screenCaptureResetTitle {
-      UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
+    let recordPresentation = { [weak self] in
+      if respectFrequency {
+        self?.recordProactiveNotificationPresented(
+          assistantId: assistantId,
+          authorizationSnapshot: authorizationSnapshot)
+      }
+      if title == Self.screenCaptureResetTitle {
+        UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
+      }
     }
 
     let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
-
-    if FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+    let floatingBarPreviewEnabled = FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
       previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled
-    ) {
-      FloatingControlBarManager.shared.showNotification(
+    )
+
+    var floatingBarMayDeliver = false
+    var floatingBarQueued = false
+    if floatingBarPreviewEnabled {
+      let presentation = FloatingControlBarManager.shared.showNotification(
         ownerID: ownerID,
         title: title,
         message: message,
@@ -444,8 +477,30 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         context: context,
         action: action,
         suggestionTelemetryIdentity: suggestionTelemetryIdentity,
-        screenshotData: screenshotData
+        insightDeliveryID: insightDeliveryID,
+        screenshotData: screenshotData,
+        onPresented: recordPresentation
       )
+      switch presentation {
+      case .presented:
+        floatingBarMayDeliver = true
+      case .queued:
+        // Queue admission is not user-visible delivery. Leave the identity unresolved so a
+        // later presentation boundary (or a system-banner fallback) can emit the terminal event.
+        floatingBarQueued = true
+      case .suppressed:
+        recordInsightDeliveryOutcome(insightDeliveryID, outcome: .suppressed, reason: .snoozed)
+        return
+      case .rejectedOwnerChange:
+        recordInsightDeliveryOutcome(
+          insightDeliveryID,
+          outcome: .suppressed,
+          reason: .staleOwner
+        )
+        return
+      case .windowUnavailable:
+        break
+      }
     }
 
     // Default path: floating-bar only. Functional callers opt-in via
@@ -453,20 +508,47 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // explicitly muted in-bar previews (bar still enabled), fall back to the
     // system banner so the notification is never fully silenced. Disabling the
     // Floating Bar itself does not force a banner — see the parameter doc.
-    guard
-      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
+    let shouldDeliverSystemBanner =
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
         previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
-        deliverSystemBanner: deliverSystemBanner
+        deliverSystemBanner: deliverSystemBanner,
+        floatingBarAccepted: floatingBarMayDeliver || floatingBarQueued
       )
-    else { return }
+    guard shouldDeliverSystemBanner else {
+      if !floatingBarMayDeliver && !floatingBarQueued {
+        recordInsightDeliveryOutcome(
+          insightDeliveryID,
+          outcome: floatingBarPreviewEnabled ? .failed : .suppressed,
+          reason: floatingBarPreviewEnabled ? .floatingBarUnavailable : .noDeliverySurface
+        )
+      }
+      return
+    }
 
+    // Freeze the presentation decision before crossing the UserNotifications callback boundary;
+    // @Sendable MainActor closures must not capture mutable local state.
+    let floatingBarDelivered = floatingBarMayDeliver
+    let floatingBarHasQueued = floatingBarQueued
     UserNotificationCallbackBridge.authorizationStatus { [weak self] authorizationStatus in
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         log("NotificationService: dropping stale-owner system notification")
+        self?.recordInsightDeliveryOutcome(
+          insightDeliveryID,
+          outcome: .suppressed,
+          reason: .staleOwner
+        )
         return
       }
       guard authorizationStatus == .authorized else {
         log("Notification skipped (auth=\(authorizationStatus.rawValue)): \(title)")
+
+        if !floatingBarDelivered && !floatingBarHasQueued {
+          self?.recordInsightDeliveryOutcome(
+            insightDeliveryID,
+            outcome: .suppressed,
+            reason: .systemAuthorizationDenied
+          )
+        }
 
         // Sending an assistant notification is not consent to change TCC or
         // LaunchServices state. A user can repair notification access from
@@ -479,9 +561,157 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         message: message,
         assistantId: assistantId,
         sound: sound,
-        authorizationSnapshot: authorizationSnapshot
+        authorizationSnapshot: authorizationSnapshot,
+        insightDeliveryID: floatingBarDelivered ? nil : insightDeliveryID,
+        insightFailureDeliveryID: (floatingBarDelivered || floatingBarHasQueued) ? nil : insightDeliveryID,
+        onPresented: recordPresentation
       )
     }
+  }
+
+  /// Presentation seam for the flag-on context director. Budget/dedup live in the
+  /// durable ledger; this method still re-checks floating-preview policy so a muted
+  /// in-bar preview falls back to a system banner instead of burning quota invisibly.
+  @discardableResult
+  func contextDirectorPresentationPreflight(ownerID: String) async -> OwnerBoundNotificationPresentationResult {
+    guard !ownerID.isEmpty,
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else { return .rejectedOwnerChange }
+    guard contextDirectorMayPresent(authorizationSnapshot: authorizationSnapshot, now: Date()) else {
+      return .suppressed
+    }
+
+    let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
+    let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
+    if FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+      previewsEnabled: previewsEnabled,
+      floatingBarEnabled: floatingBarEnabled)
+    {
+      return FloatingControlBarManager.shared.contextNotificationPreflight(
+        ownerID: ownerID,
+        authorizationSnapshot: authorizationSnapshot)
+    }
+    guard
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
+        previewsEnabled: previewsEnabled,
+        floatingBarEnabled: floatingBarEnabled,
+        deliverSystemBanner: false)
+    else { return .suppressed }
+
+    let settings = await withCheckedContinuation { continuation in
+      UserNotificationCallbackBridge.notificationSettings { settings in
+        continuation.resume(returning: settings)
+      }
+    }
+    guard
+      NotificationPermissionPolicy.hasVisibleAlertSurface(
+        status: settings.authorizationStatus,
+        alertStyle: settings.alertStyle)
+    else { return .suppressed }
+    return .queued
+  }
+
+  @discardableResult
+  func presentContextDirectorNotification(
+    ownerID: String,
+    title: String,
+    message: String,
+    decisionType: String,
+    context: FloatingBarNotificationContext,
+    onPresented: (() -> Void)? = nil,
+    onDropped: (() -> Void)? = nil
+  ) -> OwnerBoundNotificationPresentationResult {
+    guard !ownerID.isEmpty,
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else {
+      onDropped?()
+      return .rejectedOwnerChange
+    }
+    guard contextDirectorMayPresent(authorizationSnapshot: authorizationSnapshot, now: Date()) else {
+      onDropped?()
+      return .suppressed
+    }
+
+    let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
+    let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
+    let showInBar = FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled)
+    let deliverSystemBanner = FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
+      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled, deliverSystemBanner: false)
+
+    let recordPresented = { [weak self] in
+      self?.recordProactiveNotificationPresented(
+        assistantId: "context-director",
+        authorizationSnapshot: authorizationSnapshot)
+      onPresented?()
+    }
+
+    if showInBar {
+      return FloatingControlBarManager.shared.showNotification(
+        ownerID: ownerID,
+        title: title,
+        message: message,
+        assistantId: "context-director",
+        sound: .default,
+        kind: ProactiveNotificationKind.from(decisionType: decisionType),
+        context: context,
+        authorizationSnapshot: authorizationSnapshot,
+        onPresented: recordPresented,
+        onDropped: onDropped)
+    }
+
+    guard deliverSystemBanner else {
+      onDropped?()
+      return .suppressed
+    }
+
+    UserNotificationCallbackBridge.notificationSettings { [weak self] settings in
+      guard let self,
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        self.contextDirectorMayPresent(authorizationSnapshot: authorizationSnapshot, now: Date()),
+        NotificationPermissionPolicy.hasVisibleAlertSurface(
+          status: settings.authorizationStatus,
+          alertStyle: settings.alertStyle)
+      else {
+        onDropped?()
+        return
+      }
+      self.deliverNotification(
+        title: title,
+        message: message,
+        assistantId: "context-director",
+        sound: .default,
+        authorizationSnapshot: authorizationSnapshot,
+        onPresented: recordPresented,
+        onDropped: onDropped
+      )
+    }
+    return .queued
+  }
+
+  private func contextDirectorMayPresent(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    now: Date
+  ) -> Bool {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
+    let components = Calendar.current.dateComponents([.hour, .minute], from: now)
+    let level = Self.currentFrequencyLevel()
+    let gate = ContextDeliveryGateInput(
+      masterEnabled: Self.areNotificationsEnabled(),
+      frequencyLevel: level,
+      snoozed: FloatingControlBarManager.shared.isSnoozed,
+      paywalled: AppState.isPaywalledEffective,
+      minuteOfDay: (components.hour ?? 0) * 60 + (components.minute ?? 0),
+      activePeriod: Self.currentActivePeriod(),
+      cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: level)
+    )
+    guard ContextDeliveryBudget.freeGate(input: gate) == .allowed else { return false }
+    return isProactiveNotificationEligible(
+      assistantId: "context-director",
+      now: now,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// The only delivery path for contextual task interruptions. Unlike the
@@ -586,9 +816,17 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     message: String,
     assistantId: String,
     sound: NotificationSound,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    insightDeliveryID: UUID? = nil,
+    insightFailureDeliveryID: UUID? = nil,
+    onPresented: (() -> Void)? = nil,
+    onDropped: (() -> Void)? = nil
   ) {
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      recordInsightDeliveryOutcome(insightFailureDeliveryID, outcome: .suppressed, reason: .staleOwner)
+      onDropped?()
+      return
+    }
     let content = UNMutableNotificationContent()
     content.title = title
     content.body = message
@@ -625,18 +863,50 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         // Clean up metadata on error
         self?.notificationMetadata.removeValue(forKey: notificationId)
         self?.notificationMetadataOrder.removeAll { $0 == notificationId }
+        self?.recordInsightDeliveryOutcome(
+          insightFailureDeliveryID,
+          outcome: .failed,
+          reason: .systemDeliveryFailed
+        )
+        onDropped?()
       } else {
         print("Notification sent successfully")
         // Track notification sent
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+          self?.recordInsightDeliveryOutcome(insightDeliveryID, outcome: .suppressed, reason: .staleOwner)
+          onDropped?()
+          return
+        }
+        self?.recordInsightDeliveryOutcome(
+          insightDeliveryID,
+          outcome: .delivered,
+          reason: .systemBannerDelivered,
+          surface: .systemNotification
+        )
         AnalyticsManager.shared.notificationSent(
           notificationId: notificationId,
           title: title,
           assistantId: assistantId,
           surface: "system_notification"
         )
+        onPresented?()
       }
     }
+  }
+
+  private func recordInsightDeliveryOutcome(
+    _ deliveryID: UUID?,
+    outcome: InsightAssistantTelemetry.Outcome,
+    reason: InsightAssistantTelemetry.Reason,
+    surface: InsightAssistantTelemetry.Surface? = nil
+  ) {
+    guard let deliveryID else { return }
+    AnalyticsManager.shared.insightAssistantDeliveryOutcome(
+      outcome,
+      reason: reason,
+      deliveryID: deliveryID,
+      surface: surface
+    )
   }
 
   // MARK: - Frequency throttle
@@ -666,21 +936,85 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// Whether the master Notifications toggle is on. Reads the mirrored UserDefaults key,
   /// defaulting to `true` when absent so notifications are not accidentally suppressed
   /// before the Settings page has hydrated from the backend.
-  static func areNotificationsEnabled() -> Bool {
-    guard UserDefaults.standard.object(forKey: Self.masterEnabledDefaultsKey) != nil else {
+  static func areNotificationsEnabled(defaults: UserDefaults = .standard) -> Bool {
+    guard defaults.object(forKey: Self.masterEnabledDefaultsKey) != nil else {
       return true
     }
-    return UserDefaults.standard.bool(forKey: Self.masterEnabledDefaultsKey)
+    return defaults.bool(forKey: Self.masterEnabledDefaultsKey)
   }
 
   /// Current frequency level from UserDefaults, clamped to [0, 5]. Falls back to
   /// `defaultFrequencyLevel` when the key is absent (first run before sync).
-  static func currentFrequencyLevel() -> Int {
-    guard UserDefaults.standard.object(forKey: Self.frequencyDefaultsKey) != nil else {
+  static func currentFrequencyLevel(defaults: UserDefaults = .standard) -> Int {
+    guard defaults.object(forKey: Self.frequencyDefaultsKey) != nil else {
       return Self.defaultFrequencyLevel
     }
-    let raw = UserDefaults.standard.integer(forKey: Self.frequencyDefaultsKey)
+    let raw = defaults.integer(forKey: Self.frequencyDefaultsKey)
     return max(0, min(5, raw))
+  }
+
+  @discardableResult
+  static func beginNotificationSettingsSync(defaults: UserDefaults = .standard) -> Int {
+    let revision = defaults.integer(forKey: settingsSyncRevisionDefaultsKey) &+ 1
+    defaults.set(revision, forKey: settingsSyncRevisionDefaultsKey)
+    defaults.set(true, forKey: settingsPendingSyncDefaultsKey)
+    return revision
+  }
+
+  static func completeNotificationSettingsSync(
+    revision: Int,
+    defaults: UserDefaults = .standard
+  ) {
+    guard defaults.integer(forKey: settingsSyncRevisionDefaultsKey) == revision else { return }
+    defaults.set(false, forKey: settingsPendingSyncDefaultsKey)
+  }
+
+  static func hasPendingNotificationSettingsSync(defaults: UserDefaults = .standard) -> Bool {
+    defaults.bool(forKey: settingsPendingSyncDefaultsKey)
+  }
+
+  static func shouldPreserveLocalNotificationSettings(
+    revisionAtLoadStart: Int,
+    currentRevision: Int,
+    pendingAtLoadStart: Bool,
+    pendingNow: Bool
+  ) -> Bool {
+    pendingAtLoadStart || pendingNow || currentRevision != revisionAtLoadStart
+  }
+
+  static func currentActivePeriod(defaults: UserDefaults = .standard) -> NotificationActivePeriod {
+    let fallback = NotificationActivePeriod.defaultValue
+    let start =
+      defaults.object(forKey: activePeriodStartDefaultsKey) == nil
+      ? fallback.startMinute : defaults.integer(forKey: activePeriodStartDefaultsKey)
+    let end =
+      defaults.object(forKey: activePeriodEndDefaultsKey) == nil
+      ? fallback.endMinute : defaults.integer(forKey: activePeriodEndDefaultsKey)
+    return NotificationActivePeriod(startMinute: start, endMinute: end)
+  }
+
+  static func updateActivePeriod(startMinute: Int, endMinute: Int) {
+    let period = NotificationActivePeriod(startMinute: startMinute, endMinute: endMinute)
+    UserDefaults.standard.set(period.startMinute, forKey: activePeriodStartDefaultsKey)
+    UserDefaults.standard.set(period.endMinute, forKey: activePeriodEndDefaultsKey)
+
+    // Contextual task interruptions predate the shared notification setting and persist the
+    // inverse quiet period. Keep that legacy policy projection aligned with the user-facing
+    // active period until its versioned configuration is retired.
+    var taskConfiguration = ProactiveTaskInterruptionSettings.load()
+    taskConfiguration.quietHoursStartMinute = period.endMinute
+    taskConfiguration.quietHoursEndMinute = period.startMinute
+    ProactiveTaskInterruptionSettings.save(taskConfiguration)
+  }
+
+  static func isWithinActivePeriod(
+    now: Date = Date(),
+    calendar: Calendar = .current,
+    defaults: UserDefaults = .standard
+  ) -> Bool {
+    let components = calendar.dateComponents([.hour, .minute], from: now)
+    let minuteOfDay = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+    return currentActivePeriod(defaults: defaults).contains(minuteOfDay: minuteOfDay)
   }
 
   /// Minimum interval between proactive notifications for a given level.
@@ -688,18 +1022,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   private static func minInterval(forLevel level: Int) -> TimeInterval? {
     switch level {
     case 0: return .infinity  // Off
-    case 1: return 60 * 60  // Minimal:  1 per hour
-    case 2: return 30 * 60  // Low:      1 per 30 min
-    case 3: return 10 * 60  // Balanced: 1 per 10 min
-    case 4: return 3 * 60  // High:     1 per 3 min
+    case 1...4: return ContextDeliveryBudget.cooldownSeconds(frequencyLevel: level)
     default: return nil  // Maximum:  no throttle
     }
   }
 
-  /// Decide whether a proactive notification from `assistantId` should be delivered.
-  /// Records the timestamp when allowed so subsequent calls within the window are
-  /// suppressed. Per-assistant + global limits combine so a chatty assistant cannot
-  /// starve another.
+  /// Prepare the owner-scoped throttle ledger. Eligibility checks are read-only;
+  /// timestamps advance only at a visible presentation boundary.
   private func prepareOwnerScopedState(
     for authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) {
@@ -714,24 +1043,23 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     throttleOwnerSnapshot = authorizationSnapshot
   }
 
-  private func shouldAllowProactiveNotification(
+  private func recordProactiveNotificationPresented(
     assistantId: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     now: Date = Date()
-  ) -> Bool {
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
+  ) {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     prepareOwnerScopedState(for: authorizationSnapshot)
-    guard
-      isProactiveNotificationEligible(
-        assistantId: assistantId,
-        now: now,
-        authorizationSnapshot: authorizationSnapshot
-      )
-    else { return false }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
     lastNotificationAt[assistantId] = now
     lastNotificationAtGlobal = now
-    return true
+  }
+
+  func lastProactivePresentationAtForCurrentOwner() -> Date? {
+    guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
+    else { return nil }
+    prepareOwnerScopedState(for: snapshot)
+    return lastNotificationAtGlobal
   }
 
   private func storeNotificationMetadata(
@@ -782,11 +1110,40 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     now: Date
   ) -> Bool {
-    shouldAllowProactiveNotification(
+    guard
+      isProactiveNotificationEligible(
+        assistantId: assistantId,
+        now: now,
+        authorizationSnapshot: authorizationSnapshot)
+    else { return false }
+    recordProactiveNotificationPresented(
       assistantId: assistantId,
       authorizationSnapshot: authorizationSnapshot,
       now: now
     )
+    return true
+  }
+
+  func proactiveNotificationEligibleForTesting(
+    assistantId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    now: Date
+  ) -> Bool {
+    isProactiveNotificationEligible(
+      assistantId: assistantId,
+      now: now,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  func recordProactiveNotificationPresentedForTesting(
+    assistantId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    now: Date
+  ) {
+    recordProactiveNotificationPresented(
+      assistantId: assistantId,
+      authorizationSnapshot: authorizationSnapshot,
+      now: now)
   }
 
   private func isProactiveNotificationEligible(
@@ -796,6 +1153,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   ) -> Bool {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
     prepareOwnerScopedState(for: authorizationSnapshot)
+    guard Self.isWithinActivePeriod(now: now) else { return false }
     let level = Self.currentFrequencyLevel()
     guard let interval = Self.minInterval(forLevel: level) else {
       return true  // Maximum

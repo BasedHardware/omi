@@ -11,6 +11,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Advanced.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Assistants.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+DeveloperKeys.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Integrations.swift
+  - desktop/macos/Desktop/Sources/Integrations/GmailAccountPickerView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatLabView.swift
   - desktop/macos/Desktop/Sources/Chat/ChatResource.swift
   - desktop/macos/Desktop/Sources/Chat/ClaudeAuthSheet.swift

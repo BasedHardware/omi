@@ -4,20 +4,112 @@ icon: "gear"
 description: "Connect your AI assistant to the Omi MCP server"
 ---
 
-## Hosted Server (Recommended)
+## Choose a setup method
 
-The fastest way to get started — no installation required.
+Omi supports four setup paths:
+
+| Method | Authentication | Best for |
+| --- | --- | --- |
+| Omi's guided connection | OAuth for ChatGPT and Claude; a generated MCP key for local clients | The current Omi macOS app (recommended) |
+| Hosted server with OAuth | Browser sign-in and consent; no key to copy | Supported cloud clients |
+| Hosted server with an MCP key | `Authorization: Bearer omi_mcp_...` | Clients that accept custom headers |
+| Local stdio server | An MCP key passed to `mcp-server-omi` | Clients that require a local process or a self-hosted backend |
+
+OAuth and MCP keys grant access to the same hosted endpoint. OAuth is the default for the
+new cloud-connector UI; manual MCP keys remain available as a fallback.
+
+## Connect from the Omi macOS app (Recommended)
+
+On the Omi home screen, find **Use omi memory anywhere**, choose a destination, and follow
+the connection card:
+
+- **ChatGPT:** choose **ChatGPT / Codex**, then add Omi from its approved ChatGPT listing.
+  ChatGPT opens Omi's OAuth consent flow; you do not need to create or paste a key.
+- **Claude:** choose **Claude / Claude Code**, then **Claude (cloud)**. Omi opens Claude's
+  custom-connector flow with the registered public OAuth client.
+- **Claude Code, Codex, OpenClaw, and Hermes:** Omi generates an MCP connection key and
+  offers guided local setup. Expand **Manual installation** to copy the server URL, key,
+  command, or configuration yourself.
+- **ChatGPT custom app:** expand **Developer-mode fallback** only if your workspace cannot
+  use the approved directory listing.
+
+OAuth grants can be reviewed or revoked from the connected client. Revoking an MCP key is
+separate; use the Developer settings described below.
+
+---
+
+## Hosted Server with OAuth
+
+Use the hosted server URL as the remote MCP URL:
+
+```text
+https://api.omi.me/v1/mcp/sse
+```
+
+The endpoint supports MCP Streamable HTTP (`2025-03-26`) and advertises OAuth metadata at:
+
+```text
+https://api.omi.me/.well-known/oauth-protected-resource/v1/mcp/sse
+https://api.omi.me/.well-known/oauth-authorization-server
+```
+
+OAuth uses browser sign-in, explicit consent, authorization code + PKCE, and refresh
+tokens. Omi currently provides registered public clients for its ChatGPT and Claude setup
+flows. A generic MCP client cannot invent a client ID; if it is not one of those supported
+flows, use an MCP key instead.
+
+<Tabs>
+  <Tab title="ChatGPT" icon="robot">
+    The preferred path is **Omi → Use omi memory anywhere → ChatGPT / Codex → ChatGPT
+    (cloud)**. Add Omi from the directory page and approve the OAuth consent screen.
+
+    For the advanced developer-mode fallback, use:
+
+    - **Connection / server URL:** `https://api.omi.me/v1/mcp/sse`
+    - **Authentication:** OAuth
+    - **OAuth Client ID:** `omi-chatgpt-prod`
+    - **OAuth Client Secret:** leave blank
+    - **Token auth method:** `none`
+    - **Authorization URL:** `https://api.omi.me/authorize`
+    - **Token URL:** `https://api.omi.me/token`
+  </Tab>
+  <Tab title="Claude" icon="robot">
+    In Claude, open **Customize → Connectors → Add custom connector**, then use:
+
+    - **Name:** Omi Memory
+    - **Remote MCP server URL:** `https://api.omi.me/v1/mcp/sse`
+    - **OAuth Client ID:** `omi-claude-prod`
+    - **OAuth Client Secret:** leave blank
+
+    Click **Add**, then **Connect**, and approve Omi's OAuth consent screen. The Omi macOS
+    app exposes the same flow under **Use omi memory anywhere → Claude / Claude Code →
+    Claude (cloud)**.
+  </Tab>
+</Tabs>
+
+---
+
+## Manual MCP-key fallback
+
+Use a manual key for clients that support a bearer header but cannot use Omi's registered
+OAuth flows.
 
 <Steps>
-  <Step title="Generate an API Key" icon="key">
-    Open the Omi app and navigate to **Settings → Developer → MCP** to generate your API key.
+  <Step title="Find or create an MCP key" icon="key">
+    In the current macOS UI, open **Use omi memory anywhere**, choose Claude Code, Codex,
+    OpenClaw, or Hermes, and expand **Manual installation**. Omi generates the connection
+    key and shows a masked **Your key** row with a **Copy** button.
+
+    You can also use the cross-platform Omi app: open **Settings → Developer Settings**,
+    scroll to **MCP Server**, and create a key in its **API Keys** list. The complete
+    `omi_mcp_...` value is shown only when it is created, so copy and store it then.
 
     Your key will look like: `omi_mcp_...`
 
     <Note>
-    This key is only for MCP clients. To call REST Developer API endpoints directly, create a separate
-    Developer API key from **Settings → Developer → Create Key**. Developer API keys look like
-    `omi_dev_...`.
+    MCP keys are distinct from Developer API keys. An `omi_mcp_...` key authenticates the
+    hosted MCP endpoint and `/v1/mcp/...` REST routes. An `omi_dev_...` key authenticates
+    `/v1/dev/...` routes and will not authenticate MCP.
     </Note>
 
   </Step>
@@ -26,18 +118,19 @@ The fastest way to get started — no installation required.
 
     - **Server URL:** `https://api.omi.me/v1/mcp/sse`
     - **Authorization:** `Bearer omi_mcp_...` (your generated key)
-    - **Transport:** Streamable HTTP (MCP 2025-03-26 spec)
+    - **Transport:** Streamable HTTP (MCP `2025-03-26`)
 
   </Step>
 </Steps>
 
 ---
 
-## Client Configuration
+## Manual hosted-client configuration
 
 <Tabs>
-  <Tab title="Claude Desktop" icon="robot">
-    Add to your `claude_desktop_config.json`:
+  <Tab title="Claude Desktop / Claude Code" icon="robot">
+    Claude's cloud connector supports OAuth as described above. For a manual-key fallback,
+    add this to `claude_desktop_config.json`:
 
     ```json
     {
@@ -57,6 +150,14 @@ The fastest way to get started — no installation required.
     - Windows PowerShell: `$env:APPDATA\Claude\claude_desktop_config.json`
     - Windows cmd: `%APPDATA%\Claude\claude_desktop_config.json`
 
+    Claude Code can be configured at user scope instead:
+
+    ```bash
+    claude mcp add --scope user --transport http omi-memory \
+      https://api.omi.me/v1/mcp/sse \
+      --header "Authorization: Bearer omi_mcp_YOUR_KEY_HERE"
+    ```
+
   </Tab>
   <Tab title="Cursor" icon="i-cursor">
     Go to **Cursor Settings → MCP** and add a new server:
@@ -66,6 +167,17 @@ The fastest way to get started — no installation required.
     - **URL:** `https://api.omi.me/v1/mcp/sse`
     - **Headers:** `Authorization: Bearer omi_mcp_YOUR_KEY_HERE`
 
+  </Tab>
+  <Tab title="Codex" icon="terminal">
+    Add this to `~/.codex/config.toml`:
+
+    ```toml
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["-y", "mcp-remote", "https://api.omi.me/v1/mcp/sse", "--header", "Authorization: Bearer omi_mcp_YOUR_KEY_HERE"]
+    ```
+
+    Restart Codex after saving the file.
   </Tab>
   <Tab title="OpenCode" icon="terminal">
     Add to your project's `opencode.json` (or `~/.config/opencode/opencode.json` globally):
@@ -93,7 +205,10 @@ The fastest way to get started — no installation required.
     ```
 
     <Note>
-    Be sure to use an MCP key generated from **Settings → Developer → MCP** (starts with `omi_mcp_`). Developer API keys (`omi_dev_...`) only authenticate REST endpoints and will return `401 Unauthorized`.
+    Be sure to use an MCP key from one of the locations in
+    [Manual MCP-key fallback](#manual-mcp-key-fallback). It starts with `omi_mcp_`.
+    Developer API keys (`omi_dev_...`) only authenticate Developer API endpoints and will
+    return `401 Unauthorized` here.
     </Note>
 
   </Tab>
@@ -103,8 +218,14 @@ The fastest way to get started — no installation required.
     Enter the server URL and API key in Poke's MCP connection settings.
 
   </Tab>
+  <Tab title="OpenClaw / Hermes" icon="terminal">
+    The Omi macOS app provides the current command or configuration under each client's
+    **Manual installation** disclosure. Copy it there so the generated key is inserted
+    without retyping it.
+  </Tab>
   <Tab title="Custom Client" icon="code">
-    Any MCP client that supports the **Streamable HTTP** transport (2025-03-26 spec) will work:
+    Any MCP client that supports **Streamable HTTP** and custom authorization headers can
+    use the manual-key path:
 
     ```bash
     # Endpoint
@@ -124,13 +245,72 @@ The fastest way to get started — no installation required.
 
 ---
 
-## Docker (Self-Hosted)
+## Local stdio server with uvx or Python
+
+Run the MCP server locally over the standard input/output transport. `uvx` downloads and
+runs the published package without a separate installation. Python 3.11.6 or newer is
+required.
+
+<Tabs>
+  <Tab title="uvx" icon="terminal">
+    Add this to your MCP client's local-server configuration:
+
+    ```json
+    {
+      "mcpServers": {
+        "omi": {
+          "command": "uvx",
+          "args": ["mcp-server-omi"],
+          "env": {
+            "OMI_API_KEY": "omi_mcp_YOUR_KEY_HERE"
+          }
+        }
+      }
+    }
+    ```
+
+    Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first. The
+    `OMI_API_KEY` value can also be supplied with each tool call.
+  </Tab>
+  <Tab title="Python" icon="python">
+    Install the package in a Python 3.11.6+ environment:
+
+    ```bash
+    pip install mcp-server-omi
+    ```
+
+    Then configure your MCP client to launch the local server:
+
+    ```json
+    {
+      "mcpServers": {
+        "omi": {
+          "command": "mcp-server-omi",
+          "env": {
+            "OMI_API_KEY": "omi_mcp_YOUR_KEY_HERE"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  Generate the MCP key using either location in [Manual MCP-key fallback](#manual-mcp-key-fallback).
+  Developer API keys that start with `omi_dev_` will not authenticate MCP requests.
+</Note>
+
+---
+
+## Local stdio server with Docker
 
 If you prefer to run the MCP server locally:
 
 <Steps>
   <Step title="Generate an API Key" icon="key">
-    Open the Omi app → **Settings → Developer → MCP** to generate your key.
+    Generate an MCP key using either location in
+    [Manual MCP-key fallback](#manual-mcp-key-fallback).
   </Step>
   <Step title="Install Docker" icon="docker">
     Install Docker. We recommend [OrbStack](https://orbstack.dev/) for macOS.
@@ -151,6 +331,16 @@ If you prefer to run the MCP server locally:
 
   </Step>
 </Steps>
+
+The same Docker command can be used by any MCP client that supports local stdio servers.
+If you prefer to keep the key out of the configuration file, pass it through the
+`OMI_API_KEY` environment variable:
+
+```bash
+docker run --rm -i \
+  -e OMI_API_KEY="omi_mcp_YOUR_KEY_HERE" \
+  omiai/mcp-server
+```
 
 <Tip>
   The API key can also be provided with each tool call. If not provided, the

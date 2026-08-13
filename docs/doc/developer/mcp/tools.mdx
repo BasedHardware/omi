@@ -6,6 +6,10 @@ description: "Complete reference for all Omi MCP tools"
 
 ## Memory Tools
 
+The hosted server returns only the tools allowed by the OAuth grant or MCP key. A local
+`mcp-server-omi` stdio process currently exposes the eight memory and conversation tools
+in the first two sections below; the additional tools are hosted-server tools.
+
 <AccordionGroup>
   <Accordion title="get_memories" icon="brain">
     Retrieve a list of user memories with optional filtering.
@@ -154,6 +158,39 @@ description: "Complete reference for all Omi MCP tools"
 
 ---
 
+## Profile, Imported Data, and Activity Tools
+
+| Tool | Parameters | Description |
+| --- | --- | --- |
+| `get_user_profile` | None | Return Omi's cached high-level user summary, if generated |
+| `get_x_posts` | `kind?` (`tweet` or `bookmark`), `limit?` (default 50) | List imported X posts and bookmarks, newest first |
+| `search_x_posts` | `query`, `limit?` (default 10) | Semantic search over imported X posts and bookmarks |
+| `get_goals` | `include_inactive?` (default false) | List goals, active by default |
+| `get_chat_messages` | `limit?` (default 50), `offset?` | List recent Omi chat messages, newest first |
+| `get_people` | None | List recognized people with speaker samples |
+| `get_screen_activity` | `start_date?`, `end_date?`, `app?`, `summary?`, `limit?` | List synced screen activity or return a per-app summary |
+| `get_daily_summaries` | `start_date?`, `end_date?`, `limit?` (default 30), `offset?` | List Omi's daily summaries, newest first |
+
+Dates use `YYYY-MM-DD`. `get_screen_activity` defaults to 200 raw rows; `limit` is ignored
+when `summary` is true.
+
+---
+
+## Action Item Tools
+
+| Tool | Required parameters | Optional parameters | Description |
+| --- | --- | --- | --- |
+| `get_action_items` | None | `completed`, `due_start_date`, `due_end_date`, `limit` (default 100), `offset` | List tasks and to-dos |
+| `search_action_items` | `query` | `limit` (default 10) | Semantic search over tasks |
+| `create_action_item` | `description` | `due_at`, `completed` (default false) | Create a task; identical retries do not duplicate it |
+| `complete_action_item` | `action_item_id` | `completed` (default true) | Complete or reopen a task |
+| `update_action_item` | `action_item_id` | `description`, `due_at` | Update only the supplied fields |
+| `delete_action_item` | `action_item_id` | None | Delete a task |
+
+Due dates accept `YYYY-MM-DD` or an ISO 8601 date-time where noted by the client schema.
+
+---
+
 ## Error Handling
 
 All tools return JSON-RPC 2.0 errors when something goes wrong:
@@ -163,6 +200,8 @@ All tools return JSON-RPC 2.0 errors when something goes wrong:
 | `-32602` | Invalid parameters (bad date format, unknown category) |
 | `-32001` | Resource not found (memory or conversation doesn't exist) |
 | `-32002` | Locked content (paid plan required) |
+| `-32003` | The OAuth grant is missing the tool's required scope |
+| `-32009` | Authorization or serving policy denied the operation |
 | `-32601` | Unknown tool name |
 
 **Example error response:**

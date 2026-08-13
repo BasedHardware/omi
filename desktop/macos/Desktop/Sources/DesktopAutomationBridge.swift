@@ -152,9 +152,9 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var homeMode: String?
   /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
   var shellVariant: String?
-  /// Stable typed route for the cohort shell. Nil for the legacy shell.
+  /// Stable typed route for the Chat-first shell. Nil for the legacy shell.
   var chatFirstRoute: String?
-  /// Set only by the mounted cohort destination after it has appeared. This
+  /// Set only by the mounted Chat-first destination after it has appeared. This
   /// keeps a successful navigation response equivalent to the target being
   /// visible, rather than merely accepted by the root reducer.
   var visibleChatFirstRoute: String?
@@ -735,9 +735,7 @@ final class DesktopAutomationActionRegistry {
       run: handler)
   }
 
-  func unregister(_ name: String) {
-    entries[name] = nil
-  }
+  func unregister(_ name: String) { entries[name] = nil }
 
   func descriptors() -> [DesktopAutomationActionDescriptor] {
     entries.values.map(\.descriptor).sorted { $0.name < $1.name }
@@ -1010,6 +1008,25 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "probe_suggestion_nudge",
+      summary: "Run the real suggestion grounding/evaluation/delivery path on the latest frame",
+      params: ["app", "window_title"],
+      safety: "network_or_model",
+      sideEffects: [
+        "may call model/backend services",
+        "may deliver a user-visible suggestion during the configured active period",
+      ]
+    ) { params in
+      let app = params["app"].flatMap { $0.isEmpty ? nil : $0 }
+      let title = params["window_title"].flatMap { $0.isEmpty ? nil : $0 }
+      return await ProactiveAssistantsPlugin.shared.probeSuggestionNudge(
+        appOverride: app,
+        windowTitleOverride: title
+      )
+    }
+
+    registerContextBucketDirectorProbe()
+    register(
       name: "set_contextual_task_focus",
       summary: "Set deterministic focus suppression for contextual task interruptions",
       params: ["suppressed"]
@@ -1055,7 +1072,7 @@ final class DesktopAutomationActionRegistry {
       else {
         throw DesktopAutomationActionError.invalidParams("context event could not be normalized")
       }
-      let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      let matched = await ContextSubjectBindingService.shared.resolve(event)
       let referenceHash = matched.referenceHash
       await TaskContextualResurfacingService.shared.observe(matched)
       let shouldFlush = boolParam(params["flush"], default: true)
@@ -1663,6 +1680,61 @@ final class DesktopAutomationActionRegistry {
         log("debug_reach_error: Retry tapped")
       }
       return ["shown": "true"]
+    }
+
+    // Cursor-free click diagnosis: report which window (any app's) is topmost at a screen point,
+    // and — when it is one of ours — the exact view AppKit hit-tests there. Exists because "I
+    // click X and nothing happens" is otherwise undiagnosable without synthesizing real clicks.
+    register(
+      name: "debug_hit_probe",
+      summary: "Report topmost window + hit-tested view at screen point (top-left coords)",
+      params: ["x", "y"]
+    ) { params in
+      guard let x = Double(params["x"] ?? ""), let y = Double(params["y"] ?? "") else {
+        return ["error": "need x and y (screen top-left coords)"]
+      }
+      guard let primary = NSScreen.screens.first else { return ["error": "no screens"] }
+      let cocoaPoint = NSPoint(x: x, y: primary.frame.maxY - y)
+      var result: [String: String] = [
+        "screen_point_cg": "(\(Int(x)), \(Int(y)))",
+        "screen_point_cocoa": NSStringFromPoint(cocoaPoint),
+        "screens": NSScreen.screens.map { NSStringFromRect($0.frame) }.joined(separator: " | "),
+      ]
+      // Our own windows containing the point, front-to-back. Reliable where the window-server
+      // query is not; foreign overlap is diagnosed from outside via CGWindowList.
+      let containing = NSApp.windows
+        .filter { $0.isVisible && $0.frame.contains(cocoaPoint) }
+        .sorted { $0.orderedIndex < $1.orderedIndex }
+      result["own_windows_at_point"] =
+        containing.isEmpty
+        ? "none"
+        : containing.map { window in
+          var extras = ""
+          if let bar = window as? FloatingControlBarWindow {
+            let local = NSPoint(
+              x: cocoaPoint.x - window.frame.minX, y: cocoaPoint.y - window.frame.minY)
+            extras =
+              " acceptsHit=\(bar.automationAcceptsMouseHit(inContentPoint: local)) ignores=\(window.ignoresMouseEvents)"
+          }
+          return
+            "\(String(describing: type(of: window)))(\"\(window.title)\" level=\(window.level.rawValue) key=\(window.isKeyWindow) idx=\(window.orderedIndex)\(extras))"
+        }.joined(separator: " ; ")
+      if let window = containing.first {
+        let inWindow = window.convertPoint(fromScreen: cocoaPoint)
+        result["point_in_window"] = NSStringFromPoint(inWindow)
+        if let root = window.contentView?.superview ?? window.contentView {
+          let inRoot = root.convert(inWindow, from: nil)
+          let hit = root.hitTest(inRoot)
+          var chain: [String] = []
+          var view = hit
+          while let v = view, chain.count < 8 {
+            chain.append(String(describing: type(of: v)))
+            view = v.superview
+          }
+          result["hit_view_chain"] = chain.isEmpty ? "nil (click falls through)" : chain.joined(separator: " < ")
+        }
+      }
+      return result
     }
 
     register(
@@ -3349,12 +3421,34 @@ final class DesktopAutomationActionRegistry {
       let appState = await MainActor.run { AppState.current }
       let hasPermission = appState?.hasNotificationPermission ?? false
       let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
+      let activePeriod = await MainActor.run { NotificationService.currentActivePeriod() }
       return [
         "enabled": settings.enabled ? "true" : "false",
         "frequency": "\(settings.frequency)",
         "frequency_label": settings.frequencyDescription,
         "has_permission": hasPermission ? "true" : "false",
         "banners_disabled": bannersDisabled ? "true" : "false",
+        "active_start_minute": "\(activePeriod.startMinute)",
+        "active_end_minute": "\(activePeriod.endMinute)",
+      ]
+    }
+
+    register(
+      name: "set_notification_active_period",
+      summary: "Set the device-local proactive notification active period",
+      params: ["start_minute", "end_minute"]
+    ) { params in
+      let current = await MainActor.run { NotificationService.currentActivePeriod() }
+      let startMinute = intParam(params["start_minute"], default: current.startMinute)
+      let endMinute = intParam(params["end_minute"], default: current.endMinute)
+      let saved = await MainActor.run { () -> NotificationActivePeriod in
+        NotificationService.updateActivePeriod(startMinute: startMinute, endMinute: endMinute)
+        return NotificationService.currentActivePeriod()
+      }
+      return [
+        "saved": "true",
+        "active_start_minute": "\(saved.startMinute)",
+        "active_end_minute": "\(saved.endMinute)",
       ]
     }
 
@@ -3369,6 +3463,12 @@ final class DesktopAutomationActionRegistry {
         enabled: enabled,
         frequency: frequency
       )
+      UserDefaults.standard.set(
+        response.enabled,
+        forKey: NotificationService.masterEnabledDefaultsKey)
+      UserDefaults.standard.set(
+        response.frequency,
+        forKey: NotificationService.frequencyDefaultsKey)
       return [
         "saved": "true",
         "enabled": response.enabled ? "true" : "false",

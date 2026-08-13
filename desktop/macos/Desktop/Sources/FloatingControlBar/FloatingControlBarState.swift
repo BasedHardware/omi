@@ -172,6 +172,31 @@ struct FloatingBarNotificationContext: Equatable {
   let currentActivity: String?
   let reasoning: String?
   let detail: String?
+  /// Durable lookup key into `proactive_deliveries`. Unlike the legacy card
+  /// context, this survives the old 60-second follow-up window.
+  let provenanceRef: String?
+
+  init(
+    sourceTitle: String,
+    assistantId: String,
+    sourceApp: String? = nil,
+    windowTitle: String? = nil,
+    contextSummary: String? = nil,
+    currentActivity: String? = nil,
+    reasoning: String? = nil,
+    detail: String? = nil,
+    provenanceRef: String? = nil
+  ) {
+    self.sourceTitle = sourceTitle
+    self.assistantId = assistantId
+    self.sourceApp = sourceApp
+    self.windowTitle = windowTitle
+    self.contextSummary = contextSummary
+    self.currentActivity = currentActivity
+    self.reasoning = reasoning
+    self.detail = detail
+    self.provenanceRef = provenanceRef
+  }
 }
 
 enum FloatingBarNotificationAction: Equatable {
@@ -187,11 +212,15 @@ struct FloatingBarNotification: Identifiable, Equatable {
   let title: String
   let message: String
   let assistantId: String
+  let kind: ProactiveNotificationKind
   let context: FloatingBarNotificationContext?
   let action: FloatingBarNotificationAction?
   /// Optional opaque proactive-suggestion join keys. No card content or screen
   /// provenance enters notification analytics through this field.
   let suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
+  /// Optional opaque Advice delivery key. It is consumed only at the actual
+  /// floating-bar presentation boundary and carries no advice or screen content.
+  let insightDeliveryID: UUID?
   /// Screenshot JPEG data from the moment the notification was generated (not shown in UI)
   let screenshotData: Data?
 
@@ -200,18 +229,22 @@ struct FloatingBarNotification: Identifiable, Equatable {
     title: String,
     message: String,
     assistantId: String,
+    kind: ProactiveNotificationKind? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil
   ) {
     self.ownerID = ownerID
     self.title = title
     self.message = message
     self.assistantId = assistantId
+    self.kind = kind ?? ProactiveNotificationKind.from(assistantId: assistantId)
     self.context = context
     self.action = action
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
+    self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData
   }
 

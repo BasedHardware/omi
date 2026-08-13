@@ -250,6 +250,11 @@ enum OnboardingFlow {
     "hasTriggeredSystemAudio",
     "hasTriggeredAccessibility",
     "hasTriggeredBluetooth",
+    // Gmail account selection is per-owner: without clearing it here a
+    // sign-out lets the next account on the same Mac import the previous
+    // owner's chosen Gmail profile into their memories.
+    DefaultsKey.gmailSelectedCookiePath.rawValue,
+    DefaultsKey.gmailSelectedAccountLabel.rawValue,
   ]
 
   /// Remove every account-scoped onboarding key. Mounted-@AppStorage values

@@ -10,8 +10,6 @@ import 'dart:io';
 /// we test with a single init and exercise the override/flag mechanisms.
 class _TestEnvFields implements EnvFields {
   @override
-  String? get openAIAPIKey => null;
-  @override
   String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => null;
@@ -69,25 +67,41 @@ void main() {
       expect(AppEnvironmentProfile.mobileBeta.authCallbackScheme, 'omi-beta');
     });
 
+    test('mobile beta keeps OAuth on the production identity plane', () {
+      expect(
+        Env.authApiBaseUrlForProfile(AppEnvironmentProfile.mobileBeta, servingApiBaseUrl: 'https://api.omiapi.com/'),
+        Env.productionApiBaseUrl,
+      );
+    });
+
+    test('local prod pairs production Firebase with a developer-chosen backend', () {
+      expect(AppEnvironmentProfile.localProd.firebaseProjectId, 'based-hardware');
+      expect(AppEnvironmentProfile.localProd.usesFirebaseAuthEmulator, isFalse);
+      expect(AppEnvironmentProfile.localProd.allowsProductionData, isTrue);
+      expect(AppEnvironmentProfile.localProd.authCallbackScheme, 'omi');
+    });
+
     test('local profile rejects a production Firebase project', () {
       expect(
-        () => Env.validateFirebaseProject(
-          projectId: 'based-hardware',
-          configuredProfile: AppEnvironmentProfile.localDev,
-        ),
+        () =>
+            Env.validateFirebaseProject(projectId: 'based-hardware', configuredProfile: AppEnvironmentProfile.localDev),
         throwsStateError,
       );
     });
 
     test('flavor defaults map to production and local profiles', () {
+      expect(AppEnvironmentProfile.forFlavor(productionFlavor: true), AppEnvironmentProfile.production);
+      expect(AppEnvironmentProfile.forFlavor(productionFlavor: false), AppEnvironmentProfile.localDev);
+    });
+
+    test('production iOS config keeps the production Google redirect client id', () {
+      final prodConfig = File('ios/Flutter/prodRelease.xcconfig').readAsStringSync();
+
       expect(
-        AppEnvironmentProfile.forFlavor(productionFlavor: true),
-        AppEnvironmentProfile.production,
+        prodConfig,
+        contains('GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as'),
       );
-      expect(
-        AppEnvironmentProfile.forFlavor(productionFlavor: false),
-        AppEnvironmentProfile.localDev,
-      );
+      expect(prodConfig, isNot(contains('GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.1031333818730-')));
     });
   });
 
@@ -135,6 +149,45 @@ void main() {
       }
     });
 
+    test('local prod accepts loopback, private-network, and tunnel endpoints in debug builds', () {
+      for (final endpoint in [
+        'http://127.0.0.1:8000/',
+        'http://192.168.1.20:8000/',
+        'https://example.ngrok-free.app/',
+      ]) {
+        Env.validateStartupRouting(
+          productionFamily: true,
+          configuredProfile: AppEnvironmentProfile.localProd,
+          configuredApiBaseUrl: endpoint,
+          releaseBuild: false,
+        );
+      }
+    });
+
+    test('local prod is rejected in release builds', () {
+      expect(
+        () => Env.validateStartupRouting(
+          productionFamily: true,
+          configuredProfile: AppEnvironmentProfile.localProd,
+          configuredApiBaseUrl: 'http://127.0.0.1:8000/',
+          releaseBuild: true,
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('local prod rejects a malformed endpoint', () {
+      expect(
+        () => Env.validateStartupRouting(
+          productionFamily: true,
+          configuredProfile: AppEnvironmentProfile.localProd,
+          configuredApiBaseUrl: 'not a url',
+          releaseBuild: false,
+        ),
+        throwsStateError,
+      );
+    });
+
     test('local development startup accepts the emulator API', () {
       expect(
         () => validateApplicationStartupRouting(
@@ -164,9 +217,6 @@ void main() {
       mainSource.indexOf('validateApplicationStartupRouting();'),
       lessThan(mainSource.indexOf('ServiceManager.init()')),
     );
-    expect(
-      mainSource,
-      contains('Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);'),
-    );
+    expect(mainSource, contains('Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);'));
   });
 }
