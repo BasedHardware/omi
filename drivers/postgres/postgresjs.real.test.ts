@@ -121,6 +121,7 @@ import { createPostgresFirebaseAuthorizedLedgerRuntime } from "./firebase-author
 import { createPostgresPredicateBatchWorkInputRepository } from "./predicate-batch-work-input";
 import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
 import { createPostgresProductProjectionWriteRepository } from "./product-projection-repository";
+import { createPostgresTombstoneRestoreTarget } from "./tombstone-restore-target";
 import {
   createPostgresMemoryReadGroundingRepository,
   createPostgresMemoryShadowResultRepository,
@@ -635,6 +636,9 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'omi_platform_cleanup') THEN
           CREATE ROLE omi_platform_cleanup NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'omi_platform_restore') THEN
+          CREATE ROLE omi_platform_restore NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
         END IF;
       END
       $role$
@@ -4056,5 +4060,120 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       eligibility,
       async () => undefined,
     )).rejects.toMatchObject({ code: "terminal_coordinate_denied" });
+  }, 120_000);
+
+  test("restore role installs retained terminal fences with exact replay and rollback", async () => {
+    const suffix = randomUUID();
+    const accountId = `account:restore:${suffix}`;
+    const rollbackAccountId = `account:restore-rollback:${suffix}`;
+    const dominatedAccountId = `account:restore-dominated:${suffix}`;
+    const restore = Object.freeze({
+      restore_id: `restore:${suffix}`,
+      restore_scope: "postgresql" as const,
+      restored_snapshot_digest: sha256CanonicalContent({ suffix, snapshot: true }),
+      restore_completed_at_epoch_seconds: 1_800_000_000,
+    });
+    const terminal = Object.freeze({
+      account_id: accountId,
+      control_revision: 9,
+      deletion_epoch: 12,
+      terminal_record_digest: sha256CanonicalContent({ suffix, terminal: true }),
+    });
+    await ownerSql.begin(async (transaction) => {
+      for (const account of [accountId, rollbackAccountId, dominatedAccountId]) {
+        await transaction.unsafe(
+          "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)",
+          [account],
+        );
+        await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+          (account_id, control_revision, account_generation, account_epoch, lifecycle_state,
+           deletion_epoch, observed_at, record_schema_version, record_json, content_hash)
+          VALUES ($1, 9, 'rolled_back_stranded', 4, 'active', NULL, transaction_timestamp(),
+                  'control-v1', '{}'::jsonb, $2)`, [account, "a".repeat(64)]);
+        await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+          (account_id, control_revision, activated_epoch, activation_control_revision)
+          VALUES ($1, 9, 4, 9)`, [account]);
+      }
+    });
+
+    const target = createPostgresTombstoneRestoreTarget(pool);
+    const first = await target.applyTerminalRecord({ restore, terminal_record: terminal });
+    expect(first).toMatchObject({
+      restore_id: restore.restore_id,
+      restored_snapshot_digest: restore.restored_snapshot_digest,
+      account_id: accountId,
+      control_revision: 9,
+      deletion_epoch: 12,
+      result: "applied",
+      error_code: null,
+    });
+    expect(await target.applyTerminalRecord({ restore, terminal_record: terminal })).toEqual(first);
+
+    const stored = await ownerSql.unsafe<{
+      fences: number; receipts: number; fence_epoch: string; receipt_result: string;
+    }[]>(`SELECT
+      (SELECT count(*)::int FROM omi_memory.account_restored_terminal_fences
+        WHERE account_id = $1) fences,
+      (SELECT count(*)::int FROM omi_memory.account_restore_terminal_application_receipts
+        WHERE account_id = $1 AND restore_id = $2) receipts,
+      (SELECT deletion_epoch::text FROM omi_memory.account_restored_terminal_fences
+        WHERE account_id = $1 ORDER BY deletion_epoch DESC LIMIT 1) fence_epoch,
+      (SELECT result FROM omi_memory.account_restore_terminal_application_receipts
+        WHERE account_id = $1 AND restore_id = $2) receipt_result`, [accountId, restore.restore_id]);
+    expect([...stored]).toEqual([{
+      fences: 1, receipts: 1, fence_epoch: "12", receipt_result: "applied",
+    }]);
+
+    await expect(target.applyTerminalRecord({
+      restore,
+      terminal_record: { ...terminal, terminal_record_digest: "f".repeat(64) },
+    })).rejects.toMatchObject({ code: "target_conflict" });
+
+    await expect(target.withHeldTarget(restore, async (session) => {
+      await session.apply({ ...terminal, account_id: rollbackAccountId });
+      throw new Error("qualification rollback after restore target");
+    })).rejects.toMatchObject({ code: "persistence_failed" });
+    const rollbackCounts = await ownerSql.unsafe<{ fences: number; receipts: number }[]>(`SELECT
+      (SELECT count(*)::int FROM omi_memory.account_restored_terminal_fences
+        WHERE account_id = $1) fences,
+      (SELECT count(*)::int FROM omi_memory.account_restore_terminal_application_receipts
+        WHERE account_id = $1) receipts`, [rollbackAccountId]);
+    expect([...rollbackCounts]).toEqual([{ fences: 0, receipts: 0 }]);
+
+    const higherRestore = Object.freeze({ ...restore, restore_id: `restore:higher:${suffix}` });
+    const olderRestore = Object.freeze({ ...restore, restore_id: `restore:older:${suffix}` });
+    await expect(target.applyTerminalRecord({
+      restore: higherRestore,
+      terminal_record: {
+        ...terminal,
+        account_id: dominatedAccountId,
+        deletion_epoch: 20,
+        terminal_record_digest: sha256CanonicalContent({ suffix, terminal: "higher" }),
+      },
+    })).resolves.toMatchObject({ result: "applied", deletion_epoch: 20 });
+    await expect(target.applyTerminalRecord({
+      restore: olderRestore,
+      terminal_record: { ...terminal, account_id: dominatedAccountId },
+    })).resolves.toMatchObject({ result: "already_absent", deletion_epoch: 12 });
+    const dominated = await ownerSql.unsafe<{ fences: number; max_epoch: string }[]>(`SELECT
+      count(*)::int AS fences, max(deletion_epoch)::text AS max_epoch
+      FROM omi_memory.account_restored_terminal_fences WHERE account_id = $1`,
+    [dominatedAccountId]);
+    expect([...dominated]).toEqual([{ fences: 1, max_epoch: "20" }]);
+
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(
+        "SELECT * FROM omi_memory.hold_postgres_restore_target($1, 'postgresql', $2, $3)",
+        [restore.restore_id, restore.restored_snapshot_digest, restore.restore_completed_at_epoch_seconds],
+      );
+    })).rejects.toMatchObject({ code: "42501" });
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_restore");
+      await transaction.unsafe(
+        "SELECT * FROM omi_memory.account_restore_terminal_application_receipts WHERE account_id = $1",
+        [accountId],
+      );
+    })).rejects.toMatchObject({ code: "42501" });
   }, 120_000);
 });

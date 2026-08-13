@@ -157,4 +157,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0025-account-deletion-cleanup-runtime.sql",
     sha256: "357fb3625e10d157d0a951067966aa2c1c5c2330af3041015026c26331dac7d9",
   }),
+  Object.freeze({
+    version: 26,
+    name: "postgres-tombstone-restore-target",
+    fileName: "0026-postgres-tombstone-restore-target.sql",
+    sha256: "32244da6a077e6232c854858150b8c6c28084d684629611cb58b678875c3b02e",
+  }),
 ]);

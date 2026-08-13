@@ -47,6 +47,8 @@ const expectedTables = [
   "account_control_heads",
   "account_control_revisions",
   "account_deletion_surface_receipts",
+  "account_restore_terminal_application_receipts",
+  "account_restored_terminal_fences",
   "account_terminal_deletion_exports",
   "application_credential_heads",
   "application_credential_revisions",
@@ -178,6 +180,42 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
         `${right.surface}:${right.table}`,
       ));
     expect(sqlRows).toEqual(typedRows);
+  });
+
+  test("keeps the PostgreSQL restore target inert, monotone, and separately authorized", () => {
+    const restoreSql = migrationSql.find((migration) =>
+      migration.fileName === "0026-postgres-tombstone-restore-target.sql")?.sql;
+    expect(restoreSql).toBeDefined();
+    expect(restoreSql).toContain("CREATE TABLE omi_memory.account_restored_terminal_fences");
+    expect(restoreSql).toContain(
+      "CREATE TABLE omi_memory.account_restore_terminal_application_receipts",
+    );
+    expect(restoreSql).toContain("PRIMARY KEY (account_id, deletion_epoch)");
+    expect(restoreSql).toContain("PRIMARY KEY (account_id, restore_id)");
+    expect(restoreSql).toContain(
+      "FOREIGN KEY (account_id, applied_fence_deletion_epoch)",
+    );
+    expect(restoreSql).toContain("v_had_dominating_fence := true");
+    expect(restoreSql).toContain("WHEN v_had_dominating_fence THEN 'already_absent'");
+    expect(restoreSql).not.toContain(
+      "FOREIGN KEY (account_id, deletion_epoch)\n    REFERENCES omi_memory.account_restored_terminal_fences",
+    );
+    expect(restoreSql).toContain("restore_scope text NOT NULL CHECK (restore_scope = 'postgresql')");
+    expect(restoreSql).toContain("SECURITY DEFINER\nSET search_path = pg_catalog, omi_memory");
+    expect(restoreSql).toContain(
+      "GRANT EXECUTE ON FUNCTION omi_memory.hold_postgres_restore_target(text, text, text, bigint)",
+    );
+    expect(restoreSql).toContain(
+      "GRANT EXECUTE ON FUNCTION omi_memory.apply_postgres_restore_terminal_fence(text, bigint, bigint, text)",
+    );
+    expect(restoreSql).toContain("TO omi_platform_restore;");
+    expect(restoreSql).not.toContain("TO omi_platform_application");
+    expect(restoreSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*account_(?:restored_terminal_fences|restore_terminal_application_receipts)/s);
+    expect(restoreSql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
+    expect(restoreSql).toContain("restore_target_receipt_conflict");
+    expect(restoreSql).toContain("restore_target_terminal_conflict");
+    expect(restoreSql).toContain("PERFORM pg_advisory_xact_lock");
+    expect(restoreSql).toContain("set_config('omi.restore_id', p_restore_id, true)");
   });
 
   test("orders every cross-surface foreign key child before its parent", () => {
