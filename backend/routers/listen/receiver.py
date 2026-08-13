@@ -66,6 +66,7 @@ from utils.transcribe_decisions import (
 )
 from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
+from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 
@@ -531,6 +532,7 @@ class ListenReceiver:
     async def receive_data(self) -> None:
         request = self.host.request
         buffer = bytearray()
+        decoded_audio_bytes = 0
         self.host.state.last_audio_received_time = time.time()
         self.host.state.last_activity_time = self.host.state.last_audio_received_time
         try:
@@ -577,6 +579,7 @@ class ListenReceiver:
                         continue
                     if not decoded:
                         continue
+                    decoded_audio_bytes += len(decoded)
                     self._capture('capture_client_audio', decoded)
                     if self.host.state.audio_ring_buffer is not None:
                         self.host.state.audio_ring_buffer.write(decoded, now)
@@ -593,6 +596,19 @@ class ListenReceiver:
             logger.error('Listen receive failure type=%s', type(error).__name__)
             self.host.state.close_code = 1011
         finally:
+            if decoded_audio_bytes:
+                sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
+                emit_product_event(
+                    uid=request.uid,
+                    event='Encoded Audio Duration Measured',
+                    properties={
+                        'recording_id': self.host.recording_session_id,
+                        'conversation_id': self.host.state.current_conversation_id,
+                        'codec': request.codec,
+                        'decoded_audio_bytes': decoded_audio_bytes,
+                        'duration_seconds': decoded_audio_bytes / (sample_rate * 2),
+                    },
+                )
             if self.vad_gate is not None:
                 logger.info(json.dumps(self.vad_gate.to_json_log()))
             if not self.host.use_custom_stt:
