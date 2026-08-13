@@ -221,6 +221,17 @@ finalizer until an authoritative transcript seal and same-transaction outbox
 exist. See
 `docs/memory-productionization/listen-formation-ingestion-contract.md`.
 
+`runGatewayAgentScenario` is the declarative local-integration harness for the
+same boundary. A scenario declares restored durable state, ordered user turns,
+context sources, the closed safe-tool set, gateway replies, scheduled gateway
+faults, approval events, and exact expected event rows/rendered observations.
+The script is consumed only by the gateway adapter's `fetch` seam; it cannot be
+installed as a product model or bypass the semantic lane. Every run restores
+its resulting append-only snapshot and byte-compares the replay before it may
+pass. Approval declarations exercise lifecycle projection/replay only; the
+separate policy harness remains the authority for proving zero execution before
+durable approval of an approval-required tool.
+
 ## Environment variables
 
 All are optional.

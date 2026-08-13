@@ -455,9 +455,16 @@ export const createGatewayChatGenerationSource = (
       });
     },
   });
-  return registerTrustedChatGenerationSourceCapability(source, {
-    tier: "real-provider",
+  // Gateway reachability is not evidence that a provider was contacted. An
+  // injected transport is named separately, but neither transport may mint a
+  // real-provider capability without a source/run-bound gateway receipt.
+  return registerTrustedChatGenerationSourceCapability(source, options.fetch === undefined ? {
+    tier: "unknown",
     adapter: "omi-llm-gateway",
+    deterministic: false,
+  } : {
+    tier: "unknown",
+    adapter: "omi-llm-gateway-injected-transport",
     deterministic: false,
   }, TRUSTED_CAPABILITY_TOKEN);
 };

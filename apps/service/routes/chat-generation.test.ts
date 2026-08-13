@@ -2189,7 +2189,7 @@ describe("ratified chat generation wire red proofs", () => {
       expect(agentInitial).toContainEqual(expect.objectContaining({
         kind: "capability_receipt",
         details: {
-          tier: "real-provider",
+          tier: "unknown",
           adapter: "omi-llm-gateway",
           deterministic: false,
         },

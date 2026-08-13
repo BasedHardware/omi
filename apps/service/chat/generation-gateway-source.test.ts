@@ -382,8 +382,8 @@ describe("gateway chat generation source", () => {
     for (let turn = 0; turn < 10 && completed === 0 && failed === null; turn += 1) await Promise.resolve();
 
     expect(readChatGenerationSourceCapability(source)).toEqual({
-      tier: "real-provider",
-      adapter: "omi-llm-gateway",
+      tier: "unknown",
+      adapter: "omi-llm-gateway-injected-transport",
       deterministic: false,
     });
     expect(deltas).toEqual(["Gateway ", "answer."]);
@@ -442,6 +442,7 @@ describe("gateway chat generation source", () => {
         gatewayUrl: `http://127.0.0.1:${server.port}`,
         laneId: "omi:auto:chat-agent",
         serviceToken: "network-test-token",
+        fetch,
       });
       const deltas: string[] = [];
       const outcome = new Promise<"done" | "failed">((resolve) => {
@@ -461,6 +462,11 @@ describe("gateway chat generation source", () => {
       });
       expect(observed?.body.model).toBe("omi:auto:chat-agent");
       expect(observed?.body.stream).toBe(true);
+      expect(readChatGenerationSourceCapability(source)).toEqual({
+        tier: "unknown",
+        adapter: "omi-llm-gateway-injected-transport",
+        deterministic: false,
+      });
     } finally {
       server.stop(true);
     }
@@ -520,6 +526,15 @@ describe("gateway chat generation source", () => {
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
     })).toThrow("invalid LLM gateway URL");
+    expect(readChatGenerationSourceCapability(createGatewayChatGenerationSource({
+      gatewayUrl: "https://gateway.internal",
+      laneId: "omi:auto:chat-agent",
+      serviceToken: "service-secret",
+    }))).toEqual({
+      tier: "unknown",
+      adapter: "omi-llm-gateway",
+      deterministic: false,
+    });
   });
 
   test("the app-facing no-gateway source fails instead of emitting a fake answer", async () => {
