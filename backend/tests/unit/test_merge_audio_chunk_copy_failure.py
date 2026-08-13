@@ -19,38 +19,37 @@ import os
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
 
-from unittest.mock import MagicMock
-
 import pytest
 
 import utils.conversations.merge_conversations as merge
+from tests.object_store_fakes import FakeObjectStore
 
 
-class _FakeBucket:
-    """copy_blob raises when the source path belongs to a conversation in fail_for."""
+class _FailingObjectStore(FakeObjectStore):
+    """copy() raises when the source path belongs to a conversation in fail_for (the neutral-port
+    equivalent of the old GCS copy_blob raising a transient error)."""
 
-    def __init__(self, fail_for=()):
+    def __init__(self, *args, fail_for=(), **kwargs):
+        super().__init__(*args, **kwargs)
         self._fail_for = set(fail_for)
 
-    def blob(self, path):
-        b = MagicMock()
-        b.path = path
-        return b
-
-    def copy_blob(self, source_blob, _bucket, _new_path):
+    def copy(self, src_bucket, src_key, dst_bucket, dst_key):
         for conv_id in self._fail_for:
-            if f'/{conv_id}/' in getattr(source_blob, 'path', ''):
-                raise Exception(f"simulated transient GCS copy error for {conv_id}")
+            if f'/{conv_id}/' in src_key:
+                raise Exception(f"simulated transient object-store copy error for {conv_id}")
+        return super().copy(src_bucket, src_key, dst_bucket, dst_key)
 
 
-def _install(monkeypatch, *, chunks_by_conv, bucket, list_raises_for=()):
-    storage_client = MagicMock()
-    storage_client.bucket.return_value = bucket
-    monkeypatch.setattr(merge, "_get_storage_client", lambda: storage_client)
+def _install(monkeypatch, *, chunks_by_conv, store, list_raises_for=()):
+    monkeypatch.setattr(merge, "get_object_store", lambda: store)
+    # seed each source chunk so a successful copy can read it (copy() reads src)
+    for _conv_id, _chunks in chunks_by_conv.items():
+        for _c in _chunks:
+            store.put(merge.private_cloud_sync_bucket, _c['path'], b'x')
 
     def _list_audio_chunks(uid, conv_id):
         if conv_id in list_raises_for:
-            raise Exception(f"simulated transient GCS listing error for {conv_id}")
+            raise Exception(f"simulated transient object-store listing error for {conv_id}")
         return chunks_by_conv.get(conv_id, [])
 
     monkeypatch.setattr(merge, "list_audio_chunks", _list_audio_chunks)
@@ -70,7 +69,7 @@ _CHUNKS = {
 
 def test_later_conversation_list_failure_propagates(monkeypatch):
     # conv_a lists+copies fine (has_chunks becomes True), conv_b's listing throws.
-    _install(monkeypatch, chunks_by_conv=_CHUNKS, bucket=_FakeBucket(), list_raises_for={'conv_b'})
+    _install(monkeypatch, chunks_by_conv=_CHUNKS, store=_FailingObjectStore(), list_raises_for={'conv_b'})
 
     with pytest.raises(Exception):
         merge._copy_audio_chunks_for_merge('u1', _CONVS, 'merged_1')
@@ -78,7 +77,7 @@ def test_later_conversation_list_failure_propagates(monkeypatch):
 
 def test_later_conversation_copy_failure_propagates(monkeypatch):
     # conv_a copies fine, conv_b's copy_blob throws.
-    _install(monkeypatch, chunks_by_conv=_CHUNKS, bucket=_FakeBucket(fail_for={'conv_b'}))
+    _install(monkeypatch, chunks_by_conv=_CHUNKS, store=_FailingObjectStore(fail_for={'conv_b'}))
 
     with pytest.raises(Exception):
         merge._copy_audio_chunks_for_merge('u1', _CONVS, 'merged_1')
@@ -86,7 +85,7 @@ def test_later_conversation_copy_failure_propagates(monkeypatch):
 
 def test_all_conversations_copy_successfully_returns_audio_files(monkeypatch):
     # No failure anywhere: the helper still returns the created audio-file records unchanged.
-    _install(monkeypatch, chunks_by_conv=_CHUNKS, bucket=_FakeBucket())
+    _install(monkeypatch, chunks_by_conv=_CHUNKS, store=_FailingObjectStore())
 
     result = merge._copy_audio_chunks_for_merge('u1', _CONVS, 'merged_1')
 
@@ -95,6 +94,6 @@ def test_all_conversations_copy_successfully_returns_audio_files(monkeypatch):
 
 def test_no_chunks_anywhere_returns_empty(monkeypatch):
     # A source with genuinely no chunks is not a failure and must not abort the merge.
-    _install(monkeypatch, chunks_by_conv={}, bucket=_FakeBucket())
+    _install(monkeypatch, chunks_by_conv={}, store=_FailingObjectStore())
 
     assert merge._copy_audio_chunks_for_merge('u1', _CONVS, 'merged_1') == []

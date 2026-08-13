@@ -5,48 +5,42 @@ bucket URL. A googleapis URL for a DIFFERENT or legacy bucket makes split return
 list, so [1] raised IndexError. Callers guard only with the looser
 startswith('https://storage.googleapis.com/'), so such a URL reaches here. It now returns when
 the app-logo bucket prefix is absent, and still deletes a matching URL.
+
+Exercised through the neutral object-store port: delete_app_logo builds its prefix from
+_object_store().public_url(omi_apps_bucket, '') and deletes via _object_store().delete(), so a fake
+with a googleapis endpoint reproduces the exact URL-prefix guard (was a raw GCS _get_storage_client).
 """
 
 import utils.other.storage as storage
+from tests.object_store_fakes import FakeObjectStore
 
 
-class _FakeBlob:
-    def __init__(self, sink):
-        self._sink = sink
+class _RecordingObjectStore(FakeObjectStore):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.deleted: list = []
 
-    def delete(self):
-        self._sink.append('deleted')
-
-
-class _FakeBucket:
-    def __init__(self, sink):
-        self._sink = sink
-
-    def blob(self, path):
-        self._sink.append(('blob', path))
-        return _FakeBlob(self._sink)
+    def delete(self, bucket, key):
+        self.deleted.append((bucket, key))
+        return super().delete(bucket, key)
 
 
-class _FakeClient:
-    def __init__(self, sink):
-        self._sink = sink
-
-    def bucket(self, name):
-        return _FakeBucket(self._sink)
+def _install(monkeypatch):
+    store = _RecordingObjectStore(public_endpoint="https://storage.googleapis.com")
+    monkeypatch.setattr(storage, '_object_store', lambda: store)
+    return store
 
 
 def test_delete_app_logo_ignores_url_from_other_bucket(monkeypatch):
-    sink = []
-    monkeypatch.setattr(storage, '_get_storage_client', lambda: _FakeClient(sink))
+    store = _install(monkeypatch)
 
     storage.delete_app_logo('https://storage.googleapis.com/some-other-bucket/x.png')  # must not raise
 
-    assert sink == []  # nothing deleted
+    assert store.deleted == []  # nothing deleted
 
 
 def test_delete_app_logo_ignores_url_that_embeds_prefix_later(monkeypatch):
-    sink = []
-    monkeypatch.setattr(storage, '_get_storage_client', lambda: _FakeClient(sink))
+    store = _install(monkeypatch)
     # A foreign-bucket URL that embeds the app-logo prefix later in the path must NOT delete: the
     # guard requires the URL to start with the prefix, not merely contain it.
     embedded = (
@@ -55,15 +49,15 @@ def test_delete_app_logo_ignores_url_that_embeds_prefix_later(monkeypatch):
 
     storage.delete_app_logo(embedded)
 
-    assert sink == []  # nothing deleted
+    assert store.deleted == []  # nothing deleted
 
 
 def test_delete_app_logo_deletes_matching_url(monkeypatch):
-    sink = []
-    monkeypatch.setattr(storage, '_get_storage_client', lambda: _FakeClient(sink))
+    store = _install(monkeypatch)
+    store.put(storage.omi_apps_bucket, 'app123.png', b'x')
     url = f'https://storage.googleapis.com/{storage.omi_apps_bucket}/app123.png'
 
     storage.delete_app_logo(url)
 
-    assert ('blob', 'app123.png') in sink
-    assert 'deleted' in sink
+    assert (storage.omi_apps_bucket, 'app123.png') in store.deleted
+    assert not store.exists(storage.omi_apps_bucket, 'app123.png')
