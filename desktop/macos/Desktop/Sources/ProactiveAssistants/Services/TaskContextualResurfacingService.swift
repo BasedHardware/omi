@@ -503,13 +503,13 @@ final class TaskInterruptionLedgerDefaults: TaskInterruptionLedgerPersisting {
     fixedOwnerID = ownerID
   }
 
-  private var key: String {
+  private var key: ScopedDefaultsKey {
     let dynamicOwner =
       defaults === UserDefaults.standard
       ? RuntimeOwnerIdentity.currentOwnerId()
       : defaults.string(forKey: .authUserId)
     let owner = fixedOwnerID ?? dynamicOwner ?? "signed-out"
-    return "proactiveTaskInterruptionLedger.v1.\(owner)"
+    return .taskInterruptionLedger(ownerID: owner)
   }
 
   func load() -> TaskInterruptionLedger {

@@ -135,20 +135,23 @@ private func transitionContextTestOwner(to ownerID: String?) async {
 final class TaskInterruptionLedgerOwnerIsolationTests: XCTestCase {
   func testDefaultOwnerTracksAuthenticationChanges() {
     let suite = "TaskInterruptionLedgerOwnerIsolationTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
+    guard let defaults = UserDefaults(suiteName: suite) else {
+      XCTFail("Failed to create isolated defaults suite")
+      return
+    }
     defer { defaults.removePersistentDomain(forName: suite) }
     let persistence = TaskInterruptionLedgerDefaults(defaults: defaults)
-    defaults.set("owner-a", forKey: "auth_userId")
+    defaults.set("owner-a", forKey: .authUserId)
     persistence.save(TaskInterruptionLedger(sentAt: [Date(timeIntervalSince1970: 42)]))
-    defaults.set("owner-b", forKey: "auth_userId")
+    defaults.set("owner-b", forKey: .authUserId)
     XCTAssertTrue(persistence.load().sentAt.isEmpty)
-    defaults.set("owner-a", forKey: "auth_userId")
+    defaults.set("owner-a", forKey: .authUserId)
     XCTAssertEqual(persistence.load().sentAt.count, 1)
   }
 
   func testLegacyQuietHoursTraceDecodesWithoutResettingLedger() throws {
     let suite = "TaskInterruptionLedgerOwnerIsolationTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
     defer { defaults.removePersistentDomain(forName: suite) }
     let persistence = TaskInterruptionLedgerDefaults(defaults: defaults, ownerID: "owner-a")
     let payload: [String: Any] = [
@@ -167,7 +170,7 @@ final class TaskInterruptionLedgerOwnerIsolationTests: XCTestCase {
     ]
     defaults.set(
       try JSONSerialization.data(withJSONObject: payload),
-      forKey: "proactiveTaskInterruptionLedger.v1.owner-a"
+      forKey: .taskInterruptionLedger(ownerID: "owner-a")
     )
 
     let loaded = persistence.load()
@@ -176,7 +179,9 @@ final class TaskInterruptionLedgerOwnerIsolationTests: XCTestCase {
     XCTAssertEqual(loaded.lastTrace?.reason, .legacyQuietHours)
 
     persistence.save(loaded)
-    let saved = try XCTUnwrap(defaults.data(forKey: "proactiveTaskInterruptionLedger.v1.owner-a"))
+    let saved = try XCTUnwrap(
+      defaults.data(forKey: .taskInterruptionLedger(ownerID: "owner-a"))
+    )
     let savedJSON = try XCTUnwrap(String(data: saved, encoding: .utf8))
     XCTAssertFalse(savedJSON.contains("\"quiet_hours\""))
     XCTAssertTrue(savedJSON.contains("\"legacy_quiet_hours\""))
