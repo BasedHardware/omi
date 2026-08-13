@@ -362,7 +362,7 @@ export const startGatewayReadOnlyToolLoop = (
         return;
       }
       if (options.isCancelled()) return;
-      if (!sawDone) {
+      if (!sawDone || buffer.trim().length > 0) {
         options.fail(gatewayFailure("generation_provider_failed"));
         return;
       }

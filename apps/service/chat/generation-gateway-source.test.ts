@@ -283,6 +283,26 @@ describe("gateway chat generation source", () => {
     expect(completed).toBe(0);
   });
 
+  test("rejects an unterminated gateway fragment after the terminal SSE marker", async () => {
+    const store = seedAgentLedger();
+    const source = createGatewayChatGenerationSource({
+      gatewayUrl: "https://gateway.internal",
+      laneId: "omi:auto:chat-agent",
+      serviceToken: "service-secret",
+      readOnlyToolLoop: {
+        registry: createAgentToolRegistry([safeReadTool(async () => ({
+          summary: "must not run", durationMs: 1, retryable: false,
+        }))]),
+        tool: readOnlyToolSchema,
+        agentRunEvents: store,
+        nowEpochMilliseconds: () => 2,
+      },
+      fetch: async () => new Response("data: [DONE]\n\ndata: {\"choices\":[]}"),
+    });
+    const failure = await new Promise<unknown>((resolve) => source.start(input({ onError: resolve })));
+    expect(failure).toEqual({ code: "generation_provider_failed", retryable: true });
+  });
+
   test("cancellation aborts a hanging safe tool and timeout records one terminal error", async () => {
     const cancellationStore = seedAgentLedger();
     let started!: () => void;
