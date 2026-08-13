@@ -246,6 +246,12 @@ def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
     assert provider.fallback_class == "dev_direct_openai"
     assert fallbacks[0]["component"] == "llm_gateway"
 
+    reasoning_provider = desktop_proactivity._proactive_provider_request(
+        request("proactive_reasoning"), "user-1", "request-2"
+    )
+    assert reasoning_provider.payload["model"] == "gpt-5.6-luna"
+    assert reasoning_provider.payload["reasoning_effort"] == "low"
+
 
 def test_direct_provider_fallback_fails_closed_outside_dev(monkeypatch):
     monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
