@@ -176,11 +176,11 @@ def snapshot_paths(paths: Iterable[Path]) -> tuple[tuple[str, str, int, int], ..
     return tuple(entries)
 
 
-def ran_zero_tests(output: str) -> bool:
-    """Report whether the runner said it executed nothing, despite a green exit."""
+def executed_test_count(output: str) -> Optional[int]:
+    """Return the highest executed-test count the runner reported, or None if it reported none."""
 
     counts = [int(count) for pattern in EXECUTED_TEST_COUNT_PATTERNS for count in pattern.findall(output)]
-    return bool(counts) and not any(counts)
+    return max(counts) if counts else None
 
 
 def run_streaming(
@@ -230,9 +230,16 @@ def emit_iteration_result(
         return 127
 
     elapsed = clock() - started_at
-    if result.returncode == 0 and ran_zero_tests(getattr(result, "stdout", None) or ""):
-        emit(f"Iteration {iteration}: FAIL (filter {test_command.test_filter!r} matched 0 tests) in {elapsed:.2f}s")
-        return 1
+    if result.returncode == 0 and test_command.language == "swift":
+        # A green `swift test --filter` proves nothing on its own: it exits 0 both when the
+        # filter matched nothing and when the reporter never said what ran, so require the count.
+        executed = executed_test_count(getattr(result, "stdout", None) or "")
+        if executed is None:
+            emit(f"Iteration {iteration}: FAIL (no executed-test count reported; coverage unproven) in {elapsed:.2f}s")
+            return 1
+        if executed == 0:
+            emit(f"Iteration {iteration}: FAIL (filter {test_command.test_filter!r} matched 0 tests) in {elapsed:.2f}s")
+            return 1
     if result.returncode == 0:
         emit(f"Iteration {iteration}: PASS in {elapsed:.2f}s")
     else:

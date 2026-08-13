@@ -162,6 +162,30 @@ class DevFeedbackTests(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertTrue(any("PASS" in line for line in output))
 
+    def test_a_swift_run_that_reports_no_test_count_fails_instead_of_passing(self) -> None:
+        command = dev_feedback.test_command_for(self.desktop_root, "swift", "WidgetTests")
+        output: list[str] = []
+
+        def runner(_command_line: tuple[str, ...], *, cwd: Path) -> SimpleNamespace:
+            return SimpleNamespace(returncode=0, stdout="Build complete!\n")
+
+        status = dev_feedback.emit_iteration_result(command, 1, runner=runner, clock=FakeClock(), emit=output.append)
+
+        self.assertEqual(status, 1)
+        self.assertTrue(any("no executed-test count reported" in line for line in output))
+
+    def test_a_pytest_run_passes_on_its_exit_code_without_a_swift_test_count(self) -> None:
+        command = dev_feedback.test_command_for(self.desktop_root, "python", "tests/unit/test_desktop_chat.py")
+        output: list[str] = []
+
+        def runner(_command_line: tuple[str, ...], *, cwd: Path) -> SimpleNamespace:
+            return SimpleNamespace(returncode=0, stdout="1 passed in 0.02s\n")
+
+        status = dev_feedback.emit_iteration_result(command, 1, runner=runner, clock=FakeClock(), emit=output.append)
+
+        self.assertEqual(status, 0)
+        self.assertTrue(any("PASS" in line for line in output))
+
     def test_streaming_runner_echoes_and_captures_the_test_output(self) -> None:
         stream = io.StringIO()
 
@@ -173,7 +197,7 @@ class DevFeedbackTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertIn("Executed 0 tests", stream.getvalue())
-        self.assertTrue(dev_feedback.ran_zero_tests(result.stdout))
+        self.assertEqual(dev_feedback.executed_test_count(result.stdout), 0)
 
     def test_rejects_an_empty_filter(self) -> None:
         with self.assertRaisesRegex(ValueError, "test filter must not be empty"):
