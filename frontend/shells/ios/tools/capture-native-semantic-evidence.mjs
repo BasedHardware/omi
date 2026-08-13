@@ -18,6 +18,7 @@ const project = path.join(iosRoot, "app/ios/Runner.xcodeproj");
 const scheme = "Runner";
 const testIdentifier = "test://com.apple.xcode/Runner/RunnerUITests/NativeSemanticEvidenceUITests/testChatReadySemanticEvidence";
 const testOnly = "RunnerUITests/NativeSemanticEvidenceUITests/testChatReadySemanticEvidence";
+const foregroundGuard = path.join(coreRoot, "shells/tools/macos-foreground-guard.mjs");
 const domains = new Set(["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"]);
 const states = new Set(["loading", "empty", "ready", "error", "offline", "busy", "complete", "cancelled"]);
 const themes = new Set(["light", "dark"]);
@@ -217,6 +218,18 @@ function run(command, args, options) {
   return result;
 }
 
+function runForegroundGuarded(command, args, options, outputDir) {
+  const guardResult = path.join(outputDir, "foreground-guard.json");
+  const stdoutPath = path.join(outputDir, "xcodebuild.stdout");
+  const stderrPath = path.join(outputDir, "xcodebuild.stderr");
+  const wrapped = spawnSync(process.execPath, [foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--", command, ...args], { ...options, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024 });
+  if (!existsSync(guardResult)) throw new Error("iOS semantic foreground guard produced no terminal receipt");
+  const custody = readJson(guardResult, "iOS semantic foreground guard");
+  if (custody.schema !== "omi.macos-foreground-guard/v1" || custody.monitor_error !== null || custody.error !== null || custody.status !== 0) throw new Error(`iOS semantic foreground custody failed: ${custody.monitor_error || custody.error || custody.status}`);
+  if (wrapped.status !== 0) throw new Error("iOS semantic foreground guard failed");
+  return { status: custody.status, stdout: readFileSync(stdoutPath, "utf8"), stderr: readFileSync(stderrPath, "utf8"), custody };
+}
+
 function relativeCore(file, label) {
   const resolved = insideCore(file, label);
   const relative = path.relative(coreRoot, resolved);
@@ -398,7 +411,9 @@ function main() {
   const resultBundle = path.join(outputDir, "Runner.xcresult");
   const xcodeArgs = ["test", "-project", project, "-scheme", scheme, "-destination", `platform=iOS Simulator,id=${device}`, "-only-testing", testOnly, "-parallel-testing-enabled", "NO", "-derivedDataPath", path.join(outputDir, "DerivedData"), "-resultBundlePath", resultBundle, "CODE_SIGNING_ALLOWED=NO", `FLUTTER_ROOT=${path.dirname(path.dirname(flutterBin))}`];
   const xcodeStarted = new Date();
-  const xcode = run("xcodebuild", xcodeArgs, { cwd: path.join(iosRoot, "app"), env, timeout: 300_000 });
+  let xcode;
+  try { xcode = runForegroundGuarded("xcodebuild", xcodeArgs, { cwd: path.join(iosRoot, "app"), env }, outputDir); }
+  catch (error) { fail(error.message); return; }
   const finishedAt = new Date();
   if (xcode.status !== 0) { fail(`xcodebuild semantic test failed (exit ${xcode.status ?? "signal"})`); return; }
   const exportDir = path.join(outputDir, "attachments");
@@ -429,6 +444,7 @@ function main() {
     command: { argv: ["xcodebuild", ...xcodeArgs], cwd: path.relative(coreRoot, path.join(iosRoot, "app")), exit_code: xcode.status, started_at: xcodeStarted.toISOString(), finished_at: finishedAt.toISOString(), timeout_seconds: 300 },
     stdout_sha256: sha256(Buffer.from(xcode.stdout || "")),
     stderr_sha256: sha256(Buffer.from(xcode.stderr || "")),
+    foreground_custody: xcode.custody,
     build_commands: { surfaces: [nodeBin, path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], flutter: [flutterBin, ...["build", "ios", "--simulator", "--debug", `--dart-define=SURFACE_MODE=scheme`, `--dart-define=SCHEME_BUNDLE=surfaces`, `--dart-define=SURFACE_QUERY=${query}`]] },
   };
   const receiptPath = path.join(outputDir, mode.matrix ? "native-preparation-receipt.json" : "supplementary-receipt.json");
