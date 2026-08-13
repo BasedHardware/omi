@@ -149,8 +149,13 @@ extension WKWebView {
     if configuration.urlSchemeHandler(forURLScheme: OmiSchemeHandler.scheme) == nil {
       configuration.setURLSchemeHandler(OmiSchemeHandler.shared, forURLScheme: OmiSchemeHandler.scheme)
     }
-    OmiRuntimeProbeHandler.installIfRequested(on: configuration)
-    return omi_initWithFrame(frame, configuration: configuration)
+    let runtimeProbeHandler = OmiRuntimeProbeHandler.installIfRequested(on: configuration)
+    let webView = omi_initWithFrame(frame, configuration: configuration)
+    if let runtimeProbeHandler {
+      runtimeProbeHandler.attach(to: webView)
+      OmiRuntimeProbeHandler.retain(runtimeProbeHandler, for: webView)
+    }
+    return webView
   }
 
   static func omiInstallSchemeHandlerHook() {

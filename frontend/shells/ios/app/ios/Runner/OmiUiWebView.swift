@@ -40,6 +40,7 @@ final class OmiUiWebViewFactory: NSObject, FlutterPlatformViewFactory {
 final class OmiUiWebView: NSObject, FlutterPlatformView {
   private let webView: WKWebView
   private let channel: FlutterMethodChannel
+  private var runtimeProbeHandler: OmiRuntimeProbeHandler?
 
   init(
     frame: CGRect,
@@ -56,7 +57,7 @@ final class OmiUiWebView: NSObject, FlutterPlatformView {
     // This is a capture-only, opt-in host return path.  It is intentionally
     // absent from normal launches and retains only typed lifecycle/style
     // values (never labels, field values, URLs, or credentials).
-    OmiRuntimeProbeHandler.installIfRequested(on: configuration)
+    let configuredRuntimeHandler = OmiRuntimeProbeHandler.installIfRequested(on: configuration)
     NSLog(
       "[scheme] handler registered on owned configuration for %@:// (viewId=%lld)",
       OmiSchemeHandler.scheme,
@@ -64,6 +65,8 @@ final class OmiUiWebView: NSObject, FlutterPlatformView {
     )
 
     webView = WKWebView(frame: frame, configuration: configuration)
+    runtimeProbeHandler = configuredRuntimeHandler
+    runtimeProbeHandler?.attach(to: webView)
     webView.scrollView.contentInsetAdjustmentBehavior = .never
 
     channel = FlutterMethodChannel(
@@ -121,14 +124,16 @@ final class OmiUiWebView: NSObject, FlutterPlatformView {
 }
 
 /// Redacted and allowlisted runtime result from the real WKWebView.  The
-/// marker is surfaced through the native accessibility identifier only for the
-/// fixture UI test; the production WebView never installs this handler.
+/// marker is surfaced through native accessibility identifier/value only for
+/// the fixture UI test; the production WebView never installs this handler.
 final class OmiRuntimeProbeHandler: NSObject, WKScriptMessageHandler {
   private static var installedKey: UInt8 = 0
 
-  static func installIfRequested(on configuration: WKWebViewConfiguration) {
-    guard ProcessInfo.processInfo.environment["OMI_POLISH_RUNTIME_PROBE"] == "1",
-          objc_getAssociatedObject(configuration, &installedKey) == nil else { return }
+  static func installIfRequested(on configuration: WKWebViewConfiguration) -> OmiRuntimeProbeHandler? {
+    guard ProcessInfo.processInfo.environment["OMI_POLISH_RUNTIME_PROBE"] == "1" else { return nil }
+    if let existing = objc_getAssociatedObject(configuration, &installedKey) as? OmiRuntimeProbeHandler {
+      return existing
+    }
     let handler = OmiRuntimeProbeHandler()
     configuration.userContentController.add(handler, name: "omiRuntimeProbe")
     configuration.userContentController.addUserScript(
@@ -136,6 +141,19 @@ final class OmiRuntimeProbeHandler: NSObject, WKScriptMessageHandler {
     )
     objc_setAssociatedObject(
       configuration, &installedKey, handler, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    return handler
+  }
+
+  private weak var webView: WKWebView?
+
+  private static var retainedByView: [ObjectIdentifier: OmiRuntimeProbeHandler] = [:]
+
+  static func retain(_ handler: OmiRuntimeProbeHandler, for webView: WKWebView) {
+    retainedByView[ObjectIdentifier(webView)] = handler
+  }
+
+  func attach(to webView: WKWebView) {
+    self.webView = webView
   }
 
   static let script = #"""
@@ -204,8 +222,12 @@ final class OmiRuntimeProbeHandler: NSObject, WKScriptMessageHandler {
       .replacingOccurrences(of: "+", with: "-")
       .replacingOccurrences(of: "/", with: "_")
       .replacingOccurrences(of: "=", with: "")
-    // Locate the owning view through the message's web view; no arbitrary body
-    // or user text is copied into the identifier.
-    message.webView?.accessibilityIdentifier = "OMI_RUNTIME_JSON_\(encoded)"
+    // Prefer the directly attached owner because WKScriptMessage.webView is
+    // nullable; fall back to it when the handler was not attached by a host.
+    // No arbitrary body or user text is copied into the marker.
+    let marker = "OMI_RUNTIME_JSON_\(encoded)"
+    let target = webView ?? message.webView
+    target?.accessibilityIdentifier = marker
+    target?.accessibilityValue = marker
   }
 }

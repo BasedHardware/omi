@@ -15,8 +15,12 @@ final class NativeRuntimeEvidenceUITests: XCTestCase {
     var marker: String?
     for _ in 0..<40 {
       let identifier = webView.identifier
+      let value = webView.value as? String ?? ""
       if identifier.hasPrefix("OMI_RUNTIME_JSON_") {
         marker = String(identifier.dropFirst("OMI_RUNTIME_JSON_".count))
+        break
+      } else if value.hasPrefix("OMI_RUNTIME_JSON_") {
+        marker = String(value.dropFirst("OMI_RUNTIME_JSON_".count))
         break
       }
       RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.25))
