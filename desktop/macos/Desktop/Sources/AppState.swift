@@ -450,7 +450,7 @@ class AppState: ObservableObject {
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
   var silentMicRecoveryAttempts = 0
   var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
-  var meetingDetectorMode: AssistantSettings.SystemAudioCaptureMode?
+  var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
   var meetingBoundaryInProgress = false
   var pendingMeetingState: Bool?
 
@@ -465,9 +465,14 @@ class AppState: ObservableObject {
   var meetingEndFinalizationInProgress = false
   @Published var isAwaitingMeeting = false
 
-  var effectiveSystemAudioMode: AssistantSettings.SystemAudioCaptureMode {
-    if UserDefaults.standard.bool(forKey: "disableSystemAudioCapture") { return .never }
-    return AssistantSettings.shared.systemAudioCaptureMode
+  var audioRecordingMode: AssistantSettings.AudioRecordingMode {
+    AssistantSettings.shared.audioRecordingMode
+  }
+
+  /// A hidden developer override may suppress the system tap, but it cannot change the user's
+  /// recording policy or whether the microphone/meeting gate runs.
+  var shouldCaptureSystemAudio: Bool {
+    !UserDefaults.standard.bool(forKey: .disableSystemAudioCapture)
   }
   var vadGateService: VADGateService? {
     get { servicesCoordinator.vadGateService }
@@ -561,9 +566,9 @@ class AppState: ObservableObject {
     get { servicesCoordinator.screenCaptureKitBrokenObserver }
     set { servicesCoordinator.screenCaptureKitBrokenObserver = newValue }
   }
-  var systemAudioCaptureModeObserver: NSObjectProtocol? {
-    get { servicesCoordinator.systemAudioCaptureModeObserver }
-    set { servicesCoordinator.systemAudioCaptureModeObserver = newValue }
+  var audioRecordingModeObserver: NSObjectProtocol? {
+    get { servicesCoordinator.audioRecordingModeObserver }
+    set { servicesCoordinator.audioRecordingModeObserver = newValue }
   }
   var coreAudioCaptureRecoveryObserver: NSObjectProtocol? {
     get { servicesCoordinator.coreAudioCaptureRecoveryObserver }
@@ -831,7 +836,7 @@ class AppState: ObservableObject {
       // Restart transcription if it was active before sleep
       Task { @MainActor in
         guard let self = self else { return }
-        if self.wasTranscribingBeforeSleep && AssistantSettings.shared.transcriptionEnabled {
+        if self.wasTranscribingBeforeSleep && AssistantSettings.shared.audioRecordingMode != .off {
           log("System wake: Restarting transcription (was active before sleep)")
           // Brief delay to let audio subsystem settle after wake
           try? await Task.sleep(for: .seconds(2))
@@ -877,14 +882,25 @@ class AppState: ObservableObject {
       }
     }
 
-    // System Audio capture mode changed — re-apply the capture gate live if a recording is armed.
-    systemAudioCaptureModeObserver = NotificationCenter.default.addObserver(
-      forName: .systemAudioCaptureModeDidChange,
+    // One preference owns both intent and meeting gating. Apply every change live so no stale
+    // boolean or secondary picker can disagree with the selected mode.
+    audioRecordingModeObserver = NotificationCenter.default.addObserver(
+      forName: .audioRecordingModeDidChange,
       object: nil,
       queue: .main
     ) { [weak self] _ in
       Task { @MainActor in
-        await self?.reconcileCapture()
+        guard let self else { return }
+        switch AssistantSettings.shared.audioRecordingMode {
+        case .off:
+          self.stopTranscription()
+        case .always, .onlyMeetings:
+          if self.isTranscribing {
+            await self.reconcileCapture()
+          } else {
+            self.startTranscription()
+          }
+        }
       }
     }
 
@@ -993,5 +1009,4 @@ extension Notification.Name {
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
   /// Posted from menu bar to toggle transcription (userInfo: ["enabled": Bool])
-  static let toggleTranscriptionRequested = Notification.Name("toggleTranscriptionRequested")
 }

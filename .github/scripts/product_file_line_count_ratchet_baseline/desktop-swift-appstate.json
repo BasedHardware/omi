@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1697
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1736
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Merge of two independent silent-mic hardening lines: (1) the microphone authorization gate at the capture choke point with the honest permission alert (a notDetermined/revoked TCC entry otherwise arms a zero-sample stream and the watchdog loops a misleading hardware alert every ~90s); (2) main's local transcript duplicate suppression, persistence flushes before stop/rotation, fences around the awaited local capture rebuild, meeting-role preservation across sleep/fallback/rotation, and the silent-mic healed route carried through the restart boundary."
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Merge of two independent hardening lines: (1) the microphone authorization gate at the capture choke point with the honest permission alert and the removed terminal 'Microphone Isn't Capturing Audio' modal (a notDetermined/revoked TCC entry otherwise arms a zero-sample stream and the watchdog loops a misleading hardware alert every ~90s); (2) main's local transcript duplicate suppression, persistence flushes before stop/rotation, fences around the awaited local capture rebuild, meeting-role preservation across sleep/fallback/rotation, the silent-mic healed route carried through the restart boundary, and the centralized Audio Recording Off/Always/Only Meetings policy."
   },
   "threshold": 1500
 }

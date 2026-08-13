@@ -78,6 +78,7 @@ enum DefaultsKey: String {
   case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
   case gmailSelectedCookiePath = "gmailSelectedCookiePath"
   case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
+  case disableSystemAudioCapture = "disableSystemAudioCapture"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is

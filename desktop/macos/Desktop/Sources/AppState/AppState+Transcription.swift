@@ -7,9 +7,10 @@ import SwiftUI
 extension AppState {
   func toggleTranscription() {
     if isTranscribing {
-      stopTranscription()
+      AssistantSettings.shared.audioRecordingMode = .off
     } else {
-      startTranscription()
+      let selected = AssistantSettings.shared.audioRecordingMode
+      AssistantSettings.shared.audioRecordingMode = selected == .off ? .onlyMeetings : selected
     }
   }
 
@@ -20,6 +21,10 @@ extension AppState {
     conversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
   ) {
     guard !isTranscribing else { return }
+    guard AssistantSettings.shared.audioRecordingMode != .off else {
+      log("Transcription: start ignored because Audio Recording is Off")
+      return
+    }
     sttSession.prepareForStart()
     silentMicRecoveryAttempts = 0
     currentConversationRole = conversationRole
@@ -125,18 +130,17 @@ extension AppState {
         // VAD gate not used for Python backend streaming (backend handles its own VAD)
         vadGateService = nil
 
-        // Initialize system audio capture if supported (macOS 14.4+) and not in "Never" mode.
-        // The actual start/stop is driven by reconcileCapture() based on the user's System Audio
-        // mode (Always / Only during meetings / Never) and meeting state. `.never` is also forced
-        // by the hidden `disableSystemAudioCapture` debug flag — see effectiveSystemAudioMode.
+        // Initialize system audio capture if supported (macOS 14.4+). The user's one Audio
+        // Recording mode controls intent + meeting gating; a hidden developer override may suppress
+        // only the system tap without creating another user-facing policy.
         // Toggle the debug flag with: defaults write <bundle> disableSystemAudioCapture -bool true
-        let systemAudioMode = effectiveSystemAudioMode
-        if systemAudioMode == .never {
-          log("Transcription: System audio capture mode = never — not initializing")
+        let recordingMode = audioRecordingMode
+        if !shouldCaptureSystemAudio {
+          log("Transcription: System audio capture disabled by developer override")
         } else if #available(macOS 14.4, *) {
           systemAudioCaptureService = SystemAudioCaptureService()
           log(
-            "Transcription: System audio capture initialized (mode=\(systemAudioMode.rawValue), macOS 14.4+)"
+            "Transcription: System audio capture initialized (mode=\(recordingMode.rawValue), macOS 14.4+)"
           )
         } else {
           log("Transcription: System audio capture not available (requires macOS 14.4+)")
@@ -191,7 +195,6 @@ extension AppState {
 
       isTranscribing = true
       recordingGeneration &+= 1
-      AssistantSettings.shared.transcriptionEnabled = true
       audioSource = effectiveSource
       currentTranscript = ""
       speakerSegments = []
@@ -554,7 +557,7 @@ extension AppState {
         return
       }
       recordSystemAudioCaptureOutcome(.granted)
-      log("Transcription: System audio capture started (mode=\(effectiveSystemAudioMode.rawValue))")
+      log("Transcription: System audio capture started (mode=\(audioRecordingMode.rawValue))")
     } catch {
       // Mirror the success path's staleness guards: if recording stopped or the
       // service was replaced while startCapture was suspended, the failure says
@@ -595,15 +598,22 @@ extension AppState {
       return
     }
 
-    let mode = effectiveSystemAudioMode
+    let mode = audioRecordingMode
+    guard mode != .off else {
+      stopTranscription()
+      return
+    }
+
+    // The detector supplies meeting boundaries in every active microphone mode. Only Meetings
+    // uses the signal to gate capture; Always uses it to label/rotate conversations.
     ensureMeetingDetector(for: mode)
 
-    let meetingStateReady = mode != .onlyDuringMeetings || meetingDetector?.hasObservedState == true
+    let meetingStateReady = mode != .onlyMeetings || meetingDetector?.hasObservedState == true
     let meetingActive = meetingDetector?.isMeetingActive ?? false
-    // Only during meetings → capture (mic + system) only while in a call. Always/Never → the mic
-    // runs continuously (system audio still respects the mode below).
-    let shouldCapture = mode != .onlyDuringMeetings || meetingActive
-    isAwaitingMeeting = mode == .onlyDuringMeetings && !meetingActive
+    // Only Meetings captures mic + system only while a call is active. Always captures both
+    // continuously, subject to OS capability and the hidden developer system-tap override.
+    let shouldCapture = mode == .always || meetingActive
+    isAwaitingMeeting = mode == .onlyMeetings && !meetingActive
 
     guard meetingStateReady else {
       log("Transcription: waiting for meeting detector before changing capture state")
@@ -631,9 +641,9 @@ extension AppState {
       }
     }
 
-    // System audio (macOS 14.4+). Captured when we should capture AND the mode isn't "never".
+    // System audio (macOS 14.4+). Captured whenever the chosen policy is actively recording.
     if #available(macOS 14.4, *) {
-      let systemShouldCapture = shouldCapture && mode != .never
+      let systemShouldCapture = shouldCapture && shouldCaptureSystemAudio
       if systemShouldCapture, systemAudioCaptureService == nil {
         systemAudioCaptureService = SystemAudioCaptureService()
         log("Transcription: System audio capture service created on demand (mode=\(mode.rawValue))")
@@ -646,6 +656,35 @@ extension AppState {
           AudioLevelMonitor.shared.updateSystemLevel(0)
           log("Transcription: System audio capture paused")
         }
+      }
+    }
+
+    if !meetingEndFinalizationInProgress,
+      MeetingConversationBoundaryPolicy.shouldFinishConversation(
+        mode: mode,
+        meetingStateReady: meetingStateReady,
+        shouldCapture: shouldCapture,
+        segmentCount: totalSegmentCount,
+        hasSpeakerSegments: !speakerSegments.isEmpty
+      )
+    {
+      meetingEndFinalizationInProgress = true
+      log("Transcription: Meeting ended — finishing conversation and waiting for the next meeting")
+      Task { @MainActor in
+        defer { self.meetingEndFinalizationInProgress = false }
+        guard
+          MeetingConversationBoundaryPolicy.shouldFinishConversation(
+            mode: self.audioRecordingMode,
+            meetingStateReady: self.meetingDetector?.hasObservedState == true,
+            shouldCapture: self.meetingDetector?.isMeetingActive == true,
+            segmentCount: self.totalSegmentCount,
+            hasSpeakerSegments: !self.speakerSegments.isEmpty
+          )
+        else {
+          log("Transcription: skipped meeting-ended finalization because meeting state changed")
+          return
+        }
+        _ = await self.finishConversation(finalizationReason: .meetingEnded)
       }
     }
 

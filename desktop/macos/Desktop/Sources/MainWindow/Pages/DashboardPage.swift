@@ -253,9 +253,8 @@ struct DashboardPage: View {
   @State private var showingGoalDetail = false
   @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
   @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
-  @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
-  @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
-    AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
+  @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) private var audioRecordingModeRaw =
+    AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
   @State private var homeMode: HomeStageMode = .hub
   @State private var didReportChatFirstTranscriptPage = false
@@ -282,12 +281,8 @@ struct DashboardPage: View {
     CaptureListeningLogic.isCaptureLive(isCaptureMonitoring: isCaptureMonitoring)
   }
 
-  private var listeningCaptureMode: AssistantSettings.SystemAudioCaptureMode {
-    CaptureListeningLogic.listeningCaptureMode(raw: systemAudioCaptureModeRaw)
-  }
-
   private var listeningModeTitle: String {
-    CaptureListeningLogic.listeningModeTitle(appState: appState, raw: systemAudioCaptureModeRaw)
+    CaptureListeningLogic.listeningModeTitle(appState: appState, raw: audioRecordingModeRaw)
   }
 
   private static let homeStageMaxWidth: CGFloat = 1360
@@ -1642,10 +1637,8 @@ struct DashboardPage: View {
             : (appState.isTranscribing ? "waveform.circle.fill" : "mic.circle"),
           status: transcriptionUnavailable ? .blocked : (appState.isTranscribing ? .active : .inactive),
           modeTitle: listeningModeTitle,
-          isMeetingsOnly: listeningCaptureMode == .onlyDuringMeetings,
           isToggling: isTogglingListening,
-          action: toggleListening,
-          modeAction: toggleListeningMode
+          action: toggleListening
         )
         // Settings lives in the nav rail (bottom-left) — no duplicate gear here.
       }
@@ -1806,11 +1799,8 @@ struct DashboardPage: View {
 
   private func toggleListening() {
     CaptureListeningLogic.toggleListening(
-      appState: appState, transcriptionEnabled: $transcriptionEnabled, isTogglingListening: $isTogglingListening)
-  }
-
-  private func toggleListeningMode() {
-    CaptureListeningLogic.toggleListeningMode(raw: $systemAudioCaptureModeRaw)
+      appState: appState, audioRecordingModeRaw: $audioRecordingModeRaw,
+      isTogglingListening: $isTogglingListening)
   }
 
   private func toggleCapture() {
@@ -3882,13 +3872,10 @@ struct HomeListeningStatusButton: View {
   let systemImage: String
   let status: HomeStatusState
   let modeTitle: String
-  let isMeetingsOnly: Bool
   let isToggling: Bool
   let action: () -> Void
-  let modeAction: () -> Void
 
-  // Single pill-level hover flag so moving between the title and the mode
-  // toggle never flickers the revealed controls.
+  // Hover reveals the selected mode, but Settings owns the only picker.
   @State private var isHovering = false
 
   var body: some View {
@@ -3932,27 +3919,6 @@ struct HomeListeningStatusButton: View {
       .disabled(isToggling)
       .help("Listening: \(status.text), \(modeTitle)")
       .accessibilityLabel("Listening \(status.text), \(modeTitle)")
-
-      // Divider + mode toggle are revealed only on hover to keep the
-      // resting pill compact.
-      if isHovering {
-        Rectangle()
-          .fill(Ink.separator)
-          .frame(width: 1, height: 18)
-          .transition(.opacity)
-
-        Button(action: modeAction) {
-          Image(systemName: isMeetingsOnly ? "person.2.fill" : "person.fill")
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundStyle(modeIconColor)
-            .frame(width: 30, height: 34)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(isMeetingsOnly ? "Switch to always listening" : "Switch to meetings only")
-        .accessibilityLabel(isMeetingsOnly ? "Switch Listening to Always" : "Switch Listening to Meetings Only")
-        .transition(.opacity)
-      }
     }
     .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
     .background(
@@ -3967,10 +3933,6 @@ struct HomeListeningStatusButton: View {
     .frame(height: 34)
     .onHover { isHovering = $0 }
     .omiAnimation(.easeInOut(duration: 0.14), value: isHovering)
-  }
-
-  private var modeIconColor: Color {
-    status.isActive ? HomePalette.green : HomePalette.muted
   }
 
   private var statusFill: Color {

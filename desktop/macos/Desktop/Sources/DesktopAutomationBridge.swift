@@ -1242,9 +1242,7 @@ final class DesktopAutomationActionRegistry {
       params: ["enabled"]
     ) { params in
       let enabled = boolParam(params["enabled"], default: true)
-      AssistantSettings.shared.transcriptionEnabled = enabled
-      NotificationCenter.default.post(
-        name: .toggleTranscriptionRequested, object: nil, userInfo: ["enabled": enabled])
+      AssistantSettings.shared.audioRecordingMode = enabled ? .onlyMeetings : .off
       return ["enabled": enabled ? "true" : "false"]
     }
 
@@ -3516,7 +3514,8 @@ final class DesktopAutomationActionRegistry {
         "insight_enabled": insight.isEnabled ? "true" : "false",
         "memory_enabled": memory.isEnabled ? "true" : "false",
         "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
-        "transcription_enabled": assistant.transcriptionEnabled ? "true" : "false",
+        "transcription_enabled": assistant.audioRecordingMode != .off ? "true" : "false",
+        "audio_recording_mode": assistant.audioRecordingMode.rawValue,
         "multi_chat_enabled": UserDefaults.standard.bool(forKey: .multiChatEnabled) ? "true" : "false",
       ]
     }

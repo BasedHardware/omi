@@ -1409,11 +1409,7 @@ struct RewindPage: View {
         .omiAnimation(.easeInOut(duration: 0.15), value: appState.isTranscribing)
     }
     .onTapGesture {
-      if appState.isTranscribing {
-        appState.stopTranscription()
-      } else {
-        appState.startTranscription()
-      }
+      appState.toggleTranscription()
     }
     .help(appState.isTranscribing ? "Audio is on - click to stop" : "Audio is off - click to start")
   }

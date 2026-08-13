@@ -291,18 +291,6 @@ struct DesktopHomeView: View {
         log("DesktopHomeView: app terminating — cancelling startup warmups")
         resetSessionScopedStartupWarmups()
       }
-      // Handle transcription toggle from menu bar
-      .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) {
-        notification in
-        if let enabled = notification.userInfo?["enabled"] as? Bool {
-          log("DesktopHomeView: Menu bar toggled transcription: \(enabled)")
-          if enabled {
-            appState.startTranscription()
-          } else {
-            appState.stopTranscription()
-          }
-        }
-      }
       // Periodic file re-scan (every 3 hours)
       .task {
         while !Task.isCancelled {
@@ -926,7 +914,7 @@ struct DesktopHomeView: View {
   private func restorePersistedCaptureServices(reason: String) {
     let settings = AssistantSettings.shared
     if PersistedCaptureLaunchPolicy.shouldStartTranscription(
-      intentEnabled: settings.transcriptionEnabled,
+      intentEnabled: settings.audioRecordingMode != .off,
       isTranscribing: appState.isTranscribing
     ) {
       log("DesktopHomeView: Restoring transcription from persisted intent (\(reason))")

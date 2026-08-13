@@ -14,7 +14,7 @@ extension AppState {
   }
 
   /// Keeps the probe's evidence policy aligned with settings changes during a recording.
-  func ensureMeetingDetector(for mode: AssistantSettings.SystemAudioCaptureMode) {
+  func ensureMeetingDetector(for mode: AssistantSettings.AudioRecordingMode) {
     if meetingDetector != nil, meetingDetectorMode != mode {
       meetingDetector?.stop()
       meetingDetector = nil
@@ -27,12 +27,12 @@ extension AppState {
         if ConferencingApps.callAppIsUsingMicrophone() { return true }
         // On modern macOS, browser titles are only a capture-gating fallback;
         // Always mode keeps the stronger CoreAudio mic signal authoritative.
-        return mode == .onlyDuringMeetings && ConferencingApps.browserCallWindowPresent()
+        return mode == .onlyMeetings && ConferencingApps.browserCallWindowPresent()
       }
       // macOS 14.0-14.3 has no CoreAudio process-input API. Keep the browser
       // title signal for Always and meetings-only capture, but never construct
       // meeting provenance while system-audio capture is disabled.
-      return mode != .never && ConferencingApps.browserCallWindowPresent()
+      return mode != .off && ConferencingApps.browserCallWindowPresent()
     }
     let detector = MeetingDetector(
       isMeetingNow: meetingProbe,

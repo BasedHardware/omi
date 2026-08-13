@@ -91,14 +91,14 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertTrue(setup.connectedAgentNames.isEmpty)
   }
 
-  func testSetupSnapshotUsesMicrophoneOnlyForNeverSystemAudio() {
+  func testSetupSnapshotReportsAudioRecordingOff() {
     let model = makeModel()
     appState?.hasMicrophonePermission = true
-    let previousMode = AssistantSettings.shared.systemAudioCaptureMode
-    AssistantSettings.shared.systemAudioCaptureMode = .never
-    defer { AssistantSettings.shared.systemAudioCaptureMode = previousMode }
+    let previousMode = AssistantSettings.shared.audioRecordingMode
+    AssistantSettings.shared.audioRecordingMode = .off
+    defer { AssistantSettings.shared.audioRecordingMode = previousMode }
 
-    XCTAssertEqual(model.postOnboardingSetup.listening, .microphoneOnly)
+    XCTAssertEqual(model.postOnboardingSetup.listening, .disabled)
   }
 
   func testSetupSnapshotRejectsStaleOrBrokenScreenCapture() {
