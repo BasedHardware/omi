@@ -93,7 +93,7 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     XCTAssertEqual(task.description.count, ContextDirectorTaskContext.maximumDescriptionLength)
   }
 
-  func testDirectorTaskSelectionIncludesNearFutureAndUndatedButExcludesFarFutureAndCompleted() {
+  func testDirectorTaskSelectionIncludesFarFutureAsReferenceAfterActionableTasks() {
     let now = Date(timeIntervalSince1970: 1_700_000_000)
     let tasks = [
       task("tomorrow", dueAt: now.addingTimeInterval(24 * 60 * 60)),
@@ -104,7 +104,24 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
 
     XCTAssertEqual(
       ContextDirectorTaskSelection.select(from: tasks, now: now).map(\.description),
-      ["tomorrow", "undated"])
+      ["tomorrow", "undated", "far"])
+  }
+
+  func testDirectorPromptMarksFarFutureTaskReferenceOnly() {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let snapshot = ContextBucketSnapshot(
+      bucketID: "bucket", versionID: 1, version: 1, header: "header",
+      frozenRankedSegment: Data(), tail: [], validatedFacts: ["fact"], notifyWorthiness: 1)
+    let prompt = ContextProactivityPromptBuilder.directorPrompt(
+      snapshot: snapshot,
+      tasks: [
+        ContextDirectorTaskContext(
+          description: "Far task", dueAt: now.addingTimeInterval(72 * 60 * 60))
+      ],
+      frame: CapturedFrame(jpegData: Data(), appName: "Notes", captureTime: now))
+
+    XCTAssertTrue(
+      prompt.contains("Reference only: already exists; do not resurface or create it yet."))
   }
 
   func testFrozenRankedSegmentIsConcatenatedByteForByte() {
