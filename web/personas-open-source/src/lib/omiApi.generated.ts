@@ -1258,6 +1258,7 @@ export interface CreateConversationFromTranscriptRequest {
   client_device_id?: string | null;
   client_platform?: string | null;
   client_session_id?: string | null;
+  conversation_role?: "ambient" | "meeting";
   finished_at?: string | null;
   geolocation?: GeolocationInput | null;
   language?: string | null;
@@ -2178,6 +2179,25 @@ export interface KnowledgeGraphResponse {
   truncated?: boolean;
 }
 
+export interface LegacyMaterializePromptsResponse {
+  intents?: Array<LegacyProactiveIntent>;
+}
+
+export interface LegacyProactiveIntent {
+  account_generation: number;
+  blocks: Array<QuestionCardSpec | TaskCardSpec | GoalLinkSpec | CaptureLinkSpec | MemoryLinkSpec>;
+  cold_start_sequence_terminal_receipt_id?: string | null;
+  cold_start_sequence_terminal_state?: "completed" | "abandoned" | null;
+  continuity_key: string;
+  created_at: string;
+  delivered_at?: string | null;
+  delivery_state?: "ready" | "pending_kernel_receipt" | "delivered";
+  intent_id: string;
+  materialization_receipt_id?: string | null;
+  source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment" | "cold_start_rich" | "cold_start_sparse";
+  subject?: ChatFirstSubject | null;
+}
+
 export interface LinkCalendarEventRequest {
   event_id: string;
 }
@@ -2224,10 +2244,6 @@ export interface MaterializePromptsRequest {
   receipts?: Array<ProactiveMaterializationReceipt>;
   source_surface: "main_chat";
   window_foreground?: boolean;
-}
-
-export interface MaterializePromptsResponse {
-  intents?: Array<ProactiveIntent>;
 }
 
 export interface McpAddServerResponse {
@@ -2775,21 +2791,6 @@ export interface PricingOption {
 
 export interface PrivateCloudSyncResponse {
   private_cloud_sync_enabled: boolean;
-}
-
-export interface ProactiveIntent {
-  account_generation: number;
-  blocks: Array<QuestionCardSpec | TaskCardSpec | GoalLinkSpec | CaptureLinkSpec | MemoryLinkSpec>;
-  cold_start_sequence_terminal_receipt_id?: string | null;
-  cold_start_sequence_terminal_state?: "completed" | "abandoned" | null;
-  continuity_key: string;
-  created_at: string;
-  delivered_at?: string | null;
-  delivery_state?: "ready" | "pending_kernel_receipt" | "delivered";
-  intent_id: string;
-  materialization_receipt_id?: string | null;
-  source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment" | "cold_start_rich" | "cold_start_sparse";
-  subject?: ChatFirstSubject | null;
 }
 
 export interface ProactiveMaterializationReceipt {
@@ -4324,6 +4325,8 @@ export interface OmiApiSchemas {
   "InterventionRecord": InterventionRecord;
   "InterventionSurface": InterventionSurface;
   "KnowledgeGraphResponse": KnowledgeGraphResponse;
+  "LegacyMaterializePromptsResponse": LegacyMaterializePromptsResponse;
+  "LegacyProactiveIntent": LegacyProactiveIntent;
   "LinkCalendarEventRequest": LinkCalendarEventRequest;
   "LlmTotalCostResponse": LlmTotalCostResponse;
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
@@ -4332,7 +4335,6 @@ export interface OmiApiSchemas {
   "LocationContextConsentResponse": LocationContextConsentResponse;
   "LocationContextConsentUpdate": LocationContextConsentUpdate;
   "MaterializePromptsRequest": MaterializePromptsRequest;
-  "MaterializePromptsResponse": MaterializePromptsResponse;
   "McpAddServerResponse": McpAddServerResponse;
   "McpApiKey": McpApiKey;
   "McpApiKeyCreate": McpApiKeyCreate;
@@ -4412,7 +4414,6 @@ export interface OmiApiSchemas {
   "PluginResult": PluginResult;
   "PricingOption": PricingOption;
   "PrivateCloudSyncResponse": PrivateCloudSyncResponse;
-  "ProactiveIntent": ProactiveIntent;
   "ProactiveMaterializationReceipt": ProactiveMaterializationReceipt;
   "ProactiveNotification": ProactiveNotification;
   "ProcessConversationRequest": ProcessConversationRequest;
@@ -5506,9 +5507,9 @@ export interface OmiApiPaths {
   };
   "/v1/chat/materialize-prompts": {
     post: {
-      operationId: "materialize_prompts_v1_chat_materialize_prompts_post";
+      operationId: "materialize_prompts_v1_v1_chat_materialize_prompts_post";
       responses: {
-        "200": MaterializePromptsResponse;
+        "200": LegacyMaterializePromptsResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -10444,7 +10445,7 @@ export async function record_chat_deferral_v1_chat_deferrals_post(header: { auth
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function materialize_prompts_v1_chat_materialize_prompts_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MaterializePromptsRequest, init?: OmiApiClientInit): Promise<MaterializePromptsResponse> {
+export async function materialize_prompts_v1_v1_chat_materialize_prompts_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MaterializePromptsRequest, init?: OmiApiClientInit): Promise<LegacyMaterializePromptsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/chat/materialize-prompts`;
   const _search = "";
