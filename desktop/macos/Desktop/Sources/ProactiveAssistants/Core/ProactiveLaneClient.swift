@@ -15,10 +15,21 @@ struct ProactiveLaneResult: Equatable, Sendable {
   let content: String
 }
 
-enum ProactiveLaneClientError: Error {
+enum ProactiveLaneClientError: LocalizedError {
   case invalidResponse
   case http(Int)
   case ownerChanged
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidResponse:
+      return "proactive_invalid_response"
+    case .http(let statusCode):
+      return "proactive_http_error status=\(statusCode)"
+    case .ownerChanged:
+      return "proactive_owner_changed"
+    }
+  }
 }
 
 actor ProactiveLaneClient {

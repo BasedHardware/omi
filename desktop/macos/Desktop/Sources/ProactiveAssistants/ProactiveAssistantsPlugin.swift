@@ -60,7 +60,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private(set) var isMonitoring = false
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
   private var _hasScreenRecordingPermission: Bool?  // Cached permission state
-  private var currentApp: String?
+  var currentApp: String?
   private var currentAppBundleID: String?
   private var currentWindowID: CGWindowID?
   private var currentWindowTitle: String?
@@ -594,7 +594,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// Logged only on transition: the gates above return without a trace, and a stuck
   /// gate (idle misread, phantom screen share, excluded frontmost app) reads exactly
   /// like a healthy quiet pipeline — that ambiguity cost a full debugging session.
-  private var lastCaptureGateReason: String??
+  var lastCaptureGateReason: String??
 
   private func logCaptureGate(_ reason: String?) {
     guard lastCaptureGateReason != reason else { return }
@@ -654,7 +654,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// grows without bound and the 60s idle gate silently swallowed every capture tick
   /// while the user was actively typing (measured live: `.null` reported 322s idle at
   /// the same instant the any-input sentinel reported 0.00006s).
-  private func systemIdleSeconds() -> TimeInterval {
+  func systemIdleSeconds() -> TimeInterval {
     TimeInterval(
       CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: Self.anyInputEventType))
   }
@@ -750,9 +750,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     }.value
     guard isMonitoring else { return }
 
-    // Skip capture during system modes that block ScreenCaptureKit (Mission Control, Expose, etc.)
-    // This avoids burning through consecutive failures and generating unnecessary error events
+    // Skip system modes that block ScreenCaptureKit without burning failure events.
     if let mode = probe.specialSystemMode {
+      logCaptureGate("special_system_mode")
       log("SpecialModeDetection: \(mode.logDescription)")
       return
     }
