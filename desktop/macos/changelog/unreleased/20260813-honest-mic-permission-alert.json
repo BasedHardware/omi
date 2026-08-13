@@ -1,0 +1,3 @@
+{
+  "change": "When macOS blocks microphone access, Omi now asks for permission or tells you exactly that — instead of looping 'Microphone Isn't Capturing Audio' at you every minute"
+}

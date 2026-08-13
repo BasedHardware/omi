@@ -366,6 +366,33 @@ extension AppState {
 
   func startMicrophoneAudioCapture() async {
     guard let audioCaptureService = audioCaptureService else { return }
+
+    // Authorization first, capture second. CoreAudio HAL capture never triggers the
+    // system microphone prompt on its own: with a notDetermined or revoked TCC entry it
+    // "succeeds" and delivers zero samples forever. The silent-mic watchdog then reads
+    // those zeros as a dead device and loops the user through rebuilds into a
+    // "Microphone Isn't Capturing Audio" alert every ~90s — a permission problem wearing
+    // a hardware costume. startTranscription() has its own guard, but resume, the meeting
+    // gate, and the watchdog's own rebuild all arm capture through here without passing it.
+    switch AudioCaptureService.authorizationStatus() {
+    case .authorized:
+      break
+    case .notDetermined:
+      log("Transcription: microphone permission undetermined — requesting before capture")
+      if await AudioCaptureService.requestPermission() {
+        break
+      }
+      surfaceMicrophonePermissionAlert()
+      stopTranscription()
+      return
+    case .denied, .restricted:
+      surfaceMicrophonePermissionAlert()
+      stopTranscription()
+      return
+    @unknown default:
+      break
+    }
+
     configureSharedCaptureWatchdog(audioCaptureService)
 
     // Cloud mode: the mixer sums mic + system into one mono stream for the WebSocket.
@@ -760,10 +787,38 @@ extension AppState {
       DesktopDiagnosticsManager.shared.recordTranscriptionSilentCaptureExhausted(
         recoveryAttempts: silentMicRecoveryAttempts)
       stopTranscription()
-      showAlert(
-        title: "Microphone Isn't Capturing Audio",
-        message:
-          "Omi stopped recording because your microphone returned no audio. Check your input device and try again.")
+      // An unauthorized app receives exactly this symptom — endless zero samples — so
+      // check permission before blaming the hardware and sending the user to swap mics.
+      if AudioCaptureService.authorizationStatus() != .authorized {
+        surfaceMicrophonePermissionAlert()
+      } else {
+        showAlert(
+          title: "Microphone Isn't Capturing Audio",
+          message:
+            "Omi stopped recording because your microphone returned no audio. Check your input device and try again.")
+      }
+    }
+  }
+
+  /// Tell the user the actual problem when capture is blocked by permission, and take
+  /// them to the exact pane that fixes it.
+  @MainActor
+  func surfaceMicrophonePermissionAlert() {
+    log("Transcription: microphone permission not granted — surfacing permission alert")
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "mic_permission",
+      from: "capture_start",
+      to: "permission_alert",
+      reason: "not_authorized",
+      outcome: .degraded,
+      extra: ["status": String(describing: AudioCaptureService.authorizationStatus())])
+    showAlert(
+      title: "Omi Needs Microphone Access",
+      message:
+        "macOS is not letting Omi hear the microphone. Enable Omi under "
+        + "System Settings → Privacy & Security → Microphone, then start recording again.")
+    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+      NSWorkspace.shared.open(url)
     }
   }
 
