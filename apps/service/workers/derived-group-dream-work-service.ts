@@ -58,9 +58,8 @@ const stopped = (
  * The single production-neutral composition for derived-group dream work.
  *
  * It exposes no scheduler, route, database connection, model default, or
- * success commit. Runtime composition must inject those separately after their
- * gates. Materialization remains intentionally inert until graph/product
- * success semantics are separately authorized.
+ * success commit. Runtime composition must inject PostgreSQL repositories and
+ * scheduler wiring separately after their gates.
  */
 export const defineDerivedGroupDreamWorkService = (
   dependencies: DerivedGroupDreamWorkServiceDependencies,

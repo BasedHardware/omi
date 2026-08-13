@@ -259,4 +259,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0042-derived-group-dream-work-input.sql",
     sha256: "235887c9b22549ef3170bbabf6c4df43fa2a573d62714b40807599d42ebddfac",
   }),
+  Object.freeze({
+    version: 43,
+    name: "derived-group-dream-success",
+    fileName: "0043-derived-group-dream-success.sql",
+    sha256: "faacdf8d1ab6b4334bf063501512cd23192629c0053dc8f3d5ae2adebfe11d36",
+  }),
 ]);

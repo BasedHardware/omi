@@ -111,6 +111,7 @@ const expectedNonFormationOrigin = (
   if (workKind === "promotion") return "promotion";
   if (workKind === "identity_cluster") return "identity_consolidation";
   if (workKind === "predicate_batch") return "predicate_alignment";
+  if (workKind === "derived_group_dream") return "derived_group_dream";
   return null;
 };
 

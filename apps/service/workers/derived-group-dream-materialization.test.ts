@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import {
   DERIVED_GROUP_DREAM_VERSION,
-  derivedGroupDreamPreservesOriginals,
   derivedGroupDreamProjectionContractDigest,
+  planDerivedGroupDream,
 } from "../../../core/consolidate/derived-group-dream";
 import {
   DURABLE_MEMORY_WORK_VERSION,
@@ -14,6 +14,7 @@ import {
   MEMORY_STRATEGY_VERSION,
   registerMemoryStrategy,
 } from "../../../core/consolidate/strategy-assignment";
+import type { CanonicalClaim } from "../../../core/schema";
 import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-context-internal";
 import { durableMemoryWorkInputManifestDigest } from "../stores/durable-memory-work-repository";
 import {
@@ -21,16 +22,17 @@ import {
   DERIVED_GROUP_DREAM_RESULT_CONTRACT_VERSION,
 } from "./derived-group-dream-contract";
 import {
+  createDerivedGroupDreamAuthoritativeAppend,
+} from "./derived-group-dream-materialization";
+import {
   derivedGroupDreamWorkInputManifest,
   parseDerivedGroupDreamInputSnapshot,
 } from "./derived-group-dream-work-adapter";
-import { defineDerivedGroupDreamWorkAdapter } from "./derived-group-dream-work-producer";
 
 const digest = (character: string): string => character.repeat(64);
 const ref = (prefix: string, character: string): string => `${prefix}_${digest(character)}`;
 const owner = "account:alice";
-const issuer = createAuthorizedLedgerWriteContextIssuer();
-const context = issuer.issue({
+const context = createAuthorizedLedgerWriteContextIssuer().issue({
   context_version: "authorized-ledger-write-context-v1",
   principal_id: "worker:one",
   account_id: owner, application_id: "app:dream", credential_id: "credential:one",
@@ -57,7 +59,7 @@ const strategyCoordinates = Object.freeze({
 
 const strategy = registerMemoryStrategy({
   version: MEMORY_STRATEGY_VERSION,
-  strategy_id: "strategy:dream:authority",
+  strategy_id: "strategy:dream:materialization",
   work_kind: "derived_group_dream",
   coordinates: strategyCoordinates,
 });
@@ -65,7 +67,7 @@ const strategy = registerMemoryStrategy({
 const snapshot = () => parseDerivedGroupDreamInputSnapshot({
   version: DERIVED_GROUP_DREAM_INPUT_SNAPSHOT_VERSION,
   owner_account_id: owner,
-  job_id: "job:dream:one",
+  job_id: "job:dream:materialization",
   input_frontier: digest("f"),
   projection_contract_digest: derivedGroupDreamProjectionContractDigest({
     strategy_version: strategyCoordinates.strategy_version,
@@ -98,17 +100,17 @@ const snapshot = () => parseDerivedGroupDreamInputSnapshot({
   created_at_event_time: 1_700_000_000,
 });
 
-const leasedJob = (input = snapshot()) => leaseDurableMemoryWork(
+const leasedJob = () => leaseDurableMemoryWork(
   acceptDurableMemoryWork({
     version: DURABLE_MEMORY_WORK_VERSION,
-    job_id: input.job_id,
+    job_id: snapshot().job_id,
     owner_account_id: owner,
     account_epoch: 7,
     lifecycle_state: "active",
     deletion_epoch: null,
     work_kind: "derived_group_dream",
-    input_frontier: input.input_frontier,
-    input_digest: durableMemoryWorkInputManifestDigest(derivedGroupDreamWorkInputManifest(input)),
+    input_frontier: snapshot().input_frontier,
+    input_digest: durableMemoryWorkInputManifestDigest(derivedGroupDreamWorkInputManifest(snapshot())),
     execution_contract_digest: strategy.execution_contract_digest,
     accepted_at_event_time: 100,
     max_attempts: 2,
@@ -118,32 +120,37 @@ const leasedJob = (input = snapshot()) => leaseDurableMemoryWork(
   20,
 );
 
-describe("derived group dream work adapter", () => {
-  test("loads the staged snapshot under a leased job and plans rebuildable groups without a model", async () => {
-    let loadCalls = 0;
-    const adapter = defineDerivedGroupDreamWorkAdapter({
-      load_input: async () => {
-        loadCalls += 1;
-        return { kind: "found", snapshot: snapshot() };
+const witnessClaim = (claimRevisionId: string, propositionId: string): CanonicalClaim => ({
+  claim_lineage_id: `lineage:${claimRevisionId}`,
+  claim_revision_id: claimRevisionId,
+  owner_account_id: owner,
+  predicate: "likes",
+  arguments: [{
+    slot_id: "subject", role: "subject", surface: "topic", span: { start: 0, end: 5 },
+    value: { kind: "entity_ref", ref: "entity:one" },
+  }],
+  temporal_scope: {
+    observed_at: "2026-08-11T20:00:00Z", precision: "instant",
+    valid_time: {
+      typed_expression: { kind: "absolute", granularity: "instant", value: "2026-08-11T20:00:00Z" },
+      resolved_interval: {
+        kind: "instant", start: "2026-08-11T20:00:00Z", end: "2026-08-11T20:00:00Z",
+        timezone: "UTC", granularity: "instant",
       },
-      load_current_parent: async () => ({ kind: "found", parent_commit: null }),
-      load_witness_claims: async () => ({ kind: "found", committed_revisions: [] }),
-    });
-    const job = leasedJob();
-    const produced = await adapter.produce(context, job, strategy);
-    expect(produced).toMatchObject({
-      kind: "produced",
-      result_contract_version: DERIVED_GROUP_DREAM_RESULT_CONTRACT_VERSION,
-      response_digest: expect.stringMatching(/^[a-f0-9]{64}$/),
-    });
-    if (produced.kind !== "produced") throw new Error("expected produced outcome");
-    expect(produced.normalized_result["version"]).toBe(DERIVED_GROUP_DREAM_VERSION);
-    expect(produced.normalized_result["original_claim_revision_ids"]).toEqual([
-      "claim:one:r1", "claim:two:r1",
-    ]);
-    expect(produced.normalized_result["group_projections"]).toHaveLength(1);
-    expect(JSON.stringify(produced.normalized_result)).not.toContain("subject:owner");
-    expect(derivedGroupDreamPreservesOriginals({
+      derivation: { resolver_version: "fixture:v1", timezone: "UTC" },
+    },
+  },
+  evidence_refs: [ref("atevidence1", "a")],
+  policy_labels: [], source_language: "en",
+  scope: { locality: "durable", scope_ref: "entity:one" },
+  lifecycle: "canonical",
+  canonical_claim_id: `canonical:${claimRevisionId}`,
+  source_provisional_revision_ids: [`provisional:${claimRevisionId}`],
+});
+
+describe("derived group dream materialization", () => {
+  test("binds witness claims and derived views without graph claim rewrites", () => {
+    const input = {
       version: DERIVED_GROUP_DREAM_VERSION,
       owner_account_id: owner,
       input_frontier: snapshot().input_frontier,
@@ -152,61 +159,19 @@ describe("derived group dream work adapter", () => {
       group_memberships: snapshot().group_memberships,
       people_cluster_beliefs: snapshot().people_cluster_beliefs,
       created_at_event_time: snapshot().created_at_event_time,
-    }, produced.normalized_result as never)).toBeTrue();
-    expect(loadCalls).toBe(1);
-  });
-
-  test("fails closed on missing input, strategy mismatch, and withheld witness claims", async () => {
-    const adapter = defineDerivedGroupDreamWorkAdapter({
-      load_input: async () => ({ kind: "not_found" }),
-      load_current_parent: async () => ({ kind: "found", parent_commit: null }),
-      load_witness_claims: async () => ({ kind: "found", committed_revisions: [] }),
-    });
-    await expect(adapter.produce(context, leasedJob(), strategy)).resolves.toMatchObject({
-      kind: "failed",
-      error_code: "dependency_unavailable",
-    });
-
-    const mismatchStrategy = registerMemoryStrategy({
-      version: MEMORY_STRATEGY_VERSION,
-      strategy_id: "strategy:dream:mismatch",
-      work_kind: "derived_group_dream",
-      coordinates: {
-        ...strategyCoordinates,
-        result_contract_version: "derived-group-dream-result:v0",
-      },
-    });
-    const mismatchAdapter = defineDerivedGroupDreamWorkAdapter({
-      load_input: async () => ({ kind: "found", snapshot: snapshot() }),
-      load_current_parent: async () => ({ kind: "found", parent_commit: null }),
-      load_witness_claims: async () => ({ kind: "found", committed_revisions: [] }),
-    });
-    await expect(mismatchAdapter.produce(context, leasedJob(), mismatchStrategy)).resolves.toMatchObject({
-      kind: "failed",
-      error_code: "dependency_unavailable",
-    });
-
-    await expect(adapter.materialize(context, leasedJob(), {} as never, strategy)).resolves.toMatchObject({
-      kind: "failed",
-      error_code: "dependency_unavailable",
-    });
-  });
-
-  test("rejects a projection contract that does not match the registered strategy", async () => {
-    const adapter = defineDerivedGroupDreamWorkAdapter({
-      load_input: async () => ({
-        kind: "found",
-        snapshot: parseDerivedGroupDreamInputSnapshot({
-          ...snapshot(),
-          projection_contract_digest: digest("z"),
-        }),
-      }),
-      load_current_parent: async () => ({ kind: "found", parent_commit: null }),
-      load_witness_claims: async () => ({ kind: "found", committed_revisions: [] }),
-    });
-    await expect(adapter.produce(context, leasedJob(), strategy)).resolves.toMatchObject({
-      kind: "failed",
-      error_code: "dependency_unavailable",
-    });
+    };
+    const outcome = planDerivedGroupDream(input);
+    const witnesses = [
+      { kind: "claim" as const, revision_id: "claim:one:r1", claim: witnessClaim("claim:one:r1", "proposition:one") },
+      { kind: "claim" as const, revision_id: "claim:two:r1", claim: witnessClaim("claim:two:r1", "proposition:two") },
+    ];
+    const append = createDerivedGroupDreamAuthoritativeAppend(
+      context, leasedJob(), strategy, outcome, witnesses, null,
+    );
+    expect(append.origin).toEqual({ kind: "non_formation", reason: "derived_group_dream" });
+    expect(append.transition.revisions).toHaveLength(0);
+    expect(append.transition.committed_revisions).toHaveLength(2);
+    expect(append.transition.derivation.commit.success_kind).toBe("success");
+    expect(append.transition.derivation.commit.output_revisions).toHaveLength(0);
   });
 });

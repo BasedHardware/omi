@@ -180,6 +180,15 @@ realTest("derived group dream PostgreSQL input persistence", () => {
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'omi_platform_application') THEN
           CREATE ROLE omi_platform_application NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'omi_platform_cleanup') THEN
+          CREATE ROLE omi_platform_cleanup NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'omi_platform_restore') THEN
+          CREATE ROLE omi_platform_restore NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'omi_platform_restore_operator') THEN
+          CREATE ROLE omi_platform_restore_operator NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+        END IF;
       END
       $role$
     `, [], { prepare: false });

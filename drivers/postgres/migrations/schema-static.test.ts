@@ -71,6 +71,7 @@ const expectedTables = [
   "listen_formation_delivery_revisions",
   "listen_formation_finalizations",
   "listen_formation_outbox",
+  "memory_attribution_belief_revisions",
   "memory_candidate_derivation_artifacts",
   "memory_claim_evidence_refs",
   "memory_claim_lineages",
@@ -896,7 +897,7 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
   });
 
   test("makes durable-work success atomic with its exact graph origin, receipt, state, and outbox", () => {
-    expect(allSql).toContain("'promotion', 'identity_consolidation', 'predicate_alignment'");
+    expect(allSql).toContain("'promotion', 'identity_consolidation', 'predicate_alignment', 'derived_group_dream'");
     expect(allSql).toContain("ADD COLUMN origin_code text GENERATED ALWAYS AS");
     expect(allSql).toContain("UNIQUE (account_id, commit_id, sequence, origin_code, success_kind)");
     expect(allSql).toContain("UNIQUE (account_id, commit_id, request_digest, state)");
@@ -914,6 +915,7 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(success.body).toContain("work_kind = 'promotion' AND origin_code = 'promotion'");
     expect(success.body).toContain("origin_code = 'identity_consolidation'");
     expect(success.body).toContain("origin_code = 'predicate_alignment'");
+    expect(allSql).toContain("origin_code = 'derived_group_dream'");
     expect(success.body).toContain("memory_work_acceptances");
     expect(success.body).toContain("memory_work_state_revisions");
     expect(success.body).toContain("memory_derivation_commits");
@@ -1032,6 +1034,22 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(migration).toContain("'derived_group_dream'");
     expect(migration).toContain("DROP CONSTRAINT memory_work_acceptances_work_kind_check");
     expect(migration).not.toMatch(/\b(?:GRANT|CREATE ROLE)\b[^;]*memory_derived_group_dream_work_inputs/s);
+  });
+
+  test("persists derived-group dream success with group projections and belief revisions", () => {
+    const belief = tables.find((table) => table.name === "memory_attribution_belief_revisions")!;
+    expect(belief.body).toContain("revision_contract_version = 'attribution-belief-v1'");
+    expect(belief.body).toContain("belief_revision_id ~ '^atbr1_[0-9a-f]{64}$'");
+    expect(allSql).toContain("CREATE FUNCTION omi_memory.persist_derived_group_dream_materialization");
+    expect(allSql).toContain("GRANT EXECUTE ON FUNCTION omi_memory.persist_derived_group_dream_materialization");
+    expect(allSql).not.toMatch(
+      /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE)[^;]*memory_attribution_belief_revisions/s,
+    );
+    const migration = migrationSql.find((entry) => entry.version === 43)!.sql;
+    expect(migration).toContain("work_kind = 'derived_group_dream'");
+    expect(migration).toContain("origin_code = 'derived_group_dream'");
+    expect(migration).toContain("memory_attribution_belief_revisions");
+    expect(migration).toContain("TO omi_platform_application");
   });
 
   test("binds accepted work to one authority strategy while shadows remain non-authoritative", () => {

@@ -18,6 +18,7 @@ import {
 import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatement } from "./connection";
 import { appendAuthoritativeLedgerWithinTransaction } from "./authoritative-ledger-repository";
 import { durableMemoryWorkStagedResultContentHash } from "./durable-memory-work-result";
+import { persistDerivedGroupDreamMaterializationWithinTransaction } from "./derived-group-dream-materialization";
 import {
   PostgresRepositoryError,
   type PostgresTransactionObservability,
@@ -445,13 +446,18 @@ const commitWithinTransaction = async (
       connection, context, request.authoritative_append, false,
     );
     if (appended.kind === "idempotency_conflict") return appended;
-    if (appended.kind !== "committed") {
+    if (appended.kind !== "committed" && appended.kind !== "replayed") {
       // A graph append already committed without this terminal work unit would
       // violate the atomic-success invariant rather than constitute replay.
       throw new PostgresRepositoryError("persistence_failed");
     }
     graphCommitId = appended.commit_id;
     graphSequence = appended.sequence;
+    if (request.leased_job.work_kind === "derived_group_dream") {
+      await persistDerivedGroupDreamMaterializationWithinTransaction(
+        connection, context, request, graphCommitId, graphSequence,
+      );
+    }
   }
 
   let succeeded: Readonly<DurableMemoryWorkJob>;

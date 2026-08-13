@@ -3,6 +3,7 @@ import { isProxy } from "node:util/types";
 import { sha256CanonicalContent } from "../retrieve/content-digest";
 import {
   buildProductGroupProjection,
+  parseProductGroupProjection,
   PRODUCT_PROJECTION_CONTRACT_VERSION,
   type ProductGroupProjection,
 } from "../retrieve/product-projection";
@@ -321,3 +322,36 @@ export const derivedGroupDreamProjectionContractDigest = (
   strategy_version: coordinates.strategy_version,
   code_version: coordinates.code_version,
 });
+
+export const parseDerivedGroupDreamOutcome = (value: unknown): Readonly<DerivedGroupDreamOutcome> => {
+  const input = exactRecord(value, [
+    "version", "owner_account_id", "input_frontier", "projection_contract_digest",
+    "original_claim_revision_ids", "group_projections", "people_cluster_beliefs", "result_digest",
+  ], "invalid_outcome");
+  if (input["version"] !== DERIVED_GROUP_DREAM_VERSION) fail("invalid_outcome");
+  const owner = token(input["owner_account_id"], "invalid_outcome");
+  const originalClaimRevisionIds = sortedUniqueTokens(
+    input["original_claim_revision_ids"] as readonly string[], MAX_CLAIMS, "invalid_outcome",
+  );
+  const groupProjections = (Array.isArray(input["group_projections"]) ? input["group_projections"] : fail("invalid_outcome"))
+    .map((item) => parseProductGroupProjection(item));
+  const peopleBeliefs = (Array.isArray(input["people_cluster_beliefs"]) ? input["people_cluster_beliefs"] : fail("invalid_outcome"))
+    .map((item) => parseAttributionBeliefRevision(item));
+  const resultDigest = digest(input["result_digest"], "invalid_outcome");
+  const outcomeWithoutDigest = {
+    version: DERIVED_GROUP_DREAM_VERSION,
+    owner_account_id: owner,
+    input_frontier: token(input["input_frontier"], "invalid_outcome"),
+    projection_contract_digest: digest(input["projection_contract_digest"], "invalid_outcome"),
+    original_claim_revision_ids: originalClaimRevisionIds,
+    group_projections: Object.freeze(groupProjections),
+    people_cluster_beliefs: Object.freeze(peopleBeliefs),
+  };
+  if (sha256CanonicalContent({
+    contract_version: DERIVED_GROUP_DREAM_VERSION,
+    ...outcomeWithoutDigest,
+    group_projection_ids: groupProjections.map((item) => item.group_projection_id),
+    people_belief_revision_ids: peopleBeliefs.map((item) => item.belief_revision_id),
+  }) !== resultDigest) fail("invalid_outcome");
+  return Object.freeze({ ...outcomeWithoutDigest, result_digest: resultDigest });
+};

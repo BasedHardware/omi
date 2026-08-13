@@ -23,6 +23,7 @@ export const POSTGRES_DELETION_SURFACE_TABLES = Object.freeze({
     "listen_formation_delivery_heads",
   ]),
   authoritative_memory: Object.freeze([
+    "memory_attribution_belief_revisions",
     "memory_claim_evidence_refs", "memory_claim_lineages", "memory_claim_liveness_fences",
     "memory_claim_predicate_refs", "memory_claim_revisions", "memory_claim_source_provisionals",
     "memory_claim_supersessions", "memory_consumed_markers",

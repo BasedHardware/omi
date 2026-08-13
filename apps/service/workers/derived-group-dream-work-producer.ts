@@ -3,11 +3,13 @@ import { isProxy } from "node:util/types";
 import {
   DERIVED_GROUP_DREAM_VERSION,
   derivedGroupDreamProjectionContractDigest,
+  parseDerivedGroupDreamOutcome,
   planDerivedGroupDream,
   type DerivedGroupDreamInput,
 } from "../../../core/consolidate/derived-group-dream";
 import {
   parseDurableMemoryWorkJob,
+  type DurableMemoryWorkErrorCode,
   type DurableMemoryWorkJob,
 } from "../../../core/consolidate/state-machine";
 import {
@@ -26,6 +28,10 @@ import {
   type DerivedGroupDreamInputSnapshot,
 } from "./derived-group-dream-work-adapter";
 import type { DerivedGroupDreamWorkInputLoadOutcome } from "./derived-group-dream-work-input-repository";
+import {
+  materializeDerivedGroupDreamFromLoadedWitnesses,
+  type DerivedGroupDreamWitnessLoadOutcome,
+} from "./derived-group-dream-materialization";
 import type {
   DurableMemoryWorkMaterializeOutcome,
   DurableMemoryWorkProduceOutcome,
@@ -36,7 +42,20 @@ export interface DerivedGroupDreamWorkAdapterDependencies {
     context: AuthorizedLedgerWriteContext,
     job: Readonly<DurableMemoryWorkJob>,
   ) => Promise<DerivedGroupDreamWorkInputLoadOutcome>;
+  readonly load_current_parent: (
+    context: AuthorizedLedgerWriteContext,
+    job: Readonly<DurableMemoryWorkJob>,
+  ) => Promise<DerivedGroupDreamParentLoadOutcome>;
+  readonly load_witness_claims: (
+    context: AuthorizedLedgerWriteContext,
+    job: Readonly<DurableMemoryWorkJob>,
+    claimRevisionIds: readonly string[],
+  ) => Promise<DerivedGroupDreamWitnessLoadOutcome>;
 }
+
+export type DerivedGroupDreamParentLoadOutcome =
+  | Readonly<{ kind: "found"; parent_commit: string | null }>
+  | Readonly<{ kind: "failed"; error_code: DurableMemoryWorkErrorCode }>;
 
 export interface DerivedGroupDreamWorkAdapter {
   produce(
@@ -61,10 +80,13 @@ const exactDependencies = (value: unknown): DerivedGroupDreamWorkAdapterDependen
   if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
     || Object.getPrototypeOf(value) !== Object.prototype) fail("invalid_dependencies");
   const keys = Reflect.ownKeys(value);
-  if (keys.length !== 1 || keys[0] !== "load_input") fail("invalid_dependencies");
-  const descriptor = Object.getOwnPropertyDescriptor(value, "load_input");
-  if (!descriptor || !("value" in descriptor) || !descriptor.enumerable
-    || typeof descriptor.value !== "function" || isProxy(descriptor.value)) fail("invalid_dependencies");
+  const expected = ["load_input", "load_current_parent", "load_witness_claims"];
+  if (keys.length !== expected.length || !expected.every((key) => keys.includes(key))) fail("invalid_dependencies");
+  for (const key of expected) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable
+      || typeof descriptor.value !== "function" || isProxy(descriptor.value)) fail("invalid_dependencies");
+  }
   return value as DerivedGroupDreamWorkAdapterDependencies;
 };
 
@@ -102,8 +124,8 @@ const mapLoadFailure = (loaded: DerivedGroupDreamWorkInputLoadOutcome): DurableM
 
 /**
  * Inert derived-group dream work adapter. It loads the sealed PostgreSQL input
- * snapshot under a leased job and runs the pure planner only. Success commit,
- * model defaults, scheduler wiring, and route activation remain separately gated.
+ * snapshot under a leased job and runs the pure planner only. Scheduler wiring,
+ * model defaults, and route activation remain separately gated.
  */
 export const defineDerivedGroupDreamWorkAdapter = (
   dependenciesValue: DerivedGroupDreamWorkAdapterDependencies,
@@ -154,8 +176,44 @@ export const defineDerivedGroupDreamWorkAdapter = (
       }
     },
 
-    async materialize() {
-      return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" });
+    async materialize(
+      contextValue: AuthorizedLedgerWriteContext,
+      jobValue: Readonly<DurableMemoryWorkJob>,
+      stagedValue: StagedDurableMemoryWorkResult,
+      strategyValue: Readonly<RegisteredMemoryStrategy>,
+    ) {
+      let context: AuthorizedLedgerWriteContext;
+      let job: Readonly<DurableMemoryWorkJob>;
+      let strategy: Readonly<RegisteredMemoryStrategy>;
+      let staged: StagedDurableMemoryWorkResult;
+      try {
+        context = assertAuthorizedLedgerWriteContext(contextValue);
+        job = parseDurableMemoryWorkJob(jobValue);
+        strategy = parseRegisteredMemoryStrategy(strategyValue);
+        staged = stagedValue;
+      } catch {
+        return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" });
+      }
+      let parentLoaded: DerivedGroupDreamParentLoadOutcome;
+      try {
+        parentLoaded = await dependencies.load_current_parent(context, job);
+      } catch {
+        return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" });
+      }
+      if (parentLoaded.kind === "failed") {
+        return Object.freeze({ kind: "failed" as const, error_code: parentLoaded.error_code });
+      }
+      let witnessLoaded: DerivedGroupDreamWitnessLoadOutcome;
+      try {
+        const claimRevisionIds = parseDerivedGroupDreamOutcome(staged.normalized_result)
+          .original_claim_revision_ids;
+        witnessLoaded = await dependencies.load_witness_claims(context, job, claimRevisionIds);
+      } catch {
+        return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" });
+      }
+      return materializeDerivedGroupDreamFromLoadedWitnesses(
+        context, job, staged, strategy, parentLoaded.parent_commit, witnessLoaded,
+      );
     },
   });
 };

@@ -174,7 +174,10 @@ describe("derived group dream work service", () => {
         load: async () => ({ kind: "found", input: stagedInput }),
       }),
       resolve_strategy: async () => strategy,
-      dream: {},
+      dream: {
+        load_current_parent: async () => ({ kind: "failed", error_code: "dependency_unavailable" }),
+        load_witness_claims: async () => ({ kind: "failed", error_code: "dependency_unavailable" }),
+      },
       max_parent_rematerializations: 1,
     });
 

@@ -37,7 +37,7 @@ const INPUT_KINDS = new Set<DurableMemoryWorkInputKind>([
   "identity_authorization_revision", "graph_frontier",
 ]);
 const WORK_KINDS = new Set<DurableMemoryWorkKind>([
-  "formation", "promotion", "identity_cluster", "predicate_batch",
+  "formation", "promotion", "identity_cluster", "predicate_batch", "derived_group_dream",
 ]);
 const ERROR_CODES = new Set<DurableMemoryWorkErrorCode>([
   "model_timeout", "model_rate_limited", "model_response_invalid",
