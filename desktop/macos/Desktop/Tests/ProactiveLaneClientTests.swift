@@ -43,13 +43,15 @@ final class ProactiveLaneClientTests: XCTestCase {
     }
   }
 
-  func testRetryAfterHeaderIsParsedAsSeconds() {
-    let response = HTTPURLResponse(
-      url: URL(string: "https://proactive.test/v1/desktop/proactivity/completions")!,
-      statusCode: 429,
-      httpVersion: nil,
-      headerFields: ["Retry-After": " 45 "])
-    XCTAssertEqual(ProactiveLaneClient.parseRetryAfterSeconds(from: response!), 45)
+  func testRetryAfterHeaderIsParsedAsSeconds() throws {
+    let url = try XCTUnwrap(URL(string: "https://proactive.test/v1/desktop/proactivity/completions"))
+    let response = try XCTUnwrap(
+      HTTPURLResponse(
+        url: url,
+        statusCode: 429,
+        httpVersion: nil,
+        headerFields: ["Retry-After": " 45 "]))
+    XCTAssertEqual(ProactiveLaneClient.parseRetryAfterSeconds(from: response), 45)
   }
 
   func testExtractionSkipsNetworkDuringQuotaCooldownThenResumesAfterDeadline() async throws {
@@ -216,8 +218,13 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
       client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
       return
     }
-    let response = HTTPURLResponse(
-      url: url, statusCode: stub.statusCode, httpVersion: nil, headerFields: stub.headers)!
+    guard
+      let response = HTTPURLResponse(
+        url: url, statusCode: stub.statusCode, httpVersion: nil, headerFields: stub.headers)
+    else {
+      client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+      return
+    }
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: stub.body)
     client?.urlProtocolDidFinishLoading(self)
