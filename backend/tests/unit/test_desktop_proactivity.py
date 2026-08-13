@@ -289,6 +289,128 @@ def test_configured_gateway_remains_authoritative(monkeypatch):
     assert provider.fallback_class == "none"
 
 
+def test_direct_extraction_length_retry_gate_is_shape_and_provider_scoped():
+    direct = desktop_proactivity._ProviderRequest(
+        url="https://api.openai.com/v1/chat/completions",
+        headers={},
+        payload={},
+        fallback_class="dev_direct_openai",
+    )
+    gateway = desktop_proactivity._ProviderRequest(
+        url="http://gateway/v1/chat/completions",
+        headers={},
+        payload={},
+        fallback_class="none",
+    )
+
+    empty = {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
+    truncated = {"choices": [{"finish_reason": "length", "message": {"content": '{"summary":'}}]}
+    truncated_scalar = {"choices": [{"finish_reason": "length", "message": {"content": '{"summary":1'}}]}
+    truncated_literal = {"choices": [{"finish_reason": "length", "message": {"content": '{"summary":true'}}]}
+    schema_mismatch = {"choices": [{"finish_reason": "length", "message": {"content": '{"summary":3}'}}]}
+    malformed_shape = {"choices": [{"finish_reason": "length", "message": {"content": None}}]}
+    refusal = {"choices": [{"finish_reason": "length", "message": {"content": None, "refusal": "not allowed"}}]}
+
+    assert desktop_proactivity._should_retry_direct_extraction(empty, request(), direct)
+    assert desktop_proactivity._should_retry_direct_extraction(truncated, request(), direct)
+    assert desktop_proactivity._should_retry_direct_extraction(truncated_scalar, request(), direct)
+    assert desktop_proactivity._should_retry_direct_extraction(truncated_literal, request(), direct)
+    assert not desktop_proactivity._should_retry_direct_extraction(schema_mismatch, request(), direct)
+    assert not desktop_proactivity._should_retry_direct_extraction(malformed_shape, request(), direct)
+    assert not desktop_proactivity._should_retry_direct_extraction(refusal, request(), direct)
+    assert not desktop_proactivity._should_retry_direct_extraction(empty, request("proactive_reasoning"), direct)
+    assert not desktop_proactivity._should_retry_direct_extraction(empty, request(), gateway)
+
+
+@pytest.mark.asyncio
+async def test_direct_extraction_retries_length_once_without_extra_quota_reservation(monkeypatch):
+    calls = []
+    consumed = []
+
+    class DirectClient:
+        async def post(self, url, *, headers, json):
+            calls.append((url, headers, json))
+            body = (
+                {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
+                if len(calls) == 1
+                else {
+                    "model": "gpt-5-nano",
+                    "choices": [{"finish_reason": "stop", "message": {"content": '{"summary":"ok"}'}}],
+                }
+            )
+            return httpx.Response(200, request=httpx.Request("POST", url), json=body)
+
+    class Semaphore:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    async def consume(uid, operation):
+        consumed.append((uid, operation))
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
+
+    result = await desktop_proactivity.proactive_completion(request(), uid="user-1")
+
+    assert len(calls) == 2
+    assert calls[0][2]["max_completion_tokens"] == 1024
+    assert calls[1][2]["max_completion_tokens"] == 2400
+    assert consumed == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+    assert result.response["choices"][0]["message"]["content"] == '{"summary":"ok"}'
+
+
+@pytest.mark.asyncio
+async def test_direct_extraction_length_retry_releases_quota_once_after_final_failure(monkeypatch):
+    calls = []
+    released = []
+
+    class DirectClient:
+        async def post(self, url, *, headers, json):
+            calls.append(json)
+            return httpx.Response(
+                200,
+                request=httpx.Request("POST", url),
+                json={"choices": [{"finish_reason": "length", "message": {"content": ""}}]},
+            )
+
+    class Semaphore:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    async def allow(*_):
+        return None
+
+    async def release(uid, operation):
+        released.append((uid, operation))
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", allow)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
+
+    with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
+        await desktop_proactivity.proactive_completion(request(), uid="user-1")
+
+    assert unavailable.value.status_code == 502
+    assert [payload["max_completion_tokens"] for payload in calls] == [1024, 2400]
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+
+
 @pytest.mark.asyncio
 async def test_provider_configuration_failure_releases_reserved_quota(monkeypatch):
     released = []

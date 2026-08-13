@@ -52,6 +52,7 @@ _DIRECT_MODELS = {
     "proactive_extraction": "gpt-5-nano",
     "proactive_reasoning": "gpt-5.6-luna",
 }
+_DIRECT_EXTRACTION_RETRY_MAX_COMPLETION_TOKENS = 2400
 
 
 @dataclass(frozen=True)
@@ -354,6 +355,73 @@ def _usage_envelope(response: Mapping[str, Any]) -> ProactiveUsageEnvelope:
     )
 
 
+def _looks_like_truncated_json(content: str) -> bool:
+    stripped = content.rstrip()
+    if not stripped:
+        return True
+    try:
+        json.loads(stripped)
+    except json.JSONDecodeError as exc:
+        if exc.msg.startswith("Unterminated string"):
+            return True
+        if exc.msg == "Extra data":
+            return False
+        # A length-limited JSON object/array normally ends at an unfinished
+        # structural token. Do not retry arbitrary malformed JSON whose parse
+        # error occurs away from the end of the provider content.
+        if exc.pos == len(stripped):
+            return True
+        if exc.pos < max(len(stripped) - 1, 0):
+            return False
+        return stripped.endswith(("{", "[", ":", ",", '"'))
+    return False
+
+
+def _should_retry_direct_extraction(
+    response: Any,
+    request: ProactiveCompletionRequest,
+    provider_request: _ProviderRequest,
+) -> bool:
+    """Retry only the known dev-direct extraction length exhaustion shape."""
+    if (
+        provider_request.fallback_class != "dev_direct_openai"
+        or request.operation != ProactiveOperation.EXTRACTION
+        or request.max_completion_tokens >= _DIRECT_EXTRACTION_RETRY_MAX_COMPLETION_TOKENS
+    ):
+        return False
+    if not isinstance(response, Mapping):
+        return False
+    choices = response.get("choices")
+    if not isinstance(choices, list) or len(choices) != 1:
+        return False
+    choice = choices[0]
+    if not isinstance(choice, Mapping) or choice.get("finish_reason") != "length":
+        return False
+    message = choice.get("message")
+    if not isinstance(message, Mapping) or message.get("refusal"):
+        return False
+    content = message.get("content")
+    return isinstance(content, str) and _looks_like_truncated_json(content)
+
+
+async def _post_provider_completion(
+    provider_request: _ProviderRequest,
+    *,
+    max_completion_tokens: int | None = None,
+) -> Any:
+    payload = provider_request.payload
+    if max_completion_tokens is not None:
+        payload = {**payload, "max_completion_tokens": max_completion_tokens}
+    async with get_llm_gateway_semaphore():
+        response = await get_llm_gateway_client().post(
+            provider_request.url,
+            headers=provider_request.headers,
+            json=payload,
+        )
+    response.raise_for_status()
+    return response.json()
+
+
 @router.post("/v1/desktop/proactivity/completions", response_model=ProactiveCompletionEnvelope)
 async def proactive_completion(
     request: ProactiveCompletionRequest,
@@ -375,16 +443,30 @@ async def proactive_completion(
 
     await _consume_quota(uid, request.operation)
     request_id = str(uuid4())
+    provider_request: _ProviderRequest | None = None
     try:
         provider_request = _proactive_provider_request(request, uid, request_id)
-        async with get_llm_gateway_semaphore():
-            response = await get_llm_gateway_client().post(
-                provider_request.url,
-                headers=provider_request.headers,
-                json=provider_request.payload,
+        response_body = await _post_provider_completion(provider_request)
+        if _should_retry_direct_extraction(response_body, request, provider_request):
+            choice = response_body["choices"][0]
+            message = choice.get("message") if isinstance(choice, Mapping) else None
+            content = message.get("content") if isinstance(message, Mapping) else None
+            logger.warning(
+                "desktop_proactivity_direct_extraction_length_retry operation=%s finish_reason=%s "
+                "choices_count=%s content_type=%s content_length=%s initial_max_completion_tokens=%s "
+                "retry_max_completion_tokens=%s",
+                operation,
+                choice.get("finish_reason") if isinstance(choice, Mapping) else "unknown",
+                len(response_body["choices"]),
+                type(content).__name__,
+                len(content) if isinstance(content, str) else 0,
+                request.max_completion_tokens,
+                _DIRECT_EXTRACTION_RETRY_MAX_COMPLETION_TOKENS,
             )
-        response.raise_for_status()
-        response_body = response.json()
+            response_body = await _post_provider_completion(
+                provider_request,
+                max_completion_tokens=_DIRECT_EXTRACTION_RETRY_MAX_COMPLETION_TOKENS,
+            )
     except HTTPException:
         await _release_quota(uid, request.operation)
         raise
@@ -394,14 +476,14 @@ async def proactive_completion(
             logger.warning(
                 "desktop_proactivity_provider_http_error operation=%s fallback_class=%s status=%s",
                 operation,
-                provider_request.fallback_class,
+                provider_request.fallback_class if provider_request is not None else "unknown",
                 exc.response.status_code,
             )
         else:
             logger.warning(
                 "desktop_proactivity_provider_error operation=%s fallback_class=%s error_type=%s",
                 operation,
-                provider_request.fallback_class,
+                provider_request.fallback_class if provider_request is not None else "unknown",
                 type(exc).__name__,
             )
         raise HTTPException(status_code=502, detail="Proactive model unavailable") from exc
