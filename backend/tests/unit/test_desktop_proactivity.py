@@ -242,6 +242,7 @@ def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
     assert "prompt_cache_key" not in provider.payload
     assert "prompt_cache_options" not in provider.payload
     assert "metadata" not in provider.payload
+    assert provider.payload["reasoning_effort"] == "minimal"
     assert provider.fallback_class == "dev_direct_openai"
     assert fallbacks[0]["component"] == "llm_gateway"
 
