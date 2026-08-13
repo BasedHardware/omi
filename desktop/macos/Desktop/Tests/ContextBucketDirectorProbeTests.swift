@@ -47,9 +47,11 @@
         "frozen": "frozen:entry-1\n",
         "tail": #"["entry:tail-1"]"#,
         "validated_facts": #"["fact:validated-1"]"#,
-        "tasks": #"["Review synthetic item"]"#,
+        "tasks": #"[{"description":"Review synthetic item","due_at":"2026-08-13T17:00:00Z"}]"#,
         "app": "SyntheticEditor",
         "window": "Synthetic window",
+        "captured_at": "2026-08-13T16:00:00Z",
+        "notify_worthiness": "1",
       ]
       let probe = ContextBucketDirectorProbe(
         completion: {
@@ -87,10 +89,15 @@
         validatedFacts: ["fact:validated-1"],
         notifyWorthiness: 1)
       let expectedFrame = CapturedFrame(
-        jpegData: Data(), appName: "SyntheticEditor", windowTitle: "Synthetic window", frameNumber: 0)
+        jpegData: Data(), appName: "SyntheticEditor", windowTitle: "Synthetic window", frameNumber: 0,
+        captureTime: try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-08-13T16:00:00Z")))
       let expectedPrompt = ContextProactivityPromptBuilder.directorPrompt(
         snapshot: expectedSnapshot,
-        tasks: ["Review synthetic item"],
+        tasks: [
+          ContextDirectorTaskContext(
+            description: "Review synthetic item",
+            dueAt: try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-08-13T17:00:00Z")))
+        ],
         frame: expectedFrame)
 
       XCTAssertEqual(captured?.operation, ModelQoS.Proactivity.reasoningOperation)
@@ -143,10 +150,12 @@
         "header": "header",
         "frozen": "frozen",
         "tail": "[]",
-        "validated_facts": "[]",
+        "validated_facts": #"["fact:validated"]"#,
         "tasks": "[]",
         "app": "SyntheticApp",
         "window": "SyntheticWindow",
+        "captured_at": "2026-08-13T16:00:00Z",
+        "notify_worthiness": "1",
       ])
 
       XCTAssertEqual(result["decision"], "task_candidate")
@@ -160,6 +169,89 @@
       XCTAssertEqual(recorded?.operation, ModelQoS.Proactivity.reasoningOperation)
     }
 
+    func testReplayReturnsEffectiveSilenceWithoutModelForIneligibleSnapshot() async throws {
+      let recorder = CallRecorder()
+      let probe = ContextBucketDirectorProbe(
+        completion: { operation, _, _, _, _, _, _ in
+          await recorder.save(
+            operation: operation,
+            prompt: "unexpected",
+            imageData: nil,
+            schemaKeys: [],
+            cacheKey: nil,
+            maxCompletionTokens: 0,
+            authorizationSnapshotWasPresent: false)
+          throw ContextBucketDirectorProbeError.invalidModelResponse
+        }, isNonProduction: true)
+
+      let result = try await probe.run(params: [
+        "bucket_id": "synthetic-task-only-bucket",
+        "version": "1",
+        "header": "Task-only synthetic context",
+        "frozen": "entry:synthetic",
+        "tail": "[]",
+        "validated_facts": "[]",
+        "tasks": #"[{"description":"Review synthetic issue 043","due_at":null}]"#,
+        "app": "SyntheticBrowser",
+        "window": "Issue (043)",
+        "captured_at": "2026-08-13T12:10:00Z",
+        "notify_worthiness": "1",
+      ])
+
+      XCTAssertEqual(result["decision"], "silence")
+      XCTAssertEqual(result["reasoning"], "ineligible_snapshot")
+      XCTAssertEqual(result["model"], "not_invoked")
+      XCTAssertEqual(result["latency_ms"], "0")
+      let recorded = await recorder.record
+      XCTAssertNil(recorded)
+    }
+
+    func testEligibilityRequiresPositiveWorthinessAndValidatedFacts() {
+      let eligible = ContextBucketSnapshot(
+        bucketID: "eligible", versionID: 1, version: 1, header: "header",
+        frozenRankedSegment: Data(), tail: [], validatedFacts: ["fact:one"], notifyWorthiness: 1)
+      let noFacts = ContextBucketSnapshot(
+        bucketID: "no-facts", versionID: 1, version: 1, header: "header",
+        frozenRankedSegment: Data(), tail: [], validatedFacts: [], notifyWorthiness: 1)
+      let zeroWorthiness = ContextBucketSnapshot(
+        bucketID: "zero", versionID: 1, version: 1, header: "header",
+        frozenRankedSegment: Data(), tail: [], validatedFacts: ["fact:one"], notifyWorthiness: 0)
+
+      XCTAssertTrue(ContextDirectorEligibility.permitsEvaluation(of: eligible))
+      XCTAssertFalse(ContextDirectorEligibility.permitsEvaluation(of: noFacts))
+      XCTAssertFalse(ContextDirectorEligibility.permitsEvaluation(of: zeroWorthiness))
+    }
+
+    func testReplayReturnsEffectiveSilenceForZeroWorthinessWithoutModel() async throws {
+      let recorder = CallRecorder()
+      let probe = ContextBucketDirectorProbe(
+        completion: { operation, _, _, _, _, _, _ in
+          await recorder.save(
+            operation: operation, prompt: "unexpected", imageData: nil, schemaKeys: [], cacheKey: nil,
+            maxCompletionTokens: 0, authorizationSnapshotWasPresent: false)
+          throw ContextBucketDirectorProbeError.invalidModelResponse
+        }, isNonProduction: true)
+
+      let result = try await probe.run(params: [
+        "bucket_id": "synthetic-completed",
+        "version": "1",
+        "header": "Completed synthetic commitment",
+        "frozen": "entry:synthetic",
+        "tail": "[]",
+        "validated_facts": #"["fact:completed"]"#,
+        "tasks": "[]",
+        "app": "SyntheticPlanner",
+        "window": "Completed handoff",
+        "captured_at": "2026-08-13T12:10:00Z",
+        "notify_worthiness": "0",
+      ])
+
+      XCTAssertEqual(result["decision"], "silence")
+      XCTAssertEqual(result["reasoning"], "ineligible_snapshot")
+      let recorded = await recorder.record
+      XCTAssertNil(recorded)
+    }
+
     @MainActor
     func testAutomationDescriptorDeclaresNetworkOnlyAndNoDelivery() {
       DesktopAutomationActionRegistry.shared.registerBuiltins()
@@ -170,7 +262,10 @@
       XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("deliver notifications") }) == true)
       XCTAssertEqual(
         descriptor?.params,
-        ["bucket_id", "version", "header", "frozen", "tail", "validated_facts", "tasks", "app", "window"])
+        [
+          "bucket_id", "version", "header", "frozen", "tail", "validated_facts", "tasks", "app", "window",
+          "captured_at", "notify_worthiness",
+        ])
     }
 
     func testReplayFailsClosedOutsideNonProductionBeforeClientCall() async {

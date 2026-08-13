@@ -33,6 +33,8 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
   }
 
   func testDirectorPromptContainsSafetyPreambleBucketTasksAndFrameMetadata() {
+    let capturedAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let dueAt = Date(timeIntervalSince1970: 1_700_003_600)
     let snapshot = ContextBucketSnapshot(
       bucketID: "bucket", versionID: 5, version: 2, header: "Persistent work context; 2 qualifying visits.",
       frozenRankedSegment: Data("frozen:entry-1\n".utf8),
@@ -40,10 +42,14 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       validatedFacts: ["fact:PR-123"],
       notifyWorthiness: 1)
     let frame = CapturedFrame(
-      jpegData: Data(), appName: "Terminal", windowTitle: "deploy.sh", frameNumber: 9)
+      jpegData: Data(), appName: "Terminal", windowTitle: "deploy.sh", frameNumber: 9,
+      captureTime: capturedAt)
     let prompt = ContextProactivityPromptBuilder.directorPrompt(
       snapshot: snapshot,
-      tasks: ["Review PR-123", "Send release notes"],
+      tasks: [
+        ContextDirectorTaskContext(description: "Review PR-123", dueAt: dueAt),
+        ContextDirectorTaskContext(description: "Send release notes", dueAt: nil),
+      ],
       frame: frame)
     let bucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
     let expected = [
@@ -54,11 +60,12 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       bucket,
       "",
       "== OPEN OR OVERDUE TASKS ==",
-      "- Review PR-123\n- Send release notes",
+      "- Review PR-123\n  Due at (UTC): 2023-11-14T23:13:20Z\n- Send release notes",
       "",
       "== CURRENT FRAME METADATA ==",
       "App: Terminal",
       "Window: deploy.sh",
+      "Captured at (UTC): 2023-11-14T22:13:20Z",
     ].joined(separator: "\n")
 
     XCTAssertEqual(prompt, expected)
@@ -66,6 +73,14 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     XCTAssertTrue(prompt.contains("== FROZEN RANKED CONTEXT ==\nfrozen:entry-1"))
     XCTAssertTrue(prompt.contains("== RECENT TAIL ==\ntail:entry-2"))
     XCTAssertTrue(prompt.contains("== VALIDATED FACTS ==\nfact:PR-123"))
+  }
+
+  func testDirectorTaskContextBoundsDescription() {
+    let task = ContextDirectorTaskContext(
+      description: String(repeating: "x", count: ContextDirectorTaskContext.maximumDescriptionLength + 10),
+      dueAt: nil)
+
+    XCTAssertEqual(task.description.count, ContextDirectorTaskContext.maximumDescriptionLength)
   }
 
   func testFrozenRankedSegmentIsConcatenatedByteForByte() {

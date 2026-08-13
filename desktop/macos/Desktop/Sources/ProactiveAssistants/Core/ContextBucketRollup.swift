@@ -93,6 +93,18 @@ enum ContextBucketPromptAssembler {
   }
 }
 
+struct ContextDirectorTaskContext: Equatable, Sendable {
+  static let maximumDescriptionLength = 600
+
+  let description: String
+  let dueAt: Date?
+
+  init(description: String, dueAt: Date?) {
+    self.description = String(description.prefix(Self.maximumDescriptionLength))
+    self.dueAt = dueAt
+  }
+}
+
 enum ContextProactivityPromptBuilder {
   static func extractionPrompt(frame: CapturedFrame, fence: ContextVisitFence) -> String {
     let evidenceRef = frame.screenshotId.map { "screenshot:\($0)" } ?? "visit:\(fence.visitID)"
@@ -112,11 +124,15 @@ enum ContextProactivityPromptBuilder {
 
   static func directorPrompt(
     snapshot: ContextBucketSnapshot,
-    tasks: [String],
+    tasks: [ContextDirectorTaskContext],
     frame: CapturedFrame
   ) -> String {
     let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
-    let taskContext = tasks.prefix(20).map { "- \($0)" }.joined(separator: "\n")
+    let taskLines: [String] = tasks.prefix(20).map { task -> String in
+      guard let dueAt = task.dueAt else { return "- \(task.description)" }
+      return "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))"
+    }
+    let taskContext = taskLines.joined(separator: "\n")
     return """
       \(ScreenDerivedContent.untrustedPreamble)
       Decide whether interrupting now adds concrete value. Return silence unless the validated
@@ -130,7 +146,15 @@ enum ContextProactivityPromptBuilder {
       == CURRENT FRAME METADATA ==
       App: \(frame.appName)
       Window: \(frame.windowTitle ?? "")
+      Captured at (UTC): \(utcTimestamp(frame.captureTime))
       """
+  }
+
+  private static func utcTimestamp(_ date: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    return formatter.string(from: date)
   }
 }
 

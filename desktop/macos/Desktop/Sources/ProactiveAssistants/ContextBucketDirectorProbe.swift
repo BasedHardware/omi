@@ -51,7 +51,8 @@
 
     /// Replays a synthetic bucket/frame through the exact production prompt and model contract.
     /// The input values are all strings because the automation bridge has a string-valued action
-    /// ABI; list-valued fields must be JSON arrays of strings.
+    /// ABI. Tail and fact fields are JSON arrays of strings; tasks are JSON objects with
+    /// `description` and nullable `due_at` fields.
     func run(params: [String: String]) async throws -> [String: String] {
       guard isNonProduction else {
         throw ContextBucketDirectorProbeError.nonProductionOnly
@@ -65,12 +66,25 @@
         frozenRankedSegment: Data(input.frozen.utf8),
         tail: input.tail,
         validatedFacts: input.validatedFacts,
-        notifyWorthiness: 1)
+        notifyWorthiness: input.notifyWorthiness)
+      guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else {
+        return [
+          "decision": "silence",
+          "title": "",
+          "message": "",
+          "reasoning": "ineligible_snapshot",
+          "bucket_entry_ref_count": "0",
+          "fact_ref_count": "0",
+          "model": "not_invoked",
+          "latency_ms": "0",
+        ]
+      }
       let frame = CapturedFrame(
         jpegData: Data(),
         appName: input.app,
         windowTitle: input.window,
-        frameNumber: 0)
+        frameNumber: 0,
+        captureTime: input.capturedAt)
       let prompt = ContextProactivityPromptBuilder.directorPrompt(
         snapshot: snapshot,
         tasks: input.tasks,
@@ -116,9 +130,11 @@
       let frozen: String
       let tail: [String]
       let validatedFacts: [String]
-      let tasks: [String]
+      let tasks: [ContextDirectorTaskContext]
       let app: String
       let window: String
+      let capturedAt: Date
+      let notifyWorthiness: Double
 
       init(params: [String: String]) throws {
         bucketID = try Self.requiredString(params, key: "bucket_id", maxLength: 200)
@@ -132,9 +148,19 @@
         tail = try Self.requiredStringList(params, key: "tail", maxCount: 20, maxLength: 2_400)
         validatedFacts = try Self.requiredStringList(
           params, key: "validated_facts", maxCount: 20, maxLength: 2_400)
-        tasks = try Self.requiredStringList(params, key: "tasks", maxCount: 20, maxLength: 600)
+        tasks = try Self.requiredTaskList(params, key: "tasks", maxCount: 20)
         app = try Self.requiredString(params, key: "app", maxLength: 200)
         window = try Self.requiredString(params, key: "window", maxLength: 400)
+        let rawCapturedAt = try Self.requiredString(params, key: "captured_at", maxLength: 40)
+        guard let parsedCapturedAt = Self.parseTimestamp(rawCapturedAt) else {
+          throw ContextBucketDirectorProbeError.invalidParams("captured_at")
+        }
+        capturedAt = parsedCapturedAt
+        let rawWorthiness = try Self.requiredString(params, key: "notify_worthiness", maxLength: 16)
+        guard let parsedWorthiness = Double(rawWorthiness), (0...1).contains(parsedWorthiness) else {
+          throw ContextBucketDirectorProbeError.invalidParams("notify_worthiness")
+        }
+        notifyWorthiness = parsedWorthiness
       }
 
       private static func requiredString(
@@ -166,6 +192,46 @@
           throw ContextBucketDirectorProbeError.invalidParams(key)
         }
         return strings
+      }
+
+      private static func requiredTaskList(
+        _ params: [String: String],
+        key: String,
+        maxCount: Int
+      ) throws -> [ContextDirectorTaskContext] {
+        guard let raw = params[key], let data = raw.data(using: .utf8),
+          let values = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+          values.count <= maxCount
+        else {
+          throw ContextBucketDirectorProbeError.invalidParams(key)
+        }
+        return try values.map { value in
+          guard let description = value["description"] as? String,
+            !description.isEmpty,
+            description.count <= ContextDirectorTaskContext.maximumDescriptionLength
+          else {
+            throw ContextBucketDirectorProbeError.invalidParams(key)
+          }
+          let dueAt: Date?
+          if value["due_at"] == nil || value["due_at"] is NSNull {
+            dueAt = nil
+          } else if let rawDueAt = value["due_at"] as? String,
+            let parsedDueAt = parseTimestamp(rawDueAt)
+          {
+            dueAt = parsedDueAt
+          } else {
+            throw ContextBucketDirectorProbeError.invalidParams(key)
+          }
+          return ContextDirectorTaskContext(description: description, dueAt: dueAt)
+        }
+      }
+
+      private static func parseTimestamp(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: value) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
       }
 
       private static func frozenString(_ raw: String?) throws -> String {

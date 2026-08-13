@@ -26,6 +26,12 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
   }
 }
 
+enum ContextDirectorEligibility {
+  static func permitsEvaluation(of snapshot: ContextBucketSnapshot) -> Bool {
+    snapshot.notifyWorthiness > 0 && !snapshot.validatedFacts.isEmpty
+  }
+}
+
 extension ContextBucketStore {
   func activeFenceIsValid(_ fence: ContextVisitFence) async -> Bool {
     let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
@@ -95,7 +101,7 @@ actor ContextProactivityEngine {
     else { return }
     // Facts are the only source of notification worthiness. A bucket containing
     // ambient narrative alone cannot purchase a frontier-model call.
-    guard snapshot.notifyWorthiness > 0, !snapshot.validatedFacts.isEmpty else { return }
+    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
     guard
       let currentFrame = await MainActor.run(body: {
         AssistantCoordinator.shared.trackedFrameForDirector(startedAt: fence.startedAt)
@@ -133,12 +139,14 @@ actor ContextProactivityEngine {
       return
     }
 
-    let taskDescriptions = await MainActor.run {
-      (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks).prefix(20).map(\.description)
+    let taskContext = await MainActor.run {
+      (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks).prefix(20).map {
+        ContextDirectorTaskContext(description: $0.description, dueAt: $0.dueAt)
+      }
     }
     let prompt = ContextProactivityPromptBuilder.directorPrompt(
       snapshot: snapshot,
-      tasks: taskDescriptions,
+      tasks: taskContext,
       frame: currentFrame)
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
