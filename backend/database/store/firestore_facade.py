@@ -137,6 +137,28 @@ def _firestore_errors():
         raise _gexc.AlreadyExists(str(exc)) from exc
 
 
+class _AggregationResult:
+    """One Firestore aggregation cell. Upstream reads ``.value`` (the count) off it."""
+
+    __slots__ = ("value", "alias")
+
+    def __init__(self, value: int, alias: str = "field_1") -> None:
+        self.value = value
+        self.alias = alias
+
+
+class _AggregationQuery:
+    """Firestore ``AggregationQuery`` shape. ``count()`` returns this, not a bare int: every source
+    call site reads the total as ``q.count().get()[0][0].value`` (x_posts, conversations, folders,
+    apps, action_items, daily_summaries, chat), so ``get()`` yields a nested ``[[AggregationResult]]``."""
+
+    def __init__(self, value: int) -> None:
+        self._value = value
+
+    def get(self, transaction: Any = None, **kwargs: Any) -> List[List["_AggregationResult"]]:
+        return [[_AggregationResult(self._value)]]
+
+
 class _Snapshot:
     """Firestore ``DocumentSnapshot`` shape over a neutral :class:`StoredDocument`."""
 
@@ -325,8 +347,9 @@ class _Query:
             start_after=self._resolve_start_after(),
         )
 
-    def count(self) -> int:
-        return self._client._store.count(self._collection, filters=self._filters or None)
+    def count(self) -> "_AggregationQuery":
+        # Firestore's count() returns an AggregationQuery; callers do .count().get()[0][0].value.
+        return _AggregationQuery(self._client._store.count(self._collection, filters=self._filters or None))
 
     def stream(self, transaction: Optional["_FacadeTransaction"] = None) -> Iterable[_Snapshot]:
         for stored in self._run():

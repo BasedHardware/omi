@@ -121,11 +121,13 @@ def test_document_id_validation_rejects_path_injection_and_reserved_ids():
 
 
 def test_count_over_filters():
+    # count() returns a Firestore AggregationQuery, read as .count().get()[0][0].value — the idiom
+    # every source call site uses (x_posts, conversations, apps, action_items, chat, ...).
     c = _client()
     for i, s in enumerate(["a", "b", "a"]):
         c.document(f"users/u1/goals/g{i}").set({"status": s})
-    assert c.collection("users/u1/goals").count() == 3
-    assert c.collection("users/u1/goals").where(filter=FieldFilter("status", "==", "a")).count() == 2
+    assert c.collection("users/u1/goals").count().get()[0][0].value == 3
+    assert c.collection("users/u1/goals").where(filter=FieldFilter("status", "==", "a")).count().get()[0][0].value == 2
 
 
 def test_collections_enumerates_subcollections_for_recursive_delete():
