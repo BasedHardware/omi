@@ -667,6 +667,97 @@ def _name_match_tier(app: App, query: str) -> int:
     return 2
 
 
+def _serves_public_catalog(my_apps: bool | None, installed_apps: bool | None) -> bool:
+    """Whether this search reads the shared public catalog rather than one user's own apps.
+
+    `my_apps` and `installed_apps` both scope the result to the caller, so they cannot be served
+    from a catalog shared between users. Everything else is the same approved public list for
+    everybody.
+    """
+    return not my_apps and not installed_apps
+
+
+def _public_catalog_for_search(category: str | None, capability: str | None) -> List[App]:
+    """The approved public apps for a search, taken from the catalog the browse endpoints share.
+
+    `search_apps_db`'s default branch selects `approved == True AND private == False`, which is
+    exactly what `get_approved_available_apps()` already holds: a 10-minute Redis copy behind a
+    singleflight memory cache, invalidated by `invalidate_approved_apps_cache()` on every approve,
+    publish, unpublish and visibility change.
+
+    Reading it here is what removes the per-keystroke Firestore scan. It deliberately reuses the
+    existing catalog rather than adding a second cached copy, because a second copy would need its
+    own invalidation — and a public list that goes stale independently is how an unpublished app
+    stays visible after its owner hides it.
+    """
+    apps = get_approved_available_apps(include_reviews=True)
+    # Re-assert visibility on the way out, exactly as the browse endpoints do. The source is
+    # already approved-and-public, so this changes nothing today; it is here so a future widening
+    # of the shared catalog cannot quietly make search the endpoint that leaks a private app.
+    apps = [app for app in apps if app.approved and not app.private]
+    if category:
+        apps = [app for app in apps if app.category == category]
+    if capability:
+        apps = filter_apps_by_capability(apps, capability)
+
+    # Copy before returning. These App objects are the cache's own, handed to every request that
+    # asks for the catalog, so the caller stamping a per-user `enabled` onto them would publish one
+    # user's installs to everyone served from the same cached list until it expired.
+    return [app.model_copy() for app in apps]
+
+
+def _personal_apps_for_search(
+    uid: str,
+    category: str | None,
+    capability: str | None,
+    my_apps: bool,
+    installed_apps: bool,
+) -> List[App]:
+    """The caller's own or installed apps, read live because they are not shareable between users."""
+    enabled_app_ids = list(get_enabled_apps(uid)) if installed_apps else None
+    apps_data = search_apps_db(
+        uid=uid,
+        category=category,
+        capability=capability,
+        my_apps=my_apps,
+        installed_apps=installed_apps,
+        enabled_app_ids=enabled_app_ids,
+    )
+
+    # Drop any malformed record missing an id before enrichment: id drives the installs/reviews
+    # lookups below and the pre-loop app_ids list, so a missing id would KeyError before the
+    # per-record ValidationError guard can catch it.
+    valid_apps_data = [a for a in apps_data if a.get('id')]
+    skipped_no_id = len(apps_data) - len(valid_apps_data)
+    if skipped_no_id:
+        logger.warning("Skipping %d malformed app record(s) without an id in search results", skipped_no_id)
+
+    app_ids = [app['id'] for app in valid_apps_data]
+    apps_installs = get_apps_installs_count(app_ids)
+    apps_reviews = get_apps_reviews(app_ids)
+
+    apps: List[App] = []
+    for app_dict in valid_apps_data:
+        app_dict['installs'] = apps_installs.get(app_dict['id'], 0)
+
+        # Calculate average from reviews
+        reviews = apps_reviews.get(app_dict['id'], {})
+        scores = [_clamp_review_score(x['score']) for x in reviews.values()]
+        app_dict['rating_avg'] = sum(scores) / len(scores) if scores else None
+        app_dict['rating_count'] = len(scores)
+
+        # Skip a malformed/legacy app document rather than 500 the whole search page.
+        try:
+            apps.append(App(**app_dict))
+        except ValidationError as e:
+            logger.warning(
+                "Skipping malformed app %s in search results: %s",
+                app_dict.get('id'),
+                [err['loc'][0] for err in e.errors() if err.get('loc')],
+            )
+    return apps
+
+
 @router.get('/v2/apps/search', tags=['v2'], response_model=AppSearchResponse)
 def search_apps(
     q: str | None = Query(default=None, description='Search query for app name or description'),
@@ -687,56 +778,23 @@ def search_apps(
     Returns a flat list of apps matching the search and filter criteria.
     """
 
-    enabled_app_ids = None
-    if installed_apps:
-        enabled_app_ids = list(get_enabled_apps(uid))
-
-    apps_data = search_apps_db(
-        uid=uid,
-        category=category,
-        capability=capability,
-        my_apps=my_apps or False,
-        installed_apps=installed_apps or False,
-        enabled_app_ids=enabled_app_ids,
-    )
-
     user_enabled = set(get_enabled_apps(uid))
 
-    # Drop any malformed record missing an id before enrichment: id drives the installs/reviews/
-    # enabled lookups below and the pre-loop app_ids list, so a missing id would KeyError before the
-    # per-record ValidationError guard can catch it.
-    valid_apps_data = [a for a in apps_data if a.get('id')]
-    skipped_no_id = len(apps_data) - len(valid_apps_data)
-    if skipped_no_id:
-        logger.warning("Skipping %d malformed app record(s) without an id in search results", skipped_no_id)
-    apps_data = valid_apps_data
+    if _serves_public_catalog(my_apps, installed_apps):
+        apps = _public_catalog_for_search(category, capability)
+    else:
+        apps = _personal_apps_for_search(
+            uid=uid,
+            category=category,
+            capability=capability,
+            my_apps=bool(my_apps),
+            installed_apps=bool(installed_apps),
+        )
 
-    app_ids = [app['id'] for app in apps_data]
-    apps_installs = get_apps_installs_count(app_ids)
-    apps_reviews = get_apps_reviews(app_ids)
-
-    apps = []
-
-    for app_dict in apps_data:
-        app_dict['enabled'] = app_dict['id'] in user_enabled
-        app_dict['rejected'] = app_dict.get('approved') is False
-        app_dict['installs'] = apps_installs.get(app_dict['id'], 0)
-
-        # Calculate average from reviews
-        reviews = apps_reviews.get(app_dict['id'], {})
-        scores = [_clamp_review_score(x['score']) for x in reviews.values()]
-        app_dict['rating_avg'] = sum(scores) / len(scores) if scores else None
-        app_dict['rating_count'] = len(scores)
-
-        # Skip a malformed/legacy app document rather than 500 the whole search page.
-        try:
-            apps.append(App(**app_dict))
-        except ValidationError as e:
-            logger.warning(
-                "Skipping malformed app %s in search results: %s",
-                app_dict.get('id'),
-                [err['loc'][0] for err in e.errors() if err.get('loc')],
-            )
+    # Whether the caller has this app installed is the one per-user fact in the result, so it is
+    # stamped per request and never enters the shared catalog cache.
+    for app in apps:
+        app.enabled = app.id in user_enabled
 
     # Always exclude persona type apps from results
     filtered_apps = [app for app in apps if not app.is_a_persona()]

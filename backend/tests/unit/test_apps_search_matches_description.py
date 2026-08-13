@@ -11,6 +11,11 @@ regardless of installs, or the app the user typed the name of falls off page 1.
 
 Test isolation follows test_apps_search_poison_guard.py: import routers.apps normally, patch the
 import-cheap db helpers, and call the handler directly.
+
+The seam moved but the assertions did not: the public search path now reads the catalog shared with
+the browse endpoints (`get_approved_available_apps`) rather than calling `search_apps_db` itself, so
+that is what these tests feed. Every expected result below is unchanged from when this file was
+written — only where the apps come from is different.
 """
 
 import os
@@ -18,6 +23,7 @@ import os
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
+from models.app import App  # noqa: E402
 from routers import apps as apps_mod  # noqa: E402
 
 
@@ -30,14 +36,16 @@ def _app_dict(app_id, name, description):
         'description': description,
         'image': 'http://img',
         'capabilities': ['chat'],
+        # The shared catalog holds approved public apps, and search re-asserts that on the way out.
+        'approved': True,
+        'private': False,
     }
 
 
 def _search(monkeypatch, records, q, installs=None):
-    monkeypatch.setattr(apps_mod, 'search_apps_db', lambda **kw: [dict(r) for r in records])
+    catalog = [App(**{**record, 'installs': (installs or {}).get(record['id'], 0)}) for record in records]
+    monkeypatch.setattr(apps_mod, 'get_approved_available_apps', lambda include_reviews=False: catalog)
     monkeypatch.setattr(apps_mod, 'get_enabled_apps', lambda uid: set())
-    monkeypatch.setattr(apps_mod, 'get_apps_installs_count', lambda ids: installs or {})
-    monkeypatch.setattr(apps_mod, 'get_apps_reviews', lambda ids: {})
 
     return apps_mod.search_apps(
         q=q,

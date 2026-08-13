@@ -4,6 +4,11 @@ search_apps builds App(**app_dict) in a loop over raw Firestore app documents. O
 malformed app document (missing a required field like name/category/author) previously raised
 ValidationError and 500'd the entire search result for the user. The guard skips + logs it.
 
+These now run against `my_apps=True`, which is the scope that still reads raw documents through
+`search_apps_db`. The public catalog moved to the shared, already-built list the browse endpoints
+use, and carries the same guard upstream in `_safe_build_app` — covered by
+test_apps_search_shared_catalog.py. The assertions here are unchanged.
+
 Test isolation: routers.apps imports cleanly, so the test imports it normally, patches the
 import-cheap db helpers with monkeypatch.setattr, and calls the handler directly.
 """
@@ -42,7 +47,7 @@ def test_search_apps_skips_malformed_record(monkeypatch):
         rating=None,
         capability=None,
         sort=None,
-        my_apps=None,
+        my_apps=True,
         installed_apps=None,
         offset=0,
         limit=20,
@@ -69,7 +74,7 @@ def test_search_apps_skips_record_without_id(monkeypatch):
         rating=None,
         capability=None,
         sort=None,
-        my_apps=None,
+        my_apps=True,
         installed_apps=None,
         offset=0,
         limit=20,
