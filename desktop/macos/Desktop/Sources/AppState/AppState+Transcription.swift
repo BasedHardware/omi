@@ -377,23 +377,17 @@ extension AppState {
     // "Microphone Isn't Capturing Audio" alert every ~90s — a permission problem wearing
     // a hardware costume. startTranscription() has its own guard, but resume, the meeting
     // gate, and the watchdog's own rebuild all arm capture through here without passing it.
-    switch AudioCaptureService.authorizationStatus() {
-    case .authorized:
-      break
-    case .notDetermined:
+    var gateAction = MicrophoneCaptureAuthorizationPolicy.action(
+      for: AudioCaptureService.authorizationStatus())
+    if gateAction == .requestPermission {
       log("Transcription: microphone permission undetermined — requesting before capture")
-      if await AudioCaptureService.requestPermission() {
-        break
-      }
+      gateAction = MicrophoneCaptureAuthorizationPolicy.action(
+        afterRequestGranted: await AudioCaptureService.requestPermission())
+    }
+    guard gateAction == .proceed else {
       surfaceMicrophonePermissionAlert()
       stopTranscription()
       return
-    case .denied, .restricted:
-      surfaceMicrophonePermissionAlert()
-      stopTranscription()
-      return
-    @unknown default:
-      break
     }
 
     configureSharedCaptureWatchdog(audioCaptureService)
@@ -803,10 +797,14 @@ extension AppState {
         recoveryAttempts: silentMicRecoveryAttempts)
       stopTranscription()
       // An unauthorized app receives exactly this symptom — endless zero samples — so
-      // check permission before blaming the hardware and sending the user to swap mics.
-      if AudioCaptureService.authorizationStatus() != .authorized {
+      // the policy checks permission before blaming the hardware and sending the user
+      // to swap mics.
+      switch MicrophoneCaptureAuthorizationPolicy.terminalAlert(
+        for: AudioCaptureService.authorizationStatus())
+      {
+      case .permission:
         surfaceMicrophonePermissionAlert()
-      } else {
+      case .hardware:
         showAlert(
           title: "Microphone Isn't Capturing Audio",
           message:
