@@ -270,9 +270,10 @@ extension ContextBucketStore {
         sql: """
           SELECT statement, identifiersJson FROM bucket_facts
           WHERE bucketID = ? AND validityState = 'validated'
-          ORDER BY createdAt DESC LIMIT 250
+            AND (expiresAt IS NULL OR expiresAt > ?)
+          ORDER BY id DESC LIMIT 250
           """,
-        arguments: [bucketID]
+        arguments: [bucketID, now]
       ).compactMap { row -> BucketFactValidator.ExistingFactIdentity? in
         guard
           let existingStatement = row["statement"] as String?,
