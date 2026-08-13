@@ -506,6 +506,13 @@ def get_llm(
         )
 
     model, provider = _get_model_config(feature)
+    # The feature lane (feature_auto_lane_id) is pinned to the feature's
+    # resolved provider. When BYOK selection below switches providers, the
+    # gateway lane for this feature still routes to the original provider, so a
+    # provider-switched BYOK request must bypass the fixed lane and use the
+    # direct client — the gateway would otherwise reject the forwarded key
+    # with missing_byok_key. Keep the pre-selection provider to detect the switch.
+    lane_provider = _effective_byok_provider(model, provider)
 
     if provider == 'anthropic' and not gateway_feature_mode:
         raise ValueError(
@@ -565,10 +572,11 @@ def get_llm(
             model, provider = byok_model, byok_prov
             byok_key = byok_key_for_profile
 
-    if byok_key and gateway_feature_mode:
+    effective_provider = _effective_byok_provider(model, provider)
+    if byok_key and gateway_feature_mode and effective_provider == lane_provider:
         result = get_or_create_omi_gateway_llm_for_byok(
             feature_auto_lane_id(feature),
-            provider=_effective_byok_provider(model, provider),
+            provider=effective_provider,
             api_key=byok_key,
             streaming=streaming,
             feature=feature,
@@ -652,6 +660,7 @@ def get_qos_info() -> Dict[str, Dict[str, str]]:
     all_features = get_all_configured_features()
     for feature in sorted(all_features):
         model, provider = _get_model_config(feature)
+
         info[feature] = {
             'model': model,
             'profile': get_active_profile_name(),
