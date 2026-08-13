@@ -11,6 +11,7 @@ import {
   cleanupIosIntermediates,
   macRuntimeAppName,
   parseMacProbe,
+  prepareRuntimeOutputDir,
   runtimeProbeScript,
   runtimeFixtureName,
   requireIosDiskHeadroom,
@@ -175,6 +176,19 @@ test("iOS cleanup rejects symlinked output authority", () => {
     rmSync(scratch, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
   }
+});
+
+test("runtime output is confined to a real core build child", () => {
+  const scratch = mkdtempSync(path.join(root, ".build", "runtime-output-custody-test-"));
+  try {
+    assert.equal(prepareRuntimeOutputDir(path.join(scratch, "nested")), path.join(scratch, "nested"));
+    assert.throws(() => prepareRuntimeOutputDir(path.join(root, "packages/surfaces")), /core\/\.build/);
+    const outside = mkdtempSync(path.join(tmpdir(), "runtime-output-outside-"));
+    const link = path.join(scratch, "linked");
+    assert.equal(spawnSync("ln", ["-s", outside, link]).status, 0);
+    assert.throws(() => prepareRuntimeOutputDir(link), /symlink/);
+    rmSync(outside, { recursive: true, force: true });
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
 });
 
 test("native surfaces input is bounded and rejects symlinks", () => {

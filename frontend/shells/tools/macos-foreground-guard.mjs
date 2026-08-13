@@ -10,6 +10,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const asn = /^ASN:0x[0-9a-f]+-0x[0-9a-f]+:$/i;
+const maxCapturedBytesPerStream = 16 * 1024 * 1024;
 
 function probeForeground() {
   return new Promise((resolve, reject) => {
@@ -84,8 +85,6 @@ export async function guardedRun(spec) {
   let previousSampleAt = Date.now();
   let maxSampleGapMilliseconds = 0;
   const child = spawn(spec.command, spec.args, { cwd: spec.cwd, env: spec.env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
-  child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
-  child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
   const groupAlive = () => {
     try { process.kill(-child.pid, 0); return true; }
     catch (error) { return error?.code !== "ESRCH"; }
@@ -110,6 +109,18 @@ export async function guardedRun(spec) {
     })();
     return terminationPromise;
   };
+  const capture = (chunks, streamName) => (chunk) => {
+    const current = chunks.reduce((total, part) => total + part.length, 0);
+    const bytes = Buffer.from(chunk);
+    const remaining = Math.max(0, maxCapturedBytesPerStream - current);
+    if (remaining) chunks.push(bytes.subarray(0, remaining));
+    if (bytes.length > remaining) {
+      monitorFault ||= `guarded command ${streamName} exceeded ${maxCapturedBytesPerStream} bytes`;
+      stopChild();
+    }
+  };
+  child.stdout.on("data", capture(stdout, "stdout"));
+  child.stderr.on("data", capture(stderr, "stderr"));
   const sample = async () => {
     if (monitoring || monitorFault) return;
     monitoring = true;

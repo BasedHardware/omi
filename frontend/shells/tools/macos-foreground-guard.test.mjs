@@ -58,6 +58,19 @@ test("foreground guard fails closed on timeout and writes a terminal result", ()
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 });
 
+test("foreground guard bounds noisy child output and fails closed", () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), "omi-focus-output-bound-"));
+  try {
+    const result = path.join(scratch, "result.json"); const stdout = path.join(scratch, "stdout"); const stderr = path.join(scratch, "stderr");
+    const run = spawnSync(process.execPath, [helper, "--result", result, "--stdout", stdout, "--stderr", stderr, "--timeout", "5", ...guardArgs, "--", "/bin/sh", "-c", "yes x | head -c 17000000"], { encoding: "utf8", timeout: 10_000 });
+    assert.notEqual(run.status, 0);
+    const receipt = JSON.parse(readFileSync(result, "utf8"));
+    assert.match(receipt.monitor_error, /stdout exceeded 16777216 bytes/);
+    assert.ok(readFileSync(stdout).length <= 16 * 1024 * 1024);
+    assert.equal(readFileSync(stderr).length, 0);
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
+
 test("foreground guard kills a resistant command group within its terminal deadline", () => {
   const scratch = mkdtempSync(path.join(tmpdir(), "omi-focus-group-"));
   try {
