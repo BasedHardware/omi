@@ -169,6 +169,17 @@ enum ContextProactivityPromptBuilder {
   }
 }
 
+enum ContextBucketCompactionPolicy {
+  static let retainedTailCount = 5
+
+  static func shouldCompact(uncompressedCount: Int) -> Bool {
+    // Snapshot reads retain only the newest tail. Compact as soon as an older
+    // entry would fall outside that read window, even when narratives are
+    // short, so context cannot disappear between the tail and frozen segment.
+    return uncompressedCount > retainedTailCount
+  }
+}
+
 extension ContextBucketStore {
   func writeExtraction(
     _ extraction: BucketExtraction,
@@ -328,9 +339,8 @@ extension ContextBucketStore {
           WHERE bucketID = ? AND isCompacted = 0 ORDER BY createdAt ASC
         """,
       arguments: [bucketID])
-    let total = uncompressed.reduce(0) { $0 + ($1["tokenCount"] as Int? ?? 0) }
-    if total > ContextBucketPromptAssembler.ambientTailCompactionThreshold, uncompressed.count > 5 {
-      let compacted = uncompressed.dropLast(5)
+    if ContextBucketCompactionPolicy.shouldCompact(uncompressedCount: uncompressed.count) {
+      let compacted = uncompressed.dropLast(ContextBucketCompactionPolicy.retainedTailCount)
       var rankedLines = (String(data: frozen, encoding: .utf8) ?? "")
         .split(separator: "\n", omittingEmptySubsequences: true)
         .map { String($0) + "\n" }

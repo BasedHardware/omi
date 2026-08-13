@@ -3,6 +3,14 @@ import XCTest
 @testable import Omi_Computer
 
 final class ContextBucketPromptAssemblerTests: XCTestCase {
+  func testCompactionStartsBeforeAnEntryFallsOutsideTheRetainedTail() {
+    XCTAssertFalse(
+      ContextBucketCompactionPolicy.shouldCompact(uncompressedCount: 5))
+    XCTAssertTrue(
+      ContextBucketCompactionPolicy.shouldCompact(uncompressedCount: 6),
+      "The sixth short narrative must move into frozen context instead of disappearing")
+  }
+
   func testExtractionPromptPreservesSafetyPreambleAndScreenshotEvidenceRef() {
     let frame = CapturedFrame(
       jpegData: Data(), appName: "Xcode", windowTitle: "PR-123", frameNumber: 7, screenshotId: 42)
