@@ -5,6 +5,10 @@ import {
   defineModelPipelineExclusivity,
   MODEL_PIPELINE_RESOURCE_VERSION,
 } from "../../apps/service/workers/model-pipeline-exclusivity";
+import {
+  bindModelPipelineResourceAdmission,
+  defineModelPipelineResourceAdmission,
+} from "../../apps/service/workers/model-pipeline-resource-admission";
 import { createPostgresListenAttributionBeliefOneShotRuntime } from
   "./listen-attribution-belief-one-shot-runtime";
 
@@ -13,11 +17,14 @@ const unusedPool = (): PostgresTransactionPool => Object.freeze({
 });
 
 const pipelineOptions = () => ({
-  model_pipeline_exclusivity: defineModelPipelineExclusivity(async (_resource, callback) =>
-    Object.freeze({ kind: "completed" as const, value: await callback(new AbortController().signal) })),
+  model_pipeline_exclusivity: bindModelPipelineResourceAdmission(
+    defineModelPipelineExclusivity(async (_resource, callback) =>
+      Object.freeze({ kind: "completed" as const, value: await callback(new AbortController().signal) })),
+    defineModelPipelineResourceAdmission([{ resource_digest: "d".repeat(64), max_concurrency: 1 }]),
+  ),
   resolve_model_pipeline_resource: async () => Object.freeze({
     version: MODEL_PIPELINE_RESOURCE_VERSION,
-    resource_digest: "a".repeat(64),
+    resource_digest: "d".repeat(64),
   }),
 });
 

@@ -7,17 +7,24 @@ import {
   defineModelPipelineExclusivity,
   MODEL_PIPELINE_RESOURCE_VERSION,
 } from "../../apps/service/workers/model-pipeline-exclusivity";
+import {
+  bindModelPipelineResourceAdmission,
+  defineModelPipelineResourceAdmission,
+} from "../../apps/service/workers/model-pipeline-resource-admission";
 
 const unusedPool: PostgresTransactionPool = Object.freeze({
   withTransaction: async () => { throw new Error("constructor_must_not_open_postgres"); },
 });
 
 const pipelineOptions = () => ({
-  model_pipeline_exclusivity: defineModelPipelineExclusivity(async (_resource, callback) =>
-    Object.freeze({ kind: "completed" as const, value: await callback(new AbortController().signal) })),
+  model_pipeline_exclusivity: bindModelPipelineResourceAdmission(
+    defineModelPipelineExclusivity(async (_resource, callback) =>
+      Object.freeze({ kind: "completed" as const, value: await callback(new AbortController().signal) })),
+    defineModelPipelineResourceAdmission([{ resource_digest: "c".repeat(64), max_concurrency: 1 }]),
+  ),
   resolve_model_pipeline_resource: async () => Object.freeze({
     version: MODEL_PIPELINE_RESOURCE_VERSION,
-    resource_digest: "b".repeat(64),
+    resource_digest: "c".repeat(64),
   }),
 });
 

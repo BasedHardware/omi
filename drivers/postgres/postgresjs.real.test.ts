@@ -127,8 +127,19 @@ import { createPostgresDurableMemoryWorkResultRepository } from "./durable-memor
 import { createPostgresDurableMemoryWorkSuccessRepository } from "./durable-memory-work-success";
 import { createPostgresFormationWorkInputRepository } from "./formation-work-input";
 import { createPostgresFormationOneShotRuntime } from "./formation-one-shot-runtime";
-import { createPostgresModelPipelineExclusivity } from "./model-pipeline-exclusivity";
+import { createPostgresProductionModelPipelineExclusivity } from "./model-pipeline-exclusivity";
 import { MODEL_PIPELINE_RESOURCE_VERSION } from "../../apps/service/workers/model-pipeline-exclusivity";
+import {
+  currentProductionMigrationManifestDigest,
+  parseProductionQualificationManifest,
+  PRODUCTION_QUALIFICATION_BUN_IMAGE,
+  PRODUCTION_QUALIFICATION_DEPENDENCY_ARTIFACT_VERSION,
+  PRODUCTION_QUALIFICATION_MANIFEST_VERSION,
+  PRODUCTION_QUALIFICATION_NODE_CONTROL_IMAGE,
+  PRODUCTION_QUALIFICATION_PLATFORM,
+  PRODUCTION_QUALIFICATION_POSTGRES_CLIENT,
+  PRODUCTION_QUALIFICATION_POSTGRES_SERVER_VERSION,
+} from "../../scripts/production-qualification-manifest";
 import {
   createPostgresFirebaseAuthorizedGraphSnapshotRuntime,
   projectFirebaseAuthorizedGraphSnapshotLoad,
@@ -191,6 +202,43 @@ import { DeterministicFakeModel, type ModelInvokeRequest } from "../model/port";
 
 const explicitTestUrl = process.env["OMI_TEST_POSTGRES_URL"];
 const realTest = explicitTestUrl ? describe : describe.skip;
+const QUALIFICATION_MANIFEST_RECEIPT = parseProductionQualificationManifest({
+  version: PRODUCTION_QUALIFICATION_MANIFEST_VERSION,
+  source: {
+    source_commit: "a".repeat(40),
+    dependency_artifact_version: PRODUCTION_QUALIFICATION_DEPENDENCY_ARTIFACT_VERSION,
+    dependency_artifact_receipt_digest: "0".repeat(64),
+    platform: PRODUCTION_QUALIFICATION_PLATFORM,
+    bun_image: PRODUCTION_QUALIFICATION_BUN_IMAGE,
+    node_control_image: PRODUCTION_QUALIFICATION_NODE_CONTROL_IMAGE,
+    postgres_server_version_num: PRODUCTION_QUALIFICATION_POSTGRES_SERVER_VERSION,
+    postgres_client: PRODUCTION_QUALIFICATION_POSTGRES_CLIENT,
+    migration_manifest_digest: currentProductionMigrationManifestDigest(),
+  },
+  workload: {
+    account_count: 2, duration_seconds: 60,
+    memory_read_steady_rps: 1, memory_read_burst_rps: 1,
+    memory_read_steady_concurrency: 1, memory_read_burst_concurrency: 1,
+    mcp_steady_rps: 0, mcp_burst_rps: 0,
+    mcp_steady_concurrency: 0, mcp_burst_concurrency: 0,
+    shadow_jobs_per_minute: 1,
+  },
+  objectives: {
+    p95_memory_read_ms: 1, p95_mcp_ms: 1, p95_pool_acquire_ms: 1,
+    cold_start_ms: 1, cpu_millicores: 1, rss_mib: 1, graceful_shutdown_ms: 1,
+  },
+  connections: {
+    cloud_sql_total: 7, serving: 1, candidate: 1, rollback: 1,
+    jobs: 1, migration: 1, operator: 1, emergency: 1,
+  },
+  recovery: {
+    authoritative_rpo_seconds: 0, authoritative_rto_seconds: 1,
+    rebuildable_rpo_seconds: 0, rebuildable_rto_seconds: 1,
+  },
+  model_resources: "0123456789abcdef".split("").map((character) => ({
+    resource_digest: character.repeat(64), max_concurrency: 1,
+  })),
+});
 const QUALIFICATION_DATABASE_GENERATION_DIGEST = "d".repeat(64);
 const QUALIFICATION_RESTORE_RELEASE = Object.freeze({
   database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
@@ -1326,7 +1374,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       const beliefLossSignals: AbortSignal[] = [];
       const beliefRuntime = createPostgresListenAttributionBeliefOneShotRuntime({
         pool: appRolePool,
-        model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+        model_pipeline_exclusivity: createPostgresProductionModelPipelineExclusivity(modelLockPool, QUALIFICATION_MANIFEST_RECEIPT),
         resolve_model_pipeline_resource: async () => Object.freeze({
           version: MODEL_PIPELINE_RESOURCE_VERSION,
           resource_digest: "d".repeat(64),
@@ -1607,8 +1655,8 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       connectionString: explicitTestUrl!, maxConnections: 1,
     });
     try {
-      const holder = createPostgresModelPipelineExclusivity(modelLockPool);
-      const contender = createPostgresModelPipelineExclusivity(contenderPool);
+      const holder = createPostgresProductionModelPipelineExclusivity(modelLockPool, QUALIFICATION_MANIFEST_RECEIPT);
+      const contender = createPostgresProductionModelPipelineExclusivity(contenderPool, QUALIFICATION_MANIFEST_RECEIPT);
       const same = Object.freeze({
         version: MODEL_PIPELINE_RESOURCE_VERSION,
         resource_digest: "9".repeat(64),
@@ -1649,8 +1697,8 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       connectionString: explicitTestUrl!, maxConnections: 1,
     });
     try {
-      const holder = createPostgresModelPipelineExclusivity(modelLockPool);
-      const contender = createPostgresModelPipelineExclusivity(contenderPool);
+      const holder = createPostgresProductionModelPipelineExclusivity(modelLockPool, QUALIFICATION_MANIFEST_RECEIPT);
+      const contender = createPostgresProductionModelPipelineExclusivity(contenderPool, QUALIFICATION_MANIFEST_RECEIPT);
       const resource = Object.freeze({
         version: MODEL_PIPELINE_RESOURCE_VERSION,
         resource_digest: "7".repeat(64),
@@ -2472,7 +2520,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       pool: appRolePool,
       strategies: [runtimeStrategy],
       resolve_model: async () => runtimeModel,
-      model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+      model_pipeline_exclusivity: createPostgresProductionModelPipelineExclusivity(modelLockPool, QUALIFICATION_MANIFEST_RECEIPT),
       resolve_model_pipeline_resource: async () => Object.freeze({
         version: MODEL_PIPELINE_RESOURCE_VERSION,
         resource_digest: "a".repeat(64),
@@ -2793,7 +2841,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         predicateModelCalls += 1;
         return { assertions: [] };
       }),
-      model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+      model_pipeline_exclusivity: createPostgresProductionModelPipelineExclusivity(modelLockPool, QUALIFICATION_MANIFEST_RECEIPT),
       resolve_model_pipeline_resource: async () => Object.freeze({
         version: MODEL_PIPELINE_RESOURCE_VERSION,
         resource_digest: "b".repeat(64),
@@ -2932,7 +2980,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           ],
         }] };
       }),
-      model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+      model_pipeline_exclusivity: createPostgresProductionModelPipelineExclusivity(modelLockPool, QUALIFICATION_MANIFEST_RECEIPT),
       resolve_model_pipeline_resource: async () => Object.freeze({
         version: MODEL_PIPELINE_RESOURCE_VERSION,
         resource_digest: "c".repeat(64),
@@ -5203,7 +5251,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const queryCandidateRefs: string[] = [];
     const queryRuntime = createPostgresMemoryQueryEvaluationOneShotRuntime({
       pool: appRolePool, codec_root_secret: new Uint8Array(32).fill(8),
-      model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+      model_pipeline_exclusivity: createPostgresProductionModelPipelineExclusivity(modelLockPool, QUALIFICATION_MANIFEST_RECEIPT),
       resolve_model_pipeline_resource: async () => Object.freeze({
         version: MODEL_PIPELINE_RESOURCE_VERSION,
         resource_digest: "e".repeat(64),
@@ -5301,7 +5349,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     }
     const restartedQueryRuntime = createPostgresMemoryQueryEvaluationOneShotRuntime({
       pool: appRolePool, codec_root_secret: new Uint8Array(32).fill(8),
-      model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+      model_pipeline_exclusivity: createPostgresProductionModelPipelineExclusivity(modelLockPool, QUALIFICATION_MANIFEST_RECEIPT),
       resolve_model_pipeline_resource: async () => Object.freeze({
         version: MODEL_PIPELINE_RESOURCE_VERSION,
         resource_digest: "e".repeat(64),

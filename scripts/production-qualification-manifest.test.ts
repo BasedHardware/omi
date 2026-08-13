@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  assertProductionQualificationManifestReceipt,
   currentProductionMigrationManifestDigest,
   parseProductionQualificationManifest,
   PRODUCTION_QUALIFICATION_BUN_IMAGE,
@@ -72,6 +73,7 @@ const manifest = () => ({
 describe("production qualification manifest", () => {
   test("seals every qualification coordinate and accounts for the full connection budget", () => {
     const receipt = parseProductionQualificationManifest(manifest());
+    expect(assertProductionQualificationManifestReceipt(receipt)).toBe(receipt);
     expect(receipt.version).toBe("production-qualification-manifest-receipt-v1");
     expect(receipt.manifest_digest).toMatch(/^[0-9a-f]{64}$/);
     expect(receipt.allocated_connections).toBe(90);
@@ -79,6 +81,15 @@ describe("production qualification manifest", () => {
     expect(Object.isFrozen(receipt)).toBe(true);
     expect(Object.isFrozen(receipt.manifest)).toBe(true);
     expect(Object.isFrozen(receipt.manifest.model_resources)).toBe(true);
+  });
+
+  test("brands parser-minted receipts and rejects structural lookalikes", () => {
+    const receipt = parseProductionQualificationManifest(manifest());
+    expect(assertProductionQualificationManifestReceipt(receipt)).toBe(receipt);
+    expect(() => assertProductionQualificationManifestReceipt(structuredClone(receipt)))
+      .toThrow("production_qualification_manifest_receipt_invalid");
+    expect(() => assertProductionQualificationManifestReceipt(Object.freeze({ ...receipt })))
+      .toThrow("production_qualification_manifest_receipt_invalid");
   });
 
   test("is byte-stable and changes for every material qualification class", () => {

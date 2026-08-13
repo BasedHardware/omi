@@ -84,6 +84,8 @@ export interface ProductionQualificationManifestReceipt {
   readonly unallocated_connections: number;
 }
 
+const MINTED_MANIFEST_RECEIPTS = new WeakSet<object>();
+
 const fail = (code = "production_qualification_manifest_invalid"): never => {
   throw new TypeError(code);
 };
@@ -283,11 +285,26 @@ export const parseProductionQualificationManifest = (
     recovery,
     model_resources: modelResources,
   }) as ProductionQualificationManifest;
-  return Object.freeze({
+  const receipt = Object.freeze({
     version: "production-qualification-manifest-receipt-v1" as const,
     manifest,
     manifest_digest: sha256CanonicalContent(manifest),
     allocated_connections: connections.allocated,
     unallocated_connections: connections.connections.cloud_sql_total - connections.allocated,
   });
+  MINTED_MANIFEST_RECEIPTS.add(receipt);
+  return receipt;
+};
+
+/**
+ * Proves that the receipt was produced by the strict parser in this process.
+ * Structural lookalikes cannot authorize production startup composition.
+ */
+export const assertProductionQualificationManifestReceipt = (
+  value: unknown,
+): Readonly<ProductionQualificationManifestReceipt> => {
+  if (value === null || typeof value !== "object" || !MINTED_MANIFEST_RECEIPTS.has(value)) {
+    return fail("production_qualification_manifest_receipt_invalid");
+  }
+  return value as Readonly<ProductionQualificationManifestReceipt>;
 };

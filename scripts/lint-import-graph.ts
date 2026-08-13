@@ -476,6 +476,9 @@ const consolidationWorkServiceImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][
 const productProjectionMaterializerImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/product-projection-materialization(?:\.ts)?["']/;
 const productConflictCoreImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*core\/retrieve\/product-conflict(?:\.ts)?["']/;
 const authorizedPostgresConnectionCapability = /\b(?:withAuthorizedSerializableConnectionTransaction|AuthorizedPostgresConnectionTransaction|appendAuthoritativeLedgerWithinTransaction)\b/;
+const modelPipelineAdmissionOwner = "apps/service/workers/model-pipeline-resource-admission.ts";
+const postgresModelPipelineOwner = "drivers/postgres/model-pipeline-exclusivity.ts";
+const rawModelPipelineAdmissionConstruction = /\b(?:defineModelPipelineResourceAdmission|bindModelPipelineResourceAdmission)\b/;
 
 /** Blank out comments so documentation of the fence does not trip the fence. */
 const withoutComments = (text: string): string => text
@@ -535,6 +538,22 @@ for (const file of files(root)) {
       failures.push(
         `${shown}: application code may not import the raw PostgreSQL connection/transaction capability; `
         + "compose only the sealed authoritative repository adapter",
+      );
+    }
+    if (shown !== modelPipelineAdmissionOwner
+      && shown !== postgresModelPipelineOwner
+      && shown !== "scripts/lint-import-graph.ts"
+      && rawModelPipelineAdmissionConstruction.test(code)) {
+      failures.push(
+        `${shown}: raw model-pipeline admission is private to the parser-verified PostgreSQL composition; `
+        + "production workers must consume its admitted exclusivity capability",
+      );
+    }
+    if (shown.startsWith("drivers/postgres/")
+      && shown !== postgresModelPipelineOwner
+      && /\bdefineModelPipelineExclusivity\b/.test(code)) {
+      failures.push(
+        `${shown}: PostgreSQL model-pipeline exclusivity must be constructed from a parser-minted production qualification manifest`,
       );
     }
     if (shown !== "scripts/lint-import-graph.ts"

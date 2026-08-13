@@ -12,6 +12,10 @@ import {
   defineModelPipelineExclusivity,
   MODEL_PIPELINE_RESOURCE_VERSION,
 } from "../../apps/service/workers/model-pipeline-exclusivity";
+import {
+  bindModelPipelineResourceAdmission,
+  defineModelPipelineResourceAdmission,
+} from "../../apps/service/workers/model-pipeline-resource-admission";
 
 const strategy = registerMemoryStrategy({
   version: MEMORY_STRATEGY_VERSION,
@@ -35,13 +39,17 @@ const strategy = registerMemoryStrategy({
 const unusedPool: PostgresTransactionPool = Object.freeze({
   withTransaction: async () => { throw new Error("constructor_must_not_open_postgres"); },
 });
-const exclusivity = defineModelPipelineExclusivity(async (_resource, callback) =>
-  Object.freeze({ kind: "completed" as const, value: await callback(new AbortController().signal) }));
+const resourceDigest = "b".repeat(64);
+const exclusivity = bindModelPipelineResourceAdmission(
+  defineModelPipelineExclusivity(async (_resource, callback) =>
+    Object.freeze({ kind: "completed" as const, value: await callback(new AbortController().signal) })),
+  defineModelPipelineResourceAdmission([{ resource_digest: resourceDigest, max_concurrency: 1 }]),
+);
 const pipeline = {
   model_pipeline_exclusivity: exclusivity,
   resolve_model_pipeline_resource: async () => Object.freeze({
     version: MODEL_PIPELINE_RESOURCE_VERSION,
-    resource_digest: "b".repeat(64),
+    resource_digest: resourceDigest,
   }),
 };
 

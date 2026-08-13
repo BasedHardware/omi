@@ -27,10 +27,12 @@ import { createPostgresMemoryShadowResultRepository } from
   "./memory-experiment-repository";
 import type { PostgresTransactionObservability } from "./transaction";
 import {
-  assertModelPipelineExclusivity,
-  type ModelPipelineExclusivity,
   type ModelPipelineResource,
 } from "../../apps/service/workers/model-pipeline-exclusivity";
+import {
+  assertAdmittedModelPipelineExclusivity,
+  type AdmittedModelPipelineExclusivity,
+} from "../../apps/service/workers/model-pipeline-resource-admission";
 
 const RUNTIME_PORT: unique symbol = Symbol("postgres-listen-attribution-belief-one-shot-runtime");
 const INPUT_REF = /^labinput1_[a-f0-9]{64}$/;
@@ -43,7 +45,7 @@ export interface PostgresListenAttributionBeliefOneShotOptions {
     strategy: Readonly<RegisteredMemoryStrategy>,
     evaluationRole: "baseline" | "candidate",
   ) => Promise<AttributionCalibratorPort | null>;
-  readonly model_pipeline_exclusivity: ModelPipelineExclusivity;
+  readonly model_pipeline_exclusivity: AdmittedModelPipelineExclusivity;
   readonly resolve_model_pipeline_resource: (
     strategy: Readonly<RegisteredMemoryStrategy>,
     evaluationRole: "baseline" | "candidate",
@@ -97,7 +99,7 @@ const exactRecord = (value: unknown, keys: readonly string[], code: string): Rec
 const options = (value: unknown): Readonly<{
   pool: PostgresTransactionPool;
   resolve_calibrator: PostgresListenAttributionBeliefOneShotOptions["resolve_calibrator"];
-  model_pipeline_exclusivity: ModelPipelineExclusivity;
+  model_pipeline_exclusivity: AdmittedModelPipelineExclusivity;
   resolve_model_pipeline_resource: PostgresListenAttributionBeliefOneShotOptions["resolve_model_pipeline_resource"];
   observability?: PostgresTransactionObservability;
 }> => {
@@ -115,7 +117,9 @@ const options = (value: unknown): Readonly<{
   if (typeof withTransaction !== "function" || isProxy(withTransaction)
     || typeof resolver !== "function" || isProxy(resolver)
     || typeof resourceResolver !== "function" || isProxy(resourceResolver)) fail("invalid_options");
-  const exclusivity = assertModelPipelineExclusivity(row["model_pipeline_exclusivity"]);
+  const exclusivity = assertAdmittedModelPipelineExclusivity(
+    row["model_pipeline_exclusivity"],
+  );
   const result = {
     pool: Object.freeze({
       withTransaction: <Result>(

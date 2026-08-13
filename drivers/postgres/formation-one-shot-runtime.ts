@@ -11,11 +11,11 @@ import {
   defineFormationWorkService,
 } from "../../apps/service/workers/formation-work-service";
 import type { ModelPort } from "../model/port";
-import type {
-  ModelPipelineExclusivity,
-  ModelPipelineResource,
-} from "../../apps/service/workers/model-pipeline-exclusivity";
-import { assertModelPipelineExclusivity } from "../../apps/service/workers/model-pipeline-exclusivity";
+import type { ModelPipelineResource } from "../../apps/service/workers/model-pipeline-exclusivity";
+import {
+  assertAdmittedModelPipelineExclusivity,
+  type AdmittedModelPipelineExclusivity,
+} from "../../apps/service/workers/model-pipeline-resource-admission";
 import { isProxy } from "node:util/types";
 import {
   parseRegisteredMemoryStrategy,
@@ -47,7 +47,7 @@ export interface PostgresFormationOneShotRuntimeOptions {
     job: Readonly<DurableMemoryWorkJob>,
     strategy: Readonly<RegisteredMemoryStrategy>,
   ) => Promise<ModelPort | null>;
-  readonly model_pipeline_exclusivity: ModelPipelineExclusivity;
+  readonly model_pipeline_exclusivity: AdmittedModelPipelineExclusivity;
   readonly resolve_model_pipeline_resource: (
     context: AuthorizedLedgerWriteContext,
     job: Readonly<DurableMemoryWorkJob>,
@@ -98,7 +98,9 @@ const strategyRegistry = (
 export const createPostgresFormationOneShotRuntime = (
   options: PostgresFormationOneShotRuntimeOptions,
 ): PostgresFormationOneShotRuntime => {
-  const modelPipelineExclusivity = assertModelPipelineExclusivity(options.model_pipeline_exclusivity);
+  const modelPipelineExclusivity = assertAdmittedModelPipelineExclusivity(
+    options.model_pipeline_exclusivity,
+  );
   if (typeof options.resolve_model_pipeline_resource !== "function"
     || isProxy(options.resolve_model_pipeline_resource)) {
     throw new TypeError("postgres formation runtime invalid_model_pipeline_resource_resolver");

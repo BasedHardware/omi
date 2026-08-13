@@ -87,6 +87,33 @@ test("authority fences reject issuer construction and raw PostgreSQL capabilitie
   }
 });
 
+test("PostgreSQL model workers cannot bypass parser-verified resource admission", () => {
+  const rawAdmissionFixture = join(
+    platformRoot, "drivers", "postgres", "model-resource-admission-tripwire-fixture.ts",
+  );
+  const genericLockFixture = join(
+    platformRoot, "drivers", "postgres", "generic-model-lock-tripwire-fixture.ts",
+  );
+  try {
+    writeFileSync(rawAdmissionFixture, [
+      'import { defineModelPipelineResourceAdmission } from "../../apps/service/workers/model-pipeline-resource-admission";',
+      "export const bypass = defineModelPipelineResourceAdmission;",
+    ].join("\n"));
+    writeFileSync(genericLockFixture, [
+      'import { defineModelPipelineExclusivity } from "../../apps/service/workers/model-pipeline-exclusivity";',
+      "export const bypass = defineModelPipelineExclusivity;",
+    ].join("\n"));
+    const rejected = runLint();
+    expect(rejected.status).not.toBe(0);
+    const output = `${rejected.stdout}${rejected.stderr}`;
+    expect(output).toContain("raw model-pipeline admission is private");
+    expect(output).toContain("must be constructed from a parser-minted production qualification manifest");
+  } finally {
+    rmSync(rawAdmissionFixture, { force: true });
+    rmSync(genericLockFixture, { force: true });
+  }
+});
+
 test("query evaluation constructors are private to the single composition root", () => {
   const routeFixture = join(platformRoot, "apps", "service", "routes", "query-evaluation-tripwire-fixture.ts");
   const copyFixture = join(platformRoot, "apps", "service", "composition", "memory-query-evaluation-copy.ts");

@@ -27,11 +27,11 @@ import {
   PostgresRepositoryError,
   type PostgresTransactionObservability,
 } from "./transaction";
+import type { ModelPipelineResource } from "../../apps/service/workers/model-pipeline-exclusivity";
 import {
-  assertModelPipelineExclusivity,
-  type ModelPipelineExclusivity,
-  type ModelPipelineResource,
-} from "../../apps/service/workers/model-pipeline-exclusivity";
+  assertAdmittedModelPipelineExclusivity,
+  type AdmittedModelPipelineExclusivity,
+} from "../../apps/service/workers/model-pipeline-resource-admission";
 
 const RUNTIME_PORT: unique symbol = Symbol("postgres-memory-query-evaluation-one-shot-runtime");
 const INPUT_REF = /^mqir1_[a-f0-9]{64}$/;
@@ -56,7 +56,7 @@ export interface PostgresMemoryQueryEvaluationOneShotRuntimeOptions {
   readonly pool: PostgresTransactionPool;
   readonly codec_root_secret: Uint8Array;
   readonly produce: MemoryQueryEvaluationCompositionConfig["produce"];
-  readonly model_pipeline_exclusivity: ModelPipelineExclusivity;
+  readonly model_pipeline_exclusivity: AdmittedModelPipelineExclusivity;
   readonly resolve_model_pipeline_resource: (
     request: QueryModelRequest,
   ) => Promise<Readonly<ModelPipelineResource> | null>;
@@ -144,7 +144,9 @@ const sourceFailure = (error: unknown): PostgresMemoryQueryEvaluationInputOutcom
 export const createPostgresMemoryQueryEvaluationOneShotRuntime = (
   options: PostgresMemoryQueryEvaluationOneShotRuntimeOptions,
 ): PostgresMemoryQueryEvaluationOneShotRuntime => {
-  const modelPipelineExclusivity = assertModelPipelineExclusivity(options.model_pipeline_exclusivity);
+  const modelPipelineExclusivity = assertAdmittedModelPipelineExclusivity(
+    options.model_pipeline_exclusivity,
+  );
   if (typeof options.resolve_model_pipeline_resource !== "function"
     || isProxy(options.resolve_model_pipeline_resource)) {
     throw new TypeError("postgres query evaluation runtime invalid_model_pipeline_resource_resolver");

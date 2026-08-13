@@ -17,6 +17,10 @@ import {
   defineModelPipelineExclusivity,
   MODEL_PIPELINE_RESOURCE_VERSION,
 } from "../../apps/service/workers/model-pipeline-exclusivity";
+import {
+  bindModelPipelineResourceAdmission,
+  defineModelPipelineResourceAdmission,
+} from "../../apps/service/workers/model-pipeline-resource-admission";
 
 const strategy = registerMemoryStrategy({
   version: MEMORY_STRATEGY_VERSION,
@@ -42,13 +46,17 @@ const unusedPool: PostgresTransactionPool = Object.freeze({
     throw new Error("constructor_must_not_open_postgres");
   },
 });
-const exclusivity = defineModelPipelineExclusivity(async (_resource, callback) =>
-  Object.freeze({ kind: "completed" as const, value: await callback(new AbortController().signal) }));
+const resourceDigest = "a".repeat(64);
+const exclusivity = bindModelPipelineResourceAdmission(
+  defineModelPipelineExclusivity(async (_resource, callback) =>
+    Object.freeze({ kind: "completed" as const, value: await callback(new AbortController().signal) })),
+  defineModelPipelineResourceAdmission([{ resource_digest: resourceDigest, max_concurrency: 1 }]),
+);
 const pipeline = {
   model_pipeline_exclusivity: exclusivity,
   resolve_model_pipeline_resource: async () => Object.freeze({
     version: MODEL_PIPELINE_RESOURCE_VERSION,
-    resource_digest: "a".repeat(64),
+    resource_digest: resourceDigest,
   }),
 };
 
@@ -87,6 +95,16 @@ describe("PostgreSQL formation one-shot runtime", () => {
       resolve_model_pipeline_resource: pipeline.resolve_model_pipeline_resource,
       max_parent_rematerializations: 2,
     })).toThrow("invalid_port");
+    expect(() => createPostgresFormationOneShotRuntime({
+      pool: unusedPool, strategies: [strategy], resolve_model: async () => null,
+      model_pipeline_exclusivity: defineModelPipelineExclusivity(async (_resource, callback) =>
+        Object.freeze({
+          kind: "completed" as const,
+          value: await callback(new AbortController().signal),
+        })) as never,
+      resolve_model_pipeline_resource: pipeline.resolve_model_pipeline_resource,
+      max_parent_rematerializations: 2,
+    })).toThrow("invalid_admitted_exclusivity");
 
     const retrieval = registerMemoryStrategy({
       version: MEMORY_STRATEGY_VERSION,

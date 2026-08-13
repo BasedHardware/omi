@@ -25,11 +25,11 @@ import {
 } from "../../core/consolidate/strategy-assignment";
 import type { DurableMemoryWorkJob } from "../../core/consolidate/state-machine";
 import type { ModelPort } from "../model/port";
-import type {
-  ModelPipelineExclusivity,
-  ModelPipelineResource,
-} from "../../apps/service/workers/model-pipeline-exclusivity";
-import { assertModelPipelineExclusivity } from "../../apps/service/workers/model-pipeline-exclusivity";
+import type { ModelPipelineResource } from "../../apps/service/workers/model-pipeline-exclusivity";
+import {
+  assertAdmittedModelPipelineExclusivity,
+  type AdmittedModelPipelineExclusivity,
+} from "../../apps/service/workers/model-pipeline-resource-admission";
 import { isProxy } from "node:util/types";
 import type { PostgresTransactionPool } from "./connection";
 import { createPostgresAuthoritativeGraphSnapshotRepository } from "./authoritative-graph-snapshot";
@@ -51,7 +51,7 @@ export interface PostgresPredicateBatchOneShotRuntimeOptions {
     job: Readonly<DurableMemoryWorkJob>,
     strategy: Readonly<RegisteredMemoryStrategy>,
   ) => Promise<ModelPort | null>;
-  readonly model_pipeline_exclusivity: ModelPipelineExclusivity;
+  readonly model_pipeline_exclusivity: AdmittedModelPipelineExclusivity;
   readonly resolve_model_pipeline_resource: (
     context: AuthorizedLedgerWriteContext,
     job: Readonly<DurableMemoryWorkJob>,
@@ -108,7 +108,9 @@ const unsupportedAdapter = (kind: Exclude<ConsolidationWorkKind, "predicate_batc
 export const createPostgresPredicateBatchOneShotRuntime = (
   options: PostgresPredicateBatchOneShotRuntimeOptions,
 ): PostgresPredicateBatchOneShotRuntime => {
-  const modelPipelineExclusivity = assertModelPipelineExclusivity(options.model_pipeline_exclusivity);
+  const modelPipelineExclusivity = assertAdmittedModelPipelineExclusivity(
+    options.model_pipeline_exclusivity,
+  );
   if (typeof options.resolve_model_pipeline_resource !== "function"
     || isProxy(options.resolve_model_pipeline_resource)) {
     throw new TypeError("postgres predicate runtime invalid_model_pipeline_resource_resolver");
