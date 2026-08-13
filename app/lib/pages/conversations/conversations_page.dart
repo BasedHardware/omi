@@ -581,7 +581,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     child: Column(
                       children: [
                         if (showGoals)
-                          RepaintBoundary(child: GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals)),
+                          RepaintBoundary(
+                            child: GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
+                          ),
                       ],
                     ),
                   );
@@ -699,10 +701,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           date: row.date,
                         );
                       case _ConversationListRowKind.recording:
-                        return RecordingListItem(
-                          key: ValueKey('rec_${row.recording!.id}'),
-                          recording: row.recording!,
-                        );
+                        return RecordingListItem(key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);
                       case _ConversationListRowKind.groupSpacer:
                         return const SizedBox(height: 10);
                     }

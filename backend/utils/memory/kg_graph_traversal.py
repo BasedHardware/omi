@@ -1,8 +1,8 @@
-"""Bounded read-only knowledge-graph traversal for canonical cohort (WS-N).
+"""Bounded read-only knowledge-graph traversal for universal memory (WS-N).
 
 The KG is stored in Firestore (``users/{uid}/knowledge_nodes`` +
 ``knowledge_edges``) via ``database.knowledge_graph`` — there is no live Neo4j
-backend in this repo. Traversal is prod-inert for legacy users.
+backend in this repo. Traversal is bounded by hop, fan-out, and triple caps.
 """
 
 from __future__ import annotations
@@ -15,7 +15,10 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
 from utils.memory.atom_keyword_index import is_indexable_long_term_atom
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import (  # compatibility exports; never a gate
+    MemorySystem as MemorySystem,
+    resolve_memory_system as resolve_memory_system,
+)
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 
 logger = logging.getLogger(__name__)
@@ -71,8 +74,9 @@ class TraversalResult:
 
 
 def user_allows_kg_traversal(uid: str, *, db_client: Any = None) -> bool:
-    """Traversal is meaningful only for the canonical memory cohort."""
-    return resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
+    """Traversal is available to every valid authenticated account."""
+    del db_client
+    return bool(uid.strip())
 
 
 def _long_term_memory_ids(uid: str, *, db_client: Any) -> Set[str]:
@@ -186,7 +190,7 @@ def traverse_knowledge_graph(
     )
 
     if not user_allows_kg_traversal(uid, db_client=client):
-        result.skipped_reason = "not_canonical_cohort"
+        result.skipped_reason = "invalid_uid"
         return result
 
     allowed_memory_ids = _long_term_memory_ids(uid, db_client=client)
@@ -267,7 +271,7 @@ def traverse_knowledge_graph(
 
 
 def format_traversal_result(result: TraversalResult) -> str:
-    if result.skipped_reason == "not_canonical_cohort":
+    if result.skipped_reason == "invalid_uid":
         return "Knowledge graph traversal is unavailable for this account."
 
     if not result.seed_node_ids:

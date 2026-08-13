@@ -136,13 +136,26 @@ extension View {
 /// *because* the question above it is its context, and this row has none.
 struct ChatProactivePushRow: View {
   let text: String
+  let kind: ProactiveNotificationKind
+
+  private var badge: ProactiveNotificationBadge {
+    ProactiveNotificationBadge(kind: kind)
+  }
 
   var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-      Image(systemName: "bell")
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
+      Image(systemName: badge.systemImage)
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(Ink.secondary)
-      OmiMarkdown(text: text, sender: .ai)
+        .foregroundColor(Ink.accent)
+        .frame(width: 24, height: 24)
+        .background(Ink.accent.opacity(0.1), in: Circle())
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text(badge.label)
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundColor(Ink.secondary)
+        OmiMarkdown(text: text, sender: .ai)
+      }
       Spacer(minLength: 0)
     }
     .padding(.horizontal, OmiSpacing.md)
@@ -155,17 +168,35 @@ struct ChatProactivePushRow: View {
         .stroke(Ink.glassEdge, lineWidth: 1)
     )
     .accessibilityElement(children: .combine)
-    .accessibilityLabel("Omi noticed: \(text)")
+    .accessibilityLabel("\(badge.label): \(text)")
   }
 }
 
-/// Visibility rule for the quiet timeline's per-message metadata row
-/// (rating / copy / info / timestamp). Keyboard parity is part of the
-/// contract: focus on any metadata control must reveal the row, otherwise
-/// Tab / Full Keyboard Access ends up on an invisible button.
-enum ChatBubbleMetadataReveal {
-  static func isVisible(hovering: Bool, controlFocused: Bool, transientFeedback: Bool) -> Bool {
-    hovering || controlFocused || transientFeedback
+struct ProactiveNotificationBadge: Equatable {
+  let label: String
+  let systemImage: String
+
+  /// Shared glyph contract: Insight uses `sparkles` everywhere; Suggestion keeps `lightbulb`.
+  static let insightSystemImage = "sparkles"
+  static let suggestionSystemImage = "lightbulb"
+
+  init(kind: ProactiveNotificationKind) {
+    switch kind {
+    case .suggestion:
+      (label, systemImage) = ("Suggestion", Self.suggestionSystemImage)
+    case .insight:
+      (label, systemImage) = ("Insight", Self.insightSystemImage)
+    case .task:
+      (label, systemImage) = ("Task", "checkmark.circle")
+    case .memory:
+      (label, systemImage) = ("Memory", "brain.head.profile")
+    case .goal:
+      (label, systemImage) = ("Goal", "target")
+    case .resurface:
+      (label, systemImage) = ("Resurfaced", "clock.arrow.circlepath")
+    case .general:
+      (label, systemImage) = ("Notification", "bell")
+    }
   }
 }
 

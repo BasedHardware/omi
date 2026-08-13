@@ -97,6 +97,42 @@ def store():
         yield module
 
 
+def test_global_intake_pause_is_enforced_inside_apply_boundary(store, monkeypatch):
+    monkeypatch.setenv("MEMORY_MODE", "off")
+    db_client = MagicMock()
+
+    with pytest.raises(store.CanonicalMemoryIntakePausedError, match="globally paused"):
+        store.apply_long_term_patch_firestore(
+            uid="uid-paused",
+            operation_id="op-paused",
+            patch_payload={},
+            db_client=db_client,
+        )
+
+    db_client.transaction.assert_not_called()
+
+
+def test_global_intake_pause_is_enforced_inside_source_replacement_boundary(store, monkeypatch):
+    monkeypatch.setenv("MEMORY_MODE", "shadow")
+    db_client = MagicMock()
+
+    with pytest.raises(store.CanonicalMemoryIntakePausedError, match="globally paused"):
+        store.replace_conversation_source_firestore(
+            uid="uid-paused",
+            conversation_id="conversation-paused",
+            replacement_id="replacement-paused",
+            replacement_digest="digest-paused",
+            replacement_operation=None,
+            observed_control=None,
+            expected_source_items=[],
+            expected_reactivation_items=[],
+            writes=[],
+            db_client=db_client,
+        )
+
+    db_client.transaction.assert_not_called()
+
+
 class _FakeSnapshot:
     def __init__(self, data, exists=True, reference=None):
         self._data = data

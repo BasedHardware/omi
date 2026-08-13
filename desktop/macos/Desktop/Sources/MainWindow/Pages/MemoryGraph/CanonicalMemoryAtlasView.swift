@@ -2039,7 +2039,7 @@ struct CanonicalMemoryAtlasPage: View {
 /// The hub already owns navigation chrome (the Memory menu selects the
 /// destination), so this variant renders the surface full-bleed instead of
 /// stacking the page's own back/title bar underneath the hub bar. It is the
-/// canonical-cohort counterpart to `MemoryGraphPage`, which fills the same tab
+/// assertion-backed counterpart to `MemoryGraphPage`, which fills the same tab
 /// for users still on the legacy graph.
 struct CanonicalMemoryAtlasTabView: View {
   @ObservedObject var viewModel: MemoryGraphViewModel

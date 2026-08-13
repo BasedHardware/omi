@@ -367,26 +367,19 @@ def test_make_harness_targets_run_resolved_python_from_checkout_with_unicode_and
     ]
 
 
-def test_canonical_maintenance_harness_activates_synthetic_uid_only_in_emulator(monkeypatch) -> None:
+def test_canonical_maintenance_harness_accepts_any_synthetic_uid_only_in_emulator(monkeypatch) -> None:
     module = runpy.run_path(
         str(REPO_ROOT / "scripts/dev-harness/run-canonical-maintenance.py"),
         run_name="run_canonical_maintenance_test",
     )
-    from config import canonical_memory_cohort
-    from utils.memory import memory_system
+    from utils.memory import memory_authority
 
-    original_cohort = canonical_memory_cohort.CANONICAL_MEMORY_USERS
-    original_memory_system_cohort = memory_system.CANONICAL_MEMORY_USERS
-    try:
-        monkeypatch.setenv("FIRESTORE_EMULATOR_HOST", "127.0.0.1:18080")
-        monkeypatch.setenv("ENVIRONMENT", "local-dev-harness")
-        module["_activate_local_canonical_cohort"]("synthetic-alice")
+    monkeypatch.setenv("FIRESTORE_EMULATOR_HOST", "127.0.0.1:18080")
+    monkeypatch.setenv("ENVIRONMENT", "local-dev-harness")
+    module["_configure_local_universal_memory"]("synthetic-alice")
 
-        assert memory_system.resolve_memory_system("synthetic-alice") == memory_system.MemorySystem.CANONICAL
-        assert memory_system.resolve_memory_system("someone-else") == memory_system.MemorySystem.LEGACY
-    finally:
-        canonical_memory_cohort.CANONICAL_MEMORY_USERS = original_cohort
-        memory_system.CANONICAL_MEMORY_USERS = original_memory_system_cohort
+    assert memory_authority.resolve_memory_system("synthetic-alice") == memory_authority.MemorySystem.CANONICAL
+    assert memory_authority.resolve_memory_system("someone-else") == memory_authority.MemorySystem.CANONICAL
 
 
 def test_canonical_maintenance_harness_replaces_ambient_environment(monkeypatch) -> None:
@@ -463,7 +456,7 @@ def test_canonical_maintenance_harness_fails_on_outbox_delivery_errors(monkeypat
     monkeypatch.setattr(main_globals["config"], "load_config", lambda *_args, **_kwargs: object())
     monkeypatch.setitem(main_globals, "_apply_harness_env", lambda _cfg: None)
     monkeypatch.setitem(main_globals, "_resolve_uid", lambda _cfg, _user: "synthetic-alice")
-    monkeypatch.setitem(main_globals, "_activate_local_canonical_cohort", lambda _uid: None)
+    monkeypatch.setitem(main_globals, "_configure_local_universal_memory", lambda _uid: None)
 
     @dataclass
     class _MaintenanceReport:

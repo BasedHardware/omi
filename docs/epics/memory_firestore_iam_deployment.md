@@ -33,11 +33,9 @@ The deployed backend service account is the only principal expected to mutate ca
 
 ## Dev-cloud before production IAM proof
 
-For canonical `GET /v3/memories` activation, cloud IAM must now be proven first in a dedicated non-production Firebase/GCP project. See:
-
-- `docs/rollout/memory-v3-proof-order.md`
-- `docs/runbooks/memory-v3-dev-cloud-proof.md`
-- `docs/runbooks/memory-v3-production-activation.md`
+For universal memory deployment, cloud IAM must first be proven in a dedicated
+non-production Firebase/GCP project. See
+`docs/runbooks/universal-memory-operations.md`.
 
 Dev-cloud proof must use a deployed branch backend revision with its actual runtime identity. A local backend using dev credentials is supplemental only and cannot satisfy the dev-cloud gate.
 
@@ -52,19 +50,19 @@ Dev-cloud IAM acceptance requires:
 
 After dev-cloud GO, production IAM remains a production-only final activation blocker. Production activation must verify production runtime identity and effective IAM, but should not use production as the first enabled-path proof environment.
 
-## Rollout/deployment checklist
+## Deployment checklist
 
-Before enabling memory writes for any production user:
+Before enabling universal memory writes in production:
 
 1. Confirm `firebase.json`, `firestore.rules`, and `firestore.indexes.json` are deployed for the target Firebase project.
 2. Confirm the backend runs with the intended service account and has Firestore access no broader than required; record the IAM evidence in the rollout ticket or deployment change.
 3. Confirm client direct access remains denied by Firestore Security Rules. Until real validation is available, the static guard is `pytest tests/unit/test_memory_firestore_security_rules.py -q`.
 4. Confirm the backend write path still uses the atomic apply adapter and operation journal; do not introduce a direct product writer bypass.
-5. Keep the deployment-readiness declaration explicit: `MEMORY_MODE=off`
-   before proof and `MEMORY_MODE=read` after proof. Request routing does not
-   read this env; `CANONICAL_MEMORY_USERS` plus persisted control state own the
-   product decision. See `docs/runbooks/canonical-memory-rollout-flags.md`.
-6. Confirm account deletion/source tombstone generation fences and rollback compatibility projection are healthy before widening the allowlist.
+5. Keep the global deployment-readiness declaration explicit:
+   `MEMORY_MODE=off` before proof and `MEMORY_MODE=read` after proof. It is not
+   a user selector. See `docs/runbooks/universal-memory-operations.md`.
+6. Confirm account deletion/source tombstone generation fences and the
+   universal dual-format rollback reader before enabling global intake.
 
 ## Emulator validation gate
 
@@ -300,13 +298,13 @@ Remaining deployment gates before enabling this contract in production:
 - A persisted read-to-write rollback must use the reconciled memory-derived
   compatibility projection; it must not expose stale vectors or resurrect
   deleted memories.
-- Returning to legacy after persistent canonical writes is not an env flag
-  flip. It requires decommission reconciliation so canonical-created memories
-  do not disappear from the user experience.
-- If IAM or Security Rules are wrong, remove affected users from
-  `CANONICAL_MEMORY_USERS` and disable persisted controls first, stop memory
-  workers, then fix and redeploy rules/IAM before retrying writes. Set the env
-  readiness declaration back to `MEMORY_MODE=off` as part of the same rollback.
+- Returning to a legacy-only reader after persistent canonical writes is
+  forbidden because canonical-created memories would disappear. Keep the
+  universal dual-format reader deployed.
+- If IAM or Security Rules are wrong, stop canonical intake/maintenance with
+  the global incident controls, then fix and redeploy rules/IAM before retrying
+  writes. Set the readiness declaration back to `MEMORY_MODE=off` as part of
+  the same global rollback; never reroute selected UIDs to a legacy writer.
 
 ## Verification currently available
 

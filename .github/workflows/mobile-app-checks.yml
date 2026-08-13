@@ -45,6 +45,9 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Match repo-checks.yml so dependency resolution cannot drift when
+          # the stable channel advances beyond the repository's lockfile.
+          flutter-version: 3.44.5
           cache: true
 
       # flutter-action already caches the SDK and ~/.pub-cache. build_runner's
@@ -106,6 +109,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.44.5
           cache: true
 
       - name: Cache build_runner state
@@ -243,6 +247,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.44.5
           cache: true
 
       - name: Cache build_runner state

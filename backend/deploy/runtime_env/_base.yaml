@@ -42,8 +42,6 @@ environment_shared:
           config_map:
             name: '{env}-omi-backend-config'
             key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
-        MEMORY_ENABLED_USERS:
-          category: memory_rollout
         OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
           value: 'false'
           category: rollout
@@ -170,8 +168,6 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
-          MEMORY_ENABLED_USERS:
-            category: memory_rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -254,8 +250,6 @@ environment_shared:
             env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
             provisional: true
             category: service_auth
-          MEMORY_ENABLED_USERS:
-            category: memory_rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -335,8 +329,6 @@ environment_shared:
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
-          MEMORY_ENABLED_USERS:
-            category: memory_rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -431,8 +423,6 @@ environment_shared:
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
-          MEMORY_ENABLED_USERS:
-            category: memory_rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -558,8 +548,6 @@ environment_shared:
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
-          MEMORY_ENABLED_USERS:
-            category: memory_rollout
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             category: memory_rollout
           MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:

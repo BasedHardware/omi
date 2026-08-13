@@ -1,14 +1,19 @@
-"""Backfill WS-O schema defaults for canonical cohort users (O-W3)."""
+"""Repair canonical memory schema defaults for explicitly named users."""
 
 from __future__ import annotations
 
 import argparse
 import logging
+import sys
+from pathlib import Path
 from typing import Any, Dict, cast
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from database._client import db
 from database.memory_collections import MemoryCollections
-from utils.memory.memory_system import list_canonical_cohort_uids
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +43,13 @@ def backfill_user(uid: str, *, dry_run: bool = True) -> int:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
-    parser = argparse.ArgumentParser(description="Backfill WS-O MemoryItem schema defaults")
+    parser = argparse.ArgumentParser(description="Repair MemoryItem schema defaults for bounded explicit UIDs")
+    parser.add_argument("--uid", action="append", required=True, help="Firebase UID; repeat for a bounded batch")
     parser.add_argument("--apply", action="store_true", help="Write changes (default is dry-run)")
     args = parser.parse_args()
     dry_run = not args.apply
     total = 0
-    for uid in list_canonical_cohort_uids():
+    for uid in sorted(set(args.uid)):
         count = backfill_user(uid, dry_run=dry_run)
         logger.info("uid=%s updated=%d dry_run=%s", uid, count, dry_run)
         total += count
