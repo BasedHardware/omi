@@ -12,8 +12,9 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import sys
-from urllib import request
+from urllib import error, request
 
 
 DIRECTOR_CASES = {
@@ -32,6 +33,8 @@ DIRECTOR_CASES = {
     "commitment-explicit-due-date",
     "commitment-ambiguous-mention",
 }
+
+STABLE_PROACTIVE_ERROR = re.compile(r"\bproactive_(?:http_error status=\d{3}|invalid_response|owner_changed)\b")
 
 
 def map_case(case: dict) -> dict[str, str]:
@@ -105,7 +108,7 @@ def validate(deck: dict) -> tuple[int, int]:
     return len(cases), len(DIRECTOR_CASES)
 
 
-def invoke_case(case: dict, port: int) -> dict:
+def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
     """Invoke the no-delivery DEBUG probe against a local named QA bundle."""
     scripts_dir = Path(__file__).resolve().parent
     sys.path.insert(0, str(scripts_dir))
@@ -124,8 +127,19 @@ def invoke_case(case: dict, port: int) -> dict:
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         method="POST",
     )
-    with request.urlopen(bridge_request, timeout=45) as response:
-        envelope = json.load(response)
+    try:
+        with request.urlopen(bridge_request, timeout=45) as response:
+            envelope = json.load(response)
+    except error.HTTPError as exc:
+        stable_error = None
+        try:
+            error_envelope = json.loads(exc.read(4096))
+            match = STABLE_PROACTIVE_ERROR.search(str(error_envelope.get("error", "")))
+            stable_error = match.group(0) if match else None
+        except (AttributeError, json.JSONDecodeError, UnicodeDecodeError):
+            pass
+        suffix = f" ({stable_error})" if stable_error else ""
+        raise RuntimeError(f"{case['id']}: probe returned HTTP {exc.code}{suffix}") from exc
     if envelope.get("ok") is not True:
         raise RuntimeError(f"{case['id']}: probe failed: {envelope.get('error', 'unknown error')}")
     result = envelope.get("result", envelope)
@@ -133,7 +147,7 @@ def invoke_case(case: dict, port: int) -> dict:
     decision = detail.get("decision")
     polarity = "silence" if decision == "silence" else "notify"
     expected = case["expectedAction"]
-    return {
+    result = {
         "id": case["id"],
         "expectedAction": expected,
         "decision": decision,
@@ -142,6 +156,13 @@ def invoke_case(case: dict, port: int) -> dict:
         "model": detail.get("model"),
         "latency_ms": detail.get("latency_ms"),
     }
+    if include_text:
+        result.update(
+            title=detail.get("title"),
+            message=detail.get("message"),
+            reasoning=detail.get("reasoning"),
+        )
+    return result
 
 
 def main() -> int:
@@ -153,6 +174,11 @@ def main() -> int:
     )
     parser.add_argument("--emit-probe-params", action="store_true")
     parser.add_argument("--invoke", action="store_true")
+    parser.add_argument(
+        "--include-text",
+        action="store_true",
+        help="Include synthetic probe title/message/reasoning in live replay output.",
+    )
     parser.add_argument("--port", type=int, default=47910)
     args = parser.parse_args()
     deck = json.loads(Path(args.fixture).read_text(encoding="utf-8"))
@@ -162,7 +188,21 @@ def main() -> int:
         print(json.dumps([{"id": case["id"], "params": map_case(case)} for case in director_cases], indent=2))
         return 0
     if args.invoke:
-        results = [invoke_case(case, args.port) for case in director_cases]
+        results = []
+        for case in director_cases:
+            try:
+                results.append(invoke_case(case, args.port, include_text=args.include_text))
+            except (RuntimeError, OSError, ValueError) as exc:
+                results.append(
+                    {
+                        "id": case["id"],
+                        "expectedAction": case["expectedAction"],
+                        "decision": None,
+                        "polarity": "error",
+                        "matched": False,
+                        "error": str(exc),
+                    }
+                )
         print(json.dumps(results, indent=2))
         matched = sum(result["matched"] for result in results)
         print(f"context bucket director replay: {matched}/{len(results)} polarity matches")
