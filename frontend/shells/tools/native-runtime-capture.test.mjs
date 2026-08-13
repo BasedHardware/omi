@@ -41,6 +41,11 @@ function writePreparation(file, m, artifactPath, artifactBytes) {
     domain: m.domain, shell: m.shell, state: m.state, theme: m.theme, width: m.width, accessibility: m.accessibility,
     run_id: m.run_id, source_shas: m.source_shas, capture_class: m.capture_class, source_tier: m.source_tier,
     command: { argv: ["fixture"], cwd: ".", cwd_root: "core", exit_code: 0 },
+    ...(m.shell === "ios" ? { foreground_custody: {
+      schema: "omi.macos-foreground-guard/v1", status: 0, signal: null, error: null, monitor_error: null,
+      target_interval_milliseconds: 20, probe_timeout_milliseconds: 250, sample_count: 2, max_sample_gap_milliseconds: 20,
+      policy: "sampled-macos-foreground-custody-20ms-target-250ms-probe-timeout-no-activation-request",
+    } } : {}),
     artifact: { root: "core", path: path.relative(root, artifactPath), sha256: createHash("sha256").update(artifactBytes).digest("hex") },
   })}\n`);
 }
@@ -202,5 +207,21 @@ test("recorded replay command is runnable without a host platform checkout", () 
     const run = spawnSync(process.execPath, [producer, "--manifest", manifestPath, "--replay-input", inputPath, "--replay-output", outputPath, "--output-dir", path.join(scratch, "gate"), "--emit-gate-records", "false"], { cwd: root, encoding: "utf8" });
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stdout, /NATIVE_RUNTIME_REPLAY/);
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test("iOS runtime replay binds and validates native foreground custody", () => {
+  const scratch = mkdtempSync(path.join(root, ".build", "runtime-ios-custody-test-"));
+  try {
+    const m = manifest({ shell: "ios", surface_query: "polish=1&qa=chat&state=ready&platform=mobile&theme=dark&width=regular&accessibility=none&locale=en-US", device: { udid: "A".repeat(8) + "-AAAA-AAAA-AAAA-" + "A".repeat(12), model: "iPhone 17 Pro", orientation: "portrait" }, viewport: { width: 402, height: 874, scale: 3 } });
+    const manifestPath = path.join(scratch, "coordinate.json"); const inputPath = path.join(scratch, "runtime.json"); const outputPath = path.join(scratch, "replayed.json");
+    const artifact = { schema: "omi.polish.runtime/v1", domain: m.domain, shell: m.shell, state: m.state, theme: m.theme, width: m.width, accessibility: m.accessibility, run_id: m.run_id, source_shas: m.source_shas, capture_class: m.capture_class, source_tier: m.source_tier, events: [{ type: "lifecycle", name: "state", value: m.state, passed: true }] };
+    const bytes = Buffer.from(`${JSON.stringify(artifact)}\n`); writeFileSync(manifestPath, `${JSON.stringify(m)}\n`); writeFileSync(inputPath, bytes);
+    const preparationPath = path.join(scratch, "runtime-preparation-receipt.json"); writePreparation(preparationPath, m, inputPath, bytes);
+    const result = gateReplay(m, manifestPath, inputPath, outputPath, path.join(scratch, "gate"));
+    assert.ok(result.receipt.input_set.entries.some((entry) => entry.key.endsWith("macos-foreground-guard.mjs")));
+    const preparation = JSON.parse(readFileSync(preparationPath, "utf8"));
+    writeFileSync(preparationPath, `${JSON.stringify({ ...preparation, foreground_custody: { ...preparation.foreground_custody, monitor_error: "changed" } })}\n`);
+    assert.throws(() => gateReplay(m, manifestPath, inputPath, path.join(scratch, "tampered.json"), path.join(scratch, "gate2")), /foreground custody/);
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 });

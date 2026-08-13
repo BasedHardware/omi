@@ -50,15 +50,29 @@ export async function guardedRun(spec) {
   const child = spawn(spec.command, spec.args, { cwd: spec.cwd, env: spec.env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
   child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+  const groupAlive = () => {
+    try { process.kill(-child.pid, 0); return true; }
+    catch (error) { return error?.code !== "ESRCH"; }
+  };
+  let terminationPromise = null;
   const stopChild = () => {
-    if (child.exitCode === null && child.signalCode === null) {
-      try { process.kill(-child.pid, "SIGTERM"); } catch { child.kill("SIGTERM"); }
-      setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) {
-          try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
-        }
-      }, 1_000).unref();
-    }
+    if (terminationPromise) return terminationPromise;
+    terminationPromise = (async () => {
+      if (groupAlive()) {
+        try { process.kill(-child.pid, "SIGTERM"); } catch (error) { if (error?.code !== "ESRCH") child.kill("SIGTERM"); }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      // Escalate against the process group even when its original leader has
+      // already exited; a descendant may have ignored TERM while retaining the
+      // same group id.
+      if (groupAlive()) {
+        try { process.kill(-child.pid, "SIGKILL"); } catch (error) { if (error?.code !== "ESRCH") child.kill("SIGKILL"); }
+      }
+      const deadline = Date.now() + 1_000;
+      while (groupAlive() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+      if (groupAlive()) monitorFault ||= "guarded command group cleanup could not be established";
+    })();
+    return terminationPromise;
   };
   const sample = async () => {
     if (monitoring || monitorFault) return;
@@ -102,6 +116,7 @@ export async function guardedRun(spec) {
       resolve({ code: null, signal: "SIGKILL", error: "guarded command close deadline exceeded" });
     }, (spec.timeoutSeconds * 1_000) + 2_500).unref();
   })]);
+  if (terminationPromise) await terminationPromise;
   process.removeListener("SIGINT", interruptSigint);
   process.removeListener("SIGTERM", interruptSigterm);
   clearInterval(interval); clearTimeout(timeout);
