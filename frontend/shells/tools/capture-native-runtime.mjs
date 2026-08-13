@@ -15,6 +15,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  statfsSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -26,6 +27,7 @@ const coreRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const macRoot = path.join(coreRoot, "shells/macos");
 const iosRoot = path.join(coreRoot, "shells/ios");
 const foregroundGuard = path.join(coreRoot, "shells/tools/macos-foreground-guard.mjs");
+const iosMinimumFreeBytes = 40 * 1024 * 1024 * 1024;
 const forbiddenForegroundBundleIds = [
   "com.apple.iphonesimulator",
   "me.omi.proto.omiWebviewProto",
@@ -262,6 +264,27 @@ export function macRuntimeAppName(runId) {
   return `omi-on-runtime-${sha256(Buffer.from(runId)).slice(0, 16)}`;
 }
 
+export function cleanupIosIntermediates(outputDir) {
+  const transientPaths = [
+    path.join(outputDir, "DerivedData"),
+    path.join(outputDir, "Runner.xcresult"),
+    path.join(outputDir, "attachments"),
+    path.join(outputDir, "home"),
+    path.join(iosRoot, "app/.dart_tool/flutter_build"),
+    path.join(iosRoot, "app/build"),
+  ];
+  for (const transientPath of transientPaths) rmSync(transientPath, { recursive: true, force: true });
+}
+
+export function requireIosDiskHeadroom(outputDir, minimumFreeBytes = iosMinimumFreeBytes) {
+  const stats = statfsSync(outputDir);
+  const availableBytes = Number(stats.bavail) * Number(stats.bsize);
+  if (!Number.isSafeInteger(availableBytes) || availableBytes < minimumFreeBytes) {
+    throw new Error(`iOS runtime capture requires at least ${minimumFreeBytes} free bytes; found ${availableBytes}`);
+  }
+  return availableBytes;
+}
+
 function runMac(manifest, outputDir) {
   const launcher = path.join(macRoot, "scripts/dev-run-macos.sh");
   const screenshot = path.join(outputDir, "probe.png");
@@ -396,8 +419,10 @@ function runIos(manifest, outputDir) {
   const testOnly = "RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence";
   const resultBundle = path.join(outputDir, "Runner.xcresult");
   const env = allowedEnvironment();
-  const scratch = path.join(outputDir, "home"); mkdirSync(scratch, { recursive: true }); env.HOME = scratch; env.PUB_CACHE = path.join(scratch, ".pub-cache"); env.XDG_CACHE_HOME = path.join(scratch, ".cache");
   mkdirSync(outputDir, { recursive: true });
+  cleanupIosIntermediates(outputDir);
+  requireIosDiskHeadroom(outputDir);
+  const scratch = path.join(outputDir, "home"); mkdirSync(scratch, { recursive: true }); env.HOME = scratch; env.PUB_CACHE = path.join(scratch, ".pub-cache"); env.XDG_CACHE_HOME = path.join(scratch, ".cache");
   const surfacesDist = process.env.SURFACES_DIST || process.env.OMI_SURFACES_DIST;
   const resolvedSurfacesDist = surfacesDist ? path.resolve(surfacesDist) : "";
   if (!resolvedSurfacesDist.startsWith(`${coreRoot}${path.sep}`) || !existsSync(path.join(resolvedSurfacesDist, "index.html"))) throw new Error("SURFACES_DIST must point to an existing core-owned surfaces dist/index.html");
@@ -411,34 +436,38 @@ function runIos(manifest, outputDir) {
   const boundDevice = Object.values(inventoryDocument.devices || {}).flat().find((candidate) => candidate.udid === device);
   if (!boundDevice || boundDevice.state !== "Booted" || boundDevice.name !== manifest.device.model) throw new Error("manifest iOS simulator is not the exact booted device");
   const query = manifest.surface_query;
-  const bundle = spawnSync(nodeBin, [path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], { cwd: coreRoot, env, encoding: "utf8", timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
-  if (bundle.status !== 0) throw new Error(`iOS surfaces bundle preparation failed (${bundle.status ?? "signal"})`);
-  const flutterArgs = ["build", "ios", "--simulator", "--debug", "--dart-define=SURFACE_MODE=scheme", "--dart-define=SCHEME_BUNDLE=surfaces", `--dart-define=SURFACE_QUERY=${query}`];
-  const flutter = spawnSync(flutterBin, flutterArgs, { cwd: path.join(iosRoot, "app"), env, encoding: "utf8", timeout: 300_000, maxBuffer: 64 * 1024 * 1024 });
-  if (flutter.status !== 0) throw new Error(`iOS Flutter fixture build failed (${flutter.status ?? "signal"})`);
-  const args = ["test", "-project", project, "-scheme", "Runner", "-destination", `platform=iOS Simulator,id=${device}`, "-only-testing", testOnly, "-parallel-testing-enabled", "NO", "-derivedDataPath", path.join(outputDir, "DerivedData"), "-resultBundlePath", resultBundle, "CODE_SIGNING_ALLOWED=NO", `FLUTTER_ROOT=${path.dirname(path.dirname(flutterBin))}`];
-  const started = new Date();
-  const guardResult = path.join(outputDir, "foreground-guard.json");
-  const stdoutPath = path.join(outputDir, "xcodebuild.stdout");
-  const stderrPath = path.join(outputDir, "xcodebuild.stderr");
-  const guarded = spawnSync(process.execPath, [foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","), "--", "xcodebuild", ...args], { cwd: path.join(iosRoot, "app"), env, encoding: "utf8", timeout: 310_000, maxBuffer: 16 * 1024 * 1024 });
-  const finished = new Date();
-  if (!existsSync(guardResult)) throw new Error("iOS runtime foreground guard produced no terminal receipt");
-  const custody = readJson(guardResult, "iOS runtime foreground guard");
-  if (guarded.status !== 0 || custody.schema !== "omi.macos-foreground-guard/v1" || custody.monitor_error !== null || custody.error !== null || custody.status !== 0) throw new Error(`iOS native runtime foreground custody failed (${custody.monitor_error || custody.error || custody.status || guarded.status})`);
-  const result = { status: custody.status, stdout: readFileSync(stdoutPath, "utf8"), stderr: readFileSync(stderrPath, "utf8") };
-  const exportDir = path.join(outputDir, "attachments"); mkdirSync(exportDir, { recursive: true });
-  const testIdentifier = "test://com.apple.xcode/Runner/RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence";
-  const exported = spawnSync("xcrun", ["xcresulttool", "export", "attachments", "--path", resultBundle, "--output-path", exportDir, "--test-id", testIdentifier], { cwd: coreRoot, env, encoding: "utf8", timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
-  if (exported.status !== 0) throw new Error(`iOS runtime attachment export failed (${exported.status ?? "signal"})`);
-  const exportedManifest = readJson(path.join(exportDir, "manifest.json"), "iOS runtime attachment manifest");
-  if (!Array.isArray(exportedManifest) || exportedManifest.length !== 1 || !Array.isArray(exportedManifest[0].attachments)) throw new Error("iOS runtime attachment manifest is not exact");
-  const attachments = exportedManifest[0].attachments.filter((item) => typeof item.suggestedHumanReadableName === "string" && /^OMI_NATIVE_IOS_RUNTIME_JSON(?:_\d+_[0-9A-F-]{36})?\.json$/.test(item.suggestedHumanReadableName));
-  if (attachments.length !== 1 || typeof attachments[0].exportedFileName !== "string" || !/^[A-Za-z0-9-]+\.json$/.test(attachments[0].exportedFileName)) throw new Error("iOS runtime UI test must retain exactly one typed host marker");
-  const markerFile = path.join(exportDir, attachments[0].exportedFileName);
-  if (!existsSync(markerFile) || !statSync(markerFile).isFile()) throw new Error("iOS runtime host marker bytes are missing");
-  const marker = validateHostMarker(readJson(markerFile, "iOS runtime marker"), manifest);
-  return { marker, started, finished, argv: [process.execPath, foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","), "--", "xcodebuild", ...args], stdout: result.stdout || "", stderr: result.stderr || "", commandTimeoutSeconds: 310, commandCwd: "shells/ios/app", query, foregroundCustody: custody, buildCommands: { surfaces: [nodeBin, path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], surfaces_stdout_sha256: sha256(Buffer.from(bundle.stdout || "")), surfaces_stderr_sha256: sha256(Buffer.from(bundle.stderr || "")), flutter: [flutterBin, ...flutterArgs], flutter_stdout_sha256: sha256(Buffer.from(flutter.stdout || "")), flutter_stderr_sha256: sha256(Buffer.from(flutter.stderr || "")) } };
+  try {
+    const bundle = spawnSync(nodeBin, [path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], { cwd: coreRoot, env, encoding: "utf8", timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
+    if (bundle.status !== 0) throw new Error(`iOS surfaces bundle preparation failed (${bundle.status ?? "signal"})`);
+    const flutterArgs = ["build", "ios", "--simulator", "--debug", "--dart-define=SURFACE_MODE=scheme", "--dart-define=SCHEME_BUNDLE=surfaces", `--dart-define=SURFACE_QUERY=${query}`];
+    const flutter = spawnSync(flutterBin, flutterArgs, { cwd: path.join(iosRoot, "app"), env, encoding: "utf8", timeout: 300_000, maxBuffer: 64 * 1024 * 1024 });
+    if (flutter.status !== 0) throw new Error(`iOS Flutter fixture build failed (${flutter.status ?? "signal"})`);
+    const args = ["test", "-project", project, "-scheme", "Runner", "-destination", `platform=iOS Simulator,id=${device}`, "-only-testing", testOnly, "-parallel-testing-enabled", "NO", "-derivedDataPath", path.join(outputDir, "DerivedData"), "-resultBundlePath", resultBundle, "CODE_SIGNING_ALLOWED=NO", `FLUTTER_ROOT=${path.dirname(path.dirname(flutterBin))}`];
+    const started = new Date();
+    const guardResult = path.join(outputDir, "foreground-guard.json");
+    const stdoutPath = path.join(outputDir, "xcodebuild.stdout");
+    const stderrPath = path.join(outputDir, "xcodebuild.stderr");
+    const guarded = spawnSync(process.execPath, [foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","), "--", "xcodebuild", ...args], { cwd: path.join(iosRoot, "app"), env, encoding: "utf8", timeout: 310_000, maxBuffer: 16 * 1024 * 1024 });
+    const finished = new Date();
+    if (!existsSync(guardResult)) throw new Error("iOS runtime foreground guard produced no terminal receipt");
+    const custody = readJson(guardResult, "iOS runtime foreground guard");
+    if (guarded.status !== 0 || custody.schema !== "omi.macos-foreground-guard/v1" || custody.monitor_error !== null || custody.error !== null || custody.status !== 0) throw new Error(`iOS native runtime foreground custody failed (${custody.monitor_error || custody.error || custody.status || guarded.status})`);
+    const result = { status: custody.status, stdout: readFileSync(stdoutPath, "utf8"), stderr: readFileSync(stderrPath, "utf8") };
+    const exportDir = path.join(outputDir, "attachments"); mkdirSync(exportDir, { recursive: true });
+    const testIdentifier = "test://com.apple.xcode/Runner/RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence";
+    const exported = spawnSync("xcrun", ["xcresulttool", "export", "attachments", "--path", resultBundle, "--output-path", exportDir, "--test-id", testIdentifier], { cwd: coreRoot, env, encoding: "utf8", timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
+    if (exported.status !== 0) throw new Error(`iOS runtime attachment export failed (${exported.status ?? "signal"})`);
+    const exportedManifest = readJson(path.join(exportDir, "manifest.json"), "iOS runtime attachment manifest");
+    if (!Array.isArray(exportedManifest) || exportedManifest.length !== 1 || !Array.isArray(exportedManifest[0].attachments)) throw new Error("iOS runtime attachment manifest is not exact");
+    const attachments = exportedManifest[0].attachments.filter((item) => typeof item.suggestedHumanReadableName === "string" && /^OMI_NATIVE_IOS_RUNTIME_JSON(?:_\d+_[0-9A-F-]{36})?\.json$/.test(item.suggestedHumanReadableName));
+    if (attachments.length !== 1 || typeof attachments[0].exportedFileName !== "string" || !/^[A-Za-z0-9-]+\.json$/.test(attachments[0].exportedFileName)) throw new Error("iOS runtime UI test must retain exactly one typed host marker");
+    const markerFile = path.join(exportDir, attachments[0].exportedFileName);
+    if (!existsSync(markerFile) || !statSync(markerFile).isFile()) throw new Error("iOS runtime host marker bytes are missing");
+    const marker = validateHostMarker(readJson(markerFile, "iOS runtime marker"), manifest);
+    return { marker, started, finished, argv: [process.execPath, foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","), "--", "xcodebuild", ...args], stdout: result.stdout || "", stderr: result.stderr || "", commandTimeoutSeconds: 310, commandCwd: "shells/ios/app", query, foregroundCustody: custody, buildCommands: { surfaces: [nodeBin, path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], surfaces_stdout_sha256: sha256(Buffer.from(bundle.stdout || "")), surfaces_stderr_sha256: sha256(Buffer.from(bundle.stderr || "")), flutter: [flutterBin, ...flutterArgs], flutter_stdout_sha256: sha256(Buffer.from(flutter.stdout || "")), flutter_stderr_sha256: sha256(Buffer.from(flutter.stderr || "")) } };
+  } finally {
+    cleanupIosIntermediates(outputDir);
+  }
 }
 
 function main() {

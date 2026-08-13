@@ -7,10 +7,12 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
   gateReplay,
+  cleanupIosIntermediates,
   macRuntimeAppName,
   parseMacProbe,
   runtimeProbeScript,
   runtimeFixtureName,
+  requireIosDiskHeadroom,
   validateHostMarker,
   validateManifest,
 } from "./capture-native-runtime.mjs";
@@ -104,6 +106,8 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   assert.match(source, /validateForegroundCustody\(preparation\.foreground_custody\)/);
   assert.match(source, /monitor_error !== null/);
   assert.match(source, /xcresulttool/);
+  assert.match(source, /finally \{\s*cleanupIosIntermediates\(outputDir\)/);
+  assert.match(source, /iosMinimumFreeBytes = 40 \* 1024 \* 1024 \* 1024/);
   assert.match(source, /OMI_NATIVE_IOS_RUNTIME_JSON\(\?:_\\d\+_\[0-9A-F-\]\{36\}\)\?/);
   assert.match(source, /allowedEnvironment/);
   assert.match(source, /mkdirSync\(scratch, \{ recursive: true \}\)/);
@@ -128,6 +132,26 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   assert.doesNotMatch(source, /value:root\.dataset\.surfaceState/);
   assert.doesNotMatch(iosHook, /OMI_API_TOKEN/);
   assert.match(iosTest, /webView\.value as\? String/);
+});
+
+test("iOS native runtime intermediates are bounded and cleaned without touching evidence", () => {
+  const scratch = mkdtempSync(path.join(root, ".build", "runtime-ios-cleanup-test-"));
+  const evidence = path.join(scratch, "runtime.json");
+  try {
+    writeFileSync(evidence, "evidence\n");
+    for (const relative of ["DerivedData/cache", "Runner.xcresult/data", "attachments/marker", "home/.cache/item"]) {
+      const target = path.join(scratch, relative);
+      mkdirSync(path.dirname(target), { recursive: true });
+      writeFileSync(target, "transient\n");
+    }
+    assert.ok(requireIosDiskHeadroom(scratch, 1) > 0);
+    assert.throws(() => requireIosDiskHeadroom(scratch, Number.MAX_SAFE_INTEGER), /requires at least/);
+    cleanupIosIntermediates(scratch);
+    assert.equal(readFileSync(evidence, "utf8"), "evidence\n");
+    for (const relative of ["DerivedData", "Runner.xcresult", "attachments", "home"]) {
+      assert.equal(existsSync(path.join(scratch, relative)), false);
+    }
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
 });
 
 test("macOS scratch app name binds arbitrary matrix run IDs without weakening launcher grammar", () => {
