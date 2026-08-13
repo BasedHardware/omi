@@ -233,8 +233,8 @@ export const EN_MESSAGES = {
   "home.startTyping": "Start typing to search what's saved",
   "home.resultsFor": "Results for “{query}”",
   "home.keySearch": "⌘K",
-  "home.loadedCount": "{count} loaded items",
-  "home.matchCount": "{count} matches in loaded items",
+  "home.loadedCount": "{count} items shown",
+  "home.matchCount": "{count} matches",
 
   // Chat. Server-authoritative per ADR-005: the client mirrors, never owns.
   "chat.title": "Chat",
@@ -374,7 +374,7 @@ export const EN_MESSAGES = {
 
   // Where the rows on screen came from. Rendered at every width, on purpose: a QA label
   // that desktop CSS hides is exactly how a fixture render gets mistaken for real data.
-  "dataSource.fixture": "Fixture data — not from your account",
+  "dataSource.fixture": "Sample data — not from your account",
   "dataSource.live": "Your account data",
   "dataSource.detail": "{source} · {detail}",
 
@@ -417,12 +417,12 @@ export const EN_MESSAGES = {
   "memoriesPlatform.completeness.degraded": "Memories may be out of date right now.",
   "memoriesPlatform.completeness.partial": "Showing a limited set of memories.",
   "memoriesPlatform.reasonsLabel": "Why this result is limited",
-  "memoriesPlatform.reason.acceptedWorkPending": "Accepted work is still pending consolidation.",
-  "memoriesPlatform.reason.projectionStale": "The projection is stale.",
-  "memoriesPlatform.reason.projectionUnavailable": "The projection is unavailable.",
-  "memoriesPlatform.reason.projectionBypassed": "The projection was bypassed.",
-  "memoriesPlatform.reason.sourceBound": "The search was bounded by source.",
-  "memoriesPlatform.reason.timeBound": "The search was bounded by time.",
-  "memoriesPlatform.reason.policyBound": "The search was bounded by policy.",
+  "memoriesPlatform.reason.acceptedWorkPending": "Recent changes are still being prepared.",
+  "memoriesPlatform.reason.projectionStale": "This view may be out of date.",
+  "memoriesPlatform.reason.projectionUnavailable": "Saved memories are temporarily unavailable.",
+  "memoriesPlatform.reason.projectionBypassed": "This view was not refreshed.",
+  "memoriesPlatform.reason.sourceBound": "Only memories from the selected source are shown.",
+  "memoriesPlatform.reason.timeBound": "Only memories from the selected time period are shown.",
+  "memoriesPlatform.reason.policyBound": "Some memories are hidden by your current access settings.",
 
 } as const;

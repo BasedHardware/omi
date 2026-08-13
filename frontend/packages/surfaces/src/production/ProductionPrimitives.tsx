@@ -27,10 +27,7 @@ export function ProductionDataSourceBadge({ source, locale }: {
   const live = source.kind === "live";
   const detail = live
     ? t(locale, "dataSource.live")
-    : t(locale, "dataSource.detail", {
-        source: t(locale, "dataSource.fixture"),
-        detail: source.fixture,
-      });
+    : t(locale, "dataSource.fixture");
   return (
     <p
       className={`data-source-badge tone-${live ? "live" : "fixture"}`}

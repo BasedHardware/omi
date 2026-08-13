@@ -295,7 +295,7 @@ test("Home keeps result rows non-live and debounces only concise count changes",
     await rendered.act(async () => initialAnnouncement());
     const live = rendered.container.querySelector('[data-live-region="true"]');
     assert.equal(live?.getAttribute("aria-atomic"), "true");
-    assert.match(live?.textContent ?? "", /loaded/iu);
+    assert.match(live?.textContent ?? "", /shown/iu);
 
     const input = rendered.container.querySelector('input[type="search"]');
     const setter = Object.getOwnPropertyDescriptor(rendered.window.HTMLInputElement.prototype, "value")?.set;
@@ -305,7 +305,7 @@ test("Home keeps result rows non-live and debounces only concise count changes",
       input.dispatchEvent(new rendered.window.Event("input", { bubbles: true }));
     });
     assert.equal(callbacks.size, 1, "a changed result count schedules one replacement announcement");
-    assert.match(live?.textContent ?? "", /loaded/iu, "old count remains until the debounce fires");
+    assert.match(live?.textContent ?? "", /shown/iu, "old count remains until the debounce fires");
     const filteredAnnouncement = callbacks.values().next().value;
     callbacks.clear();
     await rendered.act(async () => filteredAnnouncement());
