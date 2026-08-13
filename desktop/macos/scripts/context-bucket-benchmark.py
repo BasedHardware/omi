@@ -98,6 +98,11 @@ def validate(deck: dict) -> tuple[int, int]:
             raise ValueError(f"{case['id']}: invalid expectedAction")
         if not isinstance(case.get("forbidden"), list) or not case["forbidden"]:
             raise ValueError(f"{case['id']}: forbidden behavior contract is required")
+        forbidden_output_terms = case.get("forbiddenOutputTerms", [])
+        if not isinstance(forbidden_output_terms, list) or any(
+            not isinstance(term, str) or not term.strip() for term in forbidden_output_terms
+        ):
+            raise ValueError(f"{case['id']}: forbiddenOutputTerms must be non-empty strings")
         if case["id"] in DIRECTOR_CASES:
             params = map_case(case)
             required = {
@@ -148,12 +153,23 @@ def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
     decision = detail.get("decision")
     polarity = "silence" if decision == "silence" else "notify"
     expected = case["expectedAction"]
+    response_text = "\n".join(
+        str(detail.get(field) or "") for field in ("title", "message", "reasoning")
+    ).casefold()
+    forbidden_output_terms = case.get("forbiddenOutputTerms", [])
+    forbidden_terms_matched = [
+        term for term in forbidden_output_terms if term.casefold() in response_text
+    ]
+    polarity_matched = expected == "either" or expected == polarity
     result = {
         "id": case["id"],
         "expectedAction": expected,
         "decision": decision,
         "polarity": polarity,
-        "matched": expected == "either" or expected == polarity,
+        "matched": polarity_matched and not forbidden_terms_matched,
+        "polarity_matched": polarity_matched,
+        "forbidden_output_matched": bool(forbidden_terms_matched),
+        "forbidden_terms_matched": forbidden_terms_matched,
         "model": detail.get("model"),
         "latency_ms": detail.get("latency_ms"),
     }
