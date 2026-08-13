@@ -41,12 +41,12 @@ function writePreparation(file, m, artifactPath, artifactBytes) {
     domain: m.domain, shell: m.shell, state: m.state, theme: m.theme, width: m.width, accessibility: m.accessibility,
     run_id: m.run_id, source_shas: m.source_shas, capture_class: m.capture_class, source_tier: m.source_tier,
     command: { argv: ["fixture"], cwd: ".", cwd_root: "core", exit_code: 0 },
-    ...(m.shell === "ios" ? { foreground_custody: {
+    foreground_custody: {
       schema: "omi.macos-foreground-guard/v1", status: 0, signal: null, error: null, monitor_error: null,
       target_interval_milliseconds: 20, probe_timeout_milliseconds: 250, sample_count: 2, max_sample_gap_milliseconds: 20,
-      forbidden_bundle_ids: ["com.apple.iphonesimulator", "me.omi.proto.omiWebviewProto"],
+      forbidden_bundle_ids: ["com.apple.iphonesimulator", "me.omi.proto.omiWebviewProto", "me.omi.shell.core-tasks.prototype"],
       policy: "sampled-macos-forbidden-fixture-foreground-detection-20ms-target-250ms-probe-timeout-no-activation-request",
-    } } : {}),
+    },
     artifact: { root: "core", path: path.relative(root, artifactPath), sha256: createHash("sha256").update(artifactBytes).digest("hex") },
   })}\n`);
 }
@@ -89,6 +89,8 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   assert.match(macHost, /attempt < maxAttempts && \(error != nil \|\| pending\)/);
   assert.match(source, /xcodebuild/);
   assert.match(source, /macos-foreground-guard\.mjs/);
+  assert.match(source, /macOS runtime foreground guard produced no terminal receipt/);
+  assert.match(source, /validateForegroundCustody\(preparation\.foreground_custody\)/);
   assert.match(source, /monitor_error !== null/);
   assert.match(source, /xcresulttool/);
   assert.match(source, /OMI_NATIVE_IOS_RUNTIME_JSON\(\?:_\\d\+_\[0-9A-F-\]\{36\}\)\?/);
@@ -177,6 +179,7 @@ test("canonical runtime replay emits gate-shaped input set, receipt, and coverag
     assert.equal(receipt.cwd_root, "core");
     assert.equal(receipt.artifact_created[`core:${path.relative(root, outputPath)}`], true);
     assert.ok(receipt.input_set.entries.some((entry) => entry.key.endsWith("runtime-preparation-receipt.json")));
+    assert.ok(receipt.input_set.entries.some((entry) => entry.key.endsWith("macos-foreground-guard.mjs")));
     assert.match(receipt.argv.join(" "), /--emit-gate-records false/);
     const coverage = JSON.parse(readFileSync(result.coveragePath, "utf8"));
     assert.equal(coverage.coverage[0].kind, "runtime_trace");
@@ -187,6 +190,9 @@ test("canonical runtime replay emits gate-shaped input set, receipt, and coverag
     assert.equal(existsSync(outputPath), true);
     const preparationPath = path.join(scratch, "runtime-preparation-receipt.json");
     const preparation = JSON.parse(readFileSync(preparationPath, "utf8"));
+    writeFileSync(preparationPath, `${JSON.stringify({ ...preparation, foreground_custody: { ...preparation.foreground_custody, monitor_error: "changed" } })}\n`);
+    assert.throws(() => gateReplay(m, manifestPath, inputPath, path.join(scratch, "custody-tampered.json"), outDir), /foreground custody/);
+    writeFileSync(preparationPath, `${JSON.stringify(preparation)}\n`);
     writeFileSync(preparationPath, `${JSON.stringify({ ...preparation, artifact: { ...preparation.artifact, sha256: "0".repeat(64) } })}\n`);
     assert.throws(() => gateReplay(m, manifestPath, inputPath, path.join(scratch, "tampered.json"), outDir), /does not match/);
   } finally {
