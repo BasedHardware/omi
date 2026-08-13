@@ -37,7 +37,7 @@ These 15 MPNs must be sourced from authorized distributors or manufacturer direc
 | MPN | Ref | Package | Sourcing Plan | RF Critical? |
 |-----|-----|---------|---------------|-------------|
 | CHQ0603T-2N2B-HU | L3, L4 | 0201 | 2.2nH RF matching inductor in nRF5340 antenna path. **DO NOT SUBSTITUTE by value alone** — Q factor, SRF, and DCR must match. Equivalent: Murata LQP03TN2N2B02D (LCSC C269798, verify stock). Must be high-Q (>15 at 2.4GHz), SRF >6GHz. | **Yes** |
-| LQM18PN3R3MFRL | L5 | 0603 | 3.3µH power inductor for nRF7002 WiFi supply filter (L5). Equivalent: Murata LQM18PN3R3MGHD (higher current rating, same footprint). Source Murata direct or DigiKey. Match: 3.3µH ±20%, Isat ≥700mA, DCR ≤350mΩ. | No |
+| LQM18PN3R3MFRL | L5 | 0603 | 3.3µH power inductor for nRF7002 Wi-Fi supply filter (L5). Equivalent: Murata LQM18PN3R3MGHD (higher current rating, same footprint). Source Murata direct or DigiKey. Match: 3.3µH ±20%, Isat ≥700mA, DCR ≤350mΩ. | No |
 | MWSD1608FE100KT | L1, L2 | 0603 | 10µH power inductor for nRF5340 DCDC. Equivalent: Murata LQM18PN100MFRL (LCSC C307603 — but this is LQM18PN1R0, **1µH not 10µH**). Source Sunlord direct or find 10µH ±20% 0603, Isat ≥280mA, DCR ≤1Ω. | No |
 
 ### Connectors / Specialty (8 parts)

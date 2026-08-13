@@ -34,7 +34,7 @@
 
 ## Impedance Targets
 
-### RF Traces (BLE/WiFi)
+### RF Traces (BLE/Wi-Fi)
 
 | Parameter | Target | Tolerance |
 |-----------|--------|-----------|
@@ -51,7 +51,7 @@ For 50Ω microstrip on this stackup:
 
 ### Differential Pairs (if present)
 
-USB differential pairs (if routed) should target 90Ω differential impedance. This stackup was designed primarily for BLE/WiFi, not USB — verify if any differential pairs exist.
+USB differential pairs (if routed) should target 90Ω differential impedance. This stackup was designed primarily for BLE/Wi-Fi, not USB — verify if any differential pairs exist.
 
 ### General Signal Traces
 
@@ -138,7 +138,7 @@ The KiCad PCB has `dielectric_constraints no` set, meaning the PCB editor does n
 
 ### Loss Tangent
 
-FR4 dielectric loss tangent is set to 0.02 in the design — standard value for generic FR4. For 2.4GHz RF performance, this is adequate. Higher-frequency designs (>6GHz) would benefit from low-loss materials (e.g., Megtron 6), but that is not necessary for BLE/WiFi at 2.4–5GHz.
+FR4 dielectric loss tangent is set to 0.02 in the design — standard value for generic FR4. For 2.4GHz RF performance, this is adequate. Higher-frequency designs (>6GHz) would benefit from low-loss materials (e.g., Megtron 6), but that is not necessary for BLE/Wi-Fi at 2.4–5GHz.
 
 ### Grid Origin
 
