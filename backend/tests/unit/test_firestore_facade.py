@@ -103,6 +103,23 @@ def test_no_id_document_and_add_get_unique_random_ids():
     assert ref.get().to_dict() == {"n": 1}
 
 
+def test_document_id_validation_rejects_path_injection_and_reserved_ids():
+    # Cubic PR 10887: the neutral store addresses docs by a '/'-delimited path, so a '/' in a single
+    # client-supplied id would split into extra segments and write to the WRONG collection/key. The
+    # facade mirrors Firestore's id contract centrally so every collection().document(id) is defended.
+    import pytest
+
+    c = _client()
+    col = c.collection("users/u1/screen_activity")
+    for bad in ["a/b", "", ".", "..", "__proto__"]:
+        with pytest.raises(ValueError):
+            col.document(bad)
+    # a legitimate id still composes the expected path
+    assert col.document("ok-123").path == "users/u1/screen_activity/ok-123"
+    # the top-level client.document() still takes a full '/'-path (not a single id) unchanged
+    assert c.document("users/u1/screen_activity/x").path == "users/u1/screen_activity/x"
+
+
 def test_count_over_filters():
     c = _client()
     for i, s in enumerate(["a", "b", "a"]):

@@ -52,6 +52,28 @@ def _auto_id() -> str:
     previous record (fair-use events, action-item creates)."""
     return "".join(secrets.choice(_AUTO_ID_ALPHABET) for _ in range(20))
 
+
+def _validate_doc_id(doc_id: str) -> str:
+    """Reject document ids that Firestore itself refuses, before they compose a neutral path.
+
+    The neutral store addresses documents by a ``/``-delimited string path, so a ``/`` inside a
+    single client-supplied id would split into extra segments and silently write to the WRONG
+    collection/key (path injection). This mirrors Firestore's document-id contract centrally, so
+    every ``collection().document(id)`` call site is defended once: non-empty, no ``/``, not ``.``
+    or ``..``, not the reserved ``__*__`` form, at most 1500 bytes (Firestore's limit)."""
+    if not doc_id:
+        raise ValueError("A document id must not be empty")
+    if "/" in doc_id:
+        raise ValueError(f"Invalid document id {doc_id!r}: a document id must not contain '/'")
+    if doc_id in (".", ".."):
+        raise ValueError(f"Invalid document id {doc_id!r}: a document id must not be '.' or '..'")
+    if doc_id.startswith("__") and doc_id.endswith("__"):
+        raise ValueError(f"Invalid document id {doc_id!r}: the '__*__' form is reserved")
+    if len(doc_id.encode("utf-8")) > 1500:
+        raise ValueError("Invalid document id: exceeds Firestore's 1500-byte limit")
+    return doc_id
+
+
 # Firestore comparison op strings -> neutral store ops (ports.Filter). The store's Mongo adapter
 # accepts these directly; unsupported ops surface as a clear error rather than silently mis-querying.
 _OP_MAP = {
@@ -327,7 +349,9 @@ class _CollRef(_Query):
 
     def document(self, doc_id: Optional[str] = None) -> _DocRef:
         # No id -> a fresh random auto-id (Firestore semantics), never a deterministic derivation.
-        return _DocRef(self._client, f"{self._collection}/{doc_id or _auto_id()}")
+        # A client-supplied id is validated so a '/' can't split the composed path (path injection).
+        doc_id = _auto_id() if doc_id is None else _validate_doc_id(doc_id)
+        return _DocRef(self._client, f"{self._collection}/{doc_id}")
 
     def list_documents(self) -> List[_DocRef]:
         return [_DocRef(self._client, s.path) for s in self._run()]
