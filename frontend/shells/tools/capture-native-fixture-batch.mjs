@@ -45,7 +45,9 @@ const safeRunId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
 const safeLocale = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/;
 const maxCoordinates = 1236;
 const maxBatchCoordinates = 32;
-export const nativeForbiddenForegroundPolicy = "sampled-20ms-forbidden-fixture-foreground-detection-no-activation-request";
+export const nativeForbiddenForegroundPolicy = "sampled-forbidden-fixture-foreground-custody-no-activation-request";
+const foregroundTargetIntervalMs = 20;
+const foregroundProbeTimeoutMs = 250;
 const simulatorBundleId = "com.apple.iphonesimulator";
 const widthPolicy = {
   macos: {
@@ -381,37 +383,115 @@ function sleepSync(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
-function foregroundMonitorMain(forbiddenJson, readyPath, stopPath, violationPath, donePath) {
-  const forbidden = new Set(JSON.parse(forbiddenJson));
+function readMonitorAction(actionPath) {
+  if (typeof actionPath !== "string" || actionPath.length === 0) return {};
+  if (!existsSync(actionPath)) return {};
   try {
-    while (!existsSync(stopPath)) {
-      let observed;
-      try { observed = macForegroundApplication("continuous foreground monitor"); }
-      catch (error) {
-        writeAtomic(violationPath, { reason: error.message });
-        return;
-      }
-      if (forbidden.has(observed.bundleId)) {
-        writeAtomic(violationPath, { reason: "a forbidden fixture application became foreground", observed_bundle_id: observed.bundleId });
-        return;
-      }
-      if (!existsSync(readyPath)) writeAtomic(readyPath, { forbidden_bundle_ids: [...forbidden].sort() });
-      sleepSync(20);
-    }
-  } finally {
-    if (!existsSync(readyPath)) writeAtomic(readyPath, { forbidden_bundle_ids: [...forbidden].sort(), failed: true });
-    writeAtomic(donePath, { stopped: true });
+    const action = JSON.parse(readFileSync(actionPath, "utf8"));
+    return action && typeof action === "object" ? action : {};
+  } catch {
+    return {};
   }
 }
 
-export function startForbiddenForegroundMonitor(forbiddenBundleIds, outRoot) {
+export function cleanupOwnedForegroundWorkForTest(config, action = {}, operations = {}) {
+  const killProcess = operations.killProcess || process.kill.bind(process);
+  const runSync = operations.spawnSyncFn || spawnSync;
+  const attempts = [];
+  if (Number.isSafeInteger(action.mac_process_group_pid) && action.mac_process_group_pid > 1) {
+    try {
+      killProcess(-action.mac_process_group_pid, "SIGTERM");
+      attempts.push({ kind: "macos_process_group", pid: action.mac_process_group_pid, signal: "SIGTERM", ok: true });
+      sleepSync(100);
+      try {
+        killProcess(-action.mac_process_group_pid, 0);
+        killProcess(-action.mac_process_group_pid, "SIGKILL");
+        attempts.push({ kind: "macos_process_group", pid: action.mac_process_group_pid, signal: "SIGKILL", ok: true });
+      } catch (error) {
+        if (error?.code !== "ESRCH") attempts.push({ kind: "macos_process_group", pid: action.mac_process_group_pid, signal: "SIGKILL", ok: false });
+      }
+    } catch (error) {
+      attempts.push({ kind: "macos_process_group", pid: action.mac_process_group_pid, signal: "SIGTERM", ok: error?.code === "ESRCH" });
+    }
+  }
+  for (const target of config.ios_targets || []) {
+    if (!target || !/^[A-Za-z0-9._:-]+$/.test(target.udid || "") || !/^[A-Za-z0-9][A-Za-z0-9.-]{1,127}$/.test(target.bundle_id || "")) continue;
+    const result = runSync("/usr/bin/xcrun", ["simctl", "terminate", target.udid, target.bundle_id], {
+      cwd: coreRoot,
+      env: allowedEnvironment(config.monitor_root, "ios"),
+      encoding: "utf8",
+      timeout: 5_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const output = `${result.stdout || ""}\n${result.stderr || ""}`;
+    attempts.push({ kind: "ios_fixture_app", udid: target.udid, bundle_id: target.bundle_id, ok: result.status === 0 || output.includes("found nothing to terminate") });
+  }
+  return attempts;
+}
+
+function foregroundMonitorMain(configJson, readyPath, stopPath, violationPath, donePath, actionPath) {
+  const parsed = JSON.parse(configJson);
+  const config = Array.isArray(parsed)
+    ? { forbidden_bundle_ids: parsed, ios_targets: [], monitor_root: path.dirname(donePath) }
+    : { ...parsed, monitor_root: path.dirname(donePath) };
+  const forbidden = new Set(config.forbidden_bundle_ids || []);
+  const started = process.hrtime.bigint();
+  let lastSample = started;
+  let sampleCount = 0;
+  let maxSampleGapMs = 0;
+  let violation = null;
+  let cleanupAttempts = [];
+  try {
+    while (!existsSync(stopPath)) {
+      const sampleStarted = process.hrtime.bigint();
+      if (sampleCount > 0) maxSampleGapMs = Math.max(maxSampleGapMs, Number(sampleStarted - lastSample) / 1e6);
+      lastSample = sampleStarted;
+      sampleCount += 1;
+      let observed;
+      try { observed = macForegroundApplication("continuous foreground monitor"); }
+      catch (error) {
+        violation = { reason: error.message };
+        cleanupAttempts = cleanupOwnedForegroundWorkForTest(config, readMonitorAction(actionPath));
+        writeAtomic(violationPath, { ...violation, cleanup_attempts: cleanupAttempts });
+        return;
+      }
+      if (forbidden.has(observed.bundleId)) {
+        violation = { reason: "a forbidden fixture application became foreground", observed_bundle_id: observed.bundleId };
+        cleanupAttempts = cleanupOwnedForegroundWorkForTest(config, readMonitorAction(actionPath));
+        writeAtomic(violationPath, { ...violation, cleanup_attempts: cleanupAttempts });
+        return;
+      }
+      if (!existsSync(readyPath)) writeAtomic(readyPath, { forbidden_bundle_ids: [...forbidden].sort(), target_interval_ms: foregroundTargetIntervalMs, probe_timeout_ms: foregroundProbeTimeoutMs });
+      sleepSync(foregroundTargetIntervalMs);
+    }
+  } finally {
+    if (!existsSync(readyPath)) writeAtomic(readyPath, { forbidden_bundle_ids: [...forbidden].sort(), failed: true });
+    writeAtomic(donePath, {
+      schema: "omi.polish.foreground-custody/v1",
+      stopped: true,
+      policy: nativeForbiddenForegroundPolicy,
+      target_interval_ms: foregroundTargetIntervalMs,
+      probe_timeout_ms: foregroundProbeTimeoutMs,
+      sample_count: sampleCount,
+      max_sample_gap_ms: Number(maxSampleGapMs.toFixed(3)),
+      elapsed_ms: Number((Number(process.hrtime.bigint() - started) / 1e6).toFixed(3)),
+      forbidden_bundle_ids: [...forbidden].sort(),
+      cleanup_attempts: cleanupAttempts,
+      violation,
+    });
+  }
+}
+
+export function startForbiddenForegroundMonitor(forbiddenBundleIds, outRoot, iosTargets = []) {
   const monitorRoot = path.join(outRoot, `.focus-monitor-${process.pid}-${randomBytes(4).toString("hex")}`);
   mkdirSync(monitorRoot, { recursive: true });
   const readyPath = path.join(monitorRoot, "ready.json");
   const stopPath = path.join(monitorRoot, "stop");
   const violationPath = path.join(monitorRoot, "violation.json");
   const donePath = path.join(monitorRoot, "done.json");
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--foreground-monitor", JSON.stringify([...forbiddenBundleIds].sort()), readyPath, stopPath, violationPath, donePath], {
+  const actionPath = path.join(monitorRoot, "owned-action.json");
+  const config = { forbidden_bundle_ids: [...forbiddenBundleIds].sort(), ios_targets: iosTargets, monitor_root: monitorRoot };
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--foreground-monitor", JSON.stringify(config), readyPath, stopPath, violationPath, donePath, actionPath], {
     cwd: coreRoot,
     env: allowedEnvironment(monitorRoot, "macos"),
     stdio: "ignore",
@@ -420,11 +500,24 @@ export function startForbiddenForegroundMonitor(forbiddenBundleIds, outRoot) {
   while (!existsSync(readyPath) && !existsSync(violationPath) && Date.now() < deadline) sleepSync(10);
   if (!existsSync(readyPath) || existsSync(violationPath)) {
     try { child.kill("SIGTERM"); } catch {}
+    const terminalDeadline = Date.now() + 2_000;
+    while (!existsSync(donePath) && Date.now() < terminalDeadline) sleepSync(10);
     const detail = existsSync(violationPath) ? JSON.parse(readFileSync(violationPath, "utf8")).reason : "monitor did not become ready";
     rmSync(monitorRoot, { recursive: true, force: true });
     fail(`native foreground monitor unavailable: ${detail}`);
   }
-  return { child, monitorRoot, stopPath, violationPath, donePath };
+  return { child, monitorRoot, stopPath, violationPath, donePath, actionPath, config };
+}
+
+export function assertForegroundMonitorHealthy(monitor, label) {
+  if (!monitor) fail(`${label}: foreground monitor is unavailable`);
+  if (existsSync(monitor.violationPath)) {
+    const violation = loadJson(monitor.violationPath, "foreground monitor violation");
+    fail(`${label}: focus custody failed: ${violation.reason}`);
+  }
+  if (existsSync(monitor.donePath)) fail(`${label}: foreground monitor stopped before custody completed`);
+  try { process.kill(monitor.child.pid, 0); }
+  catch { fail(`${label}: foreground monitor died without a terminal receipt`); }
 }
 
 export function stopForbiddenForegroundMonitor(monitor) {
@@ -441,30 +534,38 @@ export function stopForbiddenForegroundMonitor(monitor) {
     try { violation = JSON.parse(readFileSync(monitor.violationPath, "utf8")); }
     catch { violation = { reason: "foreground monitor wrote malformed violation evidence" }; }
   }
+  const receipt = completed ? loadJson(monitor.donePath, "foreground monitor terminal receipt") : null;
   rmSync(monitor.monitorRoot, { recursive: true, force: true });
-  assertForegroundMonitorCompletion(completed, violation);
+  assertForegroundMonitorCompletion(completed, violation, receipt);
+  return receipt;
 }
 
-function assertForegroundMonitorCompletion(completed, violation) {
+function assertForegroundMonitorCompletion(completed, violation, receipt = null) {
   if (!completed) fail("native fixture capture focus custody failed: foreground monitor stopped without a terminal receipt");
   if (violation) fail(`native fixture capture focus custody failed: ${violation.reason}`);
+  if (!receipt || receipt.schema !== "omi.polish.foreground-custody/v1" || receipt.policy !== nativeForbiddenForegroundPolicy || receipt.target_interval_ms !== foregroundTargetIntervalMs || receipt.probe_timeout_ms !== foregroundProbeTimeoutMs || !Number.isInteger(receipt.sample_count) || receipt.sample_count < 1 || typeof receipt.max_sample_gap_ms !== "number" || receipt.max_sample_gap_ms < 0 || receipt.violation !== null) {
+    fail("native fixture capture focus custody failed: terminal receipt is malformed");
+  }
 }
 
 function macForegroundApplication(label) {
   const front = spawnSync("/usr/bin/lsappinfo", ["front"], {
     cwd: coreRoot,
     encoding: "utf8",
-    timeout: 5_000,
+    timeout: foregroundProbeTimeoutMs,
     stdio: ["ignore", "pipe", "pipe"],
   });
   const identity = foregroundApplicationFromProbe(front, label);
-  const info = spawnSync("/usr/bin/lsappinfo", ["info", "-only", "bundleID", "-app", identity], { cwd: coreRoot, encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "pipe"] });
+  const info = spawnSync("/usr/bin/lsappinfo", ["info", "-only", "bundleID", "-app", identity], { cwd: coreRoot, encoding: "utf8", timeout: foregroundProbeTimeoutMs, stdio: ["ignore", "pipe", "pipe"] });
   return foregroundBundleFromProbes(front, info, label);
 }
 
-function assertNoForbiddenForeground(forbiddenBundleIds, label) {
+function assertNoForbiddenForeground(forbiddenBundleIds, label, monitor = null) {
   const observed = macForegroundApplication(label);
-  if (forbiddenBundleIds.has(observed.bundleId)) fail(`${label}: a forbidden fixture application became foreground`);
+  if (forbiddenBundleIds.has(observed.bundleId)) {
+    if (monitor) cleanupOwnedForegroundWorkForTest(monitor.config, readMonitorAction(monitor.actionPath));
+    fail(`${label}: a forbidden fixture application became foreground`);
+  }
 }
 
 export function assertMacForegroundProbeTransitionForTest(beforeFront, beforeInfo, afterFront, afterInfo, forbidden = new Set([simulatorBundleId, "me.omi.capture"])) {
@@ -487,7 +588,7 @@ function bundleIdentifierForApp(app, label) {
   if (!/^[A-Za-z0-9][A-Za-z0-9.-]{1,127}$/.test(bundleId)) fail(`${label}: app bundle identifier is unavailable`);
   return bundleId;
 }
-export function assertForegroundMonitorCompletionForTest(completed, violation = null) { assertForegroundMonitorCompletion(completed, violation); }
+export function assertForegroundMonitorCompletionForTest(completed, violation = null, receipt = null) { assertForegroundMonitorCompletion(completed, violation, receipt); }
 
 function writeAtomic(file, value) {
   const temporary = `${file}.tmp-${process.pid}`;
@@ -963,9 +1064,10 @@ function readIosReadiness(device, markerPath, env) {
   try { return JSON.parse(result.stdout); } catch { return null; }
 }
 
-function waitForIosReadiness(coordinate, artifact, markerPath, nonce, waitSeconds) {
+function waitForIosReadiness(coordinate, artifact, markerPath, nonce, waitSeconds, monitor) {
   const deadline = Date.now() + waitSeconds * 1000;
   while (Date.now() <= deadline) {
+    assertForegroundMonitorHealthy(monitor, `${coordinate.run_id}: readiness custody`);
     const marker = readIosReadiness(coordinate.device.udid, markerPath, artifact.env);
     if (marker &&
         Object.keys(marker).sort().join(",") === "domain,fixture,nonce,polish_state,route,run_id,state" &&
@@ -991,7 +1093,7 @@ function waitForIosReadiness(coordinate, artifact, markerPath, nonce, waitSecond
   fail(`${coordinate.run_id}: capture app did not publish the run-bound readiness record`);
 }
 
-function captureMac(coordinate, artifact, output, timeoutSeconds) {
+function captureMac(coordinate, artifact, output, timeoutSeconds, monitor) {
   const env = { ...artifact.env };
   env.OMI_SURFACE_QUERY = coordinate.surface_query;
   env.OMI_RUN_CLIENT_ID = coordinate.run_id;
@@ -1001,30 +1103,42 @@ function captureMac(coordinate, artifact, output, timeoutSeconds) {
   env.OMI_NATIVE_VIEWPORT_HEIGHT = String(coordinate.viewport.height);
   env.OMI_APP_NAME = "omi-on-polish-batch";
   env.OMI_BUILD_DIR = artifact.buildDir;
-  const result = spawnSync(path.join(artifact.app, "Contents/MacOS/omi-on-polish-batch"), [], {
+  env.OMI_FOCUS_ACTION_PATH = monitor.actionPath;
+  const executable = path.join(artifact.app, "Contents/MacOS/omi-on-polish-batch");
+  assertForegroundMonitorHealthy(monitor, `${coordinate.run_id}: pre-capture custody`);
+  const wrapper = 'temporary="$OMI_FOCUS_ACTION_PATH.tmp-$$"; printf \'{"mac_process_group_pid":%s}\\n\' "$$" > "$temporary"; mv "$temporary" "$OMI_FOCUS_ACTION_PATH"; exec "$1"';
+  const result = spawnSync("/bin/sh", ["-c", wrapper, "omi-focus-owned-wrapper", executable], {
     cwd: coreRoot,
     env,
     encoding: "utf8",
     timeout: timeoutSeconds * 1000,
     stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
   });
+  // The fixture executable is the process-group leader. Clear any exact
+  // descendants it left behind before relinquishing custody; never target a
+  // user process by name or restore/activate another application.
+  cleanupOwnedForegroundWorkForTest({ ...monitor.config, ios_targets: [] }, readMonitorAction(monitor.actionPath));
+  rmSync(monitor.actionPath, { force: true });
+  assertForegroundMonitorHealthy(monitor, `${coordinate.run_id}: post-capture custody`);
   if (result.error?.code === "ETIMEDOUT" || result.signal === "SIGTERM") fail(`${coordinate.run_id}: macOS capture timed out`);
   if (result.status !== 0) fail(`${coordinate.run_id}: macOS capture failed (exit ${result.status ?? "signal"})`);
 }
 
-function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
+function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds, monitor) {
   // `simctl` talks directly to an already-Booted CoreSimulator device and does
   // not need Simulator.app to launch or activate. Sample the foreground and
   // reject only the exact Simulator/fixture bundles. Ordinary user switching
   // remains allowed. We never restore focus because that would activate UI.
   const forbiddenForeground = new Set([simulatorBundleId, artifact.bundleId]);
-  assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: preflight`);
+  assertForegroundMonitorHealthy(monitor, `${coordinate.run_id}: preflight custody`);
+  assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: preflight`, monitor);
   verifyIosDevice(coordinate, artifact.env);
   if (!artifact.appearanceByDevice.has(coordinate.device.udid)) artifact.appearanceByDevice.set(coordinate.device.udid, queryIosAppearance(coordinate.device.udid, artifact.env));
   if (!artifact.geometryByDevice.has(coordinate.device.udid)) artifact.geometryByDevice.set(coordinate.device.udid, queryIosGeometry(coordinate.device.udid, artifact.env));
   setIosAppearance(coordinate.device.udid, coordinate.theme, artifact.env);
   setIosGeometry(coordinate.device.udid, coordinate.viewport, artifact.env);
-  assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator configuration`);
+  assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator configuration`, monitor);
   terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: terminate prior app`);
   const stdoutPath = `${output}.app.stdout`;
   const stderrPath = `${output}.app.stderr`;
@@ -1041,8 +1155,8 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
   try {
     launched = true;
     runCommand(commandSpec("xcrun", ["simctl", "launch", `--stdout=${stdoutPath}`, `--stderr=${stderrPath}`, coordinate.device.udid, artifact.bundleId, `--omi-capture-query=${coordinate.surface_query}`, `--omi-capture-run-id=${coordinate.run_id}`, `--omi-capture-nonce=${readinessNonce}`], coreRoot, artifact.env, 30), `${coordinate.run_id}: launch capture app`);
-    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator launch`);
-    waitForIosReadiness(coordinate, artifact, markerPath, readinessNonce, waitSeconds);
+    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator launch`, monitor);
+    waitForIosReadiness(coordinate, artifact, markerPath, readinessNonce, waitSeconds, monitor);
     // CoreSimulator can report DOM readiness one compositor frame before its
     // text/glyph surfaces settle. Capture and discard that first native frame
     // so both the retained image and a later strict replay begin at the same
@@ -1051,33 +1165,34 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
     const warmupOutput = `${output}.warmup.png`;
     rmSync(warmupOutput, { force: true });
     runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", warmupOutput], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: settle simulator compositor`);
-    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator warmup screenshot`);
+    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator warmup screenshot`, monitor);
     rmSync(warmupOutput, { force: true });
     runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", output], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: simulator screenshot`);
-    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator screenshot`);
+    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator screenshot`, monitor);
   } finally {
     if (launched) terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: cleanup app`);
     rmSync(stdoutPath, { force: true });
     rmSync(stderrPath, { force: true });
-    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: cleanup`);
+    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: cleanup`, monitor);
+    assertForegroundMonitorHealthy(monitor, `${coordinate.run_id}: post-cleanup custody`);
   }
 }
 
-function prepareIosArtifact(artifact, coordinates) {
+function prepareIosArtifact(artifact, coordinates, monitor) {
   const forbiddenForeground = new Set([simulatorBundleId, artifact.bundleId]);
-  assertNoForbiddenForeground(forbiddenForeground, "iOS fixture preparation preflight");
+  assertNoForbiddenForeground(forbiddenForeground, "iOS fixture preparation preflight", monitor);
   for (const coordinate of coordinates.filter((entry) => entry.shell === "ios")) {
     if (!artifact.installedDevices.has(coordinate.device.udid)) {
       verifyIosDevice(coordinate, artifact.env);
       runCommand(commandSpec("xcrun", ["simctl", "install", coordinate.device.udid, artifact.app], coreRoot, artifact.env, 120), `${coordinate.run_id}: install capture app once for device`);
-      assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator install`);
+      assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator install`, monitor);
       artifact.installedDevices.add(coordinate.device.udid);
     }
     if (!artifact.frozenDevices.has(coordinate.device.udid)) {
       freezeIosStatusBar(coordinate.device.udid, artifact.env);
       artifact.frozenDevices.add(coordinate.device.udid);
     }
-    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: iOS fixture preparation`);
+    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: iOS fixture preparation`, monitor);
   }
 }
 
@@ -1095,6 +1210,8 @@ function assembleReceipt(resultPath, outRoot, manifestPath, manifest, args) {
   if (typeof result.command !== "string" || !Array.isArray(result.argv) || !result.input_set || !result.members || typeof result.members !== "object") fail("batch result is missing command/input/member bindings");
   const expectedAuthority = { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { macos: nativeForbiddenForegroundPolicy, ios: nativeForbiddenForegroundPolicy }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } };
   if (canonical(result.authority) !== canonical(expectedAuthority)) fail("batch result authority/focus policy is invalid");
+  const custody = result.foreground_custody;
+  if (!custody || custody.schema !== "omi.polish.foreground-custody/v1" || custody.policy !== nativeForbiddenForegroundPolicy || custody.target_interval_ms !== foregroundTargetIntervalMs || custody.probe_timeout_ms !== foregroundProbeTimeoutMs || !Number.isInteger(custody.sample_count) || custody.sample_count < 1 || typeof custody.max_sample_gap_ms !== "number" || custody.max_sample_gap_ms < 0 || custody.violation !== null || !Array.isArray(custody.cleanup_attempts)) fail("batch result foreground custody receipt is invalid");
   const members = result.members;
   const memberIds = Object.keys(members).sort();
   if (memberIds.length === 0 || memberIds.some((id, index) => id !== `m${String(index).padStart(4, "0")}`)) fail("batch result members are not canonical");
@@ -1239,9 +1356,16 @@ function main() {
     ...(artifacts.ios ? [simulatorBundleId, artifacts.ios.bundleId] : []),
   ]);
   assertNoForbiddenForeground(forbiddenForeground, "native batch foreground preflight");
-  let foregroundMonitor = startForbiddenForegroundMonitor(forbiddenForeground, outRoot);
+  const iosTargets = coordinates
+    .filter((coordinate) => coordinate.shell === "ios")
+    .map((coordinate) => ({ udid: coordinate.device.udid, bundle_id: artifacts.ios.bundleId }))
+    .filter((target, index, values) => values.findIndex((candidate) => canonical(candidate) === canonical(target)) === index);
+  let foregroundMonitor = startForbiddenForegroundMonitor(forbiddenForeground, outRoot, iosTargets);
+  let foregroundCustody = null;
   try {
-    if (artifacts.ios) prepareIosArtifact(artifacts.ios, coordinates);
+    assertForegroundMonitorHealthy(foregroundMonitor, "native fixture preparation preflight custody");
+    if (artifacts.ios) prepareIosArtifact(artifacts.ios, coordinates, foregroundMonitor);
+    assertForegroundMonitorHealthy(foregroundMonitor, "native fixture preparation postflight custody");
   } catch (error) {
     try {
       if (artifacts.ios) for (const device of artifacts.ios.frozenDevices) {
@@ -1263,6 +1387,7 @@ function main() {
   const records = [];
   try {
     for (const coordinate of coordinates) {
+    assertForegroundMonitorHealthy(foregroundMonitor, `${coordinate.run_id}: coordinate preflight custody`);
     const dir = path.join(capturesRoot, coordinate.shell);
     mkdirSync(dir, { recursive: true });
     const output = path.join(dir, `${coordinate.run_id}.png`);
@@ -1270,8 +1395,8 @@ function main() {
     rmSync(output, { force: true });
     rmSync(sidecar, { force: true });
     try {
-      if (coordinate.shell === "macos") captureMac(coordinate, artifacts.macos, output, timeoutSeconds);
-      else captureIos(coordinate, artifacts.ios, output, waitSeconds, timeoutSeconds);
+      if (coordinate.shell === "macos") captureMac(coordinate, artifacts.macos, output, timeoutSeconds, foregroundMonitor);
+      else captureIos(coordinate, artifacts.ios, output, waitSeconds, timeoutSeconds, foregroundMonitor);
       if (!existsSync(output)) fail(`${coordinate.run_id}: native capture did not write a PNG`);
       const replayFirstRaw = args.replay_proof && records.length === 0 && coordinate.shell === "ios" ? `${output}.first.raw.png` : null;
       if (replayFirstRaw) copyFileSync(output, replayFirstRaw);
@@ -1282,8 +1407,8 @@ function main() {
         const repeatRaw = coordinate.shell === "ios" ? `${output}.repeat.raw.png` : null;
         rmSync(repeatOutput, { force: true });
         if (repeatRaw) rmSync(repeatRaw, { force: true });
-        if (coordinate.shell === "macos") captureMac(coordinate, artifacts.macos, repeatOutput, timeoutSeconds);
-        else captureIos(coordinate, artifacts.ios, repeatOutput, waitSeconds, timeoutSeconds);
+        if (coordinate.shell === "macos") captureMac(coordinate, artifacts.macos, repeatOutput, timeoutSeconds, foregroundMonitor);
+        else captureIos(coordinate, artifacts.ios, repeatOutput, waitSeconds, timeoutSeconds, foregroundMonitor);
         if (repeatRaw) copyFileSync(repeatOutput, repeatRaw);
         if (coordinate.shell === "ios") canonicalizeScreenshot(repeatOutput);
         const repeatImage = validateImage(repeatOutput, coordinate);
@@ -1338,6 +1463,7 @@ function main() {
         image_sha256: image.sha256,
       });
       records.push(record);
+      assertForegroundMonitorHealthy(foregroundMonitor, `${coordinate.run_id}: coordinate postflight custody`);
     } catch (error) {
       rmSync(output, { force: true });
       rmSync(sidecar, { force: true });
@@ -1355,9 +1481,10 @@ function main() {
           restoreIosDevice(device, artifacts.ios);
         }
       }
-      assertNoForbiddenForeground(forbiddenForeground, "native batch final restoration");
+      assertForegroundMonitorHealthy(foregroundMonitor, "native batch final custody");
+      assertNoForbiddenForeground(forbiddenForeground, "native batch final restoration", foregroundMonitor);
     } finally {
-      try { stopForbiddenForegroundMonitor(foregroundMonitor); }
+      try { foregroundCustody = stopForbiddenForegroundMonitor(foregroundMonitor); }
       finally {
         foregroundMonitor = null;
         for (const artifact of Object.values(artifacts)) cleanupEnvironment(artifact.env);
@@ -1392,6 +1519,7 @@ function main() {
     stdout_sha256: sha256(stdoutLine),
     stderr_sha256: sha256(""),
     authority: plan.authority,
+    foreground_custody: foregroundCustody,
     replay_proof: Boolean(args.replay_proof),
   };
   writeAtomic(resultPath, result);
@@ -1400,7 +1528,7 @@ function main() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    if (process.argv[2] === "--foreground-monitor") foregroundMonitorMain(...process.argv.slice(3, 8));
+    if (process.argv[2] === "--foreground-monitor") foregroundMonitorMain(...process.argv.slice(3, 9));
     else main();
   } catch (error) { console.error(`ERROR: ${error.message}`); process.exitCode = 2; }
 }

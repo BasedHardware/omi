@@ -10,7 +10,7 @@ import test from "node:test";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const producer = path.join(root, "shells/tools/capture-native-fixture-batch.mjs");
-const { assertForegroundMonitorCompletionForTest, assertMacForegroundProbeTransitionForTest, canonicalizeScreenshotForTest, nativeFocusPolicyForTest } = await import(producer);
+const { assertForegroundMonitorCompletionForTest, assertForegroundMonitorHealthy, assertMacForegroundProbeTransitionForTest, canonicalizeScreenshotForTest, cleanupOwnedForegroundWorkForTest, nativeFocusPolicyForTest } = await import(producer);
 const coreSha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const platformSha = "1".repeat(40);
 
@@ -39,6 +39,23 @@ function manifest(coordinates) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function custodyReceipt(overrides = {}) {
+  return {
+    schema: "omi.polish.foreground-custody/v1",
+    stopped: true,
+    policy: nativeFocusPolicyForTest(),
+    target_interval_ms: 20,
+    probe_timeout_ms: 250,
+    sample_count: 3,
+    max_sample_gap_ms: 24.5,
+    elapsed_ms: 75,
+    forbidden_bundle_ids: ["me.omi.capture.test"],
+    cleanup_attempts: [],
+    violation: null,
+    ...overrides,
+  };
 }
 
 function pngCrc(bytes) {
@@ -290,12 +307,16 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(iosProject, /CaptureFlutterViewController\.swift in Sources/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /\/usr\/bin\/lsappinfo/);
-  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: preflight`\)/);
-  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: simulator launch`\)/);
-  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: simulator screenshot`\)/);
-  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: cleanup`\)/);
-  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: iOS fixture preparation`\)/);
-  assert.match(source, /sampled-20ms-forbidden-fixture-foreground-detection-no-activation-request/);
+  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: preflight`, monitor\)/);
+  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: simulator launch`, monitor\)/);
+  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: simulator screenshot`, monitor\)/);
+  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: cleanup`, monitor\)/);
+  assert.match(source, /assertNoForbiddenForeground\(forbiddenForeground, `\$\{coordinate\.run_id\}: iOS fixture preparation`, monitor\)/);
+  assert.match(source, /sampled-forbidden-fixture-foreground-custody-no-activation-request/);
+  assert.match(source, /target_interval_ms: foregroundTargetIntervalMs/);
+  assert.match(source, /probe_timeout_ms: foregroundProbeTimeoutMs/);
+  assert.match(source, /sample_count: sampleCount/);
+  assert.match(source, /max_sample_gap_ms/);
   assert.match(source, /startForbiddenForegroundMonitor/);
   assert.match(source, /native batch final restoration/);
   assert.match(source, /artifacts\.macos\.bundleId/);
@@ -353,11 +374,58 @@ test("iOS continuous foreground monitor observes the real host without activatin
 });
 
 test("iOS foreground custody fails closed when its monitor dies after readiness", () => {
-  assert.doesNotThrow(() => assertForegroundMonitorCompletionForTest(true));
+  assert.doesNotThrow(() => assertForegroundMonitorCompletionForTest(true, null, custodyReceipt()));
   assert.throws(() => assertForegroundMonitorCompletionForTest(false), /foreground monitor stopped without a terminal receipt/);
-  assert.throws(() => assertForegroundMonitorCompletionForTest(true, { reason: "changed" }), /focus custody failed: changed/);
+  assert.throws(() => assertForegroundMonitorCompletionForTest(true, { reason: "changed" }, custodyReceipt()), /focus custody failed: changed/);
+  assert.throws(() => assertForegroundMonitorCompletionForTest(true, null, custodyReceipt({ sample_count: 0 })), /terminal receipt is malformed/);
   const source = readFileSync(producer, "utf8");
   assert.match(source, /finally \{\s*foregroundMonitor = null;\s*for \(const artifact of Object\.values\(artifacts\)\) cleanupEnvironment\(artifact\.env\);/);
+});
+
+test("coordinate custody rejects monitor death and terminal violation files", () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), "omi-native-focus-health-"));
+  try {
+    const monitor = {
+      child: { pid: 2_000_000_000 },
+      violationPath: path.join(scratch, "violation.json"),
+      donePath: path.join(scratch, "done.json"),
+    };
+    assert.throws(() => assertForegroundMonitorHealthy(monitor, "coordinate"), /died without a terminal receipt/);
+    monitor.child.pid = process.pid;
+    writeFileSync(monitor.violationPath, JSON.stringify({ reason: "exact fixture became foreground" }));
+    assert.throws(() => assertForegroundMonitorHealthy(monitor, "coordinate"), /focus custody failed: exact fixture became foreground/);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test("foreground violation cleanup targets only the owned mac group and bound iOS app", () => {
+  const kills = [];
+  const commands = [];
+  const monitorRoot = mkdtempSync(path.join(tmpdir(), "omi-focus-cleanup-test-"));
+  const config = {
+    monitor_root: monitorRoot,
+    ios_targets: [{ udid: "owned-device", bundle_id: "me.omi.capture.test" }],
+  };
+  try {
+    const attempts = cleanupOwnedForegroundWorkForTest(config, { mac_process_group_pid: 4242 }, {
+      killProcess(pid, signal) {
+        kills.push([pid, signal]);
+        return true;
+      },
+      spawnSyncFn(command, args) {
+        commands.push([command, args]);
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+    assert.deepEqual(kills, [[-4242, "SIGTERM"], [-4242, 0], [-4242, "SIGKILL"]]);
+    assert.deepEqual(commands, [["/usr/bin/xcrun", ["simctl", "terminate", "owned-device", "me.omi.capture.test"]]]);
+    assert.equal(attempts.some((attempt) => attempt.kind === "macos_process_group" && attempt.signal === "SIGKILL"), true);
+    assert.equal(attempts.some((attempt) => attempt.kind === "ios_fixture_app" && attempt.bundle_id === "me.omi.capture.test"), true);
+    assert.equal(JSON.stringify(commands).includes("com.apple.iphonesimulator"), false);
+  } finally {
+    rmSync(monitorRoot, { recursive: true, force: true });
+  }
 });
 
 test("screenshot canonicalization removes low-bit compositor jitter but preserves visible changes", () => {
@@ -442,7 +510,7 @@ test("assemble-receipt binds result manifest separately from replay artifacts", 
     writeFileSync(matrix, JSON.stringify(value));
     const members = { m0000: { coordinate: ["screenshot", coordinate.domain, coordinate.shell, coordinate.state, coordinate.theme, coordinate.width, "none"], run_id: coordinate.run_id, evidence: { root: "core", path: path.relative(root, image), sha256: sha256(png) }, sidecar: { root: "core", path: path.relative(root, sidecar), sha256: sha256(readFileSync(sidecar)) } } };
     const authority = { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { macos: nativeFocusPolicyForTest(), ios: nativeFocusPolicyForTest() }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } };
-    const result = { schema: "omi.polish.native-fixture-batch-result/v1", source_shas: value.source_shas, manifest_path: `core:${path.relative(root, matrix)}`, manifest_sha256: sha256(readFileSync(matrix)), command: "node capture-native-fixture-batch.mjs", argv: ["node", "capture-native-fixture-batch.mjs"], input_set: { id: `input-v1-${"a".repeat(64)}`, entries: [], tree_sha256: "a".repeat(64) }, members, timeout_seconds: 300, wait_seconds: 1, stdout_sha256: sha256("NATIVE_FIXTURE_BATCH_COMPLETE members=1\n"), stderr_sha256: sha256(""), authority };
+    const result = { schema: "omi.polish.native-fixture-batch-result/v1", source_shas: value.source_shas, manifest_path: `core:${path.relative(root, matrix)}`, manifest_sha256: sha256(readFileSync(matrix)), command: "node capture-native-fixture-batch.mjs", argv: ["node", "capture-native-fixture-batch.mjs"], input_set: { id: `input-v1-${"a".repeat(64)}`, entries: [], tree_sha256: "a".repeat(64) }, members, timeout_seconds: 300, wait_seconds: 1, stdout_sha256: sha256("NATIVE_FIXTURE_BATCH_COMPLETE members=1\n"), stderr_sha256: sha256(""), authority, foreground_custody: custodyReceipt() };
     writeFileSync(resultPath, JSON.stringify(result, null, 2));
     const forged = { ...result, authority: { fixture: true } };
     writeFileSync(resultPath, JSON.stringify(forged, null, 2));
