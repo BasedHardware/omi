@@ -924,8 +924,11 @@ async def download_latest_desktop_release(
     channel in the legacy release metadata; the requested channel is strict
     (404 when empty — QA/tooling contract).
     Defaults to stable channel (for macos.omi.me). Use channel=beta for QA.
-    identity=beta serves the separately-installable "Omi Beta" DMG, which runs
-    side-by-side with stable.
+    identity selects which installer that channel serves: identity=beta is the
+    separately-installable "Omi Beta" DMG that runs side-by-side with stable.
+    When identity is absent it follows the channel (channel=beta alone serves
+    the beta-identity DMG — the macos.omi.me/beta redirect contract); pass
+    identity explicitly to request the cross product.
     """
     if identity is None:
         # macos.omi.me/beta redirects here with only channel=beta — the URL-map redirect
