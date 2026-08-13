@@ -209,6 +209,12 @@ adapter reuses the canonical authorized memory page and preserves its citations,
 window and completeness. No provider prompt or default consumes those bytes yet;
 see `docs/memory-productionization/authorized-chat-memory-context-contract.md`.
 
+The ratified Listen-to-memory semantic mapping is implemented as an inert
+acceptance adapter; it is intentionally not called by the local socket
+finalizer until an authoritative transcript seal and same-transaction outbox
+exist. See
+`docs/memory-productionization/listen-formation-ingestion-contract.md`.
+
 ## Environment variables
 
 All are optional.
