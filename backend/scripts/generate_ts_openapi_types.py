@@ -284,8 +284,10 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
 
             # Parse requestBody
             body_type: str | None = None
+            body_required = False
             req_body = operation.get('requestBody', {})
             if isinstance(req_body, dict):
+                body_required = bool(req_body.get('required', False))
                 content = req_body.get('content', {})
                 if isinstance(content, dict):
                     json_content = content.get('application/json')
@@ -304,7 +306,7 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                 fields = ', '.join(f'{ts_identifier(n)}{"?" if not r else ""}: {t}' for n, t, r in header_params)
                 sig_parts.append(f'header: {{ {fields} }}')
             if body_type:
-                sig_parts.append(f'body: {body_type}')
+                sig_parts.append(f'body{"?" if not body_required else ""}: {body_type}')
             sig_parts.append('init?: OmiApiClientInit')
             sig = ', '.join(sig_parts)
 

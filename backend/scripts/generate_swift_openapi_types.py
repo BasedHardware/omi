@@ -805,8 +805,14 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
                 else:
                     body_lines.append(f'  if let {sw} {{ req.setValue(String({sw}), forHTTPHeaderField: {name_lit}) }}')
             if body_type:
-                body_lines.append('  req.setValue("application/json", forHTTPHeaderField: "Content-Type")')
-                body_lines.append('  req.httpBody = try JSONEncoder().encode(body)')
+                if body_required:
+                    body_lines.append('  req.setValue("application/json", forHTTPHeaderField: "Content-Type")')
+                    body_lines.append('  req.httpBody = try JSONEncoder().encode(body)')
+                else:
+                    body_lines.append('  if let body {')
+                    body_lines.append('    req.setValue("application/json", forHTTPHeaderField: "Content-Type")')
+                    body_lines.append('    req.httpBody = try JSONEncoder().encode(body)')
+                    body_lines.append('  }')
             body_lines.append('  let (data, resp) = try await URLSession.shared.data(for: req)')
             body_lines.append('  guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }')
             body_lines.append('  guard (200..<300).contains(http.statusCode) else {')
