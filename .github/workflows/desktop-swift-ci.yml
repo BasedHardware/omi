@@ -11,10 +11,10 @@ concurrency:
   # Supersede stale revisions of the same PR, but never let a later main push
   # cancel the exact-SHA evidence consumed by desktop release planning.
   group: desktop-swift-${{ github.event.pull_request.number || github.sha }}
-  # A merged PR emits a `closed` run in this same group. That bookkeeping run
-  # must not cancel the exact-SHA verifier whose aggregate check release
-  # planning consumes.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+  # An abandoned PR's `closed` run may cancel obsolete work. A merged PR's
+  # bookkeeping run must not cancel exact-SHA evidence still finishing for the
+  # merge, so only unmerged closures retain cancellation authority.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'closed' || !github.event.pull_request.merged) }}
 
 jobs:
   changes:
@@ -252,8 +252,11 @@ jobs:
 
   desktop-swift:
     # Keep this name stable: desktop release planning requires this exact
-    # check to pass for the source SHA that will be tagged.
-    name: Desktop Swift Build & Tests
+    # check to pass for the source SHA that will be tagged. Closed-event
+    # bookkeeping must use a distinct name because GitHub associates a merged
+    # pull_request.closed run with the target-branch merge SHA; publishing a
+    # newer skipped required check there would block release planning.
+    name: ${{ github.event.action == 'closed' && 'Desktop Swift PR Closure' || 'Desktop Swift Build & Tests' }}
     needs: [changes, desktop-swift-verify]
     if: ${{ always() && needs.changes.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
