@@ -344,8 +344,8 @@ struct ChatBubble: View {
       EmptyView()
     case .timestampOnly:
       messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
-    case .actions(let ratings):
-      messageMetadataRow(includeRatingButtons: ratings, includeCopyButton: true)
+    case .actions:
+      messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
     }
     // **A user turn gets no metadata band.** Its timestamp-only row cost every
     // question a reserved band for a fact the reply underneath already stamps.

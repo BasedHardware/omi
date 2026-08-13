@@ -60,12 +60,13 @@ enum ToolActivityTimelineLayout {
 
   static func symbol(for name: String) -> String {
     let cleanName = String(name.split(separator: "__").last ?? Substring(name)).lowercased()
-    if cleanName.contains("search") || cleanName.hasPrefix("grep") || cleanName.hasPrefix("glob") {
+    let tokens = Set(cleanName.split { !$0.isLetter && !$0.isNumber }.map(String.init))
+    if tokens.contains("search") || cleanName.hasPrefix("grep") || cleanName.hasPrefix("glob") {
       return "magnifyingglass"
     }
-    if cleanName.contains("read") || cleanName.contains("fetch") { return "doc.text" }
-    if cleanName.contains("write") || cleanName.contains("edit") { return "pencil" }
-    if cleanName.contains("bash") || cleanName.contains("shell") || cleanName.contains("command") {
+    if tokens.contains("read") || tokens.contains("fetch") { return "doc.text" }
+    if tokens.contains("write") || tokens.contains("edit") { return "pencil" }
+    if tokens.contains("bash") || tokens.contains("shell") || tokens.contains("command") {
       return "terminal"
     }
     if cleanName.contains("agent") { return "person.2" }
@@ -173,6 +174,6 @@ struct ToolCallHeaderLabel: View {
           .truncationMode(.middle)
       }
     }
-    .frame(height: ToolActivityTimelineLayout.headerHeight, alignment: .leading)
+    .frame(minHeight: ToolActivityTimelineLayout.headerHeight, alignment: .leading)
   }
 }

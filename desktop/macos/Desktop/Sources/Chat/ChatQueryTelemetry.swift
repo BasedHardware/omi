@@ -287,11 +287,18 @@ struct ChatQueryErrorDetail: Equatable, Sendable {
         retryDisposition: nil)
     case .agentRuntimeFailure(let failure):
       let classified = AgentErrorClassifier.classify(failure)
-      let billingRejected =
-        classified.code == .providerBillingExhausted || classified.code == .planLimitReached
+      let classifierOwnsCode: Bool
+      switch classified.code {
+      case .providerBillingExhausted, .planLimitReached:
+        classifierOwnsCode = true
+      case .providerAuthExpired, .credentialLeakSuspected:
+        classifierOwnsCode = failure.failureCode == .unknown
+      default:
+        classifierOwnsCode = false
+      }
       return ChatQueryErrorDetail(
-        errorCode: billingRejected ? classified.code.rawValue : failure.failureCode.rawValue,
-        retryable: billingRejected ? false : failure.retryable,
+        errorCode: classifierOwnsCode ? classified.code.rawValue : failure.failureCode.rawValue,
+        retryable: classifierOwnsCode ? classified.retryable : failure.retryable,
         failureCode: boundedFailureCode(failure.code),
         failureSource: failure.source,
         adapterId: failure.adapterId,

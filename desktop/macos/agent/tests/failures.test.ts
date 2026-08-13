@@ -4,6 +4,7 @@ import {
   AdapterRuntimeError,
   attachWorkerRecycle,
   failureFromError,
+  isProviderBillingFailure,
   unexpectedQueryErrorDiagnostic,
   WORKER_RECYCLED_NEXT_SEND_MESSAGE,
 } from "../src/runtime/failures.js";
@@ -31,6 +32,20 @@ describe("query error diagnostics", () => {
 });
 
 describe("provider billing vs worker recycle", () => {
+  it("matches both HTTP-first and status-first 402 phrasings", () => {
+    for (const text of [
+      "HTTP 402 status code (no body)",
+      "Request failed: http/402",
+      "402 status from provider",
+      "status 402",
+      "status code: 402",
+      "status code = 402",
+    ]) {
+      expect(isProviderBillingFailure(text), text).toBe(true);
+    }
+    expect(isProviderBillingFailure("used 402 tokens")).toBe(false);
+  });
+
   it("marks a bare HTTP 402 as non-retryable quota before recycle wrapping", () => {
     const failure = failureFromError(new Error("HTTP 402 status code (no body)"), {
       code: "adapter_execution_failed",

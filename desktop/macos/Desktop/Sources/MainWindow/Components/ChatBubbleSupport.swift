@@ -252,12 +252,12 @@ struct BackgroundAgentSummary: Equatable {
 enum ChatBubbleMetadataBand: Equatable {
   case hidden
   case timestampOnly
-  case actions(ratings: Bool)
+  case actions
 
   static func of(_ message: ChatMessage) -> Self {
     guard message.sender == .ai, !message.isStreaming else { return .hidden }
     guard !message.copyableText.isEmpty else { return .timestampOnly }
-    return .actions(ratings: true)
+    return .actions
   }
 }
 
@@ -277,6 +277,9 @@ enum ChatBubbleIdentity {
       && lhs.rating == rhs.rating
       && lhs.isSynced == rhs.isSynced
       && lhs.copyableText == rhs.copyableText
+      && lhs.displayResources == rhs.displayResources
+      && lhs.journalStatus == rhs.journalStatus
+      && lhs.citations.map(\.id) == rhs.citations.map(\.id)
       && (lhs.metadata != nil) == (rhs.metadata != nil)
       && ChatContentBlockCodec.comparisonData(lhs.contentBlocks)
         == ChatContentBlockCodec.comparisonData(rhs.contentBlocks)

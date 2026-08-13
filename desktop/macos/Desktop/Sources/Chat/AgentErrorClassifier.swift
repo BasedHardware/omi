@@ -120,7 +120,9 @@ enum AgentErrorClassifier {
     // that happens to contain those digits cannot claim this rule.
     if lower.contains("payment required")
       || lower.range(of: #"\bhttp[\s/]*402\b"#, options: .regularExpression) != nil
-      || lower.range(of: #"\b402\s+status\b"#, options: .regularExpression) != nil
+      || lower.range(
+        of: #"\b(?:402\s+status|status(?:\s+code)?\s*[:=]?\s*402)\b"#,
+        options: .regularExpression) != nil
     {
       return ClassifiedAgentError(
         code: .providerBillingExhausted,

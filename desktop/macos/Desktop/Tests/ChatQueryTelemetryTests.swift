@@ -114,6 +114,23 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertFalse(String(describing: properties).contains("private prompt"))
   }
 
+  func testUnknownDaemonAuthFailureReportsClassifierCodeAndIsNotRetryable() {
+    let failure = AgentRuntimeFailure(
+      code: "adapter_execution_failed",
+      failureCode: .unknown,
+      userMessage: "Authentication required",
+      source: "adapter_execution",
+      adapterId: "pi-mono",
+      retryable: true
+    )
+    let error = BridgeError.agentRuntimeFailure(failure)
+    let detail = ChatQueryErrorDetail.from(error)
+
+    XCTAssertEqual(detail?.errorCode, "provider_auth_expired")
+    XCTAssertEqual(detail?.retryable, false)
+    XCTAssertEqual(ChatQueryFailureDisposition.classify(error), .failed(.authentication))
+  }
+
   func testRecycledWorkerHTTP402ReportsBillingNotUnknownRuntime() {
     let failure = AgentRuntimeFailure(
       code: "adapter_execution_failed",

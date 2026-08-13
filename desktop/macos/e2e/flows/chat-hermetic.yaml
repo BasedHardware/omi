@@ -5,7 +5,6 @@ description: Hermetic chat in Home tab — send/receive with Rust OMI_LLM_STUB=1
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Chat/ChatTurnFailureNotice.swift
-  - desktop/macos/agent/src/runtime/failures.ts
   - desktop/macos/Desktop/Sources/Theme/OmiTextEditor.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimePayload.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContinuityInvariants.swift

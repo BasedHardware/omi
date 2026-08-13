@@ -22,6 +22,8 @@ final class ToolActivityTimelineLayoutTests: XCTestCase {
     XCTAssertEqual(sparkles.midY, ToolActivityTimelineLayout.iconColumn / 2, accuracy: 0.001)
     XCTAssertEqual(ToolActivityTimelineLayout.symbol(for: "get_daily_recap"), "sparkles")
     XCTAssertEqual(ToolActivityTimelineLayout.symbol(for: "read_tool_output"), "doc.text")
+    XCTAssertEqual(ToolActivityTimelineLayout.symbol(for: "thread_dump"), "sparkles")
+    XCTAssertEqual(ToolActivityTimelineLayout.symbol(for: "spreadsheet"), "sparkles")
   }
 
   func testDisclosureSitsBesideTheLabelInsteadOfTheTrailingEdge() {

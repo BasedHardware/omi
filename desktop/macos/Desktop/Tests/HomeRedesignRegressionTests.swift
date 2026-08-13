@@ -168,7 +168,7 @@ final class ChatBubbleMetadataBandTests: XCTestCase {
       isStreaming: false,
       isSynced: false)
 
-    XCTAssertEqual(ChatBubbleMetadataBand.of(message), .actions(ratings: true))
+    XCTAssertEqual(ChatBubbleMetadataBand.of(message), .actions)
   }
 
   func testStreamingReplyHidesTheMetadataBand() {
@@ -211,19 +211,53 @@ final class ChatBubbleIdentityTests: XCTestCase {
       bubble(isSynced: false, metadata: Self.sampleMetadata))
   }
 
-  private static let sampleMetadata = MessageMetadata(
-    model: "claude-sonnet",
-    inputTokens: 10,
-    outputTokens: 4,
-    cacheReadTokens: nil,
-    cacheWriteTokens: nil,
-    costUsd: nil,
-    systemPrompt: nil,
-    hasScreenshot: false,
-    screenshotSizeBytes: nil,
-    toolNames: [],
-    sqlRowsReturned: 0,
-    sqlQueryCount: 0)
+  func testLateArtifactsAreVisibleIdentity() {
+    let withoutArtifact = bubble(isSynced: false, metadata: nil)
+    let withArtifact = ChatBubble(
+      message: ChatMessage(
+        id: "live-tail",
+        text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+        sender: .ai,
+        isStreaming: false,
+        isSynced: false,
+        resources: [
+          ChatResource(
+            id: "artifact:late",
+            origin: .generatedArtifact,
+            title: "result.json",
+            subtitle: "application/json",
+            mimeType: "application/json",
+            thumbnailURL: nil,
+            imageData: nil,
+            uri: "omi-artifact://late",
+            artifactId: "late",
+            sessionId: nil,
+            runId: nil,
+            state: .ready)
+        ]),
+      app: nil,
+      showsOmiMark: true,
+      onRate: { _ in })
+    XCTAssertNotEqual(withoutArtifact, withArtifact)
+  }
+
+  func testJournalFailureIsVisibleIdentity() {
+    let completed = bubble(isSynced: false, metadata: nil)
+    let failed = ChatBubble(
+      message: ChatMessage(
+        id: "live-tail",
+        text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+        sender: .ai,
+        isStreaming: false,
+        isSynced: false,
+        journalStatus: .failed),
+      app: nil,
+      showsOmiMark: true,
+      onRate: { _ in })
+    XCTAssertNotEqual(completed, failed)
+  }
+
+  private static let sampleMetadata = MessageMetadata(toolNames: ["search"])
 
   private func bubble(isSynced: Bool, metadata: MessageMetadata?) -> ChatBubble {
     ChatBubble(

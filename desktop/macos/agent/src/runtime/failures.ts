@@ -72,7 +72,7 @@ export const WORKER_RECYCLED_NEXT_SEND_MESSAGE =
   "The local agent reset its session after an error. Send your message again.";
 
 const PROVIDER_BILLING_HTTP_402 = /\bhttp[\s/]*402\b/i;
-const PROVIDER_BILLING_402_STATUS = /\b402\s+status\b/i;
+const PROVIDER_BILLING_402_STATUS = /\b(?:402\s+status|status(?:\s+code)?\s*[:=]?\s*402)\b/i;
 
 /** A 402 is a provider billing rejection, not a poisoned worker. Recycle can
  * still clean the process; retrying the same turn cannot clear Payment Required.

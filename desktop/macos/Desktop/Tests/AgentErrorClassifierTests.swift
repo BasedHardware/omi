@@ -51,6 +51,8 @@ final class AgentErrorClassifierTests: XCTestCase {
       "HTTP 402 status code (no body)",
       "402 Payment Required",
       "Request failed: http/402",
+      "status 402",
+      "status code: 402",
     ] {
       let classified = AgentErrorClassifier.classify(raw)
       XCTAssertEqual(classified.code, .providerBillingExhausted, "unclassified: \(raw)")
