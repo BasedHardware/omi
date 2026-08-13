@@ -214,7 +214,8 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   init(
     handlers: NativeHandlers, frame: NSRect, loadURL: URL,
     http: BridgeHttpHandler?, listen: ListenSocketHandler?,
-    chatStream: ChatStreamHandler?, chatAttachmentStaging: ChatAttachmentStagingHandler?
+    chatStream: ChatStreamHandler?, chatAttachmentStaging: ChatAttachmentStagingHandler?,
+    ephemeral: Bool = false
   ) {
     self.loadURL = loadURL
     self.http = http
@@ -222,6 +223,12 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     self.chatStream = chatStream
     self.chatAttachmentStaging = chatAttachmentStaging
     let config = WKWebViewConfiguration()
+    if ephemeral {
+      // Fixture/semantic automation must not read or mutate the signed-in
+      // user's WebKit profile. This also keeps strict replay fully inside its
+      // declared scratch custody instead of consulting ~/Library/WebKit.
+      config.websiteDataStore = .nonPersistent()
+    }
     config.defaultWebpagePreferences.allowsContentJavaScript = true
     let webView = TransparentWKWebView(frame: frame, configuration: config)
     webView.wantsLayer = true
@@ -443,11 +450,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidFinishLaunching(_ note: Notification) {
+    let fixtureCapture = env["OMI_PROBE_EXIT"] != nil
+    let semanticWindow = env["OMI_SEMANTIC_WINDOW"] == "1"
     if let server = surfaceLoad.server {
       do {
         try server.start()
         loopback = server
       } catch {
+        if fixtureCapture || semanticWindow {
+          FileHandle.standardError.write(
+            Data("LOOPBACK: failed port=\(loopbackPort)\n".utf8))
+          Darwin.exit(1)
+        }
         let alert = NSAlert()
         alert.messageText = "Loopback failed to bind"
         alert.informativeText =
@@ -456,8 +470,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
 
-    let fixtureCapture = env["OMI_PROBE_EXIT"] != nil
-    let semanticWindow = env["OMI_SEMANTIC_WINDOW"] == "1"
     let fixtureSized = fixtureCapture || semanticWindow
     let minimumWidth: CGFloat = semanticWindow ? 320 : 760
     let minimumHeight: CGFloat = semanticWindow ? 360 : 560
@@ -515,7 +527,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     controller = WebViewController(
       handlers: handlers, frame: contentRect, loadURL: surfaceLoad.url,
       http: httpHandler, listen: listenSocketHandler,
-      chatStream: chatStreamHandler, chatAttachmentStaging: chatAttachmentStagingHandler)
+      chatStream: chatStreamHandler, chatAttachmentStaging: chatAttachmentStagingHandler,
+      ephemeral: fixtureCapture || semanticWindow)
     window = NSWindow(
       contentRect: contentRect,
       styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
