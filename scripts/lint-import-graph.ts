@@ -453,6 +453,7 @@ const storageProvenanceIdentifiers = [
 const storageProvenanceAllowMarker = "storage-provenance-ok(";
 
 const queryEvaluationCompositionRoot = "apps/service/composition/memory-query-evaluation.ts";
+const memoryRecallKernelCompositionRoot = "apps/service/composition/memory-recall-kernel.ts";
 const authorizedLedgerContextCompositionRoot = "apps/service/auth/firebase-application-authorization.ts";
 const externallyAuthorizedProjectionOwner = "drivers/postgres/firebase-authorized-graph-snapshot-runtime.ts";
 const memoryExportRuntimeOwner = "drivers/postgres/firebase-authorized-memory-export-runtime.ts";
@@ -465,6 +466,7 @@ const durableWorkRunnerImporters = new Set([
 ]);
 const queryEvaluationInternalImporters = new Set([
   queryEvaluationCompositionRoot,
+  memoryRecallKernelCompositionRoot,
   "apps/service/workers/memory-owner-query-evidence-source.ts",
   "apps/service/workers/memory-authorized-query-grounding-producer.ts",
   "apps/service/workers/memory-paired-query-grounding-coordinator.ts",
