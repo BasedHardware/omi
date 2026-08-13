@@ -112,7 +112,7 @@ horizon_case = {
     },
 }
 mapped_tasks = __import__("json").loads(benchmark.map_case(horizon_case)["tasks"])
-assert [task["description"] for task in mapped_tasks] == ["overdue", "near", "undated"]
+assert [task["description"] for task in mapped_tasks] == ["overdue", "near", "far", "undated"]
 
 envelope["result"]["detail"]["decision"] = "unexpected"
 with patch.object(benchmark.request, "urlopen", return_value=Response()):

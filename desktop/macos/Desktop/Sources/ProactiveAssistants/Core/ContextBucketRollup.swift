@@ -187,8 +187,14 @@ enum ContextProactivityPromptBuilder {
     tasks: [ContextDirectorTaskContext],
     frame: CapturedFrame
   ) -> String {
+    let actionableCutoff = frame.captureTime.addingTimeInterval(
+      ContextDirectorTaskSelection.futureHorizon)
     let taskLines: [String] = tasks.prefix(20).map { task -> String in
       guard let dueAt = task.dueAt else { return "- \(task.description)" }
+      if dueAt > actionableCutoff {
+        return
+          "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))\n  Reference only: already exists; do not resurface or create it yet."
+      }
       return "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))"
     }
     let taskContext = taskLines.joined(separator: "\n")
