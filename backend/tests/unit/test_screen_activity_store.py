@@ -11,13 +11,14 @@ from datetime import datetime
 import pytest
 
 import database.screen_activity as screen_activity_db
-from tests.store_fakes import FakeDocumentStore
+from tests.store_fakes import install_fake_db_client
 
 
 @pytest.fixture
 def store(monkeypatch):
-    fake = FakeDocumentStore()
-    monkeypatch.setattr(screen_activity_db, '_store', lambda: fake)
+    # ADR-0044: screen_activity threads the raw ``db`` client; inject the neutral facade over a
+    # fake so the real read/write logic runs against ``fake._docs`` (was the retired ``_store`` seam).
+    fake = install_fake_db_client(monkeypatch)
     return fake
 
 
@@ -95,19 +96,12 @@ class TestSummary:
         assert set(summary['apps']['Chrome']['window_titles']) == {'X', 'Y'}
 
 
-class TestOcrText:
-    def test_missing_document_returns_empty(self, store):
-        assert screen_activity_db.get_screen_activity_ocr_text('u1', 'missing') == ''
-
-    def test_returns_truncated_ocr(self, store):
-        store.set('users/u1/screen_activity/a', {'ocrText': 'y' * 500})
-        assert screen_activity_db.get_screen_activity_ocr_text('u1', 'a', max_len=50) == 'y' * 50
-
-    def test_slash_in_id_is_rejected_not_path_traversed(self, store):
-        # A sid containing '/' must not compose an unintended document path (path injection): the
-        # read normalizes the id segment exactly as the write does, and an unsafe id is refused.
-        with pytest.raises(ValueError):
-            screen_activity_db.get_screen_activity_ocr_text('u1', 'a/b')
+# NOTE: the previous ``TestOcrText`` suite covered ``get_screen_activity_ocr_text``, a convenience
+# getter the upstream merge reverted and which has no live caller anywhere in the tree. Per the
+# upstream-fidelity policy (delta = storage only) we do not re-add orphan convenience functions, so
+# the dead-scope tests are dropped rather than re-pointed. The slash-injection guard they asserted
+# now lives centrally in the facade (_CollRef.document -> _validate_doc_id) and is covered by
+# TestUpsert::test_client_id_with_slash_is_rejected_not_written_to_wrong_path + the facade suite.
 
 
 class TestIds:

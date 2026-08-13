@@ -16,13 +16,14 @@ import pytest  # noqa: E402
 
 import database.wrapped as wrapped_module  # noqa: E402
 from database.wrapped import WrappedStatus  # noqa: E402
-from tests.store_fakes import FakeDocumentStore  # noqa: E402
+from tests.store_fakes import install_fake_db_client  # noqa: E402
 
 
 @pytest.fixture
 def store(monkeypatch):
-    fake = FakeDocumentStore()
-    monkeypatch.setattr(wrapped_module, '_store', lambda: fake)
+    # ADR-0044: wrapped threads the raw ``db`` client; inject the neutral facade over a fake so the
+    # real read/write logic runs against ``fake._docs`` (was the retired ``_store`` seam).
+    fake = install_fake_db_client(monkeypatch)
     return fake
 
 
