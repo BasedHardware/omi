@@ -20,6 +20,8 @@ import {
   removeOwnedContainer, removeOwnedVolume, verifyOwnedContainerConfiguration,
   type PostgresTestCommandRunner,
 } from "./postgres-test-resources";
+import { runPostgresLogicalRestoreDrill } from "./postgres-logical-restore-drill";
+import { POSTGRES_MIGRATIONS } from "../drivers/postgres/migrations/manifest";
 
 const PROJECT_ROOT = realpathSync(resolve(import.meta.dir, ".."));
 const paths = postgresTestPaths(PROJECT_ROOT);
@@ -395,7 +397,13 @@ const testPostgres = async (preserve: boolean): Promise<void> => {
       env: childEnvironment, inherit: true,
     });
     if (result.exitCode !== 0) process.exitCode = result.exitCode;
-    if (result.exitCode === 0) runRuntimeParity(prepared.state);
+    if (result.exitCode === 0) {
+      const restoreDrill = runPostgresLogicalRestoreDrill(
+        resourceRunner, prepared.state, POSTGRES_MIGRATIONS.length,
+      );
+      process.stdout.write(`${JSON.stringify(restoreDrill)}\n`);
+      runRuntimeParity(prepared.state);
+    }
   } finally {
     if (preserve) {
       if (prepared.started) teardown();
