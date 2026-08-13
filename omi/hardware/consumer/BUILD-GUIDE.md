@@ -1,6 +1,6 @@
-# Build Your Own Omi
+# Build Your Own Omi — Omi Consumer
 
-↑ **[README](README.md)** | **[Kit Assembly](KIT-ASSEMBLY.md)** | **[Readiness Checklist](INDIE-MAKER-CHECKLIST.md)**
+↑ **[README](README.md)** | **[Kit Assembly](KIT-ASSEMBLY.md)** | **[Build Readiness](BUILD-READINESS.md)**
 
 **This guide helps you pick the right build path based on your experience.**
 
@@ -105,14 +105,14 @@ Pricing depends on quantity. Expect ~$80–120/unit at 10+ units.
 
 1. Clone this repo and read the engineering reference docs (see table below)
 2. Order mainboard PCB — HDI specs in [IMPEDANCE-STACKUP.md](electrical/IMPEDANCE-STACKUP.md)
-3. Order charger PCB and FPC — flex specs in [FPC-FLEX-FAB-NOTES.md](electrical/FPC-FLEX-FAB-NOTES.md)
+3. Order charger PCB and FPC — flex specs in [FPC-FAB-NOTES.md](electrical/FPC-FAB-NOTES.md)
 4. Source components — 63 unique MPNs total: 48 available on LCSC, 15 must be consigned. See [LCSC-SOURCING.md](bom/LCSC-SOURCING.md)
-5. Order PCBA — select Standard or Advanced assembly tier for WLCSP capability (PCB fabrication is separate; HDI service is required for mainboard). Use [CPL-README.md](bom/CPL-README.md) for rotation/pin-1
+5. Order PCBA — select Standard or Advanced assembly tier for WLCSP capability (PCB fabrication is separate; HDI service is required for mainboard). Use [COMPONENT-PLACEMENT.md](bom/COMPONENT-PLACEMENT.md) for rotation/pin-1
 6. Specify stencil and reflow — [STENCIL-REFLOW-NOTES.md](electrical/STENCIL-REFLOW-NOTES.md)
 7. Order battery — [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) (dangerous goods shipping, allow 2–4 weeks)
 8. Order CNC enclosure from a machining service
 9. Receive boards → inspect → X-ray verify WLCSP joints
-10. Flash firmware via J-Link SWD — [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md)
+10. Flash firmware via J-Link SWD — [SWD-FLASHING.md](electrical/SWD-FLASHING.md)
 11. Solder battery, connect FPC, assemble into enclosure
 12. Test (BLE, Wi-Fi, mic, IMU, charging)
 
@@ -121,14 +121,14 @@ Pricing depends on quantity. Expect ~$80–120/unit at 10+ units.
 | Doc | Audience | What It Covers |
 |-----|----------|---------------|
 | [LCSC-SOURCING.md](bom/LCSC-SOURCING.md) | Sourcing engineer | Part-by-part availability, JLCPCB ordering, cost breakdown |
-| [CPL-README.md](bom/CPL-README.md) | PCBA engineer | Pick-and-place format, rotation corrections, WLCSP pin-1 |
+| [COMPONENT-PLACEMENT.md](bom/COMPONENT-PLACEMENT.md) | PCBA engineer | Pick-and-place format, rotation corrections, WLCSP pin-1 |
 | [STENCIL-REFLOW-NOTES.md](electrical/STENCIL-REFLOW-NOTES.md) | CM / process engineer | Stencil specs, paste type, reflow profile, X-ray criteria |
 | [IMPEDANCE-STACKUP.md](electrical/IMPEDANCE-STACKUP.md) | PCB fab engineer | 4-layer stackup, impedance targets, HDI requirements |
-| [FPC-FLEX-FAB-NOTES.md](electrical/FPC-FLEX-FAB-NOTES.md) | Flex fab engineer | FPC fabrication, stiffener, bend radius, quality checks |
+| [FPC-FAB-NOTES.md](electrical/FPC-FAB-NOTES.md) | Flex fab engineer | FPC fabrication, stiffener, bend radius, quality checks |
 | [RF-ANTENNA-NOTES.md](electrical/RF-ANTENNA-NOTES.md) | RF engineer | RF architecture, switch control, enclosure RF strategy |
 | [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | Everyone | Battery selection, safety, shipping compliance |
-| [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) | Everyone | Debug probe wiring, test points, firmware flashing |
-| [ALTERNATES.md](bom/ALTERNATES.md) | Sourcing engineer | Substitute parts (approved, candidate, rejected) |
+| [SWD-FLASHING.md](electrical/SWD-FLASHING.md) | Everyone | Debug probe wiring, test points, firmware flashing |
+| [ALTERNATE-PARTS.md](bom/ALTERNATE-PARTS.md) | Sourcing engineer | Substitute parts (approved, candidate, rejected) |
 
 ---
 
@@ -152,7 +152,7 @@ Get firmware hex files from:
 - **Pre-built releases:** [github.com/BasedHardware/omi/releases](https://github.com/BasedHardware/omi/releases) — download `net_core.hex` and `app_core.hex` matching your hardware revision (v1.2)
 - **Build from source:** Follow the [firmware build guide](https://docs.omi.me/doc/developer/firmware/Compile_firmware) — requires nRF Connect SDK
 
-See [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) for complete instructions. Quick summary:
+See [SWD-FLASHING.md](electrical/SWD-FLASHING.md) for complete instructions. Quick summary:
 
 ```bash
 # Download nrfutil from nordicsemi.com, then:

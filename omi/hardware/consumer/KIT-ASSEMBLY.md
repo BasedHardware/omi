@@ -1,4 +1,4 @@
-# Kit Assembly Guide
+# Kit Assembly Guide — Omi Consumer
 
 ↑ **[Build Guide](BUILD-GUIDE.md)** | **[README](README.md)**
 
@@ -103,7 +103,7 @@ With the board powered, connect 4 wires to the SWD test points:
 
 Use pogo pins, test clips, or solder temporary wires. The test points are labeled on the board silkscreen.
 
-See [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) for test point locations and detailed wiring.
+See [SWD-FLASHING.md](electrical/SWD-FLASHING.md) for test point locations and detailed wiring.
 
 ### Flash
 
@@ -180,7 +180,7 @@ Run these tests before closing the enclosure — fixing problems after assembly 
 
 **Motor test** may require pairing with the Omi app first. If motor testing isn't available in the app yet, verify the motor by briefly touching its pads to a 3V disposable battery (CR2032) — it should vibrate.
 
-If any test fails, debug now. See [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) for troubleshooting via J-Link RTT.
+If any test fails, debug now. See [SWD-FLASHING.md](electrical/SWD-FLASHING.md) for troubleshooting via J-Link RTT.
 
 ---
 

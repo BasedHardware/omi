@@ -63,8 +63,8 @@ The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Bui
 ### Quick Links
 
 - **Kit assembly guide:** [KIT-ASSEMBLY.md](KIT-ASSEMBLY.md)
-- **Firmware flashing:** [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md)
-- **Readiness checklist:** [INDIE-MAKER-CHECKLIST.md](INDIE-MAKER-CHECKLIST.md)
+- **SWD flashing:** [SWD-FLASHING.md](electrical/SWD-FLASHING.md)
+- **Build readiness:** [BUILD-READINESS.md](BUILD-READINESS.md)
 - **Firmware source:** [omi/firmware/](../../firmware/)
 - **Online docs:** [docs.omi.me](https://docs.omi.me/doc/hardware/consumer)
 
@@ -73,14 +73,14 @@ The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Bui
 | Doc | What It Covers |
 |-----|---------------|
 | [LCSC-SOURCING.md](bom/LCSC-SOURCING.md) | Part availability, JLCPCB ordering, cost breakdown |
-| [CPL-README.md](bom/CPL-README.md) | Pick-and-place format, rotation, WLCSP pin-1 |
+| [COMPONENT-PLACEMENT.md](bom/COMPONENT-PLACEMENT.md) | Pick-and-place format, rotation, WLCSP pin-1 |
 | [STENCIL-REFLOW-NOTES.md](electrical/STENCIL-REFLOW-NOTES.md) | Stencil specs, paste, reflow, X-ray |
 | [IMPEDANCE-STACKUP.md](electrical/IMPEDANCE-STACKUP.md) | 4-layer stackup, impedance, HDI |
-| [FPC-FLEX-FAB-NOTES.md](electrical/FPC-FLEX-FAB-NOTES.md) | FPC fabrication, bend radius, quality |
+| [FPC-FAB-NOTES.md](electrical/FPC-FAB-NOTES.md) | FPC fabrication, bend radius, quality |
 | [RF-ANTENNA-NOTES.md](electrical/RF-ANTENNA-NOTES.md) | RF architecture, switch control, enclosure strategy |
 | [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | Battery selection, safety, shipping |
-| [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) | Debug probe wiring, test points, firmware flashing |
-| [ALTERNATES.md](bom/ALTERNATES.md) | Substitute parts (approved / candidate / rejected) |
+| [SWD-FLASHING.md](electrical/SWD-FLASHING.md) | Debug probe wiring, test points, firmware flashing |
+| [ALTERNATE-PARTS.md](bom/ALTERNATE-PARTS.md) | Substitute parts (approved / candidate / rejected) |
 
 ## Directory Structure
 
@@ -89,7 +89,7 @@ consumer/
 ├── README.md                  ← you are here
 ├── BUILD-GUIDE.md             ← start here: pick your build path
 ├── KIT-ASSEMBLY.md            ← step-by-step for Kit buyers
-├── INDIE-MAKER-CHECKLIST.md   ← readiness overview & feasibility
+├── BUILD-READINESS.md   ← readiness overview & feasibility
 ├── LICENSE
 │
 ├── electrical/                ← PCB design files & engineering docs
@@ -99,11 +99,11 @@ consumer/
 │   │   └── schematic.pdf
 │   ├── charger-board/         ← charging dock PCB (v1.0)
 │   ├── fpc-board/             ← flex PCB (v1.0)
-│   ├── SWD-DEBUG-ACCESS.md    ← firmware flashing guide
+│   ├── SWD-FLASHING.md    ← firmware flashing guide
 │   ├── STENCIL-REFLOW-NOTES.md
 │   ├── IMPEDANCE-STACKUP.md
 │   ├── RF-ANTENNA-NOTES.md
-│   └── FPC-FLEX-FAB-NOTES.md
+│   └── FPC-FAB-NOTES.md
 │
 ├── bom/                       ← bills of materials & sourcing
 │   ├── README.md              ← BOM format & column definitions
@@ -113,9 +113,9 @@ consumer/
 │   ├── mechanical-bom.csv
 │   ├── *-cpl.csv              ← pick-and-place files
 │   ├── LCSC-SOURCING.md
-│   ├── CPL-README.md
+│   ├── COMPONENT-PLACEMENT.md
 │   ├── BATTERY-SPEC.md
-│   └── ALTERNATES.md
+│   └── ALTERNATE-PARTS.md
 │
 ├── mechanical/                ← enclosure & internal parts (STEP)
 │   ├── assemblies/            ← full device + charger assembly

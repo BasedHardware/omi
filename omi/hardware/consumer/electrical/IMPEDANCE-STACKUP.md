@@ -128,7 +128,7 @@ When ordering PCBs from JLCPCB, select the closest standard stackup:
 | Surface finish | Specify ENIG when ordering (KiCad design: unspecified) |
 | Cover layer | Polyimide coverlay (not solder mask) |
 
-See `FPC-FLEX-FAB-NOTES.md` for flex-specific fabrication details.
+See `FPC-FAB-NOTES.md` for flex-specific fabrication details.
 
 ## Design Notes
 

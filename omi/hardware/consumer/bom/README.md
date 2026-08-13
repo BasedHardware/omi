@@ -120,10 +120,10 @@ These files complete the indie-maker build package — each addresses a specific
 |------|--------|------|
 | [`LCSC-SOURCING.md`](LCSC-SOURCING.md) | JLCPCB part availability, stock status, alternatives | Task 3 |
 | [`BATTERY-SPEC.md`](BATTERY-SPEC.md) | Battery procurement, shipping (UN3480/PI965), protection circuit | Task 6 |
-| [`ALTERNATES.md`](ALTERNATES.md) | Approved/candidate/rejected second-source parts | Task 10 |
-| [`CPL-README.md`](CPL-README.md) | Pick-and-place file format, rotation offsets | Task 2 |
-| [`../electrical/SWD-DEBUG-ACCESS.md`](../electrical/SWD-DEBUG-ACCESS.md) | J-Link wiring, pogo-pin SWD access | Task 4 |
+| [`ALTERNATE-PARTS.md`](ALTERNATE-PARTS.md) | Approved/candidate/rejected second-source parts | Task 10 |
+| [`COMPONENT-PLACEMENT.md`](COMPONENT-PLACEMENT.md) | Pick-and-place file format, rotation offsets | Task 2 |
+| [`../electrical/SWD-FLASHING.md`](../electrical/SWD-FLASHING.md) | J-Link wiring, pogo-pin SWD access | Task 4 |
 | [`../electrical/STENCIL-REFLOW-NOTES.md`](../electrical/STENCIL-REFLOW-NOTES.md) | Stencil design, reflow profile, WLCSP handling | Task 5 |
 | [`../electrical/RF-ANTENNA-NOTES.md`](../electrical/RF-ANTENNA-NOTES.md) | RF path, antenna, diplexer, matching network | Task 7 |
 | [`../electrical/IMPEDANCE-STACKUP.md`](../electrical/IMPEDANCE-STACKUP.md) | 4-layer HDI stackup, impedance targets, fab notes | Task 8 |
-| [`../electrical/FPC-FLEX-FAB-NOTES.md`](../electrical/FPC-FLEX-FAB-NOTES.md) | FPC fabrication, bend rules, connector mating | Task 9 |
+| [`../electrical/FPC-FAB-NOTES.md`](../electrical/FPC-FAB-NOTES.md) | FPC fabrication, bend rules, connector mating | Task 9 |
