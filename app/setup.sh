@@ -100,8 +100,36 @@ function detect_apple_team_id() {
     done < <(find "$profiles_dir" -name '*.mobileprovision' -print0 2>/dev/null)
   fi
 
-  # 3. Fallback: collect all team IDs that have a valid signing cert in the keychain
-  if [ -z "$team_id" ] && [ -d "$profiles_dir" ]; then
+  # 3. Fallback: offer the teams named by installed profiles, but only if this
+  #    machine holds an iOS development identity at all.
+  #
+  #    Deliberately does NOT try to decide which team a certificate belongs to.
+  #    The team in a certificate's common name is not authoritative: Apple keeps
+  #    the original personal-team ID there when a developer joins a paid team, so
+  #    a certificate reading "Apple Development: NAME (PERSONALTEAM)" can be
+  #    issued under a different team entirely — the real one is the OU, readable
+  #    only by decoding the certificate. Matching the common name therefore
+  #    rejects teams the developer can sign for and accepts ones they cannot.
+  #
+  #    The profile's own TeamIdentifier is authoritative, so that is what gets
+  #    offered. The identity check is a presence test only: with no iOS
+  #    development identity, nothing here is signable and prompting for a team
+  #    would be pointless. "iPhone Developer" is the legacy name for the same
+  #    identity and still exists on older machines. "Developer ID Application"
+  #    is deliberately excluded — it signs Mac distribution builds and cannot
+  #    sign an iOS development build.
+  #
+  #    When several teams qualify this cannot tell them apart, so it asks rather
+  #    than guessing — see the prompt below.
+  # SHA-1 fingerprints of the iOS development identities whose private keys this
+  # machine holds. "Developer ID Application" is excluded: it signs Mac
+  # distribution builds and cannot sign an iOS development build.
+  local held_fingerprints
+  held_fingerprints=$(security find-identity -v -p codesigning 2>/dev/null \
+    | grep -E "Apple Development|iPhone Developer" \
+    | awk '{print toupper($2)}' | grep -E '^[0-9A-F]{40}$')
+
+  if [ -z "$team_id" ] && [ -d "$profiles_dir" ] && [ -n "$held_fingerprints" ]; then
     local seen_teams=()
     while IFS= read -r -d '' profile; do
       local plist candidate
@@ -109,13 +137,34 @@ function detect_apple_team_id() {
       candidate=$(echo "$plist" | xmllint --xpath \
         "string(//key[text()='TeamIdentifier']/following-sibling::array[1]/string[1])" \
         - 2>/dev/null)
-      if [ -n "$candidate" ]; then
-        if security find-identity -v -p codesigning 2>/dev/null | grep -q "$candidate"; then
-          local already_seen=false
-          for t in "${seen_teams[@]:-}"; do [ "$t" = "$candidate" ] && already_seen=true && break; done
-          $already_seen || seen_teams+=("$candidate")
+      [ -n "$candidate" ] || continue
+
+      local already_seen=false
+      for t in "${seen_teams[@]:-}"; do [ "$t" = "$candidate" ] && already_seen=true && break; done
+      $already_seen && continue
+
+      # Offer the team only if the profile embeds a certificate whose private key
+      # is on this machine — the same question Xcode asks when it picks a profile.
+      # Deliberately not decided from the certificate's common name: Apple keeps
+      # the original personal-team ID there when a developer joins a paid team, so
+      # a certificate reading "Apple Development: NAME (PERSONALTEAM)" can be
+      # issued under a different team (the real one is the OU). Matching the name
+      # both rejects teams the developer can sign for and accepts ones they cannot.
+      local usable=false idx=0 der fingerprint
+      while [ "$idx" -lt 50 ]; do
+        der=$(printf '%s' "$plist" \
+          | plutil -extract "DeveloperCertificates.$idx" raw -o - - 2>/dev/null) || break
+        [ -n "$der" ] || break
+        fingerprint=$(printf '%s' "$der" | base64 -d 2>/dev/null \
+          | openssl x509 -inform DER -noout -fingerprint -sha1 2>/dev/null \
+          | sed 's/.*=//; s/://g' | tr '[:lower:]' '[:upper:]')
+        if [ -n "$fingerprint" ] && printf '%s\n' "$held_fingerprints" | grep -qx "$fingerprint"; then
+          usable=true
+          break
         fi
-      fi
+        idx=$((idx + 1))
+      done
+      $usable && seen_teams+=("$candidate")
     done < <(find "$profiles_dir" -name '*.mobileprovision' -print0 2>/dev/null)
 
     if [ "${#seen_teams[@]}" -eq 1 ]; then
