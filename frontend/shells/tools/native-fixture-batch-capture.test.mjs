@@ -164,8 +164,8 @@ function canonical(value) {
   return JSON.stringify(value);
 }
 
-function inputEntriesForFake(manifestPath, appPath) {
-  const files = [...new Set([manifestPath, producer, ...walk(appPath)])];
+function inputEntriesForFake(manifestPath, appPath, extraFiles = []) {
+  const files = [...new Set([manifestPath, producer, ...walk(appPath), ...extraFiles])];
   const entries = files.map((file) => ({ key: `core:${path.relative(root, file)}`, sha256: sha256(readFileSync(file)), size: statSync(file).size, mode: statSync(file).mode & 0o777 })).sort((left, right) => left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
   const tree = sha256(canonical(entries));
   return { id: `input-v1-${tree}`, entries, tree_sha256: tree };
@@ -317,6 +317,9 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /probe_timeout_ms: foregroundProbeTimeoutMs/);
   assert.match(source, /sample_count: sampleCount/);
   assert.match(source, /max_sample_gap_ms/);
+  assert.match(source, /ownedAction = \{ mac_process_group_pid: child\.pid \}/);
+  assert.match(source, /fixture code cannot redirect cleanup at a user process/);
+  assert.doesNotMatch(source, /OMI_FOCUS_ACTION_PATH/);
   assert.match(source, /startForbiddenForegroundMonitor/);
   assert.match(source, /native batch final restoration/);
   assert.match(source, /artifacts\.macos\.bundleId/);
@@ -497,26 +500,55 @@ test("batch boundaries require prepared inputs and reject oversized/semantic ran
 test("assemble-receipt binds result manifest separately from replay artifacts", () => {
   const outRoot = path.join(root, ".build", `native-fixture-assemble-${process.pid}`);
   const matrix = path.join(root, ".build", `native-fixture-assemble-matrix-${process.pid}.json`);
-  const image = path.join(outRoot, "captures/macos/fake.png");
-  const sidecar = `${image}.sidecar.json`;
-  const resultPath = path.join(outRoot, "batch-result.json");
+  const image = path.join(outRoot, "captures/macos/assembly-fake.png");
+  const resultPath = path.join(outRoot, "batch-result-macos-0-1.json");
   try {
     mkdirSync(path.dirname(image), { recursive: true });
-    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
-    writeFileSync(image, png);
     const coordinate = coordinateForAssembly();
-    writeFileSync(sidecar, JSON.stringify({ schema: "omi.polish.screenshot/v1", domain: coordinate.domain, shell: coordinate.shell, state: coordinate.state, theme: coordinate.theme, width: coordinate.width, accessibility: "none", run_id: coordinate.run_id, source_shas: coordinate.source_shas, capture_class: "native_fixture", source_tier: "native_shell", image_root: "core", image_path: `core:${path.relative(root, image)}`, image_sha256: sha256(png) }));
     const value = manifest([coordinate]);
     writeFileSync(matrix, JSON.stringify(value));
-    const members = { m0000: { coordinate: ["screenshot", coordinate.domain, coordinate.shell, coordinate.state, coordinate.theme, coordinate.width, "none"], run_id: coordinate.run_id, evidence: { root: "core", path: path.relative(root, image), sha256: sha256(png) }, sidecar: { root: "core", path: path.relative(root, sidecar), sha256: sha256(readFileSync(sidecar)) } } };
-    const authority = { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { macos: nativeFocusPolicyForTest(), ios: nativeFocusPolicyForTest() }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } };
-    const result = { schema: "omi.polish.native-fixture-batch-result/v1", source_shas: value.source_shas, manifest_path: `core:${path.relative(root, matrix)}`, manifest_sha256: sha256(readFileSync(matrix)), command: "node capture-native-fixture-batch.mjs", argv: ["node", "capture-native-fixture-batch.mjs"], input_set: { id: `input-v1-${"a".repeat(64)}`, entries: [], tree_sha256: "a".repeat(64) }, members, timeout_seconds: 300, wait_seconds: 1, stdout_sha256: sha256("NATIVE_FIXTURE_BATCH_COMPLETE members=1\n"), stderr_sha256: sha256(""), authority, foreground_custody: custodyReceipt() };
-    writeFileSync(resultPath, JSON.stringify(result, null, 2));
-    const forged = { ...result, authority: { fixture: true } };
-    writeFileSync(resultPath, JSON.stringify(forged, null, 2));
-    const rejected = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--assemble-receipt", "--result-path", resultPath, "--started-at", "2026-08-11T12:00:00.000Z", "--finished-at", "2026-08-11T12:00:01.000Z"], { encoding: "utf8" });
-    assert.notEqual(rejected.status, 0);
-    assert.match(rejected.stderr, /authority\/focus policy is invalid/);
+    const app = path.join(outRoot, "build/macos/omi-on-polish-batch.app");
+    const executable = path.join(app, "Contents/MacOS/omi-on-polish-batch");
+    const stamp = path.join(app, "Contents/Resources/omi-build-stamp.json");
+    mkdirSync(path.dirname(executable), { recursive: true });
+    mkdirSync(path.dirname(stamp), { recursive: true });
+    writeFileSync(path.join(app, "Contents/Info.plist"), `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>me.omi.capture.test</string></dict></plist>\n`);
+    const fakeImage = path.join(app, "Contents/Resources/fake.png");
+    writeFileSync(fakeImage, fixturePng(960, 671));
+    writeFileSync(executable, "#!/bin/sh\ncp \"$(dirname \"$0\")/../Resources/fake.png\" \"$OMI_SNAPSHOT_PATH\"\n");
+    chmodSync(executable, 0o755);
+    writeFileSync(stamp, "{\"fixture\":true}\n");
+    const preparedPath = path.join(outRoot, "prepared-input-set.json");
+    const descriptor = {
+      schema: "omi.polish.native-fixture-prepared/v1", source_shas: value.source_shas, manifest_path: `core:${path.relative(root, matrix)}`, manifest_sha256: sha256(readFileSync(matrix)), shell: "macos", scope: "manifest-shell", coordinate_run_ids: [coordinate.run_id],
+      artifacts: { macos: { shell: "macos", app: `core:${path.relative(root, app)}`, build_dir: `core:${path.relative(root, path.join(outRoot, "build/macos"))}`, stamp: `core:${path.relative(root, stamp)}`, stamp_sha256: sha256(readFileSync(stamp)), bundle_id: "me.omi.capture.test" } },
+      authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { macos: nativeFocusPolicyForTest(), ios: nativeFocusPolicyForTest() }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
+    };
+    descriptor.input_set = inputEntriesForFake(matrix, app);
+    writeFileSync(preparedPath, JSON.stringify(descriptor, null, 2));
+    const argv = ["node", "shells/tools/capture-native-fixture-batch.mjs", "--manifest", path.relative(root, matrix), "--out-root", path.relative(root, outRoot), "--shell", "macos", "--offset", "0", "--limit", "1", "--prepared-input-set", path.relative(root, preparedPath), "--replay-proof", "--timeout-seconds", "300", "--wait-seconds", "1"];
+    const baseline = spawnSync(process.execPath, argv.slice(1), { cwd: root, encoding: "utf8", timeout: 30_000 });
+    assert.equal(baseline.status, 0, baseline.stderr);
+    const result = JSON.parse(readFileSync(resultPath, "utf8"));
+    const adversarial = [
+      [{ ...result, command: "true", argv: ["true"] }, /command\/argv/],
+      [{ ...result, input_set: { id: `input-v1-${"a".repeat(64)}`, entries: [], tree_sha256: "a".repeat(64) } }, /input set integrity/],
+      [{ ...result, replay_proof: false }, /strict replay proof/],
+      [{ ...result, replay_attestation: { ...result.replay_attestation, image_sha256: "b".repeat(64) } }, /independent replay byte binding/],
+      [{ ...result, foreground_custody: { ...result.foreground_custody, forbidden_bundle_ids: [] } }, /foreground custody/],
+      [{ ...result, foreground_custody: { ...result.foreground_custody, elapsed_ms: 1, max_sample_gap_ms: 10 } }, /foreground custody/],
+      [{ ...result, foreground_custody: { ...result.foreground_custody, sample_count: 1_000_000_000 } }, /foreground custody/],
+      [{ ...result, foreground_custody: { ...result.foreground_custody, probe_timeout_ms: 5_000 } }, /foreground custody/],
+      [{ ...result, foreground_custody: { ...result.foreground_custody, cleanup_attempts: [{ kind: "user-process", ok: true }] } }, /foreground custody/],
+      [{ ...result, foreground_custody: { ...result.foreground_custody, policy: "guaranteed-20ms" } }, /foreground custody/],
+      [{ ...result, foreground_custody: { ...result.foreground_custody, stopped: false } }, /foreground custody/],
+    ];
+    for (const [forged, expected] of adversarial) {
+      writeFileSync(resultPath, JSON.stringify(forged, null, 2));
+      const rejected = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--assemble-receipt", "--result-path", resultPath, "--started-at", "2026-08-11T12:00:00.000Z", "--finished-at", "2026-08-11T12:00:01.000Z"], { encoding: "utf8" });
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stderr, expected);
+    }
     writeFileSync(resultPath, JSON.stringify(result, null, 2));
     const run = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--assemble-receipt", "--result-path", resultPath, "--started-at", "2026-08-11T12:00:00.000Z", "--finished-at", "2026-08-11T12:00:01.000Z"], { encoding: "utf8" });
     assert.equal(run.status, 0, run.stderr);
@@ -561,7 +593,10 @@ test("one manifest-scoped prepared app can capture a later coordinate determinis
     descriptor.input_set = inputEntriesForFake(matrix, app);
     mkdirSync(outRoot, { recursive: true });
     writeFileSync(preparedPath, JSON.stringify(descriptor, null, 2));
-    const uniform = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "1", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60"], { encoding: "utf8" });
+    const noReplay = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "1", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60"], { encoding: "utf8" });
+    assert.notEqual(noReplay.status, 0);
+    assert.match(noReplay.stderr, /requires --replay-proof/);
+    const uniform = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "1", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60", "--replay-proof"], { encoding: "utf8" });
     assert.notEqual(uniform.status, 0);
     assert.match(uniform.stderr, /uniform framebuffer and cannot prove rendered UI/);
     writeFileSync(fakeImage, fixturePng(960, 671));
@@ -583,13 +618,13 @@ test("one manifest-scoped prepared app can capture a later coordinate determinis
     assert.equal(result.foreground_custody.violation, null);
     const image = path.join(outRoot, "captures/macos/assembly-fake-dark.png");
     assert.equal(readFileSync(image).length, fixturePng(960, 671).length);
-    const firstRange = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "0", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60"], { encoding: "utf8" });
+    const firstRange = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "0", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60", "--replay-proof"], { encoding: "utf8" });
     assert.equal(firstRange.status, 0, firstRange.stderr);
     assert.equal(readFileSync(path.join(outRoot, "batch-result-macos-0-1.json"), "utf8").length > 0, true);
     assert.equal(readFileSync(path.join(outRoot, "batch-result-macos-1-1.json"), "utf8").length > 0, true);
     descriptor.coordinate_run_ids = [secondCoordinate.run_id];
     writeFileSync(preparedPath, JSON.stringify(descriptor, null, 2));
-    const narrowed = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "1", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60"], { encoding: "utf8" });
+    const narrowed = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "1", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60", "--replay-proof"], { encoding: "utf8" });
     assert.notEqual(narrowed.status, 0);
     assert.match(narrowed.stderr, /coordinate scope is stale/);
   } finally {

@@ -242,6 +242,11 @@ function shellQuote(value) {
   return `'${String(value).replaceAll("'", "'\\''")}'`;
 }
 
+function canonicalCaptureInvocation(manifestPath, outRoot, shell, offset, limit, preparedPath, timeoutSeconds, waitSeconds) {
+  const argv = ["node", "shells/tools/capture-native-fixture-batch.mjs", "--manifest", authorityRelative(manifestPath), "--out-root", authorityRelative(outRoot), "--shell", shell, "--offset", String(offset), "--limit", String(limit), "--prepared-input-set", authorityRelative(preparedPath), "--replay-proof", "--timeout-seconds", String(timeoutSeconds), "--wait-seconds", String(waitSeconds)];
+  return { argv, command: argv.map(shellQuote).join(" ") };
+}
+
 function parseQuery(raw, coordinate) {
   if (typeof raw !== "string" || raw.length === 0 || raw.length > 1024 || raw.includes("#")) fail(`${coordinate.run_id}: surface_query is empty, too long, or has a fragment`);
   const values = new Map();
@@ -383,17 +388,6 @@ function sleepSync(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
-function readMonitorAction(actionPath) {
-  if (typeof actionPath !== "string" || actionPath.length === 0) return {};
-  if (!existsSync(actionPath)) return {};
-  try {
-    const action = JSON.parse(readFileSync(actionPath, "utf8"));
-    return action && typeof action === "object" ? action : {};
-  } catch {
-    return {};
-  }
-}
-
 export function cleanupOwnedForegroundWorkForTest(config, action = {}, operations = {}) {
   const killProcess = operations.killProcess || process.kill.bind(process);
   const runSync = operations.spawnSyncFn || spawnSync;
@@ -429,7 +423,7 @@ export function cleanupOwnedForegroundWorkForTest(config, action = {}, operation
   return attempts;
 }
 
-function foregroundMonitorMain(configJson, readyPath, stopPath, violationPath, donePath, actionPath) {
+function foregroundMonitorMain(configJson, readyPath, stopPath, violationPath, donePath) {
   const parsed = JSON.parse(configJson);
   const config = Array.isArray(parsed)
     ? { forbidden_bundle_ids: parsed, ios_targets: [], monitor_root: path.dirname(donePath) }
@@ -451,13 +445,13 @@ function foregroundMonitorMain(configJson, readyPath, stopPath, violationPath, d
       try { observed = macForegroundApplication("continuous foreground monitor"); }
       catch (error) {
         violation = { reason: error.message };
-        cleanupAttempts = cleanupOwnedForegroundWorkForTest(config, readMonitorAction(actionPath));
+        cleanupAttempts = cleanupOwnedForegroundWorkForTest(config);
         writeAtomic(violationPath, { ...violation, cleanup_attempts: cleanupAttempts });
         return;
       }
       if (forbidden.has(observed.bundleId)) {
         violation = { reason: "a forbidden fixture application became foreground", observed_bundle_id: observed.bundleId };
-        cleanupAttempts = cleanupOwnedForegroundWorkForTest(config, readMonitorAction(actionPath));
+        cleanupAttempts = cleanupOwnedForegroundWorkForTest(config);
         writeAtomic(violationPath, { ...violation, cleanup_attempts: cleanupAttempts });
         return;
       }
@@ -489,9 +483,8 @@ export function startForbiddenForegroundMonitor(forbiddenBundleIds, outRoot, ios
   const stopPath = path.join(monitorRoot, "stop");
   const violationPath = path.join(monitorRoot, "violation.json");
   const donePath = path.join(monitorRoot, "done.json");
-  const actionPath = path.join(monitorRoot, "owned-action.json");
   const config = { forbidden_bundle_ids: [...forbiddenBundleIds].sort(), ios_targets: iosTargets, monitor_root: monitorRoot };
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--foreground-monitor", JSON.stringify(config), readyPath, stopPath, violationPath, donePath, actionPath], {
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--foreground-monitor", JSON.stringify(config), readyPath, stopPath, violationPath, donePath], {
     cwd: coreRoot,
     env: allowedEnvironment(monitorRoot, "macos"),
     stdio: "ignore",
@@ -506,7 +499,7 @@ export function startForbiddenForegroundMonitor(forbiddenBundleIds, outRoot, ios
     rmSync(monitorRoot, { recursive: true, force: true });
     fail(`native foreground monitor unavailable: ${detail}`);
   }
-  return { child, monitorRoot, stopPath, violationPath, donePath, actionPath, config };
+  return { child, monitorRoot, stopPath, violationPath, donePath, config };
 }
 
 export function assertForegroundMonitorHealthy(monitor, label) {
@@ -563,7 +556,7 @@ function macForegroundApplication(label) {
 function assertNoForbiddenForeground(forbiddenBundleIds, label, monitor = null) {
   const observed = macForegroundApplication(label);
   if (forbiddenBundleIds.has(observed.bundleId)) {
-    if (monitor) cleanupOwnedForegroundWorkForTest(monitor.config, readMonitorAction(monitor.actionPath));
+    if (monitor) cleanupOwnedForegroundWorkForTest(monitor.config);
     fail(`${label}: a forbidden fixture application became foreground`);
   }
 }
@@ -1093,7 +1086,7 @@ function waitForIosReadiness(coordinate, artifact, markerPath, nonce, waitSecond
   fail(`${coordinate.run_id}: capture app did not publish the run-bound readiness record`);
 }
 
-function captureMac(coordinate, artifact, output, timeoutSeconds, monitor) {
+async function captureMac(coordinate, artifact, output, timeoutSeconds, monitor) {
   const env = { ...artifact.env };
   env.OMI_SURFACE_QUERY = coordinate.surface_query;
   env.OMI_RUN_CLIENT_ID = coordinate.run_id;
@@ -1103,25 +1096,54 @@ function captureMac(coordinate, artifact, output, timeoutSeconds, monitor) {
   env.OMI_NATIVE_VIEWPORT_HEIGHT = String(coordinate.viewport.height);
   env.OMI_APP_NAME = "omi-on-polish-batch";
   env.OMI_BUILD_DIR = artifact.buildDir;
-  env.OMI_FOCUS_ACTION_PATH = monitor.actionPath;
   const executable = path.join(artifact.app, "Contents/MacOS/omi-on-polish-batch");
   assertForegroundMonitorHealthy(monitor, `${coordinate.run_id}: pre-capture custody`);
-  const wrapper = 'temporary="$OMI_FOCUS_ACTION_PATH.tmp-$$"; printf \'{"mac_process_group_pid":%s}\\n\' "$$" > "$temporary"; mv "$temporary" "$OMI_FOCUS_ACTION_PATH"; exec "$1"';
-  const result = spawnSync("/bin/sh", ["-c", wrapper, "omi-focus-owned-wrapper", executable], {
-    cwd: coreRoot,
-    env,
-    encoding: "utf8",
-    timeout: timeoutSeconds * 1000,
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: true,
+  let ownedMacProcessGroupPid = null;
+  const result = await new Promise((resolve) => {
+    const child = spawn(executable, [], {
+      cwd: coreRoot,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    });
+    // Parent retains the exact spawn-returned process-group identity. It is
+    // never placed in the child environment or in a child-writable action
+    // channel, so fixture code cannot redirect cleanup at a user process.
+    const ownedAction = { mac_process_group_pid: child.pid };
+    ownedMacProcessGroupPid = child.pid;
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout = `${stdout}${chunk}`.slice(-8_192); });
+    child.stderr.on("data", (chunk) => { stderr = `${stderr}${chunk}`.slice(-8_192); });
+    let timedOut = false;
+    const custodyTimer = setInterval(() => {
+      if (existsSync(monitor.violationPath) || existsSync(monitor.donePath)) {
+        cleanupOwnedForegroundWorkForTest({ ...monitor.config, ios_targets: [] }, ownedAction);
+      }
+    }, 10);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      cleanupOwnedForegroundWorkForTest({ ...monitor.config, ios_targets: [] }, ownedAction);
+    }, timeoutSeconds * 1000);
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      clearInterval(custodyTimer);
+      resolve({ status: null, signal: null, error, stdout, stderr, timedOut });
+    });
+    child.once("close", (status, signal) => {
+      clearTimeout(timer);
+      clearInterval(custodyTimer);
+      resolve({ status, signal, stdout, stderr, timedOut });
+    });
   });
   // The fixture executable is the process-group leader. Clear any exact
   // descendants it left behind before relinquishing custody; never target a
   // user process by name or restore/activate another application.
-  cleanupOwnedForegroundWorkForTest({ ...monitor.config, ios_targets: [] }, readMonitorAction(monitor.actionPath));
-  rmSync(monitor.actionPath, { force: true });
+  cleanupOwnedForegroundWorkForTest({ ...monitor.config, ios_targets: [] }, { mac_process_group_pid: ownedMacProcessGroupPid });
   assertForegroundMonitorHealthy(monitor, `${coordinate.run_id}: post-capture custody`);
-  if (result.error?.code === "ETIMEDOUT" || result.signal === "SIGTERM") fail(`${coordinate.run_id}: macOS capture timed out`);
+  if (result.timedOut || result.error?.code === "ETIMEDOUT") fail(`${coordinate.run_id}: macOS capture timed out`);
   if (result.status !== 0) fail(`${coordinate.run_id}: macOS capture failed (exit ${result.status ?? "signal"})`);
 }
 
@@ -1201,17 +1223,55 @@ function loadJson(file, label) {
   catch (error) { fail(`${label} cannot be read: ${error.message}`); }
 }
 
+function validateForegroundCustodyReceipt(custody, expectedForbidden, timeoutSeconds) {
+  const exactCustodyKeys = ["cleanup_attempts", "elapsed_ms", "forbidden_bundle_ids", "max_sample_gap_ms", "policy", "probe_timeout_ms", "sample_count", "schema", "stopped", "target_interval_ms", "violation"];
+  if (!custody || canonical(Object.keys(custody).sort()) !== canonical(exactCustodyKeys) || custody.schema !== "omi.polish.foreground-custody/v1" || custody.stopped !== true || custody.policy !== nativeForbiddenForegroundPolicy || custody.target_interval_ms !== foregroundTargetIntervalMs || custody.probe_timeout_ms !== foregroundProbeTimeoutMs || !Number.isInteger(custody.sample_count) || custody.sample_count < 1 || !Number.isFinite(custody.elapsed_ms) || custody.elapsed_ms <= 0 || custody.elapsed_ms > timeoutSeconds * 1000 || custody.sample_count > Math.ceil(custody.elapsed_ms * 10) + 1 || !Number.isFinite(custody.max_sample_gap_ms) || custody.max_sample_gap_ms < 0 || custody.max_sample_gap_ms > custody.elapsed_ms || (custody.sample_count > 1 && custody.max_sample_gap_ms <= 0) || custody.violation !== null || canonical(custody.cleanup_attempts) !== "[]" || canonical(custody.forbidden_bundle_ids) !== canonical(expectedForbidden)) fail("batch result foreground custody receipt is invalid");
+}
+
 function assembleReceipt(resultPath, outRoot, manifestPath, manifest, args) {
   const result = loadJson(resultPath, "batch result");
+  const exactResultKeys = ["argv", "authority", "command", "coordinate_count", "foreground_custody", "input_set", "limit", "manifest_path", "manifest_sha256", "members", "offset", "prepared_input_set", "replay_attestation", "replay_proof", "schema", "shell", "source_shas", "stderr_sha256", "stdout_sha256", "timeout_seconds", "wait_seconds"];
+  if (canonical(Object.keys(result).sort()) !== canonical(exactResultKeys)) fail("batch result fields are not canonical");
   if (result.schema !== "omi.polish.native-fixture-batch-result/v1") fail("batch result schema is invalid");
   if (result.batch_id !== undefined || result.generated_at !== undefined) fail("batch result must not contain batch_id or timestamps");
   if (result.source_shas?.core !== manifest.source_shas.core || result.source_shas?.platform !== manifest.source_shas.platform) fail("batch result source SHAs are stale");
   if (result.manifest_path !== `core:${authorityRelative(manifestPath)}` || result.manifest_sha256 !== hashFile(manifestPath)) fail("batch result manifest binding is stale");
   if (typeof result.command !== "string" || !Array.isArray(result.argv) || !result.input_set || !result.members || typeof result.members !== "object") fail("batch result is missing command/input/member bindings");
+  if (!['macos', 'ios', 'both'].includes(result.shell) || !Number.isInteger(result.offset) || result.offset < 0 || !Number.isInteger(result.limit) || result.limit < 1 || result.limit > maxBatchCoordinates) fail("batch result range is invalid");
+  const shellCoordinates = manifest.coordinates.filter((coordinate) => result.shell === "both" || coordinate.shell === result.shell);
+  if (result.offset + result.limit > shellCoordinates.length) fail("batch result range escapes manifest scope");
+  const expectedCoordinates = shellCoordinates.slice(result.offset, result.offset + result.limit);
+  if (result.coordinate_count !== expectedCoordinates.length) fail("batch result coordinate count is invalid");
+  const timeoutSeconds = Number(result.timeout_seconds);
+  const waitSeconds = Number(result.wait_seconds);
+  if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 30 || timeoutSeconds > 300 || !Number.isInteger(waitSeconds) || waitSeconds < 1 || waitSeconds > 30) fail("batch result timeout/wait policy is invalid");
+  if (result.replay_proof !== true) fail("batch result requires strict replay proof");
+  if (typeof result.prepared_input_set !== "string") fail("batch result prepared input set binding is missing");
+  const preparedPath = ensurePreparedPath(result.prepared_input_set);
+  const invocation = canonicalCaptureInvocation(manifestPath, outRoot, result.shell, result.offset, result.limit, preparedPath, timeoutSeconds, waitSeconds);
+  if (canonical(result.argv) !== canonical(invocation.argv) || result.command !== invocation.command) fail("batch result command/argv are not the canonical capture invocation");
+  const expectedResultPath = path.join(outRoot, `batch-result-${result.shell}-${result.offset}-${result.limit}.json`);
+  if (realpathSync(resultPath) !== realpathSync(expectedResultPath)) fail("batch result path is not canonical for its capture range");
+  const prepared = loadPreparedInputSet(preparedPath, manifestPath, manifest, result.shell);
+  try {
+    if (canonical(result.input_set) !== canonical(prepared.input)) fail("batch result prepared input set integrity is invalid");
+  } finally {
+    for (const artifact of Object.values(prepared.artifacts)) cleanupEnvironment(artifact.env);
+  }
   const expectedAuthority = { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { macos: nativeForbiddenForegroundPolicy, ios: nativeForbiddenForegroundPolicy }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } };
   if (canonical(result.authority) !== canonical(expectedAuthority)) fail("batch result authority/focus policy is invalid");
   const custody = result.foreground_custody;
-  if (!custody || custody.schema !== "omi.polish.foreground-custody/v1" || custody.policy !== nativeForbiddenForegroundPolicy || custody.target_interval_ms !== foregroundTargetIntervalMs || custody.probe_timeout_ms !== foregroundProbeTimeoutMs || !Number.isInteger(custody.sample_count) || custody.sample_count < 1 || typeof custody.max_sample_gap_ms !== "number" || custody.max_sample_gap_ms < 0 || custody.violation !== null || !Array.isArray(custody.cleanup_attempts)) fail("batch result foreground custody receipt is invalid");
+  const expectedForbidden = [
+    ...(prepared.artifacts.macos ? [prepared.artifacts.macos.bundleId] : []),
+    ...(prepared.artifacts.ios ? [simulatorBundleId, prepared.artifacts.ios.bundleId] : []),
+  ].sort();
+  validateForegroundCustodyReceipt(custody, expectedForbidden, timeoutSeconds);
+  const replay = spawnSync(process.execPath, result.argv.slice(1), { cwd: coreRoot, env: allowedEnvironment(outRoot, "screenshot-assembler"), encoding: "utf8", timeout: timeoutSeconds * 1000, maxBuffer: 16 * 1024 * 1024 });
+  if (replay.status !== 0 || replay.stdout !== `NATIVE_FIXTURE_BATCH_COMPLETE members=${result.coordinate_count}\n` || replay.stderr !== "") fail("batch result failed independent replay execution");
+  const replayedResult = loadJson(resultPath, "independently replayed batch result");
+  const stable = (value) => { const copy = { ...value }; delete copy.foreground_custody; return copy; };
+  if (canonical(stable(replayedResult)) !== canonical(stable(result))) fail("batch result failed independent replay byte binding");
+  validateForegroundCustodyReceipt(replayedResult.foreground_custody, expectedForbidden, timeoutSeconds);
   const members = result.members;
   const memberIds = Object.keys(members).sort();
   if (memberIds.length === 0 || memberIds.some((id, index) => id !== `m${String(index).padStart(4, "0")}`)) fail("batch result members are not canonical");
@@ -1223,11 +1283,22 @@ function assembleReceipt(resultPath, outRoot, manifestPath, manifest, args) {
       const file = ensureCoreFile(artifact.path, `${memberId} artifact`);
       if (hashFile(file) !== artifact.sha256) fail(`batch result member ${memberId} artifact hash changed`);
     }
+    const index = Number(memberId.slice(1));
+    const coordinate = expectedCoordinates[index];
+    const expectedMember = {
+      coordinate: [coordinate.kind, coordinate.domain, coordinate.shell, coordinate.state, coordinate.theme, coordinate.width, coordinate.accessibility],
+      run_id: coordinate.run_id,
+      evidence: { root: "core", path: authorityRelative(path.join(outRoot, "captures", coordinate.shell, `${coordinate.run_id}.png`)), sha256: member.evidence.sha256 },
+      sidecar: { root: "core", path: authorityRelative(path.join(outRoot, "captures", coordinate.shell, `${coordinate.run_id}.png.sidecar.json`)), sha256: member.sidecar.sha256 },
+    };
+    if (canonical(member) !== canonical(expectedMember)) fail(`batch result member ${memberId} does not match manifest coordinate`);
   }
+  if (memberIds.length !== expectedCoordinates.length) fail("batch result members do not cover the exact range");
+  const firstMember = members.m0000;
+  const expectedAttestation = { schema: "omi.polish.screenshot-replay-attestation/v1", required: true, verified_run_id: firstMember.run_id, image_sha256: firstMember.evidence.sha256 };
+  if (canonical(result.replay_attestation) !== canonical(expectedAttestation)) fail("batch result replay attestation is invalid");
   const expectedBatchId = canonicalBatchId(result.input_set.id, result.command, members);
   const resultSha = hashFile(resultPath);
-  const timeoutSeconds = Number(result.timeout_seconds);
-  if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 30 || timeoutSeconds > 300) fail("batch result timeout is invalid");
   const startedAt = args.started_at;
   const finishedAt = args.finished_at;
   if (typeof startedAt !== "string" || typeof finishedAt !== "string" || Number.isNaN(Date.parse(startedAt)) || Number.isNaN(Date.parse(finishedAt)) || Date.parse(finishedAt) < Date.parse(startedAt)) fail("--started-at/--finished-at must be ordered ISO timestamps");
@@ -1270,7 +1341,7 @@ function assembleReceipt(resultPath, outRoot, manifestPath, manifest, args) {
   process.stdout.write(`NATIVE_FIXTURE_RECEIPT: ${expectedBatchId} file=${authorityRelative(receiptPath)}\n`);
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(usage()); return; }
   if (!args.manifest || !args.out_root) fail(`${usage()}\n--manifest and --out-root are required`);
@@ -1297,6 +1368,7 @@ function main() {
   const manifestHash = hashFile(manifestPath);
   if (args.prepare && args.prepared_input_set) fail("--prepare and --prepared-input-set are mutually exclusive");
   if (!args.prepare && !args.dry_run && !args.prepared_input_set) fail("capture requires --prepared-input-set; use --prepare to build a mode-bound input set first");
+  if (!args.prepare && !args.dry_run && !args.replay_proof) fail("capture requires --replay-proof for receipt-eligible strict rerun evidence");
   const preparedPath = args.prepared_input_set ? ensurePreparedPath(args.prepared_input_set) : path.join(outRoot, "prepared-input-set.json");
   let input = inputSet(manifestPath, {}, args.prepare ? [] : [preparedPath]);
   const commandParts = ["node", "shells/tools/capture-native-fixture-batch.mjs", "--manifest", authorityRelative(manifestPath), "--out-root", authorityRelative(outRoot), "--shell", shell, "--offset", String(offset), "--limit", String(limit)];
@@ -1385,6 +1457,7 @@ function main() {
   const capturesRoot = path.join(outRoot, "captures");
   mkdirSync(capturesRoot, { recursive: true });
   const records = [];
+  let replayAttestation = null;
   try {
     for (const coordinate of coordinates) {
     assertForegroundMonitorHealthy(foregroundMonitor, `${coordinate.run_id}: coordinate preflight custody`);
@@ -1395,7 +1468,7 @@ function main() {
     rmSync(output, { force: true });
     rmSync(sidecar, { force: true });
     try {
-      if (coordinate.shell === "macos") captureMac(coordinate, artifacts.macos, output, timeoutSeconds, foregroundMonitor);
+      if (coordinate.shell === "macos") await captureMac(coordinate, artifacts.macos, output, timeoutSeconds, foregroundMonitor);
       else captureIos(coordinate, artifacts.ios, output, waitSeconds, timeoutSeconds, foregroundMonitor);
       if (!existsSync(output)) fail(`${coordinate.run_id}: native capture did not write a PNG`);
       const replayFirstRaw = args.replay_proof && records.length === 0 && coordinate.shell === "ios" ? `${output}.first.raw.png` : null;
@@ -1407,7 +1480,7 @@ function main() {
         const repeatRaw = coordinate.shell === "ios" ? `${output}.repeat.raw.png` : null;
         rmSync(repeatOutput, { force: true });
         if (repeatRaw) rmSync(repeatRaw, { force: true });
-        if (coordinate.shell === "macos") captureMac(coordinate, artifacts.macos, repeatOutput, timeoutSeconds, foregroundMonitor);
+        if (coordinate.shell === "macos") await captureMac(coordinate, artifacts.macos, repeatOutput, timeoutSeconds, foregroundMonitor);
         else captureIos(coordinate, artifacts.ios, repeatOutput, waitSeconds, timeoutSeconds, foregroundMonitor);
         if (repeatRaw) copyFileSync(repeatOutput, repeatRaw);
         if (coordinate.shell === "ios") canonicalizeScreenshot(repeatOutput);
@@ -1421,6 +1494,7 @@ function main() {
           if (repeatRaw) copyFileSync(repeatRaw, path.join(diagnostics, "repeat.raw.png"));
           fail(`${coordinate.run_id}: consecutive capture bytes differ under --replay-proof; preserved diagnostics at ${authorityRelative(diagnostics)}`);
         }
+        replayAttestation = { schema: "omi.polish.screenshot-replay-attestation/v1", required: true, verified_run_id: coordinate.run_id, image_sha256: image.sha256 };
         rmSync(repeatOutput, { force: true });
         if (repeatRaw) rmSync(repeatRaw, { force: true });
       }
@@ -1513,6 +1587,10 @@ function main() {
     argv: captureArgv,
     input_set: input,
     members,
+    shell,
+    offset,
+    limit,
+    prepared_input_set: authorityRelative(preparedPath),
     coordinate_count: records.length,
     timeout_seconds: timeoutSeconds,
     wait_seconds: waitSeconds,
@@ -1521,6 +1599,7 @@ function main() {
     authority: plan.authority,
     foreground_custody: foregroundCustody,
     replay_proof: Boolean(args.replay_proof),
+    replay_attestation: replayAttestation,
   };
   writeAtomic(resultPath, result);
   process.stdout.write(stdoutLine);
@@ -1528,7 +1607,7 @@ function main() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    if (process.argv[2] === "--foreground-monitor") foregroundMonitorMain(...process.argv.slice(3, 9));
-    else main();
+    if (process.argv[2] === "--foreground-monitor") foregroundMonitorMain(...process.argv.slice(3, 8));
+    else await main();
   } catch (error) { console.error(`ERROR: ${error.message}`); process.exitCode = 2; }
 }
