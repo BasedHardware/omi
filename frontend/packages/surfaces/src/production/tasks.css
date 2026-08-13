@@ -108,7 +108,7 @@
 .task-copy { min-width: 0; flex: 1; align-self: center; }
 .task-description { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--type-body-line); }
 .is-completed .task-description { color: var(--content-tertiary); text-decoration: line-through; }
-.task-meta { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-xs); color: var(--content-tertiary); font-size: var(--type-label-size); }
+.task-meta { display: flex; max-width: var(--measure-meta); flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-xs); color: var(--content-tertiary); font-family: var(--type-meta-family); font-size: var(--type-meta-size); line-height: var(--type-meta-line); }
 .task-source { color: var(--content-secondary); }
 .task-editor { width: 100%; min-height: 84px; resize: vertical; }
 .task-edit-fields { display: grid; gap: var(--space-sm); }
