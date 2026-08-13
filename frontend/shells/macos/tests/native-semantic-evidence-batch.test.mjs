@@ -13,6 +13,20 @@ const wrapper = join(root, "probes/native-semantic-evidence-batch.mjs");
 const coreSha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const platformSha = "1".repeat(40);
 
+function lockedSessionSkipReason() {
+  const front = spawnSync("/usr/bin/lsappinfo", ["front"], { encoding: "utf8", timeout: 5_000 });
+  const identity = front.status === 0 ? front.stdout.trim().match(/ASN:0x[0-9a-f]+-0x[0-9a-f]+:/i)?.[0] : null;
+  if (!identity) return false;
+  const info = spawnSync("/usr/bin/lsappinfo", ["info", "-only", "name", "-app", identity], { encoding: "utf8", timeout: 5_000 });
+  const bundle = spawnSync("/usr/bin/lsappinfo", ["info", "-only", "bundleID", "-app", identity], { encoding: "utf8", timeout: 5_000 });
+  const observed = foregroundApplicationFromResults(front, info, bundle);
+  return observed.name === "loginwindow" && observed.bundleId === "com.apple.loginwindow"
+    ? "native semantic fixture execution requires an unlocked GUI session"
+    : false;
+}
+
+const lockedSession = lockedSessionSkipReason();
+
 function manifest(kind = "ax_snapshot", captureClass = "native_fixture") {
   const coordinate = {
     schema: "omi.polish.matrix-coordinate/v1", kind, domain: "memories", shell: "macos", state: "ready", theme: "light", width: "regular",
@@ -68,7 +82,7 @@ function prepareArgs(matrix, out, probe, app) {
   return [wrapper, "--manifest", matrix, "--out-root", out, "--probe", probe, "--fixture-app", app, "--prepare"];
 }
 
-test("semantic batch emits exact AX coverage and immutable prepared inputs", () => {
+test("semantic batch emits exact AX coverage and immutable prepared inputs", { skip: lockedSession }, () => {
   const scratch = mkdtempSync(join(tmpdir(), "omi-native-semantic-batch-"));
   try {
     const out = join(root, ".build", `semantic-batch-test-${process.pid}`); mkdirSync(out, { recursive: true });
@@ -149,7 +163,7 @@ test("prepared semantic ranges are immutable and cannot be widened on replay", (
   } finally { rmSync(scratch, { recursive: true, force: true }); rmSync(join(root, ".build", `semantic-range-test-${process.pid}`), { recursive: true, force: true }); }
 });
 
-test("semantic batch rejects a probe document bound to any PID except the launched child", () => {
+test("semantic batch rejects a probe document bound to any PID except the launched child", { skip: lockedSession }, () => {
   const scratch = mkdtempSync(join(tmpdir(), "omi-native-semantic-target-"));
   try {
     const out = join(root, ".build", `semantic-target-test-${process.pid}`); mkdirSync(out, { recursive: true });
@@ -163,7 +177,7 @@ test("semantic batch rejects a probe document bound to any PID except the launch
   } finally { rmSync(scratch, { recursive: true, force: true }); rmSync(join(root, ".build", `semantic-target-test-${process.pid}`), { recursive: true, force: true }); }
 });
 
-test("keyboard trace requires each observed transition and Escape restoration", () => {
+test("keyboard trace requires each observed transition and Escape restoration", { skip: lockedSession }, () => {
   const scratch = mkdtempSync(join(tmpdir(), "omi-native-semantic-keyboard-"));
   try {
     const out = join(root, ".build", `semantic-keyboard-test-${process.pid}`); mkdirSync(out, { recursive: true }); const probe = join(out, "fake-probe.mjs"); fakeProbe(probe); const app = fakeFixture(out); const matrix = join(out, "matrix.json"); writeFileSync(matrix, JSON.stringify(manifest("keyboard_trace")));
@@ -190,7 +204,7 @@ test("keyboard batch is focus-safe by default and requires explicit operator con
   } finally { rmSync(scratch, { recursive: true, force: true }); rmSync(join(root, ".build", `semantic-focus-block-test-${process.pid}`), { recursive: true, force: true }); }
 });
 
-test("AX batch rejects a probe that tries to serialize user text", () => {
+test("AX batch rejects a probe that tries to serialize user text", { skip: lockedSession }, () => {
   const scratch = mkdtempSync(join(tmpdir(), "omi-native-semantic-redaction-"));
   try {
     const out = join(root, ".build", `semantic-redaction-test-${process.pid}`); mkdirSync(out, { recursive: true }); const probe = join(out, "fake-probe.mjs"); fakeProbe(probe, "Created by David"); const app = fakeFixture(out); const matrix = join(out, "matrix.json"); writeFileSync(matrix, JSON.stringify(manifest()));
