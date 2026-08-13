@@ -1061,6 +1061,7 @@
         ]
       },
       "expectedAction": "notify",
+      "allowedDecisions": ["suggest", "resurface"],
       "expectedEvidenceRefs": ["evidence:privacy:025-deadline"],
       "expectedSubject": {"kind": "task", "id": "task-privacy-025", "workstreamId": "workstream-alpha"},
       "expectedMaxAge": 3600,
@@ -1186,6 +1187,7 @@
         ]
       },
       "expectedAction": "notify",
+      "allowedDecisions": ["suggest", "resurface"],
       "expectedEvidenceRefs": ["evidence:commit:022"],
       "expectedSubject": {"kind": "commitment", "id": "commitment-022", "workstreamId": "workstream-alpha"},
       "expectedMaxAge": 3600,

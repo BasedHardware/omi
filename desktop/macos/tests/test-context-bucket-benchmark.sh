@@ -21,6 +21,7 @@ spec.loader.exec_module(benchmark)
 case = {
     "id": "synthetic-text-output",
     "expectedAction": "notify",
+    "allowedDecisions": ["suggest", "resurface"],
     "forbiddenOutputTerms": ["forbidden phrase"],
     "synthetic": {
         "bucket": {"id": "bucket-1", "version": 1, "notifyWorthiness": 1, "entries": []},
@@ -74,6 +75,7 @@ assert detailed["title"] == "Synthetic title"
 assert detailed["message"] == "Synthetic message"
 assert detailed["reasoning"] == "Synthetic reasoning"
 assert detailed["polarity_matched"] is True
+assert detailed["decision_matched"] is True
 assert detailed["forbidden_output_matched"] is False
 assert detailed["forbidden_terms_matched"] == []
 
@@ -81,9 +83,17 @@ leaking_case = {**case, "forbiddenOutputTerms": ["synthetic MESSAGE"]}
 with patch.object(benchmark.request, "urlopen", return_value=Response()):
     leaking = benchmark.invoke_case(leaking_case, 47910)
 assert leaking["polarity_matched"] is True
+assert leaking["decision_matched"] is True
 assert leaking["forbidden_output_matched"] is True
 assert leaking["forbidden_terms_matched"] == ["synthetic MESSAGE"]
 assert leaking["matched"] is False
+
+wrong_type_case = {**case, "allowedDecisions": ["resurface"]}
+with patch.object(benchmark.request, "urlopen", return_value=Response()):
+    wrong_type = benchmark.invoke_case(wrong_type_case, 47910)
+assert wrong_type["polarity_matched"] is True
+assert wrong_type["decision_matched"] is False
+assert wrong_type["matched"] is False
 
 envelope["result"]["detail"]["decision"] = "unexpected"
 with patch.object(benchmark.request, "urlopen", return_value=Response()):

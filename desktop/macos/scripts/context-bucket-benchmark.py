@@ -36,6 +36,7 @@ DIRECTOR_CASES = {
 }
 
 STABLE_PROACTIVE_ERROR = re.compile(r"\bproactive_(?:http_error status=\d{3}|invalid_response|owner_changed)\b")
+DIRECTOR_DECISIONS = {"suggest", "insight", "task_candidate", "resurface", "silence"}
 
 
 def map_case(case: dict) -> dict[str, str]:
@@ -103,6 +104,11 @@ def validate(deck: dict) -> tuple[int, int]:
             not isinstance(term, str) or not term.strip() for term in forbidden_output_terms
         ):
             raise ValueError(f"{case['id']}: forbiddenOutputTerms must be non-empty strings")
+        allowed_decisions = case.get("allowedDecisions", [])
+        if not isinstance(allowed_decisions, list) or any(
+            decision not in DIRECTOR_DECISIONS for decision in allowed_decisions
+        ):
+            raise ValueError(f"{case['id']}: allowedDecisions must use director decision values")
         if case["id"] in DIRECTOR_CASES:
             params = map_case(case)
             required = {
@@ -151,7 +157,7 @@ def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
     result = envelope.get("result", envelope)
     detail = result.get("detail", result)
     decision = detail.get("decision")
-    if decision not in {"suggest", "insight", "task_candidate", "resurface", "silence"}:
+    if decision not in DIRECTOR_DECISIONS:
         raise RuntimeError(f"{case['id']}: probe returned invalid decision")
     polarity = "silence" if decision == "silence" else "notify"
     expected = case["expectedAction"]
@@ -163,13 +169,16 @@ def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
         term for term in forbidden_output_terms if term.casefold() in response_text
     ]
     polarity_matched = expected == "either" or expected == polarity
+    allowed_decisions = case.get("allowedDecisions", [])
+    decision_matched = not allowed_decisions or decision in allowed_decisions
     result = {
         "id": case["id"],
         "expectedAction": expected,
         "decision": decision,
         "polarity": polarity,
-        "matched": polarity_matched and not forbidden_terms_matched,
+        "matched": polarity_matched and decision_matched and not forbidden_terms_matched,
         "polarity_matched": polarity_matched,
+        "decision_matched": decision_matched,
         "forbidden_output_matched": bool(forbidden_terms_matched),
         "forbidden_terms_matched": forbidden_terms_matched,
         "model": detail.get("model"),
