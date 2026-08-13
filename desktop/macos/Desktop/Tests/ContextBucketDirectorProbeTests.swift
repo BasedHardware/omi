@@ -204,7 +204,8 @@
       } catch {
         XCTFail("unexpected error: \(error)")
       }
-      XCTAssertNil(await recorder.record)
+      let recorded = await recorder.record
+      XCTAssertNil(recorded)
     }
   }
 #endif
