@@ -29,16 +29,17 @@ struct SettingsSearchItem: Identifiable {
         "speaker",
       ], section: .general, icon: "speaker.wave.2", settingId: "general.systemaudio"),
     SettingsSearchItem(
-      name: "Notifications", subtitle: "Proactive alerts and status",
-      keywords: ["alerts", "notify"], section: .general, icon: "gearshape",
+      name: "Notifications", subtitle: "macOS permission and banner status",
+      keywords: ["alerts", "notify", "banners", "system settings", "permission"], section: .general,
+      icon: "gearshape",
       settingId: "general.notifications"),
     SettingsSearchItem(
       name: "Ask omi", subtitle: "Show or hide the floating chat bar",
       keywords: ["floating bar", "chat bar"], section: .general, icon: "gearshape",
       settingId: "general.askomi"),
     SettingsSearchItem(
-      name: "Interface Sounds", subtitle: "Clicks and chimes as you move around Omi",
-      keywords: ["sound", "sounds", "audio", "click", "chime", "mute", "silence", "effects"],
+      name: "Interface Sounds", subtitle: "Sounds for important arrivals and completions",
+      keywords: ["sound", "sounds", "audio", "chime", "mute", "silence", "effects"],
       section: .general, icon: "speaker.wave.2", settingId: "general.interfacesounds"),
     SettingsSearchItem(
       name: "Font Size", subtitle: "Adjust text size across the app",
@@ -114,6 +115,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["frequency", "how often", "interval"], section: .notifications, icon: "bell",
       settingId: "notifications.frequency"),
     SettingsSearchItem(
+      name: "Notification Active Period", subtitle: "Choose when proactive notifications may appear",
+      keywords: ["active period", "quiet hours", "schedule", "24 hour", "time"],
+      section: .notifications, icon: "bell",
+      settingId: "notifications.activeperiod"),
+    SettingsSearchItem(
       name: "Task Notifications",
       subtitle: "Allow interruptions when a task needs attention",
       keywords: ["task", "action item", "notify task", "interruption", "proactive"],
@@ -133,7 +139,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["daily", "summary", "digest", "end of day"], section: .notifications, icon: "bell",
       settingId: "notifications.dailysummary"),
     SettingsSearchItem(
-      name: "Summary Time", subtitle: "When to send your daily summary",
+      name: "Summary Time", subtitle: "When to send your daily summary (hour only)",
       keywords: ["time", "schedule", "when", "hour"], section: .notifications, icon: "bell",
       settingId: "notifications.summarytime"),
 
@@ -359,18 +365,18 @@ enum SettingsSidebarMetrics {
 
 /// **The rows this list actually shows**, as a value rather than a literal inside a `body`.
 ///
-/// `ShellDestination.unreachable()` reads it: `Permissions` and `Help` are established pages whose
-/// only way in is a row here, so "the row exists" has to be something a test can hold. Delete one
-/// and the reachability check names the page that lost its door instead of leaving it to be
-/// discovered in the app (INV-NAV-1).
+/// `ShellDestination.unreachable()` reads it: `Permissions` is an established page whose only way in
+/// is a row here, so "the row exists" has to be something a test can hold. Delete it and the
+/// reachability check names the page that lost its door instead of leaving it to be discovered in
+/// the app (INV-NAV-1).
 enum SettingsSidebarRoutes {
   /// Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
   /// too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
   /// content too). The absorbed cases stay routable for deep links/automation
   /// and highlight their merged item via `sidebarItem`.
   ///
-  /// `Permissions` and `Help` sit last, under the settings proper: they are the things you come
-  /// here for when something is wrong, not preferences you scan.
+  /// `Permissions` sits last, under the settings proper: it is the thing you come here for when
+  /// something is wrong, not a preference you scan.
   static let visibleSections: [SettingsContentView.SettingsSection] = [
     .general,
     .account,
@@ -382,7 +388,6 @@ enum SettingsSidebarRoutes {
     .advanced,
     .about,
     .permissions,
-    .help,
   ]
 }
 
@@ -395,21 +400,9 @@ struct SettingsSidebar: View {
   @State private var isBackHovered = false
   @State private var searchQuery = ""
   @FocusState private var isSearchFocused: Bool
-  /// The support thread's unread count. This is the only place it is ever drawn: `CrispManager`
-  /// has polled for founder replies and fired notifications about them all along, while the count
-  /// it kept had no consumer anywhere in the app.
-  @ObservedObject private var crispManager = CrispManager.shared
 
   private let iconWidth: CGFloat = 20
   private let visibleSections = SettingsSidebarRoutes.visibleSections
-
-  /// How many unread things a row is standing in front of. Only `Help` has any: it is a live
-  /// support thread, and a founder reply that arrived while you were elsewhere is the one thing on
-  /// this list you would want to see without opening it. Opening the page clears it — `HelpPage`
-  /// already sets `CrispManager.isViewingHelp`.
-  private func badgeCount(for section: SettingsContentView.SettingsSection) -> Int {
-    section == .help ? crispManager.unreadCount : 0
-  }
 
   private var filteredSearchItems: [SettingsSearchItem] {
     guard !searchQuery.isEmpty else { return [] }
@@ -456,7 +449,6 @@ struct SettingsSidebar: View {
                 section: section,
                 isSelected: selectedSection.sidebarItem == section,
                 iconWidth: iconWidth,
-                badgeCount: badgeCount(for: section),
                 onTap: {
                   OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                     selectedSection = section
@@ -581,9 +573,6 @@ struct SettingsSidebarItem: View {
   let section: SettingsContentView.SettingsSection
   let isSelected: Bool
   let iconWidth: CGFloat
-  /// Unread items waiting behind this row. Zero draws nothing at all — an empty badge shape is a
-  /// permanent claim that there is something to read.
-  var badgeCount: Int = 0
   let onTap: () -> Void
 
   @State private var isHovered = false
@@ -602,10 +591,9 @@ struct SettingsSidebarItem: View {
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"
     case .about: return "info.circle"
-    // The same glyphs these two pages already answer to everywhere else in the app
-    // (`SidebarNavItem`, `ChatFirstMorePage`), so a row and the page it opens are one object.
+    // The same glyph this page already answers to everywhere else in the app (`SidebarNavItem`,
+    // `ChatFirstMorePage`), so a row and the page it opens are one object.
     case .permissions: return "exclamationmark.triangle"
-    case .help: return "bubble.left"
     }
   }
 
@@ -632,10 +620,6 @@ struct SettingsSidebarItem: View {
               .layoutPriority(1)
 
             Spacer(minLength: 0)
-
-            if badgeCount > 0 {
-              SettingsSidebarBadge(count: badgeCount, isOnSelectedRow: isSelected)
-            }
           }
           .padding(.horizontal, SettingsGlassMetrics.rowHorizontalPadding)
           .padding(.vertical, SettingsGlassMetrics.rowVerticalPadding)
@@ -657,40 +641,9 @@ struct SettingsSidebarItem: View {
           isHovered = hovering
         }
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
-        .accessibilityLabel(
-          badgeCount > 0
-            ? Text("\(section.displayTitle), \(badgeCount) unread")
-            : Text(section.displayTitle))
+        .accessibilityLabel(Text(section.displayTitle))
       }
     }
-  }
-}
-
-/// The count on a settings row that is standing in front of something unread.
-///
-/// It reads as a count on both grounds a row can have, which is the whole difficulty: an unselected
-/// row sits on the sidebar's wash, a selected one on the accent. Rather than a second colour pair
-/// nobody keeps true, the badge borrows the row's *own* label colour and sets its capsule from the
-/// same value — so it stays legible without introducing a third rung to a ladder that has two on
-/// glass, and without spending a colour on a number.
-private struct SettingsSidebarBadge: View {
-  let count: Int
-  let isOnSelectedRow: Bool
-
-  var body: some View {
-    Text("\(count)")
-      .scaledFont(size: OmiType.micro, weight: .bold)
-      .monospacedDigit()
-      .lineLimit(1)
-      .fixedSize()
-      .foregroundColor(isOnSelectedRow ? Ink.surface : Ink.primary)
-      .padding(.horizontal, 5)
-      .padding(.vertical, 1)
-      .background(
-        Capsule(style: .continuous)
-          .fill(isOnSelectedRow ? Ink.surface.opacity(0.24) : Ink.rowFillHover)
-      )
-      .accessibilityHidden(true)
   }
 }
 

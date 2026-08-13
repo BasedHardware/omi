@@ -148,13 +148,14 @@ extension SettingsContentView {
                       // Banners off — user needs to change style in System Settings
                       appState.openNotificationPreferences()
                     } else {
-                      // Auth not granted — try lsregister repair first
+                      // Request the native prompt when possible; a prior denial opens
+                      // System Settings immediately without restarting notification services.
                       AnalyticsManager.shared.notificationRepairTriggered(
                         reason: "settings_fix_button",
                         previousStatus: "not_authorized",
                         currentStatus: "not_authorized"
                       )
-                      appState.repairNotificationAndFallback()
+                      appState.requestNotificationPermission()
                     }
                   } else {
                     appState.openNotificationPreferences()
@@ -319,8 +320,8 @@ extension SettingsContentView {
 /// only needs somewhere local to hold the last read for SwiftUI to diff against.
 ///
 /// Deliberately separate from macOS's "Play user interface sound effects": that switch governs the
-/// clicks and swooshes, and this one governs everything Omi plays, including the completion chimes
-/// the system switch has no say over.
+/// swooshes, and this one governs everything Omi plays, including the completion chimes the system
+/// switch has no say over.
 private struct InterfaceSoundsRow: View {
   @State private var isEnabled = OmiUISound.isEnabled
 
@@ -333,7 +334,7 @@ private struct InterfaceSoundsRow: View {
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(Ink.primary)
 
-        Text("Clicks and chimes as you move around Omi.")
+        Text("Sounds for important arrivals and completions.")
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
       }
@@ -347,9 +348,6 @@ private struct InterfaceSoundsRow: View {
           set: { newValue in
             isEnabled = newValue
             OmiUISound.isEnabled = newValue
-            // The confirmation is the point: turning sounds on should be audible immediately, and
-            // turning them off cannot be — `play` is already muted by the line above.
-            OmiUISound.play(.commit)
           }
         )
       )

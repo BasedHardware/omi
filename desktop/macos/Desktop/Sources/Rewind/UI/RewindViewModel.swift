@@ -22,9 +22,11 @@ class RewindViewModel: ObservableObject {
 
   /// Every local day that holds capture, newest first.
   ///
-  /// The page plays one day at a time, so this is what makes it *reachable* across the whole
-  /// history rather than only the day you happened to open it on.
+  /// Days are labels and jump targets only; the timeline itself is continuous.
   @Published private(set) var capturedDays: [Date] = []
+
+  /// Exact global bounds of retained capture. The visible track window pans and zooms inside them.
+  @Published private(set) var historyRange: ClosedRange<Double>?
 
   /// Whether the walk over the capture database's own days has finished at least once.
   ///
@@ -33,9 +35,6 @@ class RewindViewModel: ObservableObject {
   /// list an honest "there is no capture". Collapsing the two is how a surface ends up telling a
   /// user with months of history that they have none.
   @Published private(set) var didSurveyHistory = false
-
-  /// Set once the user picks a day themselves, so the automatic reveal below never overrides them.
-  private var didChooseDayManually = false
 
   @Published var stats: (total: Int, indexed: Int, storageSize: Int64)? = nil
 
@@ -76,10 +75,21 @@ class RewindViewModel: ObservableObject {
   // MARK: - Private State
 
   private var searchTask: Task<Void, Never>?
+  private var ownerReloadTask: Task<Void, Never>?
   private var cancellables = Set<AnyCancellable>()
 
   /// Whether initial data has been loaded (prevents race condition with debounced search)
   private var isInitialized = false
+
+  /// Each visible viewport stays bounded even when capture contains hundreds of thousands of rows.
+  /// Zooming or panning issues a fresh evenly sampled query for that continuous time window.
+  static let timelineSampleTarget = 500
+  typealias TimelineScreenshotLoader =
+    @Sendable (_ start: Date, _ end: Date, _ targetCount: Int, _ appFilter: String?) async throws -> [Screenshot]
+
+  private var visibleTimelineRange: ClosedRange<Double>?
+  private var timelineLoadID = UUID()
+  private let timelineScreenshotLoader: TimelineScreenshotLoader
 
   /// Set by RewindPage when the transcript/notes panel is expanded.
   /// Auto-refresh skips when true so the view tree stays stable and @State is preserved.
@@ -87,7 +97,13 @@ class RewindViewModel: ObservableObject {
 
   // MARK: - Initialization
 
-  init() {
+  init(
+    timelineScreenshotLoader: @escaping TimelineScreenshotLoader = { start, end, targetCount, appFilter in
+      try RewindDatabase.shared.getScreenshotsSampled(
+        from: start, to: end, targetCount: targetCount, appFilter: appFilter)
+    }
+  ) {
+    self.timelineScreenshotLoader = timelineScreenshotLoader
     // Debounce search queries
     $searchQuery
       .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
@@ -104,6 +120,14 @@ class RewindViewModel: ObservableObject {
       }
       .store(in: &cancellables)
 
+    NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)
+      .sink { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.resetForOwnerChange()
+        }
+      }
+      .store(in: &cancellables)
+
     // Auto-refresh timeline every 3 seconds when viewing today
     Timer.publish(every: 3.0, on: .main, in: .common)
       .autoconnect()
@@ -111,6 +135,44 @@ class RewindViewModel: ObservableObject {
         Task { await self?.refreshTimelineIfViewingToday() }
       }
       .store(in: &cancellables)
+  }
+
+  private func resetForOwnerChange() {
+    searchTask?.cancel()
+    ownerReloadTask?.cancel()
+    timelineLoadID = UUID()
+    screenshots = []
+    selectedScreenshot = nil
+    searchQuery = ""
+    activeSearchQuery = nil
+    selectedApp = nil
+    availableApps = []
+    stats = nil
+    capturedDays = []
+    historyRange = nil
+    visibleTimelineRange = nil
+    didSurveyHistory = false
+    didRecoverFromCorruption = false
+    recoveredRecordCount = 0
+    showRecoveryBanner = false
+    isRebuilding = false
+    rebuildProgress = 0
+    isInitialized = false
+    isLoading = false
+    isSearching = false
+    errorMessage = nil
+
+    // The notification is intentionally posted while the exclusive owner
+    // transition is still finishing. Yield until the new local owner generation
+    // is admissible, then reload this persistent StateObject for that owner.
+    ownerReloadTask = Task { @MainActor [weak self] in
+      while RewindCaptureOwnerSnapshot.capture() == nil {
+        guard !Task.isCancelled else { return }
+        await Task.yield()
+      }
+      guard !Task.isCancelled else { return }
+      await self?.loadInitialData()
+    }
   }
 
   /// Refresh timeline only if viewing today and not actively searching.
@@ -127,17 +189,19 @@ class RewindViewModel: ObservableObject {
     // destroy the expanded view tree and lose @State (typed notes).
     guard !isTranscriptExpanded else { return }
 
-    // Only refresh if viewing today
-    let calendar = Calendar.current
-    guard calendar.isDateInToday(selectedDate) else { return }
+    // A today label can remain selected while the continuous viewport is panned into older history.
+    // Only append live frames when the actual visible window contains now.
+    guard RewindTrackWindow.shouldRefreshLiveFrames(visibleRange: visibleTimelineRange, now: Date()) else { return }
 
-    // Silent refresh: don't set isLoading, and only update if data changed
-    await silentLoadScreenshotsForDate(selectedDate)
+    // Silent refresh: append newly finalized frames without rescanning the retained history.
+    await silentlyRefreshNewestFrames()
   }
 
   /// Update only the stats (for live frame count updates)
   private func updateStatsOnly() async {
+    guard let ownerSnapshot = RewindCaptureOwnerSnapshot.capture() else { return }
     if let indexerStats = await RewindIndexer.shared.getStats() {
+      guard ownerSnapshot.isCurrent() else { return }
       stats = indexerStats
     }
   }
@@ -145,21 +209,25 @@ class RewindViewModel: ObservableObject {
   // MARK: - Loading
 
   func loadInitialData() async {
+    guard let ownerSnapshot = RewindCaptureOwnerSnapshot.capture() else { return }
     isLoading = true
     errorMessage = nil
 
     do {
       // Initialize the indexer if needed
       try await RewindIndexer.shared.initialize()
+      guard ownerSnapshot.isCurrent() else { return }
 
       // Ensure database is ready — RewindIndexer.initialize() may return early
       // (already initialized) while the database is being re-opened for a different
       // user by ViewModelContainer. This call waits for any in-progress init.
       try await RewindDatabase.shared.initialize()
+      guard ownerSnapshot.isCurrent() else { return }
 
       // Check if database was recovered from corruption
       let recovered = await RewindDatabase.shared.didRecoverFromCorruption
       let recoveredCount = await RewindDatabase.shared.recoveredRecordCount
+      guard ownerSnapshot.isCurrent() else { return }
 
       if recovered {
         didRecoverFromCorruption = true
@@ -168,48 +236,53 @@ class RewindViewModel: ObservableObject {
         log("RewindViewModel: Database was recovered from corruption, \(recoveredCount) records salvaged")
       }
 
-      // Load today's screenshots (date filter is always active)
+      // Load today's screenshots for a fast first paint.
       await loadScreenshotsForDate(selectedDate)
+      guard ownerSnapshot.isCurrent() else { return }
 
       // Load available apps for filtering
-      availableApps = try await RewindDatabase.shared.getUniqueAppNames()
+      let loadedApps = try await RewindDatabase.shared.getUniqueAppNames()
+      guard ownerSnapshot.isCurrent() else { return }
+      availableApps = loadedApps
 
       // Mark as initialized after successful load
       isInitialized = true
 
     } catch {
+      guard ownerSnapshot.isCurrent() else { return }
       errorMessage = error.localizedDescription
       logError("RewindViewModel: Failed to load initial data: \(error)")
     }
 
+    guard ownerSnapshot.isCurrent() else { return }
     isLoading = false
 
     // Notify that Rewind page finished loading (for sidebar loading indicator)
     log("RewindViewModel: Posting rewindPageDidLoad notification")
     NotificationCenter.default.post(name: .rewindPageDidLoad, object: nil)
 
-    // How far back Rewind goes, asked after the first day is already on screen.
+    // Discover the continuous retained bounds behind the newest day's first paint.
     //
     // **Deliberately not awaited above.** The newest day is the one the user opened the page to
     // see, and it must be drawable before anything else finishes; the survey is one index seek per
-    // captured day and lands behind an already-readable timeline.
-    Task { await self.surveyCapturedHistory() }
+    // captured day. The track keeps today's first paint as its initial viewport and loads other
+    // windows only as zoom or pan reaches them.
+    Task { await self.surveyCapturedHistory(ownerSnapshot: ownerSnapshot) }
 
     // Load stats asynchronously (includes storage size calculation which can be slow)
     Task {
       if let indexerStats = await RewindIndexer.shared.getStats() {
+        guard ownerSnapshot.isCurrent() else { return }
         stats = indexerStats
       }
     }
   }
 
-  /// Ask the capture database which days it actually holds, and open the newest one that does.
+  /// Ask the capture database which days it holds and publish the exact continuous history bounds.
   ///
-  /// The second half matters as much as the first: capture stops when the Mac sleeps, when screen
-  /// recording permission is revoked, and when the user turns it off, so "today" is regularly a day
-  /// with nothing in it. Landing on an empty today and stopping there is indistinguishable from
-  /// having no history at all — the reveal below is what turns that into the newest day that does
-  /// hold capture, without the user having to guess a date.
+  /// Capture stops when the Mac sleeps, when screen recording permission is revoked, and when the
+  /// user turns it off, so a one-day source regularly looks empty despite months of retained data.
+  /// The day list powers labels and jumps; exact database extrema bound one time-linear track.
   /// - Parameter attempts: how many times a database that is still opening is re-asked.
   ///
   /// **A failed read is never reported as "no capture".** Rewind's pool opens asynchronously, and
@@ -217,20 +290,24 @@ class RewindViewModel: ObservableObject {
   /// "No screen capture yet" over an account with months of it — the same class of defect as an
   /// unread day rendering as a zero rather than an unknown. On exhaustion the flag stays `false`,
   /// so the label keeps saying "checking", which remains true.
-  func surveyCapturedHistory(attempts: Int = 3) async {
+  func surveyCapturedHistory(
+    attempts: Int = 3,
+    ownerSnapshot suppliedOwnerSnapshot: RewindCaptureOwnerSnapshot? = nil
+  ) async {
+    guard let ownerSnapshot = suppliedOwnerSnapshot ?? RewindCaptureOwnerSnapshot.capture() else {
+      return
+    }
     for attempt in 0..<max(1, attempts) {
       do {
         let days = try await RewindDatabase.shared.capturedDayStarts()
+        let stats = try await RewindDatabase.shared.getStats()
+        guard ownerSnapshot.isCurrent() else { return }
         capturedDays = days
+        historyRange = RewindTrackWindow.historyRange(oldest: stats.oldestDate, newest: stats.newestDate)
         didSurveyHistory = true
-
-        guard !didChooseDayManually, activeSearchQuery == nil, screenshots.isEmpty else { return }
-        guard let newest = days.first, !Calendar.current.isDate(newest, inSameDayAs: selectedDate) else { return }
-        log("RewindViewModel: Selected day holds no capture; revealing newest captured day \(newest)")
-        selectedDate = newest
-        await loadScreenshotsForDate(newest)
         return
       } catch {
+        guard ownerSnapshot.isCurrent() else { return }
         if attempt + 1 < attempts { try? await Task.sleep(for: .milliseconds(500)) }
       }
     }
@@ -269,7 +346,7 @@ class RewindViewModel: ObservableObject {
 
   private func performSearch(query: String) async {
     // Skip if not yet initialized (prevents race condition with debounced publisher)
-    guard isInitialized else { return }
+    guard isInitialized, let ownerSnapshot = RewindCaptureOwnerSnapshot.capture() else { return }
 
     // Cancel any existing search
     searchTask?.cancel()
@@ -277,10 +354,10 @@ class RewindViewModel: ObservableObject {
     let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
 
     if trimmedQuery.isEmpty {
-      // Reset to date-filtered view (date filter is always active)
+      // Restore the viewport that was visible before search.
       isSearching = false
       activeSearchQuery = nil
-      await loadScreenshotsForDate(selectedDate)
+      await reloadVisibleTimeline(showLoading: true)
       return
     }
 
@@ -320,6 +397,7 @@ class RewindViewModel: ObservableObject {
         let fts = try await ftsResults
         // Vector search failures are non-fatal — FTS results still show
         let vector = (try? await vectorResults) ?? []
+        guard ownerSnapshot.isCurrent() else { return }
 
         if !Task.isCancelled {
           // Merge: FTS first, then add vector-only results above threshold
@@ -327,9 +405,11 @@ class RewindViewModel: ObservableObject {
           var merged = fts
           for result in vector where result.similarity > 0.5 && !ftsIds.contains(result.screenshotId) {
             if let screenshot = try? await RewindDatabase.shared.getScreenshot(id: result.screenshotId) {
+              guard ownerSnapshot.isCurrent() else { return }
               merged.append(screenshot)
             }
           }
+          guard ownerSnapshot.isCurrent() else { return }
           screenshots = merged
         }
       } catch {
@@ -338,7 +418,7 @@ class RewindViewModel: ObservableObject {
         }
       }
 
-      if !Task.isCancelled {
+      if !Task.isCancelled, ownerSnapshot.isCurrent() {
         isSearching = false
       }
     }
@@ -352,19 +432,13 @@ class RewindViewModel: ObservableObject {
     if !searchQuery.isEmpty {
       await performSearch(query: searchQuery)
     } else {
-      await loadScreenshotsForDate(selectedDate)
+      await reloadVisibleTimeline(showLoading: true)
     }
   }
 
-  func filterByDate(_ date: Date) async {
-    didChooseDayManually = true
-    selectedDate = date
-
-    if !searchQuery.isEmpty {
-      await performSearch(query: searchQuery)
-    } else {
-      await loadScreenshotsForDate(date)
-    }
+  /// Move the date control without replacing the all-time timeline source.
+  func chooseDate(_ date: Date) {
+    selectedDate = Calendar.current.startOfDay(for: date)
   }
 
   /// Point the day control at `date` without reloading the timeline.
@@ -376,16 +450,75 @@ class RewindViewModel: ObservableObject {
   func alignSelectedDay(to date: Date) {
     let day = Calendar.current.startOfDay(for: date)
     guard !Calendar.current.isDate(day, inSameDayAs: selectedDate) else { return }
-    didChooseDayManually = true
     selectedDate = day
   }
 
+  /// Preserve the viewport chosen while search results temporarily own `screenshots`, so clearing
+  /// the query restores the opened result's time instead of the pre-search window.
+  func rememberTimelineWindow(from start: Double, to end: Double) {
+    guard end > start else { return }
+    let requested = RewindTrackWindow.clamp(
+      start: start,
+      span: end - start,
+      within: historyRange ?? (start...end))
+    visibleTimelineRange = requested.start...(requested.start + requested.span)
+  }
+
+  /// Load a bounded sample for the current continuous viewport. Queries are overscanned by one
+  /// quarter-window on either side so a continuing pan keeps drawing while the next read is pending.
+  func loadTimelineWindow(from start: Double, to end: Double, showLoading: Bool = false) async {
+    guard activeSearchQuery == nil, end > start,
+      let ownerSnapshot = RewindCaptureOwnerSnapshot.capture()
+    else { return }
+    if showLoading { isLoading = true }
+    defer {
+      if showLoading, ownerSnapshot.isCurrent() { isLoading = false }
+    }
+
+    let requested = RewindTrackWindow.clamp(
+      start: start,
+      span: end - start,
+      within: historyRange ?? (start...end))
+    let overscan = requested.span / 4
+    let queryStart = max(historyRange?.lowerBound ?? requested.start, requested.start - overscan)
+    let queryEnd = min(historyRange?.upperBound ?? end, requested.start + requested.span + overscan)
+    let loadID = UUID()
+    timelineLoadID = loadID
+
+    do {
+      let results = try await timelineScreenshotLoader(
+        Date(timeIntervalSince1970: queryStart),
+        Date(timeIntervalSince1970: queryEnd),
+        Self.timelineSampleTarget,
+        selectedApp)
+      guard timelineLoadID == loadID, activeSearchQuery == nil, ownerSnapshot.isCurrent() else {
+        return
+      }
+      let displayable = await displayableScreenshots(from: results)
+      guard ownerSnapshot.isCurrent() else { return }
+      visibleTimelineRange = requested.start...(requested.start + requested.span)
+      screenshots = displayable
+    } catch {
+      guard timelineLoadID == loadID, activeSearchQuery == nil, ownerSnapshot.isCurrent() else {
+        return
+      }
+      logError("RewindViewModel: Failed to load timeline viewport: \(error)")
+    }
+  }
+
+  private func reloadVisibleTimeline(showLoading: Bool = false) async {
+    guard let range = visibleTimelineRange ?? historyRange else { return }
+    await loadTimelineWindow(from: range.lowerBound, to: range.upperBound, showLoading: showLoading)
+  }
+
   private func loadScreenshotsForDate(_ date: Date) async {
+    guard let ownerSnapshot = RewindCaptureOwnerSnapshot.capture() else { return }
     isLoading = true
 
     let calendar = Calendar.current
     let startOfDay = calendar.startOfDay(for: date)
     let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+    visibleTimelineRange = startOfDay.timeIntervalSince1970...endOfDay.timeIntervalSince1970
 
     do {
       var results = try await RewindDatabase.shared.getScreenshotsSampled(
@@ -393,9 +526,11 @@ class RewindViewModel: ObservableObject {
         to: endOfDay,
         targetCount: 500
       )
+      guard ownerSnapshot.isCurrent() else { return }
 
       // Filter out frames from the active (unfinalized) video chunk — they can't be displayed yet
       let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
+      guard ownerSnapshot.isCurrent() else { return }
       if let activeChunk = activeChunk {
         results = results.filter { $0.videoChunkPath != activeChunk }
       }
@@ -405,57 +540,72 @@ class RewindViewModel: ObservableObject {
         results = results.filter { $0.appName == app }
       }
 
+      guard ownerSnapshot.isCurrent() else { return }
       screenshots = results
 
     } catch {
       logError("RewindViewModel: Failed to load screenshots for date: \(error)")
     }
 
-    isLoading = false
+    if ownerSnapshot.isCurrent() { isLoading = false }
   }
 
-  /// Silent variant for auto-refresh: never touches isLoading, and only
-  /// updates `screenshots` when the fetched IDs differ from the current set.
-  /// This prevents unnecessary SwiftUI view-tree rebuilds that destroy @State.
-  private func silentLoadScreenshotsForDate(_ date: Date) async {
+  /// Append newly finalized captures without repeating the all-time sample query every three seconds.
+  private func silentlyRefreshNewestFrames() async {
+    guard let ownerSnapshot = RewindCaptureOwnerSnapshot.capture() else { return }
+    guard let newest = screenshots.last else {
+      await reloadVisibleTimeline()
+      return
+    }
+
     let calendar = Calendar.current
-    let startOfDay = calendar.startOfDay(for: date)
-    let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+    let startOfToday = calendar.startOfDay(for: Date())
+    guard let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday) else { return }
 
     do {
-      var results = try await RewindDatabase.shared.getScreenshotsSampled(
-        from: startOfDay,
-        to: endOfDay,
-        targetCount: 500
+      let fetched = try await RewindDatabase.shared.getScreenshots(
+        from: newest.timestamp,
+        to: endOfToday,
+        limit: Self.timelineSampleTarget
       )
-
-      // Filter out frames from the active (unfinalized) video chunk
-      let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
-      if let activeChunk = activeChunk {
-        results = results.filter { $0.videoChunkPath != activeChunk }
+      let candidates = await displayableScreenshots(from: fetched.reversed())
+      guard ownerSnapshot.isCurrent() else { return }
+      let existingIDs = Set(screenshots.compactMap(\.id))
+      let additions = candidates.filter { screenshot in
+        if let id = screenshot.id { return !existingIDs.contains(id) }
+        return screenshot.timestamp > newest.timestamp
       }
+      guard !additions.isEmpty else { return }
+      guard ownerSnapshot.isCurrent() else { return }
+      screenshots.append(contentsOf: additions)
+      historyRange = RewindTrackWindow.extending(historyRange, toInclude: additions[additions.count - 1].timestamp)
 
-      // Apply app filter if set
-      if let app = selectedApp {
-        results = results.filter { $0.appName == app }
+      let today = calendar.startOfDay(for: additions[additions.count - 1].timestamp)
+      if !capturedDays.contains(where: { calendar.isDate($0, inSameDayAs: today) }) {
+        capturedDays.insert(today, at: 0)
       }
-
-      // Only update if the data actually changed (compare by IDs)
-      let oldIds = screenshots.compactMap { $0.id }
-      let newIds = results.compactMap { $0.id }
-      if oldIds != newIds {
-        screenshots = results
-      }
-
     } catch {
-      logError("RewindViewModel: Failed to silently refresh screenshots: \(error)")
+      logError("RewindViewModel: Failed to refresh newest timeline frames: \(error)")
     }
+  }
+
+  private func displayableScreenshots<S: Sequence>(from source: S) async -> [Screenshot]
+  where S.Element == Screenshot {
+    var results = Array(source)
+    if let activeChunk = await VideoChunkEncoder.shared.currentChunkPath {
+      results.removeAll { $0.videoChunkPath == activeChunk }
+    }
+    if let app = selectedApp {
+      results.removeAll { $0.appName != app }
+    }
+    return results
   }
 
   // MARK: - Screenshot Selection
 
   func selectScreenshot(_ screenshot: Screenshot) {
     selectedScreenshot = screenshot
+    alignSelectedDay(to: screenshot.timestamp)
     AnalyticsManager.shared.rewindScreenshotViewed(timestamp: screenshot.timestamp)
   }
 

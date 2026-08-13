@@ -55,10 +55,11 @@ overlay:
         OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
           value: 'true'
           category: rollout
+        OMI_LLM_GATEWAY_FEATURE_MODE:
+          value: gateway
+          category: rollout
         MEMORY_MODE:
           value: 'off'
-        MEMORY_ENABLED_USERS:
-          value: ''
         MEMORY_V3_GET_ENABLED:
           value: 'false'
         MCP_OAUTH_CLIENTS_JSON:
@@ -186,10 +187,11 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
           MEMORY_MODE:
             value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
           MEMORY_V3_GET_ENABLED:
             value: 'false'
           MCP_OAUTH_CLAUDE_CLIENT_ID:
@@ -259,10 +261,11 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
           MEMORY_MODE:
             value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
           MEMORY_V3_GET_ENABLED:
             value: 'false'
       backend-sync-backfill:
@@ -313,10 +316,11 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
           MEMORY_MODE:
             value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
           MEMORY_V3_GET_ENABLED:
             value: 'false'
       backend-integration:
@@ -349,10 +353,11 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
           MEMORY_MODE:
             value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
           MEMORY_V3_GET_ENABLED:
             value: 'false'
     jobs:
@@ -365,10 +370,11 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
           MEMORY_MODE:
             value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
           MEMORY_V3_GET_ENABLED:
             value: 'false'
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:

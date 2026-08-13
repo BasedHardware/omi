@@ -91,9 +91,8 @@ final class ShellWindowChromeTests: XCTestCase {
   }
 
   /// …and the window still moves. It has two handles: the transparent title bar over the reserved
-  /// band (`GlassShell.titlebarClearance`, which is why the shell draws nothing up there) and the
-  /// window background, which is what makes the top bar a drag handle without any view knowing it is
-  /// one.
+  /// band and a thresholded simultaneous SwiftUI gesture on the visible top bar. The native
+  /// background-drag switch is deliberately off because AppKit mistakes hosted buttons for background.
   func testTheWindowIsStillMovableWithoutATitleBarToGrab() {
     let window = makeWindow()
     window.isMovableByWindowBackground = false
@@ -101,66 +100,82 @@ final class ShellWindowChromeTests: XCTestCase {
     ShellWindowChrome.dress(window)
 
     XCTAssertTrue(window.isMovable, "a floating window that cannot be moved is stranded")
-    XCTAssertTrue(
-      window.isMovableByWindowBackground,
-      "with no visible frame, the panels and the empty desktop between them are the drag handles")
+    XCTAssertFalse(window.isMovableByWindowBackground)
     XCTAssertTrue(
       window.styleMask.contains(.titled),
-      "the transparent title bar is the second drag handle; a borderless window loses it")
+      "the transparent title bar remains an independent drag handle")
+  }
+
+  func testHostedSwiftUIButtonsDoNotEnableNativeBackgroundDragging() throws {
+    let window = makeWindow()
+    let host = NSHostingView(
+      rootView: Button("Rewind") {}
+        .buttonStyle(.plain)
+        .frame(width: Self.contentSize.width, height: Self.contentSize.height))
+    host.frame = NSRect(origin: .zero, size: Self.contentSize)
+    window.contentView = host
+    ShellWindowChrome.dress(window)
+    host.layoutSubtreeIfNeeded()
+
+    let hit = try XCTUnwrap(host.hitTest(NSPoint(x: 450, y: 300)))
+    XCTAssertTrue(
+      hit.mouseDownCanMoveWindow,
+      "the regression fixture no longer reproduces AppKit's SwiftUI misclassification")
+    XCTAssertFalse(
+      window.isMovableByWindowBackground,
+      "native background dragging steals this hosted button's click before SwiftUI receives it")
+  }
+
+  func testLegacyWindowDragUsesSwiftUITranslation() {
+    XCTAssertEqual(
+      ShellWindowChrome.draggedOrigin(
+        windowOrigin: NSPoint(x: 100, y: 200),
+        translation: CGSize(width: 75, height: 40)),
+      NSPoint(x: 175, y: 160))
   }
 
   // MARK: - Summoned vs anchored
 
-  /// A summoned shell behaves like the thing it is: it comes up over whatever you were reading, and it
-  /// is **still there** when you go back to that. Floating level is the half the user asked for by
-  /// name — in front of whatever is behind it — and it is worth nothing on its own if the window
-  /// deletes itself the moment the thing behind it takes focus.
-  func testASummonedShellFloatsOverOtherAppsAndStaysThereWhenOneTakesFocus() {
+  /// **The app-switcher guard.** The shell used to be a `.floating` panel with `hidesOnDeactivate`, so
+  /// switching to any other app ordered it out — and a window that is not on screen is in no switcher's
+  /// list, which left ⌥-Tab and ⌘-Tab window cycling with no Omi window to offer at all. These two
+  /// properties are the whole difference between an application window and an overlay, so they are
+  /// asserted directly rather than through the presentation that happens to be applied.
+  func testASummonedShellStaysOnScreenAtNormalLevelSoWindowSwitchersCanOfferIt() {
     let window = makeWindow()
 
     ShellWindowChrome.dress(window, as: .summoned)
 
-    XCTAssertEqual(window.level, .floating, "a summoned surface that sinks behind the app you called it over")
-    XCTAssertFalse(
-      window.hidesOnDeactivate,
-      "clicking a browser, or a notification stealing focus, wipes the shell out mid-answer")
+    XCTAssertEqual(window.level, .normal, "an overlay level is not a window any switcher will cycle to")
+    XCTAssertFalse(window.hidesOnDeactivate, "AppKit orders a hidden window out of every switcher's list")
     XCTAssertTrue(window.collectionBehavior.contains(.fullScreenAuxiliary))
     XCTAssertTrue(window.collectionBehavior.contains(.moveToActiveSpace))
   }
 
-  /// **The regression guard.** `hidesOnDeactivate` shipped with the summon conversion, and every route
-  /// into `dress` runs on a window an earlier pass may already have set it on — launch dresses the
-  /// window, a summon re-dresses it, finishing onboarding re-dresses it again. So the property is
-  /// *written* `false` rather than left alone: a `dress` that only ever set it in one direction would
-  /// leave a hidden shell hidden, and a shell that vanishes when you glance at another app produces no
-  /// log line, no crash and no failing build — the user just finds an empty desktop where their answer
-  /// was.
-  func testDressingAWindowThatHidesItselfClearsThatInEitherPresentation() {
+  /// `dress` runs repeatedly as auth and onboarding change presentation, and no presentation may
+  /// reintroduce the auto-hide: a signed-in shell has to survive a trip to another app for the same
+  /// reason onboarding has to survive a trip to System Settings.
+  func testNoPresentationEverMakesTheShellHideItselfOnDeactivate() {
+    let window = makeWindow()
+
     for presentation in ShellWindowChrome.Presentation.allCases {
-      let window = makeWindow()
-      // The shape the previous build produced, and the shape a stale re-dress could hand back.
-      window.hidesOnDeactivate = true
-
       ShellWindowChrome.dress(window, as: presentation)
-
-      XCTAssertFalse(
-        window.hidesOnDeactivate,
-        "\(presentation) still orders itself out whenever another app takes focus")
+      XCTAssertFalse(window.hidesOnDeactivate, "\(presentation) hides the shell from every window switcher")
+      XCTAssertEqual(window.level, .normal, "\(presentation) puts the shell at a level switchers skip")
     }
   }
-
   /// **The first-run guard.** Onboarding sends people to System Settings for microphone, screen
-  /// recording and accessibility. A `.floating` window sits on top of the Settings pane and covers the
-  /// control the user was just told to click, so before there is an account and a finished setup the
-  /// same window is an ordinary one that can also take a Space of its own.
-  func testAnAnchoredShellStaysOutOfTheWayOfTheSettingsPaneItSendsYouTo() {
+  /// recording and accessibility, and every trip deactivates this app. A shell that auto-hid would
+  /// vanish on the way out to grant the thing it just asked for, so before there is an account and a
+  /// finished setup the same window is an ordinary one.
+  func testAnAnchoredShellStaysUpSoAPermissionTripCannotStrandOnboarding() {
     let window = makeWindow()
     ShellWindowChrome.dress(window, as: .summoned)
 
     ShellWindowChrome.dress(window, as: .anchored)
 
-    XCTAssertEqual(window.level, .normal, "onboarding floats over the System Settings pane it just asked for")
-    XCTAssertFalse(window.hidesOnDeactivate, "a permission trip deactivates the app; onboarding must survive it")
+    XCTAssertFalse(window.hidesOnDeactivate, "onboarding disappears the moment the user grants a permission")
+    XCTAssertEqual(window.level, .normal)
     XCTAssertTrue(window.collectionBehavior.contains(.fullScreenPrimary))
   }
 
@@ -191,7 +206,7 @@ final class ShellWindowChromeTests: XCTestCase {
       "the panels inside draw their own ambient shadow; the shell does not add an outer frame shadow")
     XCTAssertTrue(
       WindowGlass.hasTitlebar(ShellWindowChrome.glassKind),
-      "the transparent title bar is one of the shell's two drag handles, and ⌘W routes from the mask")
+      "the transparent title bar remains a drag handle, and ⌘W routes from the mask")
   }
 
   /// …and `dress` really applies it, in both presentations. The mapping above is a value; this is the
@@ -224,7 +239,7 @@ final class ShellWindowChromeTests: XCTestCase {
       XCTAssertTrue(
         window.styleMask.isSuperset(of: ShellWindowChrome.keyboardWindowCommands),
         "\(presentation) has no ⌘W or ⌘M and no buttons either")
-      XCTAssertTrue(window.isMovableByWindowBackground, "\(presentation) cannot be dragged anywhere")
+      XCTAssertFalse(window.isMovableByWindowBackground, "\(presentation) can steal hosted button clicks")
     }
   }
 

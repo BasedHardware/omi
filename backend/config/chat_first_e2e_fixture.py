@@ -1,19 +1,16 @@
 """Firebase Auth emulator identities and runtime guard for Chat-first E2E.
 
 The local harness seeds fixed Firebase Auth emulator UIDs through the Admin
-API.  The enabled UID is deliberately listed in the canonical-memory cohort,
-so fixture capability uses the normal product entitlement rather than a test
-bypass.
+API. Both fixture accounts use the same universal product authority; the
+distinct logical principals exist only to exercise fixture control states.
 """
 
 import json
 import os
 from pathlib import Path
 
-from config.canonical_memory_cohort import LOCAL_CHAT_FIRST_E2E_ENABLED_UID
-
-CHAT_FIRST_E2E_ENABLED_PRINCIPAL = LOCAL_CHAT_FIRST_E2E_ENABLED_UID
-CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL = 'omi-local-emulator-chat-first-disabled-v1'
+CHAT_FIRST_E2E_ENABLED_PRINCIPAL = 'omi-local-emulator-chat-first-enabled-v1'
+CHAT_FIRST_E2E_DISABLED_PRINCIPAL = 'omi-local-emulator-chat-first-disabled-v1'
 _LOCAL_E2E_STAGES = frozenset({'local', 'offline'})
 _AUTH_UID_MANIFEST_NAME = 'canonical-auth-uids.json'
 
@@ -50,7 +47,7 @@ def _fixture_auth_uids(*, state_root: str | None = None) -> dict[str, str]:
     if not isinstance(users, dict):
         return {}
     resolved: dict[str, str] = {}
-    for principal in (CHAT_FIRST_E2E_ENABLED_PRINCIPAL, CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL):
+    for principal in (CHAT_FIRST_E2E_ENABLED_PRINCIPAL, CHAT_FIRST_E2E_DISABLED_PRINCIPAL):
         uid = users.get(principal)
         if isinstance(uid, str) and uid.strip():
             resolved[principal] = uid.strip()
@@ -71,7 +68,7 @@ def is_chat_first_e2e_fixture_uid(uid: str, *, stage: str | None = None) -> bool
 
 __all__ = [
     'CHAT_FIRST_E2E_ENABLED_PRINCIPAL',
-    'CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL',
+    'CHAT_FIRST_E2E_DISABLED_PRINCIPAL',
     'fixture_uid_for_principal',
     'is_chat_first_e2e_fixture_uid',
     'is_chat_first_e2e_harness_runtime',

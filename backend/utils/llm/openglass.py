@@ -8,7 +8,13 @@ ChatMessage = dict[str, object]
 
 
 class AsyncVisionLlm(Protocol):
-    async def ainvoke(self, input: object, *, config: dict[str, Any] | None = None) -> object: ...
+    async def ainvoke(
+        self,
+        input: object,
+        *,
+        config: dict[str, Any] | None = None,
+        max_completion_tokens: int | None = None,
+    ) -> object: ...
 
 
 def _response_text(response: object) -> str:
@@ -54,6 +60,6 @@ async def describe_image(uid: str, base64_data: str) -> str:
     }
 
     with track_usage(uid, Features.OPENGLASS):
-        response = await cast(AsyncVisionLlm, get_llm('openglass')).ainvoke([message], config={"max_tokens": 150})
+        response = await cast(AsyncVisionLlm, get_llm('openglass')).ainvoke([message], max_completion_tokens=150)
     description = _response_text(response).strip()
     return description if description != '""' else ""

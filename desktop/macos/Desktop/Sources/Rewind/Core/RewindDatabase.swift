@@ -458,8 +458,10 @@ actor RewindDatabase {
     // Create directory if needed (withIntermediateDirectories creates parents too)
     try FileManager.default.createDirectory(at: omiDir, withIntermediateDirectories: true)
 
-    // Migrate data from legacy path if this is first launch with per-user paths
-    migrateFromLegacyPathIfNeeded(to: omiDir)
+    // Migrate data from legacy path if this is first launch with per-user paths.
+    // Remember an anonymous-directory source so context-bucket migration can
+    // fall back to the signed-out legacy defaults key after an early init.
+    let migratedLegacyOwnerID = migrateFromLegacyPathIfNeeded(to: omiDir)
 
     let dbPath = omiDir.appendingPathComponent("omi.db").path
     let flagPath = omiDir.appendingPathComponent(".omi_running").path
@@ -578,7 +580,7 @@ actor RewindDatabase {
     openedForUserId = expectedUserId
     consecutiveQueryIOErrors = 0
 
-    try migrate(activeQueue)
+    try migrate(activeQueue, legacyOwnerFallback: migratedLegacyOwnerID)
 
     // After unclean shutdown, do a cheap schema sanity check (not a full DB scan).
     // PRAGMA quick_check scans the ENTIRE database regardless of the (N) argument
@@ -635,12 +637,14 @@ actor RewindDatabase {
     }
   }
 
-  private func migrateFromLegacyPathIfNeeded(to userDir: URL) {
+  private func migrateFromLegacyPathIfNeeded(to userDir: URL) -> String? {
     // The legacy `Omi` root is shared historical state. A named bundle that
     // now has an identity-derived profile must never claim it: the first
     // bundle to launch would otherwise move data belonging to Omi/Omi Dev
     // or another old named bundle into its isolated root.
-    guard Self.shouldMigrateLegacyStorage(isolatedStorage: DesktopLocalProfile.usesIsolatedStorage) else { return }
+    guard Self.shouldMigrateLegacyStorage(isolatedStorage: DesktopLocalProfile.usesIsolatedStorage) else {
+      return nil
+    }
     let fileManager = FileManager.default
     let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
     let omiDir = appSupport.appendingPathComponent("Omi", isDirectory: true)
@@ -666,14 +670,15 @@ actor RewindDatabase {
       let hasContent = ["omi.db", "Screenshots", "Videos", "backups"].contains {
         fileManager.fileExists(atPath: anonymousDir.appendingPathComponent($0).path)
       }
-      guard hasContent else { return }
+      guard hasContent else { return nil }
       sourceDir = anonymousDir
     } else {
-      return  // Nothing to migrate
+      return nil  // Nothing to migrate
     }
 
     // Don't migrate to ourselves
-    guard sourceDir.path != userDir.path else { return }
+    guard sourceDir.path != userDir.path else { return nil }
+    let migratedLegacyOwnerID = sourceDir.path == anonymousDir.path ? "signed-out" : nil
 
     log("RewindDatabase: Migrating data from \(sourceDir.path) to \(userDir.path)")
 
@@ -701,8 +706,12 @@ actor RewindDatabase {
     // NOT proceed to delete it — abort the whole migration and leave source +
     // dest intact. initialize() retries migration on the next launch, once the
     // transient cause (locked DB, momentary IO error) has likely cleared.
-    guard checkpointWALBeforeMigration(in: userDir, label: "dest", fileManager: fileManager) else { return }
-    guard checkpointWALBeforeMigration(in: sourceDir, label: "source", fileManager: fileManager) else { return }
+    guard checkpointWALBeforeMigration(in: userDir, label: "dest", fileManager: fileManager) else {
+      return nil
+    }
+    guard checkpointWALBeforeMigration(in: sourceDir, label: "source", fileManager: fileManager) else {
+      return nil
+    }
 
     // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
     // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
@@ -767,6 +776,7 @@ actor RewindDatabase {
     }
 
     log("RewindDatabase: Legacy migration complete")
+    return migratedLegacyOwnerID
   }
 
   static func shouldMigrateLegacyStorage(isolatedStorage: Bool) -> Bool {
@@ -1135,7 +1145,7 @@ actor RewindDatabase {
 
   // MARK: - Migrations
 
-  private func migrate(_ queue: DatabasePool) throws {
+  private func migrate(_ queue: DatabasePool, legacyOwnerFallback: String? = nil) throws {
     var migrator = DatabaseMigrator()
 
     // Migration 1: Create screenshots table
@@ -2552,9 +2562,20 @@ actor RewindDatabase {
       }
     }
 
+    let contextBucketOwnerID = openedForUserId ?? targetUserId()
+    ContextBucketSchema.registerMigration(
+      on: &migrator,
+      defaults: .standard,
+      ownerID: contextBucketOwnerID,
+      fallbackOwnerID: legacyOwnerFallback)
+
     RewindAbandonedVideoChunkQuarantine.registerMigration(on: &migrator)
 
     try migrator.migrate(queue)
+    try ContextBucketSchema.removeMigratedLegacyDefaults(
+      afterMigrating: queue,
+      defaults: .standard,
+      ownerID: contextBucketOwnerID)
   }
 
   // MARK: - OCR Precision Reduction Migration
@@ -2940,47 +2961,42 @@ actor RewindDatabase {
   }
 
   /// Get screenshots sampled evenly across a date range, ordered ASC (oldest first).
-  /// If the total count for the range is <= targetCount, returns all rows ASC.
-  /// Otherwise picks every Nth screenshot to fit ~targetCount frames.
-  func getScreenshotsSampled(from startDate: Date, to endDate: Date, targetCount: Int) throws -> [Screenshot] {
+  /// Returns all rows within `targetCount`; otherwise samples evenly while retaining both endpoints.
+  func getScreenshotsSampled(
+    from startDate: Date, to endDate: Date, targetCount: Int, appFilter: String? = nil
+  ) throws -> [Screenshot] {
     guard let dbQueue = dbQueue else {
       throw RewindError.databaseNotInitialized
     }
 
     return try dbQueue.read { db in
-      // Get total count for the range
-      let totalCount =
-        try Screenshot
-        .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
-        .fetchCount(db)
+      var request = Screenshot.filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
+      if let appFilter {
+        request = request.filter(Column("appName") == appFilter)
+      }
+
+      // Count only rows eligible for the timeline, so sparse app filters get a full sample.
+      let totalCount = try request.fetchCount(db)
 
       if totalCount <= targetCount {
         // Return all, ordered ASC (oldest first)
-        return
-          try Screenshot
-          .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
-          .order(Column("timestamp").asc)
-          .fetchAll(db)
+        return try request.order(Column("timestamp").asc).fetchAll(db)
       }
 
       // Fetch all IDs + timestamps ordered ASC, then pick every Nth
-      let rows = try Row.fetchAll(
-        db,
-        sql: """
-              SELECT id FROM screenshots
-              WHERE timestamp >= ? AND timestamp <= ?
-              ORDER BY timestamp ASC
-          """, arguments: [startDate, endDate])
+      let idRequest = request.select(Column("id")).order(Column("timestamp").asc)
+      let rows = try Row.fetchAll(db, idRequest)
 
-      let step = Double(totalCount) / Double(targetCount)
-      var sampledIds: [Int64] = []
-      var i: Double = 0
-      while Int(i) < totalCount && sampledIds.count < targetCount {
-        let index = Int(i)
-        if index < rows.count {
-          sampledIds.append(rows[index]["id"])
-        }
-        i += step
+      let sampleCount = max(1, targetCount)
+      let sampledIds: [Int64] = (0..<sampleCount).compactMap { slot in
+        let index =
+          sampleCount == 1
+          ? totalCount - 1
+          : Int(
+            (Double(slot) * Double(totalCount - 1) / Double(sampleCount - 1))
+              .rounded())
+        guard rows.indices.contains(index) else { return nil }
+        return rows[index]["id"]
       }
 
       // Batch-fetch the sampled rows and return in ASC order

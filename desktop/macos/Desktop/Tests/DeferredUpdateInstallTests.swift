@@ -48,4 +48,17 @@ final class DeferredUpdateInstallTests: XCTestCase {
       5
     )
   }
+
+  func testCancelPreventsDeferredInstallFromFiring() {
+    var installed = false
+    let deferred = DeferredUpdateInstall(
+      version: "0.12.149",
+      silenceWindow: 120,
+      lastSpeechProvider: { nil },
+      install: { installed = true }
+    )
+    deferred.cancel()
+    deferred.start(now: Date(timeIntervalSince1970: 1_000))
+    XCTAssertFalse(installed, "cancel() must block install even if start() runs afterward")
+  }
 }

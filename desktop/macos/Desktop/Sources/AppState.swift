@@ -112,6 +112,27 @@ enum DesktopConversationMatchPolicy {
     return true
   }
 
+  /// Remember a newly observed rollover without allowing duplicate stale
+  /// callbacks to evict a different guard entry.
+  static func rememberingRotatedBackendId(
+    _ backendId: String,
+    activeBackendId: String?,
+    ignoredRotatedBackendIds: Set<String>,
+    maxCount: Int
+  ) -> Set<String> {
+    guard let activeBackendId,
+      activeBackendId != backendId,
+      !ignoredRotatedBackendIds.contains(backendId)
+    else { return ignoredRotatedBackendIds }
+
+    var updated = ignoredRotatedBackendIds
+    if updated.count >= maxCount, let evicted = updated.first {
+      updated.remove(evicted)
+    }
+    updated.insert(backendId)
+    return updated
+  }
+
   /// Identified listen sessions may only consume lifecycle events produced by
   /// their own recording. Older backend versions omit `recording_session_id`,
   /// so the matching conversation id remains the compatibility proof.
@@ -123,6 +144,53 @@ enum DesktopConversationMatchPolicy {
     guard let expectedBackendId, !expectedBackendId.isEmpty else { return true }
     guard memoryId == expectedBackendId else { return false }
     return recordingSessionId == nil || recordingSessionId == expectedBackendId
+  }
+
+  /// A completed backend event is telemetry-eligible only when it can be
+  /// attributed to the local recording that just ended. Durable SQLite
+  /// binding is intentionally not required: an exact client conversation id
+  /// or the legacy source/timestamp proof is sufficient.
+  static func acceptsCompletedLocalRecording(
+    memoryId: String,
+    memory: [String: Any]?,
+    recordingSessionId: String?,
+    expectedBackendId: String?,
+    finishedRecordingStartTime: Date?
+  ) -> Bool {
+    guard !memoryId.isEmpty, memoryId != "?" else { return false }
+    guard
+      lifecycleEventBelongsToRecording(
+        memoryId: memoryId,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: expectedBackendId
+      )
+    else {
+      return false
+    }
+
+    if let expectedBackendId, !expectedBackendId.isEmpty {
+      return memoryId == expectedBackendId
+    }
+
+    guard let finishedRecordingStartTime else { return false }
+    return memoryEventMatchesFinishedSession(memory, sessionStartedAt: finishedRecordingStartTime)
+  }
+
+  static func matchingFinishedRecordingIndex(
+    memoryId: String,
+    memory: [String: Any]?,
+    recordingSessionId: String?,
+    pending: [FinishedRecordingEnvelope]
+  ) -> Int? {
+    pending.firstIndex { envelope in
+      acceptsCompletedLocalRecording(
+        memoryId: memoryId,
+        memory: memory,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: envelope.clientConversationId,
+        finishedRecordingStartTime: envelope.startedAt
+      )
+    }
   }
 
   /// Versioned lifecycle envelopes are an ordered protocol. A client only
@@ -198,6 +266,13 @@ enum DesktopConversationMatchPolicy {
     let formatter = ISO8601DateFormatter()
     return formatter.date(from: string)
   }
+}
+
+struct FinishedRecordingEnvelope: Equatable, Sendable {
+  let sessionId: Int64?
+  let clientConversationId: String?
+  let startedAt: Date
+  let source: ConversationSource
 }
 
 @MainActor
@@ -289,6 +364,7 @@ class AppState: ObservableObject {
 
   // Permission states for onboarding
   @Published var hasNotificationPermission = false
+  @Published var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
   @Published var notificationAlertStyle: UNAlertStyle = .none  // .none, .banner, or .alert
   @Published var hasScreenRecordingPermission = false
   /// TCC state captured once at process launch. A grant that arrives while the
@@ -302,14 +378,18 @@ class AppState: ObservableObject {
   var lastNotificationAlertStyle: String?
   var lastNotificationSoundEnabled: Bool?
   var lastNotificationBadgeEnabled: Bool?
+  var notificationPermissionRefreshGeneration = 0
   @Published var isScreenCaptureKitBroken = false  // Capture engine issue; not the source of permission truth
   @Published var isScreenRecordingStale = false  // Deprecated: no longer inferred from capture failures
   var screenRecordingGrantAttempts = 0  // Track how many times user clicked Grant without success
   @Published var hasAutomationPermission = false
-  @Published var automationPermissionError: OSStatus = 0  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound)
-  var isCheckingAutomationPermission = false  // Prevent concurrent checks (retry path has a 1s sleep)
+  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound).
+  @Published var automationPermissionError: OSStatus = 0
+  // Prevent concurrent checks (retry path has a 1s sleep).
+  var isCheckingAutomationPermission = false
   @Published var hasAccessibilityPermission = false
-  @Published var isAccessibilityBroken = false  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs)
+  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs).
+  @Published var isAccessibilityBroken = false
   @Published var hasFullDiskAccess = false
 
   /// Usage-limit popup state. Set by `triggerUsageLimitPopup(reason:)` when the
@@ -434,10 +514,11 @@ class AppState: ObservableObject {
   /// Last accepted server event sequence per durable recording session. This
   /// is display state only; Firestore remains the authoritative sequence owner.
   var lifecycleSequenceByRecordingSession: [String: Int] = [:]
+  static let maxLifecycleRecordingSessions = 32
   var ignoredRotatedBackendConversationIds: Set<String> = []
-  var finishedSessionId: Int64?
-  var finishedClientConversationId: String?
-  var finishedRecordingStartTime: Date?
+  static let maxIgnoredRotatedBackendConversationIds = 16
+  var pendingFinishedRecordings: [FinishedRecordingEnvelope] = []
+  static let maxPendingFinishedRecordings = 16
 
   var willTerminateObserver: NSObjectProtocol? {
     get { servicesCoordinator.willTerminateObserver }

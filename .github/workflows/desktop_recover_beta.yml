@@ -1,13 +1,12 @@
-name: Recover Qualified Desktop Beta
+name: Retry Desktop Beta Promotion
 
-# The sole break-glass path. It can only retry the server-owned promotion of an
-# already signed and qualified immutable candidate; it cannot create a build,
-# waive evidence, or mutate Stable.
+# Manual retry for the same server-owned promotion Codemagic normally performs.
+# It cannot create a build, waive signed-smoke evidence, or mutate Stable.
 on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Exact qualified v*-macos candidate tag to retry on Beta'
+        description: 'Exact signed v*-macos candidate tag to retry on Beta'
         required: true
         type: string
       confirm:
@@ -16,14 +15,6 @@ on:
         type: string
       reason:
         description: 'Why automatic Beta promotion needs recovery'
-        required: true
-        type: string
-      qualification_run_id:
-        description: 'Trusted qualification run ID that produced this candidate evidence'
-        required: true
-        type: string
-      qualification_run_attempt:
-        description: 'Trusted qualification run attempt that produced this candidate evidence'
         required: true
         type: string
 
@@ -39,8 +30,6 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
           REASON: ${{ inputs.reason }}
-          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
-          QUALIFICATION_RUN_ATTEMPT: ${{ inputs.qualification_run_attempt }}
         run: |
           set -euo pipefail
           test "$CONFIRM" = recover-beta || { echo 'confirm must be exactly: recover-beta' >&2; exit 1; }
@@ -48,28 +37,19 @@ jobs:
             echo 'release_tag must be an exact immutable macOS candidate tag' >&2; exit 1;
           }
           test -n "${REASON//[[:space:]]/}" || { echo 'reason is required' >&2; exit 1; }
-          printf '%s\n' "$QUALIFICATION_RUN_ID" | grep -qE '^[1-9][0-9]*$' || {
-            echo 'qualification_run_id must be a positive GitHub Actions run ID' >&2; exit 1;
-          }
-          printf '%s\n' "$QUALIFICATION_RUN_ATTEMPT" | grep -qE '^[1-9][0-9]*$' || {
-            echo 'qualification_run_attempt must be a positive GitHub Actions run attempt' >&2; exit 1;
-          }
           {
             echo '### Beta recovery request'
             echo
             echo "- Candidate: \`$RELEASE_TAG\`"
             echo "- Requested by: \`${{ github.actor }}\`"
             echo "- Reason: $REASON"
-            echo '- Admission, qualification evidence, pointer generation, and pause state remain server-verified.'
+            echo '- Admission, signed-smoke evidence, pointer generation, and pause state remain server-verified.'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  recover-qualified-beta:
+  retry-beta-promotion:
     needs: validate-recovery
     permissions:
       contents: read
-      actions: read
     uses: ./.github/workflows/desktop_promote_beta.yml
     with:
       release_tag: ${{ inputs.release_tag }}
-      qualification_run_id: ${{ inputs.qualification_run_id }}
-      qualification_run_attempt: ${{ inputs.qualification_run_attempt }}

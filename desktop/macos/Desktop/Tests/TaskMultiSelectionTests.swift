@@ -70,4 +70,18 @@ final class TaskMultiSelectionTests: XCTestCase {
     state.toggleSelectAll(visibleIDs: ["a", "b"])
     XCTAssertEqual(state.selectedIDs(in: ["a", "b"]), ["hidden"])
   }
+
+  func testDeselectAllClearsVisibleAndHiddenRowsButKeepsSelectionModeActive() {
+    var state = TaskMultiSelectionState()
+    state.enter()
+    state.selectAll(visibleIDs: ["visible", "off-page"])
+    state.reconcile(visibleIDs: ["visible"])
+
+    state.deselectAll()
+
+    XCTAssertTrue(state.isActive)
+    XCTAssertEqual(state.selectionCount, 0)
+    XCTAssertTrue(state.selectedIDs.isEmpty)
+    XCTAssertNil(state.anchorID)
+  }
 }

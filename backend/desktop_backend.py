@@ -15,6 +15,7 @@ from routers import (
     desktop_core,
     desktop_deprecated,
     desktop_proxy,
+    desktop_proactivity,
     desktop_realtime,
     desktop_screen_crisp,
     desktop_tts_updates,
@@ -73,6 +74,7 @@ app.include_router(auth.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
 app.include_router(desktop_proxy.router)
+app.include_router(desktop_proactivity.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(desktop_tts_updates.router)

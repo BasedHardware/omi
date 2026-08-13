@@ -124,6 +124,21 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: OPENAI_API_KEY
+  - name: OMI_LLM_GATEWAY_URL
+    value: "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080"
+  - name: OMI_ENV_STAGE
+    value: "dev"
+  - name: OMI_LLM_GATEWAY_FEATURE_MODE
+    value: "gateway"
+  - name: OMI_LLM_CHAT_AGENT_ROUTE
+    value: "gateway"
+  - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
+    value: "false"
+  - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:

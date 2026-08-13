@@ -1,4 +1,5 @@
 @preconcurrency import AppKit
+import Combine
 import OmiTheme
 import SwiftUI
 
@@ -129,7 +130,10 @@ struct RewindPage: View {
                   // Already two panels of its own, with its own gap under the bar.
                   fullScreenResultsView(width: header)
                 }
-              } else if viewModel.screenshots.isEmpty {
+              } else if !RewindTimelinePresentation.showsTimeline(
+                screenshotCount: viewModel.screenshots.count,
+                historyRange: viewModel.historyRange
+              ) {
                 emptyState.rewindPlayerPanel(width: player)
               } else {
                 // Normal timeline view (without top bar, since we have unified one)
@@ -144,8 +148,8 @@ struct RewindPage: View {
       }
     }
     .glassContent()
-    // The page answers arrow keys and the scroll wheel wherever the pointer is, so it holds keyboard
-    // focus itself. It is not a control, though, and this container is the whole content area: the
+    // The page answers arrow keys wherever the pointer is, so it holds keyboard focus itself. The
+    // timeline track owns scroll gestures directly. This container is not a control, though: the
     // system focus effect around it was a 1 pt accent rectangle on the window's edges, which on a
     // window with no visible extent is a blue rectangle on the wallpaper. See
     // `shellPageKeyboardTarget`.
@@ -167,6 +171,19 @@ struct RewindPage: View {
       isMonitoring = state.isMonitoring
       screenAnalysisEnabled = state.captureEnabled
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      // RewindPage itself owns the decoded NSImage and frame-load task. Clearing
+      // only the view model would leave the previous owner's last frame visible
+      // while this persistent page reloads for the incoming account.
+      invalidatePendingFrameLoad()
+      currentImage = nil
+      currentIndex = 0
+      selectedGroupIndex = 0
+      searchViewMode = nil
+      selectedSpeakerSegment = nil
+      isTranscriptExpanded = false
+      LiveTranscriptMonitor.shared.clearSaved()
     }
     .onReceive(NotificationCenter.default.publisher(for: .expandRewindTranscript)) { _ in
       OmiMotion.withGated(.easeInOut(duration: 0.2)) {
@@ -192,11 +209,24 @@ struct RewindPage: View {
         currentIndex = newIndex
         // No need to reload frame - it's the same screenshot
       } else if !newScreenshots.isEmpty {
-        // First load or current screenshot deleted — start at newest (last index, ASC order)
-        currentIndex = newScreenshots.count - 1
+        // A viewport query may replace every sampled row. Stay near the same visible moment instead
+        // of snapping to the newest capture in all of history.
+        if !oldScreenshots.isEmpty, viewModel.activeSearchQuery == nil, trackWindow.span > 0 {
+          let centre = trackWindow.start + trackWindow.span / 2
+          currentIndex = RewindTimelineNavigation.nearestIndex(to: centre, screenshots: newScreenshots) ?? 0
+        } else {
+          currentIndex = newScreenshots.count - 1
+        }
         selectedGroupIndex = 0
         scheduleLoadCurrentFrame()
       }
+    }
+    .onReceive(
+      trackWindow.$start.combineLatest(trackWindow.$span)
+        .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
+    ) { start, span in
+      guard span > 0, viewModel.activeSearchQuery == nil else { return }
+      Task { await viewModel.loadTimelineWindow(from: start, to: start + span) }
     }
     .onChange(of: viewModel.activeSearchQuery) { oldQuery, newQuery in
       // When search becomes active, default to results view
@@ -277,35 +307,12 @@ struct RewindPage: View {
       }
       return .ignored
     }
-    // Global scroll wheel handler - works anywhere on the page
-    .onScrollWheel { delta in
-      handleScrollWheel(delta: delta)
-    }
   }
 
-  // Handle scroll wheel to move playhead
-  private func handleScrollWheel(delta: CGFloat) {
-    log("RewindPage: Scroll wheel delta=\(delta), currentIndex=\(currentIndex), screenshots=\(activeScreenshots.count)")
-
-    guard !activeScreenshots.isEmpty else {
-      log("RewindPage: Scroll ignored - no screenshots")
-      return
-    }
-    guard searchViewMode != .results else {
-      log("RewindPage: Scroll ignored - in results view")
-      return
-    }
-
-    let sensitivity: CGFloat = 0.5  // Reduced from 3.0 - was too fast
-    let framesToMove = Int(delta * sensitivity)  // Positive delta (scroll right/down) = newer = higher index
-
-    if framesToMove != 0 {
-      let newIndex = max(0, min(activeScreenshots.count - 1, currentIndex + framesToMove))
-      if newIndex != currentIndex {
-        log("RewindPage: Scroll moving from \(currentIndex) to \(newIndex)")
-        seekToIndex(newIndex)
-      }
-    }
+  /// The AppKit track owns wheel/swipe input and forwards only gestures that begin on the timeline.
+  private func handleTimelineScroll(deltaX: CGFloat, deltaY: CGFloat) {
+    guard viewModel.activeSearchQuery == nil, searchViewMode != .results else { return }
+    trackWindow.pan(deltaX: deltaX, deltaY: deltaY)
   }
 
   // MARK: - No Search Results
@@ -496,6 +503,11 @@ struct RewindPage: View {
       let groups = viewModel.groupedSearchResults
       if groups.indices.contains(groupIndex) {
         viewModel.alignSelectedDay(to: groups[groupIndex].startTime)
+        trackWindow.center(on: groups[groupIndex].startTime.timeIntervalSince1970)
+        viewModel.rememberTimelineWindow(
+          from: trackWindow.start,
+          to: trackWindow.start + trackWindow.span
+        )
       }
       scheduleLoadCurrentFrame()
     }
@@ -586,9 +598,10 @@ struct RewindPage: View {
         selection: Binding(
           get: { viewModel.selectedDate },
           set: { newDate in
-            // Only reload if the selected day actually changed
+            // Keep one all-time source; the picker moves its playhead instead of replacing it with
+            // a day-bounded query.
             guard !Calendar.current.isDate(newDate, inSameDayAs: viewModel.selectedDate) else { return }
-            Task { await viewModel.filterByDate(newDate) }
+            seekToCapturedDay(newDate)
           }
         ),
         displayedComponents: [.date]
@@ -640,7 +653,7 @@ struct RewindPage: View {
 
       HStack(spacing: OmiSpacing.sm) {
         Button {
-          if let older { Task { await viewModel.filterByDate(older) } }
+          if let older { seekToCapturedDay(older) }
         } label: {
           Label("Older", systemImage: "chevron.left")
             .scaledFont(size: OmiType.caption)
@@ -650,7 +663,7 @@ struct RewindPage: View {
         .opacity(older == nil ? 0.35 : 1)
 
         Button {
-          if let newer { Task { await viewModel.filterByDate(newer) } }
+          if let newer { seekToCapturedDay(newer) }
         } label: {
           Label("Newer", systemImage: "chevron.right")
             .scaledFont(size: OmiType.caption)
@@ -662,7 +675,7 @@ struct RewindPage: View {
         Spacer(minLength: 0)
 
         Button {
-          if let oldest { Task { await viewModel.filterByDate(oldest) } }
+          if let oldest { seekToCapturedDay(oldest) }
         } label: {
           Text("Oldest capture")
             .scaledFont(size: OmiType.caption)
@@ -768,11 +781,13 @@ struct RewindPage: View {
     VStack(spacing: 0) {
       RewindTrackBar(
         screenshots: activeScreenshots,
+        historyRange: viewModel.historyRange,
         currentIndex: currentIndex,
         searchResultIndices: viewModel.activeSearchQuery != nil && searchViewMode != .timeline
           ? Set(searchResultIndices) : nil,
         window: trackWindow,
-        onSelect: { seekToIndex($0) })
+        onSelect: { seekToIndex($0) },
+        onScroll: { handleTimelineScroll(deltaX: $0, deltaY: $1) })
       RewindTrackFooter(
         screenshots: activeScreenshots,
         currentIndex: currentIndex,
@@ -827,6 +842,9 @@ struct RewindPage: View {
       guard isCurrentFrameLoad(index: requestedIndex, requestID: requestID, sourceToken: sourceToken) else { return }
       currentImage = image
       viewModel.selectScreenshot(screenshots[requestedIndex])
+      if viewModel.activeSearchQuery == nil {
+        viewModel.alignSelectedDay(to: screenshots[requestedIndex].timestamp)
+      }
       isLoadingFrame = false
       return
     }
@@ -889,11 +907,22 @@ struct RewindPage: View {
 
   private func seekToIndex(_ index: Int) {
     let screenshots = activeScreenshots
-    let newIndex = max(0, min(index, screenshots.count - 1))
+    guard let newIndex = RewindTimelineNavigation.clampedIndex(index, screenshots: screenshots) else { return }
     guard newIndex != currentIndex else { return }
 
     currentIndex = newIndex
+    trackWindow.reveal(screenshots[newIndex].timestamp.timeIntervalSince1970)
     scheduleLoadCurrentFrame()
+  }
+
+  private func seekToCapturedDay(_ date: Date) {
+    viewModel.chooseDate(date)
+    let calendar = Calendar.current
+    let start = calendar.startOfDay(for: date)
+    let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(24 * 3600)
+    let span = max(trackWindow.span, end.timeIntervalSince(start))
+    let middle = start.timeIntervalSince1970 + end.timeIntervalSince(start) / 2
+    trackWindow.set(start: middle - span / 2, span: span)
   }
 
   private func nextFrame() {
@@ -1424,40 +1453,6 @@ struct RewindPage: View {
         }
       }
     }
-  }
-}
-
-// MARK: - Scroll Wheel Event Monitor
-
-/// View modifier that monitors scroll wheel events globally when the view is visible
-struct ScrollWheelMonitor: ViewModifier {
-  let onScroll: (CGFloat) -> Void
-  @State private var monitor: Any?
-
-  func body(content: Content) -> some View {
-    content
-      .onAppear {
-        // Add local monitor for scroll wheel events
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
-          let delta = event.scrollingDeltaY + event.scrollingDeltaX
-          if delta != 0 {
-            onScroll(delta)
-          }
-          return event  // Pass event through
-        }
-      }
-      .onDisappear {
-        if let monitor = monitor {
-          NSEvent.removeMonitor(monitor)
-        }
-        monitor = nil
-      }
-  }
-}
-
-extension View {
-  func onScrollWheel(_ handler: @escaping (CGFloat) -> Void) -> some View {
-    modifier(ScrollWheelMonitor(onScroll: handler))
   }
 }
 

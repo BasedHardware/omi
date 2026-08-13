@@ -62,7 +62,9 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   /// the point of `reach`: the pill the user presses and the claim the test checks are now one thing.
   case apps
   case permissions
-  case help
+  /// The chronological activity spine — Home's former landing surface, now the Memory hub's first
+  /// view. Appended last so the established cases keep their raw values.
+  case activity
 
   /// The one mechanism that reaches a destination. Not a description of the UI — a claim about
   /// reachability that `ShellDestination.unreachable` checks.
@@ -74,11 +76,11 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case memoryHubView
     /// A row in the Settings section list, which the bar's gear opens.
     ///
-    /// This case exists because two pages had `nil` for an answer. `PermissionsPage` and `HelpPage`
-    /// render correctly and always did; their only writers were the sidebar the glass shell stopped
-    /// rendering, so they became pages with no door — and the gear's own tooltip has been promising
-    /// "permissions" the whole time. The row mounts the same page the shell's route does, so this
-    /// is a way in rather than a second, smaller version of it (INV-NAV-1).
+    /// This case exists because `PermissionsPage` had `nil` for an answer. It renders correctly and
+    /// always did; its only writer was the sidebar the glass shell stopped rendering, so it became a
+    /// page with no door — and the gear's own tooltip has been promising "permissions" the whole
+    /// time. The row mounts the same page the shell's route does, so this is a way in rather than a
+    /// second, smaller version of it (INV-NAV-1).
     case settingsSidebar
   }
 
@@ -86,7 +88,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
 
   var title: String {
     switch self {
-    case .home: return "Home"
+    case .home: return "Chat"
     case .conversations: return "Conversations"
     case .memories: return "Memories"
     case .brainMap: return "Brain Map"
@@ -94,7 +96,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .rewind: return "Rewind"
     case .apps: return "Apps"
     case .permissions: return "Permissions"
-    case .help: return "Help"
+    case .activity: return "Activity"
     }
   }
 
@@ -102,12 +104,11 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   var navItem: SidebarNavItem {
     switch self {
     case .home: return .dashboard
-    case .conversations, .memories, .brainMap: return .conversations
+    case .conversations, .memories, .brainMap, .activity: return .conversations
     case .tasks: return .tasks
     case .rewind: return .rewind
     case .apps: return .apps
     case .permissions: return .permissions
-    case .help: return .help
     }
   }
 
@@ -117,23 +118,23 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .conversations: return .conversations
     case .memories: return .memories
     case .brainMap: return .brainMap
-    case .home, .tasks, .rewind, .apps, .permissions, .help: return nil
+    case .activity: return .activity
+    case .home, .tasks, .rewind, .apps, .permissions: return nil
     }
   }
 
-  /// The Settings row that opens this page, for the two the Settings list owns.
+  /// The Settings row that opens this page, for the one the Settings list owns.
   var settingsSection: SettingsContentView.SettingsSection? {
     switch self {
     case .permissions: return .permissions
-    case .help: return .help
-    case .home, .conversations, .memories, .brainMap, .tasks, .rewind, .apps: return nil
+    case .home, .conversations, .memories, .brainMap, .activity, .tasks, .rewind, .apps: return nil
     }
   }
 
   var reach: Reach {
     switch self {
-    case .conversations, .memories, .brainMap: return .memoryHubView
-    case .permissions, .help: return .settingsSidebar
+    case .conversations, .memories, .brainMap, .activity: return .memoryHubView
+    case .permissions: return .settingsSidebar
     case .home, .tasks, .rewind, .apps: return .topBar
     }
   }
@@ -205,11 +206,11 @@ enum TopNavigationRoutes {
   /// are single pills. Nothing here opens a menu.
   static let primaryItems = [
     TopNavigationItem(
-      index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "magnifyingglass",
-      tooltip: "Home — search everything you've seen and heard"),
+      index: SidebarNavItem.dashboard.rawValue, title: "Chat", icon: "bubble.left.and.text.bubble.right",
+      tooltip: "Chat — talk to Omi about everything you've seen and heard"),
     TopNavigationItem(
-      index: SidebarNavItem.conversations.rawValue, title: "Library", icon: "books.vertical",
-      tooltip: "Everything Omi has kept — conversations, memories, brain map"),
+      index: SidebarNavItem.conversations.rawValue, title: "Memories", icon: "books.vertical",
+      tooltip: "Everything Omi has kept — activity, conversations, memories, brain map"),
     TopNavigationItem(
       index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist",
       tooltip: "Tasks — everything Omi heard you commit to"),

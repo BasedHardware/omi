@@ -11,6 +11,7 @@ compiler the flags run against.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
 import unittest
@@ -23,13 +24,27 @@ SUITE_RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/swift-test-suites.sh"
 PRE_PUSH_PATH = REPO_ROOT / "scripts/pre-push"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from pre_push_ci_prediction import resolve_impact  # noqa: E402
+from pre_push_ci_prediction import DESKTOP_RELEASE_PATHSPECS, resolve_impact  # noqa: E402
+
+_PLANNER_SPEC = importlib.util.spec_from_file_location(
+    "plan_desktop_release_ci_contract",
+    REPO_ROOT / ".github/scripts/plan-desktop-release.py",
+)
+assert _PLANNER_SPEC and _PLANNER_SPEC.loader
+planner = importlib.util.module_from_spec(_PLANNER_SPEC)
+_PLANNER_SPEC.loader.exec_module(planner)
 
 EXPECTED_XCODE_VERSION = "16.4"
 EXPECTED_XCODE_BUILD = "16F6"
 EXPECTED_XCODE_APP = f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app"
 JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile"]
 MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
+# Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
+# cold-runner ceiling than the narrower release-compile job.
+MACOS_JOB_TIMEOUT_MINUTES = {
+    "desktop-swift-verify": 90,
+    "desktop-swift-release-compile": 60,
+}
 
 
 def _workflow_text() -> str:
@@ -110,24 +125,26 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("fetch-depth: 1", release_job)
 
     def test_release_control_inputs_produce_exact_sha_checks(self):
-        """Candidate-building config must run the checks consumed by the release planner."""
-        for path in (
-            "codemagic.yaml",
-            ".github/scripts/plan-desktop-release.py",
-            ".github/workflows/desktop_auto_release.yml",
-            ".github/workflows/desktop-swift-ci.yml",
-        ):
-            with self.subTest(path=path):
-                self.assertTrue(resolve_impact([path], event="push").includes("desktop-ci-only"))
+        """Every planner releasable pathspec must produce the exact-SHA CI checks."""
+        self.assertEqual(DESKTOP_RELEASE_PATHSPECS, planner.DESKTOP_RELEASE_PATHS)
+        self.assertEqual(set(MACOS_JOBS), set(MACOS_JOB_TIMEOUT_MINUTES))
+        for pathspec in planner.DESKTOP_RELEASE_PATHS:
+            # Directory pathspecs need a concrete file probe under the tree.
+            probe = pathspec if Path(pathspec).suffix else f"{pathspec.rstrip('/')}/Resources/Info.plist"
+            with self.subTest(pathspec=pathspec, probe=probe):
+                plan = resolve_impact([probe], event="push")
+                self.assertTrue(plan.includes("desktop-ci-only"), probe)
+                self.assertTrue(plan.includes("desktop-swift-release-compile"), probe)
 
     def test_macos_jobs_have_a_bounded_runner_budget(self):
         """A stuck Swift invocation must not consume hosted macOS capacity forever."""
-        for job_id in MACOS_JOBS:
-            with self.subTest(job=job_id):
-                self.assertIn("timeout-minutes: 60", self.jobs[job_id])
+        self.assertEqual(set(MACOS_JOBS), set(MACOS_JOB_TIMEOUT_MINUTES))
+        for job_id, timeout_minutes in MACOS_JOB_TIMEOUT_MINUTES.items():
+            with self.subTest(job=job_id, timeout_minutes=timeout_minutes):
+                self.assertIn(f"timeout-minutes: {timeout_minutes}", self.jobs[job_id])
 
     def test_closed_prs_release_the_same_pr_concurrency_group_without_allocating_a_runner(self):
-        """A close event supersedes its PR run before any macOS job can start."""
+        """Closures allocate no Mac; only abandoned PRs cancel obsolete work."""
         workflow = _workflow_text()
         changes = self.jobs["changes"]
 
@@ -135,8 +152,23 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("github.event.action == 'closed' && github.event.pull_request.merged", workflow)
         self.assertIn("format('merged-{0}', github.event.pull_request.number)", workflow)
         self.assertIn("github.event.pull_request.number || github.sha", workflow)
-        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
+        self.assertIn(
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'closed' || !github.event.pull_request.merged) }}",
+            workflow,
+        )
         self.assertIn("github.event.action != 'closed'", changes)
+
+    def test_closed_pr_bookkeeping_cannot_publish_the_required_release_check(self):
+        """A merged close run must not supersede exact-SHA release evidence."""
+        gate = self.jobs["desktop-swift"]
+        release_compile = self.jobs["desktop-swift-release-compile"]
+
+        self.assertIn("github.event.action == 'closed'", gate)
+        self.assertIn("Desktop Swift PR Closure", gate)
+        self.assertIn("Desktop Swift Build & Tests", gate)
+        self.assertIn("github.event.action == 'closed'", release_compile)
+        self.assertIn("Desktop Swift PR Closure Release Compile", release_compile)
+        self.assertIn("Desktop Swift Release Compile", release_compile)
 
     def test_notification_boundary_runs_targeted_release_regression(self):
         job = self.jobs["desktop-swift-verify"]
@@ -158,7 +190,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """The required check name must fail closed on its selected lanes."""
         gate = self.jobs["desktop-swift"]
 
-        self.assertIn("name: Desktop Swift Build & Tests", gate)
+        self.assertIn("'Desktop Swift Build & Tests'", gate)
         self.assertIn("desktop-swift-verify", gate)
         self.assertIn("always()", gate)
         self.assertIn("STATIC_REQUIRED", gate)
@@ -229,7 +261,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             concurrency,
         )
         self.assertIn(
-            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'closed' || !github.event.pull_request.merged) }}",
             concurrency,
         )
         self.assertNotIn("github.ref", concurrency)
@@ -366,6 +398,31 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
         self.assertNotIn("xcodebuild -version | head -1", runner)
         self.assertIn("sed -n '1p'", runner)
+
+    def test_m1_pre_tag_outer_budget_covers_sequential_inner_ceilings(self):
+        """Outer M1 pre-tag caps must exceed the sum of sequential inner stage ceilings."""
+        readiness = (REPO_ROOT / "desktop/macos/scripts/pre-tag-readiness.sh").read_text(encoding="utf-8")
+        auto_release = (REPO_ROOT / ".github/workflows/desktop_auto_release.yml").read_text(encoding="utf-8")
+        inner_ceilings = [
+            int(match.group(1))
+            for match in re.finditer(
+                r"run_watchdog (?:runner-self-clean|readiness-cache-prepare|readiness-agent-dependencies|readiness-offline-stack) (\d+)",
+                readiness,
+            )
+        ]
+        self.assertEqual(inner_ceilings, [1200, 3600, 1800, 3600])
+        inner_sum = sum(inner_ceilings)
+        step = re.search(
+            r"Run ownership-scoped M1 pre-tag readiness[\s\S]*?timeout-minutes:\s*(\d+)[\s\S]*?--timeout-seconds\s+(\d+)",
+            auto_release,
+        )
+        self.assertIsNotNone(step)
+        step_timeout_minutes = int(step.group(1))
+        outer_watchdog_seconds = int(step.group(2))
+        # Require a 15-minute margin above the sequential inner sum.
+        minimum_outer_seconds = inner_sum + 15 * 60
+        self.assertGreaterEqual(outer_watchdog_seconds, minimum_outer_seconds)
+        self.assertGreaterEqual(step_timeout_minutes * 60, outer_watchdog_seconds)
 
     # --- adversarial: removing any guard must fail -------------------------
 

@@ -32,13 +32,30 @@ overlay:
           category: rollout
         MEMORY_MODE:
           value: 'off'
-        MEMORY_ENABLED_USERS:
-          value: ''
         MEMORY_V3_GET_ENABLED:
           value: 'false'
     pusher:
       values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
       env:
+        OMI_LLM_GATEWAY_URL:
+          value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
+          category: service_discovery
+        OMI_ENV_STAGE:
+          value: dev
+          category: runtime_identity
+        OMI_LLM_GATEWAY_FEATURE_MODE:
+          value: gateway
+          category: rollout
+        OMI_LLM_CHAT_AGENT_ROUTE:
+          value: gateway
+          category: rollout
+        OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+          value: 'false'
+          category: rollout
+        OMI_LLM_GATEWAY_SERVICE_TOKEN:
+          secret:
+            name: dev-omi-backend-secrets
+            key: OMI_LLM_GATEWAY_SERVICE_TOKEN
         GITHUB_TOKEN:
           secret:
             name: dev-omi-backend-secrets
@@ -235,13 +252,11 @@ overlay:
             category: rollout
           MEMORY_MODE:
             value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
           MEMORY_V3_GET_ENABLED:
             value: 'false'
           # `/v3/memories` and the canonical graph use signed cursors even for
-          # the initial page, so an enrolled user must fail closed until this
-          # versioned binding is present.
+          # the initial page, so cursor reads fail closed until this versioned
+          # binding is present.
           MEMORY_V3_CURSOR_SECRET_VERSION:
             value: dev-v1
             category: memory_rollout
@@ -296,8 +311,6 @@ overlay:
             category: rollout
           MEMORY_MODE:
             value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
           MEMORY_V3_GET_ENABLED:
             value: 'false'
         forbidden_env:
@@ -350,8 +363,6 @@ overlay:
             category: rollout
           MEMORY_MODE:
             value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
           MEMORY_V3_GET_ENABLED:
             value: 'false'
         forbidden_env:
@@ -404,8 +415,6 @@ overlay:
             category: rollout
           MEMORY_MODE:
             value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
           MEMORY_V3_GET_ENABLED:
             value: 'false'
         forbidden_env:
@@ -436,8 +445,6 @@ overlay:
             value: based-hardware
           MEMORY_MODE:
             value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
           MEMORY_V3_GET_ENABLED:
             value: 'false'
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:

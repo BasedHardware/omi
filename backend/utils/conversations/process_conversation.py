@@ -12,8 +12,7 @@ from fastapi import HTTPException
 import database._client as db_client_module
 from database import redis_db
 from database.auth import get_user_name
-from utils.conversations.transcript_for_llm import conversation_transcript_for_llm
-import database.memories as memories_db
+from utils.conversations.transcript_for_llm import conversation_transcript_for_llm, conversation_transcripts_for_llm
 import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.users as users_db
@@ -22,19 +21,15 @@ import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
 from database.vector_db import (
-    find_similar_memories,
-    upsert_memory_vector,
-    delete_memory_vector,
     upsert_action_item_vectors_batch,
     delete_action_item_vectors_batch,
     find_similar_action_items,
 )
-from utils.llm.memories import resolve_memory_conflict
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
-from models.memories import MemoryDB, Memory, MemoryCategory, SubjectAttribution, render_memory
+from models.memories import MemoryDB, Memory, MemoryCategory, SubjectAttribution
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.memory_contracts import L1MemoryArchiveClass, deterministic_contract_id
 from models.workstream_association import AssociationEvidence
@@ -50,11 +45,8 @@ from models.conversation_enums import ConversationSource, ConversationStatus, Ex
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
-from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
-from utils.memory.memory_system import MemorySystem
-from utils.memory.memory_system_pin import memory_system_request_scope
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
@@ -81,19 +73,16 @@ from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.memories import (
     extract_canonical_l1_memory_candidates,
     extract_memories_from_text,
-    new_memories_extractor,
 )
+from utils.llm.temporal import date_in_tz
 from utils.conversations.memory_extraction_telemetry import (
     PATH_CANONICAL,
-    PATH_LEGACY,
     ConversationMemoryExtractionResult,
     emit_conversation_memories_extracted,
     source_for_conversation,
 )
-from utils.llm.temporal import date_in_tz
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.goals import extract_and_update_goal_progress
-from utils.llm.knowledge_graph import extract_knowledge_from_memory
 from utils.llm.chat import (
     retrieve_metadata_from_text,
     retrieve_metadata_from_message,
@@ -260,7 +249,7 @@ def _get_structured(
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {ext_conv.text_source}')
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
-        transcript_text = conversation_transcript_for_llm(uid, main_conv, people)
+        transcript_text, action_items_transcript = conversation_transcripts_for_llm(uid, main_conv, people)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
@@ -277,7 +266,7 @@ def _get_structured(
                 )
             with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                 structured.action_items = extract_action_items(
-                    transcript_text,
+                    action_items_transcript,
                     conv_started_at,
                     language_code,
                     tz_str,
@@ -314,7 +303,7 @@ def _get_structured(
             )
         with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
             structured.action_items = extract_action_items(
-                transcript_text,
+                action_items_transcript,
                 conv_started_at,
                 language_code,
                 tz_str,
@@ -876,12 +865,22 @@ def _canonical_conversation_write_payload(
 def _extract_memories_canonical(
     uid: str, conversation: Conversation, *, db_client: Any, parity_capture: SurfaceParityCapture | None = None
 ) -> ConversationMemoryExtractionResult:
-    """Canonical-cohort extraction with one atomic source replacement."""
+    """Universal canonical extraction with one atomic source replacement."""
     source = source_for_conversation(conversation)
     memory_service = MemoryService(db_client=db_client)
 
     language = users_db.get_user_language_preference(uid)
     capture_candidates: List[Tuple[Memory, List[str], str, List[str], bool]] = []
+
+    # Relative dates in delayed external content must resolve against capture
+    # time, not the worker's current wall clock.  Keep this date grounding on
+    # the universal extractor path as well as the retired legacy path.
+    content_date = None
+    if conversation.started_at is not None:
+        try:
+            content_date = date_in_tz(conversation.started_at, notification_db.get_user_time_zone(uid))
+        except Exception as exc:
+            logger.warning("canonical memory extraction content_date_failed uid=%s reason=%s", uid, exc)
 
     if conversation.source == ConversationSource.external_integration:
         ext_data = conversation.external_data or {}
@@ -895,6 +894,7 @@ def _extract_memories_canonical(
                     text_content,
                     text_source,
                     language=language,
+                    content_date=content_date,
                     strict=True,
                 )
             ]
@@ -1073,195 +1073,10 @@ def _extract_memories_canonical(
 def _extract_memories_inner(
     uid: str, conversation: Conversation, *, parity_capture: SurfaceParityCapture | None = None
 ) -> ConversationMemoryExtractionResult:
-    with memory_system_request_scope(uid) as memory_system:
-        db_client = getattr(db_client_module, 'db', None)
-        if memory_system == MemorySystem.CANONICAL:
-            MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
-            return _extract_memories_canonical(uid, conversation, db_client=db_client, parity_capture=parity_capture)
-
-        if parity_capture is None:
-            # Preserve the direct legacy helper shape used by non-live callers
-            # and its contract tests; live finalization supplies the observer.
-            return _extract_memories_legacy(uid, conversation)
-        return _extract_memories_legacy(uid, conversation, parity_capture=parity_capture)
-
-
-def _extract_memories_legacy(
-    uid: str, conversation: Conversation, *, parity_capture: SurfaceParityCapture | None = None
-) -> ConversationMemoryExtractionResult:
-    source = source_for_conversation(conversation)
-    language = users_db.get_user_language_preference(uid)
-    new_memories: List[Memory] = []
-
-    # Ground extraction in the date the content was captured, not the processing time, so
-    # relative dates in delayed or backfilled content resolve correctly (cubic on #8501).
-    content_date = None
-    started_at = conversation.started_at
-    if started_at is not None:
-        try:
-            content_date = date_in_tz(started_at, notification_db.get_user_time_zone(uid))
-        except Exception as e:
-            logger.warning(f"_extract_memories_inner content_date_failed uid={uid}: {e}")
-
-    # Extract memories based on conversation source
-    if conversation.source == ConversationSource.external_integration:
-        ext_data = conversation.external_data or {}
-        text_content = ext_data.get('text')
-        if text_content and len(text_content) > 0:
-            text_source = ext_data.get('text_source', 'other')
-            new_memories = extract_memories_from_text(
-                uid, text_content, text_source, language=language, content_date=content_date
-            )
-    else:
-        # For regular conversations with transcript segments
-        new_memories = new_memories_extractor(
-            uid, conversation.transcript_segments, language=language, content_date=content_date
-        )
-
-    is_locked = conversation.is_locked
-    parsed_memories: List[MemoryDB] = []
-    # (old_memory_id, new_memory_id) pairs to invalidate after the new memories are saved.
-    invalidations: List[Tuple[str, str]] = []
-    # Cheap exact-duplicate guard within this batch (avoids redundant conflict LLM calls).
-    seen_norm: Set[str] = set()
-    subject_entity_id, subject_attribution = infer_subject_from_segments(conversation.transcript_segments)
-
-    for memory in new_memories:
-        norm = ' '.join((memory.content or '').lower().split())
-        if not norm or norm in seen_norm:
-            continue
-        seen_norm.add(norm)
-
-        # Wider net (lower threshold, more candidates) than before so cross-phrasing
-        # contradictions are caught — "loves ice cream" vs "hates ice cream",
-        # "lives in NYC" vs "lives in LA" — then let the LLM decide what's outdated.
-        similar_matches = find_similar_memories(
-            uid, memory.content, threshold=0.6, limit=8, subject_entity_id=subject_entity_id
-        )
-
-        # Only compare against currently-active memories (never resurface superseded ones).
-        similar_memories: List[Dict[str, Any]] = []
-        for match in similar_matches:
-            memory_data = memories_db.get_memory(uid, match['memory_id'])
-            if memory_data and memory_data.get('invalid_at') is None:
-                existing_subject = memory_data.get('subject_entity_id')
-                if subject_entity_id and existing_subject and subject_entity_id != existing_subject:
-                    continue
-                similar_memories.append(
-                    {
-                        'memory_id': match['memory_id'],
-                        'category': match['category'],
-                        'score': match['score'],
-                        'content': memory_data.get('content', ''),
-                    }
-                )
-
-        supersede_ids: List[str] = []
-        if similar_memories:
-            resolution = resolve_memory_conflict(memory.content, similar_memories, language=language)
-
-            if resolution.action == 'skip':
-                continue
-
-            if resolution.action == 'merge':
-                if resolution.merged_predicate:
-                    memory.predicate = resolution.merged_predicate
-                if resolution.merged_arguments:
-                    memory.arguments = resolution.merged_arguments
-                if resolution.merged_qualifiers:
-                    memory.qualifiers = {**memory.qualifiers, **resolution.merged_qualifiers}
-                if resolution.merged_content:
-                    memory.content = resolution.merged_content
-                elif resolution.merged_predicate or resolution.merged_arguments:
-                    memory.content = render_memory(memory)
-
-            if resolution.action in ('update', 'merge'):
-                for idx in resolution.supersedes or []:
-                    if 1 <= idx <= len(similar_memories):
-                        supersede_ids.append(similar_memories[idx - 1]['memory_id'])
-
-        memory_db_obj = MemoryDB.from_memory(
-            memory,
-            uid,
-            conversation.id,
-            False,
-            source_id=conversation.id,
-            source_type="conversation",
-            source_signal="transcription",
-            artifact_ref=_transcript_artifact_ref(conversation),
-            extractor_id="new_memories_extractor",
-            subject_entity_id=subject_entity_id,
-            subject_attribution=subject_attribution,
-            client_device_id=getattr(conversation, "client_device_id", None),
-        )
-        memory_db_obj.is_locked = is_locked
-        # Corroboration is durability: a fact that updates/merges/supersedes an
-        # existing memory has now been seen more than once, so promote it out of
-        # the short-term tier it was born into.
-        if supersede_ids:
-            memory_db_obj.memory_tier = MemoryTier.long_term
-        parsed_memories.append(memory_db_obj)
-
-        for old_id in supersede_ids:
-            # Guard against superseding the very memory we're about to (re)write — the
-            # merged content can hash to an existing id.
-            if old_id and old_id != memory_db_obj.id:
-                invalidations.append((old_id, memory_db_obj.id))
-
-    if len(parsed_memories) == 0:
-        logger.info(f"No memories extracted for conversation {conversation.id}")
-        return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_LEGACY)
-
-    # Replace conversation-scoped memories only after extraction succeeds.
-    deletion_result = memories_db.delete_memories_for_conversation(uid, conversation.id)
-    for memory_id in deletion_result.get('vector_delete_ids', []):
-        delete_memory_vector(uid, memory_id)
-
-    logger.info(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
-    memories_db.save_memories(uid, [memory_write_payload(fact, MemoryApiExposure.LEGACY) for fact in parsed_memories])
-    if parity_capture is not None:
-        parity_capture.observe(
-            "inbound",
-            {"type": "accepted_memories", "memories": _parity_accepted_memories(parsed_memories)},
-        )
-
-    for memory_db_obj in parsed_memories:
-        upsert_memory_vector(
-            uid,
-            memory_db_obj.id,
-            memory_db_obj.content,
-            memory_db_obj.category.value,
-            subject_entity_id=memory_db_obj.subject_entity_id,
-        )
-
-    # Invalidate (not delete) superseded memories: keep them as history but drop them from
-    # every retrieval path. Removing the vector also pulls them out of semantic search.
-    for old_id, new_id in invalidations:
-        try:
-            memories_db.invalidate_memory(uid, old_id, superseded_by=new_id)
-            delete_memory_vector(uid, old_id)
-            logger.info(f"Invalidated superseded memory {old_id} -> {new_id}")
-        except Exception:
-            logger.exception(f"Failed to invalidate superseded memory {old_id}")
-
-    if len(parsed_memories) > 0:
-        record_usage(uid, memories_created=len(parsed_memories))
-
-        try:
-            user_name = cast(str, get_user_name(uid))
-
-            for memory_db_obj in parsed_memories:
-                if memory_db_obj.kg_extracted or memory_db_obj.is_locked:
-                    continue
-                try:
-                    result = extract_knowledge_from_memory(uid, memory_db_obj.content, memory_db_obj.id, user_name)
-                    if result is not None:
-                        memories_db.set_memory_kg_extracted(uid, memory_db_obj.id)
-                except Exception:
-                    logging.exception(f"Error extracting knowledge graph from memory_id: {memory_db_obj.id}")
-        except Exception:
-            logging.exception("Error extracting knowledge graph from memory.")
-    return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_LEGACY)
+    db_client = getattr(db_client_module, 'db', None)
+    memory_service = MemoryService(db_client=db_client)
+    memory_service.ensure_canonical_mutation_ready(uid)
+    return _extract_memories_canonical(uid, conversation, db_client=db_client, parity_capture=parity_capture)
 
 
 def _transcript_artifact_ref(conversation: Conversation) -> Dict[str, Any]:
@@ -1298,7 +1113,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         return
 
     is_locked = conversation.is_locked
-    if conversation_capture.process_before_legacy(uid, conversation.id, conversation.structured.action_items):
+    if conversation_capture.process_conversation_before_legacy(uid, conversation):
         return
 
     action_items_data: List[Dict[str, Any]] = []
@@ -1314,7 +1129,7 @@ def _save_action_items(uid: str, conversation: Conversation):
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
             'is_locked': is_locked,
-            **conversation_capture.canonical_fields(action_item, conversation.id),
+            **conversation_capture.canonical_conversation_fields(action_item, conversation),
         }
         action_items_data.append(action_item_data)
 
@@ -1711,14 +1526,10 @@ def process_conversation(
                 if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
                     submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
             if not defer_memory_extraction:
-                with memory_system_request_scope(uid) as memory_system:
-                    if memory_system == MemorySystem.CANONICAL:
-                        # Canonical writes intentionally fail closed. Do not hide a
-                        # retryable gate/store failure in an unobserved future and
-                        # report this conversation as successfully processed.
-                        _extract_memories(uid, conversation)
-                    else:
-                        submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
+                # Canonical source replacement is universal and intentionally
+                # fail-closed. Do not hide a retryable apply/store failure in an
+                # unobserved future while reporting finalization as successful.
+                _extract_memories(uid, conversation)
             submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
             submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 

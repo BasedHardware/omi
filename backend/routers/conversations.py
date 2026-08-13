@@ -7,10 +7,9 @@ from datetime import datetime, timezone
 import database.conversations as conversations_db
 import database._client as db_client_module
 import database.action_items as action_items_db
-import database.memories as memories_db
 import database.redis_db as redis_db
 import database.users as users_db
-from database.vector_db import delete_vector, delete_memory_vector, delete_transcript_chunk_vectors
+from database.vector_db import delete_vector, delete_transcript_chunk_vectors
 from utils.other.storage import delete_conversation_audio_files
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
@@ -40,18 +39,16 @@ from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.app import App
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
 from models.shared import StatusResponse
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations import lifecycle as lifecycle_service
-from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
 from utils import byok
-from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
     clamp_conversation_search_pagination,
@@ -778,13 +775,7 @@ def delete_conversation(
         # Delete associated memories and action items before removing the conversation doc
         # so a partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
-        memory_system = pin_memory_system(uid, db_client=db_client)
-        if memory_system == MemorySystem.CANONICAL:
-            MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
-        else:
-            deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
-            for memory_id in deletion_result.get('vector_delete_ids', []):
-                delete_memory_vector(uid, memory_id)
+        MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
 
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
@@ -1229,6 +1220,47 @@ def get_shared_conversation_by_id(conversation_id: str):
     response_dict = conversation_to_dict(conversation)
     response_dict['people'] = [p.model_dump() for p in people]
     return response_dict
+
+
+class ConversationTopicRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    transcript: str = Field(..., min_length=1, max_length=100_000)
+
+
+class ConversationTopicResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    emoji: str = ""
+    title: str = ""
+
+
+@router.post('/v1/conversations/topic', response_model=ConversationTopicResponse, tags=['conversations'])
+async def generate_conversation_topic_endpoint(
+    body: ConversationTopicRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:topic")),
+):
+    """Return-only emoji + short title through the managed conv_structure feature.
+
+    Does not write Firestore. Desktop clients call this for the fast provisional title
+    on a just-saved conversation instead of inventing one via Anthropic Haiku chat
+    completions; full backend processing still overwrites it later.
+    """
+    # Deferred with the LLM helper: this router is covered by module-isolation tests that
+    # build a minimal dependency graph, and utils.subscription pulls database.user_usage
+    # in at import time.
+    from utils.llm import conversation_topic as conversation_topic_llm
+    from utils.subscription import is_trial_paywalled
+
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+    topic = await run_blocking(
+        llm_executor,
+        lambda: conversation_topic_llm.generate_conversation_topic(uid, body.transcript),
+    )
+    if topic is None:
+        raise HTTPException(status_code=502, detail="conversation_topic_failed")
+    return ConversationTopicResponse(emoji=topic.emoji or "", title=topic.title or "")
 
 
 @router.post("/v1/conversations/search", response_model=SearchConversationsResponse, tags=['conversations'])

@@ -142,8 +142,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     add("utils.task_intelligence", task_intelligence)
     conversation_capture = AutoMockModule("utils.task_intelligence.conversation_capture")
     conversation_capture.capture_enabled = MagicMock(return_value=False)
-    conversation_capture.process_before_legacy = MagicMock(return_value=False)
-    conversation_capture.canonical_fields = MagicMock(return_value={})
+    conversation_capture.process_conversation_before_legacy = MagicMock(return_value=False)
+    conversation_capture.canonical_conversation_fields = MagicMock(return_value={})
     conversation_capture.legacy_document_ids = MagicMock(return_value=None)
     conversation_capture.reconcile_after_legacy = MagicMock()
     add("utils.task_intelligence.conversation_capture", conversation_capture)
@@ -349,10 +349,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     memory_system = ModuleType("utils.memory.memory_system")
     memory_system.MemorySystem = _MemorySystem
     add("utils.memory.memory_system", memory_system)
-
-    memory_system_pin = ModuleType("utils.memory.memory_system_pin")
-    memory_system_pin.memory_system_request_scope = MagicMock()
-    add("utils.memory.memory_system_pin", memory_system_pin)
 
     canonical_memory_adapter = ModuleType("utils.memory.canonical_memory_adapter")
     canonical_memory_adapter.extraction_memory_id = MagicMock()
@@ -965,8 +961,10 @@ def test_conversation_action_item_auto_sync_uses_postprocess_pool(monkeypatch):
     conversation.is_locked = False
     conversation.structured.action_items = [action_item]
 
-    monkeypatch.setattr(process_conversation.conversation_capture, 'process_before_legacy', lambda *args: False)
-    monkeypatch.setattr(process_conversation.conversation_capture, 'canonical_fields', lambda *args: {})
+    monkeypatch.setattr(
+        process_conversation.conversation_capture, 'process_conversation_before_legacy', lambda *args: False
+    )
+    monkeypatch.setattr(process_conversation.conversation_capture, 'canonical_conversation_fields', lambda *args: {})
     monkeypatch.setattr(process_conversation.conversation_capture, 'legacy_document_ids', lambda *args: None)
     monkeypatch.setattr(process_conversation.conversation_capture, 'reconcile_after_legacy', lambda *args: None)
     monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])
@@ -1064,17 +1062,18 @@ def test_all_callsites_use_get_llm():
         kg_calls.count('knowledge_graph') == 2
     ), f"Expected 2 get_llm('knowledge_graph') calls, got {kg_calls.count('knowledge_graph')}"
 
-    # memories.py: 5 callsites (memories x2, learnings x1, memory_category x1, memory_conflict x1)
+    # memories.py: 6 callsites (memories x3 incl. the memory-log extract SSOT, learnings x1,
+    # memory_category x1, memory_conflict x1)
     mem_source = (backend_dir / "utils" / "llm" / "memories.py").read_text(encoding="utf-8")
     mem_calls = re.findall(r"get_llm\('(\w+)'", mem_source)
-    assert mem_calls.count('memories') == 2, f"Expected 2 get_llm('memories') calls, got {mem_calls.count('memories')}"
+    assert mem_calls.count('memories') == 3, f"Expected 3 get_llm('memories') calls, got {mem_calls.count('memories')}"
     assert 'learnings' in mem_calls, "Missing get_llm('learnings') in memories.py"
     assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
     assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
 
-    # Total: 9 + 2 + 5 = 16 callsites
+    # Total: 9 + 2 + 6 = 17 callsites
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 16, f"Expected 16 total get_llm() callsites, got {total}"
+    assert total == 17, f"Expected 17 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():

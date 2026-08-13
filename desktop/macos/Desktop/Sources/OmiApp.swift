@@ -274,8 +274,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Publish the live delegate instance for callers that can't rely on
     // `NSApp.delegate as? AppDelegate` (nil under SwiftUI's delegate adaptor).
     AppDelegate.shared = self
+    if AuthStorageCanary.isRequested || UserNotificationCallbackBridge.isSignedSmokeRequested() { return }
     OmiFontRegistration.registerAll()
-    if AuthStorageCanary.isRequested { return }
     // Single-instance guard: a second live copy of the same bundle id + launch mode
     // would race the first against the shared Rewind SQLite DB
     // (~/Library/Application Support/Omi/…) and the bundle-id UserDefaults domain,
@@ -556,13 +556,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     migrateAppName()
 
     updateOnboardingLifecyclePolicy(reason: "launch")
+    // `queue: nil` + explicit hop, never `queue: .main`: synchronous main-queue delivery makes
+    // every background `UserDefaults.set` wait on the main thread, which deadlocked the app when
+    // an auth commit held the session fence while posting and the main thread wanted that fence
+    // (frozen sign-in screen, #11374).
     userDefaultsObserver = NotificationCenter.default.addObserver(
       forName: UserDefaults.didChangeNotification,
       object: nil,
-      queue: .main
+      queue: nil
     ) { [weak self] _ in
-      MainActor.assumeIsolated {
-        self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated {
+          self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+        }
       }
     }
 
@@ -1086,7 +1092,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       openMainAppWindow()
       return .summon
     }
-    let action = ShellSummon.toggleAction(for: ShellSummon.shellWindow())
+    let action = ShellSummon.toggleAction(for: ShellSummon.shellWindow(), presentation: ShellSummon.presentation())
     switch action {
     case .summon:
       openMainAppWindow()
@@ -1253,8 +1259,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-    // The Dock icon is the guaranteed way back to a shell you put away with Escape or ⌘W — the
-    // reason `LSUIElement` stays false. Route it through the same summon as the hotkey.
+    // The Dock icon is the guaranteed way back to a shell that puts itself away whenever you click
+    // off it — the reason `LSUIElement` stays false. Route it through the same summon as the hotkey.
     DesktopAutomationWindowPresentation.revealForUser()
     guard MainActor.assumeIsolated({ ShellSummon.summon() }) else { return true }
     sender.activate(ignoringOtherApps: true)

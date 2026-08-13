@@ -98,7 +98,7 @@ runs:
           SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
-        REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+        REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
       run: |
         DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
         gcloud run services describe backend-sync \
@@ -133,7 +133,7 @@ runs:
           --min-instances=1
           --max-instances=30
           --concurrency=1
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           ${{ inputs.cloud_run_flags }}
         env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}
         secrets: ${{ steps.backfill-runtime.outputs.secrets }}

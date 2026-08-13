@@ -126,6 +126,89 @@ def test_chat_agent_personality_preserves_array_system_text():
     assert system_message['content'][1:] == [{'type': 'text', 'text': 'Use the user context.'}]
 
 
+def test_chat_agent_tools_force_reasoning_effort_none_for_luna_chat_completions():
+    """gpt-5.6-luna rejects function tools when reasoning_effort != none on chat/completions."""
+    config = gateway_config()
+    # Mutate the serving route the way a bad override would: medium effort + tools.
+    route = config.route_artifacts['route.chat_agent.model_config.001']
+    config.route_artifacts['route.chat_agent.model_config.001'] = route.model_copy(
+        update={'provider_options': {**dict(route.provider_options), 'reasoning_effort': 'medium', 'temperature': 0.7}}
+    )
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [
+            {'role': 'system', 'content': 'Use tools when needed.'},
+            {'role': 'user', 'content': 'What did I say about coffee?'},
+        ],
+        'tools': [
+            {
+                'type': 'function',
+                'function': {
+                    'name': 'get_memories_tool',
+                    'description': 'Get memories',
+                    'parameters': {'type': 'object', 'properties': {'query': {'type': 'string'}}},
+                },
+            }
+        ],
+        'tool_choice': 'auto',
+    }
+    resolved = resolve_chat_completion_route(config, request)
+
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+
+    assert provider_request['model'] == 'gpt-5.6-luna'
+    assert provider_request['tools']
+    assert provider_request.get('reasoning_effort') == 'none'
+    assert 'temperature' not in provider_request
+
+
+def test_chat_agent_default_route_reasoning_effort_is_none():
+    config = gateway_config()
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [{'role': 'user', 'content': 'Hello.'}],
+        'tools': [
+            {
+                'type': 'function',
+                'function': {
+                    'name': 'get_memories_tool',
+                    'description': 'Get memories',
+                    'parameters': {'type': 'object', 'properties': {}},
+                },
+            }
+        ],
+    }
+    resolved = resolve_chat_completion_route(config, request)
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+    assert provider_request.get('reasoning_effort') == 'none'
+
+
+def test_gpt56_tools_strip_bool_temperature():
+    """True==1 must not bypass the temperature sanitize (OpenAI rejects non-default)."""
+    config = gateway_config()
+    route = config.route_artifacts['route.chat_agent.model_config.001']
+    config.route_artifacts['route.chat_agent.model_config.001'] = route.model_copy(
+        update={'provider_options': {**dict(route.provider_options), 'temperature': True}}
+    )
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [{'role': 'user', 'content': 'hi'}],
+        'tools': [
+            {
+                'type': 'function',
+                'function': {
+                    'name': 'get_memories_tool',
+                    'description': 'Get memories',
+                    'parameters': {'type': 'object', 'properties': {}},
+                },
+            }
+        ],
+    }
+    resolved = resolve_chat_completion_route(config, request)
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+    assert 'temperature' not in provider_request
+
+
 @pytest.mark.asyncio
 async def test_executor_uses_lkg_route_provider_options_when_active_is_shadow():
     active_route = active_route_with_fallbacks([]).model_copy(
@@ -134,8 +217,14 @@ async def test_executor_uses_lkg_route_provider_options_when_active_is_shadow():
             'rollout': RolloutPolicy(stage=RolloutStage.SHADOW, percent=0),
         }
     )
-    lkg_route = (
-        gateway_config().route_artifacts[LKG_ROUTE].model_copy(update={'provider_options': {'temperature': 0.1}})
+    # Use a non-gpt-5.6 LKG primary so temperature is a meaningful provider option
+    # (gpt-5.6* only accepts the default temperature and strips other values).
+    lkg_base = gateway_config().route_artifacts[LKG_ROUTE]
+    lkg_route = lkg_base.model_copy(
+        update={
+            'primary': ProviderRef(provider='openai', model='gpt-4.1-mini'),
+            'provider_options': {'temperature': 0.1},
+        }
     )
     config = config_with_routes(active_route, lkg_route)
     resolved = resolve_chat_completion_route(config, valid_request())

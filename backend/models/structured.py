@@ -36,6 +36,7 @@ except ModuleNotFoundError:
         )
         candidate_action: Optional[Literal['create', 'update', 'complete']] = None
         target_task_id: Optional[str] = None
+        source_segment_ids: List[str] = Field(default_factory=list)
 
         @staticmethod
         def actions_to_string(action_items: List['ActionItem']) -> str:

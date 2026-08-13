@@ -20,7 +20,9 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   var isEnabled: Bool {
     get async {
-      await MainActor.run { SuggestionAssistantSettings.shared.isEnabled }
+      await MainActor.run {
+        !ContextBucketsFeature.isEnabled && SuggestionAssistantSettings.shared.isEnabled
+      }
     }
   }
 
@@ -63,6 +65,21 @@ actor SuggestionAssistant: ProactiveAssistant {
   private var recentSuggestions: [String] = []
   private let maxRecentSuggestions = 10
 
+  /// The commitments handed to the evaluation currently in flight, kept so delivery can
+  /// hold a `commitment` nudge to what the model was actually shown.
+  private var commitmentsInFlight: [String] = []
+
+  /// Goals, cached because grounding must stay off the network — a fetch on this path would
+  /// blow through the window in which a suggestion is still about the current screen. A
+  /// stale-but-present list is worth far more here than a fresh one that arrives late.
+  private var cachedGoals: [String] = []
+  /// The authorization the cached goals were fetched under. Revalidated at read time, not
+  /// just at write time: an account switch between the fetch and the next evaluation must
+  /// not put one user's goals in another user's prompt.
+  private var cachedGoalsSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  private var lastGoalsRefresh = Date.distantPast
+  private let goalsRefreshInterval: TimeInterval = 600
+
   private var cooldownInterval: TimeInterval {
     get async { await MainActor.run { SuggestionAssistantSettings.shared.cooldownInterval } }
   }
@@ -90,7 +107,14 @@ actor SuggestionAssistant: ProactiveAssistant {
   // MARK: - Trigger
 
   func onContextSwitch(departingFrame: CapturedFrame?, newApp: String, newWindowTitle: String?) async {
-    pendingContextSwitchAt = Date()
+    pendingContextSwitchAt = SuggestionDwellAnchor.anchor(
+      current: pendingContextSwitchAt,
+      currentApp: pendingApp,
+      currentWindowTitle: pendingWindowTitle,
+      newApp: newApp,
+      newWindowTitle: newWindowTitle,
+      now: Date()
+    )
     pendingApp = newApp
     pendingWindowTitle = newWindowTitle
   }
@@ -109,6 +133,9 @@ actor SuggestionAssistant: ProactiveAssistant {
     let enabled = await isEnabled
     let excluded = await MainActor.run { SuggestionAssistantSettings.shared.isAppExcluded(frame.appName) }
     let snoozed = await MainActor.run { FloatingControlBarManager.shared.isSnoozed }
+    let isWithinActivePeriod = await MainActor.run {
+      NotificationService.isWithinActivePeriod(now: Date())
+    }
     let cooldown = await cooldownInterval
 
     let now = Date()
@@ -118,6 +145,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       isEnabled: enabled,
       isAppExcluded: excluded,
       isSnoozed: snoozed,
+      isWithinActivePeriod: isWithinActivePeriod,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
       cooldown: cooldown,
@@ -161,6 +189,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     clearPendingContext()
     lastEvaluationAt = now
     dailyBudget.recordEvaluation(now: now)
+    commitmentsInFlight = grounding.openCommitments
 
     do {
       return try await evaluate(frame: frame, grounding: grounding)
@@ -199,6 +228,9 @@ actor SuggestionAssistant: ProactiveAssistant {
         .map(Self.describeCommitment)
     }
     grounding.openCommitments = Array(alwaysRelevant)
+
+    grounding.goals = currentOwnerGoals()
+    refreshGoalsIfStale()
 
     // The window title is the topic or person the user is looking at. Without it there is
     // nothing to scope a search by, so the context-specific sources are skipped entirely
@@ -242,11 +274,78 @@ actor SuggestionAssistant: ProactiveAssistant {
     return grounding
   }
 
+  /// Describe a commitment the way a person would say it out loud.
+  ///
+  /// Fire-and-forget goal refresh. Never awaited by grounding: the next evaluation gets the
+  /// fresher list, this one is not delayed for it.
+  ///
+  /// Owner-scoped end to end. Goals are personal, and `getGoals()` documents that its
+  /// short-lived shared cache is **not** owner-validated — an unsnapshotted call can hand
+  /// back the previous account's goals, which would then sit in this cache and be pasted
+  /// into the next owner's prompt for up to `goalsRefreshInterval`. So: capture a snapshot,
+  /// fetch under it, and store only if that authorization is still current on arrival.
+  private func refreshGoalsIfStale() {
+    guard Date().timeIntervalSince(lastGoalsRefresh) >= goalsRefreshInterval else { return }
+    guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      cachedGoals = []
+      cachedGoalsSnapshot = nil
+      return
+    }
+    lastGoalsRefresh = Date()
+    Task { [weak self] in
+      do {
+        let goals = try await APIClient.shared.getGoals(authorizationSnapshot: snapshot)
+        let titles = goals.compactMap { goal -> String? in
+          let title = goal.title.trimmingCharacters(in: .whitespacesAndNewlines)
+          return title.isEmpty ? nil : title
+        }
+        await self?.storeGoals(titles, snapshot: snapshot)
+      } catch {
+        logError("Suggestion: goal grounding unavailable", error: error)
+      }
+    }
+  }
+
+  /// Drop the result outright if the account changed while the fetch was in flight.
+  private func storeGoals(_ goals: [String], snapshot: RuntimeOwnerAuthorizationSnapshot) {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot) else {
+      cachedGoals = []
+      cachedGoalsSnapshot = nil
+      lastGoalsRefresh = .distantPast
+      log("Suggestion: dropped goal grounding from a superseded owner")
+      return
+    }
+    cachedGoals = goals
+    cachedGoalsSnapshot = snapshot
+  }
+
+  /// Cached goals, but only if they still belong to whoever is signed in right now.
+  private func currentOwnerGoals() -> [String] {
+    guard let snapshot = cachedGoalsSnapshot,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
+    else {
+      if !cachedGoals.isEmpty {
+        log("Suggestion: discarded cached goals after an owner change")
+      }
+      cachedGoals = []
+      cachedGoalsSnapshot = nil
+      lastGoalsRefresh = .distantPast
+      return []
+    }
+    return cachedGoals
+  }
+
+  /// Describe a commitment the way a person would say it out loud.
+  ///
+  /// This string is what the model quotes, so an absolute date here comes back out in the
+  /// card as "call dad (due 2026-08-10)" — a database row read aloud. Worse, the raw
+  /// `ISO8601DateFormatter` rendered in UTC, so anything due after 8pm Eastern printed as
+  /// *tomorrow*; the model then scored a due-today task as not-yet-urgent and it fell under
+  /// the confidence bar. Relative phrasing fixes the voice and the timezone in one move,
+  /// and it is what the model actually needs — it reasons about urgency, not calendars.
   private static func describeCommitment(_ task: TaskActionItem) -> String {
     guard let dueAt = task.dueAt else { return task.description }
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withFullDate]
-    return "\(task.description) (due \(formatter.string(from: dueAt)))"
+    return "\(task.description) — \(SuggestionDueDescription.phrase(for: dueAt))"
   }
 
   /// One line per past screen: when, where, and a snippet of what was on it.
@@ -258,17 +357,19 @@ actor SuggestionAssistant: ProactiveAssistant {
     let formatter = DateFormatter()
     formatter.dateFormat = "MMM d HH:mm"
     let when = formatter.string(from: screenshot.timestamp)
-    let where_ = screenshot.windowTitle.map { "\(screenshot.appName) — \($0)" } ?? screenshot.appName
-    guard let ocr = screenshot.ocrText, !ocr.isEmpty else { return "\(when) · \(where_)" }
+    let location = screenshot.windowTitle.map { "\(screenshot.appName) — \($0)" } ?? screenshot.appName
+    guard let ocr = screenshot.ocrText, !ocr.isEmpty else { return "\(when) · \(location)" }
     let snippet = ocr.replacingOccurrences(of: "\n", with: " ").prefix(200)
-    return "\(when) · \(where_): \(snippet)"
+    return "\(when) · \(location): \(snippet)"
   }
 
   /// Derive a search term from the window title, which is where the topic or person lives.
   /// Reuses the shared normalizer so spinners, timers and unread counts do not become
   /// search noise.
   private static func groundingSearchTerm(for frame: CapturedFrame) -> String? {
-    guard let normalized = ContextDetection.normalizeWindowTitle(frame.windowTitle) else { return nil }
+    guard let normalized = ContextDetection.normalizeWindowTitle(frame.windowTitle, appName: frame.appName) else {
+      return nil
+    }
     // Must be sanitized before it reaches FTS5 — see SuggestionSearchTerm.
     let sanitized = SuggestionSearchTerm.sanitize(normalized)
     // Very short titles ("Inbox", "New Tab") carry no signal worth searching on.
@@ -389,37 +490,70 @@ actor SuggestionAssistant: ProactiveAssistant {
   // MARK: - Delivery
 
   func handleResult(_ result: AssistantResult, sendEvent: @escaping @Sendable (String, [String: Any]) -> Void) async {
-    guard let result = result as? SuggestionResult else { return }
+    _ = await resolveDelivery(result, sendEvent: sendEvent)
+  }
+
+  /// Runs the delivery decision and reports what actually happened.
+  ///
+  /// The return value exists because "the model produced a suggestion" and "the user saw a
+  /// card" are different claims. A probe that reports the former as success will call the
+  /// delivery path verified while the confidence bar, dedup, or the commitment guard was
+  /// silently dropping every card.
+  @discardableResult
+  private func resolveDelivery(
+    _ result: AssistantResult,
+    sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
+  ) async -> SuggestionAssistantTelemetry.DeliveryOutcome? {
+    guard let result = result as? SuggestionResult else { return nil }
     guard result.hasSuggestion, let suggestion = result.suggestion else {
       log("Suggestion: nothing worth saying — \(result.currentActivity)")
-      return
+      return nil
     }
     let telemetryIdentity = SuggestionAssistantTelemetry.NotificationIdentity(result.telemetryIdentity)
-
-    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else {
-      await emitDeliveryOutcome(.rejectedOwner, identity: telemetryIdentity)
-      return
-    }
-
+    let ownerID = RuntimeOwnerIdentity.currentOwnerId()
     let threshold = await minConfidence
-    guard suggestion.confidence >= threshold else {
-      await emitDeliveryOutcome(.filteredLowConfidence, identity: telemetryIdentity)
-      log(
-        "Suggestion: below bar [\(Int(suggestion.confidence * 100))% < \(Int(threshold * 100))%] "
-          + "\"\(suggestion.suggestion)\""
-      )
-      return
-    }
 
-    guard !SuggestionDeduplication.isDuplicate(suggestion.suggestion, of: recentSuggestions) else {
+    let outcome = SuggestionDeliveryPolicy.decide(
+      hasOwner: ownerID != nil,
+      confidence: suggestion.confidence,
+      threshold: threshold,
+      isDuplicate: SuggestionDeduplication.isDuplicate(suggestion.suggestion, of: recentSuggestions),
+      isGroundedCommitment: SuggestionCommitmentGuard.isGrounded(
+        suggestion: suggestion.suggestion,
+        category: suggestion.category,
+        openCommitments: commitmentsInFlight
+      )
+    )
+
+    let percent = Int(suggestion.confidence * 100)
+    switch outcome {
+    case .rejectedOwner:
+      await emitDeliveryOutcome(.rejectedOwner, identity: telemetryIdentity)
+      return outcome
+    case .filteredLowConfidence:
+      await emitDeliveryOutcome(.filteredLowConfidence, identity: telemetryIdentity)
+      log("Suggestion: below bar [\(percent)% < \(Int(threshold * 100))%] \"\(suggestion.suggestion)\"")
+      return outcome
+    case .filteredDuplicate:
       await emitDeliveryOutcome(.filteredDuplicate, identity: telemetryIdentity)
       log("Suggestion: duplicate of a recent suggestion — \"\(suggestion.suggestion)\"")
-      return
+      return outcome
+    case .filteredUngroundedCommitment:
+      await emitDeliveryOutcome(.filteredUngroundedCommitment, identity: telemetryIdentity)
+      log(
+        "Suggestion: ungrounded commitment [\(percent)%] — "
+          + "no open commitment matches \"\(suggestion.suggestion)\""
+      )
+      return outcome
+    case .delivered:
+      break
     }
 
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+    // Re-read the owner immediately before delivering: an account switch between the
+    // decision and the card must not put one user's commitment on another user's screen.
+    guard let ownerID, RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
       await emitDeliveryOutcome(.rejectedOwner, identity: telemetryIdentity)
-      return
+      return .rejectedOwner
     }
 
     recentSuggestions.append(suggestion.suggestion)
@@ -433,6 +567,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       ownerID: ownerID,
       telemetryIdentity: telemetryIdentity
     )
+    return .delivered
   }
 
   private func emitDeliveryOutcome(
@@ -476,6 +611,94 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
   }
 
+  // MARK: - Automation probe
+
+  /// Run grounding → evaluation → delivery on a supplied frame, bypassing only the dwell
+  /// and cooldown gates.
+  ///
+  /// Those two gates are pure functions with their own tests; everything downstream of them
+  /// — real commitments from the store, the real prompt, a real model call, the confidence
+  /// bar, dedup, the commitment guard, and real delivery through `NotificationService` — is
+  /// the part that cannot be proven without spending money, and is therefore the part worth
+  /// a probe. Verifying it otherwise requires holding a leisure window frontmost for 30s,
+  /// which an agent cannot do without taking the user's focus.
+  func probeEvaluateAndDeliver(
+    frame: CapturedFrame,
+    sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
+  ) async -> [String: String] {
+    // The probe bypasses only timing gates for intentional QA. It retains every
+    // privacy, user-choice, and spend boundary before the screenshot reaches a model.
+    let assistantEnabled = await isEnabled
+    let gateState = await MainActor.run {
+      (
+        SuggestionAssistantSettings.shared.isAppExcluded(frame.appName),
+        FloatingControlBarManager.shared.isSnoozed,
+        NotificationService.isWithinActivePeriod(now: Date()),
+        NotificationService.areNotificationsEnabled(),
+        NotificationService.currentFrequencyLevel()
+      )
+    }
+    let now = Date()
+    let decision = SuggestionGatePolicy.decide(
+      isEnabled: assistantEnabled,
+      isAppExcluded: gateState.0,
+      isSnoozed: gateState.1,
+      isWithinActivePeriod: gateState.2,
+      now: now,
+      lastEvaluationAt: nil,
+      cooldown: 0,
+      dwell: Self.requiredDwell,
+      requiredDwell: Self.requiredDwell,
+      evaluationsToday: dailyBudget.countToday(now: now),
+      dailyBudget: Self.dailyEvaluationBudget)
+    guard gateState.3, gateState.4 > 0, decision.allowsEvaluation else {
+      if !gateState.3 { return ["outcome": "skipped_notifications_disabled"] }
+      if gateState.4 == 0 { return ["outcome": "skipped_frequency_off"] }
+      return ["outcome": SuggestionAssistantTelemetry.GateOutcome(decision).rawValue]
+    }
+
+    let grounding = await assembleGrounding(for: frame)
+    commitmentsInFlight = grounding.openCommitments
+
+    guard !grounding.isEmpty else {
+      return ["outcome": "no_grounding", "commitments": "0"]
+    }
+
+    dailyBudget.recordEvaluation(now: now)
+
+    let result: SuggestionResult?
+    do {
+      result = try await evaluate(frame: frame, grounding: grounding)
+    } catch {
+      return ["outcome": "evaluation_failed", "error": "\(error)"]
+    }
+
+    guard let result else {
+      return ["outcome": "no_result", "commitments": "\(grounding.openCommitments.count)"]
+    }
+    guard result.hasSuggestion, let suggestion = result.suggestion else {
+      return [
+        "outcome": "declined",
+        "activity": result.currentActivity,
+        "commitments": "\(grounding.openCommitments.count)",
+      ]
+    }
+
+    // Report what delivery actually did, not that a suggestion existed. `outcome` is
+    // "delivered" only when a card reached NotificationService.
+    let delivery = await resolveDelivery(result, sendEvent: sendEvent)
+
+    return [
+      "outcome": delivery?.rawValue ?? "no_delivery_decision",
+      "delivered": delivery == .delivered ? "true" : "false",
+      "suggestion": suggestion.suggestion,
+      "category": suggestion.category.rawValue,
+      "confidence": "\(Int(suggestion.confidence * 100))",
+      "commitments": "\(grounding.openCommitments.count)",
+      "goals": "\(grounding.goals.count)",
+    ]
+  }
+
   // MARK: - Lifecycle
 
   func clearPendingWork() async {
@@ -485,6 +708,10 @@ actor SuggestionAssistant: ProactiveAssistant {
   func stop() async {
     clearPendingContext()
     recentSuggestions.removeAll()
+    commitmentsInFlight.removeAll()
+    cachedGoals.removeAll()
+    cachedGoalsSnapshot = nil
+    lastGoalsRefresh = .distantPast
   }
 }
 

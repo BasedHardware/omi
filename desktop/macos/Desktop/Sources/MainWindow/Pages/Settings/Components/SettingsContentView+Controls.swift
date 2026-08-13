@@ -85,6 +85,44 @@ enum SettingsControlMetrics {
   static func dailySummaryHour(from date: Date, calendar: Calendar = .current) -> Int {
     calendar.component(.hour, from: date)
   }
+
+  /// Daily Summary persists hour only. Any minute the picker offers is snapped to `:00`
+  /// immediately so the control never shows a time that cannot round-trip.
+  static func canonicalizeDailySummaryTime(_ date: Date, calendar: Calendar = .current) -> Date {
+    dailySummaryDate(forHour: dailySummaryHour(from: date, calendar: calendar), referenceDate: date, calendar: calendar)
+  }
+
+  static func notificationPeriodLabel(forMinute minute: Int) -> String {
+    let normalizedMinute = min(max(0, minute), 1439)
+    return String(format: "%02d:%02d", normalizedMinute / 60, normalizedMinute % 60)
+  }
+
+  /// Equal Active Period endpoints mean all-day delivery; surface that in the UI instead of
+  /// leaving `06:00 → 06:00` looking like a zero-width or single-minute window.
+  static func notificationActivePeriodSubtitle(startMinute: Int, endMinute: Int) -> String {
+    if NotificationActivePeriod(startMinute: startMinute, endMinute: endMinute).isAllDay {
+      return "All day — proactive notifications may appear any time"
+    }
+    return "When proactive notifications may appear (24-hour time)"
+  }
+
+  static func notificationActivePeriodSummaryLabel(startMinute: Int, endMinute: Int) -> String? {
+    NotificationActivePeriod(startMinute: startMinute, endMinute: endMinute).isAllDay ? "All day" : nil
+  }
+
+  /// General → Notifications mirrors macOS TCC/banner style only. Product enablement lives in
+  /// Notifications & Privacy (master + frequency).
+  static func generalNotificationPermissionStatusText(
+    hasPermission: Bool, bannersDisabled: Bool
+  ) -> String {
+    if !hasPermission {
+      return "macOS notification permission is off"
+    }
+    if bannersDisabled {
+      return "Permission granted, but macOS banners are off"
+    }
+    return "macOS banners enabled"
+  }
 }
 
 struct SettingsMenuPicker<SelectionValue: Hashable, Content: View>: View {
@@ -594,6 +632,14 @@ extension SettingsContentView {
 
       // Software Updates
       settingsCard(settingId: "about.updates") {
+        let updateStatus = DesktopUpdateStatusPresentation.kind(
+          sessionInProgress: updaterViewModel.updateSessionInProgress,
+          updateAvailable: updaterViewModel.updateAvailable,
+          availableVersion: updaterViewModel.availableVersion,
+          restartImminent: updaterViewModel.updateRestartImminent,
+          deferredForRecording: updaterViewModel.updateDeferredForActiveRecording,
+          userInitiatedCheck: updaterViewModel.userInitiatedCheckInProgress
+        )
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "arrow.triangle.2.circlepath")
@@ -606,7 +652,7 @@ extension SettingsContentView {
 
             Spacer()
 
-            Button("Check Now") {
+            Button(updateStatus.checkActionTitle) {
               updaterViewModel.checkForUpdates()
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
@@ -615,7 +661,38 @@ extension SettingsContentView {
               updaterViewModel.canManuallyCheckForUpdates
                 ? "Check for app updates"
                 : updaterViewModel.updateSessionInProgress
-                  ? "An update is already downloading…" : "Already checking for updates…")
+                  ? "An update is already in progress…" : "Already checking for updates…")
+          }
+
+          if updateStatus.isVisible {
+            HStack(alignment: .center, spacing: OmiSpacing.sm) {
+              if updateStatus.showsProgress {
+                ProgressView()
+                  .controlSize(.small)
+              } else {
+                Image(systemName: "arrow.down.circle.fill")
+                  .scaledFont(size: OmiType.body)
+                  .foregroundColor(Ink.accent)
+              }
+
+              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+                Text(updateStatus.title)
+                  .scaledFont(size: OmiType.body, weight: .medium)
+                  .foregroundColor(Ink.primary)
+                if let detail = updateStatus.detail {
+                  Text(detail)
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(Ink.secondary)
+                }
+              }
+              Spacer(minLength: 0)
+            }
+            .padding(OmiSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Ink.rowFill)
+            .cornerRadius(OmiChrome.elementRadius)
+            .accessibilityIdentifier("settings-update-status")
+            .accessibilityLabel(updateStatus.accessibilityLabel)
           }
 
           if let lastCheck = updaterViewModel.lastUpdateCheckDate {
@@ -758,6 +835,31 @@ extension SettingsContentView {
         Text(
           "You're on a newer beta build (\(updaterViewModel.currentVersion)). The latest stable release is \(stableVersion).\n\nSwitching to Stable means you won't receive new updates until a stable release surpasses your current version. You can also download the stable version now."
         )
+      }
+
+      settingsCard(settingId: "about.discord") {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "person.2.fill")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.secondary)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Community")
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundColor(Ink.primary)
+
+            Text("Get help from the omi community and team")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+
+          Spacer()
+
+          Button("Join Discord") {
+            openURLInDefaultBrowser(SupportLinks.discord)
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        }
       }
 
       settingsCard(settingId: "about.reportissue") {
