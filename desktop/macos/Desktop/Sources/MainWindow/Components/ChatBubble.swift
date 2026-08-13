@@ -339,12 +339,13 @@ struct ChatBubble: View {
         .foregroundColor(PageGlass.warning)
     }
 
-    if message.sender == .ai && !message.isStreaming && message.isSynced {
-      messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
-    } else if message.sender == .ai && !message.isStreaming && !message.copyableText.isEmpty {
-      messageMetadataRow(includeRatingButtons: false, includeCopyButton: true)
-    } else if message.sender == .ai && !message.isStreaming {
+    switch ChatBubbleMetadataBand.of(message) {
+    case .hidden:
+      EmptyView()
+    case .timestampOnly:
       messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
+    case .actions:
+      messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
     }
     // **A user turn gets no metadata band.** Its timestamp-only row cost every
     // question a reserved band for a fact the reply underneath already stamps.
@@ -1104,15 +1105,13 @@ struct AgentCompletionCard: View {
 
 extension ChatBubble: @preconcurrency Equatable {
   static func == (lhs: ChatBubble, rhs: ChatBubble) -> Bool {
-    // Streaming messages always re-render so SwiftUI sees live updates
-    guard !lhs.message.isStreaming && !rhs.message.isStreaming else { return false }
-    // Completed messages are equal when visible content hasn't changed
-    return lhs.message.id == rhs.message.id
-      && lhs.message.text == rhs.message.text
-      && lhs.message.rating == rhs.message.rating
-      && lhs.app?.id == rhs.app?.id
-      && lhs.showsOmiMark == rhs.showsOmiMark
-      && lhs.isDuplicate == rhs.isDuplicate
+    ChatBubbleIdentity.equal(
+      lhs.message,
+      rhs.message,
+      appIDs: (lhs.app?.id, rhs.app?.id),
+      showsOmiMark: (lhs.showsOmiMark, rhs.showsOmiMark),
+      isDuplicate: (lhs.isDuplicate, rhs.isDuplicate)
+    )
   }
 }
 
@@ -1546,62 +1545,64 @@ struct ToolCallCard: View {
   }
 
   var body: some View {
-    HStack(alignment: .top, spacing: OmiSpacing.sm) {
-      toolActivityIcon(name: name, status: displayStatus, size: 15)
-        .frame(width: 20, height: 20)
-        .background(Ink.surface.opacity(0.94), in: Circle())
-        .accessibilityHidden(true)
-
-      VStack(alignment: .leading, spacing: 0) {
+    VStack(alignment: .leading, spacing: 0) {
+      ToolCallActivityHeadline(name: name, status: displayStatus) {
         toolHeader
+      }
 
-        if isExpanded || showUnavailable {
-          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-            if let details = input?.details {
-              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-                Text("Input")
-                  .scaledFont(size: OmiType.micro, weight: .semibold)
-                  .foregroundColor(Ink.secondary)
-
-                Text(details)
-                  .scaledFont(size: OmiType.caption, design: .monospaced)
-                  .foregroundColor(Ink.secondary)
-                  .lineLimit(10)
-              }
-            }
-
-            if let output = output, !output.isEmpty {
-              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-                Text("Output")
-                  .scaledFont(size: OmiType.micro, weight: .semibold)
-                  .foregroundColor(Ink.secondary)
-
-                Text(output)
-                  .scaledFont(size: OmiType.caption, design: .monospaced)
-                  .foregroundColor(Ink.secondary)
-                  .lineLimit(15)
-              }
-            }
-
-            if showUnavailable {
-              Text("Agent unavailable — it may have been dismissed.")
-                .scaledFont(size: OmiType.caption)
+      if isExpanded || showUnavailable {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          if let details = input?.details {
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+              Text("Input")
+                .scaledFont(size: OmiType.micro, weight: .semibold)
                 .foregroundColor(Ink.secondary)
+
+              Text(details)
+                .scaledFont(size: OmiType.caption, design: .monospaced)
+                .foregroundColor(Ink.secondary)
+                .lineLimit(10)
             }
           }
-          .padding(.vertical, OmiSpacing.xs)
-          .padding(.trailing, OmiSpacing.sm)
+
+          if let output = output, !output.isEmpty {
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+              Text("Output")
+                .scaledFont(size: OmiType.micro, weight: .semibold)
+                .foregroundColor(Ink.secondary)
+
+              Text(output)
+                .scaledFont(size: OmiType.caption, design: .monospaced)
+                .foregroundColor(Ink.secondary)
+                .lineLimit(15)
+            }
+          }
+
+          if showUnavailable {
+            Text("Agent unavailable — it may have been dismissed.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
         }
+        .padding(.vertical, OmiSpacing.xs)
+        .padding(.leading, ToolActivityTimelineLayout.expandedContentLeadingInset)
+        .padding(.trailing, OmiSpacing.sm)
       }
     }
-    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+    .frame(maxWidth: .infinity, minHeight: ToolActivityTimelineLayout.rowMinHeight, alignment: .topLeading)
     .background(alignment: .topLeading) {
       if connectsToNext {
         GeometryReader { proxy in
           Rectangle()
             .fill(Ink.secondary.opacity(0.28))
-            .frame(width: 1, height: max(0, proxy.size.height - 9))
-            .offset(x: 9.5, y: 19)
+            .frame(
+              width: ToolActivityTimelineLayout.connectorWidth,
+              height: max(0, proxy.size.height - ToolActivityTimelineLayout.connectorBottomTrim)
+            )
+            .offset(
+              x: ToolActivityTimelineLayout.connectorOriginX,
+              y: ToolActivityTimelineLayout.connectorTopInset
+            )
             .transition(.scale(scale: 0, anchor: .top).combined(with: .opacity))
         }
         .accessibilityHidden(true)
@@ -1612,7 +1613,7 @@ struct ToolCallCard: View {
 
   @ViewBuilder
   private var toolHeader: some View {
-    HStack(alignment: .top, spacing: OmiSpacing.xxs) {
+    HStack(alignment: .center, spacing: OmiSpacing.xxs) {
       if hasExpandableContent {
         Button(action: {
           OmiMotion.withGated(.easeInOut(duration: 0.2)) {
@@ -1622,9 +1623,11 @@ struct ToolCallCard: View {
           toolHeaderLabel(showsDisclosure: true)
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityHint(isExpanded ? "Collapse tool details" : "Expand tool details")
       } else {
         toolHeaderLabel(showsDisclosure: false)
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
 
       Group {
@@ -1654,30 +1657,12 @@ struct ToolCallCard: View {
   }
 
   private func toolHeaderLabel(showsDisclosure: Bool) -> some View {
-    HStack(spacing: OmiSpacing.xs) {
-      Text(ChatContentBlock.displayName(for: name))
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-
-      if let summary = input?.summary, !summary.isEmpty {
-        Text(summary)
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary.opacity(0.72))
-          .lineLimit(1)
-          .truncationMode(.middle)
-      }
-
-      Spacer(minLength: OmiSpacing.xs)
-
-      if showsDisclosure {
-        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-          .scaledFont(size: OmiType.micro)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 18, height: 18)
-          .accessibilityHidden(true)
-      }
-    }
-    .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+    ToolCallHeaderLabel(
+      title: ChatContentBlock.displayName(for: name),
+      summary: input?.summary,
+      showsDisclosure: showsDisclosure,
+      isExpanded: isExpanded
+    )
     .contentShape(Rectangle())
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilityTitle)
@@ -1841,53 +1826,6 @@ extension ChatContentBlock {
     guard name.hasPrefix("mcp__") else { return name }
     return String(name.split(separator: "__").last ?? Substring(name))
   }
-}
-
-// MARK: - Tool Activity Icon
-
-@MainActor @ViewBuilder
-private func toolActivityIcon(name: String, status: ToolCallStatus, size: CGFloat) -> some View {
-  switch status {
-  case .running:
-    ProgressView()
-      .controlSize(.mini)
-      .frame(width: size, height: size)
-  case .slow:
-    ProgressView()
-      .controlSize(.mini)
-      .frame(width: size, height: size)
-      .tint(PageGlass.warning)
-  case .stalled:
-    Image(systemName: "exclamationmark.triangle.fill")
-      .scaledFont(size: size)
-      .foregroundColor(PageGlass.warning)
-  case .completed:
-    Image(systemName: toolActivitySymbol(for: name))
-      .scaledFont(size: size)
-      .foregroundColor(Ink.secondary)
-  case .failed:
-    Image(systemName: "xmark.circle")
-      .scaledFont(size: size)
-      .foregroundColor(Ink.errorRed)
-  }
-}
-
-private func toolActivitySymbol(for name: String) -> String {
-  let cleanName = String(name.split(separator: "__").last ?? Substring(name)).lowercased()
-  if cleanName.contains("search") || cleanName.hasPrefix("grep") || cleanName.hasPrefix("glob") {
-    return "magnifyingglass"
-  }
-  if cleanName.contains("read") || cleanName.contains("fetch") { return "doc.text" }
-  if cleanName.contains("write") || cleanName.contains("edit") { return "pencil" }
-  if cleanName.contains("bash") || cleanName.contains("shell") || cleanName.contains("command") {
-    return "terminal"
-  }
-  if cleanName.contains("agent") { return "person.2" }
-  if cleanName.contains("calendar") { return "calendar" }
-  if cleanName.contains("mail") || cleanName.contains("message") { return "envelope" }
-  if cleanName.contains("permission") { return "lock" }
-  if cleanName.contains("screen") || cleanName.contains("capture") { return "rectangle.dashed" }
-  return "sparkles"
 }
 
 // MARK: - Tool Call Stalled Banner

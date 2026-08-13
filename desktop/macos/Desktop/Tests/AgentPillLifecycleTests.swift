@@ -1779,7 +1779,7 @@ import XCTest
     XCTAssertTrue(chatBubbleSource.contains("connectsToNext: position < toolCalls.count - 1"))
     XCTAssertTrue(chatBubbleSource.contains(".spring(response: 0.36, dampingFraction: 0.86)"))
     XCTAssertTrue(chatBubbleSource.contains(".move(edge: .top).combined(with: .opacity)"))
-    XCTAssertTrue(chatBubbleSource.contains("toolActivityIcon(name: name, status: displayStatus, size: 15)"))
+    XCTAssertTrue(chatBubbleSource.contains("ToolCallActivityHeadline(name: name, status: displayStatus)"))
     XCTAssertTrue(chatBubbleSource.contains("ToolCallCard(\n              name: name"))
     XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: item.block.agentOpenRef"))
     XCTAssertTrue(chatBubbleSource.contains("onOpenAgent: onOpenAgent"))
