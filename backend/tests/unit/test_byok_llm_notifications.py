@@ -184,6 +184,38 @@ def test_handle_llm_error_does_not_notify_platform_error(
     mock_send_each.assert_not_called()
 
 
+@patch('utils.llm.byok_errors.messaging.send_each')
+@patch('utils.llm.byok_errors.notification_db.get_all_tokens', return_value=['token-1'])
+@patch('utils.llm.byok_errors.try_acquire_byok_llm_error_notification_lock', return_value=True)
+@patch('utils.llm.byok_errors.get_byok_uid', return_value='user-1')
+@patch('utils.llm.byok_errors.get_byok_key', return_value=None)
+@patch('utils.llm.byok_errors.get_byok_oauth_credential', return_value={'provider': 'chatgpt'})
+def test_handle_llm_error_notifies_oauth_byok_failure(
+    mock_oauth,
+    mock_get_key,
+    mock_get_uid,
+    mock_lock,
+    mock_get_tokens,
+    mock_send_each,
+):
+    """OAuth-backed BYOK failures classify as byok and fire the reconnect nudge.
+
+    ChatGPT/Grok send no x-byok-* key header, so source must come from the
+    request-context OAuth credential rather than the key map.
+    """
+    from utils.llm.byok_errors import handle_llm_error
+
+    mock_send_each.return_value = SimpleNamespace(responses=[SimpleNamespace(success=True, exception=None)])
+
+    handle_llm_error(_HTTPError("bad api key", 401), 'chatgpt', feature='chat_agent', model='gpt-5.4-mini')
+
+    mock_lock.assert_called_once_with('user-1', 'chatgpt', 'invalid')
+    mock_get_tokens.assert_called_once_with('user-1')
+    mock_send_each.assert_called_once()
+    message = mock_send_each.call_args.args[0][0]
+    assert message.data == {'type': 'byok_llm_error', 'provider': 'chatgpt', 'reason': 'invalid'}
+
+
 @patch('utils.llm.byok_errors.release_byok_llm_error_notification_lock')
 @patch('utils.llm.byok_errors.notification_db.remove_bulk_tokens')
 @patch('utils.llm.byok_errors.messaging.send_each')

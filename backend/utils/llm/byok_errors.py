@@ -31,7 +31,7 @@ except ImportError:
         )
 
 
-from utils.byok import get_byok_key, get_byok_uid
+from utils.byok import get_byok_key, get_byok_oauth_credential, get_byok_uid
 from utils.executors import storage_executor, submit_with_context
 from utils.log_sanitizer import sanitize
 
@@ -47,6 +47,11 @@ _FCM_SEND_EACH_LIMIT = 500
 def get_llm_error_source(provider: Optional[str]) -> str:
     """Return platform/byok for the current request and provider."""
     if provider and get_byok_key(provider):
+        return 'byok'
+    # OAuth-backed BYOK (ChatGPT/Grok) sends no x-byok-* key header; the
+    # credential lives in the request context instead. Treat its provider
+    # failures as user-key BYOK so the reconnection nudge fires.
+    if provider in {'chatgpt', 'grok'} and get_byok_oauth_credential() is not None:
         return 'byok'
     return 'platform'
 
