@@ -1,0 +1,3 @@
+{
+  "change": "Fixed realtime voice audio recovery after an audio-device change"
+}
