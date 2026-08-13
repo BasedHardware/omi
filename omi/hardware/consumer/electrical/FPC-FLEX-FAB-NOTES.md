@@ -194,7 +194,7 @@ These are **minimum design targets** per IPC-2223C (Sectional Design Standard fo
 1. **Visual inspection:** No delamination, no exposed copper outside pad openings, no coverlay lifting at edges. **Pass:** zero visible defects under 10× magnification.
 2. **Dimensional:** Outline matches gerber ±0.1mm. Stiffener edges align to `Enhance` layer outline within **±0.2mm**. **Fail:** any stiffener overhang into bend zone.
 3. **Coverlay opening registration:** Pad openings in coverlay expose full pad area with ≥50µm clearance to adjacent copper. **Fail:** coverlay overlapping any solderable pad.
-4. **Flex test:** Gently flex FPC to installed bend radius (~1.8mm). **Pass:** no cracking, no delamination, no white stress marks visible under 10× magnification. **Fail:** any visible damage.
+4. **Flex test:** Gently flex FPC to installed bend radius (~2.2mm). **Pass:** no cracking, no delamination, no white stress marks visible under 10× magnification. **Fail:** any visible damage.
 5. **Continuity:** Test all 9 signal nets from J1 pads to J3 pads with multimeter (see pin-to-net table above): SWDCLK, SWDIO, TXD, RXD, VIN+, VDD_3V3, bat+, ~RESET, GND. **Pass:** resistance ≤2Ω per trace. **Fail:** open (>10Ω) or short between adjacent nets (<100KΩ).
 6. **Peel strength:** Stiffener must not peel off with 1 kg/cm perpendicular pull force. **Fail:** any delamination under light finger pressure.
 
@@ -202,5 +202,5 @@ These are **minimum design targets** per IPC-2223C (Sectional Design Standard fo
 
 7. **Connector coplanarity:** With J3 populated, place FPC on flat surface. **Pass:** pins coplanar within **0.1mm** (measure with feeler gauge or optical). **Fail:** visible tilt or >0.1mm gap at any pin.
 8. **Connector fit:** J3 must mate with mainboard J1 (ST-BTB-K3570606F) smoothly. **Pass:** latch engages fully, connector sits flat, no visible angular offset. **Fail:** incomplete latch engagement or connector angle >2°.
-9. **Post-bend continuity:** After bending FPC to installed position (~1.8mm radius), re-test continuity on all 9 nets. **Pass:** resistance ≤2Ω (same as pre-bend). **Fail:** any increase >1Ω from pre-bend value indicates cracked trace.
+9. **Post-bend continuity:** After bending FPC to installed position (~2.2mm radius), re-test continuity on all 9 nets. **Pass:** resistance ≤2Ω (same as pre-bend). **Fail:** any increase >1Ω from pre-bend value indicates cracked trace.
 10. **Contact ring inspection:** J1 must sit flat and concentric. **Pass:** contact resistance to FPC pads ≤100mΩ, ring concentric within ±0.1mm. **Fail:** resistance >200mΩ or visible misalignment.

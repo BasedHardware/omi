@@ -22,7 +22,7 @@ Parts are classified into three tiers:
 | RF passives (L3, L4, C12, C15, C49, C50) | 🚫 | Exact MPN only unless RF retuned and measured. See `RF-ANTENNA-NOTES.md`. |
 | RF ICs (U3 diplexer, U10 RF switch) | 🚫 | No pin-compatible alternate; redesign/revalidation required. |
 | Main SoC (U1 nRF5340) | 🚫 | No pin-compatible alternate. Nordic-only. |
-| WiFi companion (U2 nRF7002) | 🚫 | No pin-compatible alternate. Nordic-only. |
+| Wi-Fi companion (U2 nRF7002) | 🚫 | No pin-compatible alternate. Nordic-only. |
 | Crystals (X1, X2, X3) | ⚠️ | Must match load capacitance, ESR, tolerance, and package exactly. |
 | MEMS microphone (MIC1, MIC2) | 🚫 | No verified pin/port-compatible alternate. Use exact MPN. |
 | Battery protection (U14 GLF73910) | 🚫 | OVP/UVP thresholds must match BQ25101 charge profile. No verified alternate. |
@@ -127,7 +127,7 @@ These parts have no pin-compatible alternate. Plan inventory accordingly.
 | Ref | MPN | Why No Alternate | Sourcing Fallback |
 |-----|-----|------------------|-------------------|
 | U1 | nRF5340-CLAA | Only Nordic makes this SoC. No pin/function equivalent. | DigiKey, Mouser, Nordic direct |
-| U2 | nRF7002-CEAA-R7 | Only Nordic makes this WiFi companion. No pin-compatible alternate (works with nRF52/53/91 and non-Nordic hosts, but no other IC replaces it). | DigiKey, Mouser, Nordic direct |
+| U2 | nRF7002-CEAA-R7 | Only Nordic makes this Wi-Fi companion. No pin-compatible alternate (works with nRF52/53/91 and non-Nordic hosts, but no other IC replaces it). | DigiKey, Mouser, Nordic direct |
 | U3 | LFD182G45DCHD277 | Murata diplexer for 2.4/5GHz band splitting. Other diplexers have different band edges, port impedance, and insertion loss. | Murata direct, DigiKey |
 | U7 | CSNP4GCR01-DPW | CS Semi 4Gbit SD NAND. No qualified alternate — other SD NAND ICs may be pin-compatible (LGA-8) but require firmware qualification, JEDEC ID verification, power-loss behavior testing, and endurance validation. | CS Semi (Changjiang Storage) direct, Alibaba |
 | U10 | FM8625H | FUMAN SPDT RF switch. Other SPDT switches may work but require RF path re-validation (insertion loss, isolation, P1dB). | FUMAN direct, LCSC sourcing request |
@@ -202,7 +202,7 @@ Source CJ17 from CJ Semi or authorized distributors.
 **⚠ After substituting any crystal:**
 1. Verify crystal startup over voltage range (2.9–4.2V) and temperature (-20 to +60°C)
 2. Confirm firmware load-capacitance / trim settings match the new crystal's CL specification
-3. Measure frequency error with a counter or spectrum analyzer — Nordic requires ±40ppm for BLE, WiFi 802.11 requires ±20ppm
-4. Run BLE DTM (Direct Test Mode) and WiFi conducted TX to confirm output power and spectral mask
-5. At minimum: confirm BLE advertising with nRF Connect and WiFi scan results at room temperature
+3. Measure frequency error with a counter or spectrum analyzer — Nordic requires ±40ppm for BLE, Wi-Fi 802.11 requires ±20ppm
+4. Run BLE DTM (Direct Test Mode) and Wi-Fi conducted TX to confirm output power and spectral mask
+5. At minimum: confirm BLE advertising with nRF Connect and Wi-Fi scan results at room temperature
 6. The nRF7002 40MHz crystal has tight Wi-Fi EVM implications — validate with Wi-Fi throughput test

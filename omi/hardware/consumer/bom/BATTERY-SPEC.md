@@ -94,14 +94,14 @@ Any LiPo cell meeting these criteria will work:
 
 | Parameter | Requirement | Notes |
 |-----------|-------------|-------|
-| **Max continuous discharge** | ≥300mA (≥350mA preferred) | nRF7002 WiFi TX draws 191mA at 2.4GHz / 260mA at 5GHz max power (Nordic PS), plus nRF5340, sensors, and regulator losses — total can exceed 300mA during WiFi 5GHz TX |
-| **Max pulse discharge** | ≥500mA for 100ms | Boot-up inrush, WiFi TX bursts at max power with concurrent BLE |
+| **Max continuous discharge** | ≥300mA (≥350mA preferred) | nRF7002 Wi-Fi TX draws 191mA at 2.4GHz / 260mA at 5GHz max power (Nordic PS), plus nRF5340, sensors, and regulator losses — total can exceed 300mA during Wi-Fi 5GHz TX |
+| **Max pulse discharge** | ≥500mA for 100ms | Boot-up inrush, Wi-Fi TX bursts at max power with concurrent BLE |
 | **Internal resistance** | ≤500mΩ | High IR causes voltage sag during TX bursts — may trigger brown-out reset |
-| **Protection board trip current** | ≥800mA | Must not trip during WiFi 5GHz TX peaks (260mA radio + system overhead) |
+| **Protection board trip current** | ≥800mA | Must not trip during Wi-Fi 5GHz TX peaks (260mA radio + system overhead) |
 | **Charging current** | ~135mA typ (ISET = R8 = 1KΩ; K_ISET = 135 AΩ, range 129–145mA) | ~0.9C for 150mAh cell — cell must be rated for ≥150mA charge current |
 | **NTC thermistor** | Not required on battery | BQ25101 TS pin is configured on-board (R28, 10K NTC near cell) |
 
-**⚠ WiFi current is higher than typical BLE wearables.** Nordic's nRF7002 product spec lists 191mA (2.4GHz) and 260mA (5GHz) TX current before system overhead. Verify the cell's protection PCB does not trip during WiFi operation. If the cell's protection trips below 300mA, it is unsuitable.
+**⚠ Wi-Fi current is higher than typical BLE wearables.** Nordic's nRF7002 product spec lists 191mA (2.4GHz) and 260mA (5GHz) TX current before system overhead. Verify the cell's protection PCB does not trip during Wi-Fi operation. If the cell's protection trips below 300mA, it is unsuitable.
 
 **⚠ Thermal sensing caveat:** The on-board NTC (R28, 10K) drives the BQ25101 TS pin for charge temperature monitoring. R28 is positioned ~1mm from U15 (BQ25101 charger IC) per KiCad PCB — it senses charger IC temperature, not cell temperature directly. Thermal coupling to the battery is indirect. For effective cell protection during charging, verify the cell's built-in protection circuit handles temperature independently.
 
@@ -115,7 +115,7 @@ The built-in protection circuit inside the cell must meet these thresholds:
 | Overcharge release | 4.05V | 4.15V | Hysteresis prevents cycling |
 | Overdischarge cutoff | 2.4V | 2.7V | GLF73910-BD01 provides additional board-level protection at ~2.9V |
 | Overdischarge release | 2.9V | 3.1V | Must resume when charging begins |
-| Overcurrent trip | ≥800mA | — | Must not trip during WiFi TX peaks |
+| Overcurrent trip | ≥800mA | — | Must not trip during Wi-Fi TX peaks |
 | Short-circuit protection | Required | — | Must disconnect within 50µs |
 | Quiescent current | — | ≤5µA | Minimizes self-discharge during storage |
 | PCM resistance | — | ≤150mΩ | Adds to cell IR; included in 500mΩ total IR budget |
@@ -162,8 +162,8 @@ Before assembly, verify each incoming cell:
 |------------|-------------|-------------------|
 | BLE advertising only | ~5mA | ~30 hours |
 | BLE connected + recording | ~15mA | ~10 hours |
-| BLE + WiFi idle (associated) | ~40mA | ~3.5 hours |
-| WiFi 2.4GHz TX (active upload) | ~200mA | ~45 minutes |
-| WiFi 5GHz TX (max power) | ~270mA | ~33 minutes |
+| BLE + Wi-Fi idle (associated) | ~40mA | ~3.5 hours |
+| Wi-Fi 2.4GHz TX (active upload) | ~200mA | ~45 minutes |
+| Wi-Fi 5GHz TX (max power) | ~270mA | ~33 minutes |
 
-These are rough estimates. WiFi TX currents are from Nordic nRF7002 product specification (191mA at 2.4GHz, 260mA at 5GHz) plus system overhead (~10–15mA). Actual runtime depends on firmware power management, WiFi duty cycle, TX power setting, and ambient temperature. Firmware may limit TX power or duty cycle to extend battery life.
+These are rough estimates. Wi-Fi TX currents are from Nordic nRF7002 product specification (191mA at 2.4GHz, 260mA at 5GHz) plus system overhead (~10–15mA). Actual runtime depends on firmware power management, Wi-Fi duty cycle, TX power setting, and ambient temperature. Firmware may limit TX power or duty cycle to extend battery life.
