@@ -9832,4 +9832,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Open store';
+
+  @override
+  String get findDevice => 'Find';
 }

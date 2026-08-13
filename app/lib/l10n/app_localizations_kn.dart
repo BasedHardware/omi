@@ -9871,4 +9871,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get findDevice => 'ಹುಡುಕಿ';
 }

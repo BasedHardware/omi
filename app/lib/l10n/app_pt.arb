@@ -3250,5 +3250,6 @@
     "accountCutoverMigrationInProgressTitle": "Migração em andamento",
     "accountCutoverMigrationInProgressMessage": "Sua conta está migrando. Os recursos do produto ficam pausados até a migração terminar.",
     "accountCutoverMigrationRollbackMessage": "Sua conta está em manutenção após um rollback de migração. Alguns dados mais recentes podem ficar isolados.",
-    "accountCutoverOpenStore": "Abrir loja"
+    "accountCutoverOpenStore": "Abrir loja",
+    "findDevice": "Encontrar"
 }

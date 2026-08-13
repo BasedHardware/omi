@@ -9909,4 +9909,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get findDevice => 'கண்டறி';
 }

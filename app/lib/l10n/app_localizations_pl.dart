@@ -9869,4 +9869,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otwórz sklep';
+
+  @override
+  String get findDevice => 'Znajdź';
 }

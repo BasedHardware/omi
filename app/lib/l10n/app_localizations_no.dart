@@ -9839,4 +9839,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Öppna butik';
+
+  @override
+  String get findDevice => 'Finn';
 }

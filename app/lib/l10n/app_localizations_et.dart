@@ -9834,4 +9834,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Avaa kauppa';
+
+  @override
+  String get findDevice => 'Leia';
 }

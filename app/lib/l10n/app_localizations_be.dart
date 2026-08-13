@@ -9872,4 +9872,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Открыть магазин';
+
+  @override
+  String get findDevice => 'Знайсці';
 }

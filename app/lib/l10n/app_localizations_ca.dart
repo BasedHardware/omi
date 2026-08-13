@@ -9896,4 +9896,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Abrir tienda';
+
+  @override
+  String get findDevice => 'Troba';
 }

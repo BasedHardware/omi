@@ -9897,4 +9897,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Apri store';
+
+  @override
+  String get findDevice => 'Trova';
 }

@@ -9892,4 +9892,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otevřít obchod';
+
+  @override
+  String get findDevice => 'Пронајди';
 }

@@ -9851,4 +9851,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Mağazayı aç';
+
+  @override
+  String get findDevice => 'Bul';
 }

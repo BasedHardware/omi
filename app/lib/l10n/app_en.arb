@@ -11634,5 +11634,9 @@
     "accountCutoverOpenStore": "Open store",
     "@accountCutoverOpenStore": {
         "description": "Button that opens the app store for a required cutover upgrade"
+    },
+    "findDevice": "Find",
+    "@findDevice": {
+        "description": "Action that makes a nearby connected Omi pendant vibrate so the user can locate it"
     }
 }

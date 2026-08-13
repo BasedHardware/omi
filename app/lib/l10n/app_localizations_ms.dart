@@ -9865,4 +9865,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Buka toko';
+
+  @override
+  String get findDevice => 'Cari';
 }

@@ -9762,4 +9762,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'פתחו חנות';
+
+  @override
+  String get findDevice => 'איתור';
 }

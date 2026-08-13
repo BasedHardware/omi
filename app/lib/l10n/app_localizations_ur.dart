@@ -9852,4 +9852,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'فتح المتجر';
+
+  @override
+  String get findDevice => 'تلاش کریں';
 }

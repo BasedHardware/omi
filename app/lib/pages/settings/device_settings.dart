@@ -41,6 +41,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   Timer? _debounce;
   Timer? _micGainDebounce;
+  bool _isFindingDevice = false;
 
   bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
 
@@ -160,6 +161,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   Widget _buildProfileStyleItem({
+    Key? key,
     required FaIconData icon,
     required String title,
     String? subtitle,
@@ -216,6 +218,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
     if (copyValue != null) {
       return GestureDetector(
+        key: key,
+        behavior: HitTestBehavior.opaque,
         onTap: () {
           Clipboard.setData(ClipboardData(text: copyValue));
           ScaffoldMessenger.of(
@@ -227,9 +231,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     }
 
     if (onTap != null) {
-      return GestureDetector(onTap: onTap, child: content);
+      return GestureDetector(key: key, behavior: HitTestBehavior.opaque, onTap: onTap, child: content);
     }
-    return content;
+    return KeyedSubtree(key: key, child: content);
   }
 
   Widget _buildDeviceInfoSection(BtDevice? device, DeviceProvider provider) {
@@ -703,13 +707,46 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     return level >= 0 && level < labels.length ? labels[level] : '';
   }
 
-  Widget _buildCustomizationSection() {
+  Future<void> _findDevice(DeviceProvider provider) async {
+    if (_isFindingDevice) return;
+    setState(() => _isFindingDevice = true);
+
+    final found = await provider.findDevice();
+    if (!mounted) return;
+
+    setState(() => _isFindingDevice = false);
+    if (!found) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(context.l10n.deviceNotConnected)));
+    }
+  }
+
+  Widget _buildCustomizationSection(BtDevice? device, DeviceProvider provider) {
     final doubleTapAction = SharedPreferencesUtil().doubleTapAction;
+    final supportsFind = device?.type == DeviceType.omi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
 
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
+          if (supportsFind) ...[
+            _buildProfileStyleItem(
+              key: const Key('find_device_button'),
+              icon: FontAwesomeIcons.bullseye,
+              title: context.l10n.findDevice,
+              showChevron: false,
+              trailing: _isFindingDevice
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : null,
+              onTap: () => _findDevice(provider),
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+          ],
           // Double Tap
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.handPointer,
@@ -917,7 +954,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 if (provider.isConnected) ...[
                   const SizedBox(height: 16),
                   _buildSectionHeader(context.l10n.customizationSection),
-                  _buildCustomizationSection(),
+                  _buildCustomizationSection(provider.connectedDevice ?? provider.pairedDevice, provider),
                   const SizedBox(height: 32),
                   _buildSectionHeader(context.l10n.deviceInfoSection),
                   _buildDeviceInfoSection(provider.pairedDevice, provider),

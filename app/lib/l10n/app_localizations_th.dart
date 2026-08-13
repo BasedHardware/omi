@@ -9784,4 +9784,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'เปิดสโตร์';
+
+  @override
+  String get findDevice => 'ค้นหา';
 }

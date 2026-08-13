@@ -9867,4 +9867,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Store openen';
+
+  @override
+  String get findDevice => 'Zoeken';
 }

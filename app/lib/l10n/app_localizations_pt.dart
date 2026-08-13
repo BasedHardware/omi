@@ -9848,4 +9848,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Abrir loja';
+
+  @override
+  String get findDevice => 'Encontrar';
 }

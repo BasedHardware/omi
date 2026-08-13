@@ -18332,6 +18332,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open store'**
   String get accountCutoverOpenStore;
+
+  /// Action that makes a nearby connected Omi pendant vibrate so the user can locate it
+  ///
+  /// In en, this message translates to:
+  /// **'Find'**
+  String get findDevice;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

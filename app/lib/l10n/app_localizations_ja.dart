@@ -9674,4 +9674,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'ストアを開く';
+
+  @override
+  String get findDevice => '探す';
 }

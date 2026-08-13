@@ -9675,4 +9675,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => '스토어 열기';
+
+  @override
+  String get findDevice => '찾기';
 }

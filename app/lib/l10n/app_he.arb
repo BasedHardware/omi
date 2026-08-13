@@ -10780,5 +10780,6 @@
     "accountCutoverMigrationInProgressTitle": "העברה בתהליך",
     "accountCutoverMigrationInProgressMessage": "החשבון שלכם בהעברה. תכונות המוצר מושהות עד לסיום ההעברה.",
     "accountCutoverMigrationRollbackMessage": "החשבון שלכם בתחזוקה לאחר ביטול העברה. ייתכן שנתונים חדשים יותר נותרו מבודדים.",
-    "accountCutoverOpenStore": "פתחו חנות"
+    "accountCutoverOpenStore": "פתחו חנות",
+    "findDevice": "איתור"
 }

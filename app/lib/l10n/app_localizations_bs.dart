@@ -9868,4 +9868,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otevřít obchod';
+
+  @override
+  String get findDevice => 'Pronađi';
 }

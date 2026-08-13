@@ -9862,4 +9862,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Відкрити магазин';
+
+  @override
+  String get findDevice => 'Знайти';
 }

@@ -9870,4 +9870,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otevřít obchod';
+
+  @override
+  String get findDevice => 'Poišči';
 }

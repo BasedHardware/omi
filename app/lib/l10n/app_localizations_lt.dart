@@ -9859,4 +9859,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otwórz sklep';
+
+  @override
+  String get findDevice => 'Rasti';
 }

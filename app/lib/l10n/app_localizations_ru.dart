@@ -9877,4 +9877,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Открыть магазин';
+
+  @override
+  String get findDevice => 'Найти';
 }

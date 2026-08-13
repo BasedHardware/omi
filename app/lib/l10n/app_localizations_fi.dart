@@ -9840,4 +9840,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Avaa kauppa';
+
+  @override
+  String get findDevice => 'Etsi';
 }

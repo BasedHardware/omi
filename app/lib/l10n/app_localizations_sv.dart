@@ -9844,4 +9844,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Öppna butik';
+
+  @override
+  String get findDevice => 'Hitta';
 }

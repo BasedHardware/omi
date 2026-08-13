@@ -9656,4 +9656,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => '打开应用商店';
+
+  @override
+  String get findDevice => '查找';
 }

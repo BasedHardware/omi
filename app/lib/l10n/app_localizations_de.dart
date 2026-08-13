@@ -9922,4 +9922,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Store öffnen';
+
+  @override
+  String get findDevice => 'Finden';
 }

@@ -9840,4 +9840,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'فتح المتجر';
+
+  @override
+  String get findDevice => 'پیدا کردن';
 }

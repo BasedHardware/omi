@@ -218,6 +218,19 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
+  Future<bool> findDevice() async {
+    final device = connectedDevice ?? pairedDevice;
+    if (!isConnected || device == null || device.type != DeviceType.omi) return false;
+
+    try {
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      return await connection?.playFindDevicePattern() ?? false;
+    } catch (e) {
+      Logger.debug('DeviceProvider: Failed to play find-device pattern: $e');
+      return false;
+    }
+  }
+
   Future _bleDisconnectDevice(BtDevice btDevice) async {
     await ServiceManager.instance().device.disconnectDevice();
   }

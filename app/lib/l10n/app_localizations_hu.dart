@@ -9880,4 +9880,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Áruház megnyitása';
+
+  @override
+  String get findDevice => 'Keresés';
 }

@@ -9887,4 +9887,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Deschide magazinul';
+
+  @override
+  String get findDevice => 'Găsește';
 }

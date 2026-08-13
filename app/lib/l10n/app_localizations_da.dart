@@ -9825,4 +9825,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Åbn butik';
+
+  @override
+  String get findDevice => 'Find';
 }

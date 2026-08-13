@@ -9836,4 +9836,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Mở cửa hàng';
+
+  @override
+  String get findDevice => 'Tìm';
 }

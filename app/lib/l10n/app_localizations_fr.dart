@@ -9927,4 +9927,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Ouvrir le store';
+
+  @override
+  String get findDevice => 'Localiser';
 }
