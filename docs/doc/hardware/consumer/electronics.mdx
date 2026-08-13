@@ -127,12 +127,12 @@ These files are in `omi/hardware/consumer/` in the repository:
 |----------|-------------|
 | [`bom/LCSC-SOURCING.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/LCSC-SOURCING.md) | LCSC/JLCPCB part numbers, stock status, sourcing guide |
 | [`bom/BATTERY-SPEC.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/BATTERY-SPEC.md) | Battery procurement spec (GRP1654M1, 3.7V 150mAh LiPo) |
-| [`bom/ALTERNATES.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/ALTERNATES.md) | Alternate parts list with substitution risk ratings |
-| [`electrical/SWD-DEBUG-ACCESS.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/SWD-DEBUG-ACCESS.md) | SWD debug wiring for initial firmware flash |
+| [`bom/ALTERNATE-PARTS.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/ALTERNATE-PARTS.md) | Alternate parts list with substitution risk ratings |
+| [`electrical/SWD-FLASHING-GUIDE.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/SWD-FLASHING-GUIDE.md) | SWD debug wiring for initial firmware flash |
 | [`electrical/STENCIL-REFLOW-NOTES.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/STENCIL-REFLOW-NOTES.md) | Stencil, solder paste, and reflow profile specs |
 | [`electrical/RF-ANTENNA-NOTES.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/RF-ANTENNA-NOTES.md) | RF architecture, antenna notes, DO NOT SUBSTITUTE list |
 | [`electrical/IMPEDANCE-STACKUP.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/IMPEDANCE-STACKUP.md) | PCB stackup and impedance targets |
-| [`electrical/FPC-FLEX-FAB-NOTES.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/FPC-FLEX-FAB-NOTES.md) | FPC flex fabrication, stiffener, coverlay specs |
+| [`electrical/FPC-FAB-NOTES.md`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/FPC-FAB-NOTES.md) | FPC flex fabrication, stiffener, coverlay specs |
 
 ---
 
@@ -151,7 +151,7 @@ These files are in `omi/hardware/consumer/` in the repository:
     <Warning>If current draw exceeds 50mA before firmware flash, disconnect immediately — likely a short. Do not connect a bench supply while a battery or USB charger is also connected unless you understand the BQ25101 power path.</Warning>
   </Step>
   <Step title="Flash Firmware">
-    Connect SWD debugger (J-Link) to test points: SWDIO→TP3, SWDCLK→TP8, GND→TP18, VTref→VDD_3V3 rail (sense input, not power — J-Link uses this to set I/O voltage levels), optional RESET→TP14 (all bottom side except TP12). Flash network core first, then application core. See [SWD debug guide](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/SWD-DEBUG-ACCESS.md) and [firmware guide](/doc/developer/firmware/Compile_firmware).
+    Connect SWD debugger (J-Link) to test points: SWDIO→TP3, SWDCLK→TP8, GND→TP18, VTref→VDD_3V3 rail (sense input, not power — J-Link uses this to set I/O voltage levels), optional RESET→TP14 (all bottom side except TP12). Flash network core first, then application core. See [SWD flashing guide](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/SWD-FLASHING-GUIDE.md) and [firmware guide](/doc/developer/firmware/Compile_firmware).
   </Step>
   <Step title="Verify BLE">
     Open nRF Connect mobile app. The device should appear advertising as "Omi". If not, check 32MHz crystal and antenna matching network.
