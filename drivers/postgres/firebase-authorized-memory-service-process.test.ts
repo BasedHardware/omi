@@ -2,9 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import { createServedCounter } from "../../apps/service/observability/served-count";
+import type {
+  CheckedOutPostgresConnection,
+  PostgresTransactionPool,
+  SerializableTransactionOptions,
+} from "./connection";
 import type { CloseablePostgresTransactionPool } from "./postgresjs";
 import { createPostgresFirebaseAuthorizedMemoryServiceProcess } from
   "./firebase-authorized-memory-service-process";
+import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
+import { createPostgresProductionRuntimeReadiness } from "./production-runtime-readiness";
 
 const deferred = <Value>() => {
   let resolve!: (value: Value) => void;
@@ -12,14 +19,32 @@ const deferred = <Value>() => {
   return { promise, resolve };
 };
 
+const readinessRows = (released = true) => POSTGRES_MIGRATIONS.map((migration) => ({
+  server_version_num: "180004",
+  database_generation_released: released,
+  migration_version: String(migration.version),
+  migration_name: migration.name,
+  migration_sha256: migration.sha256,
+}));
+
 const fixture = (input: Readonly<{
-  readiness?: () => Promise<boolean>;
+  readiness?: () => Promise<readonly Record<string, unknown>[]>;
   mcp?: () => Promise<Response> | Response;
   close?: () => Promise<void>;
 }> = {}) => {
   let closeCalls = 0;
   const pool: CloseablePostgresTransactionPool = Object.freeze({
-    withTransaction: async () => { throw new Error("invalid identity must not reach PostgreSQL"); },
+    async withTransaction<Result>(
+      _options: SerializableTransactionOptions,
+      callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+    ): Promise<Result> {
+      return callback({
+        connectionIdentity: Object.freeze({ readiness: true }),
+        query: async <Row extends Record<string, unknown>>() =>
+          (input.readiness?.() ?? readinessRows()) as Promise<readonly Row[]>,
+        execute: async () => { throw new Error("readiness must not mutate PostgreSQL"); },
+      });
+    },
     tryWithSessionAdvisoryLock: async () => { throw new Error("not used"); },
     close: async () => { closeCalls += 1; await input.close?.(); },
   });
@@ -58,7 +83,7 @@ const fixture = (input: Readonly<{
     options: {
       pool,
       service_options,
-      readiness_check: input.readiness ?? (async () => true),
+      readiness: createPostgresProductionRuntimeReadiness(pool, "d".repeat(64)),
     },
     closeCalls: () => closeCalls,
   };
@@ -114,13 +139,13 @@ describe("PostgreSQL Firebase production memory service process kernel", () => {
   });
 
   test("a stop racing readiness can never reopen admission", async () => {
-    const ready = deferred<boolean>();
+    const ready = deferred<readonly Record<string, unknown>[]>();
     const value = fixture({ readiness: () => ready.promise });
     const process = createPostgresFirebaseAuthorizedMemoryServiceProcess(value.options);
     const starting = process.start();
     const stopping = process.stop();
     expect(process.snapshot().phase).toBe("draining");
-    ready.resolve(true);
+    ready.resolve(readinessRows());
     await expect(starting).resolves.toEqual({ kind: "unavailable" });
     await expect(stopping).resolves.toEqual({ kind: "stopped" });
     expect((await process.fetch(request("/v1/memories"))).status).toBe(503);
@@ -152,13 +177,17 @@ describe("PostgreSQL Firebase production memory service process kernel", () => {
       ...value.options,
       pool: fixture().pool,
     })).toThrow("invalid PostgreSQL Firebase memory service process options");
+    expect(() => createPostgresFirebaseAuthorizedMemoryServiceProcess({
+      ...value.options,
+      readiness: createPostgresProductionRuntimeReadiness(value.pool, "e".repeat(64)),
+    })).toThrow("invalid PostgreSQL production readiness options");
     expect(() => createPostgresFirebaseAuthorizedMemoryServiceProcess(
       new Proxy(value.options, {}) as never,
     )).toThrow();
     let getters = 0;
-    const hostile = Object.defineProperty({ ...value.options }, "readiness_check", {
+    const hostile = Object.defineProperty({ ...value.options }, "readiness", {
       enumerable: true,
-      get() { getters += 1; return async () => true; },
+      get() { getters += 1; return value.options.readiness; },
     });
     expect(() => createPostgresFirebaseAuthorizedMemoryServiceProcess(hostile as never)).toThrow();
     expect(getters).toBe(0);
@@ -184,15 +213,31 @@ describe("PostgreSQL Firebase production memory service process kernel", () => {
     const base = fixture();
     let originalClose = 0;
     let replacementClose = 0;
-    const mutablePool = {
+    const mutablePool: {
+      withTransaction: PostgresTransactionPool["withTransaction"];
+      tryWithSessionAdvisoryLock: CloseablePostgresTransactionPool["tryWithSessionAdvisoryLock"];
+      close: () => Promise<void>;
+    } = {
       withTransaction: base.pool.withTransaction,
       tryWithSessionAdvisoryLock: base.pool.tryWithSessionAdvisoryLock,
       close: async () => { originalClose += 1; },
     };
     let readinessCalls = 0;
+    mutablePool.withTransaction = async <Result>(
+      _options: SerializableTransactionOptions,
+      callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+    ): Promise<Result> => {
+      readinessCalls += 1;
+      return callback({
+        connectionIdentity: Object.freeze({ readiness: true }),
+        query: async <Row extends Record<string, unknown>>() =>
+          readinessRows() as unknown as readonly Row[],
+        execute: async () => { throw new Error("not used"); },
+      });
+    };
     const mutableOptions = {
       pool: mutablePool,
-      readiness_check: async () => { readinessCalls += 1; return true; },
+      readiness: createPostgresProductionRuntimeReadiness(mutablePool, "d".repeat(64)),
       service_options: {
         ...base.service_options,
         memory_read: {
@@ -205,7 +250,7 @@ describe("PostgreSQL Firebase production memory service process kernel", () => {
       },
     };
     const process = createPostgresFirebaseAuthorizedMemoryServiceProcess(mutableOptions);
-    mutableOptions.readiness_check = async () => false;
+    mutablePool.withTransaction = async () => { throw new Error("replacement must not run"); };
     mutablePool.close = async () => { replacementClose += 1; };
     await expect(process.start()).resolves.toEqual({ kind: "ready" });
     await expect(process.stop()).resolves.toEqual({ kind: "stopped" });

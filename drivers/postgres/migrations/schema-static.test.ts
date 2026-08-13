@@ -435,6 +435,29 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(gateSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*postgres_restore_admission_/s);
   });
 
+  test("exposes only fixed, read-only production startup readiness to the application role", () => {
+    const readinessSql = migrationSql.find((migration) =>
+      migration.fileName === "0035-production-runtime-readiness.sql")?.sql;
+    expect(readinessSql).toBeDefined();
+    if (readinessSql === undefined) throw new Error("missing_production_runtime_readiness_migration");
+    expect(readinessSql).toContain(
+      "CREATE FUNCTION omi_memory.inspect_production_runtime_readiness(",
+    );
+    expect(readinessSql).toContain("SECURITY DEFINER\nSET search_path = pg_catalog, omi_memory");
+    expect(readinessSql).toContain("current_setting('server_version_num')::text");
+    expect(readinessSql).toContain("FROM omi_memory.platform_schema_migrations AS migration");
+    expect(readinessSql).toContain("FROM omi_memory.postgres_restore_admission_heads AS head");
+    expect(readinessSql).toContain("AND release.state = 'released'");
+    expect(readinessSql).toContain(
+      "REVOKE ALL ON FUNCTION omi_memory.inspect_production_runtime_readiness(text) FROM PUBLIC",
+    );
+    expect(readinessSql).toContain(
+      "GRANT EXECUTE ON FUNCTION omi_memory.inspect_production_runtime_readiness(text)\n  TO omi_platform_application",
+    );
+    expect(readinessSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*\b(?:platform_schema_migrations|postgres_restore_admission_)/s);
+    expect(readinessSql).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
+  });
+
   test("orders every cross-surface foreign key child before its parent", () => {
     const tableSurface = new Map(Object.entries(POSTGRES_DELETION_SURFACE_TABLES)
       .flatMap(([surface, names]) => names.map((name) => [name, surface] as const)));

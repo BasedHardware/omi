@@ -211,4 +211,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0034-internal-worker-restore-gate.sql",
     sha256: "7f23f709a22e5d705279ab094d00c107955d7be3b54995c56c0dacb3a8f7c2cd",
   }),
+  Object.freeze({
+    version: 35,
+    name: "production-runtime-readiness",
+    fileName: "0035-production-runtime-readiness.sql",
+    sha256: "0fa72a8def09da66d2f36be8c9e334877e83595d0150467794ae476e3123d89e",
+  }),
 ]);

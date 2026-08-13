@@ -184,6 +184,7 @@ import { createPostgresMemoryQueryEvaluationOneShotRuntime } from
 import { POSTGRES_MIGRATIONS } from "./migrations/manifest";
 import { runPostgresMigrations } from "./migrations/runner";
 import { createPostgresJsTransactionPool, type CloseablePostgresTransactionPool } from "./postgresjs";
+import { createPostgresProductionRuntimeReadiness } from "./production-runtime-readiness";
 import { authorizationStateDigest, type AuthorityStateRow } from "./transaction";
 import { SqliteLedger } from "../sqlite";
 import { DeterministicFakeModel, type ModelInvokeRequest } from "../model/port";
@@ -837,6 +838,49 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     await headInsert;
     expect(headInsertFinished).toBe(true);
   }, 120_000);
+
+  test("admits startup only for the exact applied manifest and released database generation", async () => {
+    const appRolePool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(
+        options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+        callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+      ) => pool.withTransaction(options, async (connection) => {
+        await connection.query({
+          name: "qualification.production_readiness.set_application_role",
+          text: "SET LOCAL ROLE omi_platform_application",
+          values: [],
+        });
+        return callback(connection);
+      }),
+    });
+
+    const readiness = createPostgresProductionRuntimeReadiness(
+      appRolePool,
+      QUALIFICATION_DATABASE_GENERATION_DIGEST,
+    );
+    await expect(readiness.check()).resolves.toBe(true);
+    await expect(createPostgresProductionRuntimeReadiness(
+      appRolePool,
+      "0".repeat(64),
+    ).check()).resolves.toBe(false);
+
+    await expect(appRolePool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read only" },
+      async (connection) => connection.query({
+        name: "qualification.production_readiness.direct_history_denied",
+        text: "SELECT version FROM omi_memory.platform_schema_migrations",
+        values: [],
+      }),
+    )).rejects.toMatchObject({ code: "42501" });
+    await expect(appRolePool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read only" },
+      async (connection) => connection.query({
+        name: "qualification.production_readiness.direct_release_denied",
+        text: "SELECT database_generation_digest FROM omi_memory.postgres_restore_admission_heads",
+        values: [],
+      }),
+    )).rejects.toMatchObject({ code: "42501" });
+  });
 
   test("Listen capture persists an atomic finalization boundary with exact replay and rollback", async () => {
     const suffix = randomUUID();

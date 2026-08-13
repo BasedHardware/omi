@@ -6,6 +6,10 @@ import {
   type PostgresFirebaseAuthorizedMemoryServiceAppOptions,
 } from "./firebase-authorized-memory-service-app";
 import type { CloseablePostgresTransactionPool } from "./postgresjs";
+import {
+  bindPostgresProductionRuntimeReadiness,
+  type PostgresProductionRuntimeReadiness,
+} from "./production-runtime-readiness";
 
 export type ProductionMemoryServiceProcessPhase =
   | "constructed"
@@ -40,7 +44,7 @@ export interface PostgresFirebaseAuthorizedMemoryServiceProcess {
 export interface PostgresFirebaseAuthorizedMemoryServiceProcessOptions {
   readonly service_options: PostgresFirebaseAuthorizedMemoryServiceAppOptions;
   readonly pool: CloseablePostgresTransactionPool;
-  readonly readiness_check: () => Promise<boolean>;
+  readonly readiness: PostgresProductionRuntimeReadiness;
 }
 
 const fail = (): never => { throw new TypeError("invalid PostgreSQL Firebase memory service process options"); };
@@ -85,7 +89,10 @@ const exactRecordWithOptional = (
   return result;
 };
 
-const nestedPool = (serviceOptions: unknown): unknown => {
+const nestedAuthorization = (serviceOptions: unknown): Readonly<{
+  pool: unknown;
+  databaseGenerationDigest: unknown;
+}> => {
   const service = exactRecordWithOptional(serviceOptions, [
     "counter", "mcp_handler", "memory_read", "now_epoch_seconds",
   ], ["observability"]);
@@ -94,7 +101,10 @@ const nestedPool = (serviceOptions: unknown): unknown => {
     "application_id", "context_ttl_seconds", "database_generation_digest",
     "id_token_adapter", "pool", "project_id", "runtime_mode",
   ]);
-  return authorization["pool"];
+  return Object.freeze({
+    pool: authorization["pool"],
+    databaseGenerationDigest: authorization["database_generation_digest"],
+  });
 };
 
 const json = (body: Readonly<Record<string, string>>, status: number): Response => new Response(
@@ -113,19 +123,24 @@ const unavailable = (): Response => json({ status: "unavailable" }, 503);
 export const createPostgresFirebaseAuthorizedMemoryServiceProcess = (
   optionsValue: PostgresFirebaseAuthorizedMemoryServiceProcessOptions,
 ): PostgresFirebaseAuthorizedMemoryServiceProcess => {
-  const options = exactRecord(optionsValue, ["pool", "readiness_check", "service_options"]);
+  const options = exactRecord(optionsValue, ["pool", "readiness", "service_options"]);
   const poolValue = options["pool"];
   if (poolValue === null || typeof poolValue !== "object" || isProxy(poolValue)) fail();
   const closeDescriptor = Object.getOwnPropertyDescriptor(poolValue, "close");
   if (!closeDescriptor || !("value" in closeDescriptor)
     || typeof closeDescriptor.value !== "function" || isProxy(closeDescriptor.value)) fail();
-  const readinessCheck = options["readiness_check"];
-  if (typeof readinessCheck !== "function" || isProxy(readinessCheck)) fail();
-  if (nestedPool(options["service_options"]) !== poolValue) fail();
+  const authorization = nestedAuthorization(options["service_options"]);
+  if (authorization.pool !== poolValue
+    || typeof authorization.databaseGenerationDigest !== "string") fail();
+  const databaseGenerationDigest = authorization.databaseGenerationDigest as string;
 
   const closeMethod = (closeDescriptor as PropertyDescriptor & { value: () => Promise<void> }).value;
   const close = closeMethod.bind(poolValue);
-  const check = (readinessCheck as () => Promise<boolean>).bind(undefined);
+  const check = bindPostgresProductionRuntimeReadiness(
+    options["readiness"],
+    poolValue as CloseablePostgresTransactionPool,
+    databaseGenerationDigest,
+  );
   const app = createPostgresFirebaseAuthorizedMemoryServiceApp(
     options["service_options"] as PostgresFirebaseAuthorizedMemoryServiceAppOptions,
   );
