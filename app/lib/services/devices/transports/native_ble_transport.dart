@@ -115,7 +115,7 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Future<bool> isConnected() async {
     try {
-      return _hostApi.isPeripheralConnected(_peripheralUuid);
+      return await _hostApi.isPeripheralConnected(_peripheralUuid);
     } catch (e) {
       return false;
     }
@@ -124,7 +124,7 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Future<bool> ping() async {
     try {
-      return _hostApi.isPeripheralConnected(_peripheralUuid);
+      return await _hostApi.isPeripheralConnected(_peripheralUuid);
     } catch (e) {
       return false;
     }
