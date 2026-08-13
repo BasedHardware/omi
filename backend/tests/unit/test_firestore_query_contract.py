@@ -13,6 +13,7 @@ import routers.task_recommendations as task_recommendations_router
 from database.firestore_index_registry import (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    CANONICAL_MEMORY_ATLAS_READ_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
@@ -27,6 +28,9 @@ from database.firestore_index_registry import (
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+    UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
+    UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
     firebase_index_manifest,
 )
 from scripts import firestore_query_coverage, generate_firestore_indexes
@@ -312,6 +316,7 @@ def test_generated_firestore_manifest_matches_the_checked_in_contract():
         STALE_IN_PROGRESS_CONVERSATIONS_QUERY.index_requirement.to_manifest() == expected_conversations_status_finished
     )
     assert firebase_index_manifest()['indexes'].count(expected_conversations_status_finished) == 1
+    assert CANONICAL_MEMORY_ATLAS_READ_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
 
 
 @pytest.mark.slow
@@ -334,6 +339,9 @@ def test_query_inventory_registers_the_migrated_query_shapes():
         EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
         ACTIVE_ATTENTION_OVERRIDE_QUERY,
         STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+        UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+        UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
+        UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     ):
         matching = [query for query in report['queries'] if query['registered_spec'] == spec.identifier]
         assert len(matching) == 1

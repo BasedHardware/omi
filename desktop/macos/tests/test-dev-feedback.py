@@ -92,15 +92,15 @@ class DevFeedbackTests(unittest.TestCase):
 
     def test_watch_continues_after_a_failed_test_and_coalesces_saves(self) -> None:
         command = dev_feedback.test_command_for(self.desktop_root, "python", "tests/unit/test_desktop_chat.py")
-        calls: list[tuple[tuple[str, ...], Path, bool]] = []
+        calls: list[tuple[tuple[str, ...], Path]] = []
         output: list[str] = []
         exit_codes = iter((1, 0))
         snapshots = iter(("before-save", "first-save", "second-save", "second-save", "second-save"))
         clock = FakeClock()
 
-        def runner(command_line: tuple[str, ...], *, cwd: Path, check: bool) -> SimpleNamespace:
-            calls.append((command_line, cwd, check))
-            return SimpleNamespace(returncode=next(exit_codes))
+        def runner(command_line: tuple[str, ...], *, cwd: Path) -> SimpleNamespace:
+            calls.append((command_line, cwd))
+            return SimpleNamespace(returncode=next(exit_codes), stdout="Executed 2 tests, with 0 failures\n")
 
         def snapshotter(_paths: object) -> str:
             return next(snapshots)
@@ -119,11 +119,85 @@ class DevFeedbackTests(unittest.TestCase):
         )
 
         self.assertEqual(result, 0)
-        self.assertEqual(calls, [(command.command, command.cwd, False), (command.command, command.cwd, False)])
+        self.assertEqual(calls, [(command.command, command.cwd), (command.command, command.cwd)])
         self.assertTrue(any("FAIL (exit 1)" in line for line in output))
         self.assertTrue(any("Iteration 2: PASS" in line for line in output))
         self.assertEqual(sum("Change detected" in line for line in output), 1)
         self.assertEqual(clock.delays, [0.1, 0.1, 0.1, 0.1])
+
+    def test_a_filter_matching_no_tests_fails_despite_a_zero_exit(self) -> None:
+        command = dev_feedback.test_command_for(self.desktop_root, "swift", "ThisClassDoesNotExistAnywhere_XYZ")
+        output: list[str] = []
+
+        def runner(_command_line: tuple[str, ...], *, cwd: Path) -> SimpleNamespace:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=(
+                    "\t Executed 0 tests, with 0 failures (0 unexpected) in 0.000 seconds\n"
+                    "✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.\n"
+                ),
+            )
+
+        status = dev_feedback.emit_iteration_result(command, 1, runner=runner, clock=FakeClock(), emit=output.append)
+
+        self.assertEqual(status, 1)
+        self.assertTrue(any("matched 0 tests" in line for line in output))
+        self.assertFalse(any("PASS" in line for line in output))
+
+    def test_an_executed_test_still_passes_when_swift_testing_reports_no_suites(self) -> None:
+        command = dev_feedback.test_command_for(self.desktop_root, "swift", "TasksStoreDeletedLaneRetirementTests")
+        output: list[str] = []
+
+        def runner(_command_line: tuple[str, ...], *, cwd: Path) -> SimpleNamespace:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=(
+                    "\t Executed 2 tests, with 0 failures (0 unexpected) in 0.046 seconds\n"
+                    "✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.\n"
+                ),
+            )
+
+        status = dev_feedback.emit_iteration_result(command, 1, runner=runner, clock=FakeClock(), emit=output.append)
+
+        self.assertEqual(status, 0)
+        self.assertTrue(any("PASS" in line for line in output))
+
+    def test_a_swift_run_that_reports_no_test_count_fails_instead_of_passing(self) -> None:
+        command = dev_feedback.test_command_for(self.desktop_root, "swift", "WidgetTests")
+        output: list[str] = []
+
+        def runner(_command_line: tuple[str, ...], *, cwd: Path) -> SimpleNamespace:
+            return SimpleNamespace(returncode=0, stdout="Build complete!\n")
+
+        status = dev_feedback.emit_iteration_result(command, 1, runner=runner, clock=FakeClock(), emit=output.append)
+
+        self.assertEqual(status, 1)
+        self.assertTrue(any("no executed-test count reported" in line for line in output))
+
+    def test_a_pytest_run_passes_on_its_exit_code_without_a_swift_test_count(self) -> None:
+        command = dev_feedback.test_command_for(self.desktop_root, "python", "tests/unit/test_desktop_chat.py")
+        output: list[str] = []
+
+        def runner(_command_line: tuple[str, ...], *, cwd: Path) -> SimpleNamespace:
+            return SimpleNamespace(returncode=0, stdout="1 passed in 0.02s\n")
+
+        status = dev_feedback.emit_iteration_result(command, 1, runner=runner, clock=FakeClock(), emit=output.append)
+
+        self.assertEqual(status, 0)
+        self.assertTrue(any("PASS" in line for line in output))
+
+    def test_streaming_runner_echoes_and_captures_the_test_output(self) -> None:
+        stream = io.StringIO()
+
+        result = dev_feedback.run_streaming(
+            (sys.executable, "-c", "print('Executed 0 tests, with 0 failures'); raise SystemExit(0)"),
+            cwd=self.desktop_root,
+            stream=stream,
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("Executed 0 tests", stream.getvalue())
+        self.assertEqual(dev_feedback.executed_test_count(result.stdout), 0)
 
     def test_rejects_an_empty_filter(self) -> None:
         with self.assertRaisesRegex(ValueError, "test filter must not be empty"):

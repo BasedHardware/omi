@@ -24,25 +24,26 @@ def test_loads_default_gateway_config():
     assert lane.last_known_good == LKG_ROUTE
     assert config.route_artifacts[ACTIVE_ROUTE].content_digest.startswith('sha256:')
     assert config.feature_bundles['chat_extraction.requires_context'].lane_id == LANE_ID
-    assert config.route_artifacts[ACTIVE_ROUTE].primary.model == 'openai/gpt-5.6-luna'
+    assert config.route_artifacts[ACTIVE_ROUTE].primary.model == 'gpt-5.6-luna'
     assert config.route_artifacts[ACTIVE_ROUTE].provider_options['reasoning_effort'] == 'low'
 
 
 def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     config = load_gateway_config(prod_mode=True)
 
-    assert get_model('conv_discard') == 'gpt-5.6-luna'
+    assert get_model('conv_discard') == 'gpt-5-nano'
     assert get_model('memories') == 'gpt-5.6-luna'
     assert get_model('fair_use') == 'gpt-5.6-luna'
-    assert get_model('chat_agent') == 'gpt-5.6-luna'
+    assert get_model('chat_agent') == 'claude-sonnet-4-6'
 
-    assert config.route_artifacts['route.conv_discard.model_config.001'].primary.model == 'openai/gpt-5.6-luna'
-    assert config.route_artifacts['route.memories.model_config.001'].primary.model == 'openai/gpt-5.6-luna'
-    assert config.route_artifacts['route.fair_use.model_config.001'].primary.model == 'openai/gpt-5.6-luna'
-    assert config.route_artifacts['route.chat_agent.model_config.001'].primary.provider == 'openrouter'
-    assert config.route_artifacts['route.chat_agent.model_config.001'].primary.model == 'openai/gpt-5.6-luna'
+    assert config.route_artifacts['route.conv_discard.model_config.001'].primary.model == 'gpt-5-nano'
+    assert config.route_artifacts['route.memories.model_config.001'].primary.model == 'gpt-5.6-luna'
+    assert config.route_artifacts['route.fair_use.model_config.001'].primary.model == 'gpt-5.6-luna'
+    assert config.route_artifacts['route.chat_agent.model_config.001'].primary.provider == 'openai'
+    assert config.route_artifacts['route.chat_agent.model_config.001'].primary.model == 'gpt-5.6-luna'
     assert config.route_artifacts['route.memory_l2.model_config.001'].provider_options['reasoning_effort'] == 'medium'
     assert config.route_artifacts['route.chat_agent.model_config.001'].provider_options == {
+        'extra_body': {'prompt_cache_retention': '24h'},
         'reasoning_effort': 'none',
     }
     chat_agent_lane = config.lanes['omi:auto:chat-agent']
@@ -55,25 +56,44 @@ def test_memory_l2_gateway_lane_resolves_to_luna():
     config = load_gateway_config(prod_mode=True)
 
     assert get_model('memory_l2') == 'gpt-5.6-luna'
-    assert get_provider('memory_l2') == 'openrouter'
+    assert get_provider('memory_l2') == 'openai'
     lane = config.lanes['omi:auto:memory-l2']
     route = config.route_artifacts[lane.active_route]
     assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
-    assert route.primary.model == 'openai/gpt-5.6-luna'
-    assert route.primary.provider == 'openrouter'
+    assert route.primary.model == 'gpt-5.6-luna'
+    assert route.primary.provider == 'openai'
+
+
+def test_desktop_proactive_lanes_are_pinned_and_structured():
+    config = load_gateway_config(prod_mode=True)
+
+    extraction = config.lanes['omi:auto:desktop-proactive-extraction']
+    reasoning = config.lanes['omi:auto:desktop-proactive-reasoning']
+    extraction_route = config.route_artifacts[extraction.active_route]
+    reasoning_route = config.route_artifacts[reasoning.active_route]
+
+    assert extraction.capabilities.structured_output == StructuredOutputMode.JSON_SCHEMA
+    assert reasoning.capabilities.structured_output == StructuredOutputMode.JSON_SCHEMA
+    assert extraction_route.primary.model == 'gpt-5-nano'
+    assert extraction_route.provider_options == {
+        'extra_body': {'prompt_cache_retention': '24h'},
+        'reasoning_effort': 'minimal',
+    }
+    assert reasoning_route.primary.model == 'gpt-5.6-luna'
+    assert reasoning_route.provider_options == {
+        'extra_body': {'prompt_cache_retention': '24h'},
+        'reasoning_effort': 'low',
+    }
 
 
 def test_translation_uses_the_gateway_translation_capability():
     config = load_gateway_config(prod_mode=True)
 
-    assert get_model('translation') == 'gpt-5.6-luna'
-    assert get_provider('translation') == 'openrouter'
+    assert get_model('translation') == 'gemini-2.5-flash-lite'
+    assert get_provider('translation') == 'gemini'
     lane = config.lanes['omi:auto:translation']
     assert lane.capabilities.translation is True
     assert lane.capabilities.structured_output.value == 'json_schema'
-    route = config.route_artifacts[lane.active_route]
-    assert route.primary.provider == 'openrouter'
-    assert route.primary.model == 'openai/gpt-5.6-luna'
 
 
 def test_translation_capability_requires_json_schema_output():

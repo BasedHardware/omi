@@ -19,7 +19,6 @@ from pydantic import SecretStr
 
 from utils.llm.gateway_client import GatewayContextChatOpenAI, get_llm_gateway_base_url, get_llm_gateway_service_token
 from utils.llm.gateway_resilience import gateway_transport_timeout
-from utils.llm.openrouter_model_names import openrouter_provider_model_name
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -39,6 +38,7 @@ class OpenAICompatibleProviderConfig:
     api_key_env: str
     base_url: Optional[str] = None
     default_headers: Dict[str, str] = field(default_factory=dict)
+    prefix_google_models: bool = False
 
 
 OPENAI_COMPATIBLE_PROVIDERS: Dict[str, OpenAICompatibleProviderConfig] = {
@@ -48,10 +48,17 @@ OPENAI_COMPATIBLE_PROVIDERS: Dict[str, OpenAICompatibleProviderConfig] = {
         api_key_env='OPENROUTER_API_KEY',
         base_url="https://openrouter.ai/api/v1",
         default_headers={"X-Title": "Omi Chat"},
+        prefix_google_models=True,
     ),
 }
 
 _llm_cache: Dict[tuple, Any] = {}
+
+
+def get_openai_api_key() -> str:
+    """Return the platform OpenAI credential at the provider boundary."""
+
+    return os.environ.get(OPENAI_COMPATIBLE_PROVIDERS['openai'].api_key_env, '').strip()
 
 
 def _cache_key(provider: str, model_name: str, streaming: bool, options: Dict[str, Any]) -> tuple:
@@ -60,7 +67,9 @@ def _cache_key(provider: str, model_name: str, streaming: bool, options: Dict[st
 
 
 def _api_model_name(provider_config: OpenAICompatibleProviderConfig, model_name: str) -> str:
-    return openrouter_provider_model_name(provider_config.name, model_name)
+    if provider_config.prefix_google_models and model_name.startswith('gemini'):
+        return f'google/{model_name}'
+    return model_name
 
 
 def get_or_create_openai_compatible_llm(

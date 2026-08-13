@@ -1,6 +1,6 @@
 # macOS Release-Health Metric Specification
 
-**Status:** active · **Schema version:** 3 · **Owner:** desktop/macos · **Tracking:** [#10425](https://github.com/BasedHardware/omi/issues/10425)
+**Status:** active · **Schema version:** 4 · **Owner:** desktop/macos · **Tracking:** [#10425](https://github.com/BasedHardware/omi/issues/10425)
 
 This is the **authoritative query contract** for macOS release-health telemetry. It
 defines, per signal, the exact numerator, denominator, time window, minimum cohort,
@@ -37,9 +37,9 @@ build-attributable via `options.releaseName`/`options.dist` set at `SentrySDK.st
 - **Comparison basis.** Build-vs-build and beta-vs-stable use the same window and
   denominator definition; a delta is a regression only if both cohorts meet the
   minimum sample and the direction is adverse for the outcome of interest.
-- **Privacy.** Numerators/denominators are bounded dimensions only. No transcript,
-  audio, prompt, device identifier, or free-form local error text is emitted to
-  PostHog or Sentry tags (enforced by `DesktopDiagnosticsManagerTests` /
+- **Privacy.** Custom metric payloads use bounded dimensions only. No transcript,
+  audio, prompt, custom device identifier, or free-form local error text is emitted
+  in PostHog properties or Sentry tags (enforced by `DesktopDiagnosticsManagerTests` /
   `TelemetryPrivacyBoundaryTests`).
 
 ## Metrics
@@ -143,12 +143,58 @@ the release-evidence layer (`#9523`) will consume.
 - **Privacy:** native events carry only `update_channel`/`bundle_id` tags +
   `diagnostic_area`/`failure_class`; no user content.
 
+### Proactive advice delivery — doctor metric `proactive_delivery`
+
+- **Availability source:** unique users emitting `Advice Generated`, divided by
+  macOS DAU in the same rolling PT24H window. Both sides are scoped to
+  `$app_namespace = com.omi.computer-macos` and `$os_name = macOS`.
+- **Delivery source:** `Advice Delivery Outcome` terminal events. Eligible delivery
+  outcomes are `delivered` plus `failed`; preference/policy suppressions are excluded.
+  With at least 10 eligible outcomes, exact-zero delivered outcomes is unhealthy.
+- **Alarm:** exact-zero advice users with at least 50 macOS DAU, or exact-zero
+  delivered eligible outcomes, is unhealthy. Fewer than 50 DAU or fewer than 10
+  eligible delivery outcomes is `unknown`, never success or failure. The scheduled
+  `desktop_release_doctor.yml` job runs hourly, keeps one durable GitHub issue
+  open while unhealthy, closes it after measured recovery, and treats a broken
+  PostHog query as an alarm rather than silently passing.
+- **Monitor credentials:** the scheduled job reads the repository Actions secret
+  `POSTHOG_PERSONAL_API_KEY` and Actions variables `POSTHOG_PROJECT_ID` and `POSTHOG_HOST`. It deliberately
+  does not use the approval-protected `prod` environment, which would leave hourly
+  checks waiting for a human. Missing configuration produces a neutral `unconfigured`
+  result and no health alarm because no measurement occurred. A configured query that
+  fails produces `monitor_error` and opens the durable issue; neither state turns the metric green.
+- **Delivery outcomes:** each `Advice Generated` event carries an opaque
+  process-local `delivery_id`. `Advice Delivery Outcome` records a closed
+  `outcome` (`delivered`, `suppressed`, or `failed`) and bounded `reason`.
+  Notification preferences suppress delivery only; they do not suppress analysis.
+  A queued floating-bar item is intermediate and MUST NOT count as delivered until
+  the presentation boundary accepts it.
+- **Privacy:** the query exports aggregate counts only. Neither event's custom
+  payload contains advice text, screen content, prompts, transcript, or a device
+  identifier. PostHog's standard `person_id` is used in-place only for aggregate
+  cardinality and is not returned by the monitor.
+
 ### Updater delivery — doctor metric `updater_delivery`
 
-- **Source:** PostHog updater events (`source_app_version`, `source_app_build`,
-  `update_channel`, `target_version`, `target_build`).
-- **Numerator:** successful installs (`update_installed`). **Denominator:** started
-  update attempts. **Window:** PT24H. **Minimum cohort:** 30 attempts per build.
+- **Source:** `Update Check Started` joined to its single terminal
+  `Update Check Completed` on opaque `attempt_id`. Both carry trigger, source app
+  version/build, and a normalized update channel.
+- **Failure numerator:** terminal `result = failed`. `no_update` and
+  `update_available` are successful check outcomes. `network_unavailable` is an
+  automatic background check whose URL error is specifically
+  `NSURLErrorNotConnectedToInternet` (-1009); it is reported separately and is not
+  an updater defect. Timeouts, DNS, and server reachability errors remain failures so
+  a real update-service outage is not masked. A manual check while offline remains
+  `failed` so the user receives feedback. The legacy
+  `Update Check Failed` event remains diagnostic-only and MUST NOT be used as a
+  denominator or user-impact rate.
+- **Denominator:** distinct started attempts. Missing terminals are a separate
+  instrumentation-health defect (`callback_missing` when the next Sparkle-admitted
+  check closes a stale identity). Starts are recorded only at Sparkle's serialized
+  `mayPerform` boundary, and the cycle-finish delegate is the final fallback for paths
+  that omit an abort callback. Rejected requests create no phantom attempts, and
+  duplicate callbacks cannot create extra terminals.
+- **Window:** PT24H. **Minimum cohort:** 30 attempts per build.
 
 ### Recording (client input)
 
@@ -183,7 +229,7 @@ emitted (enforced by `MemoryAssistantTelemetryTests` and
   intentionally silent.
 - **Activation metric:** proactive extraction users (`Memory Extracted`) ÷
   monitoring users (`Monitoring Started`) with `notifications_enabled = true`,
-  scoped `$app_namespace='com.omi.computer-macos'` AND `$os='macOS'`. Stop
+  scoped `$app_namespace='com.omi.computer-macos'` AND `$os_name='macOS'`. Stop
   dividing extraction by recording users.
 
 #### 2. Proactive analysis-outcome distribution — `Memory Assistant Analysis Run`

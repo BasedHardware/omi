@@ -118,15 +118,15 @@ private func transitionContextTestOwner(to ownerID: String?) async {
         await MainActor.run {
           NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
         }
-      }
-    ) { defaults in
-      defaults.removeObject(forKey: .automationOwnerOverride)
-      if let ownerID {
-        defaults.set(ownerID, forKey: .authUserId)
-      } else {
-        defaults.removeObject(forKey: .authUserId)
-      }
-    }
+      },
+      { defaults in
+        defaults.removeObject(forKey: .automationOwnerOverride)
+        if let ownerID {
+          defaults.set(ownerID, forKey: .authUserId)
+        } else {
+          defaults.removeObject(forKey: .authUserId)
+        }
+      })
   } catch {
     XCTFail("owner transition failed: \(error)")
   }
@@ -546,6 +546,50 @@ final class TaskContextualResurfacingTests: XCTestCase {
   }
 
   @MainActor
+  func testLegacyDebounceIsCancelledWhenContextBucketsBecomesEnabled() async throws {
+    let client = FakeTaskContextualResurfacingClient()
+    let flag = Box(false)
+    let service = TaskContextualResurfacingService(
+      client: client,
+      debounceInterval: 60,
+      ownerIDProvider: { "owner-1" },
+      contextBucketsEnabled: { flag.value }
+    )
+    let event = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "legacy debounce before flag flip",
+        subject: TaskContextSubject(kind: .task, id: "task-flag", workstreamID: nil),
+        occurredAt: baseDate
+      ))
+
+    await service.observe(event)
+    var pending = await service.pendingWorkstreamCount()
+    XCTAssertEqual(pending, 1)
+    flag.value = true
+    // Flag-on observe must cancel the pending legacy debounce immediately.
+    await service.observe(event)
+    pending = await service.pendingWorkstreamCount()
+    XCTAssertEqual(pending, 0)
+    await service.flush()
+    XCTAssertEqual(client.controlRequests, 0)
+    XCTAssertEqual(client.evaluations.count, 0)
+    XCTAssertEqual(client.snapshots.count, 0)
+
+    flag.value = false
+    await service.observe(event)
+    pending = await service.pendingWorkstreamCount()
+    XCTAssertEqual(pending, 1)
+    flag.value = true
+    // A mid-debounce flag flip must also fail closed inside flush.
+    await service.flush()
+    pending = await service.pendingWorkstreamCount()
+    XCTAssertEqual(pending, 0)
+    XCTAssertEqual(client.controlRequests, 0)
+    XCTAssertEqual(client.evaluations.count, 0)
+  }
+
+  @MainActor
   func testOwnerSwitchDuringControlAbortsSnapshotEvaluationAndInterruption() async throws {
     let client = FakeTaskContextualResurfacingClient()
     let ownerID = Box("owner-a")
@@ -706,6 +750,44 @@ final class TaskContextualResurfacingTests: XCTestCase {
   }
 
   @MainActor
+  func testEligibilityDoesNotConsumeFrequencyUntilPresentation() async throws {
+    await transitionContextTestOwner(to: "notification-presentation-owner")
+    let snapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    let priorFrequency = UserDefaults.standard.object(
+      forKey: NotificationService.frequencyDefaultsKey)
+    let priorActiveStart = UserDefaults.standard.object(
+      forKey: NotificationService.activePeriodStartDefaultsKey)
+    let priorActiveEnd = UserDefaults.standard.object(
+      forKey: NotificationService.activePeriodEndDefaultsKey)
+    defer {
+      Self.restoreDefault(priorFrequency, key: NotificationService.frequencyDefaultsKey)
+      Self.restoreDefault(priorActiveStart, key: NotificationService.activePeriodStartDefaultsKey)
+      Self.restoreDefault(priorActiveEnd, key: NotificationService.activePeriodEndDefaultsKey)
+    }
+    UserDefaults.standard.set(3, forKey: NotificationService.frequencyDefaultsKey)
+    UserDefaults.standard.set(0, forKey: NotificationService.activePeriodStartDefaultsKey)
+    UserDefaults.standard.set(0, forKey: NotificationService.activePeriodEndDefaultsKey)
+
+    XCTAssertTrue(
+      service.proactiveNotificationEligibleForTesting(
+        assistantId: "insight", authorizationSnapshot: snapshot, now: baseDate))
+    XCTAssertTrue(
+      service.proactiveNotificationEligibleForTesting(
+        assistantId: "insight", authorizationSnapshot: snapshot,
+        now: baseDate.addingTimeInterval(1)),
+      "a preflight that never paints must not consume the user's frequency window")
+
+    service.recordProactiveNotificationPresentedForTesting(
+      assistantId: "context-director", authorizationSnapshot: snapshot, now: baseDate)
+    XCTAssertFalse(
+      service.proactiveNotificationEligibleForTesting(
+        assistantId: "insight", authorizationSnapshot: snapshot,
+        now: baseDate.addingTimeInterval(1)),
+      "a visible director notification must advance the shared global frequency clock")
+  }
+
+  @MainActor
   func testStaleContextualInterruptionCannotConsumeLedgerMetadataOrOwnerBThrottle() async throws {
     await transitionContextTestOwner(to: "notification-owner-a")
     let ownerASnapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
@@ -720,7 +802,13 @@ final class TaskContextualResurfacingTests: XCTestCase {
 
     let priorFrequency = UserDefaults.standard.object(
       forKey: NotificationService.frequencyDefaultsKey)
+    let priorActiveStart = UserDefaults.standard.object(
+      forKey: NotificationService.activePeriodStartDefaultsKey)
+    let priorActiveEnd = UserDefaults.standard.object(
+      forKey: NotificationService.activePeriodEndDefaultsKey)
     UserDefaults.standard.set(3, forKey: NotificationService.frequencyDefaultsKey)
+    UserDefaults.standard.set(0, forKey: NotificationService.activePeriodStartDefaultsKey)
+    UserDefaults.standard.set(0, forKey: NotificationService.activePeriodEndDefaultsKey)
     XCTAssertTrue(
       service.allowProactiveNotificationForTesting(
         assistantId: "task",
@@ -751,6 +839,20 @@ final class TaskContextualResurfacingTests: XCTestCase {
       UserDefaults.standard.set(priorFrequency, forKey: NotificationService.frequencyDefaultsKey)
     } else {
       UserDefaults.standard.removeObject(forKey: NotificationService.frequencyDefaultsKey)
+    }
+    if let priorActiveStart {
+      UserDefaults.standard.set(
+        priorActiveStart, forKey: NotificationService.activePeriodStartDefaultsKey)
+    } else {
+      UserDefaults.standard.removeObject(
+        forKey: NotificationService.activePeriodStartDefaultsKey)
+    }
+    if let priorActiveEnd {
+      UserDefaults.standard.set(
+        priorActiveEnd, forKey: NotificationService.activePeriodEndDefaultsKey)
+    } else {
+      UserDefaults.standard.removeObject(
+        forKey: NotificationService.activePeriodEndDefaultsKey)
     }
   }
 
@@ -1285,5 +1387,13 @@ final class TaskContextualResurfacingTests: XCTestCase {
       now: now ?? baseDate,
       calendar: calendar
     )
+  }
+
+  private static func restoreDefault(_ value: Any?, key: String) {
+    if let value {
+      UserDefaults.standard.set(value, forKey: key)
+    } else {
+      UserDefaults.standard.removeObject(forKey: key)
+    }
   }
 }

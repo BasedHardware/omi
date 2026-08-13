@@ -52,6 +52,8 @@ model_config_features:
     structured_output:
       - chat_extraction
       - conv_app_select
+      - desktop_proactive_extraction
+      - desktop_proactive_reasoning
       - external_structure
       - proactive_notification
       - translation
@@ -70,14 +72,21 @@ model_config_features:
     pinned:
       - fair_use
   gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, native Vertex Gemini, openrouter, perplexity, and anthropic.
-  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway and does not retain a direct-provider fallback; managed product text features resolve to OpenRouter openai/gpt-5.6-luna (including former Gemini-lite and wrapped_analysis routes); web_search remains Perplexity; residual gateway Gemini native Vertex paths are out of model_config; Gemini BYOK remains unsupported and fails closed; OpenAI-family BYOK on OpenRouter-hosted routes remaps to direct OpenAI keys.
+  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway and does not retain a direct-provider fallback; gateway Gemini uses native Vertex generateContent authenticated by GKE Workload Identity; Gemini BYOK remains unsupported and fails closed.
   test_guardrail_coverage:
     - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
     - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
 surfaces:
+  - surface: desktop_context_proactivity
+    code_path: backend/routers/desktop_proactivity.py:proactive_completion
+    current_provider_model: gateway lanes desktop_proactive_extraction and desktop_proactive_reasoning; direct OpenAI only when OMI_ENV_STAGE is dev or local and the gateway URL is absent
+    request_shape: non-streaming strict structured output with optional explicit prompt caching on reasoning
+    gateway_lane_capability_needed: OpenAI-compatible structured-output lanes with explicit-cache support for reasoning
+    migration_status: acknowledged_direct_dev_recovery_surface; production remains gateway-only and fails closed, while dev and local record shared fallback telemetry when recovering through direct OpenAI
+    test_guardrail_coverage: backend/tests/unit/test_desktop_proactivity.py and backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: public_shared_conversation_chat
     code_path: backend/routers/public_shared_conversation_chat.py:public_shared_conversation_chat
-    current_provider_model: gateway-only openrouter openai/gpt-5.6-luna
+    current_provider_model: gateway-only openai/gpt-5-nano
     request_shape: non-streaming plain chat with server-resolved shared transcript, at most eight user/assistant history entries, and no tools or retrieval
     gateway_lane_capability_needed: dedicated non-streaming no-tools omi:auto:public-shared-conversation-chat lane
     migration_status: gateway_only_trusted_frontend_bff
@@ -91,10 +100,10 @@ surfaces:
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: anthropic_agentic_chat
     code_path: backend/utils/llm/gateway_anthropic.py:_GatewayAnthropicStream
-    current_provider_model: openrouter/openai/gpt-5.6-luna via omi:auto:chat-agent
+    current_provider_model: anthropic/chat_agent
     request_shape: streaming, native tool calling, server-side web search
-    gateway_lane_capability_needed: OpenAI-compatible chat-completions (or anthropic.messages BYOK) with streaming and tools on omi:auto:chat-agent
-    migration_status: gateway_only_fail_closed; managed chat_agent is OpenRouter Luna; Anthropic transport remains for Anthropic BYOK / specialist aliases; transport failures and an open circuit return a typed gateway-unavailable error without constructing a direct Anthropic client for managed traffic
+    gateway_lane_capability_needed: native anthropic.messages surface with streaming and tools on omi:auto:chat-agent
+    migration_status: gateway_only_fail_closed; transport failures and an open circuit return a typed gateway-unavailable error without constructing or calling a direct Anthropic client
     test_guardrail_coverage: backend/tests/unit/test_gateway_anthropic_client.py
   - surface: perplexity_web_search_tool
     code_path: backend/utils/retrieval/tools/perplexity_tools.py:perplexity_web_search_tool
@@ -115,14 +124,14 @@ surfaces:
     current_provider_model: openai/gpt-5.6-luna
     request_shape: streaming vision chat completion
     gateway_lane_capability_needed: gateway-owned vision chat lane or file-chat replacement retrieval path
-    migration_status: inventoried_direct_file_lifecycle_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in serving configuration does not permit the exception
+    migration_status: acknowledged_direct_file_lifecycle_surface; intentionally remains direct during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and records direct-exception telemetry without raising (PR #11419)
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: file_chat_assistants
     code_path: backend/utils/other/chat_file.py:FileChatTool
-    current_provider_model: openai/gpt-5.6-luna with Assistants, Threads, Files, File Search
+    current_provider_model: openai/gpt-4.1 with Assistants, Threads, Files, File Search
     request_shape: file upload, assistants, file_search, streaming run deltas
     gateway_lane_capability_needed: gateway-owned file/assistant lifecycle or replacement retrieval path
-    migration_status: inventoried_direct_file_lifecycle_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in serving configuration does not permit the exception
+    migration_status: acknowledged_direct_file_lifecycle_surface; intentionally remains direct during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and records direct-exception telemetry without raising (PR #11419)
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: omni_realtime_relay
     code_path: backend/routers/omni_relay.py
@@ -133,49 +142,49 @@ surfaces:
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: fair_use_classifier
     code_path: backend/utils/llm/fair_use_classifier.py:classify_user_purpose
-    current_provider_model: openrouter/openai/gpt-5.6-luna fair_use pinned feature
+    current_provider_model: openai/fair_use pinned feature
     request_shape: async plain chat JSON
     gateway_lane_capability_needed: generated omi:auto:fair-use lane
     migration_status: get_llm_routed
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: production_like_memory_ingestion
     code_path: backend/utils/memory_ingestion/adapters/production_like_model.py:_memory_llm
-    current_provider_model: openrouter/openai/gpt-5.6-luna memories feature
+    current_provider_model: openai/memories feature
     request_shape: parser chain
     gateway_lane_capability_needed: generated omi:auto:memories lane
     migration_status: get_llm_routed
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: knowledge_graph_extract
     code_path: backend/routers/knowledge_graph.py:extract_knowledge_graph
-    current_provider_model: openrouter/openai/gpt-5.6-luna knowledge_graph feature
+    current_provider_model: openai/gpt-5.6-luna knowledge_graph feature
     request_shape: return-only entity/edge extraction JSON
     gateway_lane_capability_needed: generated omi:auto:knowledge-graph lane
     migration_status: get_llm_routed; desktop onboarding should call this instead of inventing graphs via chat_agent
     test_guardrail_coverage: backend/tests/unit/test_knowledge_graph_extract_route.py
   - surface: memories_extract
     code_path: backend/routers/memories.py:extract_memory_log
-    current_provider_model: openrouter/openai/gpt-5.6-luna memories feature
+    current_provider_model: openai/gpt-5.6-luna memories feature
     request_shape: return-only memory-log JSON (memories + profile)
     gateway_lane_capability_needed: generated omi:auto:memories lane
     migration_status: get_llm_routed; desktop onboarding/import should call this instead of Haiku chat completions
     test_guardrail_coverage: backend/tests/unit/test_memories_extract_route.py
   - surface: connector_synthesis
     code_path: backend/routers/integrations.py:synthesize_connector_data
-    current_provider_model: openrouter/openai/gpt-5.6-luna memories feature
+    current_provider_model: openai/gpt-5.6-luna memories feature
     request_shape: return-only calendar/gmail/notes memories + tasks + profile
     gateway_lane_capability_needed: generated omi:auto:memories lane
     migration_status: get_llm_routed; desktop connector importers should call this instead of Haiku chat completions
     test_guardrail_coverage: backend/tests/unit/test_connector_synthesis_route.py
   - surface: conversation_topic
     code_path: backend/routers/conversations.py:generate_conversation_topic_endpoint
-    current_provider_model: openrouter/openai/gpt-5.6-luna conv_structure feature
+    current_provider_model: openai/gpt-5.6-luna conv_structure feature
     request_shape: return-only emoji + short title for a finished transcript
     gateway_lane_capability_needed: generated omi:auto:conv-structure lane
     migration_status: get_llm_routed; desktop clients should call this instead of Haiku chat completions
     test_guardrail_coverage: backend/tests/unit/test_conversation_topic_route.py
   - surface: ai_user_profile_synthesis
     code_path: backend/routers/users.py:synthesize_ai_profile
-    current_provider_model: openrouter/openai/gpt-5.6-luna memories feature
+    current_provider_model: openai/gpt-5.6-luna memories feature
     request_shape: return-only two-stage user profile document from desktop source lines
     gateway_lane_capability_needed: generated omi:auto:memories lane
     migration_status: get_llm_routed; desktop assistants should call this instead of Haiku chat completions
