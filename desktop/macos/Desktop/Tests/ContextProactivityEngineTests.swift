@@ -61,6 +61,31 @@ final class ContextProactivityEngineTests: XCTestCase {
     }
   }
 
+  func testFactExpiringAtTheEvaluationBoundaryIsOmittedFromSnapshotAndGrounding() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE bucket_facts SET expiresAt = ? WHERE id = 'current'",
+        arguments: [now])
+
+      let snapshot = try XCTUnwrap(ContextBucketStore.snapshot(in: db, bucketID: "bucket-a", now: now))
+      XCTAssertFalse(
+        snapshot.validatedFacts.contains { $0.hasPrefix("fact:current ") },
+        "expiresAt == now is already expired at the evaluation boundary")
+      XCTAssertEqual(snapshot.notifyWorthiness, 1, "the still-live fact must keep the bucket eligible")
+      XCTAssertEqual(
+        try ContextBucketStore.validatedFactIDs(
+          ["fact:current"],
+          snapshotFacts: ["fact:current current statement"],
+          bucketID: "bucket-a",
+          now: now,
+          in: db),
+        [],
+        "a cited fact must be revalidated against the same expiry boundary")
+    }
+  }
+
   func testSnapshotExcludesExpiredValidatedFactsBeforeGarbageCollection() throws {
     let queue = try contextBucketDatabase()
     let now = Date(timeIntervalSince1970: 1_725_000_000)
