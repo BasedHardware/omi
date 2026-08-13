@@ -173,7 +173,12 @@ describe("agent-run redacted export and hermetic replay", () => {
       })),
     });
     const productionExport = exportAgentRunTrace(productionIds.store, productionIds.runId, { buildId: "platform-test-build" });
-    expect(productionExport.bytes).not.toContain(productionIds.runId);
+    for (const raw of [
+      productionIds.runId,
+      "550e8400-e29b-41d4-a716-446655440000",
+      "1d7f4b24-5c7e-4c46-9f32-7eb87f4d7c2a",
+      "8f5e2c15-8a4c-4d79-9d0b-8d2e4f7b1a33",
+    ]) expect(productionExport.bytes).not.toContain(raw);
     expect(replayAgentRunTrace(JSON.parse(productionExport.bytes)).projection.events.length).toBeGreaterThan(0);
 
     for (const [runId, attemptId] of [["a", "attempt-safe"], ["run-safe", "id"]] as const) {
