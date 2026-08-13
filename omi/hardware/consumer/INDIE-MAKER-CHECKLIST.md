@@ -9,18 +9,18 @@
 
 ## Status Summary
 
-| Category | Status | Codex Score |
-|----------|--------|-------------|
+| Category | Status | Codex Score (R5) |
+|----------|--------|------------------|
 | Board-Specific BOMs | ✅ Complete — 4 files | 10/10 |
-| Pick-and-Place / CPL Files | ✅ Complete — 3 boards | 9/10 |
-| LCSC / Distributor Part Numbers | ✅ Complete — 48/63 found, sourcing guide | 8.0/10 |
-| SWD Debug Pad Map | ✅ Complete — SWD-DEBUG-ACCESS.md | 8.1/10 |
-| Stencil / Reflow / PCBA Notes | ✅ Audited — STENCIL-REFLOW-NOTES.md | 8.0→audit fix |
-| Battery Procurement Spec | ✅ Audited — BATTERY-SPEC.md | 8.0→audit fix |
-| RF / Antenna Notes | ✅ Verified — RF-ANTENNA-NOTES.md | 8.0→verified |
-| Impedance / Stackup Notes | ✅ Audited — IMPEDANCE-STACKUP.md | 8.0→audit fix |
-| FPC Flex Fab Notes | ✅ Audited — FPC-FLEX-FAB-NOTES.md | 8.3→audit fix |
-| Alternate Parts List | ✅ Updated — ALTERNATES.md | 8.2→updated |
+| Pick-and-Place / CPL Files | ✅ Complete — 3 boards | 8/10 |
+| LCSC / Distributor Part Numbers | ✅ Complete — 48/63 found, sourcing guide | 7→pending |
+| SWD Debug Pad Map | ✅ Complete — SWD-DEBUG-ACCESS.md | 7→pending |
+| Stencil / Reflow / PCBA Notes | ✅ Verified — STENCIL-REFLOW-NOTES.md | 8/10 |
+| Battery Procurement Spec | ✅ Verified — BATTERY-SPEC.md | 7→pending |
+| RF / Antenna Notes | ✅ Verified — RF-ANTENNA-NOTES.md | 7→pending |
+| Impedance / Stackup Notes | ✅ Verified — IMPEDANCE-STACKUP.md | 7→pending |
+| FPC Flex Fab Notes | ✅ Verified — FPC-FLEX-FAB-NOTES.md | 7→pending |
+| Alternate Parts List | ✅ Verified — ALTERNATES.md | 8/10 |
 | Electronics Build Guide | ✅ Complete — electronics.mdx improved | 8.2/10 |
 | PCB Gerbers | ✅ Complete (existing) | — |
 | KiCad Source | ✅ Complete (existing, KiCad 9) | — |
@@ -29,7 +29,7 @@
 | Firmware Source | ✅ Complete (existing) | — |
 | License (MIT) | ✅ Complete (existing) | — |
 
-**Post-audit:** 14 factual errors found and fixed by cross-referencing against KiCad PCB/schematics + factory BOM. Codex independent verification caught 1 additional error (BQ25101 charge current).
+**Post-audit:** 14 factual errors found and fixed. 5 rounds of Codex review + fixes applied. Key corrections: diplexer IL values, T5848≠T5838 (PDM vs I2S), overcharge protection threshold direction, JLCPCB 4L impedance minimum, stencil aperture dimensions, J-Link licensing, nrfutil commands.
 
 ---
 
