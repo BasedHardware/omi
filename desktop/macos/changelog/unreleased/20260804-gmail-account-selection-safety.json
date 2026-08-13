@@ -1,1 +1,0 @@
-{"change": "Gmail account selection now fails closed when browser identity cannot be verified, keeps reads on the selected profile, and cancels onboarding selection safely"}

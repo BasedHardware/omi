@@ -525,15 +525,15 @@ class TestStreamingFactoryRouting:
             assert service == STTService.deepgram
             assert model == 'nova-3'
 
-    def test_parakeet_fallback_without_url_uses_velma(self):
+    def test_parakeet_fallback_without_url_uses_policy_default(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
 
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(os.environ, {}, clear=False):
             env_backup = os.environ.pop('HOSTED_PARAKEET_API_URL', None)
             try:
                 service, lang, model = get_stt_service_for_language('en')
-                assert service == STTService.modulate
-                assert model == 'velma-2'
+                assert service == STTService.deepgram
+                assert model == 'nova-3'
             finally:
                 if env_backup:
                     os.environ['HOSTED_PARAKEET_API_URL'] = env_backup

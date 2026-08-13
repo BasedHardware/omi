@@ -1,5 +1,7 @@
 FROM python:3.12-slim
 
+RUN apt-get update && apt-get -y dist-upgrade && rm -rf /var/lib/apt/lists/*
+
 # Install git (needed for git operations in agentic Claude)
 RUN apt-get update && apt-get install -y \
     git \
