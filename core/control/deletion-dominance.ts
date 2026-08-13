@@ -513,8 +513,8 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
       || exportReceipt.account_generation !== tombstone.account_generation) {
       fail("terminal_coordinate_mismatch");
     }
-    const stranded = inventory.find((row) => row.surface === "stranded_product_data")!;
-    if (stranded.remaining_count > 0 && !exportReceipt.stranded_data_present) {
+    if (exportReceipt.stranded_data_present
+      !== (exportReceipt.account_generation === "rolled_back_stranded")) {
       fail("terminal_coordinate_mismatch");
     }
   }

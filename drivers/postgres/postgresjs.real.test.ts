@@ -127,6 +127,15 @@ import { createPostgresGcsDeletionReceiptRepository } from
   "./gcs-deletion-receipt-repository";
 import { createPostgresFirestoreLegacyGenerationReceiptRepository } from
   "./firestore-legacy-generation-receipt-repository";
+import { createPostgresStrandedRollbackRecoveryManifestRepository } from
+  "./stranded-rollback-recovery-manifest-repository";
+import {
+  STRANDED_ROLLBACK_RECOVERY_CONTRACT_VERSION,
+  STRANDED_ROLLBACK_RECOVERY_SURFACES,
+  STRANDED_ROLLBACK_RECOVERY_WINDOW_SECONDS,
+  STRANDED_ROLLBACK_SOURCE_RECEIPT_VERSION,
+  verifyStrandedRollbackRecovery,
+} from "../../core/control/stranded-rollback-recovery";
 import type { CheckedOutPostgresConnection, PostgresTransactionPool, SqlStatement } from "./connection";
 import { createPostgresDurableMemoryWorkAcceptanceRepository } from "./durable-memory-work-acceptance";
 import { createPostgresDurableMemoryWorkBacklogSource } from "./durable-memory-work-backlog";
@@ -5930,7 +5939,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         (account_id, deletion_epoch, export_contract_version, transitioned_at,
          account_generation, terminal_lifecycle_state, stranded_data_present,
          control_revision, content_hash)
-        VALUES ($1, 14, 'terminal-v1', transaction_timestamp(), 'new', 'deleted', true, 10, $2)`,
+        VALUES ($1, 14, 'terminal-v1', transaction_timestamp(), 'new', 'deleted', false, 10, $2)`,
       [accountId, "2".repeat(64)]);
     });
 
@@ -6014,6 +6023,106 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         ],
       );
     })).rejects.toMatchObject({ code: "42501" });
+  }, 120_000);
+
+  test("stranded rollback manifests bind every destination surface to one exact 30-day window", async () => {
+    const suffix = randomUUID();
+    const accountId = `account:stranded-recovery:${suffix}`;
+    const rolledBackAt = 1_800_000_000;
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(
+        "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)", [accountId],
+      );
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+        (account_id, control_revision, account_generation, account_epoch, lifecycle_state,
+         deletion_epoch, observed_at, record_schema_version, record_json, content_hash)
+        VALUES ($1, 11, 'rolled_back_stranded', 7, 'active', NULL, transaction_timestamp(),
+                'control-v1', '{}'::jsonb, $2)`, [accountId, "1".repeat(64)]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+        (account_id, control_revision, activated_epoch, activation_control_revision)
+        VALUES ($1, 11, NULL, NULL)`, [accountId]);
+    });
+
+    const manifestFor = (rollbackFrontier: string) => verifyStrandedRollbackRecovery({
+      control_projection: {
+        account_id: accountId,
+        control_revision: 11,
+        account_generation: "rolled_back_stranded",
+        account_epoch: 7,
+        lifecycle_state: "active",
+        deletion_epoch: null,
+        activation: null,
+        conflict: null,
+      },
+      rollback_coordinate: {
+        version: "stranded-rollback-coordinate-v1",
+        account_id: accountId,
+        control_revision: 11,
+        account_epoch: 7,
+        database_generation_digest: sha256CanonicalContent({ suffix, generation: true }),
+        cutover_frontier_digest: sha256CanonicalContent({ suffix, cutover: true }),
+        rollback_frontier_digest: rollbackFrontier,
+        cutover_at_epoch_seconds: rolledBackAt - 3_600,
+        rolled_back_at_epoch_seconds: rolledBackAt,
+        recovery_deadline_epoch_seconds:
+          rolledBackAt + STRANDED_ROLLBACK_RECOVERY_WINDOW_SECONDS,
+      },
+      source_receipts: STRANDED_ROLLBACK_RECOVERY_SURFACES.map((surface, index) => ({
+        version: STRANDED_ROLLBACK_SOURCE_RECEIPT_VERSION,
+        manifest_contract_version: STRANDED_ROLLBACK_RECOVERY_CONTRACT_VERSION,
+        scanner_contract_version: `scanner-${surface}-v1`,
+        account_id: accountId,
+        control_revision: 11,
+        account_epoch: 7,
+        database_generation_digest: sha256CanonicalContent({ suffix, generation: true }),
+        surface,
+        source_frontier_digest: sha256CanonicalContent({ suffix, surface, frontier: true }),
+        source_fence_state: "held" as const,
+        source_fence_receipt_digest: sha256CanonicalContent({ suffix, surface, fence: true }),
+        record_count: index,
+        record_set_digest: sha256CanonicalContent({ suffix, surface, set: true }),
+      })),
+      observed_at_epoch_seconds: rolledBackAt + 1,
+    }).verified_manifest!;
+
+    const repository = createPostgresStrandedRollbackRecoveryManifestRepository(pool);
+    const manifest = manifestFor(sha256CanonicalContent({ suffix, rollback: true }));
+    const stored = await repository.record(manifest);
+    expect(stored.kind).toBe("stored");
+    expect((await repository.record(manifest)).kind).toBe("replayed");
+    const key = Object.freeze({
+      version: "stranded-rollback-recovery-manifest-key-v1" as const,
+      account_id: accountId,
+      control_revision: 11,
+      account_epoch: 7,
+      database_generation_digest: manifest.database_generation_digest,
+      manifest_digest: manifest.manifest_digest,
+    });
+    await expect(repository.load(key)).resolves.toEqual({
+      kind: "found", manifest: stored.manifest,
+    });
+    await expect(repository.record(manifestFor(sha256CanonicalContent({
+      suffix, rollback: "changed",
+    })))).rejects.toMatchObject({ code: "manifest_conflict" });
+
+    const counts = await ownerSql.unsafe<{ manifests: number; receipts: number }[]>(`SELECT
+      (SELECT count(*)::int FROM omi_memory.account_stranded_rollback_recovery_manifests
+        WHERE account_id = $1) manifests,
+      (SELECT count(*)::int FROM omi_memory.account_stranded_rollback_recovery_surface_receipts
+        WHERE account_id = $1) receipts`, [accountId]);
+    expect([...counts]).toEqual([{ manifests: 1, receipts: 11 }]);
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(
+        "SELECT * FROM omi_memory.account_stranded_rollback_recovery_manifests WHERE account_id = $1",
+        [accountId],
+      );
+    })).rejects.toMatchObject({ code: "42501" });
+
+    await ownerSql.unsafe(`UPDATE omi_memory.account_control_heads
+      SET conflict_reason = 'qualification_drift', conflict_at_control_revision = 11
+      WHERE account_id = $1`, [accountId]);
+    await expect(repository.load(key)).rejects.toMatchObject({ code: "control_denied" });
   }, 120_000);
 
   test("restore role installs retained terminal fences with exact replay and rollback", async () => {

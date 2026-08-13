@@ -54,6 +54,8 @@ const expectedTables = [
   "account_typesense_deletion_receipts",
   "account_restore_terminal_application_receipts",
   "account_restored_terminal_fences",
+  "account_stranded_rollback_recovery_manifests",
+  "account_stranded_rollback_recovery_surface_receipts",
   "account_terminal_deletion_exports",
   "application_credential_heads",
   "application_credential_revisions",
@@ -183,6 +185,28 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
         "postgres_restore_admission_revisions",
         "postgres_restore_admission_heads",
       ]);
+  });
+
+  test("retains exact stranded rollback recovery evidence behind the GCP operator role", () => {
+    const sql = migrationSql.find((migration) => migration.version === 41)?.sql;
+    expect(sql).toBeDefined();
+    expect(sql).toContain("CREATE TABLE omi_memory.account_stranded_rollback_recovery_manifests");
+    expect(sql).toContain("CREATE TABLE omi_memory.account_stranded_rollback_recovery_surface_receipts");
+    expect(sql).toContain("recovery_deadline_at = rolled_back_at + interval '30 days'");
+    expect(sql).toContain("c.account_generation = 'rolled_back_stranded'");
+    expect(sql).toContain("c.lifecycle_state = 'active'");
+    expect(sql).toContain("h.activated_epoch IS NULL");
+    expect(sql).toContain("SECURITY DEFINER\nSET search_path = pg_catalog, omi_memory");
+    expect(sql?.match(/TO omi_platform_restore;/g)).toHaveLength(2);
+    expect(sql).not.toContain("TO omi_platform_application");
+    expect(sql).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*account_stranded/s);
+    expect(sql).not.toMatch(/\b(?:transcript|memory_text|prompt|model_output|object_path|firebase_uid)\b/i);
+    for (const surface of DELETION_DISPOSAL_GROUPS.flat()) {
+      if (surface === "legacy_generation_data") continue;
+      expect(sql).toContain(`'${surface}'`);
+    }
+    expect(sql).not.toContain("'legacy_generation_data'");
+    expect(sql).not.toContain("'stranded_product_data'");
   });
 
   test("keeps checkpoint candidates append-only, exact, and unable to release traffic", () => {

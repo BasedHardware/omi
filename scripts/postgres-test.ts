@@ -166,6 +166,22 @@ const waitHealthy = async (state: PostgresTestState): Promise<void> => {
   return closedError("postgres_test_container_health_timeout");
 };
 
+// Docker can briefly retain a healthy observation while PostgreSQL restarts
+// during rapid disposable-volume cycles. Qualifying migrations requires a real
+// SQL round-trip, not only the container health state.
+const waitSqlReady = async (state: PostgresTestState): Promise<void> => {
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    const ready = docker([
+      "exec", state.containerName,
+      "psql", "--username", POSTGRES_TEST_USER, "--dbname", POSTGRES_TEST_DATABASE,
+      "--no-password", "--tuples-only", "--no-align", "--command", "SELECT 1",
+    ]);
+    if (ready.exitCode === 0 && ready.stdout === "1") return;
+    await Bun.sleep(250);
+  }
+  return closedError("postgres_test_sql_readiness_timeout");
+};
+
 const discoverPort = (state: PostgresTestState): number => {
   const result = docker(["port", state.containerName, "5432/tcp"]);
   const match = result.exitCode === 0 ? /^127\.0\.0\.1:(\d+)$/.exec(result.stdout) : null;
@@ -187,6 +203,7 @@ const setup = async (): Promise<{ readonly state: PostgresTestState; readonly st
     return closedError("postgres_test_container_start_failed");
   }
   await waitHealthy(state);
+  await waitSqlReady(state);
   verifyOwnedContainerConfiguration(resourceRunner, state);
   state = withPostgresTestPort(state, discoverPort(state));
   saveState(state);

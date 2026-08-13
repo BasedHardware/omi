@@ -80,6 +80,8 @@ export const POSTGRES_RETAINED_DELETION_SAFETY_TABLES = Object.freeze([
   "account_pinecone_deletion_receipts",
   "account_restored_terminal_fences",
   "account_restore_terminal_application_receipts",
+  "account_stranded_rollback_recovery_manifests",
+  "account_stranded_rollback_recovery_surface_receipts",
 ]);
 
 /** Database-generation evidence, deliberately global rather than account data. */

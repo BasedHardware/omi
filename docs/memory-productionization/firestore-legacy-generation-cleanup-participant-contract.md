@@ -5,7 +5,7 @@ Status: implemented, route-free, production-inactive.
 This P7 participant owns the terminal-deletion inventory contribution named
 `legacy_generation_data` for the complete account-owned legacy Firestore tree.
 It does not make Firestore authoritative for the canonical backend,
-does not claim the separate `stranded_product_data` surface, and does not
+does not claim post-cutover stranded destination state, and does not
 authorize disposition of an active `rolled_back_stranded` account.
 
 ## Source registry

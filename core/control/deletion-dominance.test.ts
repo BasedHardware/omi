@@ -311,10 +311,9 @@ describe("lifecycle dominance and terminal cleanup", () => {
 
   test("ratified coordinates make remaining surfaces eligible, not deleted", () => {
     const plan = planDeletionDominance(terminalInput({
-      terminal_export_receipt: exportReceipt({ stranded_data_present: true }),
+      terminal_export_receipt: exportReceipt({ stranded_data_present: false }),
       inventory: inventory({
         product_projections: 4,
-        stranded_product_data: 3,
         external_objects: 1,
       }),
     }));
@@ -323,8 +322,8 @@ describe("lifecycle dominance and terminal cleanup", () => {
       cleanup: {
         state: "ready",
         blockers: [],
-        remaining_total: 8,
-        remaining_surfaces: ["product_projections", "stranded_product_data", "external_objects"],
+        remaining_total: 5,
+        remaining_surfaces: ["product_projections", "external_objects"],
       },
     });
     expect(plan.obligations).toContain("dispose_policy_authorized_surfaces");
@@ -345,6 +344,28 @@ describe("lifecycle dominance and terminal cleanup", () => {
         remaining_surfaces: ["legacy_generation_data"],
       },
     });
+  });
+
+  test("the terminal stranded flag is exactly the rolled-back generation coordinate", () => {
+    const rolledBack = terminalInput({
+      control_projection: projection({
+        control_revision: 7,
+        account_generation: "rolled_back_stranded",
+        account_epoch: 9,
+        lifecycle_state: "deleted",
+        deletion_epoch: 31,
+        activation: null,
+      }),
+      terminal_control_tombstone: tombstone({ account_generation: "rolled_back_stranded" }),
+      terminal_export_receipt: exportReceipt({
+        account_generation: "rolled_back_stranded",
+        stranded_data_present: true,
+      }),
+    });
+    expect(planDeletionDominance(rolledBack).mode).toBe("deleted_complete");
+    expectErrorCode(() => planDeletionDominance(terminalInput({
+      terminal_export_receipt: exportReceipt({ stranded_data_present: true }),
+    })), "terminal_coordinate_mismatch");
   });
 
   test("zero remaining surfaces is terminally complete but still retains the tombstone", () => {
@@ -440,8 +461,16 @@ describe("strict detached input and coordinate closure", () => {
       terminal_control_tombstone: tombstone({ control_revision: 8 }),
     })), "terminal_coordinate_mismatch");
     expectErrorCode(() => planDeletionDominance(terminalInput({
-      terminal_export_receipt: exportReceipt({ stranded_data_present: false }),
-      inventory: inventory({ stranded_product_data: 1 }),
+      terminal_control_tombstone: tombstone({ account_generation: "rolled_back_stranded" }),
+      terminal_export_receipt: exportReceipt({ account_generation: "rolled_back_stranded", stranded_data_present: false }),
+      control_projection: projection({
+        control_revision: 7,
+        account_generation: "rolled_back_stranded",
+        account_epoch: 9,
+        lifecycle_state: "deleted",
+        deletion_epoch: 31,
+        activation: null,
+      }),
     })), "terminal_coordinate_mismatch");
     expectErrorCode(() => planDeletionDominance(terminalInput({
       legal_hold: { ...clearLegalHold(), account_id: "acct-other" },

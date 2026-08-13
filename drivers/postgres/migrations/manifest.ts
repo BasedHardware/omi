@@ -247,4 +247,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0040-firestore-legacy-generation-deletion-receipts.sql",
     sha256: "f906945c8af6bd76133cafe1c7ed4ecd413b49a3d61350cf6a59746723b18387",
   }),
+  Object.freeze({
+    version: 41,
+    name: "stranded-rollback-recovery-manifests",
+    fileName: "0041-stranded-rollback-recovery-manifests.sql",
+    sha256: "53dd9d9c46190959746f92dce92263181b5057e26e7249be1e6c7f912cebece4",
+  }),
 ]);
