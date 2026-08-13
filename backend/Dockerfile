@@ -65,6 +65,19 @@ COPY --from=builder /opt/venv /opt/venv
 COPY .github/scripts/desktop_release_manifest.py /app/desktop_release_manifest_contract.py
 COPY backend/ .
 
+# Pre-cache tiktoken BPE encodings at build time so runtime stays hermetic. The chat token-budget
+# step (utils/retrieval/safety.py) loads cl100k_base / o200k_base; without a baked cache tiktoken
+# fetches them from openaipublic.blob.core.windows.net on first use, which fails on the no-egress
+# on-prem network (build-time egress is allowed, like the helm/model pre-fetches). TIKTOKEN_CACHE_DIR
+# points the runtime at the baked cache. (D32 — on-prem chat.)
+# The download goes through scripts/prewarm_tiktoken_cache.py (no args → its BAKED_ENCODINGS list is
+# the single source of truth for what gets baked), which retries transient CDN failures (429/5xx) with
+# bounded backoff so one flaky blob response can't fail the build. BAKED_ENCODINGS is pinned to the
+# encodings production code actually requests by test_tiktoken_baked_encodings.
+ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken_cache
+RUN /opt/venv/bin/python scripts/prewarm_tiktoken_cache.py \
+ && test -n "$(ls -A "$TIKTOKEN_CACHE_DIR")"
+
 # Run as a non-root user: a compromise of the app process (e.g. via a
 # dependency RCE) shouldn't hand the attacker root inside the container by
 # default. /app needs to stay writable — sync.py writes uploaded audio to a
