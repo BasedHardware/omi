@@ -7,7 +7,7 @@
 The nRF5340 SoC requires SWD (Serial Wire Debug) for **initial firmware flashing** on blank boards. OTA (Over-The-Air) update only works after the bootloader is programmed.
 
 **Required equipment:**
-- J-Link debug probe (SEGGER J-Link EDU Mini recommended, ~$20)
+- J-Link debug probe (SEGGER J-Link EDU Mini ~$20, or J-Link BASE ~$400 for commercial use — **EDU Mini is for non-commercial/educational use only per SEGGER license**)
 - Fine-tip probe wires or pogo pin jig
 - Magnification (the test points are small — board is only 25.5mm diameter)
 
@@ -38,7 +38,7 @@ Coordinates use the drill/place file origin (same as gerber and CPL files). See 
 
 | Connector | Pins | Common On |
 |-----------|------|-----------|
-| ARM 10-pin Cortex-M (2×5, 1.27mm pitch) | 10 | J-Link EDU Mini, J-Link BASE |
+| ARM 10-pin Cortex-M (2×5, 1.27mm / 0.05" pitch, pin 7 is key/absent) | 10 (9 populated) | J-Link EDU Mini, J-Link BASE |
 | JTAG/SWD 20-pin (2×10, 2.54mm pitch) | 20 | J-Link PLUS, J-Link ULTRA+ |
 
 The pinouts below are for the **10-pin ARM Cortex-M connector** (J-Link EDU Mini). If using a 20-pin probe, see the 20-pin mapping at the end of this section.
@@ -124,6 +124,7 @@ There is no dedicated VDD_3V3 test point on the PCB. Options (in order of prefer
 3. **Verify VTref:** Measure VDD_3V3 with a multimeter — should read 3.0–3.3V
 4. **Flash network core first**, then application core:
 
+**Option A — nrfjprog (legacy, still supported):**
 ```bash
 # Using nrfjprog (from Nordic nRF Command Line Tools v10.23+)
 
@@ -143,9 +144,31 @@ nrfjprog -f NRF53 --program net_core.hex --sectorerase --verify --coprocessor CP
 nrfjprog -f NRF53 --program app_core.hex --sectorerase --verify --reset
 ```
 
+**Option B — nrfutil (recommended for new projects):**
+```bash
+# Nordic recommends nrfutil device as the successor to nrfjprog.
+# Install: pip install nrfutil; nrfutil install device
+
+# List connected devices
+nrfutil device list
+
+# Recover protected devices
+nrfutil device recover --core Network
+nrfutil device recover --core Application
+
+# Flash network core first
+nrfutil device program --firmware net_core.hex --core Network --verify
+
+# Flash application core
+nrfutil device program --firmware app_core.hex --core Application --verify --reset
+```
+
 **If connection is unstable with flying wires**, reduce SWD clock speed:
 ```bash
+# nrfjprog:
 nrfjprog -f NRF53 --clockspeed 1000 --program app_core.hex --sectorerase --verify --reset
+# nrfutil:
+nrfutil device program --firmware app_core.hex --core Application --verify --reset --jlink-speed 1000
 ```
 
 Or use the J-Link scripts in `firmware/FLASH_3.0.8/`:

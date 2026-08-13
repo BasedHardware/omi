@@ -44,7 +44,7 @@ For 50Ω microstrip on this stackup:
 - Estimated trace width: ~130–150µm (5.1–5.9 mil)
 - The actual trace width is set in the KiCad PCB — do not modify RF traces
 - **Trace topology:** 50Ω microstrip referenced to In1.Cu ground. If there is ground pour on F.Cu adjacent to the RF trace (creating a CPWG — coplanar waveguide with ground topology), the gap between the trace and the adjacent copper also affects impedance. Check the KiCad layout for clearance to adjacent copper on RF nets.
-- **Solder mask coverage:** Solder mask over the RF trace changes the effective εr and lowers impedance slightly. If the fab applies mask over RF traces, the trace may need to be wider — request the fab's impedance simulation with mask modeled.
+- **Solder mask coverage:** Solder mask over the RF trace increases the effective εr of the surrounding medium, which **lowers** impedance (below the bare-board value). The preferred fix is to **strip solder mask from RF traces** (solder mask opening over the trace). If the fab applies mask over RF traces, the trace may need to be **narrower** to compensate and maintain 50Ω — request the fab's impedance simulation with and without mask modeled.
 - **Ground plane continuity:** In1.Cu must be uninterrupted ground under all RF traces. No plane splits, voids, power islands, or signal routing under the antenna feed path. Verify in the KiCad PCB that In1.Cu is solid copper under the RF region.
 
 ### Differential Pairs (if present)
@@ -79,7 +79,7 @@ When ordering PCBs from JLCPCB, select the closest standard stackup:
 | Surface finish | **ENIG** |
 | Impedance control | **Yes** — specify 50Ω single-ended microstrip |
 
-**⚠ JLCPCB may not have a standard 0.6mm 4-layer impedance-controlled stackup.** Their standard controlled-impedance offerings start at 0.8mm. Options:
+**⚠ JLCPCB does not offer a standard 0.6mm 4-layer impedance-controlled stackup.** Their standard controlled-impedance offerings start at 0.8mm (as of 2026). Options:
 - **Request a custom stackup** matching the design (100µm prepreg L1–L2) — JLCPCB supports custom stackups but with longer lead time and higher cost.
 - **Use 0.8mm with adjusted prepreg** — if 0.6mm is not critical for the enclosure, a 0.8mm stackup with controlled impedance may be easier to source. Verify mechanical clearance.
 - **Do NOT let the CM adjust RF trace widths without agreement** — antenna matching depends on the original trace geometry. Request an impedance report with the order and review before build.
@@ -97,8 +97,10 @@ When ordering PCBs from JLCPCB, select the closest standard stackup:
 | Through-hole vias L1–L4 | **183** (0.152mm drill) | Signal and power vias |
 | Annular ring | ≥0.1mm | Standard |
 | Sequential lamination | **Required** | Blind + buried vias require at least 3 lamination cycles |
+| HDI type | **Type II** (1+ N +1 with buried vias) | Blind vias L1–L2 and L3–L4, plus buried L2–L3 |
+| Lamination cycles | **3** | (1) Core L2–L3 with buried vias, (2) add L1 prepreg+copper with blind L1–L2, (3) add L4 prepreg+copper with blind L3–L4 |
 
-**Note:** HDI PCBs with via-in-pad, blind/buried vias, ENIG, and impedance control at 0.6mm are not a standard product. Request a quote from your fab — pricing depends heavily on the specific capabilities and panel utilization. Expect significantly higher cost and longer lead time than standard 4-layer boards.
+**Note:** HDI PCBs with via-in-pad, blind/buried vias, ENIG, and impedance control at 0.6mm are not a standard product. Not all fabs support HDI Type II — verify the fab handles sequential lamination with 3 cycles. Request a quote — pricing depends heavily on capabilities and panel utilization. Expect 2–3× cost and 1–2 week longer lead time vs standard 4-layer boards.
 
 ## Charger Board Stackup
 

@@ -58,9 +58,9 @@ nRF7002 (WiFi 5GHz) ────────────────────
 
 | Path | Components in Chain | Estimated Insertion Loss | Source / Basis |
 |------|---------------------|--------------------------|----------------|
-| BLE 2.4GHz | L3/L4 match (~0.2 dB) + RF switch U10 (~0.5 dB) + diplexer U3 low-band (~0.8 dB) | **~1.5 dB typical** | FM8625H: IL typ 0.45 dB at 2.4 GHz (datasheet Table 2); LFD182G45: IL typ 0.8 dB low band (Murata); L3/L4: estimated from inductor Q |
-| WiFi 2.4GHz | RF switch U10 (~0.5 dB) + diplexer U3 low-band (~0.8 dB) | **~1.3 dB typical** | Same switch + diplexer; nRF7002 has internal matching (no external network loss) |
-| WiFi 5GHz | Diplexer U3 high-band only (~1.0 dB) | **~1.0 dB typical** | LFD182G45: IL typ 1.0 dB high band (Murata); shortest path |
+| BLE 2.4GHz | L3/L4 match (~0.2 dB) + RF switch U10 (~0.5 dB) + diplexer U3 low-band (~0.4 dB) | **~1.1 dB typical** | FM8625H: IL typ 0.45 dB at 2.4 GHz (datasheet); LFD182G45: IL max 0.35 dB at 2.4 GHz low band (Murata datasheet); L3/L4: estimated from inductor Q |
+| WiFi 2.4GHz | RF switch U10 (~0.5 dB) + diplexer U3 low-band (~0.4 dB) | **~0.9 dB typical** | Same switch + diplexer; nRF7002 has internal matching (no external network loss) |
+| WiFi 5GHz | Diplexer U3 high-band only (~0.5 dB) | **~0.5 dB typical** | LFD182G45: IL max 0.45 dB at 5 GHz high band (Murata datasheet); shortest path |
 
 **⚠ Inductor Q and matching loss estimates need measurement.** Request S-parameter data from Murata (U3) and FUMAN (U10) for exact values. Measure actual end-to-end insertion loss with a VNA on populated boards — the values above are typical datasheet numbers and do not include PCB trace loss, connector transitions, or manufacturing variation.
 

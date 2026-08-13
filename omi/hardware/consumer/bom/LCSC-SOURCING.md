@@ -46,7 +46,7 @@ These 15 MPNs must be sourced from authorized distributors or manufacturer direc
 | ST-BTB-K3570606M | J3 (FPC) | 6+4P BTB male | Source Suntech direct. Mating pair to J1 above. Same pitch conflict — see J1 note. | 2 |
 | CA02-PG07 | PP1–PP6 (main) | WH1.5mm pogo | Source JINLANTIAN (Alibaba). 6 per board. Spring travel 1.5mm. | 8 |
 | CA62-PG308 | PP1–PP2 (charger) | WH3.3mm pogo | Source JINLANTIAN (Alibaba). 2 per board. Spring travel 3.3mm. **Different from mainboard pogos.** | 3 |
-| MMICT5838-00-012 | MIC1, MIC2 | SMD-7P (3.5×2.65mm) | TDK T5838 PDM MEMS microphone. **Bottom-port** — sound enters from PCB side (verify acoustic port alignment with enclosure). MMICT5848 variant on LCSC (C5176729) — verify pin-compatible and same sensitivity (-41dB). | 3 |
+| MMICT5838-00-012 | MIC1, MIC2 | SMD-7P (3.5×2.65mm) | TDK T5838 PDM MEMS microphone. **Bottom-port** — sound enters from PCB side (verify acoustic port alignment with enclosure). **⚠ MMICT5848 on LCSC (C5176729) is I2S interface, NOT PDM — incompatible with nRF5340 PDM peripheral. Do NOT substitute.** | 3 |
 | MHPA0606RGBDT | D2, D7 | 0606 (0.69×0.69mm) | RGB LED. Larger 0808/1010 sizes available on LCSC but **will not fit footprint**. Source MEIHUA direct. | 3 |
 | TS-1001S | K2 | 2.6×1.6×0.53mm | Ultra-low-profile tactile switch. Source JINBEILI direct or find equivalent with same footprint (163gf actuation). | 2 |
 | 1S32000049 | X2 | 1.6×1.2mm 4-pad | 32MHz crystal, 8pF load, 10ppm. Source Faith Long direct or find equivalent: 32MHz, 8pF CL, 10ppm, ≤70Ω ESR, 1.6×1.2mm package. | 2 |

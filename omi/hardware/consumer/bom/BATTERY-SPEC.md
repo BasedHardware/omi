@@ -76,11 +76,10 @@ Any LiPo cell meeting these criteria will work:
 ## Shipping & Customs
 
 - **LiPo batteries are regulated dangerous goods** (Class 9)
-- **Loose cells (not packed with equipment): UN3480 / PI965 Section IB** — cargo-aircraft-only by default under 2026 IATA DGR. Requirements:
-  - Ship at ≤30% state of charge (SoC)
-  - UN38.3 test summary must accompany the shipment
-  - Dangerous Goods handling and documentation required
-  - Maximum 2 cells per package under Section IB limits
+- **Loose cells (not packed with equipment): UN3481 is for batteries packed with/in equipment; loose cells are UN3480.**
+  - **PI965 Section II** applies for small shipments of cells ≤20Wh (this cell is 0.56Wh): max 2 cells per inner package, max 8 per outer package, passenger aircraft permitted with appropriate marking and documentation
+  - **PI965 Section IB** applies for larger quantities: cargo-aircraft-only by default, Dangerous Goods documentation required, ship at ≤30% SoC
+  - UN38.3 test summary must accompany all lithium cell shipments regardless of section
 - **Cells packed with equipment: UN3481 / PI966 Section II** — passenger aircraft permitted with restrictions
 - This cell is ~0.56Wh (150mAh × 3.7V), well under the 100Wh limit
 - **Request the supplier provide the UN38.3 test summary** — required for all lithium cell shipments
@@ -109,7 +108,7 @@ The built-in protection circuit inside the cell must meet these thresholds:
 
 | Parameter | Minimum | Maximum | Notes |
 |-----------|---------|---------|-------|
-| Overcharge cutoff | 4.25V | 4.35V | Must be below or at BQ25101's 4.2V charge voltage with margin |
+| Overcharge cutoff | 4.25V | 4.35V | Must be **above** BQ25101's 4.2V charge termination (so it doesn't trip during normal charging) but below the cell's max safe voltage (~4.35V). Acts as a safety net if the charger IC fails. |
 | Overcharge release | 4.05V | 4.15V | Hysteresis prevents cycling |
 | Overdischarge cutoff | 2.4V | 2.7V | GLF73910-BD01 provides additional board-level protection at ~2.9V |
 | Overdischarge release | 2.9V | 3.1V | Must resume when charging begins |
