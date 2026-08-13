@@ -16,6 +16,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const coreRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const wrapperPath = path.resolve(fileURLToPath(import.meta.url));
 const nativeForbiddenForegroundPolicy = "sampled-20ms-forbidden-fixture-foreground-detection-no-activation-request";
+export const semanticReadinessPolicy = Object.freeze({
+  deadlineMilliseconds: 5_000,
+  intervalMilliseconds: 100,
+});
 function expectedSemanticAuthority() {
   return {
     fixture: true,
@@ -236,6 +240,72 @@ function assertFixtureNotForeground(bundleId, coordinate, stage) {
   if (observed.bundleId === bundleId) fail(`${coordinate.run_id}: semantic fixture became foreground during ${stage}`);
 }
 function sleepSync(milliseconds) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds); }
+export function classifySemanticProbeFailure(document, stderr = "") {
+  const detail = String(document?.error || stderr || "").trim().slice(0, 256);
+  if (detail.startsWith("no-domain-landmark:") || detail.startsWith("no-accessible-window:")) {
+    return { retryable: true, detail: detail || "semantic AX tree is not ready" };
+  }
+  return { retryable: false, detail: detail || "probe failed without a semantic error" };
+}
+export function probeUntilSemanticReady({
+  invoke,
+  validate,
+  coordinate,
+  runtimePid,
+  deadlineMilliseconds = semanticReadinessPolicy.deadlineMilliseconds,
+  intervalMilliseconds = semanticReadinessPolicy.intervalMilliseconds,
+  now = Date.now,
+  sleep = sleepSync,
+  onAttempt = () => {},
+}) {
+  if (typeof invoke !== "function" || typeof validate !== "function") throw new Error("semantic readiness probe requires invoke/validate functions");
+  if (!Number.isInteger(deadlineMilliseconds) || deadlineMilliseconds < 1 || !Number.isInteger(intervalMilliseconds) || intervalMilliseconds < 1) throw new Error("semantic readiness policy is invalid");
+  const startedAt = now();
+  const deadline = startedAt + deadlineMilliseconds;
+  const attempts = [];
+  let lastFailure = "probe failed without a semantic error";
+  while (true) {
+    const attemptStartedAt = now();
+    const remaining = Math.max(1, deadline - attemptStartedAt);
+    const result = invoke(remaining);
+    const document = result?.document ?? null;
+    const status = Number.isInteger(result?.status) ? result.status : null;
+    let failure = null;
+    if (status === 0) {
+      const semanticFailure = classifySemanticProbeFailure(document);
+      if (semanticFailure.retryable) {
+        failure = semanticFailure;
+      } else {
+        try {
+          validate(document, runtimePid);
+          const attempt = { attempt: attempts.length + 1, elapsed_ms: Math.max(0, now() - startedAt), status, outcome: "ready" };
+          attempts.push(attempt); onAttempt(attempt);
+          return { document, attempts, elapsed_ms: attempt.elapsed_ms };
+        } catch (error) {
+          failure = { retryable: false, detail: String(error?.message || error).slice(0, 256) };
+        }
+      }
+    } else if (status === null) {
+      failure = { retryable: false, detail: String(result?.stderr || "probe exited without a status").trim().slice(0, 256) };
+    } else {
+      failure = classifySemanticProbeFailure(document, result?.stderr);
+    }
+    const attempt = {
+      attempt: attempts.length + 1,
+      elapsed_ms: Math.max(0, now() - startedAt),
+      status,
+      outcome: failure.retryable ? "retryable" : "terminal",
+      error: failure.detail,
+    };
+    attempts.push(attempt); onAttempt(attempt);
+    lastFailure = failure.detail;
+    if (!failure.retryable) throw new Error(`${coordinate.run_id}: semantic probe failed: ${failure.detail}`);
+    const remainingAfterAttempt = deadline - now();
+    if (remainingAfterAttempt <= 0) break;
+    sleep(Math.min(intervalMilliseconds, remainingAfterAttempt));
+  }
+  throw new Error(`${coordinate.run_id}: semantic AX readiness deadline exceeded after ${attempts.length} attempts: ${lastFailure}`);
+}
 function foregroundMonitorMain(bundleId, readyPath, stopPath, violationPath, donePath) {
   try {
     while (!existsSync(stopPath)) {
@@ -437,19 +507,56 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
       ? startForbiddenForegroundMonitor(prepared.fixture.bundleId, outRoot, coordinate.run_id)
       : null;
     let child = null;
+    const readinessPath = path.join(outRoot, "runtime", coordinate.run_id, "semantic-readiness.json");
+    const readiness = {
+      schema: "omi.native-semantic-readiness/v1",
+      coordinate: coordinateKey(coordinate),
+      policy: semanticReadinessPolicy,
+      status: "running",
+      attempts: [],
+      started_at: new Date().toISOString(),
+    };
     try {
       child = await launchFixture(prepared, coordinate, outRoot, readinessTimeoutMs);
       assertFixtureNotForeground(prepared.fixture.bundleId, coordinate, "fixture launch");
       const probeArgs = ["--pid", String(child.pid), "--bundle-id", coordinate.target.bundle_id, "--expected-bundle-id", coordinate.target.bundle_id, "--expected-process-name", coordinate.target.process_name, "--run-id", coordinate.run_id, "--source-core-sha", coordinate.source_shas.core, "--source-platform-sha", coordinate.source_shas.platform, "--coordinate", coordinateKey(coordinate), "--kind", coordinate.kind, "--landmark", coordinate.landmark, "--require-matrix", "--json"];
       if (coordinate.kind === "keyboard_trace") probeArgs.push("--expect-after", coordinate.expected_after.map((value) => value || "-").join(","), "--activate", "--keys", coordinate.keys.join(","));
-      const result = spawnSync(prepared.probePath, probeArgs, { cwd: coreRoot, env: safeEnvironment(), encoding: "utf8", timeout: 120_000 });
-      let probe; try { probe = JSON.parse(result.stdout || "{}"); } catch { fail(`${coordinate.run_id}: probe did not emit JSON`); }
-      if (result.status !== 0) fail(`${coordinate.run_id}: probe failed: ${(result.stderr || probe.error || "probe failure").trim()}`);
-      if (child.exitCode !== null || child.signalCode !== null) fail(`${coordinate.run_id}: fixture exited during semantic probe`);
-      checkProbeDocument(probe, coordinate, child.pid);
+      const invoke = (remainingMilliseconds) => {
+        if (child.exitCode !== null || child.signalCode !== null) fail(`${coordinate.run_id}: fixture exited during semantic probe`);
+        const result = spawnSync(prepared.probePath, probeArgs, { cwd: coreRoot, env: safeEnvironment(), encoding: "utf8", timeout: Math.max(1, Math.min(120_000, remainingMilliseconds)) });
+        let document = null;
+        try { document = JSON.parse(result.stdout || "{}"); } catch { /* classify as terminal below */ }
+        return { status: result.status, stderr: result.stderr, document };
+      };
+      let probe;
+      if (coordinate.kind === "ax_snapshot") {
+        const ready = probeUntilSemanticReady({
+          invoke,
+          validate: (document, runtimePid) => checkProbeDocument(document, coordinate, runtimePid),
+          coordinate,
+          runtimePid: child.pid,
+          onAttempt: (attempt) => readiness.attempts.push(attempt),
+        });
+        probe = ready.document;
+        readiness.status = "ready";
+        readiness.elapsed_ms = ready.elapsed_ms;
+      } else {
+        const result = invoke(120_000);
+        probe = result.document;
+        if (result.status !== 0) fail(`${coordinate.run_id}: probe failed: ${(result.stderr || probe?.error || "probe failure").trim()}`);
+        if (child.exitCode !== null || child.signalCode !== null) fail(`${coordinate.run_id}: fixture exited during semantic probe`);
+        checkProbeDocument(probe, coordinate, child.pid);
+        readiness.status = "ready";
+      }
       const evidence = evidenceDocument(coordinate, probe);
       return { evidence, sidecar: sidecarDocument(coordinate, probe, evidence) };
+    } catch (error) {
+      readiness.status = "failed";
+      readiness.error = String(error?.message || error).slice(0, 256);
+      throw error;
     } finally {
+      readiness.finished_at = new Date().toISOString();
+      writeAtomic(readinessPath, readiness);
       try {
         if (child) await terminateExactChild(child);
         assertFixtureNotForeground(prepared.fixture.bundleId, coordinate, "semantic cleanup");

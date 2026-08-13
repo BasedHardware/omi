@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { canonicalBatchId, foregroundApplicationFromResults, lockedGuiBlock } from "../probes/native-semantic-evidence-batch.mjs";
+import { canonicalBatchId, classifySemanticProbeFailure, foregroundApplicationFromResults, lockedGuiBlock, probeUntilSemanticReady, semanticReadinessPolicy } from "../probes/native-semantic-evidence-batch.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const core = resolve(root, "../..");
@@ -26,6 +26,59 @@ function lockedSessionSkipReason() {
 }
 
 const lockedSession = lockedSessionSkipReason();
+
+test("AX readiness retries only transient semantic absence and records eventual success", () => {
+  let clock = 0;
+  let calls = 0;
+  const sleeps = [];
+  const attempts = [];
+  const result = probeUntilSemanticReady({
+    coordinate: { run_id: "semantic-readiness" }, runtimePid: 42,
+    deadlineMilliseconds: 500, intervalMilliseconds: 100,
+    now: () => clock, sleep: (milliseconds) => { sleeps.push(milliseconds); clock += milliseconds; },
+    invoke: () => {
+      calls += 1;
+      return calls < 3
+        ? { status: 1, stderr: "no-domain-landmark: memories", document: { error: "no-domain-landmark: memories" } }
+        : { status: 0, stderr: "", document: { ready: true } };
+    },
+    validate: (document, pid) => { assert.equal(pid, 42); assert.equal(document.ready, true); },
+    onAttempt: (attempt) => attempts.push(attempt),
+  });
+  assert.equal(result.document.ready, true);
+  assert.equal(calls, 3);
+  assert.deepEqual(sleeps, [100, 100]);
+  assert.deepEqual(attempts.map((attempt) => attempt.outcome), ["retryable", "retryable", "ready"]);
+  assert.equal(semanticReadinessPolicy.intervalMilliseconds, 100);
+});
+
+test("AX readiness fails closed at the deterministic deadline", () => {
+  let clock = 0;
+  let calls = 0;
+  assert.throws(() => probeUntilSemanticReady({
+    coordinate: { run_id: "semantic-deadline" }, runtimePid: 42,
+    deadlineMilliseconds: 250, intervalMilliseconds: 100,
+    now: () => clock, sleep: (milliseconds) => { clock += milliseconds; },
+    invoke: () => { calls += 1; return { status: 1, stderr: "no-accessible-window: target has no observable native window", document: { error: "no-accessible-window: target has no observable native window" } }; },
+    validate: () => { throw new Error("must not validate an errored probe"); },
+  }), /semantic AX readiness deadline exceeded after 4 attempts/);
+  assert.equal(calls, 4);
+});
+
+test("AX readiness does not retry identity or accessibility trust failures", () => {
+  assert.equal(classifySemanticProbeFailure({ error: "target-identity-mismatch: wrong bundle" }).retryable, false);
+  assert.equal(classifySemanticProbeFailure({ error: "accessibility-not-trusted: grant Accessibility access to this probe" }).retryable, false);
+  assert.equal(classifySemanticProbeFailure({ error: "no-domain-landmark: memories" }).retryable, true);
+  let calls = 0;
+  assert.throws(() => probeUntilSemanticReady({
+    coordinate: { run_id: "semantic-identity" }, runtimePid: 42,
+    deadlineMilliseconds: 500, intervalMilliseconds: 100,
+    invoke: () => { calls += 1; return { status: 1, stderr: "target-identity-mismatch: wrong bundle", document: { error: "target-identity-mismatch: wrong bundle" } }; },
+    validate: () => {},
+    sleep: () => { throw new Error("terminal identity failure must not sleep"); },
+  }), /semantic probe failed: target-identity-mismatch/);
+  assert.equal(calls, 1);
+});
 
 function manifest(kind = "ax_snapshot", captureClass = "native_fixture") {
   const coordinate = {
@@ -99,6 +152,11 @@ test("semantic batch emits exact AX coverage and immutable prepared inputs", { s
     const runtime = join(out, "runtime/semantic-ax_snapshot");
     assert.equal(readFileSync(join(runtime, "launch-count"), "utf8"), "2", "one --replay-proof capture launches the prepared app twice");
     assert.notEqual(Number(readFileSync(join(runtime, "launcher-pid"), "utf8")), 999999, "the manifest PID is never used as a target");
+    const readiness = JSON.parse(readFileSync(join(runtime, "semantic-readiness.json"), "utf8"));
+    assert.equal(readiness.schema, "omi.native-semantic-readiness/v1");
+    assert.equal(readiness.status, "ready");
+    assert.equal(readiness.policy.intervalMilliseconds, 100);
+    assert.ok(readiness.attempts.length >= 1);
     const launchEnv = JSON.parse(readFileSync(join(runtime, "launch-env.json"), "utf8"));
     assert.deepEqual(launchEnv, { semantic: "1", headed: null, query: "polish=1&qa=memories&state=ready&platform=desktop&theme=light&width=regular&accessibility=voiceover&locale=en-US", api: null, token: null });
     const sidecar = readFileSync(join(out, "captures/macos/semantic-ax_snapshot.json.sidecar.json"), "utf8");
