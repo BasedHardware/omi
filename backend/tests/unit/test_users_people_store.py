@@ -18,12 +18,17 @@ import pytest
 
 import database.users as users
 from database.store.adapters.mongo import MongoDocumentStore
+from tests.store_fakes import install_fake_db_client
 
 
 @pytest.fixture
 def store(monkeypatch):
+    # ADR-0044: users threads the raw db client; wire the neutral facade over the REAL Mongo adapter
+    # (mongomock, no server) so the migrated path-based people CRUD runs end to end on Mongo (was the
+    # retired _store seam). The transactional _add_sample path stays on the live contract test
+    # (mongomock has no replica-set transactions).
     s = MongoDocumentStore(client=mongomock.MongoClient(), db_name='test')
-    monkeypatch.setattr(users, '_store', lambda: s)
+    install_fake_db_client(monkeypatch, store=s)
     return s
 
 

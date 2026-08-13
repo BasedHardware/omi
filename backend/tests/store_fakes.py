@@ -351,15 +351,18 @@ class FakeDocumentStore:
 def install_fake_db_client(
     monkeypatch: Any,
     backing: Optional[Dict[str, Dict[str, Any]]] = None,
-    store: Optional["FakeDocumentStore"] = None,
-) -> "FakeDocumentStore":
-    """Inject the neutral ``db_client`` facade over a fresh ``FakeDocumentStore`` for domain modules
-    that thread the raw client (``from database._client import db``) under ADR-0044.
+    store: Optional[Any] = None,
+) -> Any:
+    """Inject the neutral ``db_client`` facade over a document store for domain modules that thread
+    the raw client (``from database._client import db``) under ADR-0044.
 
     The merge adopted upstream's ``db``/``db_client`` idiom wholesale, so ``database.*`` modules no
     longer expose a ``_store`` seam to monkeypatch; instead patch the client accessor so
-    ``db.collection(...)`` / ``@transactional`` run through the facade against this fake. Returns the
-    fake so tests seed/assert on ``fake._docs`` exactly as they did against the old ``_store`` seam."""
+    ``db.collection(...)`` / ``@transactional`` run through the facade against a store. ``store``
+    accepts any port-conforming store — the default fresh ``FakeDocumentStore``, a subclass (e.g. one
+    that races a concurrent delete), or the real ``MongoDocumentStore`` over mongomock for an
+    end-to-end path-based run. Returns the store so tests seed/assert on it exactly as they did
+    against the old ``_store`` seam."""
     from database import _client
     from database.store.firestore_facade import NeutralFirestoreClient
 
