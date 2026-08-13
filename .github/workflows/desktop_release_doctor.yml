@@ -81,21 +81,51 @@ jobs:
           POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
         run: |
           set -euo pipefail
-          set +e
-          python3 .github/scripts/desktop_proactive_delivery_health.py \
-            --output /tmp/proactive-delivery-health.json \
-            --summary /tmp/proactive-delivery-health.txt
-          query_exit=$?
-          set -e
+          required_config=(POSTHOG_PERSONAL_API_KEY POSTHOG_PROJECT_ID POSTHOG_HOST)
+          missing_config=()
+          for variable in "${required_config[@]}"; do
+            if [[ -z "${!variable:-}" ]]; then
+              missing_config+=("$variable")
+            fi
+          done
 
-          if [[ "$query_exit" -ne 0 ]]; then
-            status=monitor_error
+          if (( ${#missing_config[@]} > 0 )); then
+            status=unconfigured
+            missing_config_csv="$(IFS=', '; echo "${missing_config[*]}")"
             printf '%s\n' \
-              'Proactive delivery health: MONITOR_ERROR' \
-              'The bounded PostHog query failed; inspect this workflow run.' \
+              'Proactive delivery health: UNCONFIGURED' \
+              "Missing required PostHog configuration: $missing_config_csv." \
+              'Set the POSTHOG_PERSONAL_API_KEY secret and POSTHOG_PROJECT_ID/POSTHOG_HOST variables for this workflow.' \
+              'No health alarm was created or updated.' \
               > /tmp/proactive-delivery-health.txt
+            python3 - "${missing_config[@]}" > /tmp/proactive-delivery-health.json <<'PY'
+          import json
+          import sys
+
+          print(json.dumps({
+              "metric": "proactive_delivery",
+              "status": "unconfigured",
+              "missing_config": sys.argv[1:],
+              "privacy": {"user_identifiers_included": False, "content_included": False},
+          }, indent=2, sort_keys=True))
+          PY
           else
-            status="$(python3 -c 'import json; print(json.load(open("/tmp/proactive-delivery-health.json", encoding="utf-8"))["status"])')"
+            set +e
+            python3 .github/scripts/desktop_proactive_delivery_health.py \
+              --output /tmp/proactive-delivery-health.json \
+              --summary /tmp/proactive-delivery-health.txt
+            query_exit=$?
+            set -e
+
+            if [[ "$query_exit" -ne 0 ]]; then
+              status=monitor_error
+              printf '%s\n' \
+                'Proactive delivery health: MONITOR_ERROR' \
+                'The bounded PostHog query failed; inspect this workflow run.' \
+                > /tmp/proactive-delivery-health.txt
+            else
+              status="$(python3 -c 'import json; print(json.load(open("/tmp/proactive-delivery-health.json", encoding="utf-8"))["status"])')"
+            fi
           fi
           echo "status=$status" >> "$GITHUB_OUTPUT"
           cat /tmp/proactive-delivery-health.txt >> "$GITHUB_STEP_SUMMARY"
