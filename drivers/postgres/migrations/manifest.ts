@@ -181,4 +181,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0029-restored-generation-application-gate.sql",
     sha256: "9a7792ad4493594e288e659d92be431d39a3887826efc90de705b0e29ba73ca9",
   }),
+  Object.freeze({
+    version: 30,
+    name: "listen-capture-finalization",
+    fileName: "0030-listen-capture-finalization.sql",
+    sha256: "3391f212826a62711516f00f46705d017dea4ebd6ac718935ae9b983f417dc8d",
+  }),
 ]);

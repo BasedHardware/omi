@@ -14,7 +14,10 @@ export const POSTGRES_DELETION_SURFACE_TABLES = Object.freeze({
   staged_results: Object.freeze([
     "memory_work_staged_results", "memory_formation_work_inputs",
     "memory_predicate_batch_work_inputs", "memory_query_evaluation_inputs",
-    "memory_candidate_derivation_artifacts",
+    "memory_candidate_derivation_artifacts", "listen_capture_sessions",
+    "listen_capture_session_state_revisions", "listen_capture_segments",
+    "listen_formation_finalizations", "listen_conversation_finalization_intents",
+    "listen_formation_outbox",
   ]),
   authoritative_memory: Object.freeze([
     "memory_claim_evidence_refs", "memory_claim_lineages", "memory_claim_liveness_fences",

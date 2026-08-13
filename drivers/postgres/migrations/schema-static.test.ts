@@ -57,6 +57,12 @@ const expectedTables = [
   "application_grant_revisions",
   "firebase_application_credential_bindings",
   "firebase_identity_bindings",
+  "listen_capture_sessions",
+  "listen_capture_session_state_revisions",
+  "listen_capture_segments",
+  "listen_conversation_finalization_intents",
+  "listen_formation_finalizations",
+  "listen_formation_outbox",
   "memory_candidate_derivation_artifacts",
   "memory_claim_evidence_refs",
   "memory_claim_lineages",
@@ -203,11 +209,12 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
   });
 
   test("keeps the cleanup security-definer registry identical to the typed registry", () => {
-    const cleanupSql = migrationSql.find((migration) =>
-      migration.fileName === "0025-account-deletion-cleanup-runtime.sql")?.sql;
+    const cleanupSql = [...migrationSql].reverse().find((migration) =>
+      /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION omi_memory\.cleanup_surface_tables\(/.test(migration.sql),
+    )?.sql;
     expect(cleanupSql).toBeDefined();
     const block = cleanupSql!.match(
-      /CREATE FUNCTION omi_memory\.cleanup_surface_tables\(p_surface text\)[\s\S]*?FROM \(VALUES([\s\S]*?)\) AS mapping\(surface, table_name\)/,
+      /CREATE OR REPLACE FUNCTION omi_memory\.cleanup_surface_tables\(p_surface text\)[\s\S]*?FROM \(VALUES([\s\S]*?)\) AS mapping\(surface, table_name\)/,
     );
     expect(block).not.toBeNull();
     const sqlRows = [...block![1]!.matchAll(/\('([a-z0-9_]+)', '([a-z0-9_]+)'\)/g)]
@@ -221,6 +228,62 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
         `${right.surface}:${right.table}`,
       ));
     expect(sqlRows).toEqual(typedRows);
+  });
+
+  test("keeps Listen capture account authority behind fixed named operations", () => {
+    const listenSql = migrationSql.find((migration) => migration.version === 30)?.sql;
+    expect(listenSql).toBeDefined();
+    const listenTables = [
+      "listen_capture_sessions",
+      "listen_capture_session_state_revisions",
+      "listen_capture_segments",
+      "listen_formation_finalizations",
+      "listen_conversation_finalization_intents",
+      "listen_formation_outbox",
+    ] as const;
+    for (const table of listenTables) {
+      expect(listenSql).toContain(`REVOKE ALL ON omi_memory.${table} FROM PUBLIC;`);
+      expect(listenSql).not.toMatch(
+        new RegExp(`GRANT\\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*omi_memory\\.${table}`),
+      );
+    }
+
+    const operations = [
+      "open_listen_capture_session",
+      "append_listen_capture_segment",
+      "transition_listen_capture_state",
+      "read_listen_capture_finalization_input",
+      "seal_listen_capture_finalization",
+    ] as const;
+    for (const operation of operations) {
+      const start = listenSql!.indexOf(`CREATE FUNCTION omi_memory.${operation}(`);
+      expect(start, operation).toBeGreaterThanOrEqual(0);
+      const end = listenSql!.indexOf("\nCREATE FUNCTION", start + 1);
+      const body = listenSql!.slice(start, end < 0 ? listenSql!.length : end);
+      expect(body, operation).toContain("SECURITY DEFINER\nSET search_path = pg_catalog, omi_memory");
+      expect(body, operation).toContain("current_setting('omi.account_id', true)");
+      expect(body, operation).toContain("current_setting('omi.principal_id', true)");
+      expect(body, operation).toContain("listen.capture.write");
+      expect(body, operation).toContain("IS DISTINCT FROM 'listen.capture.write'");
+      expect(body, operation).not.toMatch(/\bEXECUTE\s+format\s*\(/i);
+      expect(listenSql).toContain(`GRANT EXECUTE ON FUNCTION omi_memory.${operation}(`);
+    }
+
+    const finalization = tables.find((table) => table.name === "listen_formation_finalizations");
+    expect(finalization).toBeDefined();
+    expect(finalization!.body).toContain(
+      "(terminal_status = 'completed' AND capture_completeness = 'complete')",
+    );
+    expect(finalization!.body).toContain(
+      "(terminal_status = 'entitlement_exhausted'\n      AND capture_completeness = 'incomplete_entitlement_exhausted')",
+    );
+    expect(listenSql).toContain("p_terminal_status = 'completed' AND p_capture_completeness <> 'complete'");
+    expect(listenSql).toContain(
+      "p_terminal_status = 'entitlement_exhausted'\n      AND p_capture_completeness <> 'incomplete_entitlement_exhausted'",
+    );
+    expect(listenSql).toContain("v_segment_count >= 4096");
+    expect(listenSql).toContain("v_text_bytes + octet_length(p_text_content) > 1000000");
+    expect(listenSql).toContain("v_locked_session.conversation_id <> p_conversation_id");
   });
 
   test("keeps the PostgreSQL restore target inert, monotone, and separately authorized", () => {

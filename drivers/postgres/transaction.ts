@@ -266,6 +266,9 @@ const providerCode = (error: unknown): string | undefined => {
 export const mapPostgresFailure = (error: unknown): PostgresRepositoryError => {
   if (error instanceof PostgresRepositoryError) return error;
   if (providerCode(error) === "40001") return new PostgresRepositoryError("retryable_serialization", true);
+  if (providerCode(error) === "P1001") return new PostgresRepositoryError("idempotency_conflict");
+  if (providerCode(error) === "P1002") return new PostgresRepositoryError("transition_invalid");
+  if (providerCode(error) === "P1005") return new PostgresRepositoryError("capability_denied");
   return new PostgresRepositoryError("persistence_failed");
 };
 

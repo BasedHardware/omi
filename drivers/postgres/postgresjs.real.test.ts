@@ -141,6 +141,14 @@ import {
   createPostgresMemoryReadGroundingRepository,
   createPostgresMemoryShadowResultRepository,
 } from "./memory-experiment-repository";
+import { createPostgresListenFinalizationRepository } from "./listen-finalization-repository";
+import {
+  LISTEN_CAPTURE_APPEND_VERSION,
+  LISTEN_CAPTURE_FINALIZE_VERSION,
+  LISTEN_CAPTURE_INTERRUPT_VERSION,
+  LISTEN_CAPTURE_OPEN_VERSION,
+  LISTEN_CAPTURE_RESUME_VERSION,
+} from "../../apps/service/stores/listen-finalization-repository";
 import {
   createPostgresMemoryQueryEvaluationGraphSource,
   createPostgresMemoryQueryEvaluationInputRepository,
@@ -689,6 +697,335 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       ON CONFLICT (database_generation_digest) DO UPDATE
         SET release_revision = EXCLUDED.release_revision,
             updated_at = transaction_timestamp()`, [QUALIFICATION_DATABASE_GENERATION_DIGEST]);
+  }, 120_000);
+
+  test("Listen capture persists an atomic finalization boundary with exact replay and rollback", async () => {
+    const suffix = randomUUID();
+    const accountId = `account:listen-qualification:${suffix}`;
+    const principalId = `principal:listen-qualification:${suffix}`;
+    const applicationId = `app:listen-qualification:${suffix}`;
+    const credentialId = `credential:listen-qualification:${suffix}`;
+    const grantId = `grant:listen-qualification:${suffix}`;
+    const controlHash = "a".repeat(64);
+    const credentialHash = "b".repeat(64);
+    const grantHash = "c".repeat(64);
+    const now = Math.floor(Date.now() / 1_000);
+    const startedAt = "2026-08-13T00:00:00.000Z";
+    const appendedAt = "2026-08-13T00:00:30.000Z";
+    const interruptedAt = "2026-08-13T00:00:40.000Z";
+    const resumedAt = "2026-08-13T00:00:50.000Z";
+    const endedAt = "2026-08-13T00:01:00.000Z";
+    const sessionId = `listen-session:${suffix}`;
+    const conversationId = `listen-conversation:${suffix}`;
+    const finalizationId = `listen-finalization:${sha256CanonicalContent({
+      owner_account_id: accountId, session_id: sessionId,
+    })}`;
+    const openRequest = {
+      version: LISTEN_CAPTURE_OPEN_VERSION,
+      session_id: sessionId,
+      conversation_id: conversationId,
+      client_conversation_id: `client-conversation:${suffix}`,
+      started_at: startedAt,
+      source: "omi-listen",
+      codec: "pcm_s16le",
+      sample_rate: 16_000,
+      channels: 1,
+    } as const;
+    const firstSegment = {
+      version: LISTEN_CAPTURE_APPEND_VERSION,
+      session_id: sessionId,
+      segment: { id: `segment:${suffix}:1`, text: "I prefer a quiet workspace.", is_user: true, start: 0, end: 2 },
+      appended_at: appendedAt,
+    } as const;
+    const secondSegment = {
+      version: LISTEN_CAPTURE_APPEND_VERSION,
+      session_id: sessionId,
+      segment: { id: `segment:${suffix}:2`, text: "The other speaker is not the owner.", is_user: false, start: 2, end: 4 },
+      appended_at: appendedAt,
+    } as const;
+
+    const authorityRow: AuthorityStateRow = {
+      account_id: accountId,
+      principal_id: principalId,
+      application_id: applicationId,
+      credential_id: credentialId,
+      credential_generation: 4,
+      capability: "listen.capture.write",
+      grant_id: grantId,
+      grant_version: 1,
+      account_epoch: 12,
+      control_conflict_reason: null,
+      control_conflict_at_revision: null,
+      destination_activation_epoch: 12,
+      destination_activation_revision: 17,
+      lifecycle_state: "active",
+      deletion_epoch: null,
+      account_generation: "new",
+      credential_lifecycle: "active",
+      grant_lifecycle: "active",
+      grant_enabled: true,
+      authentication_strength: "firebase-id-token",
+      credential_expires_at_epoch_seconds: now + 7_200,
+      control_revision: 17,
+      control_content_hash: controlHash,
+      credential_content_hash: credentialHash,
+      grant_content_hash: grantHash,
+      db_now_epoch_seconds: now,
+    };
+
+    try {
+      await ownerSql.begin(async (transaction) => {
+        await transaction.unsafe(
+          "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)", [accountId],
+        );
+        await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+            (account_id, control_revision, account_generation, account_epoch,
+             lifecycle_state, deletion_epoch, observed_at, record_schema_version,
+             record_json, content_hash)
+          VALUES ($1, 17, 'new', 12, 'active', NULL, transaction_timestamp(),
+                  'control-v1', '{}'::jsonb, $2)`, [accountId, controlHash]);
+        await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+            (account_id, control_revision, activated_epoch, activation_control_revision)
+          VALUES ($1, 17, 12, 17)`, [accountId]);
+        await transaction.unsafe(`INSERT INTO omi_memory.application_credential_revisions
+            (account_id, principal_id, application_id, credential_id,
+             credential_generation, credential_kind, lifecycle,
+             authentication_strength, expires_at, record_schema_version,
+             record_json, content_hash)
+          VALUES ($1, $2, $3, $4, 4, 'firebase', 'active', 'firebase-id-token',
+                  to_timestamp($5), 'credential-v1', '{}'::jsonb, $6)`,
+        [accountId, principalId, applicationId, credentialId, now + 7_200, credentialHash]);
+        await transaction.unsafe(`INSERT INTO omi_memory.application_credential_heads
+            (account_id, application_id, credential_id, credential_generation)
+          VALUES ($1, $2, $3, 4)`, [accountId, applicationId, credentialId]);
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version, lifecycle, enabled, scopes,
+             record_schema_version, record_json, content_hash)
+          VALUES ($1, $2, $3, 4, 'listen.capture.write', $4, 1, 'active', true,
+                  '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+        [accountId, applicationId, credentialId, grantId, grantHash]);
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version)
+          VALUES ($1, $2, $3, 4, 'listen.capture.write', $4, 1)`,
+        [accountId, applicationId, credentialId, grantId]);
+      });
+
+      const context = createAuthorizedLedgerWriteContextIssuer().issue({
+        context_version: "authorized-ledger-write-context-v1",
+        principal_id: principalId,
+        account_id: accountId,
+        application_id: applicationId,
+        credential_id: credentialId,
+        credential_generation: 4,
+        capability: "listen.capture.write",
+        grant_id: grantId,
+        grant_version: 1,
+        account_epoch: 12,
+        destination_activation_revision: 17,
+        lifecycle_state: "active",
+        deletion_epoch: null,
+        authentication_strength: "firebase-id-token",
+        issued_at_epoch_seconds: now - 60,
+        expires_at_epoch_seconds: now + 3_600,
+        authorization_state_digest: authorizationStateDigest(authorityRow),
+      }, now);
+      const appRolePool: PostgresTransactionPool = Object.freeze({
+        withTransaction: async <Result>(
+          options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
+          callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+        ) => pool.withTransaction(options, async (connection) => {
+          await connection.query({
+            name: "qualification.listen.set_application_role",
+            text: "SET LOCAL ROLE omi_platform_application",
+            values: [],
+          });
+          return callback(connection);
+        }),
+      });
+      const repository = createPostgresListenFinalizationRepository({ pool: appRolePool });
+
+      await expect(repository.open(context, openRequest)).resolves.toEqual({
+        kind: "opened", session_id: sessionId, conversation_id: conversationId,
+      });
+      await expect(repository.open(context, openRequest)).resolves.toEqual({
+        kind: "replayed", session_id: sessionId, conversation_id: conversationId,
+      });
+      await expect(repository.append(context, firstSegment)).resolves.toMatchObject({
+        kind: "appended", session_id: sessionId, segment_id: firstSegment.segment.id, ordinal: 0,
+      });
+      await expect(repository.append(context, secondSegment)).resolves.toMatchObject({
+        kind: "appended", session_id: sessionId, segment_id: secondSegment.segment.id, ordinal: 1,
+      });
+      await expect(repository.append(context, firstSegment)).resolves.toMatchObject({
+        kind: "replayed", session_id: sessionId, segment_id: firstSegment.segment.id, ordinal: 0,
+      });
+      await expect(repository.append(context, {
+        ...firstSegment, segment: { ...firstSegment.segment, text: "changed bytes" },
+      })).rejects.toMatchObject({ code: "idempotency_conflict" });
+      await expect(repository.interrupt(context, {
+        version: LISTEN_CAPTURE_INTERRUPT_VERSION, session_id: sessionId, interrupted_at: interruptedAt,
+      })).resolves.toMatchObject({ kind: "interrupted", session_id: sessionId, state_sequence: 1 });
+      await expect(repository.resume(context, {
+        version: LISTEN_CAPTURE_RESUME_VERSION, session_id: sessionId, resumed_at: resumedAt,
+      })).resolves.toMatchObject({ kind: "resumed", session_id: sessionId, state_sequence: 2 });
+
+      const finalizeRequest = {
+        version: LISTEN_CAPTURE_FINALIZE_VERSION,
+        session_id: sessionId, terminal_status: "completed" as const, ended_at: endedAt,
+      };
+      const sealed = await repository.finalize(context, finalizeRequest);
+      expect(sealed).toMatchObject({ kind: "sealed", finalization_id: finalizationId, segment_count: 2 });
+      await expect(repository.finalize(context, finalizeRequest)).resolves.toEqual({
+        ...sealed, kind: "replayed",
+      });
+      await expect(repository.finalize(context, {
+        ...finalizeRequest, ended_at: "2026-08-13T00:01:01.000Z",
+      })).rejects.toMatchObject({ code: "idempotency_conflict" });
+      await expect(repository.append(context, {
+        ...secondSegment, segment: { ...secondSegment.segment, id: `segment:post-seal:${suffix}` },
+      })).rejects.toMatchObject({ code: "transition_invalid" });
+
+      const persisted = await ownerSql.unsafe<{
+        sessions: number; states: number; segments: number; finalizations: number;
+        intents: number; outbox: number;
+      }[]>(`SELECT
+        (SELECT count(*)::int FROM omi_memory.listen_capture_sessions
+          WHERE account_id = $1 AND session_id = $2) AS sessions,
+        (SELECT count(*)::int FROM omi_memory.listen_capture_session_state_revisions
+          WHERE account_id = $1 AND session_id = $2) AS states,
+        (SELECT count(*)::int FROM omi_memory.listen_capture_segments
+          WHERE account_id = $1 AND session_id = $2) AS segments,
+        (SELECT count(*)::int FROM omi_memory.listen_formation_finalizations
+          WHERE account_id = $1 AND session_id = $2) AS finalizations,
+        (SELECT count(*)::int FROM omi_memory.listen_conversation_finalization_intents
+          WHERE account_id = $1 AND conversation_id = $3) AS intents,
+        (SELECT count(*)::int FROM omi_memory.listen_formation_outbox
+          WHERE account_id = $1 AND finalization_id = $4) AS outbox`,
+      [accountId, sessionId, conversationId, finalizationId]);
+      expect([...persisted]).toEqual([{
+        sessions: 1, states: 4, segments: 2, finalizations: 1, intents: 1, outbox: 1,
+      }]);
+
+      const emptySessionId = `listen-empty:${suffix}`;
+      await expect(repository.open(context, {
+        ...openRequest, session_id: emptySessionId,
+        conversation_id: `listen-empty-conversation:${suffix}`,
+        client_conversation_id: `listen-empty-client:${suffix}`,
+      })).resolves.toMatchObject({ kind: "opened", session_id: emptySessionId });
+      await expect(repository.finalize(context, {
+        version: LISTEN_CAPTURE_FINALIZE_VERSION, session_id: emptySessionId,
+        terminal_status: "completed", ended_at: endedAt,
+      })).rejects.toMatchObject({ code: "transition_invalid" });
+
+      for (const table of [
+        "listen_capture_sessions", "listen_capture_session_state_revisions",
+        "listen_capture_segments", "listen_formation_finalizations",
+        "listen_conversation_finalization_intents", "listen_formation_outbox",
+      ]) {
+        await expect(ownerSql.begin(async (transaction) => {
+          await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+          await transaction.unsafe(`SELECT 1 FROM omi_memory.${table} LIMIT 1`);
+        })).rejects.toMatchObject({ code: "42501" });
+      }
+      await expect(ownerSql.begin(async (transaction) => {
+        await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+        await transaction.unsafe("SELECT set_config('omi.account_id', $1, true)", [accountId]);
+        await transaction.unsafe("SELECT set_config('omi.principal_id', $1, true)", [principalId]);
+        await transaction.unsafe(`SELECT * FROM omi_memory.open_listen_capture_session(
+          'missing-capability', 'missing-capability-conversation', NULL,
+          transaction_timestamp(), NULL, 'pcm', 16000, 1, $1, $2
+        )`, ["e".repeat(64), "f".repeat(64)]);
+      })).rejects.toMatchObject({ code: "P1005" });
+
+      const rollbackSessionId = `listen-rollback:${suffix}`;
+      const rollbackConversationId = `listen-rollback-conversation:${suffix}`;
+      const rollbackFinalizationId = `listen-finalization:${sha256CanonicalContent({
+        owner_account_id: accountId, session_id: rollbackSessionId,
+      })}`;
+      await repository.open(context, {
+        ...openRequest, session_id: rollbackSessionId, conversation_id: rollbackConversationId,
+        client_conversation_id: `listen-rollback-client:${suffix}`,
+      });
+      await repository.append(context, {
+        ...firstSegment, session_id: rollbackSessionId,
+        segment: { ...firstSegment.segment, id: `segment:rollback:${suffix}` },
+      });
+      await ownerSql.unsafe(`
+        CREATE OR REPLACE FUNCTION omi_memory.listen_qualification_fail_outbox()
+        RETURNS trigger LANGUAGE plpgsql AS $fn$
+        BEGIN RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'qualification_listen_outbox_failure'; END
+        $fn$;
+        DROP TRIGGER IF EXISTS listen_qualification_fail_outbox
+          ON omi_memory.listen_formation_outbox;
+        CREATE TRIGGER listen_qualification_fail_outbox BEFORE INSERT
+          ON omi_memory.listen_formation_outbox
+          FOR EACH ROW EXECUTE FUNCTION omi_memory.listen_qualification_fail_outbox();
+      `, [], { prepare: false });
+      try {
+        await expect(repository.finalize(context, {
+          version: LISTEN_CAPTURE_FINALIZE_VERSION, session_id: rollbackSessionId,
+          terminal_status: "completed", ended_at: endedAt,
+        })).rejects.toMatchObject({ code: "persistence_failed" });
+        const rollbackRows = await ownerSql.unsafe<{
+          states: number; finalizations: number; intents: number; outbox: number;
+        }[]>(`SELECT
+          (SELECT count(*)::int FROM omi_memory.listen_capture_session_state_revisions
+            WHERE account_id = $1 AND session_id = $2) AS states,
+          (SELECT count(*)::int FROM omi_memory.listen_formation_finalizations
+            WHERE account_id = $1 AND session_id = $2) AS finalizations,
+          (SELECT count(*)::int FROM omi_memory.listen_conversation_finalization_intents
+            WHERE account_id = $1 AND conversation_id = $3) AS intents,
+          (SELECT count(*)::int FROM omi_memory.listen_formation_outbox
+            WHERE account_id = $1 AND finalization_id = $4) AS outbox`,
+        [accountId, rollbackSessionId, rollbackConversationId, rollbackFinalizationId]);
+        expect([...rollbackRows]).toEqual([{ states: 1, finalizations: 0, intents: 0, outbox: 0 }]);
+      } finally {
+        await ownerSql.unsafe(`
+          DROP TRIGGER IF EXISTS listen_qualification_fail_outbox
+            ON omi_memory.listen_formation_outbox;
+          DROP FUNCTION IF EXISTS omi_memory.listen_qualification_fail_outbox();
+        `, [], { prepare: false });
+      }
+
+      await ownerSql.begin(async (transaction) => {
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version, lifecycle, enabled, scopes,
+             record_schema_version, record_json, content_hash)
+          VALUES ($1, $2, $3, 4, 'listen.capture.write', $4, 2, 'revoked', false,
+                  '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+        [accountId, applicationId, credentialId, grantId, "d".repeat(64)]);
+        await transaction.unsafe(`UPDATE omi_memory.application_grant_heads
+          SET grant_version = 2
+          WHERE account_id = $1 AND application_id = $2 AND credential_id = $3
+            AND credential_generation = 4 AND capability = 'listen.capture.write'`,
+        [accountId, applicationId, credentialId]);
+      });
+      await expect(repository.open(context, {
+        ...openRequest, session_id: `listen-revoked:${suffix}`,
+        conversation_id: `listen-revoked-conversation:${suffix}`,
+      })).rejects.toMatchObject({ code: "grant_inactive" });
+    } finally {
+      await ownerSql.begin(async (transaction) => {
+        for (const table of [
+          "listen_formation_outbox", "listen_conversation_finalization_intents",
+          "listen_formation_finalizations", "listen_capture_segments",
+          "listen_capture_session_state_revisions", "listen_capture_sessions",
+        ]) {
+          await transaction.unsafe(`DELETE FROM omi_memory.${table} WHERE account_id = $1`, [accountId]);
+        }
+        await transaction.unsafe(`DELETE FROM omi_memory.application_grant_heads WHERE account_id = $1`, [accountId]);
+        await transaction.unsafe(`DELETE FROM omi_memory.application_grant_revisions WHERE account_id = $1`, [accountId]);
+        await transaction.unsafe(`DELETE FROM omi_memory.application_credential_heads WHERE account_id = $1`, [accountId]);
+        await transaction.unsafe(`DELETE FROM omi_memory.application_credential_revisions WHERE account_id = $1`, [accountId]);
+        await transaction.unsafe(`DELETE FROM omi_memory.memory_graph_heads WHERE account_id = $1`, [accountId]);
+        await transaction.unsafe(`DELETE FROM omi_memory.account_control_heads WHERE account_id = $1`, [accountId]);
+        await transaction.unsafe(`DELETE FROM omi_memory.account_control_revisions WHERE account_id = $1`, [accountId]);
+        await transaction.unsafe(`DELETE FROM omi_memory.platform_accounts WHERE account_id = $1`, [accountId]);
+      });
+    }
   }, 120_000);
 
   test("one reserved connection owns the transaction and SET LOCAL clears after rollback", async () => {

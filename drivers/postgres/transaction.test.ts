@@ -249,6 +249,12 @@ test("maps SQLSTATE 40001 exactly and keeps provider contents out of adapter err
   const serialization = mapPostgresFailure({ code: "40001", message: "contains SQL and private values" });
   expect(serialization).toEqual(new PostgresRepositoryError("retryable_serialization", true));
   expect(serialization.message).not.toContain("private");
+  expect(mapPostgresFailure({ code: "P1001", message: "private conflict" }))
+    .toEqual(new PostgresRepositoryError("idempotency_conflict"));
+  expect(mapPostgresFailure({ code: "P1002", message: "private transition" }))
+    .toEqual(new PostgresRepositoryError("transition_invalid"));
+  expect(mapPostgresFailure({ code: "P1005", message: "private authority" }))
+    .toEqual(new PostgresRepositoryError("capability_denied"));
   const unknown = mapPostgresFailure(new Error("secret row and SQL text"));
   expect(unknown).toEqual(new PostgresRepositoryError("persistence_failed"));
   expect(unknown.message).toBe("persistence_failed");
