@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 from starlette.websockets import WebSocketState
 
+from tests.object_store_fakes import FakeObjectStore
 from routers.listen.contracts import ListenRequest
 from routers.listen.parity_capture import ListenParityCapture
 from routers.listen.receiver import ListenReceiver
@@ -203,28 +204,15 @@ async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_cl
         persist_calls.append(capture)
         return original_persist(capture)
 
-    class FakeBlob:
-        def __init__(self, bucket, object_name):
-            self.bucket = bucket
-            self.object_name = object_name
-
-        def upload_from_filename(self, filename, content_type=None):
-            uploaded.append((self.bucket, self.object_name, filename, content_type))
-
-    class FakeBucket:
-        def __init__(self, name):
-            self.name = name
-
-        def blob(self, object_name):
-            return FakeBlob(self.name, object_name)
-
-    class FakeClient:
-        def bucket(self, name):
-            return FakeBucket(name)
+    class _RecordingObjectStore(FakeObjectStore):
+        # parity_pack_export uploads via _object_store().put_from_file, not a raw GCS blob upload.
+        def put_from_file(self, bucket, key, src_path, *, content_type=None, **kwargs):
+            uploaded.append((bucket, key, src_path, content_type))
+            return super().put_from_file(bucket, key, src_path, content_type=content_type, **kwargs)
 
     monkeypatch.setattr(ListenParityCapture, 'persist', persist_once)
     monkeypatch.setattr(export_module, 'ensure_reconcile_loop', lambda *, environ=None: reconcile_calls.append(environ))
-    monkeypatch.setattr(export_module, '_storage_client', lambda: FakeClient())
+    monkeypatch.setattr(export_module, '_object_store', lambda: _RecordingObjectStore())
 
     websocket = _FakeWebSocket(audio=_AUDIO)
     runtime = ListenSessionRuntime(ListenRequest(websocket=websocket, uid=_PRINCIPAL, codec='pcm16', sample_rate=16000))

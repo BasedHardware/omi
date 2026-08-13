@@ -5,6 +5,24 @@ import logging
 
 from routers.listen.parity_capture import ListenParityCapture
 from routers.listen.parity_telemetry import record_parity_capture_event, record_parity_capture_lifecycle
+from tests.object_store_fakes import FakeObjectStore
+
+
+class _RecordingObjectStore(FakeObjectStore):
+    """parity_pack_export uploads via the neutral object-store port (_object_store().put_from_file),
+    not a raw GCS client. Record the (bucket, object, filename) of each put; optionally raise to
+    exercise the bounded fail-open path (was a GCS blob.upload_from_filename raising)."""
+
+    def __init__(self, *args, put_raises=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.puts: list = []
+        self._put_raises = put_raises
+
+    def put_from_file(self, bucket, key, src_path, **kwargs):
+        self.puts.append({'bucket': bucket, 'object': key, 'filename': src_path})
+        if self._put_raises is not None:
+            raise self._put_raises
+        return super().put_from_file(bucket, key, src_path, **kwargs)
 
 
 class _TelemetryCounter:
@@ -269,26 +287,11 @@ def test_export_cassette_file_uploads_under_prefix_without_logging_object_path(t
     cassette = cassette_dir / 'abc.json'
     cassette.write_text('{"ok":true}\n', encoding='utf-8')
 
-    uploaded = {}
-
-    class FakeBlob:
-        def upload_from_filename(self, filename, content_type=None):
-            uploaded['filename'] = filename
-            uploaded['content_type'] = content_type
-
-    class FakeBucket:
-        def blob(self, name):
-            uploaded['object'] = name
-            return FakeBlob()
-
-    class FakeClient:
-        def bucket(self, name):
-            uploaded['bucket'] = name
-            return FakeBucket()
+    store = _RecordingObjectStore()
 
     counter = _TelemetryCounter()
     monkeypatch.setattr(parity_telemetry, 'OMI_PARITY_PACK_CAPTURE_EVENTS_TOTAL', counter)
-    monkeypatch.setattr(export_mod, '_storage_client', lambda: FakeClient())
+    monkeypatch.setattr(export_mod, '_object_store', lambda: store)
     caplog.set_level(logging.INFO)
     env = {
         'OMI_ENV_STAGE': 'dev',
@@ -296,9 +299,9 @@ def test_export_cassette_file_uploads_under_prefix_without_logging_object_path(t
         'OMI_PARITY_PACK_GCS_URI': 'gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0',
     }
     assert export_mod.export_cassette_file(cassette, environ=env) is True
-    assert uploaded['bucket'] == 'based-hardware-dev-omi-parity-pack-v0'
-    assert uploaded['object'] == 'parity-pack/v0/cassettes/abc.json'
-    assert uploaded['filename'] == str(cassette)
+    assert store.puts[-1]['bucket'] == 'based-hardware-dev-omi-parity-pack-v0'
+    assert store.puts[-1]['object'] == 'parity-pack/v0/cassettes/abc.json'
+    assert store.puts[-1]['filename'] == str(cassette)
     assert 'abc.json' not in caplog.text
     assert counter.events == [
         {'stage': 'export', 'outcome': 'attempted', 'reason_class': 'configured'},
@@ -310,21 +313,11 @@ def test_export_cassette_file_emits_attempt_and_bounded_failure(tmp_path, monkey
     from routers.listen import parity_pack_export as export_mod
     from routers.listen import parity_telemetry
 
-    class FakeBlob:
-        def upload_from_filename(self, *_args, **_kwargs):
-            raise PermissionError('private detail must not be emitted')
-
-    class FakeBucket:
-        def blob(self, _name):
-            return FakeBlob()
-
-    class FakeClient:
-        def bucket(self, _name):
-            return FakeBucket()
+    store = _RecordingObjectStore(put_raises=PermissionError('private detail must not be emitted'))
 
     counter = _TelemetryCounter()
     monkeypatch.setattr(parity_telemetry, 'OMI_PARITY_PACK_CAPTURE_EVENTS_TOTAL', counter)
-    monkeypatch.setattr(export_mod, '_storage_client', lambda: FakeClient())
+    monkeypatch.setattr(export_mod, '_object_store', lambda: store)
     monkeypatch.setattr(export_mod, '_record_export_failure', lambda **_kwargs: None)
     caplog.set_level(logging.INFO)
     cassette_dir = tmp_path / 'cassettes'
