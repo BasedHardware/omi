@@ -327,8 +327,6 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
     shippedCohortsEnabled: false,
     dailyLimit: 2,
     minimumSpacing: 90 * 60,
-    quietHoursStartMinute: 22 * 60,
-    quietHoursEndMinute: 8 * 60,
     allowedPreparationKinds: []
   )
 
@@ -337,8 +335,6 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
   var shippedCohortsEnabled: Bool
   var dailyLimit: Int
   var minimumSpacing: TimeInterval
-  var quietHoursStartMinute: Int
-  var quietHoursEndMinute: Int
   var allowedPreparationKinds: Set<String>
 
   init(
@@ -346,8 +342,6 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
     shippedCohortsEnabled: Bool,
     dailyLimit: Int,
     minimumSpacing: TimeInterval,
-    quietHoursStartMinute: Int,
-    quietHoursEndMinute: Int,
     allowedPreparationKinds: Set<String>
   ) {
     self.schemaVersion = Self.schemaVersion
@@ -355,8 +349,6 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
     self.shippedCohortsEnabled = shippedCohortsEnabled
     self.dailyLimit = max(0, dailyLimit)
     self.minimumSpacing = max(0, minimumSpacing)
-    self.quietHoursStartMinute = min(max(0, quietHoursStartMinute), 1439)
-    self.quietHoursEndMinute = min(max(0, quietHoursEndMinute), 1439)
     self.allowedPreparationKinds = allowedPreparationKinds
   }
 
@@ -384,8 +376,6 @@ enum ProactiveTaskInterruptionSettings {
       shippedCohortsEnabled: config.shippedCohortsEnabled,
       dailyLimit: config.dailyLimit,
       minimumSpacing: config.minimumSpacing,
-      quietHoursStartMinute: config.quietHoursStartMinute,
-      quietHoursEndMinute: config.quietHoursEndMinute,
       allowedPreparationKinds: config.allowedPreparationKinds
     )
   }
@@ -434,7 +424,6 @@ enum TaskInterruptionGateReason: String, Codable, Equatable {
   case taskDisabled = "task_disabled"
   case focusSuppressed = "focus_suppressed"
   case snoozed
-  case quietHours = "quiet_hours"
   case expired
   case canWait = "can_wait"
   case duplicate
@@ -543,8 +532,6 @@ final class ProactiveTaskInterruptionGate {
       reason = .focusSuppressed
     } else if environment.snoozed {
       reason = .snoozed
-    } else if Self.isQuietHours(configuration: configuration, environment: environment) {
-      reason = .quietHours
     } else if candidate.expiresAt <= environment.now {
       reason = .expired
     } else if candidate.canWait {
@@ -573,18 +560,6 @@ final class ProactiveTaskInterruptionGate {
     return trace
   }
 
-  private static func isQuietHours(
-    configuration: ProactiveTaskInterruptionConfiguration,
-    environment: TaskInterruptionEnvironment
-  ) -> Bool {
-    let components = environment.calendar.dateComponents([.hour, .minute], from: environment.now)
-    let minute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
-    let start = configuration.quietHoursStartMinute
-    let end = configuration.quietHoursEndMinute
-    if start == end { return false }
-    if start < end { return minute >= start && minute < end }
-    return minute >= start || minute < end
-  }
 }
 
 struct ProactiveTaskArtifactProposal {

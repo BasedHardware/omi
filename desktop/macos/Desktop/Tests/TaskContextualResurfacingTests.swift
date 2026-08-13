@@ -756,18 +756,10 @@ final class TaskContextualResurfacingTests: XCTestCase {
     let service = NotificationService(registerWithSystemNotificationCenter: false)
     let priorFrequency = UserDefaults.standard.object(
       forKey: NotificationService.frequencyDefaultsKey)
-    let priorActiveStart = UserDefaults.standard.object(
-      forKey: NotificationService.activePeriodStartDefaultsKey)
-    let priorActiveEnd = UserDefaults.standard.object(
-      forKey: NotificationService.activePeriodEndDefaultsKey)
     defer {
       Self.restoreDefault(priorFrequency, key: NotificationService.frequencyDefaultsKey)
-      Self.restoreDefault(priorActiveStart, key: NotificationService.activePeriodStartDefaultsKey)
-      Self.restoreDefault(priorActiveEnd, key: NotificationService.activePeriodEndDefaultsKey)
     }
     UserDefaults.standard.set(3, forKey: NotificationService.frequencyDefaultsKey)
-    UserDefaults.standard.set(0, forKey: NotificationService.activePeriodStartDefaultsKey)
-    UserDefaults.standard.set(0, forKey: NotificationService.activePeriodEndDefaultsKey)
 
     XCTAssertTrue(
       service.proactiveNotificationEligibleForTesting(
@@ -788,6 +780,37 @@ final class TaskContextualResurfacingTests: XCTestCase {
   }
 
   @MainActor
+  func testProactiveEligibilityIgnoresTimeOfDay() async throws {
+    await transitionContextTestOwner(to: "notification-always-on-owner")
+    let snapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    let priorMasterEnabled = UserDefaults.standard.object(
+      forKey: NotificationService.masterEnabledDefaultsKey)
+    let priorFrequency = UserDefaults.standard.object(
+      forKey: NotificationService.frequencyDefaultsKey)
+    defer {
+      Self.restoreDefault(priorMasterEnabled, key: NotificationService.masterEnabledDefaultsKey)
+      Self.restoreDefault(priorFrequency, key: NotificationService.frequencyDefaultsKey)
+    }
+    UserDefaults.standard.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
+    UserDefaults.standard.set(5, forKey: NotificationService.frequencyDefaultsKey)
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+    let earlyMorning = try XCTUnwrap(
+      calendar.date(from: DateComponents(year: 2026, month: 8, day: 13, hour: 2)))
+    let lateNight = try XCTUnwrap(
+      calendar.date(from: DateComponents(year: 2026, month: 8, day: 13, hour: 23)))
+
+    XCTAssertTrue(
+      service.proactiveNotificationEligibleForTesting(
+        assistantId: "insight", authorizationSnapshot: snapshot, now: earlyMorning))
+    XCTAssertTrue(
+      service.proactiveNotificationEligibleForTesting(
+        assistantId: "insight", authorizationSnapshot: snapshot, now: lateNight))
+  }
+
+  @MainActor
   func testStaleContextualInterruptionCannotConsumeLedgerMetadataOrOwnerBThrottle() async throws {
     await transitionContextTestOwner(to: "notification-owner-a")
     let ownerASnapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
@@ -802,13 +825,7 @@ final class TaskContextualResurfacingTests: XCTestCase {
 
     let priorFrequency = UserDefaults.standard.object(
       forKey: NotificationService.frequencyDefaultsKey)
-    let priorActiveStart = UserDefaults.standard.object(
-      forKey: NotificationService.activePeriodStartDefaultsKey)
-    let priorActiveEnd = UserDefaults.standard.object(
-      forKey: NotificationService.activePeriodEndDefaultsKey)
     UserDefaults.standard.set(3, forKey: NotificationService.frequencyDefaultsKey)
-    UserDefaults.standard.set(0, forKey: NotificationService.activePeriodStartDefaultsKey)
-    UserDefaults.standard.set(0, forKey: NotificationService.activePeriodEndDefaultsKey)
     XCTAssertTrue(
       service.allowProactiveNotificationForTesting(
         assistantId: "task",
@@ -839,20 +856,6 @@ final class TaskContextualResurfacingTests: XCTestCase {
       UserDefaults.standard.set(priorFrequency, forKey: NotificationService.frequencyDefaultsKey)
     } else {
       UserDefaults.standard.removeObject(forKey: NotificationService.frequencyDefaultsKey)
-    }
-    if let priorActiveStart {
-      UserDefaults.standard.set(
-        priorActiveStart, forKey: NotificationService.activePeriodStartDefaultsKey)
-    } else {
-      UserDefaults.standard.removeObject(
-        forKey: NotificationService.activePeriodStartDefaultsKey)
-    }
-    if let priorActiveEnd {
-      UserDefaults.standard.set(
-        priorActiveEnd, forKey: NotificationService.activePeriodEndDefaultsKey)
-    } else {
-      UserDefaults.standard.removeObject(
-        forKey: NotificationService.activePeriodEndDefaultsKey)
     }
   }
 
@@ -1000,30 +1003,6 @@ final class TaskContextualResurfacingTests: XCTestCase {
         expected
       )
     }
-  }
-
-  func testInterruptionGateHonorsQuietHoursAcrossMidnight() {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-    let late = ISO8601DateFormatter().date(from: "2027-01-15T23:00:00Z")!
-    let midday = ISO8601DateFormatter().date(from: "2027-01-15T12:00:00Z")!
-
-    XCTAssertEqual(
-      gate().evaluate(
-        candidate: candidate(expiresAt: late.addingTimeInterval(60)),
-        configuration: configuration(quiet: true),
-        environment: environment(now: late, calendar: calendar)
-      ).reason,
-      .quietHours
-    )
-    XCTAssertEqual(
-      gate().evaluate(
-        candidate: candidate(expiresAt: midday.addingTimeInterval(60)),
-        configuration: configuration(),
-        environment: environment(now: midday, calendar: calendar)
-      ).reason,
-      .allowed
-    )
   }
 
   func testInterruptionGateEnforcesDedupeSpacingAndDailyBudget() {
@@ -1351,16 +1330,13 @@ final class TaskContextualResurfacingTests: XCTestCase {
     enabled: Bool = true,
     shipped: Bool = false,
     dailyLimit: Int = 2,
-    spacing: TimeInterval = 90 * 60,
-    quiet: Bool = false
+    spacing: TimeInterval = 90 * 60
   ) -> ProactiveTaskInterruptionConfiguration {
     ProactiveTaskInterruptionConfiguration(
       userOptedIn: enabled,
       shippedCohortsEnabled: shipped,
       dailyLimit: dailyLimit,
       minimumSpacing: spacing,
-      quietHoursStartMinute: quiet ? 22 * 60 : 0,
-      quietHoursEndMinute: quiet ? 8 * 60 : 0,
       allowedPreparationKinds: []
     )
   }
