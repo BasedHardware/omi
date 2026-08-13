@@ -250,7 +250,7 @@ def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
         request("proactive_reasoning"), "user-1", "request-2"
     )
     assert reasoning_provider.payload["model"] == "gpt-5.6-luna"
-    assert reasoning_provider.payload["reasoning_effort"] == "low"
+    assert reasoning_provider.payload["reasoning_effort"] == "medium"
 
 
 def test_direct_provider_fallback_fails_closed_outside_dev(monkeypatch):
