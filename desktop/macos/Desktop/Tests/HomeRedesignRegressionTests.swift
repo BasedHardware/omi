@@ -120,22 +120,123 @@ final class ChatBubbleMetadataBandLayoutTests: XCTestCase {
       "the metadata strip must remain inside the row's hit-test bounds")
   }
 
+  func testFinishedUnsyncedReplyReservesTheSameMetadataControlRegionAsASyncedReply() {
+    let synced = rowHeight(isStreaming: false, isSynced: true)
+    let unsynced = rowHeight(isStreaming: false, isSynced: false)
+    let streaming = rowHeight(isStreaming: true, isSynced: false)
+
+    XCTAssertEqual(synced, unsynced, accuracy: 1)
+    XCTAssertGreaterThanOrEqual(
+      unsynced - streaming,
+      ChatBubbleMetadataControlMetrics.targetSize + ChatBubbleMetadataControlMetrics.topInset - 1)
+  }
+
   private func bubble(showsMetadata: Bool) -> ChatBubble {
+    bubble(isStreaming: !showsMetadata, isSynced: showsMetadata)
+  }
+
+  private func bubble(isStreaming: Bool, isSynced: Bool) -> ChatBubble {
     ChatBubble(
       message: ChatMessage(
         id: "assistant-band",
         text: "A one-line answer.",
         createdAt: Date(timeIntervalSince1970: 1_700_000_000),
         sender: .ai,
-        isStreaming: !showsMetadata,
-        isSynced: showsMetadata),
+        isStreaming: isStreaming,
+        isSynced: isSynced),
       app: nil,
       showsOmiMark: false,
       onRate: { _ in })
   }
 
   private func rowHeight(showsMetadata: Bool) -> CGFloat {
-    NSHostingView(rootView: bubble(showsMetadata: showsMetadata).frame(width: Self.width)).fittingSize.height
+    rowHeight(isStreaming: !showsMetadata, isSynced: showsMetadata)
+  }
+
+  private func rowHeight(isStreaming: Bool, isSynced: Bool) -> CGFloat {
+    NSHostingView(rootView: bubble(isStreaming: isStreaming, isSynced: isSynced).frame(width: Self.width))
+      .fittingSize.height
+  }
+}
+
+final class ChatBubbleMetadataBandTests: XCTestCase {
+  func testFinishedReplyOffersRatingsBeforeJournalSync() {
+    let message = ChatMessage(
+      id: "live-tail",
+      text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+      sender: .ai,
+      isStreaming: false,
+      isSynced: false)
+
+    XCTAssertEqual(ChatBubbleMetadataBand.of(message), .actions(ratings: true))
+  }
+
+  func testStreamingReplyHidesTheMetadataBand() {
+    let message = ChatMessage(
+      id: "live-tail",
+      text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+      sender: .ai,
+      isStreaming: true,
+      isSynced: false)
+
+    XCTAssertEqual(ChatBubbleMetadataBand.of(message), .hidden)
+  }
+
+  func testEmptyCompletedReplyKeepsTimestampOnly() {
+    let message = ChatMessage(
+      id: "empty-tail",
+      text: "",
+      sender: .ai,
+      isStreaming: false,
+      isSynced: false)
+
+    XCTAssertEqual(ChatBubbleMetadataBand.of(message), .timestampOnly)
+  }
+}
+
+@MainActor
+final class ChatBubbleIdentityTests: XCTestCase {
+  func testSyncAndMetadataAreVisibleIdentity() {
+    let unsynced = bubble(isSynced: false, metadata: nil)
+    let synced = bubble(isSynced: true, metadata: nil)
+    let withInfo = bubble(isSynced: false, metadata: Self.sampleMetadata)
+
+    XCTAssertNotEqual(unsynced, synced)
+    XCTAssertNotEqual(unsynced, withInfo)
+  }
+
+  func testMatchingCompletedRepliesRemainEqual() {
+    XCTAssertEqual(
+      bubble(isSynced: false, metadata: Self.sampleMetadata),
+      bubble(isSynced: false, metadata: Self.sampleMetadata))
+  }
+
+  private static let sampleMetadata = MessageMetadata(
+    model: "claude-sonnet",
+    inputTokens: 10,
+    outputTokens: 4,
+    cacheReadTokens: nil,
+    cacheWriteTokens: nil,
+    costUsd: nil,
+    systemPrompt: nil,
+    hasScreenshot: false,
+    screenshotSizeBytes: nil,
+    toolNames: [],
+    sqlRowsReturned: 0,
+    sqlQueryCount: 0)
+
+  private func bubble(isSynced: Bool, metadata: MessageMetadata?) -> ChatBubble {
+    ChatBubble(
+      message: ChatMessage(
+        id: "live-tail",
+        text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+        sender: .ai,
+        isStreaming: false,
+        isSynced: isSynced,
+        metadata: metadata),
+      app: nil,
+      showsOmiMark: true,
+      onRate: { _ in })
   }
 }
 

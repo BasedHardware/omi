@@ -245,3 +245,43 @@ struct BackgroundAgentSummary: Equatable {
     )
   }
 }
+
+/// Footer actions for an assistant row. A finished reply is rateable as soon as
+/// it has copyable text; waiting for `isSynced` hid thumbs on the live tail
+/// because completion clears streaming before the journal remote id lands.
+enum ChatBubbleMetadataBand: Equatable {
+  case hidden
+  case timestampOnly
+  case actions(ratings: Bool)
+
+  static func of(_ message: ChatMessage) -> Self {
+    guard message.sender == .ai, !message.isStreaming else { return .hidden }
+    guard !message.copyableText.isEmpty else { return .timestampOnly }
+    return .actions(ratings: true)
+  }
+}
+
+/// Visible identity for `ChatBubble`'s Equatable skip. Sync, metadata, and
+/// structured blocks change the footer and tool rail without changing `text`.
+enum ChatBubbleIdentity {
+  static func equal(
+    _ lhs: ChatMessage,
+    _ rhs: ChatMessage,
+    appIDs: (String?, String?),
+    showsOmiMark: (Bool, Bool),
+    isDuplicate: (Bool, Bool)
+  ) -> Bool {
+    guard !lhs.isStreaming && !rhs.isStreaming else { return false }
+    return lhs.id == rhs.id
+      && lhs.text == rhs.text
+      && lhs.rating == rhs.rating
+      && lhs.isSynced == rhs.isSynced
+      && lhs.copyableText == rhs.copyableText
+      && (lhs.metadata != nil) == (rhs.metadata != nil)
+      && ChatContentBlockCodec.comparisonData(lhs.contentBlocks)
+        == ChatContentBlockCodec.comparisonData(rhs.contentBlocks)
+      && appIDs.0 == appIDs.1
+      && showsOmiMark.0 == showsOmiMark.1
+      && isDuplicate.0 == isDuplicate.1
+  }
+}
