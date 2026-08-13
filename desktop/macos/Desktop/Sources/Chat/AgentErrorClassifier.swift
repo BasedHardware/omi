@@ -42,6 +42,18 @@ enum AgentErrorClassifier {
     "Omi's local AI runtime is not installed correctly, so chat can't start. "
     + "Reinstall or update Omi to repair it."
 
+  /// Worker recycle rewrites `userMessage` to "send again" while leaving the
+  /// provider's 402 on `technicalMessage`. Classify both or the billing rule
+  /// never fires and the transcript falls through to the unclassified marker.
+  static func classify(_ failure: AgentRuntimeFailure) -> ClassifiedAgentError {
+    classify(
+      [failure.technicalMessage, failure.userMessage]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n")
+    )
+  }
+
   // ponytail: ordered substring rules over the observed error corpus; a rule
   // table beats ML until the corpus outgrows it. First match wins.
   static func classify(_ rawMessage: String) -> ClassifiedAgentError {

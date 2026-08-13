@@ -15,6 +15,7 @@ covers:
   # validation, and journal append; it is not a local card-insertion mapping.
   - desktop/macos/agent/src/protocol.ts
   - desktop/macos/agent/src/runtime/kernel-core.ts
+  - desktop/macos/agent/src/runtime/failures.ts
   - desktop/macos/agent/src/index.ts
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
   # S1a's authorized executor result is projected through this store before

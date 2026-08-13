@@ -59,6 +59,17 @@ enum ChatQueryFailureDisposition: Equatable, Sendable {
         return .failed(.authentication)
       case .agentRuntimeFailure(let failure) where failure.failureCode == .authentication:
         return .failed(.authentication)
+      case .agentRuntimeFailure(let failure) where failure.failureCode == .quotaExceeded:
+        return .failed(.quota)
+      case .agentRuntimeFailure(let failure):
+        switch AgentErrorClassifier.classify(failure).code {
+        case .providerBillingExhausted, .planLimitReached:
+          return .failed(.quota)
+        case .providerAuthExpired, .credentialLeakSuspected:
+          return .failed(.authentication)
+        default:
+          return .failed(.agentRuntime)
+        }
       case .failedToStart:
         return .failed(.bridgeStartFailed)
       case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
@@ -72,8 +83,6 @@ enum ChatQueryFailureDisposition: Equatable, Sendable {
         return .failed(.concurrentRequest)
       case .quotaExceeded:
         return .failed(.quota)
-      case .agentRuntimeFailure:
-        return .failed(.agentRuntime)
       case .agentError:
         return .failed(.agentError)
       }
@@ -277,9 +286,12 @@ struct ChatQueryErrorDetail: Equatable, Sendable {
         recoveryOutcome: nil,
         retryDisposition: nil)
     case .agentRuntimeFailure(let failure):
+      let classified = AgentErrorClassifier.classify(failure)
+      let billingRejected =
+        classified.code == .providerBillingExhausted || classified.code == .planLimitReached
       return ChatQueryErrorDetail(
-        errorCode: failure.failureCode.rawValue,
-        retryable: failure.retryable,
+        errorCode: billingRejected ? classified.code.rawValue : failure.failureCode.rawValue,
+        retryable: billingRejected ? false : failure.retryable,
         failureCode: boundedFailureCode(failure.code),
         failureSource: failure.source,
         adapterId: failure.adapterId,

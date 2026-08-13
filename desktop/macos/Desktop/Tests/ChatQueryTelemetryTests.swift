@@ -114,6 +114,28 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertFalse(String(describing: properties).contains("private prompt"))
   }
 
+  func testRecycledWorkerHTTP402ReportsBillingNotUnknownRuntime() {
+    let failure = AgentRuntimeFailure(
+      code: "adapter_execution_failed",
+      userMessage: "The local agent reset its session after an error. Send your message again.",
+      technicalMessage: "HTTP 402 status code (no body)",
+      source: "adapter_execution",
+      adapterId: "pi-mono",
+      retryable: true,
+      recoveryAction: "worker_recycled",
+      recoveryOutcome: "recovered",
+      retryDisposition: "next_send"
+    )
+    let error = BridgeError.agentRuntimeFailure(failure)
+    let detail = ChatQueryErrorDetail.from(error)
+
+    XCTAssertEqual(detail?.errorCode, "provider_billing_exhausted")
+    XCTAssertEqual(detail?.retryable, false)
+    XCTAssertEqual(detail?.recoveryAction, "worker_recycled")
+    XCTAssertEqual(detail?.adapterId, "pi-mono")
+    XCTAssertEqual(ChatQueryFailureDisposition.classify(error), .failed(.quota))
+  }
+
   func testRuntimeDetailedFailureCodeMustBeInTheAnalyticsAllowlist() {
     let failure = AgentRuntimeFailure(
       code: "provider_error_/Users/person/secret.txt",
