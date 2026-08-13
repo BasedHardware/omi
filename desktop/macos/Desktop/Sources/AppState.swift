@@ -561,6 +561,7 @@ class AppState: ObservableObject {
   }
 
   var wasTranscribingBeforeSleep = false
+  var conversationRoleBeforeSleep: MeetingConversationBoundaryPolicy.Role = .ambient
   var lastScreenLockTime: Date?
   var lastScreenUnlockTime: Date?
   var buttonStreamTask: Task<Void, Never>? {
@@ -785,6 +786,7 @@ class AppState: ObservableObject {
         self.wasTranscribingBeforeSleep = self.isTranscribing
         if self.isTranscribing {
           log("Computer sleeping - stopping transcription (backend handles conversation)")
+          self.conversationRoleBeforeSleep = self.currentConversationRole
           let sessionId = self.currentSessionId
           self.stopAudioCapture()
           if let sessionId {
@@ -819,7 +821,7 @@ class AppState: ObservableObject {
           // Brief delay to let audio subsystem settle after wake
           try? await Task.sleep(for: .seconds(2))
           if !self.isTranscribing {
-            self.startTranscription()
+            self.startTranscription(conversationRole: self.conversationRoleBeforeSleep)
           }
         }
         self.wasTranscribingBeforeSleep = false

@@ -72,6 +72,10 @@ class ListenSessionState:
     dg_usage_ms_pending: int = 0
     last_audio_received_time: Optional[float] = None
     last_activity_time: Optional[float] = None
+    # Client-provided close provenance. This is set before a normal WebSocket
+    # close so finalization can distinguish an internal rotation from a
+    # terminal meeting end without trusting socket timing.
+    finalization_reason: Optional[str] = None
 
 
 @dataclass(frozen=True)

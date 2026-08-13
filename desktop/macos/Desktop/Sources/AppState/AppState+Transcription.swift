@@ -249,6 +249,15 @@ extension AppState {
             return true
           }
           guard sessionStillCurrent else { return }
+          let pendingMeetingState = await MainActor.run { () -> Bool? in
+            let pending = self.pendingMeetingState
+            self.pendingMeetingState = nil
+            return pending
+          }
+          if let pendingMeetingState {
+            await self.handleMeetingObservation(active: pendingMeetingState)
+            guard self.recordingGeneration == sessionGeneration else { return }
+          }
           if let backendId = await MainActor.run(body: { () -> String? in
             let candidate = self.pendingBackendConversationId ?? self.currentBackendConversationId
             guard let candidate else { return nil }
@@ -897,6 +906,7 @@ extension AppState {
       stage: "fallback"
     )
     let source = audioSource
+    let conversationRole = currentConversationRole
     stopTranscription()
     // Restart in cloud mode once stop has settled (isTranscribing flips false inside the stop's
     // async teardown). Bounded wait avoids racing the `!isTranscribing` guard in startTranscription.
@@ -906,7 +916,7 @@ extension AppState {
         if !self.isTranscribing { break }
         try? await Task.sleep(nanoseconds: 100_000_000)
       }
-      self.startTranscription(source: source)
+      self.startTranscription(source: source, conversationRole: conversationRole)
       self.sttSession.completeFallback()
     }
   }
@@ -952,6 +962,7 @@ extension AppState {
       stage: "fallback"
     )
     let source = audioSource
+    let conversationRole = currentConversationRole
     stopTranscription()
     Task { @MainActor [weak self] in
       guard let self else { return }
@@ -959,7 +970,7 @@ extension AppState {
         if !self.isTranscribing { break }
         try? await Task.sleep(nanoseconds: 100_000_000)
       }
-      self.startTranscription(source: source)
+      self.startTranscription(source: source, conversationRole: conversationRole)
       self.sttSession.completeFallback()
     }
   }
@@ -995,6 +1006,7 @@ extension AppState {
     } else {
       // Close the cloud stream before marking the old local session finished, so no late
       // WebSocket segments can be persisted after the finalization snapshot starts.
+      transcriptionService?.markFinalizationReason(finalizationReason.rawValue)
       transcriptionService?.stop()
       transcriptionService = nil
     }
@@ -1065,6 +1077,7 @@ extension AppState {
         guard let self = self, self.isTranscribing else { return }
         log("Transcription: 4-hour limit reached — stopping and restarting")
         let sessionId = self.currentSessionId
+        let conversationRole = self.currentConversationRole
         let wasLocalSTT = self.sttSession.useLocalSTT
         let mic = self.localMicService
         let sys = self.localSystemService
@@ -1072,6 +1085,8 @@ extension AppState {
           self.localMicService = nil
           self.localSystemService = nil
         }
+        self.transcriptionService?.markFinalizationReason(
+          TranscriptionFinalizationReason.maxDurationRotation.rawValue)
         self.stopAudioCapture()
         if wasLocalSTT {
           await mic?.finish()
@@ -1097,7 +1112,7 @@ extension AppState {
             )
           }
         }
-        self.startTranscription()
+        self.startTranscription(conversationRole: conversationRole)
       }
     }
 
@@ -1203,6 +1218,15 @@ extension AppState {
           return true
         }
         guard sessionStillCurrent else { return }
+        let pendingMeetingState = await MainActor.run { () -> Bool? in
+          let pending = self.pendingMeetingState
+          self.pendingMeetingState = nil
+          return pending
+        }
+        if let pendingMeetingState {
+          await self.handleMeetingObservation(active: pendingMeetingState)
+          guard self.recordingGeneration == sessionGeneration else { return }
+        }
         if let backendId = await MainActor.run(body: { () -> String? in
           guard self.isTranscribing, self.recordingGeneration == sessionGeneration else { return nil }
           let candidate = self.pendingBackendConversationId ?? self.currentBackendConversationId

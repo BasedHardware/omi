@@ -140,9 +140,30 @@ describe("kernel conversation journal", () => {
       conversationId: "conversation-1",
       summary: "Weekly planning",
     }]);
+    expect(result.turn?.conversationId).toBe(fixture.conversationId);
     expect(result).toMatchObject({
       accepted: true,
       duplicate: false,
+      receipt: { intentId: "intent-meeting" },
+    });
+    const duplicate = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-meeting",
+      continuityKey: "capture:conversation-1",
+      source: "capture_arrival",
+      blocks: [{
+        type: "conversationLink",
+        conversation_id: "conversation-1",
+        summary: "Weekly planning",
+      }],
+      nowMs: 101,
+    });
+    expect(duplicate).toMatchObject({
+      accepted: true,
+      duplicate: true,
+      turn: { conversationId: fixture.conversationId },
       receipt: { intentId: "intent-meeting" },
     });
     fixture.store.close();

@@ -70,6 +70,13 @@ extension AppState {
       pendingMeetingState = active
       return
     }
+    // The detector can report its initial state while the async SQLite session
+    // owner is still being created. Do not rotate an unowned buffer: retain the
+    // edge and replay it as soon as the session task installs currentSessionId.
+    guard currentSessionId != nil else {
+      pendingMeetingState = active
+      return
+    }
     guard
       let transition = MeetingConversationBoundaryPolicy.transition(
         previousRole: currentConversationRole,

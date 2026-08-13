@@ -287,6 +287,27 @@ class TranscriptionService: @unchecked Sendable {
     disconnect()
   }
 
+  /// Tell the live listen session why this recording is being closed before the
+  /// socket is cancelled. The backend stamps this provenance onto the current
+  /// conversation before durable finalization, so internal max-duration
+  /// rotations cannot produce a notes-ready receipt.
+  func markFinalizationReason(_ reason: String) {
+    guard streamingMode == .conversation,
+      isConnected,
+      let webSocketTask,
+      let data = try? JSONSerialization.data(withJSONObject: [
+        "type": "finalization_reason",
+        "reason": reason,
+      ]),
+      let message = String(data: data, encoding: .utf8)
+    else { return }
+    webSocketTask.send(.string(message)) { error in
+      if let error {
+        logError("TranscriptionService: Failed to send finalization reason", error: error)
+      }
+    }
+  }
+
   /// Send audio data to the backend (buffered for efficiency)
   func sendAudio(_ data: Data) {
     guard isConnected else { return }

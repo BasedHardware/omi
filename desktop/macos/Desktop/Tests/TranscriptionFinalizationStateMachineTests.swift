@@ -347,6 +347,17 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         reason: .retry
       ))
 
+    let recoveredMeeting = TranscriptionSessionRecord(
+      source: "desktop",
+      conversationRole: .meeting,
+      finalizationReason: .crashRecovery
+    )
+    XCTAssertTrue(
+      ConversationFinalizationService.shouldNotifyMeetingCompletion(
+        session: recoveredMeeting,
+        reason: .retry
+      ))
+
     let maxDurationMeeting = TranscriptionSessionRecord(
       source: "desktop",
       conversationRole: .meeting,

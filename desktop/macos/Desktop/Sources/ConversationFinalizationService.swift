@@ -562,7 +562,9 @@ actor ConversationFinalizationService {
   ) -> Bool {
     guard session.conversationRole == .meeting else { return false }
     let effectiveReason = session.finalizationReason ?? reason
-    return effectiveReason == .meetingEnded || effectiveReason == .userStop
+    return effectiveReason == .meetingEnded
+      || effectiveReason == .userStop
+      || effectiveReason == .crashRecovery
   }
 
   private func postMeetingCompletionIfReady(
