@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const coreRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const wrapperPath = path.resolve(fileURLToPath(import.meta.url));
@@ -188,7 +188,6 @@ function fixtureQuery(coordinate) {
 }
 function runtimeEnvironment(coordinate, outRoot) {
   const runtime = path.join(outRoot, "runtime", coordinate.run_id);
-  rmSync(runtime, { recursive: true, force: true });
   const home = path.join(runtime, "home"); const temporary = path.join(runtime, "tmp");
   mkdirSync(home, { recursive: true }); mkdirSync(temporary, { recursive: true });
   return {
@@ -201,14 +200,27 @@ function runtimeEnvironment(coordinate, outRoot) {
     OMI_RUN_CLIENT_ID: coordinate.run_id,
   };
 }
+export function foregroundApplicationFromResults(front, info) {
+  const identity = front?.status === 0 && typeof front.stdout === "string" ? front.stdout.trim() : "";
+  if (!/^ASN:0x[0-9a-f]+-0x[0-9a-f]+:$/i.test(identity)) fail("macOS foreground application identity is unavailable");
+  if (info?.status !== 0 || typeof info.stdout !== "string") fail("macOS foreground application metadata is unavailable");
+  const match = info.stdout.match(/["']?LSDisplayName["']?\s*=\s*"([^"\n]+)"/);
+  if (!match?.[1]?.trim()) fail("macOS foreground application name is unavailable");
+  return { identity, name: match[1].trim() };
+}
 function foregroundApplication() {
-  const result = spawnSync("/usr/bin/lsappinfo", ["front"], { encoding: "utf8", timeout: 5_000 });
-  return result.status === 0 && result.stdout.trim() ? result.stdout.trim() : null;
+  const front = spawnSync("/usr/bin/lsappinfo", ["front"], { encoding: "utf8", timeout: 5_000 });
+  const identity = front.status === 0 ? front.stdout.trim() : "";
+  const info = identity ? spawnSync("/usr/bin/lsappinfo", ["info", "-only", "name", "-app", identity], { encoding: "utf8", timeout: 5_000 }) : { status: 1, stdout: "" };
+  return foregroundApplicationFromResults(front, info);
 }
 function assertForeground(expected, coordinate, stage) {
-  if (!expected) return;
   const observed = foregroundApplication();
-  if (observed !== expected) fail(`${coordinate.run_id}: foreground application changed during ${stage}`);
+  if (observed.identity !== expected.identity) fail(`${coordinate.run_id}: foreground application changed during ${stage}`);
+}
+export function lockedGuiBlock(foreground, sourceShas, coordinates) {
+  if (foreground.name !== "loginwindow") return null;
+  return { schema: "omi.native-semantic-blocked/v1", status: "blocked_gui_locked", reason: "native semantic evidence requires an unlocked foreground session", source_shas: sourceShas, coordinate_count: coordinates.length, run_ids: coordinates.map((coordinate) => coordinate.run_id) };
 }
 function childExit(child) {
   if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
@@ -338,30 +350,44 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
     process.exitCode = 3;
     return;
   }
+  const preflightForeground = foregroundApplication();
+  const guiBlock = lockedGuiBlock(preflightForeground, manifest.source_shas, selectedCoordinates);
+  if (guiBlock) {
+    process.stdout.write(`${JSON.stringify(guiBlock)}\n`);
+    process.exitCode = 3;
+    return;
+  }
   const command = commandText(manifestPath, outRoot, preparedPath, offset, limit, Boolean(args.replay_proof), readinessTimeoutMs);
   const records = {}; const captureRoot = path.join(outRoot, "captures", "macos"); mkdirSync(captureRoot, { recursive: true });
   const stdoutLine = `NATIVE_SEMANTIC_BATCH_COMPLETE members=${limit}\n`;
-  for (const [index, coordinate] of selectedCoordinates.entries()) {
+  const observe = async (coordinate) => {
     const foreground = foregroundApplication();
     const child = await launchFixture(prepared, coordinate, outRoot, readinessTimeoutMs);
     try {
       assertForeground(foreground, coordinate, "fixture launch");
       const probeArgs = ["--pid", String(child.pid), "--bundle-id", coordinate.target.bundle_id, "--expected-bundle-id", coordinate.target.bundle_id, "--expected-process-name", coordinate.target.process_name, "--run-id", coordinate.run_id, "--source-core-sha", coordinate.source_shas.core, "--source-platform-sha", coordinate.source_shas.platform, "--coordinate", coordinateKey(coordinate), "--kind", coordinate.kind, "--landmark", coordinate.landmark, "--require-matrix", "--json"];
-      if (coordinate.kind === "keyboard_trace") {
-        probeArgs.push("--expect-after", coordinate.expected_after.map((value) => value || "-").join(","), "--activate", "--keys", coordinate.keys.join(","));
-      }
+      if (coordinate.kind === "keyboard_trace") probeArgs.push("--expect-after", coordinate.expected_after.map((value) => value || "-").join(","), "--activate", "--keys", coordinate.keys.join(","));
       const result = spawnSync(prepared.probePath, probeArgs, { cwd: coreRoot, env: safeEnvironment(), encoding: "utf8", timeout: 120_000 });
       let probe; try { probe = JSON.parse(result.stdout || "{}"); } catch { fail(`${coordinate.run_id}: probe did not emit JSON`); }
       if (result.status !== 0) fail(`${coordinate.run_id}: probe failed: ${(result.stderr || probe.error || "probe failure").trim()}`);
       if (child.exitCode !== null || child.signalCode !== null) fail(`${coordinate.run_id}: fixture exited during semantic probe`);
       checkProbeDocument(probe, coordinate, child.pid);
-      const evidence = evidenceDocument(coordinate, probe); const sidecar = sidecarDocument(coordinate, probe, evidence);
-      const evidencePath = path.join(captureRoot, `${coordinate.run_id}.json`); const sidecarPath = `${evidencePath}.sidecar.json`; writeAtomic(evidencePath, evidence); writeAtomic(sidecarPath, sidecar);
-      records[`m${String(index).padStart(4, "0")}`] = { coordinate: [coordinate.kind, coordinate.domain, coordinate.shell, coordinate.state, coordinate.theme, coordinate.width, coordinate.accessibility], run_id: coordinate.run_id, evidence: { root: "core", path: authorityRelative(evidencePath), sha256: hashFile(evidencePath) }, sidecar: { root: "core", path: authorityRelative(sidecarPath), sha256: hashFile(sidecarPath) } };
+      const evidence = evidenceDocument(coordinate, probe);
+      return { evidence, sidecar: sidecarDocument(coordinate, probe, evidence) };
     } finally {
       await terminateExactChild(child);
       assertForeground(foreground, coordinate, "semantic cleanup");
     }
+  };
+  for (const [index, coordinate] of selectedCoordinates.entries()) {
+    rmSync(path.join(outRoot, "runtime", coordinate.run_id), { recursive: true, force: true });
+    const primary = await observe(coordinate);
+    if (args.replay_proof) {
+      const replay = await observe(coordinate);
+      if (canonical(primary.evidence) !== canonical(replay.evidence) || canonical(primary.sidecar) !== canonical(replay.sidecar)) fail(`${coordinate.run_id}: replay proof bytes differ`);
+    }
+    const evidencePath = path.join(captureRoot, `${coordinate.run_id}.json`); const sidecarPath = `${evidencePath}.sidecar.json`; writeAtomic(evidencePath, primary.evidence); writeAtomic(sidecarPath, primary.sidecar);
+    records[`m${String(index).padStart(4, "0")}`] = { coordinate: [coordinate.kind, coordinate.domain, coordinate.shell, coordinate.state, coordinate.theme, coordinate.width, coordinate.accessibility], run_id: coordinate.run_id, evidence: { root: "core", path: authorityRelative(evidencePath), sha256: hashFile(evidencePath) }, sidecar: { root: "core", path: authorityRelative(sidecarPath), sha256: hashFile(sidecarPath) } };
   }
   const resultPath = path.join(outRoot, "batch-result.json");
   writeAtomic(resultPath, { schema: "omi.polish.native-semantic-batch-result/v1", source_shas: manifest.source_shas, manifest_path: `core:${authorityRelative(manifestPath)}`, manifest_sha256: hashFile(manifestPath), command, argv: ["node", "shells/macos/probes/native-semantic-evidence-batch.mjs", "--manifest", authorityRelative(manifestPath), "--out-root", authorityRelative(outRoot), "--offset", String(offset), "--limit", String(limit), "--prepared-input-set", authorityRelative(preparedPath), "--readiness-timeout-ms", String(readinessTimeoutMs), ...(args.replay_proof ? ["--replay-proof"] : [])], input_set: prepared.input, members: records, coordinate_count: Object.keys(records).length, stdout_sha256: sha256(stdoutLine), stderr_sha256: sha256(""), authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false }, replay_proof: Boolean(args.replay_proof) });
@@ -371,6 +397,7 @@ function assemble(args, manifestPath, manifest, outRoot) {
   const resultPath = coreFile(args.result_path, "--result-path"); const result = JSON.parse(readFileSync(resultPath, "utf8"));
   if (result.schema !== "omi.polish.native-semantic-batch-result/v1" || result.manifest_path !== `core:${authorityRelative(manifestPath)}` || result.manifest_sha256 !== hashFile(manifestPath) || canonical(result.source_shas) !== canonical(manifest.source_shas) || !result.input_set?.id || typeof result.command !== "string" || !Array.isArray(result.argv) || !result.members || typeof result.members !== "object") fail("batch result is stale or malformed");
   if (!Array.isArray(result.input_set.entries) || !sha64.test(result.input_set.tree_sha256 || "") || result.input_set.id !== `input-v1-${result.input_set.tree_sha256}` || sha256(canonical(result.input_set.entries)) !== result.input_set.tree_sha256 || result.coordinate_count !== Object.keys(result.members).length) fail("batch result input set or member count is malformed");
+  if (result.replay_proof !== true || !result.argv.includes("--replay-proof")) fail("batch result lacks a completed replay proof");
   const members = result.members; const batchId = canonicalBatchId(result.input_set.id, result.command, members); const artifactHashes = {}; const before = {}; const created = {}; const seenRuns = new Set();
   for (const [memberId, member] of Object.entries(members)) {
     if (!/^m\d{4}$/.test(memberId) || !Array.isArray(member.coordinate) || member.coordinate.length !== 7 || typeof member.run_id !== "string" || member.evidence?.root !== "core" || member.sidecar?.root !== "core") fail("batch result member is malformed");
@@ -397,4 +424,6 @@ async function main() {
   if (!args.prepared_input_set) fail("capture requires --prepared-input-set");
   return await capture(args, manifestPath, manifest, outRoot, coreFile(args.prepared_input_set, "--prepared-input-set"));
 }
-try { await main(); } catch (error) { console.error(`ERROR: ${error.message}`); process.exitCode = error.exitCode || 2; }
+if (import.meta.url === pathToFileURL(process.argv[1] || "").href) {
+  try { await main(); } catch (error) { console.error(`ERROR: ${error.message}`); process.exitCode = error.exitCode || 2; }
+}
