@@ -15,10 +15,21 @@ struct ProactiveLaneResult: Equatable, Sendable {
   let content: String
 }
 
-enum ProactiveLaneClientError: Error {
+enum ProactiveLaneClientError: LocalizedError {
   case invalidResponse
   case http(Int)
   case ownerChanged
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidResponse:
+      return "proactive_invalid_response"
+    case .http(let statusCode):
+      return "proactive_http_error status=\(statusCode)"
+    case .ownerChanged:
+      return "proactive_owner_changed"
+    }
+  }
 }
 
 actor ProactiveLaneClient {
@@ -45,6 +56,7 @@ actor ProactiveLaneClient {
   func complete(
     operation: String,
     prompt: String,
+    uncachedPrompt: String? = nil,
     imageData: Data? = nil,
     jsonSchema: [String: Any],
     cacheKey: String? = nil,
@@ -57,6 +69,9 @@ actor ProactiveLaneClient {
       }
     }
     var content: [[String: Any]] = [["type": "text", "text": prompt]]
+    if let uncachedPrompt, !uncachedPrompt.isEmpty {
+      content.append(["type": "text", "text": uncachedPrompt])
+    }
     if let imageData {
       content.append([
         "type": "image_url",
@@ -141,6 +156,17 @@ enum ScreenDerivedContent {
 }
 
 enum ContextProactivityTelemetry {
+  /// Shadow-only repetition signal. The event intentionally carries no
+  /// identifier, statement, bucket, app, or owner data; it is never consulted
+  /// for fact validity, delivery, or candidate graduation.
+  static func recordFactIdentityShadow() async {
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "context_bucket_fact_identity_shadow",
+        properties: ["classification": "same_identifier_different_statement"])
+    }
+  }
+
   static func boundedProviderModel(_ value: String) -> String {
     switch value.lowercased() {
     case "gpt-5.6-luna": "gpt-5.6-luna"

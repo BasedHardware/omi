@@ -9,6 +9,8 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 
 FROM python:3.11-slim AS runner
 
+RUN apt-get update && apt-get -y dist-upgrade && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy installed packages from builder

@@ -60,6 +60,9 @@ enum DefaultsKey: String {
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
+  /// One-shot marker: the PTT-only microphone choice has been folded into the shared
+  /// `preferredMicrophoneDeviceUID`, so it is never carried over twice.
+  case shortcutPTTMicrophoneMergedIntoPreferred = "shortcut_pttMicrophoneMergedIntoPreferred"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
@@ -123,6 +126,10 @@ struct ScopedDefaultsKey {
 
   static func importConnectorSourceCount(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
+  }
+
+  static func taskInterruptionLedger(ownerID: String) -> Self {
+    Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
   }
 }
 

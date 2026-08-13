@@ -133,9 +133,6 @@ actor SuggestionAssistant: ProactiveAssistant {
     let enabled = await isEnabled
     let excluded = await MainActor.run { SuggestionAssistantSettings.shared.isAppExcluded(frame.appName) }
     let snoozed = await MainActor.run { FloatingControlBarManager.shared.isSnoozed }
-    let isWithinActivePeriod = await MainActor.run {
-      NotificationService.isWithinActivePeriod(now: Date())
-    }
     let cooldown = await cooldownInterval
 
     let now = Date()
@@ -145,7 +142,6 @@ actor SuggestionAssistant: ProactiveAssistant {
       isEnabled: enabled,
       isAppExcluded: excluded,
       isSnoozed: snoozed,
-      isWithinActivePeriod: isWithinActivePeriod,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
       cooldown: cooldown,
@@ -633,7 +629,6 @@ actor SuggestionAssistant: ProactiveAssistant {
       (
         SuggestionAssistantSettings.shared.isAppExcluded(frame.appName),
         FloatingControlBarManager.shared.isSnoozed,
-        NotificationService.isWithinActivePeriod(now: Date()),
         NotificationService.areNotificationsEnabled(),
         NotificationService.currentFrequencyLevel()
       )
@@ -643,7 +638,6 @@ actor SuggestionAssistant: ProactiveAssistant {
       isEnabled: assistantEnabled,
       isAppExcluded: gateState.0,
       isSnoozed: gateState.1,
-      isWithinActivePeriod: gateState.2,
       now: now,
       lastEvaluationAt: nil,
       cooldown: 0,
@@ -651,9 +645,9 @@ actor SuggestionAssistant: ProactiveAssistant {
       requiredDwell: Self.requiredDwell,
       evaluationsToday: dailyBudget.countToday(now: now),
       dailyBudget: Self.dailyEvaluationBudget)
-    guard gateState.3, gateState.4 > 0, decision.allowsEvaluation else {
-      if !gateState.3 { return ["outcome": "skipped_notifications_disabled"] }
-      if gateState.4 == 0 { return ["outcome": "skipped_frequency_off"] }
+    guard gateState.2, gateState.3 > 0, decision.allowsEvaluation else {
+      if !gateState.2 { return ["outcome": "skipped_notifications_disabled"] }
+      if gateState.3 == 0 { return ["outcome": "skipped_frequency_off"] }
       return ["outcome": SuggestionAssistantTelemetry.GateOutcome(decision).rawValue]
     }
 

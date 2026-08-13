@@ -42,6 +42,54 @@ final class UserNotificationCallbackBridgeTests: XCTestCase {
     XCTAssertFalse(NotificationService.hasPendingNotificationSettingsSync(defaults: defaults))
   }
 
+  func testBalancedDefaultMigrationEnablesFreshInstallAndOffUsers() throws {
+    let suiteName = "UserNotificationCallbackBridgeTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    // Fresh install: no stored level. Must write the key (not just rely on the
+    // in-memory fallback) so the backend's off default cannot hydrate 0 over it.
+    XCTAssertEqual(
+      NotificationService.applyBalancedDefaultMigration(defaults: defaults),
+      NotificationService.balancedFrequencyLevel)
+    XCTAssertEqual(
+      defaults.integer(forKey: NotificationService.frequencyDefaultsKey),
+      NotificationService.balancedFrequencyLevel)
+
+    // Second run is a no-op: the migration is once per install.
+    XCTAssertNil(NotificationService.applyBalancedDefaultMigration(defaults: defaults))
+
+    // A user turned off by the off-by-default migration moves to Balanced.
+    let offSuite = "UserNotificationCallbackBridgeTests.\(UUID().uuidString)"
+    let offDefaults = try XCTUnwrap(UserDefaults(suiteName: offSuite))
+    defer { offDefaults.removePersistentDomain(forName: offSuite) }
+    offDefaults.set(0, forKey: NotificationService.frequencyDefaultsKey)
+    XCTAssertEqual(
+      NotificationService.applyBalancedDefaultMigration(defaults: offDefaults),
+      NotificationService.balancedFrequencyLevel)
+  }
+
+  func testBalancedDefaultMigrationNeverOverridesAnExplicitUserChoice() throws {
+    // A user who opted in to another level keeps it.
+    let suiteName = "UserNotificationCallbackBridgeTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
+    XCTAssertNil(NotificationService.applyBalancedDefaultMigration(defaults: defaults))
+    XCTAssertEqual(defaults.integer(forKey: NotificationService.frequencyDefaultsKey), 5)
+
+    // A user who turns notifications off AFTER the migration is never re-enabled.
+    let optOutSuite = "UserNotificationCallbackBridgeTests.\(UUID().uuidString)"
+    let optOutDefaults = try XCTUnwrap(UserDefaults(suiteName: optOutSuite))
+    defer { optOutDefaults.removePersistentDomain(forName: optOutSuite) }
+    NotificationService.applyBalancedDefaultMigration(defaults: optOutDefaults)
+    optOutDefaults.set(0, forKey: NotificationService.frequencyDefaultsKey)
+    XCTAssertNil(NotificationService.applyBalancedDefaultMigration(defaults: optOutDefaults))
+    XCTAssertEqual(
+      optOutDefaults.integer(forKey: NotificationService.frequencyDefaultsKey), 0,
+      "re-running the migration must not resurrect notifications the user re-disabled")
+  }
+
   @MainActor
   func testNotificationSettingsAccessorsPreserveCompleteDesiredStateAcrossPartialMutations() throws {
     let suiteName = "UserNotificationCallbackBridgeTests.\(UUID().uuidString)"

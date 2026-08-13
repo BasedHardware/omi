@@ -10,6 +10,33 @@ private struct UNCompletionHandlerBox: @unchecked Sendable {
   init(_ value: @escaping (UNNotificationPresentationOptions) -> Void) { self.value = value }
 }
 
+/// Serializes notification-settings PATCHes so every mutation — user slider/toggle
+/// changes and the launch migration alike — reaches the backend in request order.
+/// An unordered send could let an earlier mutation land last and clear the
+/// pending-sync journal against a state the server never stored.
+@MainActor
+final class NotificationSettingsSyncQueue {
+  static let shared = NotificationSettingsSyncQueue()
+
+  private var tail: Task<Void, Never>?
+
+  /// `enabled: nil` leaves the master toggle untouched server-side (used by the
+  /// launch migration, which only moves the frequency).
+  func enqueue(enabled: Bool?, frequency: Int, revision: Int) {
+    let previous = tail
+    tail = Task {
+      await previous?.value
+      do {
+        _ = try await APIClient.shared.updateNotificationSettings(
+          enabled: enabled, frequency: frequency)
+        NotificationService.completeNotificationSettingsSync(revision: revision)
+      } catch {
+        logError("Failed to update notification settings", error: error)
+      }
+    }
+  }
+}
+
 /// Sound options for notifications
 enum NotificationSound {
   case `default`
@@ -52,13 +79,17 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// 0=Off (default), 1=Minimal, 2=Low, 3=Balanced, 4=High, 5=Maximum.
   /// The Settings page writes this on load and on slider change; `sendNotification`
   /// reads it synchronously to throttle proactive notifications.
-  static let frequencyDefaultsKey = "notification_frequency"
+  nonisolated static let frequencyDefaultsKey = "notification_frequency"
   static let settingsPendingSyncDefaultsKey = "notification_settings_pending_sync"
   static let settingsSyncRevisionDefaultsKey = "notification_settings_sync_revision"
 
-  /// One-time migration flag: when set, the notifications-off-by-default migration
-  /// has already run for this install, so we never re-disable a user who opted back in.
-  static let offByDefaultMigrationKey = "notificationsOffByDefaultMigrationDone"
+  /// One-time migration flag: when set, the balanced-by-default re-enable migration
+  /// has already run for this install, so we never re-enable a user who turns
+  /// notifications off after the migration.
+  nonisolated static let balancedByDefaultMigrationKey = "notificationsBalancedByDefaultMigrationDone"
+
+  /// Frequency level the re-enable migration applies (3 = Balanced).
+  nonisolated static let balancedFrequencyLevel = 3
 
   /// UserDefaults key mirroring the master `notifications_enabled` toggle from the backend.
   /// The Settings page writes it on load and on toggle change; `sendNotification` reads it
@@ -67,14 +98,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// `true` when the key is absent (first run before the Settings page hydrates).
   static let masterEnabledDefaultsKey = "notifications_enabled"
 
-  /// Device-local active period for proactive interruptions, stored as minutes since midnight.
-  /// The setting follows the Mac's local clock and defaults to 08:00–22:00.
-  static let activePeriodStartDefaultsKey = "notification_active_period_start_minute"
-  static let activePeriodEndDefaultsKey = "notification_active_period_end_minute"
-
   /// Default level used when the key has never been written (e.g. first run before
   /// the Settings page has hydrated from the backend). Mirrors the backend default.
-  /// Proactive notifications are OFF by default — users opt in via the Settings slider.
+  /// Kept at 0 (fail-closed) only for the window before `migrateToBalancedDefaultIfNeeded`
+  /// writes the key at launch; the effective default is Balanced via that migration.
   private static let defaultFrequencyLevel = 0
 
   private struct NotificationMetadata {
@@ -408,17 +435,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
-    // Device-local active period gates every proactive path (not only the director).
-    if respectFrequency && !Self.isWithinActivePeriod(now: Date()) {
-      log("NotificationService: suppressing \(assistantId) notification outside active period")
-      recordInsightDeliveryOutcome(
-        insightDeliveryID,
-        outcome: .suppressed,
-        reason: .frequencyThrottled
-      )
-      return
-    }
-
     // Proactive notifications honor the user's frequency setting. Functional
     // notifications (Crisp support replies, screen-recording permission prompts,
     // onboarding test) pass `respectFrequency: false` to bypass the gate.
@@ -696,15 +712,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     now: Date
   ) -> Bool {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
-    let components = Calendar.current.dateComponents([.hour, .minute], from: now)
     let level = Self.currentFrequencyLevel()
     let gate = ContextDeliveryGateInput(
       masterEnabled: Self.areNotificationsEnabled(),
       frequencyLevel: level,
       snoozed: FloatingControlBarManager.shared.isSnoozed,
       paywalled: AppState.isPaywalledEffective,
-      minuteOfDay: (components.hour ?? 0) * 60 + (components.minute ?? 0),
-      activePeriod: Self.currentActivePeriod(),
       cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: level)
     )
     guard ContextDeliveryBudget.freeGate(input: gate) == .allowed else { return false }
@@ -911,26 +924,43 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
   // MARK: - Frequency throttle
 
-  /// One-time migration to make proactive notifications OFF by default for ALL users.
-  /// Runs once per install (guarded by `offByDefaultMigrationKey`): sets the local
-  /// frequency to Off and persists it to the backend so the choice sticks across
-  /// devices and is reflected in Settings. Because it is guarded by the flag, a user
-  /// who later turns notifications back on is never re-disabled on subsequent launches.
+  /// One-time migration to re-enable proactive notifications at Balanced for users the
+  /// notifications-off-by-default migration (`48239de8`) turned off. A user at Off — or a
+  /// fresh install with no stored level — moves to Balanced; a user who opted in to any
+  /// other level keeps it. Per-assistant toggles are not touched, so only the categories
+  /// that default on (Live Suggestions, Insight) fire; Task and Memory stay opt-in.
+  /// Because it is guarded by `balancedByDefaultMigrationKey`, a user who turns
+  /// notifications off after the migration is never re-enabled on subsequent launches.
   /// Call early at launch, before any proactive assistant can fire.
-  static func migrateToOffByDefaultIfNeeded() {
-    guard !UserDefaults.standard.bool(forKey: Self.offByDefaultMigrationKey) else { return }
-    UserDefaults.standard.set(0, forKey: Self.frequencyDefaultsKey)
-    UserDefaults.standard.set(true, forKey: Self.offByDefaultMigrationKey)
-    log("NotificationService: applied notifications-off-by-default migration (frequency=0)")
-    guard AuthService.shared.isSignedIn else { return }
-    Task {
-      do {
-        _ = try await APIClient.shared.updateNotificationSettings(enabled: nil, frequency: 0)
-      } catch {
-        logError(
-          "NotificationService: off-by-default migration backend push failed", error: error)
-      }
+  static func migrateToBalancedDefaultIfNeeded() {
+    guard let target = applyBalancedDefaultMigration(defaults: .standard) else { return }
+    log("NotificationService: applied balanced-by-default migration (frequency=\(target))")
+    // Route the backend push through the pending-sync journal and the shared send
+    // queue: a failed push (offline, signed out during onboarding) is retried by the
+    // next Settings load instead of the stale server value hydrating back over the
+    // local re-enable, and a slow launch push can never land after — and overwrite —
+    // a frequency change the user makes right after startup.
+    let revision = beginNotificationSettingsSync()
+    NotificationSettingsSyncQueue.shared.enqueue(enabled: nil, frequency: target, revision: revision)
+  }
+
+  /// Local half of the balanced-by-default migration, split from the backend push so the
+  /// decision is synchronously unit-testable. Returns the level to push to the backend,
+  /// or nil when nothing changed (already migrated, or the user opted in to another level).
+  @discardableResult
+  nonisolated static func applyBalancedDefaultMigration(defaults: UserDefaults) -> Int? {
+    guard !defaults.bool(forKey: Self.balancedByDefaultMigrationKey) else { return nil }
+    defaults.set(true, forKey: Self.balancedByDefaultMigrationKey)
+    // The raw stored value, not `currentFrequencyLevel()`: an absent key (fresh install)
+    // must migrate so the level is written locally AND to the backend — otherwise the
+    // backend's off default would hydrate 0 over the in-memory fallback later.
+    if defaults.object(forKey: Self.frequencyDefaultsKey) != nil,
+      defaults.integer(forKey: Self.frequencyDefaultsKey) != 0
+    {
+      return nil
     }
+    defaults.set(Self.balancedFrequencyLevel, forKey: Self.frequencyDefaultsKey)
+    return Self.balancedFrequencyLevel
   }
 
   /// Whether the master Notifications toggle is on. Reads the mirrored UserDefaults key,
@@ -980,41 +1010,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     pendingNow: Bool
   ) -> Bool {
     pendingAtLoadStart || pendingNow || currentRevision != revisionAtLoadStart
-  }
-
-  static func currentActivePeriod(defaults: UserDefaults = .standard) -> NotificationActivePeriod {
-    let fallback = NotificationActivePeriod.defaultValue
-    let start =
-      defaults.object(forKey: activePeriodStartDefaultsKey) == nil
-      ? fallback.startMinute : defaults.integer(forKey: activePeriodStartDefaultsKey)
-    let end =
-      defaults.object(forKey: activePeriodEndDefaultsKey) == nil
-      ? fallback.endMinute : defaults.integer(forKey: activePeriodEndDefaultsKey)
-    return NotificationActivePeriod(startMinute: start, endMinute: end)
-  }
-
-  static func updateActivePeriod(startMinute: Int, endMinute: Int) {
-    let period = NotificationActivePeriod(startMinute: startMinute, endMinute: endMinute)
-    UserDefaults.standard.set(period.startMinute, forKey: activePeriodStartDefaultsKey)
-    UserDefaults.standard.set(period.endMinute, forKey: activePeriodEndDefaultsKey)
-
-    // Contextual task interruptions predate the shared notification setting and persist the
-    // inverse quiet period. Keep that legacy policy projection aligned with the user-facing
-    // active period until its versioned configuration is retired.
-    var taskConfiguration = ProactiveTaskInterruptionSettings.load()
-    taskConfiguration.quietHoursStartMinute = period.endMinute
-    taskConfiguration.quietHoursEndMinute = period.startMinute
-    ProactiveTaskInterruptionSettings.save(taskConfiguration)
-  }
-
-  static func isWithinActivePeriod(
-    now: Date = Date(),
-    calendar: Calendar = .current,
-    defaults: UserDefaults = .standard
-  ) -> Bool {
-    let components = calendar.dateComponents([.hour, .minute], from: now)
-    let minuteOfDay = (components.hour ?? 0) * 60 + (components.minute ?? 0)
-    return currentActivePeriod(defaults: defaults).contains(minuteOfDay: minuteOfDay)
   }
 
   /// Minimum interval between proactive notifications for a given level.
@@ -1153,7 +1148,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   ) -> Bool {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
     prepareOwnerScopedState(for: authorizationSnapshot)
-    guard Self.isWithinActivePeriod(now: now) else { return false }
     let level = Self.currentFrequencyLevel()
     guard let interval = Self.minInterval(forLevel: level) else {
       return true  // Maximum

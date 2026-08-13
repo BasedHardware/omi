@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1662
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1678
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Microphone authorization gate at the capture choke point plus the honest permission alert: without it a notDetermined/revoked TCC entry arms a zero-sample stream and the silent-mic watchdog loops a misleading hardware alert at the user every ~90s."
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Two independent silent-mic fixes meet in this file: the microphone authorization gate at the capture choke point with the honest permission alert (a notDetermined/revoked TCC entry otherwise arms a zero-sample stream and the watchdog loops a misleading hardware alert every ~90s), and silentMicHealedDeviceID plus the SilentMicRoutePolicy call at the rebuild site (the healed input route must survive a CoreAudio rebuild or the rebuild re-resolves the system default back onto the silent device)."
   },
   "threshold": 1500
 }
