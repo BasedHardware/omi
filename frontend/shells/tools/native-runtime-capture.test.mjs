@@ -38,15 +38,16 @@ function marker(m, events = [{ type: "lifecycle", name: "state", value: m.state,
 
 function writePreparation(file, m, artifactPath, artifactBytes) {
   const guard = path.join(root, "shells/tools/macos-foreground-guard.mjs");
+  const outputDir = path.dirname(artifactPath);
   const guarded = m.shell === "macos"
-    ? ["/bin/bash", path.join(root, "shells/macos/scripts/dev-run-macos.sh"), "--fixture", runtimeFixtureName(m.domain), "--run-id", m.run_id]
-    : ["xcodebuild", "-only-testing:RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence"];
+    ? ["/bin/bash", path.join(root, "shells/macos/scripts/dev-run-macos.sh"), "--fixture", runtimeFixtureName(m.domain), "--state", m.state, "--theme", m.theme, "--accessibility", m.accessibility, "--run-id", m.run_id, "--capture-out", path.join(outputDir, "probe.png"), "--viewport-width", String(m.viewport.width), "--viewport-height", String(m.viewport.height)]
+    : ["xcodebuild", "test", "-project", path.join(root, "shells/ios/app/ios/Runner.xcodeproj"), "-scheme", "Runner", "-destination", `platform=iOS Simulator,id=${m.device.udid}`, "-only-testing", "RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence", "-parallel-testing-enabled", "NO", "-derivedDataPath", path.join(outputDir, "DerivedData"), "-resultBundlePath", path.join(outputDir, "Runner.xcresult"), "CODE_SIGNING_ALLOWED=NO", "FLUTTER_ROOT=/opt/flutter"];
   writeFileSync(file, `${JSON.stringify({
     schema: "omi.polish.runtime-preparation/v1",
     domain: m.domain, shell: m.shell, state: m.state, theme: m.theme, width: m.width, accessibility: m.accessibility,
     run_id: m.run_id, source_shas: m.source_shas, capture_class: m.capture_class, source_tier: m.source_tier,
     command: {
-      argv: [process.execPath, guard, "--result", "guard.json", "--stdout", "stdout.log", "--stderr", "stderr.log", "--timeout", "300", "--forbid-bundle-ids", "com.apple.iphonesimulator,me.omi.proto.omiWebviewProto,me.omi.shell.core-tasks.prototype", "--", ...guarded],
+      argv: [process.execPath, guard, "--result", path.join(outputDir, "foreground-guard.json"), "--stdout", path.join(outputDir, m.shell === "macos" ? "foreground-guard.stdout.log" : "xcodebuild.stdout"), "--stderr", path.join(outputDir, m.shell === "macos" ? "foreground-guard.stderr.log" : "xcodebuild.stderr"), "--timeout", "300", "--forbid-bundle-ids", "com.apple.iphonesimulator,me.omi.proto.omiWebviewProto,me.omi.shell.core-tasks.prototype", "--", ...guarded],
       cwd: ".", cwd_root: "core", exit_code: 0, timeout_seconds: 310,
       stdout_sha256: "0".repeat(64), stderr_sha256: "0".repeat(64),
     },
@@ -199,6 +200,10 @@ test("canonical runtime replay emits gate-shaped input set, receipt, and coverag
     assert.equal(existsSync(outputPath), true);
     const preparationPath = path.join(scratch, "runtime-preparation-receipt.json");
     const preparation = JSON.parse(readFileSync(preparationPath, "utf8"));
+    writeFileSync(preparationPath, `${JSON.stringify({ ...preparation, foreground_custody: { ...preparation.foreground_custody, signal: "SIGKILL" } })}\n`);
+    assert.throws(() => gateReplay(m, manifestPath, inputPath, path.join(scratch, "bad-signal.json"), outDir), /foreground custody/);
+    writeFileSync(preparationPath, `${JSON.stringify({ ...preparation, command: { ...preparation.command, argv: [...preparation.command.argv, "--fixture", "settings"] } })}\n`);
+    assert.throws(() => gateReplay(m, manifestPath, inputPath, path.join(scratch, "duplicate-flag.json"), outDir), /exact fixture launcher/);
     writeFileSync(preparationPath, `${JSON.stringify({ ...preparation, command: { ...preparation.command, argv: ["fixture"] } })}\n`);
     assert.throws(() => gateReplay(m, manifestPath, inputPath, path.join(scratch, "unguarded.json"), outDir), /guarded launcher/);
     writeFileSync(preparationPath, `${JSON.stringify({ ...preparation, artifact: { ...preparation.artifact, path: "other.json" } })}\n`);
