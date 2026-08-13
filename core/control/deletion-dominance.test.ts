@@ -95,6 +95,12 @@ const ratified = (version: string) => ({
   approval_digest: digest(version === "retention-v1" ? "d" : "e"),
 });
 
+const clearLegalHold = () => ({
+  status: "clear" as const,
+  policy_version: "legal-hold-v1",
+  disposition_receipt_digest: digest("f"),
+});
+
 const input = (
   overrides: Partial<DeletionDominanceInput> = {},
 ): DeletionDominanceInput => ({
@@ -102,6 +108,7 @@ const input = (
   terminal_control_tombstone: null,
   terminal_export_receipt: null,
   restore_replay: { state: "not_required" },
+  legal_hold: { status: "unverified" },
   retention_disposition: { status: "unratified" },
   recovery_objectives: { status: "unratified" },
   inventory: null,
@@ -121,6 +128,7 @@ const terminalInput = (
   }),
   terminal_control_tombstone: tombstone(),
   terminal_export_receipt: exportReceipt(),
+  legal_hold: clearLegalHold(),
   retention_disposition: ratified("retention-v1"),
   recovery_objectives: ratified("recovery-v1"),
   inventory: inventory(),
@@ -252,6 +260,40 @@ describe("lifecycle dominance and terminal cleanup", () => {
     })), "terminal_coordinate_mismatch");
   });
 
+  test("legal hold must be verified clear before disposal and never reopens product access", () => {
+    const unverified = planDeletionDominance(terminalInput({
+      legal_hold: { status: "unverified" },
+      inventory: inventory({ product_projections: 2 }),
+    }));
+    expect(unverified).toMatchObject({
+      mode: "deleted_blocked",
+      cleanup: { state: "blocked", blockers: ["legal_hold_unverified"] },
+    });
+    expect(unverified.obligations).toContain("require_legal_hold_verification");
+    expect(Object.values(unverified.fences).every((fenced) => fenced)).toBe(true);
+
+    const held = planDeletionDominance(terminalInput({
+      legal_hold: {
+        status: "held",
+        policy_version: "legal-hold-v1",
+        disposition_receipt_digest: digest("9"),
+      },
+      inventory: inventory({ product_projections: 2 }),
+    }));
+    expect(held).toMatchObject({
+      mode: "deleted_blocked",
+      cleanup: { state: "blocked", blockers: ["legal_hold_active"] },
+    });
+    expect(held.obligations).toContain("isolate_legal_hold_content");
+    expect(held.obligations).not.toContain("dispose_policy_authorized_surfaces");
+    expect(Object.values(held.fences).every((fenced) => fenced)).toBe(true);
+
+    const clear = planDeletionDominance(terminalInput({
+      inventory: inventory({ product_projections: 2 }),
+    }));
+    expect(clear.mode).toBe("deleted_cleanup_ready");
+  });
+
   test("a terminal plan never interprets an unverified inventory as zero", () => {
     const plan = planDeletionDominance(terminalInput({ inventory: null }));
     expect(plan).toMatchObject({
@@ -305,6 +347,7 @@ describe("restore non-resurrection", () => {
       }),
       terminal_control_tombstone: tombstone(),
       terminal_export_receipt: exportReceipt(),
+      legal_hold: clearLegalHold(),
       retention_disposition: ratified("retention-v1"),
       recovery_objectives: ratified("recovery-v1"),
       inventory: inventory(),
@@ -403,6 +446,12 @@ describe("strict detached input and coordinate closure", () => {
     expectErrorCode(() => planDeletionDominance(input({
       restore_replay: new Proxy({ state: "not_required" }, {}) as never,
     })), "invalid_restore_replay");
+    expectErrorCode(() => planDeletionDominance(input({
+      legal_hold: { status: "clear", policy_version: "legal-hold-v1" } as never,
+    })), "invalid_legal_hold_coordinate");
+    expectErrorCode(() => planDeletionDominance(input({
+      legal_hold: new Proxy({ status: "unverified" }, {}) as never,
+    })), "invalid_legal_hold_coordinate");
 
     expectErrorCode(() => planDeletionDominance({ ...input(), extra: true }), "invalid_input");
     const forged = JSON.parse(JSON.stringify(inventory())) as VerifiedDeletionCleanupInventory;

@@ -33,6 +33,8 @@ The planner accepts exact detached plain data containing:
 - the observed terminal-control tombstone, if any;
 - the immutable terminal-deletion export receipt, if any;
 - the latest restore-replay checkpoint, if the account is being recovered;
+- an externally authorized legal-hold disposition receipt (`clear`, `held`, or
+  explicitly `unverified`), without hold content or operator identity;
 - a runtime-verified complete-source inventory produced by the separately
   pre-registered deletion cleanup inventory contract, or `null`; and
 - only the approval coordinates of retention/disposition and recovery-objective
@@ -61,7 +63,8 @@ unexpected input fails closed before a plan is returned.
   Irreversible disposal does not begin from this state.
 - `deleted_blocked`: terminal control is present, but tombstone replay,
   terminal export, verified cleanup inventory, retention/disposition approval,
-  recovery-objective approval, or artifact consistency is incomplete.
+  legal-hold verification, recovery-objective approval, or artifact
+  consistency is incomplete; an active legal hold is also blocked here.
 - `deleted_cleanup_ready`: terminal tombstone, immutable export receipt, and
   complete held-fence inventory are exact, restore replay is safe, and the
   required human-approved policy coordinates are present. This is eligibility
@@ -86,6 +89,9 @@ unexpected input fails closed before a plan is returned.
 6. Migration item tombstones are consulted on every resumed copy. Account
    lifecycle does not replace item-level tombstones, and item tombstones do not
    replace account lifecycle.
+7. An active legal hold blocks physical cleanup but never reopens product
+   access. Held content remains behind every lifecycle fence. This planner does
+   not place, release, interpret, or disclose a hold.
 
 ## Terminal export and cleanup boundary
 
@@ -110,11 +116,12 @@ frontier/authorization/fence/set-bound scanner receipt for every fixed surface,
 including an explicit receipt for a zero count. A missing or forged inventory
 adds `cleanup_inventory_unverified`; it never becomes an empty inventory.
 
-Append-only ledger history, legal-hold behavior, disclosure copies, support
-recovery data, and the exact fate of each listed surface are not decided by
-this planner. The output reports policy-blocked cleanup until a caller supplies
-separately ratified, versioned approval coordinates. It never invents default
-retention or disposal.
+Append-only ledger history, hold issuance/release authority, disclosure copies,
+support recovery data, and the exact fate of each listed surface are not
+decided by this planner. The output reports policy-blocked cleanup until a
+caller supplies separately ratified, versioned approval coordinates and an
+exact legal-hold disposition receipt. It never invents default retention or
+disposal.
 
 ## Output and content safety
 
@@ -157,9 +164,9 @@ restore drills, and David's data-disposition and RPO/RTO approvals.
    control revision remains blocked; exact-or-newer replay is accepted.
 6. Stranded data is included in terminal cleanup inventory regardless of the
    current generation.
-7. Missing/unverified inventory and unratified retention/disposition or
-   recovery objectives block irreversible cleanup even when every caller would
-   otherwise supply zero.
+7. Missing/unverified inventory, an unverified or active legal hold, and
+   unratified retention/disposition or recovery objectives block irreversible
+   cleanup even when every caller would otherwise supply zero.
 8. Terminal tombstone retention is always an obligation and never a disposable
    surface.
 9. Cross-account and mismatched control/deletion coordinates, unexpected keys,

@@ -58,6 +58,8 @@ export type DeletionDominanceObligation =
   | "replay_tombstones_before_restore_traffic"
   | "require_retention_disposition_approval"
   | "require_recovery_objectives_approval"
+  | "require_legal_hold_verification"
+  | "isolate_legal_hold_content"
   | "dispose_policy_authorized_surfaces";
 
 export type DeletionCleanupBlocker =
@@ -66,6 +68,8 @@ export type DeletionCleanupBlocker =
   | "terminal_export_receipt_missing"
   | "cleanup_inventory_unverified"
   | "restore_replay_incomplete"
+  | "legal_hold_unverified"
+  | "legal_hold_active"
   | "retention_disposition_unratified"
   | "recovery_objectives_unratified";
 
@@ -109,6 +113,19 @@ export type RatificationCoordinate =
       readonly approval_digest: string;
     };
 
+/**
+ * An externally authorized disposition check. `held` blocks physical cleanup
+ * but never relaxes lifecycle fences; this core neither places nor releases
+ * holds.
+ */
+export type LegalHoldCoordinate =
+  | { readonly status: "unverified" }
+  | {
+      readonly status: "clear" | "held";
+      readonly policy_version: string;
+      readonly disposition_receipt_digest: string;
+    };
+
 export type DeletionSurfaceInventoryRow = VerifiedDeletionInventoryRow;
 
 export interface DeletionDominanceInput {
@@ -116,6 +133,7 @@ export interface DeletionDominanceInput {
   readonly terminal_control_tombstone: TerminalControlTombstone | null;
   readonly terminal_export_receipt: TerminalDeletionExportReceipt | null;
   readonly restore_replay: RestoreReplayState;
+  readonly legal_hold: LegalHoldCoordinate;
   readonly retention_disposition: RatificationCoordinate;
   readonly recovery_objectives: RatificationCoordinate;
   readonly inventory: VerifiedDeletionCleanupInventory | null;
@@ -155,6 +173,7 @@ export type DeletionDominanceInputErrorCode =
   | "invalid_terminal_tombstone"
   | "invalid_terminal_export_receipt"
   | "invalid_restore_replay"
+  | "invalid_legal_hold_coordinate"
   | "invalid_ratification_coordinate"
   | "invalid_inventory"
   | "account_coordinate_mismatch"
@@ -352,6 +371,23 @@ const parseRatification = (value: unknown): RatificationCoordinate => {
   return value as RatificationCoordinate;
 };
 
+const parseLegalHold = (value: unknown): LegalHoldCoordinate => {
+  const status = plainDiscriminant(value, "status", "invalid_legal_hold_coordinate");
+  if (status === "unverified") {
+    exactPlainRecord(value, ["status"], "invalid_legal_hold_coordinate");
+    return value as LegalHoldCoordinate;
+  }
+  const row = exactPlainRecord(
+    value,
+    ["status", "policy_version", "disposition_receipt_digest"],
+    "invalid_legal_hold_coordinate",
+  );
+  if ((row.status !== "clear" && row.status !== "held")
+    || !boundedCoordinate(row.policy_version)
+    || !digest(row.disposition_receipt_digest)) fail("invalid_legal_hold_coordinate");
+  return value as LegalHoldCoordinate;
+};
+
 const emptyInventory = Object.freeze(DELETION_CLEANUP_SURFACES.map((surface) => Object.freeze({
   surface,
   remaining_count: 0,
@@ -425,6 +461,7 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
     "terminal_control_tombstone",
     "terminal_export_receipt",
     "restore_replay",
+    "legal_hold",
     "retention_disposition",
     "recovery_objectives",
     "inventory",
@@ -433,6 +470,7 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
   const tombstone = parseTombstone(input.terminal_control_tombstone);
   const exportReceipt = parseExportReceipt(input.terminal_export_receipt);
   const restoreReplay = parseRestoreReplay(input.restore_replay);
+  const legalHold = parseLegalHold(input.legal_hold);
   const retention = parseRatification(input.retention_disposition);
   const recovery = parseRatification(input.recovery_objectives);
   const verifiedInventory = input.inventory === null
@@ -517,6 +555,8 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
     const blockers: DeletionCleanupBlocker[] = ["terminal_control_not_replayed"];
     if (exportReceipt === null) blockers.push("terminal_export_receipt_missing");
     if (verifiedInventory === null) blockers.push("cleanup_inventory_unverified");
+    if (legalHold.status === "unverified") blockers.push("legal_hold_unverified");
+    if (legalHold.status === "held") blockers.push("legal_hold_active");
     if (retention.status !== "ratified") blockers.push("retention_disposition_unratified");
     if (recovery.status !== "ratified") blockers.push("recovery_objectives_unratified");
     return Object.freeze({
@@ -533,6 +573,11 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
         ...(exportReceipt === null ? ["require_terminal_export_receipt" as const] : []),
         ...(verifiedInventory === null ? ["require_verified_cleanup_inventory" as const] : []),
         "replay_tombstones_before_restore_traffic",
+        ...(legalHold.status === "unverified"
+          ? ["require_legal_hold_verification" as const]
+          : legalHold.status === "held"
+            ? ["isolate_legal_hold_content" as const]
+            : []),
         ...(retention.status === "ratified" ? [] : ["require_retention_disposition_approval" as const]),
         ...(recovery.status === "ratified" ? [] : ["require_recovery_objectives_approval" as const]),
       ]),
@@ -601,6 +646,8 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
       || restoreCheckpoint.through_deletion_epoch < tombstone.deletion_epoch)) {
     blockers.push("restore_replay_incomplete");
   }
+  if (legalHold.status === "unverified") blockers.push("legal_hold_unverified");
+  if (legalHold.status === "held") blockers.push("legal_hold_active");
   if (retention.status !== "ratified") blockers.push("retention_disposition_unratified");
   if (recovery.status !== "ratified") blockers.push("recovery_objectives_unratified");
 
@@ -618,6 +665,11 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
     ...(exportReceipt === null ? ["require_terminal_export_receipt" as const] : []),
     ...(verifiedInventory === null ? ["require_verified_cleanup_inventory" as const] : []),
     "replay_tombstones_before_restore_traffic",
+    ...(legalHold.status === "unverified"
+      ? ["require_legal_hold_verification" as const]
+      : legalHold.status === "held"
+        ? ["isolate_legal_hold_content" as const]
+        : []),
     ...(retention.status === "ratified" ? [] : ["require_retention_disposition_approval" as const]),
     ...(recovery.status === "ratified" ? [] : ["require_recovery_objectives_approval" as const]),
     ...(cleanupState === "ready" ? ["dispose_policy_authorized_surfaces" as const] : []),
