@@ -101,8 +101,10 @@ WLCSP and DSBGA joints are hidden — visual inspection cannot verify solder qua
 |-----|---------|-------|
 | U1 (nRF5340) | WLCSP-95 | **Required** — 100% X-ray first 3–5 boards |
 | U2 (nRF7002) | WLCSP-81 | **Required** — same as U1 |
+| U4 (TXS0104E) | DSBGA-12 | **Required** — verify all 12 balls connected |
 | U13 (TPS628438) | DSBGA-6 | **Required** — verify all balls connected |
 | U15 (BQ25101) | DSBGA-6 | **Required** — same as U13 |
+| U6, U11 (TPS22916) | DSBGA-4 | **Required** — verify all balls connected |
 | U14 (GLF73910) | WLCSP-4 (bottom) | **Required** — bottom-side WLCSP |
 
 See `STENCIL-REFLOW-NOTES.md` for X-ray acceptance criteria (voiding <25%, no bridges, no head-in-pillow).
