@@ -11,8 +11,10 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
 import stat
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +38,13 @@ PYTHON_WATCH_INPUTS = (
     "../../backend/utils",
     "../../backend/requirements.txt",
     "../../backend/pylock.toml",
+)
+
+# `swift test --filter` exits 0 when the filter matches nothing, so the reported
+# test counts — not the exit code — decide whether the selected coverage ran.
+EXECUTED_TEST_COUNT_PATTERNS = (
+    re.compile(r"Executed (\d+) tests?[,\s]"),
+    re.compile(r"Test run with (\d+) tests?"),
 )
 
 
@@ -167,11 +176,45 @@ def snapshot_paths(paths: Iterable[Path]) -> tuple[tuple[str, str, int, int], ..
     return tuple(entries)
 
 
+def ran_zero_tests(output: str) -> bool:
+    """Report whether the runner said it executed nothing, despite a green exit."""
+
+    counts = [int(count) for pattern in EXECUTED_TEST_COUNT_PATTERNS for count in pattern.findall(output)]
+    return bool(counts) and not any(counts)
+
+
+def run_streaming(
+    command: Sequence[str],
+    *,
+    cwd: Path,
+    stream: object = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run the test command, echoing its output live while retaining it for inspection."""
+
+    destination = sys.stdout if stream is None else stream
+    captured: list[str] = []
+    with subprocess.Popen(
+        tuple(command),
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    ) as process:
+        assert process.stdout is not None
+        for line in process.stdout:
+            destination.write(line)
+            destination.flush()
+            captured.append(line)
+        returncode = process.wait()
+    return subprocess.CompletedProcess(tuple(command), returncode, "".join(captured), "")
+
+
 def emit_iteration_result(
     test_command: TestCommand,
     iteration: int,
     *,
-    runner: Runner = subprocess.run,
+    runner: Runner = run_streaming,
     clock: Clock = time.monotonic,
     emit: Emitter = print,
 ) -> int:
@@ -180,13 +223,16 @@ def emit_iteration_result(
     emit(f"Iteration {iteration}: running {test_command.language} filter {test_command.test_filter!r}")
     started_at = clock()
     try:
-        result = runner(test_command.command, cwd=test_command.cwd, check=False)
+        result = runner(test_command.command, cwd=test_command.cwd)
     except OSError as error:
         elapsed = clock() - started_at
         emit(f"Iteration {iteration}: ERROR ({error}) in {elapsed:.2f}s")
         return 127
 
     elapsed = clock() - started_at
+    if result.returncode == 0 and ran_zero_tests(getattr(result, "stdout", None) or ""):
+        emit(f"Iteration {iteration}: FAIL (filter {test_command.test_filter!r} matched 0 tests) in {elapsed:.2f}s")
+        return 1
     if result.returncode == 0:
         emit(f"Iteration {iteration}: PASS in {elapsed:.2f}s")
     else:
@@ -244,7 +290,7 @@ def run_watch(
     *,
     poll_interval: float,
     debounce: float,
-    runner: Runner = subprocess.run,
+    runner: Runner = run_streaming,
     snapshotter: Snapshotter = snapshot_paths,
     sleep: Sleeper = time.sleep,
     clock: Clock = time.monotonic,
