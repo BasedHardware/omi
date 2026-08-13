@@ -10,7 +10,7 @@ import {
   type CalibrateAttributionBeliefInput,
   type CalibratedAttributionBelief,
 } from "../core/consolidate/attribution-calibration";
-import type { AttributionHypothesisKind } from "../core/consolidate/attribution-belief";
+import type { AttributionHypothesis, AttributionHypothesisKind } from "../core/consolidate/attribution-belief";
 import { sha256CanonicalRedacted, type CanonicalJson } from "../core/ledger";
 import { attributionCalibrationPromptCost } from "../drivers/model/glm";
 import type { ModelPort } from "../drivers/model/port";
@@ -26,7 +26,7 @@ import { withOfflineModelPipelineExclusivity } from "./offline-model-pipeline-lo
 export const CROSS_MODEL_ATTRIBUTION_MANIFEST_VERSION =
   "cross-model-attribution-structural-manifest-v1" as const;
 export const CROSS_MODEL_ATTRIBUTION_RESULT_VERSION =
-  "cross-model-attribution-structural-result-v1" as const;
+  "cross-model-attribution-structural-result-v2" as const;
 export const CROSS_MODEL_ATTRIBUTION_FAILURE_VERSION =
   "cross-model-attribution-structural-failure-v2" as const;
 export const CROSS_MODEL_ATTRIBUTION_FROZEN_MANIFEST_DIGEST =
@@ -425,22 +425,38 @@ export const runCrossModelAttributionStructuralPass = async (
           fail("wall_clock_budget_exceeded", diagnosticFor("wall_clock_budget_exceeded", false));
         }
         if (result === null) fail("provider_or_contract_failure", diagnosticFor("provider_or_contract_failure", false));
-        const top = [...result.belief.hypotheses].sort((left, right) =>
-          right.probability_micros - left.probability_micros);
-        const tied = !top[0] || top[0].probability_micros === top[1]?.probability_micros;
-        if (tied) fail("ambiguous_structural_result", diagnosticFor("ambiguous_structural_result", true));
-        const winner = top[0];
-        if (!winner || winner.kind !== structuralCase.expected_top_kind) {
+        const owner = result.belief.hypotheses.find((hypothesis: AttributionHypothesis) => hypothesis.kind === "owner");
+        const unknown = result.belief.hypotheses.find((hypothesis: AttributionHypothesis) => hypothesis.kind === "unknown");
+        if (!owner || !unknown) {
           fail("structural_expectation_failed", diagnosticFor("structural_expectation_failed", false));
         }
+        const tied = owner.probability_micros === unknown.probability_micros;
+        const expectedKind = structuralCase.expected_top_kind;
+        const expected = expectedKind === "owner" ? owner : expectedKind === "unknown" ? unknown : null;
+        if (!expected) {
+          fail("structural_expectation_failed", diagnosticFor("structural_expectation_failed", tied));
+        }
+        const other = expectedKind === "owner" ? unknown : owner;
+        if (expected.probability_micros < other.probability_micros) {
+          fail("structural_inversion", diagnosticFor("structural_inversion", tied));
+        }
+        const counts = tokenCounts(newEvents[0]);
         cases.push(Object.freeze({
           case_id: structuralCase.case_id,
+          tied,
+          hypotheses: Object.freeze(result.belief.hypotheses.map((hypothesis: AttributionHypothesis) => Object.freeze({
+            hypothesis_id: hypothesis.hypothesis_id,
+            kind: hypothesis.kind,
+            probability_micros: hypothesis.probability_micros,
+          }))),
           request_digest: result.receipt.request_digest,
           response_digest: result.receipt.response_digest,
           result_digest: result.receipt.result_digest,
-          top_kind: winner.kind,
-          top_probability_micros: winner.probability_micros,
           prompt_digest: newEvents[0]!.prompt_digest,
+          accounting_digest: counts === null ? null : sha256CanonicalRedacted(counts),
+          token_counts: counts,
+          top_kind: expected.kind,
+          top_probability_micros: expected.probability_micros,
         }));
         completedCases += 1;
       }
