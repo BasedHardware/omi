@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import type { PostgresTransactionPool } from "./connection";
-import { createPostgresFirebaseAuthorizedGraphSnapshotRuntime } from
+import {
+  createPostgresFirebaseAuthorizedGraphSnapshotRuntime,
+  projectFirebaseAuthorizedGraphSnapshotLoad,
+} from
   "./firebase-authorized-graph-snapshot-runtime";
 
 const unusedPool: PostgresTransactionPool = Object.freeze({
@@ -49,5 +52,14 @@ describe("PostgreSQL Firebase-authorized graph snapshot runtime", () => {
         verifyIdToken: async () => ({}),
       },
     })).toThrow("deployed Firebase identity forbids the Auth emulator");
+  });
+
+  test("rejects a structural loaded-outcome lookalike without sealed authority", () => {
+    expect(() => projectFirebaseAuthorizedGraphSnapshotLoad({
+      kind: "loaded",
+      authorization_generation_digest: "a".repeat(64),
+      db_now_epoch_seconds: 100,
+      snapshot: {} as never,
+    }, "UTC")).toThrow("invalid Firebase-authorized graph projection input");
   });
 });

@@ -6,8 +6,10 @@
 // domain-pending(DIV-DOMX-001)
 // domain-pending(DIV-DOMX-006)
 import { createHmac } from "node:crypto";
+import { isProxy } from "node:util/types";
 
 import {
+  ApplicationReadInvalidatedError,
   computeApplicationSynthesizedProjectionGenerationDigest,
   readApplicationSynthesizedPageWithAttestation,
   type ApplicationReadAttestation,
@@ -28,6 +30,11 @@ import type {
   RecallCompletenessInput,
   StmCoverageState,
 } from "../../../core/retrieve/recall-integrity";
+import {
+  isApplicationGrantProjectedTreeInput,
+  type ApplicationGrantProjectedTreeInputSnapshot,
+} from "../../../core/retrieve/authorization-boundary";
+import type { RenderNode } from "../../../core/retrieve/render";
 import { buildDeterministicAnchors } from "../../../core/retrieve/tree";
 import type { GraphSnapshot } from "../../../core/retrieve";
 import { InvalidMcpCursorError, type McpCursorSigningKeyset } from "../../mcp/cursor";
@@ -324,6 +331,29 @@ const buildReadCoordinates = (
   read_timestamp_epoch_seconds: readTimestampEpochSeconds,
 });
 
+const buildDirectReadCoordinates = (
+  load: DirectAuthorizedMemoryProjectionLoad,
+  readTimestampEpochSeconds: number,
+): ApplicationReadCoherentCoordinates => Object.freeze({
+  owner_identity_digest: load.owner_identity_digest,
+  application_identity_digest: load.application_identity_digest,
+  credential_identity_digest: load.credential_identity_digest,
+  authorization_state_digest: load.authorization_generation_digest,
+  grant_state_digest: load.grant_state_digest,
+  account_head_digest: load.account_generation_digest,
+  authorized_graph_digest: digestOf("authorized-graph", load.projected.graph_generation),
+  coherent_projection_commit_digest: digestOf(
+    "coherent-projection-commit",
+    load.projected.projected_content_digest,
+  ),
+  visibility_digest: digestOf("visibility", { default_synthesized: true, raw_read: false }),
+  filter_digest: digestOf("filter", { filters: [] }),
+  query_digest: digestOf("query", { query: null }),
+  source_digest: digestOf("source", { sources: ["durable"] }),
+  read_mode_digest: digestOf("read-mode", { mode: "default_synthesized" }),
+  read_timestamp_epoch_seconds: readTimestampEpochSeconds,
+});
+
 export interface PreparedMemoryRead {
   readonly ports: ApplicationReadPorts;
   /** How many produced renders this snapshot is willing to serve, before paging. */
@@ -333,6 +363,38 @@ export interface PreparedMemoryRead {
 export interface MemoryPageResult {
   readonly canonical_json: string;
   readonly attestation: ApplicationReadAttestation;
+}
+
+/**
+ * One transaction-revalidated, already projected production read.  It carries
+ * only content-free authority coordinates and a module-branded projection;
+ * there is intentionally no structural credential/grant DTO here.
+ */
+export interface DirectAuthorizedMemoryProjectionLoad {
+  readonly projected: ApplicationGrantProjectedTreeInputSnapshot;
+  readonly owner_identity_digest: string;
+  readonly application_identity_digest: string;
+  readonly credential_identity_digest: string;
+  readonly authorization_generation_digest: string;
+  readonly grant_state_digest: string;
+  readonly account_generation_digest: string;
+  readonly db_now_epoch_seconds: number;
+}
+
+export interface DirectAuthorizedMemoryReadConfig {
+  /** Fresh Firebase/PostgreSQL authorization plus graph projection per call. */
+  readonly loadAuthorized: () => Promise<DirectAuthorizedMemoryProjectionLoad>;
+  /** The production renderer remains injected and versioned by its RenderNode contract. */
+  readonly produceRenders: (
+    projected: ApplicationGrantProjectedTreeInputSnapshot,
+  ) => Promise<readonly RenderNode[]>;
+  readonly codecRootSecret: Uint8Array;
+  readonly verifyCursor: ApplicationReadPorts["verifyCursor"];
+  readonly issueCursor: ApplicationReadPorts["issueCursor"];
+  readonly traceSink: (trace: ContentSafeRecallTrace) => void | Promise<void>;
+  readonly granularity?: ReadItemGranularity;
+  readonly acceptedCoverageState?: AcceptedCoverageState;
+  readonly stmCoverageState?: StmCoverageState;
 }
 
 /**
@@ -529,4 +591,186 @@ export const readMemoryPage = async (
     throw new InvalidMcpCursorError();
   }
   return readApplicationSynthesizedPageWithAttestation(request, prepared.ports);
+};
+
+const DIRECT_DIGEST = /^[a-f0-9]{64}$/;
+const DIRECT_LOAD_KEYS = Object.freeze([
+  "projected", "owner_identity_digest", "application_identity_digest",
+  "credential_identity_digest", "authorization_generation_digest",
+  "grant_state_digest", "account_generation_digest", "db_now_epoch_seconds",
+]);
+
+const snapshotDirectAuthorizedLoad = (
+  value: unknown,
+): DirectAuthorizedMemoryProjectionLoad => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
+    || Object.getPrototypeOf(value) !== Object.prototype) {
+    throw new TypeError("invalid direct authorized memory load");
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const actual = Reflect.ownKeys(descriptors);
+  const expected = [...DIRECT_LOAD_KEYS].sort();
+  if (actual.some((key) => typeof key !== "string")
+    || actual.length !== expected.length
+    || (actual as string[]).sort().some((key, index) => key !== expected[index])) {
+    throw new TypeError("invalid direct authorized memory load");
+  }
+  for (const key of expected) {
+    const descriptor = descriptors[key];
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new TypeError("invalid direct authorized memory load");
+    }
+  }
+  const record = Object.fromEntries(expected.map((key) => [key, descriptors[key]!.value])) as
+    unknown as DirectAuthorizedMemoryProjectionLoad;
+  if (!isApplicationGrantProjectedTreeInput(record.projected)
+    || ![
+      record.owner_identity_digest, record.application_identity_digest,
+      record.credential_identity_digest, record.authorization_generation_digest,
+      record.grant_state_digest, record.account_generation_digest,
+    ].every((digest) => typeof digest === "string" && DIRECT_DIGEST.test(digest))
+    || !Number.isSafeInteger(record.db_now_epoch_seconds)
+    || record.db_now_epoch_seconds < 0) {
+    throw new TypeError("invalid direct authorized memory load");
+  }
+  return Object.freeze({ ...record });
+};
+
+const directLoadSignature = (load: DirectAuthorizedMemoryProjectionLoad): string =>
+  sha256CanonicalContent({
+    version: "direct-authorized-memory-load-v1",
+    graph_generation: load.projected.graph_generation,
+    projected_content_digest: load.projected.projected_content_digest,
+    projection_authorization_digest: load.projected.projection_authorization_digest,
+    reader_projection_digest: load.projected.reader_projection_digest,
+    owner_identity_digest: load.owner_identity_digest,
+    application_identity_digest: load.application_identity_digest,
+    credential_identity_digest: load.credential_identity_digest,
+    authorization_generation_digest: load.authorization_generation_digest,
+    grant_state_digest: load.grant_state_digest,
+    account_generation_digest: load.account_generation_digest,
+  });
+
+const directFrontierEncoder = (
+  rootSecret: Uint8Array,
+  readerProjectionDigest: string,
+): ((internalFrontier: string) => string) => {
+  const subkey = createHmac("sha256", Buffer.from(rootSecret))
+    .update("omi.service.opaque-frontier.v1", "ascii")
+    .update("\0", "ascii")
+    .update(readerProjectionDigest, "ascii")
+    .digest();
+  return (internalFrontier: string): string =>
+    `frontier-v1:${createHmac("sha256", subkey).update(internalFrontier, "utf8").digest("hex")}`;
+};
+
+/**
+ * Route-free direct product read over freshly authorized graph projections.
+ *
+ * It performs an authorized load before rendering, another after the awaited
+ * renderer, the application read core's own two-pass coherence check, and one
+ * final authorized load before any page bytes or trace leave this function.
+ * Persisted semantic projections are not required or consulted.
+ */
+export const readDirectAuthorizedMemoryPage = async (
+  request: ApplicationSynthesizedPageRequest,
+  config: DirectAuthorizedMemoryReadConfig,
+): Promise<MemoryPageResult> => {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const beforeRender = snapshotDirectAuthorizedLoad(await config.loadAuthorized());
+    const allRenders = await config.produceRenders(beforeRender.projected);
+    const afterRender = snapshotDirectAuthorizedLoad(await config.loadAuthorized());
+    if (directLoadSignature(beforeRender) !== directLoadSignature(afterRender)) continue;
+
+    const granularity = config.granularity ?? DEFAULT_READ_ITEM_GRANULARITY;
+    const selectedNodeIds = new Set(
+      selectNodesForGranularity(
+        buildDeterministicAnchors(beforeRender.projected).nodes,
+        granularity,
+      ).map((node) => node.node_id),
+    );
+    const servedRenders = Object.freeze(
+      [...allRenders]
+        .filter((render) => selectedNodeIds.has(render.node_id))
+        .sort((left, right) => compareStrings(left.node_id, right.node_id)),
+    );
+    const renderGeneration = computeApplicationSynthesizedProjectionGenerationDigest(
+      beforeRender.projected,
+      servedRenders,
+    );
+    const acceptedState = config.acceptedCoverageState ?? "bypassed";
+    const stmState = config.stmCoverageState ?? "bypassed";
+    const encodeFrontier = directFrontierEncoder(
+      config.codecRootSecret,
+      beforeRender.projected.reader_projection_digest,
+    );
+    const codecs = createReaderScopedOpaqueCodecs({
+      root_secret: config.codecRootSecret,
+      reader_projection_digest: beforeRender.projected.reader_projection_digest,
+    });
+    const readTimestamp = afterRender.db_now_epoch_seconds;
+    const coherent = (load: DirectAuthorizedMemoryProjectionLoad) => {
+      const coverage = buildCoverage(
+        acceptedState,
+        stmState,
+        load.projected.graph_generation,
+        encodeFrontier,
+      );
+      return Object.freeze({
+        coverage,
+        generations: buildGenerations(
+          load.projected.graph_generation,
+          coverage.accepted.state,
+          coverage.stm.state,
+          load.authorization_generation_digest,
+          coverage.declared_frontier,
+          granularity,
+          renderGeneration,
+        ),
+        read_coordinates: buildDirectReadCoordinates(load, readTimestamp),
+      });
+    };
+    let resolveCount = 0;
+    const bufferedTraces: ContentSafeRecallTrace[] = [];
+    const ports: ApplicationReadPorts = {
+      resolveAttempt: () => {
+        const load = resolveCount++ === 0 ? beforeRender : afterRender;
+        return Object.freeze({
+          authorized_projection: load.projected,
+          coherent: coherent(load),
+        });
+      },
+      loadDurableRenders: () => [...servedRenders],
+      encodeVisibleKey: (tuple) => codecs.encodeVisibleKey(tuple),
+      encodeItemRef: (ref) => codecs.encodeItemRef(ref),
+      encodeCitationRef: (closure) => codecs.encodeCitationRef(closure),
+      encodeTraceRef: (ref) => codecs.encodeTraceRef(ref),
+      verifyCursor: config.verifyCursor,
+      issueCursor: config.issueCursor,
+      // Buffer only. No trace leaves before the final live authority load.
+      traceSink: (trace) => { bufferedTraces.push(trace); },
+    };
+    const result = await readMemoryPage(request, Object.freeze({
+      ports: Object.freeze(ports),
+      servableRenderCount: servedRenders.length,
+    }));
+
+    const finalLoad = snapshotDirectAuthorizedLoad(await config.loadAuthorized());
+    if (directLoadSignature(afterRender) !== directLoadSignature(finalLoad)) continue;
+
+    // Telemetry is observational and cannot delay or change the authorized
+    // page. Async sink failures are contained after the final fence.
+    for (const trace of bufferedTraces) {
+      try {
+        const pending = config.traceSink(trace);
+        if (pending && typeof (pending as Promise<void>).catch === "function") {
+          void (pending as Promise<void>).catch(() => undefined);
+        }
+      } catch {
+        // Content-safe telemetry failure never alters the product read.
+      }
+    }
+    return result;
+  }
+  throw new ApplicationReadInvalidatedError();
 };

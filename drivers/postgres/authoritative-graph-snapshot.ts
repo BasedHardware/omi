@@ -24,6 +24,12 @@ interface RevisionRow extends Record<string, unknown> {
   readonly head_rank: string | number | bigint;
 }
 
+interface AdjacencyRow extends Record<string, unknown> {
+  readonly claim_revision_id: string;
+  readonly entity_id: string;
+  readonly role_slot_id: string;
+}
+
 const counter = (value: unknown): number => {
   if (typeof value === "string" && !/^(?:0|[1-9][0-9]*)$/.test(value)) {
     throw new PostgresRepositoryError("persistence_failed");
@@ -55,8 +61,22 @@ const textArray = (value: unknown): readonly string[] => {
   return Object.freeze([...value] as string[]);
 };
 
+const placementRiskMarkers = (
+  value: unknown,
+): readonly ("new_entity" | "resolved_pronoun" | "low_margin")[] => {
+  const values = textArray(value);
+  if (values.some((item) => !["new_entity", "resolved_pronoun", "low_margin"].includes(item))) {
+    throw new PostgresRepositoryError("persistence_failed");
+  }
+  return values as readonly ("new_entity" | "resolved_pronoun" | "low_margin")[];
+};
+
 export interface PostgresAuthoritativeGraphSnapshotRepository {
   load(context: AuthorizedLedgerWriteContext): Promise<GraphSnapshot>;
+  loadWithAttestation(context: AuthorizedLedgerWriteContext): Promise<Readonly<{
+    snapshot: GraphSnapshot;
+    db_now_epoch_seconds: number;
+  }>>;
   loadCurrentParent(
     context: AuthorizedLedgerWriteContext,
   ): Promise<Readonly<{ kind: "found"; parent_commit: string | null }>>;
@@ -70,8 +90,13 @@ export interface PostgresAuthoritativeGraphSnapshotRepository {
 export const createPostgresAuthoritativeGraphSnapshotRepository = (options: {
   readonly pool: PostgresTransactionPool;
   readonly observability?: PostgresTransactionObservability;
-}): PostgresAuthoritativeGraphSnapshotRepository => Object.freeze({
-  loadCurrentParent: async (context) => withAuthorizedSerializableConnectionTransaction(
+}): PostgresAuthoritativeGraphSnapshotRepository => {
+  let repository: PostgresAuthoritativeGraphSnapshotRepository;
+  repository = Object.freeze({
+  load: async (context: AuthorizedLedgerWriteContext) =>
+    (await repository.loadWithAttestation(context)).snapshot,
+  loadCurrentParent: async (context: AuthorizedLedgerWriteContext) =>
+    withAuthorizedSerializableConnectionTransaction(
     options.pool,
     context,
     async ({ authority, connection }) => {
@@ -98,10 +123,11 @@ export const createPostgresAuthoritativeGraphSnapshotRepository = (options: {
     },
     options.observability,
   ),
-  load: async (context) => withAuthorizedSerializableConnectionTransaction(
+  loadWithAttestation: async (context: AuthorizedLedgerWriteContext) =>
+    withAuthorizedSerializableConnectionTransaction(
     options.pool,
     context,
-    async ({ authority, connection }) => {
+    async ({ authority, connection, dbNowEpochSeconds }) => {
       const accountId = authority.account_id;
       const heads = await connection.query<{ sequence: string | number | bigint }>({
         name: "snapshot.graph_head",
@@ -190,13 +216,18 @@ ORDER BY c.sequence, r.revision_id
         };
         return content(revision) as unknown as ImmutableIdentitySupport;
       });
-      const adjacency = await connection.query<GraphSnapshot["adjacency"][number]>({
+      const adjacencyRows = await connection.query<AdjacencyRow>({
         name: "snapshot.adjacency",
         text: `SELECT claim_revision_id, entity_id, role_slot_id
                FROM omi_memory.memory_generated_adjacency WHERE account_id = $1
                ORDER BY claim_revision_id, entity_id, role_slot_id`,
         values: [accountId],
       });
+      const adjacency: GraphSnapshot["adjacency"] = adjacencyRows.map((row) => Object.freeze({
+        claim_revision_id: row.claim_revision_id,
+        entity_id: row.entity_id,
+        role_slot_id: row.role_slot_id,
+      }));
       const sourceLocalRoles = await connection.query<NonNullable<GraphSnapshot["source_local_roles"]>[number]>({
         name: "snapshot.source_local_roles",
         text: `SELECT claim_revision_id, source_local_ref, role_slot_id
@@ -228,14 +259,14 @@ ORDER BY c.sequence, r.revision_id
         artifact_id: row.artifact_id, kind: row.artifact_kind,
         provisional_revision_id: row.provisional_revision_id,
         canonical_claim_revision_id: row.canonical_claim_revision_id,
-        margin: row.margin, risk_markers: textArray(row.risk_markers),
+        margin: row.margin, risk_markers: placementRiskMarkers(row.risk_markers),
         unit_boundary_decision: row.unit_boundary_decision,
         scope_locality: row.scope_locality,
       }));
       const byRevision = <Item extends { readonly revision_id: string }>(items: Item[]): Item[] =>
         items.sort((left, right) => compareStrings(left.revision_id, right.revision_id));
 
-      return Object.freeze({
+      const snapshot = Object.freeze({
         owner_account_id: accountId, graph_generation: counter(heads[0].sequence),
         claims: Object.freeze(claims), entities: Object.freeze(byRevision(entities)),
         predicates: Object.freeze(byRevision(predicates)), predicate_assertions: Object.freeze(byRevision(predicateAssertions)),
@@ -249,7 +280,10 @@ ORDER BY c.sequence, r.revision_id
         adjacency: Object.freeze([...adjacency]), source_local_roles: Object.freeze([...sourceLocalRoles]),
         placement_artifacts: Object.freeze(placementArtifacts),
       } satisfies GraphSnapshot);
+      return Object.freeze({ snapshot, db_now_epoch_seconds: dbNowEpochSeconds });
     },
     options.observability,
   ),
-});
+  });
+  return repository;
+};

@@ -454,6 +454,7 @@ const storageProvenanceAllowMarker = "storage-provenance-ok(";
 
 const queryEvaluationCompositionRoot = "apps/service/composition/memory-query-evaluation.ts";
 const authorizedLedgerContextCompositionRoot = "apps/service/auth/firebase-application-authorization.ts";
+const externallyAuthorizedProjectionOwner = "drivers/postgres/firebase-authorized-graph-snapshot-runtime.ts";
 const sourceImpactCompositionRoot = "apps/service/composition/source-impact.ts";
 const sourceImpactCodecModule = "apps/service/codecs/opaque-refs.ts";
 const durableWorkRunnerImporters = new Set([
@@ -510,6 +511,14 @@ for (const file of files(root)) {
       failures.push(
         `${shown}: the ledger context minting module is private to the public validation facade; `
         + "future activation must add one reviewed auth-composition seam to this path fence",
+      );
+    }
+    if (shown !== "core/retrieve/authorization-boundary.ts"
+      && shown !== externallyAuthorizedProjectionOwner
+      && /\bprojectApplicationDefaultReadTreeInputFromAuthorizationEvidence\b/.test(code)) {
+      failures.push(
+        `${shown}: externally authorized projection evidence is private to ${externallyAuthorizedProjectionOwner}; `
+        + "consume the sealed Firebase/PostgreSQL product-read runtime instead",
       );
     }
     if (shown.startsWith("apps/")

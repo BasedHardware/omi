@@ -91,6 +91,8 @@ import {
   birthProductProposition,
   buildProductProjectionRevision,
 } from "../../core/retrieve/product-projection";
+import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
+import { produceQaRenders } from "../../apps/qa/renders";
 import type { IdentityAuthorization, IdentityConstraint, Predicate, ProvisionalClaim } from "../../core/schema";
 import {
   createPostgresAuthoritativeLedgerRepository,
@@ -105,7 +107,12 @@ import { createPostgresDurableMemoryWorkResultRepository } from "./durable-memor
 import { createPostgresDurableMemoryWorkSuccessRepository } from "./durable-memory-work-success";
 import { createPostgresFormationWorkInputRepository } from "./formation-work-input";
 import { createPostgresFormationOneShotRuntime } from "./formation-one-shot-runtime";
-import { createPostgresFirebaseAuthorizedGraphSnapshotRuntime } from "./firebase-authorized-graph-snapshot-runtime";
+import {
+  createPostgresFirebaseAuthorizedGraphSnapshotRuntime,
+  projectFirebaseAuthorizedGraphSnapshotLoad,
+} from "./firebase-authorized-graph-snapshot-runtime";
+import { createPostgresFirebaseAuthorizedMemoryReadRuntime } from
+  "./firebase-authorized-memory-read-runtime";
 import { createPostgresFirebaseAuthorizedLedgerRuntime } from "./firebase-authorized-ledger-runtime";
 import { createPostgresPredicateBatchWorkInputRepository } from "./predicate-batch-work-input";
 import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
@@ -2757,6 +2764,19 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           sequence: 6,
         },
       });
+    // The preceding canonical claim was intentionally purged by the liveness
+    // gate. Add a second, policy-eligible canonical claim so the direct product
+    // read proves positive grounded output rather than only a valid empty page.
+    const visibleIdentity = identityAppend(
+      accountId,
+      `${suffix}:visible-product`,
+      firebaseAppend.transition.derivation.commit.commit_id,
+    );
+    await expect(graphRepository.append(context, visibleIdentity)).resolves.toEqual({
+      kind: "committed",
+      commit_id: visibleIdentity.transition.derivation.commit.commit_id,
+      sequence: 7,
+    });
 
     const firebaseReadRuntime = createPostgresFirebaseAuthorizedGraphSnapshotRuntime({
       pool: appRolePool,
@@ -2779,8 +2799,48 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     expect(authorizedGraph.kind).toBe("loaded");
     if (authorizedGraph.kind !== "loaded") throw new Error("expected authorized graph");
     expect(authorizedGraph.authorization_generation_digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(authorizedGraph.db_now_epoch_seconds).toBeGreaterThanOrEqual(now);
     expect(authorizedGraph.snapshot.owner_account_id).toBe(accountId);
-    expect(authorizedGraph.snapshot.graph_generation).toBe(6);
+    expect(authorizedGraph.snapshot.graph_generation).toBe(7);
+    const authorizedProjection = projectFirebaseAuthorizedGraphSnapshotLoad(authorizedGraph, "UTC");
+    expect(authorizedProjection.projected.owner_account_id).toBe(accountId);
+    expect(authorizedProjection.authorization_generation_digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(authorizedProjection.db_now_epoch_seconds).toBe(authorizedGraph.db_now_epoch_seconds);
+    let productReadTraces = 0;
+    const firebaseProductRead = createPostgresFirebaseAuthorizedMemoryReadRuntime({
+      authorization: {
+        pool: appRolePool,
+        project_id: firebaseProjectId,
+        runtime_mode: "deployed",
+        id_token_adapter: {
+          verification_source: "firebase_production",
+          verifyIdToken: async () => firebaseClaims,
+        },
+        application_id: applicationId,
+        context_ttl_seconds: 60,
+      },
+      product: {
+        account_timezone: "UTC",
+        codec_root_secret: new Uint8Array(32).fill(0x55),
+        produce_renders: produceQaRenders,
+        verify_cursor: () => { throw new Error("first page must not verify a cursor"); },
+        issue_cursor: () => { throw new Error("bounded qualification page must not issue a cursor"); },
+        trace_sink: () => { productReadTraces += 1; },
+        accepted_coverage_state: "bypassed",
+        stm_coverage_state: "bypassed",
+      },
+    });
+    const productRead = await firebaseProductRead.read(
+      "header.payload.signature",
+      now,
+      { limit: 100, cursor: null },
+    );
+    expect(productRead.kind).toBe("loaded");
+    if (productRead.kind !== "loaded") throw new Error("expected direct product read");
+    const productPage = parseSynthesizedPageJson(productRead.canonical_json);
+    expect(productPage).not.toBeNull();
+    expect(productPage!.items.length).toBeGreaterThan(0);
+    expect(productReadTraces).toBe(1);
     await expect(firebaseRuntime.append("header.payload.signature", now, firebaseAppend))
       .resolves.toEqual({
         kind: "completed",
@@ -2852,7 +2912,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           WHERE account_id = $1 AND commit_id = $2) AS revoked_commit
     `, [accountId, revokedAppend.transition.derivation.commit.commit_id]);
     expect([...firebaseRows]).toEqual([{
-      commits: 6, head_sequence: "6", revoked_commit: 0,
+      commits: 7, head_sequence: "7", revoked_commit: 0,
     }]);
 
     let readTransactions = 0;

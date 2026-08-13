@@ -29,6 +29,7 @@ import {
   type ApplicationProjectionLoad,
 } from "./authorization-boundary";
 import { sha256CanonicalContent } from "./content-digest";
+import type { TreeInputSnapshot } from "./index";
 import {
   buildOwnerBoundSynthesizedProjection,
   type OwnerBoundSynthesizedProjectionEnvelope,
@@ -104,10 +105,29 @@ export interface ApplicationRecallCoherentLoad {
   readonly read_coordinates: ApplicationReadCoherentCoordinates;
 }
 
-export interface ApplicationReadAuthorizationAttempt {
+export interface LegacyApplicationReadAuthorizationAttempt {
   readonly authorization_request: ApplicationMemoryReadAuthorizationRequest;
   readonly load_coherent: () => ApplicationRecallCoherentLoad;
 }
+
+/**
+ * A coherent projection whose authority was established by an external,
+ * transaction-revalidated application boundary (for example the sealed
+ * Firebase/PostgreSQL runtime).  The projection remains module-branded; a
+ * structural clone cannot use this path.
+ *
+ * This is deliberately not an authorization DTO.  The authority boundary has
+ * already run and the read core receives only its branded projection plus the
+ * content-free generation coordinates it must compare before releasing bytes.
+ */
+export interface PreauthorizedApplicationReadAttempt {
+  readonly authorized_projection: ApplicationGrantProjectedTreeInputSnapshot;
+  readonly coherent: Omit<ApplicationRecallCoherentLoad, "projection_load">;
+}
+
+export type ApplicationReadAuthorizationAttempt =
+  | LegacyApplicationReadAuthorizationAttempt
+  | PreauthorizedApplicationReadAttempt;
 
 export interface ApplicationSynthesizedPageRequest {
   readonly limit: number;
@@ -461,16 +481,54 @@ const parseCoherentLoad = (input: unknown): ParsedCoherentLoad => {
   });
 };
 
-interface ParsedAuthorizationAttempt {
+interface ParsedLegacyAuthorizationAttempt {
+  readonly kind: "legacy";
   readonly authorization_request: ApplicationMemoryReadAuthorizationRequest;
   readonly load_coherent: () => ApplicationRecallCoherentLoad;
 }
 
+interface ParsedPreauthorizedApplicationReadAttempt {
+  readonly kind: "preauthorized";
+  readonly authorized_projection: ApplicationGrantProjectedTreeInputSnapshot;
+  readonly coherent: ParsedCoherentLoad;
+}
+
+type ParsedAuthorizationAttempt =
+  | ParsedLegacyAuthorizationAttempt
+  | ParsedPreauthorizedApplicationReadAttempt;
+
 const parseAuthorizationAttempt = (input: unknown): ParsedAuthorizationAttempt => {
+  if (input !== null && typeof input === "object" && !Array.isArray(input) && !isProxy(input)
+    && Object.getPrototypeOf(input) === Object.prototype
+    && Object.hasOwn(input, "authorized_projection")) {
+    const descriptors = exactDescriptors(input, ["authorized_projection", "coherent"]);
+    const projected = ownDescriptorValue(descriptors.authorized_projection);
+    if (projected === null || typeof projected !== "object" || Array.isArray(projected)
+      || isProxy(projected)
+      || !isApplicationGrantProjectedTreeInput(projected as TreeInputSnapshot)) {
+      return fail("preauthorized attempt requires a branded authorized projection");
+    }
+    const coherentValue = detachPlainJsonStrict(ownDescriptorValue(descriptors.coherent));
+    if (!exactRecord(coherentValue, ["coverage", "generations", "read_coordinates"])) {
+      return fail("preauthorized coherent load has an invalid exact shape");
+    }
+    const parsed = parseCoherentLoad({
+      projection_load: { snapshot: {}, options: {} },
+      coverage: coherentValue.coverage,
+      generations: coherentValue.generations,
+      read_coordinates: coherentValue.read_coordinates,
+    });
+    return Object.freeze({
+      kind: "preauthorized" as const,
+      authorized_projection: projected as ApplicationGrantProjectedTreeInputSnapshot,
+      coherent: parsed,
+    });
+  }
   const descriptors = exactDescriptors(input, ["authorization_request", "load_coherent"]);
   const authorizationRequest = detachPlainJsonStrict(ownDescriptorValue(descriptors.authorization_request));
   if (!isRecord(authorizationRequest)) return fail("authorization request must be a plain JSON record");
   return Object.freeze({
+    kind: "legacy" as const,
     authorization_request: authorizationRequest as unknown as ApplicationMemoryReadAuthorizationRequest,
     load_coherent: callbackValue(descriptors.load_coherent) as () => ApplicationRecallCoherentLoad,
   });
@@ -515,7 +573,7 @@ const buildGenerationSignature = (
 };
 
 interface AuthorizedCoherentRead {
-  readonly authorization_request: ApplicationMemoryReadAuthorizationRequest;
+  readonly authorization_request: ApplicationMemoryReadAuthorizationRequest | null;
   readonly projected: ApplicationGrantProjectedTreeInputSnapshot;
   readonly coherent: ParsedCoherentLoad;
   readonly signature: Readonly<CoherentGenerationSignature>;
@@ -524,6 +582,21 @@ interface AuthorizedCoherentRead {
 const loadAuthorizedCoherentRead = (ports: SnapshottedPorts): AuthorizedCoherentRead => {
   const resolved = Reflect.apply(ports.resolveAttempt, undefined, []);
   const attempt = parseAuthorizationAttempt(resolved);
+  if (attempt.kind === "preauthorized") {
+    const projected = attempt.authorized_projection;
+    const coherent = attempt.coherent;
+    return Object.freeze({
+      authorization_request: null,
+      projected,
+      coherent,
+      signature: buildGenerationSignature(
+        projected,
+        coherent.generations,
+        coherent.read_coordinates,
+        coherent.coverage,
+      ),
+    });
+  }
   const coherentBox: { value?: ParsedCoherentLoad } = {};
   const loadCoherent = attempt.load_coherent;
   const projected = readAfterApplicationAuthorization(attempt.authorization_request, () => {
@@ -732,19 +805,21 @@ const mergeCandidates = (
 };
 
 const collectForbiddenRefs = (
-  authorization: ApplicationMemoryReadAuthorizationRequest,
+  authorization: ApplicationMemoryReadAuthorizationRequest | null,
   projected: ApplicationGrantProjectedTreeInputSnapshot,
   candidates: readonly AuthorizedRenderedCandidate[],
 ): ReadonlySet<string> => {
   const refs = new Set<string>();
   const add = (value: unknown): void => { if (typeof value === "string" && value.length > 0) refs.add(value); };
-  add(authorization.owner_account_id);
-  add(authorization.credential.owner_account_id);
-  add(authorization.credential.app_id);
-  add(authorization.credential.key_id);
-  add(authorization.persisted_grant?.owner_account_id);
-  add(authorization.persisted_grant?.app_id);
-  add(authorization.persisted_grant?.key_id);
+  if (authorization !== null) {
+    add(authorization.owner_account_id);
+    add(authorization.credential.owner_account_id);
+    add(authorization.credential.app_id);
+    add(authorization.credential.key_id);
+    add(authorization.persisted_grant?.owner_account_id);
+    add(authorization.persisted_grant?.app_id);
+    add(authorization.persisted_grant?.key_id);
+  }
   for (const candidate of candidates) {
     add(candidate.candidate_ref);
     add(candidate.dedupe_ref);

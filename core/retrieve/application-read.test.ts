@@ -222,6 +222,7 @@ interface Harness {
 const harness = (options: {
   loads?: readonly LoadConfig[];
   authorizations?: readonly ApplicationMemoryReadAuthorizationRequest[];
+  preauthorized?: boolean;
   durable?: (input: ApplicationGrantProjectedTreeInputSnapshot, config: LoadConfig) => unknown;
   verify?: ApplicationReadPorts["verifyCursor"];
   issue?: ApplicationReadPorts["issueCursor"];
@@ -250,6 +251,17 @@ const harness = (options: {
     resolveAttempt: () => {
       sequence.push("resolve");
       const resolveIndex = counters.resolve++;
+      if (options.preauthorized) {
+        current = loads[Math.min(resolveIndex, loads.length - 1)]!;
+        return {
+          authorized_projection: current.projected,
+          coherent: {
+            coverage: structuredClone(current.coverage),
+            generations: { ...current.generations },
+            read_coordinates: { ...current.coordinates },
+          },
+        };
+      }
       const request = authorizations[Math.min(resolveIndex, authorizations.length - 1)]!;
       return {
         authorization_request: structuredClone(request),
@@ -360,6 +372,33 @@ const stringLeaves = (value: unknown): readonly string[] => {
 };
 
 describe("production-neutral application synthesized read", () => {
+  test("accepts only branded preauthorized projections without a legacy grant DTO", async () => {
+    const config = await withProducedRenders(loadConfig(), ["Direct authorized summary."]);
+    const fixture = harness({ loads: [config], preauthorized: true });
+    const result = await parsed(fixture);
+    expect(result.page.items.map((item) => item.text)).toEqual(["Direct authorized summary."]);
+    expect(fixture.counters.coherent).toBe(0);
+
+    const forged = harness({ loads: [config], preauthorized: true });
+    const originalResolve = forged.ports.resolveAttempt;
+    const forgedPorts: ApplicationReadPorts = {
+      ...forged.ports,
+      resolveAttempt: () => {
+        const attempt = originalResolve() as {
+          authorized_projection: ApplicationGrantProjectedTreeInputSnapshot;
+          coherent: unknown;
+        };
+        return { ...attempt, authorized_projection: structuredClone(attempt.authorized_projection) };
+      },
+    };
+    await expect(readApplicationSynthesizedPage(firstPage, forgedPorts)).rejects.toThrow(
+      "preauthorized attempt requires a branded authorized projection",
+    );
+    expect(outwardCounts(forged.counters)).toEqual({
+      visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0,
+    });
+  });
+
   test("projects only produced renders with grounded evidence closure and exact derived provenance", async () => {
     const config = await withProducedRenders(loadConfig(), ["A grounded synthesized summary."]);
     const render = config.renders[0]!;

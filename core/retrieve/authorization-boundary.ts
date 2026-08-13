@@ -126,6 +126,7 @@ const hasExactRecordKeys = (value: object, keys: readonly string[]): boolean => 
 };
 const isStringOrNull = (value: unknown): value is string | null => value === null || typeof value === "string";
 const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
+const SHA256_DIGEST = /^[a-f0-9]{64}$/;
 const requireAuthorizationRequestShape = (value: unknown): ApplicationMemoryReadAuthorizationRequest => {
   if (value === null || typeof value !== "object" || Array.isArray(value)
     || !hasExactRecordKeys(value, ["owner_account_id", "credential", "persisted_grant"])) deny("projection_binding_mismatch");
@@ -151,6 +152,25 @@ const requireAuthorizationRequestShape = (value: unknown): ApplicationMemoryRead
 };
 const isResolved = (value: string | null): value is string => typeof value === "string" && value.length > 0;
 const normalizedStrings = (values: readonly string[]): readonly string[] => [...new Set(values)].sort();
+
+const requireAuthorizationEvidenceShape = (
+  value: unknown,
+): ApplicationMemoryReadAuthorizationEvidence => {
+  const normalized = normalizePlainJson(value);
+  if (normalized === null || typeof normalized !== "object" || Array.isArray(normalized)
+    || !hasExactRecordKeys(normalized, [
+      "owner_account_id", "app_id", "key_id", "principal_digest",
+      "authorization_digest", "persisted_grant_state_digest",
+    ])) deny("projection_binding_mismatch");
+  const record = normalized as Record<string, unknown>;
+  if (![record.owner_account_id, record.app_id, record.key_id]
+      .every((field) => typeof field === "string" && field.length > 0)
+    || ![record.principal_digest, record.authorization_digest, record.persisted_grant_state_digest]
+      .every((field) => typeof field === "string" && SHA256_DIGEST.test(field))) {
+    deny("projection_binding_mismatch");
+  }
+  return deepFreezePlainJson(normalized) as ApplicationMemoryReadAuthorizationEvidence;
+};
 const genericPolicyLabels = new Set(["subject:generic", "sensitivity:generic", "capture:generic"]);
 const hasOnlyGenericPolicyLabels = (labels: readonly string[]): boolean => labels.every((label) => genericPolicyLabels.has(label));
 const isApplicationDefaultPolicy = (policy: PolicyClass): boolean =>
@@ -478,6 +498,26 @@ const projectApplicationDefaultReadTreeInput = (
   projectedInputs.add(detached);
   return deepFreezePlainJson(detached);
 };
+
+/**
+ * Applies the application-default policy projection to a graph whose storage
+ * load was already authorized and transaction-revalidated elsewhere.
+ *
+ * `authorization` is detached comparison evidence, not reusable authority.
+ * This function performs no credential lookup and must therefore only be
+ * composed behind a sealed source such as the Firebase/PostgreSQL graph
+ * runtime.  Its purpose is to avoid fabricating the legacy MCP request shape
+ * merely to reuse the policy projection.
+ */
+export const projectApplicationDefaultReadTreeInputFromAuthorizationEvidence = (
+  snapshot: GraphSnapshot,
+  options: { readonly account_timezone: string },
+  authorization: ApplicationMemoryReadAuthorizationEvidence,
+): ApplicationGrantProjectedTreeInputSnapshot => projectApplicationDefaultReadTreeInput(
+  snapshot,
+  options,
+  requireAuthorizationEvidenceShape(authorization),
+);
 
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
