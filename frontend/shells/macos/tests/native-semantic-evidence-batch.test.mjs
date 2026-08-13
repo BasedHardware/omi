@@ -94,7 +94,7 @@ test("semantic batch emits exact AX coverage and immutable prepared inputs", () 
     assert.equal(unproved.status, 2); assert.match(unproved.stderr, /lacks a completed replay proof/);
     writeFileSync(join(out, "batch-result.json"), JSON.stringify({ ...result, replay_proof: true, replay_attestation: null }));
     const forgedProof = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--assemble-receipt", "--result-path", join(out, "batch-result.json")], { encoding: "utf8" });
-    assert.equal(forgedProof.status, 2); assert.match(forgedProof.stderr, /replay attestation/);
+    assert.equal(forgedProof.status, 2); assert.match(forgedProof.stderr, /replay attestation|independent replay/);
     writeFileSync(join(out, "batch-result.json"), JSON.stringify({ ...result, command: `${result.command} 'ignored'` }));
     const forgedCommand = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--assemble-receipt", "--result-path", join(out, "batch-result.json")], { encoding: "utf8" });
     assert.equal(forgedCommand.status, 2); assert.match(forgedCommand.stderr, /exact replay-proof capture invocation/);

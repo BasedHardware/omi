@@ -477,7 +477,7 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
   process.stdout.write(stdoutLine);
 }
 function assemble(args, manifestPath, manifest, outRoot) {
-  const resultPath = coreFile(args.result_path, "--result-path"); const result = JSON.parse(readFileSync(resultPath, "utf8"));
+  const resultPath = coreFile(args.result_path, "--result-path"); const resultBytes = readFileSync(resultPath); const result = JSON.parse(resultBytes.toString("utf8"));
   if (result.schema !== "omi.polish.native-semantic-batch-result/v1" || result.manifest_path !== `core:${authorityRelative(manifestPath)}` || result.manifest_sha256 !== hashFile(manifestPath) || canonical(result.source_shas) !== canonical(manifest.source_shas) || !result.input_set?.id || typeof result.command !== "string" || !Array.isArray(result.argv) || !result.members || typeof result.members !== "object") fail("batch result is stale or malformed");
   if (canonical(result.authority) !== canonical(expectedSemanticAuthority())) fail("batch result authority does not match the prepared fixture/focus authority");
   if (!Array.isArray(result.input_set.entries) || !sha64.test(result.input_set.tree_sha256 || "") || result.input_set.id !== `input-v1-${result.input_set.tree_sha256}` || sha256(canonical(result.input_set.entries)) !== result.input_set.tree_sha256 || result.coordinate_count !== Object.keys(result.members).length) fail("batch result input set or member count is malformed");
@@ -487,6 +487,11 @@ function assemble(args, manifestPath, manifest, outRoot) {
   const offset = Number(result.argv[7]); const limit = Number(result.argv[9]); const readinessTimeout = Number(result.argv[13]);
   if (!Number.isInteger(offset) || !Number.isInteger(limit) || offset < 0 || limit < 1 || offset + limit > manifest.coordinates.length || limit !== result.coordinate_count || !Number.isInteger(readinessTimeout) || readinessTimeout < 100 || readinessTimeout > 30_000) fail("batch result command range is malformed");
   coreFile(result.argv[11], "batch result prepared input set");
+  // A capture result is only a candidate until the assembler independently
+  // executes its exact, source-bound replay command and observes byte-identical
+  // output.  Self-authored flags or duplicate hashes are not replay proof.
+  const replay = spawnSync(process.execPath, result.argv.slice(1), { cwd: coreRoot, env: safeEnvironment(), encoding: "utf8", timeout: 300_000, maxBuffer: 16 * 1024 * 1024 });
+  if (replay.status !== 0 || replay.stdout !== `NATIVE_SEMANTIC_BATCH_COMPLETE members=${result.coordinate_count}\n` || replay.stderr !== "" || !readFileSync(resultPath).equals(resultBytes)) fail("batch result failed independent replay verification");
   const members = result.members;
   if (!result.replay_attestation || result.replay_attestation.attempts !== 2 || canonical(Object.keys(result.replay_attestation.members || {})) !== canonical(Object.keys(members))) fail("batch result replay attestation is malformed");
   const batchId = canonicalBatchId(result.input_set.id, result.command, members, result.authority, result.replay_attestation); const artifactHashes = {}; const before = {}; const created = {}; const seenRuns = new Set();
