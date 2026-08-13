@@ -53,7 +53,7 @@ function limitPresentation(
   return notice.upgrade === "route" ? "reached-upgrade" : "reached-no-upgrade";
 }
 
-export function SettingsProduction({ store, fixture, locale = "en", onReady, onUpgrade, presentation = "page", returnHref = "?route=home" }: {
+export function SettingsProduction({ store, fixture, locale = "en", onReady, onUpgrade, presentation = "page", returnHref = "?route=home", onDismiss }: {
   store: ProductionSettingsStore;
   fixture?: string;
   locale?: Locale;
@@ -61,6 +61,7 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
   onUpgrade?: (limitKey: string) => void;
   presentation?: "page" | "sheet";
   returnHref?: string;
+  onDismiss?: () => void;
 }): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
   const [dead, setDead] = useState<Awaited<ReturnType<ProductionSettingsStore["deadLetters"]>>>([]);
@@ -134,6 +135,21 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
   const showAppearance = snapshot !== null && (account === "signed-in" || account === "signed-out");
   const showPlan = account === "signed-in";
   const isSheet = presentation === "sheet";
+  const dismiss = useCallback((): void => {
+    if (onDismiss) onDismiss();
+    else location.href = returnHref;
+  }, [onDismiss, returnHref]);
+
+  useEffect(() => {
+    if (!isSheet) return undefined;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      dismiss();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [dismiss, isSheet]);
 
   const changeAppearance = async (selection: AppearanceSelection): Promise<void> => {
     if (!snapshot || snapshot.appearance === selection) return;
@@ -168,7 +184,11 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
       {isSheet && <div className="settings-sheet-scrim" aria-hidden="true" />}
       <section className={"desktop-page-panel" + (isSheet ? " settings-sheet-panel" : "")} role={isSheet ? "dialog" : undefined} aria-modal={isSheet ? true : undefined} aria-labelledby={isSheet ? "settings-sheet-title" : undefined}>
         {isSheet && <header className="settings-sheet-toolbar">
-          <a className="settings-sheet-close" href={returnHref} aria-label={t(locale, "common.close")}>
+          <a className="settings-sheet-close" href={returnHref} aria-label={t(locale, "common.close")} onClick={(event) => {
+            if (!onDismiss) return;
+            event.preventDefault();
+            dismiss();
+          }}>
             <ProductionIcon name="close" size={20} />
             <span>{t(locale, "common.close")}</span>
           </a>
