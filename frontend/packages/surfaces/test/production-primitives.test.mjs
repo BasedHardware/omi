@@ -179,6 +179,51 @@ test("disabled control primitive always supplies a name, explanation, and explic
   }
 });
 
+test("shared primitives expose the complete pointer, touch, keyboard, selection, disabled, and busy state matrix", async () => {
+  const ProductionFilterChips = await loadProductionExport("ProductionPrimitives.tsx", "ProductionFilterChips");
+  const ProductionLifecycleRegion = await loadProductionExport("ProductionPrimitives.tsx", "ProductionLifecycleRegion");
+  const styles = await read("src/production/styles.css");
+  const changes = [];
+  const rendered = await renderComponent(() => createElement("div", { className: "production-shell" },
+    createElement(ProductionFilterChips, {
+      label: "Memory filters",
+      value: "all",
+      options: [
+        { value: "all", label: "All" },
+        { value: "locked", label: "Locked", disabled: true },
+      ],
+      onValueChange(value) { changes.push(value); },
+    }),
+    createElement(ProductionLifecycleRegion, {
+      phase: "refreshing",
+      hasSavedData: true,
+      locale: "en",
+    }),
+  ), {});
+  try {
+    const [selected, disabled] = rendered.container.querySelectorAll(".production-filter-chips button");
+    assert.equal(selected?.getAttribute("aria-pressed"), "true", "selection is not hover-dependent");
+    assert.equal(disabled?.disabled, true, "disabled state is native and blocks activation");
+    disabled?.click();
+    assert.deepEqual(changes, [], "disabled control cannot invoke its action");
+    assert.equal(rendered.container.querySelector(".production-lifecycle-region")?.getAttribute("aria-busy"), "true");
+
+    const stateContract = [
+      ["pointer hover", /button:hover:not\(:disabled\)/],
+      ["touch or pointer pressed", /button:active:not\(:disabled\)/],
+      ["keyboard focus", /\.production-shell[\s\S]*:focus-visible[\s\S]*outline:/],
+      ["selected", /\[aria-pressed="true"\], \[aria-selected="true"\], \.is-selected/],
+      ["disabled", /button:disabled, \[aria-disabled="true"\]/],
+      ["busy", /\[aria-busy="true"\] \{ cursor: progress;/],
+    ];
+    for (const [state, selector] of stateContract) assert.match(styles, selector, `${state} has a shared treatment`);
+    assert.match(styles, /button:active:not\(:disabled\)[^\{]*\{[^}]*transform:/, "pressed feedback exists independently of hover");
+    assert.match(styles, /\[aria-pressed="true"\][^\{]*\{[^}]*border-color:/, "selected feedback exists independently of hover");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("shared primitive/static CSS contract covers provenance, focus, motion, transparency, and non-live lists", async () => {
   const primitives = await read("src/production/ProductionPrimitives.tsx");
   const styles = await read("src/production/styles.css");
