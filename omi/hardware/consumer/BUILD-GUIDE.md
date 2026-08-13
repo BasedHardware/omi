@@ -1,5 +1,7 @@
 # Build Your Own Omi
 
+↑ **[Consumer README](README.md)** | **[Kit Assembly](KIT-ASSEMBLY.md)** | **[Readiness Checklist](INDIE-MAKER-CHECKLIST.md)**
+
 **This guide helps you pick the right build path based on your experience.**
 
 The Omi consumer device is an advanced wearable (nRF5340 + nRF7002, WLCSP packages, HDI PCB, CNC aluminium enclosure). The electronics **cannot be hand-soldered** — WLCSP at 0.35mm ball pitch requires professional pick-and-place and reflow. Choose the path that matches your skills.
@@ -27,7 +29,7 @@ The Omi factory already produces these boards at scale. Ordering pre-assembled s
 | Item | Description |
 |------|-------------|
 | Mainboard PCBA | Fully assembled and tested. nRF5340, nRF7002, 144 placements soldered, X-ray verified. |
-| Charger PCBA | Assembled. 8 placements. |
+| Charger PCBA | Assembled. 8 placements. This is the **charging dock** — not installed in the wearable. |
 | FPC | Assembled with BTB connector and charging contact ring. |
 | Battery | 150mAh LiPo coin cell with protection circuit, pre-tested. |
 | Enclosure | CNC AL6061-T6, anodized, laser-engraved (2 parts: case-a, case-b). |

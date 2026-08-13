@@ -1,5 +1,7 @@
 # Bill of Materials — Omi Consumer
 
+↑ **[Back to Build Guide](../BUILD-GUIDE.md)** | **[Consumer README](../README.md)**
+
 The BOM lists all components needed to build one Omi device (mainboard + charger + FPC + mechanical parts).
 
 ## Files

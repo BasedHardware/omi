@@ -1,5 +1,7 @@
 # FPC Flex-Specific Fabrication Notes — Omi Consumer
 
+↑ **[Build Guide](../BUILD-GUIDE.md)** | **[Consumer README](../README.md)**
+
 **Sources:** KiCad PCB (`OMI-FPC.kicad_pcb`), KiCad schematic (`OMI-FPC.kicad_sch`), gerber job (`OMI-FPC-job.gbrjob`), factory BOM (`omi-bom.csv`)
 
 ## Overview

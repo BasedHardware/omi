@@ -1,5 +1,7 @@
 # SWD Debug Access — Omi Consumer Mainboard
 
+↑ **[Build Guide](../BUILD-GUIDE.md)** | **[Kit Assembly](../KIT-ASSEMBLY.md)** | **[Consumer README](../README.md)**
+
 **Sources:** KiCad PCB (`OMI.kicad_pcb`), KiCad schematic (`nRF5340_mcu.kicad_sch`), factory BOM (`omi-bom.csv`)
 
 ## Overview

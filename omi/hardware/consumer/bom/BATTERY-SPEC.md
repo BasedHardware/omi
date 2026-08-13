@@ -1,5 +1,7 @@
 # Battery Procurement Specification — Omi Consumer
 
+↑ **[Build Guide](../BUILD-GUIDE.md)** | **[Kit Assembly](../KIT-ASSEMBLY.md)** | **[Consumer README](../README.md)**
+
 **Sources:** Factory BOM (`omi-bom.csv` row 84), KiCad schematic (`WirelessCharger.kicad_sch` — U15 BQ25101 ISET circuit), KiCad PCB (`OMI.kicad_pcb` — R8/R28 positions), TI BQ25101 datasheet (K_ISET = 135 AΩ)
 
 ## Primary Battery

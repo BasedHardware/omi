@@ -1,5 +1,7 @@
 # Component Placement List (CPL) — Omi Consumer
 
+↑ **[Build Guide](../BUILD-GUIDE.md)** | **[BOM README](README.md)** | **[Consumer README](../README.md)**
+
 Pick-and-place / centroid files for PCBA ordering. Generated from KiCad 9 PCB source files using `kicad-cli pcb export pos --use-drill-file-origin`.
 
 **Source PCBs:** `OMI.kicad_pcb` (mainboard v1.2), `OMI-Charger.kicad_pcb` (charger v1.0), `OMI-FPC.kicad_pcb` (FPC v1.1)

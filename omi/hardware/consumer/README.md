@@ -8,8 +8,8 @@ Licensed under MIT (see [LICENSE](LICENSE)).
 
 ### Electrical (`electrical/`)
 - **Mainboard** (nRF5340 + nRF7002): KiCad 9 source (in `altium/` zips — legacy folder name), Gerber files, schematics (v1.2)
-- **Charger Board**: KiCad 9 source, Gerber files, schematic (v1.0)
-- **FPC (Flexible PCB)**: KiCad 9 source, Gerber files, schematic (v1.0)
+- **Charger Board**: KiCad 9 source (in `altium/` zip), Gerber files, schematic (v1.0)
+- **FPC (Flexible PCB)**: KiCad 9 source (in `altium/` zip), Gerber files, schematic (v1.0)
 
 ### Bill of Materials (`bom/`)
 - 88 unique BOM lines (63 unique MPNs, 154 total placements across 3 boards)
@@ -81,6 +81,53 @@ The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Bui
 | [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | Battery selection, safety, shipping |
 | [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) | Debug probe wiring, test points, firmware flashing |
 | [ALTERNATES.md](bom/ALTERNATES.md) | Substitute parts (approved / candidate / rejected) |
+
+## Directory Structure
+
+```
+consumer/
+├── README.md                  ← you are here
+├── BUILD-GUIDE.md             ← start here: pick your build path
+├── KIT-ASSEMBLY.md            ← step-by-step for Kit buyers
+├── INDIE-MAKER-CHECKLIST.md   ← readiness overview & feasibility
+├── LICENSE
+│
+├── electrical/                ← PCB design files & engineering docs
+│   ├── mainboard/             ← nRF5340+nRF7002 (v1.2)
+│   │   ├── altium/*.zip       ← KiCad 9 source (legacy folder name)
+│   │   ├── gerbers/*.zip      ← production gerbers
+│   │   └── schematic.pdf
+│   ├── charger-board/         ← charging dock PCB (v1.0)
+│   ├── fpc-board/             ← flex PCB (v1.0)
+│   ├── SWD-DEBUG-ACCESS.md    ← firmware flashing guide
+│   ├── STENCIL-REFLOW-NOTES.md
+│   ├── IMPEDANCE-STACKUP.md
+│   ├── RF-ANTENNA-NOTES.md
+│   └── FPC-FLEX-FAB-NOTES.md
+│
+├── bom/                       ← bills of materials & sourcing
+│   ├── README.md              ← BOM format & column definitions
+│   ├── mainboard-bom.csv      ← 56 rows, 144 placements
+│   ├── charger-bom.csv        ← 6 rows, 8 placements
+│   ├── fpc-bom.csv
+│   ├── mechanical-bom.csv
+│   ├── *-cpl.csv              ← pick-and-place files
+│   ├── LCSC-SOURCING.md
+│   ├── CPL-README.md
+│   ├── BATTERY-SPEC.md
+│   └── ALTERNATES.md
+│
+├── mechanical/                ← enclosure & internal parts (STEP)
+│   ├── assemblies/            ← full device + charger assembly
+│   ├── parts/cnc/             ← case-a, case-b, touch pins
+│   ├── parts/injection-molding/  ← wrapper (PC+ABS)
+│   ├── parts/silicone/        ← internal pad
+│   ├── parts/sla/             ← frame, LED guide, charger cases
+│   └── drawings/              ← 2D manufacturing drawings
+│
+├── assembly/photos/           ← exploded view & component photos
+└── packaging/                 ← box, foam inserts, package drawings
+```
 
 ## File Checksums (SHA-256)
 

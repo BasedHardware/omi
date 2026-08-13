@@ -1,5 +1,7 @@
 # LCSC / JLCPCB Part Sourcing Summary — Omi Consumer
 
+↑ **[Build Guide](../BUILD-GUIDE.md)** | **[BOM README](README.md)** | **[Consumer README](../README.md)**
+
 **Last updated:** 2026-08-13
 **Sources:** Factory BOM (`omi-bom.csv`), KiCad PCB/schematic (mainboard, charger, FPC), LCSC.com stock check 2026-08-11
 

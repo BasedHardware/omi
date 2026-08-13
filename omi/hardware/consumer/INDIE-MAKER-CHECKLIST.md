@@ -1,5 +1,7 @@
 # Omi Consumer — Indie Maker Readiness
 
+↑ **[Build Guide](BUILD-GUIDE.md)** | **[Kit Assembly](KIT-ASSEMBLY.md)** | **[Consumer README](README.md)**
+
 **Can an indie maker build their own Omi device?** Yes — with the right path.
 
 **Last updated:** 2026-08-13

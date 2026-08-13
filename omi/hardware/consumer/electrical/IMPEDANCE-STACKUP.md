@@ -1,5 +1,7 @@
 # Impedance & PCB Stackup — Omi Consumer Mainboard
 
+↑ **[Build Guide](../BUILD-GUIDE.md)** | **[Consumer README](../README.md)**
+
 **Sources:** KiCad PCB (`OMI.kicad_pcb`, `OMI-Charger.kicad_pcb`, `OMI-FPC.kicad_pcb`), gerber drill files (`OMI-front-in1.drl`, `OMI-in1-in2.drl`, `OMI-in2-back.drl`, `OMI-PTH.drl`), gerber job files
 
 ## Stackup (Design Intent — from KiCad 9 PCB Source)

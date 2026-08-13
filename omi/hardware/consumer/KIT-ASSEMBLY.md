@@ -1,5 +1,7 @@
 # Kit Assembly Guide
 
+↑ **[Build Guide](BUILD-GUIDE.md)** | **[Consumer README](README.md)**
+
 **Assemble an Omi device from a pre-built electronics kit.**
 
 This guide is for Kit Build buyers. You received assembled PCBAs, battery, enclosure, and hardware — all you need to do is flash, connect, and assemble.
@@ -30,7 +32,7 @@ Open the kit and verify all items are present:
 - [ ] Mainboard PCBA (round, ~24mm diameter)
 - [ ] Charger PCBA (small board with pogo pin pads — this is the **charging dock**, not installed in the wearable)
 - [ ] FPC (thin flex cable with BTB connector and charging ring)
-- [ ] Battery (coin cell, 2 wires — red and black)
+- [ ] Battery (LiPo coin cell, 150mAh, 2 wires — red and black)
 - [ ] Case-A (aluminium top cover, laser-engraved)
 - [ ] Case-B (aluminium bottom shell)
 - [ ] Wrapper (PC+ABS injection-molded shell — sits between PCB and case)
@@ -176,7 +178,7 @@ Run these tests before closing the enclosure — fixing problems after assembly 
 | **IMU** | Tilt the board while connected | Accelerometer data changes in app |
 | **Charging** | Place on charger dock (if you have one) | LED indicates charging |
 
-**Motor test** may require pairing with the Omi app first. If motor testing isn't available in the app yet, verify the motor by briefly touching its pads to a 3V coin cell — it should vibrate.
+**Motor test** may require pairing with the Omi app first. If motor testing isn't available in the app yet, verify the motor by briefly touching its pads to a 3V disposable battery (CR2032) — it should vibrate.
 
 If any test fails, debug now. See [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) for troubleshooting via J-Link RTT.
 
