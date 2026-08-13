@@ -5,13 +5,13 @@ import time
 from typing import Any, Callable, Literal, TypedDict, cast
 
 from database import vector_db
+from database import _client as database_client
 from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
 from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
 from database.mcp_oauth import delete_user_oauth_credentials
 from database import users as users_db
 from database.action_items import get_action_item_ids
 from database.conversations import get_conversation_ids
-from database.memories import get_memory_ids
 from database.screen_activity import get_screen_activity_ids
 from database.vector_db import (
     delete_action_item_vectors_batch,
@@ -26,6 +26,8 @@ from utils.executors import cleanup_executor, submit_with_context
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import delete_canonical_memory_maintenance_registry_entry
 from utils.other.storage import delete_all_conversation_recordings
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
@@ -48,6 +50,18 @@ class PurgeResult(TypedDict):
 
 ACCOUNT_DELETION_WIPE_COMPLETED = 'Account Deletion Wipe Completed'
 ACCOUNT_DELETION_WIPE_FAILED = 'Account Deletion Wipe Failed'
+
+
+def _historical_memory_ids(uid: str) -> list[str]:
+    """Enumerate historical provider identities through the universal owner."""
+
+    return MemoryService().list_historical_memory_ids(uid)
+
+
+def _delete_memory_maintenance_registry(uid: str) -> None:
+    """Remove the content-free global inventory marker during account wipe."""
+
+    delete_canonical_memory_maintenance_registry_entry(uid, db_client=database_client.db)
 
 
 def delete_account_credentials(uid: str) -> None:
@@ -108,7 +122,11 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         logger.error(f'delete_account purge transcript chunk vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
-        memory_ids = get_memory_ids(uid)
+        # The service owns the historical physical-ID inventory. Canonical
+        # provider identities are purged by the canonical derived-data closure
+        # below, while the recursive Firestore wipe removes items, overrides,
+        # evidence, journals, and task sidecars under users/{uid}.
+        memory_ids = _historical_memory_ids(uid)
         if memory_ids:
             require_vector_index('memory_vectors')
             deleted = delete_memory_vectors_batch(uid, memory_ids)
@@ -263,6 +281,8 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         wipe_result = users_db.delete_user_data(uid)
         if wipe_result.get('status') != 'ok':
             raise RuntimeError('authoritative Firestore user-data wipe did not complete')
+        current_operation = 'memory_maintenance_registry'
+        _delete_memory_maintenance_registry(uid)
         logger.info('delete_account background wipe complete')
     except Exception as e:
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')

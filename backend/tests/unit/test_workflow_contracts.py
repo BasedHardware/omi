@@ -64,7 +64,6 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
     }
     selected_cases = {
         "backend/utils/memory/legacy_backfill.py": "tests/unit/test_ws_c_backfill.py",
-        "backend/utils/memory/canonical_legacy_backfill.py": "tests/unit/test_canonical_legacy_backfill.py",
         "backend/utils/memory/canonical_memory_adapter.py": "testing/e2e/test_canonical_memory_pipeline.py",
         "backend/routers/conversations.py": "tests/unit/test_conversation_lifecycle_contract.py",
         "backend/services/users/account_deletion.py": "tests/services/users/test_account_deletion.py",
@@ -388,6 +387,16 @@ def test_mobile_generated_files_only_run_for_codegen_or_localization_changes():
     assert 'fetch-depth: 1' in generated
     assert 'fetch-depth: 1' in android
     assert 'fetch-depth: 0' in changes
+
+
+def test_mobile_jobs_share_the_repository_flutter_toolchain_pin():
+    repo = BACKEND_DIR.parent
+    mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
+    repo_checks = (repo / ".github/workflows/repo-checks.yml").read_text(encoding="utf-8")
+
+    pinned_version = re.search(r"flutter-version:\s*([^\s#]+)", repo_checks)
+    assert pinned_version is not None
+    assert mobile_checks.count(f"flutter-version: {pinned_version.group(1)}") == 3
 
 
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():

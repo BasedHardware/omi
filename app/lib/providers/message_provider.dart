@@ -320,9 +320,10 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void clearSelectedFile(int index) {
+    if (index < 0 || index >= selectedFiles.length) return;
     selectedFiles.removeAt(index);
     selectedFileTypes.removeAt(index);
-    uploadedFiles.removeAt(index);
+    if (index < uploadedFiles.length) uploadedFiles.removeAt(index);
     notifyListeners();
   }
 
@@ -350,11 +351,22 @@ class MessageProvider extends ChangeNotifier {
   Future<List<MessageFile>?> uploadFiles(List<File> files, String? appId) async {
     if (files.isNotEmpty) {
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
-      var res = await uploadFilesServer(files, appId: appId);
+      List<MessageFile>? res;
+      try {
+        res = await uploadFilesServer(files, appId: appId);
+      } catch (e) {
+        Logger.debug('uploadFiles failed: $e');
+        res = null;
+      }
       if (res != null) {
         uploadedFiles.addAll(res);
       } else {
-        clearSelectedFiles();
+        for (var i = selectedFiles.length - 1; i >= 0; i--) {
+          if (files.any((f) => identical(f, selectedFiles[i]))) {
+            selectedFiles.removeAt(i);
+            selectedFileTypes.removeAt(i);
+          }
+        }
         final l10n = globalNavigatorKey.currentContext?.l10n;
         AppSnackbar.showSnackbarError(l10n?.msgUploadFileFailed ?? 'Failed to upload file, please try again later');
       }
@@ -575,7 +587,8 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.error) {
           if (_tryParseQuotaError(chunk.text)) {
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text =
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             if (playResponseAudio) {
               await OmiVoicePlaybackService.instance.interrupt();
@@ -706,7 +719,8 @@ class MessageProvider extends ChangeNotifier {
           if (_tryParseQuotaError(chunk.text)) {
             // Keep the user's message visible; replace AI placeholder with quota message
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text =
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             notifyListeners();
             return;

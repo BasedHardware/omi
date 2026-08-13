@@ -120,6 +120,24 @@ pub fn select_execution_mode(prompt: &str, requested: Option<ExecutionMode>) -> 
     }
 }
 
+/// Resolve the model a query executes with. The session's stored execution
+/// profile is the contract a client migrates to; a per-query `modelProfile`
+/// only overrides it when explicitly supplied. Falls back to the prompt-mode
+/// heuristic when neither is set so bare queries stay servable.
+pub fn select_query_model(
+    query_model_profile: Option<&str>,
+    session_model_profile: Option<&str>,
+    execution_mode: ExecutionMode,
+) -> String {
+    query_model_profile
+        .map(str::to_owned)
+        .or_else(|| session_model_profile.map(str::to_owned))
+        .unwrap_or_else(|| match execution_mode {
+            ExecutionMode::Fast => "omi-fast".into(),
+            ExecutionMode::Deep => "omi-deep".into(),
+        })
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct SubagentId(String);
 
@@ -416,6 +434,23 @@ mod tests {
             select_execution_mode("use deep mode for this", Some(ExecutionMode::Fast)),
             ExecutionMode::Fast
         );
+    }
+
+    #[test]
+    fn query_model_prefers_explicit_then_session_profile_then_mode_heuristic() {
+        // Per-query modelProfile overrides the session profile.
+        assert_eq!(
+            select_query_model(Some("omi-custom"), Some("omi-deep"), ExecutionMode::Fast),
+            "omi-custom"
+        );
+        // A migrated session profile governs when the query frame omits it.
+        assert_eq!(
+            select_query_model(None, Some("omi-deep"), ExecutionMode::Fast),
+            "omi-deep"
+        );
+        // No profile at all falls back to the execution-mode heuristic.
+        assert_eq!(select_query_model(None, None, ExecutionMode::Fast), "omi-fast");
+        assert_eq!(select_query_model(None, None, ExecutionMode::Deep), "omi-deep");
     }
 
     #[tokio::test]

@@ -4,8 +4,8 @@ use omi_agent_runtime::journal::{
 use omi_agent_runtime::provider_policy::ManagedTransport;
 use omi_agent_runtime::tool_relay::{Identity, ToolRelay};
 use omi_agent_runtime::{
-    emit_line, parse_line, select_execution_mode, wait_for_cancellation, ExecutionMode, Message,
-    PROTOCOL_VERSION,
+    emit_line, parse_line, select_execution_mode, select_query_model, wait_for_cancellation,
+    ExecutionMode, Message, PROTOCOL_VERSION,
 };
 use rx4::{Agent, Event};
 use serde_json::{json, Map, Value};
@@ -1433,10 +1433,11 @@ impl Runtime {
                 _ => None,
             });
         let execution_mode = select_execution_mode(&prompt, requested_mode);
-        let model = string_field(&fields, "modelProfile").unwrap_or_else(|| match execution_mode {
-            ExecutionMode::Fast => "omi-fast".into(),
-            ExecutionMode::Deep => "omi-deep".into(),
-        });
+        let model = select_query_model(
+            string_field(&fields, "modelProfile").as_deref(),
+            session.profile.model_profile.as_deref(),
+            execution_mode,
+        );
         let (cancel, mut cancelled) = watch::channel(false);
         self.running.insert(
             request_id.clone(),
