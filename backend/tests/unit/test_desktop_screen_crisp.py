@@ -8,6 +8,11 @@ from routers import desktop_screen_crisp
 from utils.other.endpoints import get_current_user_uid
 
 
+@pytest.fixture(autouse=True)
+def _desktop_not_paywalled(monkeypatch):
+    monkeypatch.setattr(desktop_screen_crisp, "is_desktop_trial_paywalled", lambda uid, platform: False)
+
+
 def make_client() -> TestClient:
     app = FastAPI()
     app.include_router(desktop_screen_crisp.router)

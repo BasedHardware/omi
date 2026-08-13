@@ -173,7 +173,7 @@ class TestPlatformFiltering:
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
         filter_pos = fn_body.find('platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS')
-        expiry_pos = fn_body.find('_is_trial_expired_cached(uid)')
+        expiry_pos = fn_body.find('_is_trial_expired_cached(uid')
         assert filter_pos != -1, "is_trial_paywalled must filter non-desktop platforms"
         assert expiry_pos != -1, "is_trial_paywalled must call the cached expiry lookup"
         assert filter_pos < expiry_pos, "platform filtering must happen before the expiry lookup"
@@ -184,7 +184,7 @@ class TestPlatformFiltering:
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
         assert (
-            'return _is_trial_expired_cached(uid)' in fn_body
+            'return _is_trial_expired_cached(uid' in fn_body
         ), "desktop paywall decisions must use the cached expiry lookup"
 
     def test_is_trial_paywalled_uses_lower_for_case_insensitivity(self):
@@ -317,11 +317,11 @@ class TestIsTrialPaywalledBehavioral:
 
     def test_desktop_uid_delegates_to_expiry_cache(self):
         assert self._sub.is_trial_paywalled('uid1', 'desktop') is True
-        self._mock_expired.assert_called_with('uid1')
+        self._mock_expired.assert_called_with('uid1', firestore_client=None, provision=True)
 
     def test_different_desktop_uid_uses_same_expiry_path(self):
         assert self._sub.is_trial_paywalled('uid99', 'desktop') is True
-        self._mock_expired.assert_called_with('uid99')
+        self._mock_expired.assert_called_with('uid99', firestore_client=None, provision=True)
 
     def test_not_expired_returns_false(self):
         self._mock_expired.return_value = False

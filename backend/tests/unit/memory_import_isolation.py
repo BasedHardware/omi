@@ -73,6 +73,7 @@ def make_database_client_stub() -> ModuleType:
     client_mod.db = MagicMock()
     client_mod.delete_collection_recursive = MagicMock()
     client_mod.get_firestore_client = lambda: client_mod.db
+    client_mod.get_customer_firestore_client = lambda: client_mod.db
 
     def _document_id_from_seed(seed: str) -> str:
         seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
