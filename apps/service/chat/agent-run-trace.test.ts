@@ -172,7 +172,7 @@ describe("agent-run redacted export and hermetic replay", () => {
           : event),
       })),
     });
-    const productionExport = exportAgentRunTrace(productionIds.store, productionIds.runId, { buildId: "platform-test-build" });
+    const productionExport = exportAgentRunTrace(productionIds.store, productionIds.runId, { buildId: "382502f41a0bc26c2e1c48159859628246f63301" });
     for (const raw of [
       productionIds.runId,
       "550e8400-e29b-41d4-a716-446655440000",

@@ -377,7 +377,7 @@ const traceDetails = (eventTrace: readonly AgentRunTraceEvent[]) => ({
 const validateTraceBundle = (value: unknown): AgentRunTraceBundle => {
   if (!isRecord(value) || !exactKeys(value, ["buildId", "bundleDigest", "contextReceipts", "durableState", "eventTrace", "projection", "projectionDigest", "runId", "schema", "schemaVersion", "timings", "toolEnvelopes", "traceDigest"])) fail("bundle shape");
   if (value.schema !== AGENT_RUN_TRACE_SCHEMA || value.schemaVersion !== CURRENT_AGENT_RUN_TRACE_SCHEMA_VERSION
-    || !isSafeLabel(value.buildId) || !isSafeLabel(value.runId) || !Array.isArray(value.eventTrace)
+    || !isSafeSourceToken(value.buildId) || !isSafeLabel(value.runId) || !Array.isArray(value.eventTrace)
     || !Array.isArray(value.contextReceipts) || !Array.isArray(value.toolEnvelopes)
     || !Array.isArray(value.timings) || !Array.isArray(value.durableState)
     || !SAFE_DIGEST.test(String(value.projectionDigest)) || !SAFE_DIGEST.test(String(value.traceDigest))
@@ -470,7 +470,7 @@ export const exportAgentRunTrace = (
   runId: string,
   input: { readonly buildId: string },
 ): AgentRunTraceExport => {
-  if (!isSafeSourceToken(runId) || !isSafeLabel(input.buildId) || input.buildId.length > AGENT_RUN_TRACE_BUILD_ID_MAX) fail("unsafe run/build id");
+  if (!isSafeSourceToken(runId) || !isSafeSourceToken(input.buildId) || input.buildId.length > AGENT_RUN_TRACE_BUILD_ID_MAX) fail("unsafe run/build id");
   const sourceEvents = store.list(runId);
   if (sourceEvents.length === 0) fail("run not found");
   const labels = labeler();
