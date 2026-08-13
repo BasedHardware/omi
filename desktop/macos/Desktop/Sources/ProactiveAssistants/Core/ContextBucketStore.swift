@@ -370,7 +370,13 @@ actor ContextBucketStore {
       arguments: [bucketID, now])
     let worthiness =
       try Double.fetchOne(
-        db, sql: "SELECT notifyWorthiness FROM context_buckets WHERE id = ?", arguments: [bucketID]) ?? 0
+        db,
+        sql: """
+          SELECT MAX(notifyWorthiness) FROM bucket_facts
+          WHERE bucketID = ? AND validityState = 'validated'
+            AND (expiresAt IS NULL OR expiresAt > ?)
+          """,
+        arguments: [bucketID, now]) ?? 0
     return ContextBucketSnapshot(
       bucketID: bucketID,
       versionID: version["id"],

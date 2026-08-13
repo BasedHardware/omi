@@ -100,6 +100,12 @@ actor CandidateSink {
           return false
         }
         if fact.dispositionState == "none" {
+          let stillFresh = try await pool.read { db in
+            try Self.graduationFacts(
+              in: db, deliveryID: deliveryID, factIDs: [fact.id], now: Date()
+            ).count == 1
+          }
+          guard stillFresh else { return false }
           let excerptHash = ContextBucketStore.referenceHash(fact.evidenceText)
           let candidate = OmiAPI.CandidateCreate.taskCreate(
             OmiAPI.TaskCreateCandidate(
@@ -135,8 +141,9 @@ actor CandidateSink {
             try await pool.write { db in
               try db.execute(
                 sql:
-                  "UPDATE bucket_facts SET dispositionState = 'candidate_pending', updatedAt = ? WHERE id = ? AND validityState = 'validated' AND dispositionState = 'none'",
-                arguments: [Date(), fact.id])
+                  "UPDATE bucket_facts SET dispositionState = 'candidate_pending', updatedAt = ? WHERE id = ? AND validityState = 'validated' AND dispositionState = 'none' AND (expiresAt IS NULL OR expiresAt > ?)",
+                arguments: [Date(), fact.id, Date()])
+              guard db.changesCount == 1 else { throw ContextBucketStoreError.staleFence }
             }
           }
         }

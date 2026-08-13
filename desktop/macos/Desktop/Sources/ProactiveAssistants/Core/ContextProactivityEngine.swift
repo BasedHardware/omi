@@ -38,6 +38,29 @@ enum ContextDirectorGrounding {
   }
 }
 
+enum ContextDirectorTaskSelection {
+  static let maximumCount = 20
+  static let futureHorizon: TimeInterval = 48 * 60 * 60
+
+  static func select(from tasks: [TaskActionItem], now: Date) -> [ContextDirectorTaskContext] {
+    let cutoff = now.addingTimeInterval(futureHorizon)
+    return
+      tasks
+      .filter { task in
+        !task.completed && !task.isRetired && !task.isPendingSuggestion
+          && (task.dueAt == nil || task.dueAt! <= cutoff)
+      }
+      .sorted { lhs, rhs in
+        let left = lhs.dueAt ?? .distantFuture
+        let right = rhs.dueAt ?? .distantFuture
+        if left != right { return left < right }
+        return lhs.createdAt > rhs.createdAt
+      }
+      .prefix(maximumCount)
+      .map { ContextDirectorTaskContext(description: $0.description, dueAt: $0.dueAt) }
+  }
+}
+
 extension ContextBucketStore {
   func activeFenceIsValid(_ fence: ContextVisitFence) async -> Bool {
     let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
@@ -146,9 +169,9 @@ actor ContextProactivityEngine {
     }
 
     let taskContext = await MainActor.run {
-      (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks).prefix(20).map {
-        ContextDirectorTaskContext(description: $0.description, dueAt: $0.dueAt)
-      }
+      ContextDirectorTaskSelection.select(
+        from: TasksStore.shared.incompleteTasks,
+        now: currentFrame.captureTime)
     }
     let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
     let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(

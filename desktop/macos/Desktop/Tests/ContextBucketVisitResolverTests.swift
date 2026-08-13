@@ -5,7 +5,7 @@ import XCTest
 @testable import Omi_Computer
 
 final class ContextBucketVisitResolverTests: XCTestCase {
-  func testFirstNormalizedVisitQualifiesSecondVisitAfterOneSecond() throws {
+  func testCompletedNormalizedVisitQualifiesNextVisit() throws {
     let queue = try migratedQueue()
     let appName = "Safari"
     let title = "Project room"
@@ -44,7 +44,7 @@ final class ContextBucketVisitResolverTests: XCTestCase {
           referenceHash: referenceHash,
           normalizedTitle: normalizedTitle,
           startedAt: firstEndedAt),
-        "a completed one-second visit must qualify the next visit")
+        "a completed visit must qualify the next visit")
       _ = try insertVisit(
         in: db,
         appName: appName,
@@ -65,7 +65,7 @@ final class ContextBucketVisitResolverTests: XCTestCase {
     }
   }
 
-  func testDiscardedSubSecondNormalizedVisitDoesNotQualifyNextVisit() throws {
+  func testDiscardedNormalizedVisitDoesNotQualifyNextVisit() throws {
     let queue = try migratedQueue()
     let appName = "Safari"
     let title = "Project room"
@@ -99,7 +99,7 @@ final class ContextBucketVisitResolverTests: XCTestCase {
           referenceHash: referenceHash,
           normalizedTitle: normalizedTitle,
           startedAt: firstEndedAt),
-        "a discarded sub-second visit must not count as a completed visit")
+        "a discarded visit must not count as a completed visit")
       XCTAssertEqual(
         try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM context_buckets"),
         0)

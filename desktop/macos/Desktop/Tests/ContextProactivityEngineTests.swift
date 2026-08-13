@@ -72,6 +72,23 @@ final class ContextProactivityEngineTests: XCTestCase {
     XCTAssertTrue(snapshot.validatedFacts.contains { $0.hasPrefix("fact:current ") })
     XCTAssertTrue(snapshot.validatedFacts.contains { $0.hasPrefix("fact:old ") })
     XCTAssertFalse(snapshot.validatedFacts.contains { $0.hasPrefix("fact:expired ") })
+    XCTAssertEqual(snapshot.notifyWorthiness, 1)
+  }
+
+  func testSnapshotWorthinessIgnoresExpiredValidatedFacts() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    try queue.write { db in
+      try db.execute(sql: "UPDATE bucket_facts SET notifyWorthiness = 0")
+      try db.execute(sql: "UPDATE bucket_facts SET notifyWorthiness = 1 WHERE id = 'expired'")
+      try db.execute(sql: "UPDATE context_buckets SET notifyWorthiness = 1 WHERE id = 'bucket-a'")
+    }
+
+    let snapshot = try queue.read { db in
+      try XCTUnwrap(ContextBucketStore.snapshot(in: db, bucketID: "bucket-a", now: now))
+    }
+
+    XCTAssertEqual(snapshot.notifyWorthiness, 0)
   }
 
   func testCandidateGraduationExcludesExpiredValidatedFacts() throws {

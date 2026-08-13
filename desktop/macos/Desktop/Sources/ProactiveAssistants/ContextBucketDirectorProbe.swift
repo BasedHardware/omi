@@ -1,7 +1,7 @@
 #if DEBUG
   import Foundation
 
-  /// Non-production-only replay of the context director's model boundary.
+  /// Non-production-only, image-independent replay of the context director's model boundary.
   ///
   /// This intentionally stops at the decoded director decision. Durable state, policy gates,
   /// task graduation, and user-visible presentation are outside this replay boundary.
@@ -114,9 +114,9 @@
 
       return [
         "decision": String(decision.decision.prefix(32)),
-        "title": String(decision.title.prefix(120)),
-        "message": String(decision.message.prefix(600)),
-        "reasoning": String(decision.reasoning.prefix(1_200)),
+        "title": decision.title,
+        "message": decision.message,
+        "reasoning": decision.reasoning,
         "bucket_entry_ref_count": "\(decision.bucketEntryRefs.count)",
         "fact_ref_count": "\(decision.factIDs.count)",
         "model": ContextProactivityTelemetry.boundedProviderModel(result.providerModel),

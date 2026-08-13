@@ -352,6 +352,7 @@ def test_direct_extraction_length_retry_gate_is_shape_and_provider_scoped():
 async def test_direct_extraction_retries_length_once_without_extra_quota_reservation(monkeypatch):
     calls = []
     consumed = []
+    fallbacks = []
 
     class DirectClient:
         async def post(self, url, *, headers, json):
@@ -380,6 +381,7 @@ async def test_direct_extraction_retries_length_once_without_extra_quota_reserva
     monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
     monkeypatch.setenv("OMI_ENV_STAGE", "dev")
     monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
     monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
@@ -391,16 +393,37 @@ async def test_direct_extraction_retries_length_once_without_extra_quota_reserva
     assert calls[1][2]["max_completion_tokens"] == 2400
     assert consumed == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
     assert result.response["choices"][0]["message"]["content"] == '{"summary":"ok"}'
+    assert len(fallbacks) == 2
+    assert fallbacks[0] | {"log": None} == {
+        "component": "llm_gateway",
+        "from_mode": "gateway",
+        "to_mode": "direct_openai",
+        "reason": "config_incomplete",
+        "outcome": "recovered",
+        "log": None,
+    }
+    assert fallbacks[1] | {"log": None} == {
+        "component": "llm_gateway",
+        "from_mode": "direct_openai",
+        "to_mode": "direct_openai_retry",
+        "reason": "capability_mismatch",
+        "outcome": "recovered",
+        "log": None,
+    }
 
 
 @pytest.mark.asyncio
-async def test_direct_extraction_length_retry_releases_quota_once_after_final_failure(monkeypatch):
+@pytest.mark.parametrize("final_failure", ["invalid", "provider"])
+async def test_direct_extraction_length_retry_releases_quota_once_after_final_failure(monkeypatch, final_failure):
     calls = []
     released = []
+    fallbacks = []
 
     class DirectClient:
         async def post(self, url, *, headers, json):
             calls.append(json)
+            if len(calls) == 2 and final_failure == "provider":
+                raise httpx.ConnectError("provider unavailable")
             return httpx.Response(
                 200,
                 request=httpx.Request("POST", url),
@@ -424,6 +447,7 @@ async def test_direct_extraction_length_retry_releases_quota_once_after_final_fa
     monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
     monkeypatch.setenv("OMI_ENV_STAGE", "dev")
     monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
     monkeypatch.setattr(desktop_proactivity, "_consume_quota", allow)
     monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
@@ -435,6 +459,15 @@ async def test_direct_extraction_length_retry_releases_quota_once_after_final_fa
     assert unavailable.value.status_code == 502
     assert [payload["max_completion_tokens"] for payload in calls] == [1024, 2400]
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+    assert len(fallbacks) == 2
+    assert fallbacks[0]["from_mode"] == "gateway"
+    assert fallbacks[0]["to_mode"] == "direct_openai"
+    assert fallbacks[0]["outcome"] == "recovered"
+    assert fallbacks[1]["component"] == "llm_gateway"
+    assert fallbacks[1]["from_mode"] == "direct_openai"
+    assert fallbacks[1]["to_mode"] == "direct_openai_retry"
+    assert fallbacks[1]["reason"] == "capability_mismatch"
+    assert fallbacks[1]["outcome"] == "exhausted"
 
 
 @pytest.mark.asyncio

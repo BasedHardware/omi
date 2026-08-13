@@ -68,12 +68,12 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       bucket,
       "",
       "== OPEN OR OVERDUE TASKS ==",
-      "- Review PR-123\n  Due at (UTC): 2023-11-14T23:13:20Z\n- Send release notes",
+      "- Review PR-123\n  Due at (UTC): 2023-11-14T23:13:20.000Z\n- Send release notes",
       "",
       "== CURRENT FRAME METADATA ==",
       "App: Terminal",
       "Window: deploy.sh",
-      "Captured at (UTC): 2023-11-14T22:13:20Z",
+      "Captured at (UTC): 2023-11-14T22:13:20.000Z",
     ].joined(separator: "\n")
 
     XCTAssertEqual(prompt, expected)
@@ -89,6 +89,20 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       dueAt: nil)
 
     XCTAssertEqual(task.description.count, ContextDirectorTaskContext.maximumDescriptionLength)
+  }
+
+  func testDirectorTaskSelectionIncludesNearFutureAndUndatedButExcludesFarFutureAndCompleted() {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let tasks = [
+      task("tomorrow", dueAt: now.addingTimeInterval(24 * 60 * 60)),
+      task("undated", dueAt: nil),
+      task("far", dueAt: now.addingTimeInterval(72 * 60 * 60)),
+      task("done", completed: true, dueAt: now.addingTimeInterval(60)),
+    ]
+
+    XCTAssertEqual(
+      ContextDirectorTaskSelection.select(from: tasks, now: now).map(\.description),
+      ["tomorrow", "undated"])
   }
 
   func testFrozenRankedSegmentIsConcatenatedByteForByte() {
@@ -139,5 +153,19 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     XCTAssertLessThanOrEqual(assembled.count, ContextBucketPromptAssembler.injectionTokenBudget * 4)
     XCTAssertTrue(assembled.contains(snapshot.frozenRankedSegment))
     XCTAssertNotNil(String(data: assembled, encoding: .utf8))
+  }
+
+  private func task(
+    _ description: String,
+    completed: Bool = false,
+    dueAt: Date?
+  ) -> TaskActionItem {
+    TaskActionItem(
+      id: description,
+      description: description,
+      completed: completed,
+      createdAt: Date(timeIntervalSince1970: 1_699_999_000),
+      dueAt: dueAt,
+      source: "manual")
   }
 }

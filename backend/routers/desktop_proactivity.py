@@ -404,6 +404,18 @@ def _should_retry_direct_extraction(
     return isinstance(content, str) and _looks_like_truncated_json(content)
 
 
+def _record_direct_extraction_retry_outcome(outcome: str) -> None:
+    """Record one terminal event for the bounded direct Nano retry."""
+    record_fallback(
+        component="llm_gateway",
+        from_mode="direct_openai",
+        to_mode="direct_openai_retry",
+        reason="capability_mismatch",
+        outcome=outcome,
+        log=logger,
+    )
+
+
 async def _post_provider_completion(
     provider_request: _ProviderRequest,
     *,
@@ -444,10 +456,12 @@ async def proactive_completion(
     await _consume_quota(uid, request.operation)
     request_id = str(uuid4())
     provider_request: _ProviderRequest | None = None
+    direct_extraction_retry_attempted = False
     try:
         provider_request = _proactive_provider_request(request, uid, request_id)
         response_body = await _post_provider_completion(provider_request)
         if _should_retry_direct_extraction(response_body, request, provider_request):
+            direct_extraction_retry_attempted = True
             choice = response_body["choices"][0]
             message = choice.get("message") if isinstance(choice, Mapping) else None
             content = message.get("content") if isinstance(message, Mapping) else None
@@ -468,9 +482,13 @@ async def proactive_completion(
                 max_completion_tokens=_DIRECT_EXTRACTION_RETRY_MAX_COMPLETION_TOKENS,
             )
     except HTTPException:
+        if direct_extraction_retry_attempted:
+            _record_direct_extraction_retry_outcome("exhausted")
         await _release_quota(uid, request.operation)
         raise
     except (httpx.HTTPError, ValueError, TypeError) as exc:
+        if direct_extraction_retry_attempted:
+            _record_direct_extraction_retry_outcome("exhausted")
         await _release_quota(uid, request.operation)
         if isinstance(exc, httpx.HTTPStatusError):
             logger.warning(
@@ -488,11 +506,15 @@ async def proactive_completion(
             )
         raise HTTPException(status_code=502, detail="Proactive model unavailable") from exc
     if not isinstance(response_body, dict):
+        if direct_extraction_retry_attempted:
+            _record_direct_extraction_retry_outcome("exhausted")
         await _release_quota(uid, request.operation)
         raise HTTPException(status_code=502, detail="Proactive model returned an invalid response")
     try:
         _validate_gateway_output(response_body, request)
     except HTTPException as exc:
+        if direct_extraction_retry_attempted:
+            _record_direct_extraction_retry_outcome("exhausted")
         await _release_quota(uid, request.operation)
         logger.warning(
             "desktop_proactivity_invalid_structured_output operation=%s fallback_class=%s provider_model=%s detail=%s",
@@ -502,6 +524,8 @@ async def proactive_completion(
             exc.detail,
         )
         raise
+    if direct_extraction_retry_attempted:
+        _record_direct_extraction_retry_outcome("recovered")
     usage = _usage_envelope(response_body)
     provider_model = response_body.get("model")
     return ProactiveCompletionEnvelope(

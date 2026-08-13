@@ -163,7 +163,7 @@ enum ContextProactivityPromptBuilder {
 
   private static func utcTimestamp(_ date: Date) -> String {
     let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime]
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     formatter.timeZone = TimeZone(secondsFromGMT: 0)
     return formatter.string(from: date)
   }
@@ -481,11 +481,12 @@ enum ContextBucketPurger {
                 lastVisitedAt = (SELECT MAX(endedAt) FROM context_visits WHERE bucketID = ? AND outcome = 'completed'),
                 notifyWorthiness = COALESCE(
                   (SELECT MAX(notifyWorthiness) FROM bucket_facts
-                   WHERE bucket_facts.bucketID = context_buckets.id AND validityState = 'validated'), 0),
+                   WHERE bucket_facts.bucketID = context_buckets.id AND validityState = 'validated'
+                     AND (expiresAt IS NULL OR expiresAt > ?)), 0),
                 updatedAt = ?
             WHERE id = ?
             """,
-          arguments: [survivingCount, bucketID, now, bucketID])
+          arguments: [survivingCount, bucketID, now, now, bucketID])
       }
     }
     if try db.tableExists("ocr_texts"), try db.tableExists("ocr_occurrences") {
