@@ -125,7 +125,6 @@ void main() {
     expect(AnalyticsManager.droppedEventCountForTesting, 5);
   });
 
-<<<<<<< HEAD
   test('account creation uses the first-auth credential boundary', () async {
     final adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);
@@ -189,6 +188,19 @@ void main() {
     expect(adapter.events.last.properties, containsPair('from_version', '3.1.0'));
     expect(adapter.events.last.properties, containsPair('to_version', '3.2.0'));
     expect(adapter.events.last.properties, isNot(contains('transport-id')));
+  });
+
+  test('memory telemetry carries the recording device firmware context', () {
+    final device = BtDevice(id: 'device-id', name: 'Omi', type: DeviceType.omi, rssi: -50, firmwareRevision: '3.2.1');
+
+    expect(AnalyticsManager.recordingDeviceProperties(device), {
+      'recording_hardware_type': 'omi',
+      'recording_firmware_revision': '3.2.1',
+    });
+    expect(AnalyticsManager.recordingDeviceProperties(null), {
+      'recording_hardware_type': 'phone',
+      'recording_firmware_revision': 'not_applicable',
+    });
   });
 }
 
