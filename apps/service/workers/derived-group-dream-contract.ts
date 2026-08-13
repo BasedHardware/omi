@@ -8,9 +8,9 @@ export const DERIVED_GROUP_DREAM_INPUT_SNAPSHOT_VERSION =
   "derived-group-dream-input-snapshot-v1" as const;
 
 /**
- * Future durable-work kind for belief-native derived-group dream. The slot is
- * named here for preregistration only; it is not admitted to the live
- * consolidation service, worker lease loop, or PostgreSQL acceptance tables.
+ * Durable-work kind for belief-native derived-group dream. Admitted to sealed
+ * PostgreSQL input persistence and generic work acceptance, but not to the live
+ * consolidation service, worker lease loop, scheduler, or route activation.
  */
 export const DERIVED_GROUP_DREAM_DURABLE_WORK_KIND = DERIVED_GROUP_DREAM_WORK_KIND;
 

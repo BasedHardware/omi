@@ -133,6 +133,7 @@ const expectedTables = [
   "memory_work_staged_results",
   "memory_placement_artifacts",
   "memory_predicate_batch_work_inputs",
+  "memory_derived_group_dream_work_inputs",
   "memory_predicate_assertion_revisions",
   "memory_predicate_identities",
   "memory_predicate_revisions",
@@ -1008,6 +1009,29 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(allSql).not.toMatch(
       /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE)[^;]*memory_predicate_batch_work_inputs/s,
     );
+  });
+
+  test("stages exact derived-group-dream input before acceptance and fences restart reads", () => {
+    const input = tables.find((table) => table.name === "memory_derived_group_dream_work_inputs")!;
+    expect(input.body).toContain("derived-group-dream-work-staged-input-v1");
+    expect(input.body).toContain("staged_input_id ~ '^dgwi1_[0-9a-f]{64}$'");
+    expect(input.body).toContain("PRIMARY KEY (account_id, job_id)");
+    expect(input.body).toContain("snapshot_version = 'derived-group-dream-input-snapshot-v1'");
+    expect(input.body).toContain("jsonb_typeof(snapshot_json) = 'object'");
+    expect(input.body).toContain("octet_length(snapshot_json::text) <= 524288");
+    expect(allSql).toContain("memory_derived_group_dream_acceptance_requires_input");
+    expect(allSql).toContain("CREATE FUNCTION omi_memory.read_derived_group_dream_work_input");
+    expect(allSql).toContain("CREATE FUNCTION omi_memory.insert_derived_group_dream_work_input");
+    expect(allSql).toContain("capability NOT IN ('memories.work.accept', 'memories.work.execute')");
+    expect(allSql).toContain("s.worker_id = current_setting('omi.principal_id', true)");
+    expect(allSql).toContain("GRANT EXECUTE ON FUNCTION omi_memory.read_derived_group_dream_work_input");
+    expect(allSql).not.toMatch(
+      /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE)[^;]*memory_derived_group_dream_work_inputs/s,
+    );
+    const migration = migrationSql.find((entry) => entry.version === 42)!.sql;
+    expect(migration).toContain("'derived_group_dream'");
+    expect(migration).toContain("DROP CONSTRAINT memory_work_acceptances_work_kind_check");
+    expect(migration).not.toMatch(/\b(?:GRANT|CREATE ROLE)\b[^;]*memory_derived_group_dream_work_inputs/s);
   });
 
   test("binds accepted work to one authority strategy while shadows remain non-authoritative", () => {

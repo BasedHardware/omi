@@ -19,11 +19,14 @@ the rejected SQLite `drivers/sqlite/dream.ts` promotion path.
 
 ## Durable-work slot
 
-`apps/service/workers/derived-group-dream-contract.ts` names the future
-`derived_group_dream` work kind and input manifest. It is **not** admitted to
-`CONSOLIDATION_WORK_KINDS`, PostgreSQL acceptance, or any lease loop.
+`apps/service/workers/derived-group-dream-contract.ts` names the
+`derived_group_dream` work kind and input manifest. PostgreSQL sealed input
+persistence and generic durable-work acceptance admit the kind with an exact
+input snapshot plus manifest. The slot is **not** admitted to
+`CONSOLIDATION_WORK_KINDS`, any lease loop, scheduler, route, or model default.
 
 ## Deliberate production gap
 
-No overnight scheduler, model pipeline, promotion adapter, or query route is
-activated. Query recall remains dark until honest grouped beliefs exist.
+No overnight scheduler, model pipeline, promotion adapter, worker adapter, or
+query route is activated. Query recall remains dark until honest grouped
+beliefs exist.

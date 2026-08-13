@@ -393,7 +393,7 @@ const testPostgres = async (preserve: boolean): Promise<void> => {
   childEnvironment["OMI_TEST_POSTGRES_URL"] = postgresTestConnectionString(prepared.state, passwordFrom(prepared.state));
   childEnvironment["OMI_TEST_POSTGRES_IMAGE"] = prepared.state.image;
   try {
-    const result = command(["bun", "test", "drivers/postgres/postgresjs.real.test.ts"], {
+    const result = command(["bun", "test", "drivers/postgres/postgresjs.real.test.ts", "drivers/postgres/derived-group-dream-work-input.real.test.ts"], {
       env: childEnvironment, inherit: true,
     });
     if (result.exitCode !== 0) process.exitCode = result.exitCode;

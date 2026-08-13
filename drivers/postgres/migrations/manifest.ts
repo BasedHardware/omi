@@ -253,4 +253,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0041-stranded-rollback-recovery-manifests.sql",
     sha256: "53dd9d9c46190959746f92dce92263181b5057e26e7249be1e6c7f912cebece4",
   }),
+  Object.freeze({
+    version: 42,
+    name: "derived-group-dream-work-input",
+    fileName: "0042-derived-group-dream-work-input.sql",
+    sha256: "235887c9b22549ef3170bbabf6c4df43fa2a573d62714b40807599d42ebddfac",
+  }),
 ]);

@@ -24,7 +24,7 @@ export interface RegisteredDurableMemoryWorkExecutionPolicy
 const TOKEN = /^[\x21-\x7e]{1,256}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 const WORK_KINDS = new Set<DurableMemoryWorkKind>([
-  "formation", "promotion", "identity_cluster", "predicate_batch",
+  "formation", "promotion", "identity_cluster", "predicate_batch", "derived_group_dream",
 ]);
 const MAX_ATTEMPTS = 100;
 const MAX_LEASE_SECONDS = 3_600;

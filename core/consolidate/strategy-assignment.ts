@@ -93,7 +93,8 @@ export interface MemoryStrategyAssignmentPolicyInput {
 const TOKEN = /^[\x21-\x7e]{1,256}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 const WORK_KINDS = new Set<MemoryStrategyKind>([
-  "formation", "promotion", "identity_cluster", "predicate_batch", "retrieval", "composition",
+  "formation", "promotion", "identity_cluster", "predicate_batch", "derived_group_dream",
+  "retrieval", "composition",
 ]);
 const UNIT_KINDS = new Set<MemoryStrategyAssignmentUnitKind>(["account", "session", "work"]);
 const COORDINATE_KEYS = [
