@@ -131,6 +131,60 @@
       "rootCauseLabel": "specific_validated_context_change"
     },
     {
+      "id": "worthy-material-change-no-commitment",
+      "category": "worthy_notify",
+      "synthetic": {
+        "bucket": {
+          "id": "bucket-material-change-026",
+          "subjectKind": "requirement",
+          "subjectId": "requirement-material-026",
+          "workstreamId": "workstream-beta",
+          "displayLabel": "Synthetic requirement revision",
+          "version": 1,
+          "notifyWorthiness": 0.86,
+          "entries": [
+            {
+              "id": "entry-material-change-026",
+              "reference": "entry:material:026",
+              "appName": "SyntheticPlanner",
+              "contextKey": "requirement:material-026",
+              "narrative": "A validated material requirement changed, but the source records no promise, request, or accountable action.",
+              "evidenceRefs": ["evidence:material:026-change"],
+              "facts": [
+                {
+                  "id": "fact-material-change-026",
+                  "statement": "The synthetic review requirement changed from two reviewers to three reviewers.",
+                  "validityState": "validated",
+                  "confidence": 0.94,
+                  "notifyWorthiness": 0.86,
+                  "expiresAt": "2026-08-20T00:00:00Z"
+                }
+              ]
+            }
+          ]
+        },
+        "frames": [
+          {
+            "id": "frame-material-change-026",
+            "capturedAt": "2026-08-13T16:30:00Z",
+            "appName": "SyntheticPlanner",
+            "windowTitle": "Requirement revision",
+            "contextKey": "requirement:material-026",
+            "textSummary": "A material requirement changed; no owner, due date, promise, or request is stated."
+          }
+        ],
+        "tasks": []
+      },
+      "expectedAction": "notify",
+      "allowedDecisions": ["insight", "suggest"],
+      "expectedEvidenceRefs": ["evidence:material:026-change"],
+      "expectedSubject": {"kind": "requirement", "id": "requirement-material-026", "workstreamId": "workstream-beta"},
+      "expectedMaxAge": 172800,
+      "forbidden": ["create_task_candidate_from_material_change", "treat_requirement_change_as_commitment", "invent_owner_or_due_date", "notify_without_validated_evidence"],
+      "forbiddenOutputTerms": ["task_candidate", "assigned owner: Alex", "due tomorrow", "due at 17:00"],
+      "rootCauseLabel": "material_change_without_explicit_commitment"
+    },
+    {
       "id": "worthy-revisit-unresolved-task",
       "category": "worthy_notify",
       "synthetic": {
