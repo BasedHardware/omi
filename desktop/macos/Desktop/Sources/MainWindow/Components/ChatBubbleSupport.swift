@@ -146,9 +146,12 @@ struct ChatProactivePushRow: View {
     HStack(alignment: .top, spacing: OmiSpacing.sm) {
       Image(systemName: badge.systemImage)
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(Ink.accent)
+        // Neutral, not accent: a notification badge is ambient history, not the one
+        // actionable element `Ink.accent` is reserved for (see Ink.swift). Blue here made
+        // every past notification shout for attention it does not want.
+        .foregroundColor(Ink.secondary)
         .frame(width: 24, height: 24)
-        .background(Ink.accent.opacity(0.1), in: Circle())
+        .background(Ink.rowFill, in: Circle())
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(badge.label)
