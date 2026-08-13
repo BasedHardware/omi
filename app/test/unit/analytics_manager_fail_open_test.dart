@@ -93,6 +93,23 @@ void main() {
     expect(AnalyticsManager.queuedEventCountForTesting, 200);
     expect(AnalyticsManager.droppedEventCountForTesting, 5);
   });
+
+  test('successful upgrade records the subscription transition', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().upgradeSucceeded(previousPlan: 'basic', newPlan: 'plus', billingInterval: 'year');
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events.map((event) => event.eventName), ['Subscription Plan Changed', 'Upgrade Succeeded']);
+    expect(adapter.events.first.properties, {
+      'previous_plan': 'basic',
+      'new_plan': 'plus',
+      'billing_interval': 'year',
+      'change_source': 'mobile_checkout',
+    });
+  });
 }
 
 class _FakeAnalyticsAdapter implements AnalyticsAdapter {
