@@ -176,6 +176,8 @@ enum ContextProactivityPromptBuilder {
       \(ScreenDerivedContent.untrustedPreamble)
       Decide whether interrupting now adds concrete value. Return silence unless the validated
       facts support a specific, timely action. Use only supplied bucket-entry refs.
+      Use resurface or suggest for an open task already supplied below. Use task_candidate only
+      for a new validated commitment that is not already in the supplied task list.
 
       \(stableBucket)
       """
