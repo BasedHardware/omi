@@ -15,7 +15,7 @@ The Omi FPC (Flexible Printed Circuit) connects the mainboard to the charger boa
 | **Total thickness** | ~0.3mm (see stackup below) | Including coverlay; confirm with fab |
 | **Copper type** | **RA (rolled annealed) preferred** | RA copper has superior bend fatigue life vs. ED (electrodeposited) copper. ED is acceptable for non-bend zones only. |
 | **Copper weight** | **1 oz (35µm)** | Per KiCad PCB design (both layers). ½ oz is NOT in the design files. |
-| **Surface finish** | Specify ENIG when ordering | KiCad design: unspecified. ENIG needed for BTB connector soldering. |
+| **Surface finish** | ENIG recommended | KiCad design: unspecified. ENIG recommended for BTB connector (0.35mm pitch) soldering reliability. J1 charging contact ring may benefit from hard-gold plating (>10µ") if subject to repeated mating — specify separately if needed. |
 | **Cover layer** | **Polyimide coverlay** (not solder mask) | Coverlay provides better flex life than liquid solder mask |
 | **Board version** | v1.1 | Per factory BOM (gerber zip filename says v1.0 — BOM is authoritative) |
 
@@ -52,9 +52,11 @@ The FPC gerber zip includes a file `OMI-FPC-Enhance.gbr`. This is the **stiffene
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | **Material** | FR4 or polyimide | FR4 is cheaper; polyimide is more flex-compatible |
-| **Thickness** | **0.3mm** | Per KiCad annotation: "Total Thickness = 0.3mm" — ambiguous whether this means stiffener alone or stiffener + FPC combined. Confirm interpretation with fab. |
+| **Thickness** | **0.3mm** | Per KiCad annotation: "Total Thickness = 0.3mm" — this likely means stiffener alone (flex is 0.29mm, total with stiffener ~0.59mm). Confirm interpretation with fab. |
+| **Applied to** | **Bottom side** (same side as J3 BTB connector) | Stiffener backs the connector for insertion force resistance |
 | **Location** | **Defined by `OMI-FPC-Enhance.gbr`** — stiffener zones under BTB connector (J3) and charging ring (J1) areas | Fab must use the Enhance layer as stiffener outline; do not guess placement |
-| **Adhesive** | 3M 467 or equivalent PSA (pressure-sensitive adhesive) | Standard FPC stiffener bonding |
+| **Adhesive** | 3M 467 or equivalent PSA (~50µm), thermally cured | Standard FPC stiffener bonding. Adhesive adds ~0.05mm to stiffened zone thickness. |
+| **Registration** | ±0.2mm to `Enhance` layer outline | Misregistered stiffener can overhang into bend zone or leave connector area unsupported |
 | **Setback from bend zone** | ≥1.0mm from bend transition edge | Stiffener edge must NOT extend into or overlap the bend zone — abrupt stiffness transition causes stress concentration and cracking |
 
 ### Why Stiffeners Are Needed
@@ -90,9 +92,9 @@ These are **minimum design targets** — confirm with your fab for the actual st
 |-----------|---------------------|-------|
 | **Static bend (installed)** | ≥6× flex thickness = **~1.8mm** | Bend held permanently in the assembled device. Based on ~0.29mm flex-only thickness. |
 | **Dynamic bend (repeated)** | ≥12× flex thickness = **~3.5mm** | If FPC is flexed during operation or service |
-| **Assembly bend** | ≥3× flex thickness = **~0.9mm** | One-time bend during device assembly. Aggressive — verify with fab for 1oz copper. |
+| **Assembly bend** | ≥6× flex thickness = **~1.8mm** | One-time bend during device assembly. IPC-2223 recommends ≥6× for 1oz copper; 3× is too aggressive and risks cracking. |
 
-**⚠ These values are for 1 oz RA copper (per KiCad design).** If the fab substitutes ED copper, increase bend radii by 50% or request fab confirmation. 1 oz copper is stiffer than ½ oz — verify bend fatigue life with fab for the installed bend radius.
+**⚠ These values are for 1 oz RA copper (per KiCad design).** RA copper is **required** in bend zones — ED (electrodeposited) copper has inferior bend fatigue and must not be used where the FPC flexes. If the fab substitutes ED copper, increase bend radii by 50% minimum or reject the substitution for bend zones. 1 oz copper is stiffer than ½ oz — verify bend fatigue life with fab for the installed bend radius.
 
 ### Bend Location
 - The FPC must bend to route from the mainboard BTB connector to the charging contact ring
@@ -132,12 +134,23 @@ These are **minimum design targets** — confirm with your fab for the actual st
 | `fpc-bom.csv` | BOM (2 components) |
 | `fpc-cpl.csv` | Component placement (2 components) |
 
+### DFM Notes for FPC Fab
+
+| Item | Requirement | Notes |
+|------|-------------|-------|
+| Annular ring | ≥0.1mm | Standard; verify fab can hold for any vias present |
+| Coverlay expansion | Allow 50–75µm for thermal expansion during lamination | Coverlay openings may shift — pad openings should be oversized by this margin |
+| Paste reduction for J3 | 10–15% paste reduction on 0.35mm pitch BTB pads | Prevents bridging during reflow |
+| Panelization | V-score or tab-route acceptable | FPC is small (~29×13mm) — panel multiple units |
+| Fiducials | Add at least 2 global fiducials if not already in gerber | Required for machine-placed J3 connector |
+
 ### Assembly Notes
 
 - J1 (charging contact ring) is a **custom part** — must be consigned to the PCBA house
 - J3 (BTB connector) is also not on LCSC — must be consigned
 - Due to only 2 components, manual soldering may be more practical than PCBA turnkey for small quantities
 - If PCBA house assembles the FPC, request stiffener application and coverlay before component placement
+- **J3 electrical check:** After assembly, verify continuity and shorts on all 6 signal pins (0.35mm pitch — adjacent shorts are the primary risk)
 
 ## Quality Checks
 
@@ -147,7 +160,7 @@ These are **minimum design targets** — confirm with your fab for the actual st
 2. **Dimensional:** Verify outline matches gerber. Check stiffener registration — stiffener edges should align to the `Enhance` layer outline within ±0.2mm.
 3. **Coverlay opening registration:** Pad openings in coverlay must not overlap copper traces. Misregistered coverlay blocks soldering.
 4. **Flex test:** Gently flex the FPC to its installed bend radius. It should not crack, delaminate, or show white stress marks.
-5. **Continuity:** Test all traces from J1 pads to J3 pads with a multimeter — verify every signal path.
+5. **Continuity:** Test all 9 signal traces from J1 pads to J3 pads with a multimeter: SWDCLK, SWDIO, TXD, RXD, VIN+, VDD_3V3, bat+, ~RESET, GND. Every signal path must pass.
 6. **Peel strength:** Stiffener should not peel off with light finger pressure. If it does, the adhesive is inadequate.
 
 ### Post-Assembly (Populated FPC)

@@ -70,11 +70,21 @@ ICs:              U5  (LSM6DS3TR-C, IMU, LGA-14, 2.5×3mm)
 
 **⚠ This is NOT a trivial bottom side.** U7 (NAND, 8×6mm) is the largest back-side part. Discuss bottom-side reflow capability with your CM before ordering. See `STENCIL-REFLOW-NOTES.md` for detailed assembly guidance.
 
-Order dual-side assembly (Standard, not Economic). Bottom side goes through reflow first, then top side.
+Order dual-side assembly (Standard, not Economic). **Let the CM decide reflow order** based on component mass distribution — heavy bottom-side parts (U7 at 8×6mm) may influence whether bottom or top goes first. See `STENCIL-REFLOW-NOTES.md` for full dual-reflow guidance, X-ray requirements, and stencil specifications.
 
 ### 5. Package Name Mapping
 
-CPL uses KiCad footprint library names (e.g., `C0201`, `R0402`, `WLCSP94-0.35-...`). JLCPCB matches components by LCSC part number from the BOM, not by CPL package name. Ensure BOM has LCSC part numbers (Task 3) for proper matching.
+CPL uses KiCad footprint library names (e.g., `C0201`, `R0402`, `WLCSP94-0.35-...`). Note: KiCad's footprint says `WLCSP94` but U1 has 95 pads — this is a footprint naming artifact, not an error. JLCPCB matches components by LCSC part number from the BOM, not by CPL package name. Ensure BOM has LCSC part numbers (see `LCSC-SOURCING.md`) for proper matching.
+
+### 6. Bottom-Side Rotation
+
+Bottom-side components are mirrored in the KiCad export. **Verify in the JLCPCB assembly preview** that bottom-side ICs (U5, U7, U9, U12, U14) have correct pin-1 orientation after mirroring. Some PCBA tools apply an additional rotation offset for bottom-side parts.
+
+### 7. DNP / Fiducials / Test Points
+
+- **Test points** (TP1–TP18) are excluded from CPL files. See `mainboard-testpoints.csv` for their locations (reference only, not placed by machine).
+- **Fiducials** are included in the gerber files, not the CPL. The CM uses fiducials for stencil and placement alignment.
+- **DNP parts** (if any): parts with `Populate = no` in the BOM are excluded from CPL. Verify BOM and CPL row counts match after filtering.
 
 ## Origin
 
@@ -90,4 +100,14 @@ kicad-cli pcb export pos --format csv --units mm --side both \
   --use-drill-file-origin <board>.kicad_pcb -o output.csv
 
 # Then filter test points (TP1-TP18) from mainboard output
+# and rename headers for JLCPCB upload if needed:
+#   Ref → Designator, Val → Comment, PosX → Mid X, PosY → Mid Y, Side → Layer
 ```
+
+### BOM/CPL Consistency Check
+
+Before uploading, verify:
+1. **Row count:** CPL designator count should match BOM component designator count (excluding test points, assembly headers, PCB/PCBA references)
+2. **Designator match:** Every designator in CPL appears in BOM and vice versa (for placed parts)
+3. **Side match:** Bottom-side designators in CPL match the list above (24 parts including 5 ICs)
+4. **Origin match:** CPL coordinates use the same origin as gerber drill files (drill/place file origin)

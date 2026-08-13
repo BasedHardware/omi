@@ -145,7 +145,7 @@ WLCSP and BGA joints are hidden under the package — visual inspection cannot v
 
 | Component Type | Check |
 |----------------|-------|
-| 0201 passives | No tombstoning, correct polarity (caps), adequate wetting, no side overhang |
+| 0201 passives | No tombstoning, adequate wetting, no side overhang (MLCCs are non-polarized) |
 | SOD-523 diodes (D1, D3, D4) | Polarity matches silkscreen, adequate end termination |
 | RGB LEDs (D2, D7) | Correct pin-1 orientation, all pads wetted |
 | Crystals (X1, X2, X3) | Flat against pads, no tilt, no solder beads |
@@ -186,9 +186,45 @@ When ordering turnkey PCBA, provide the CM with this complete package:
 | First-article report | Request photos, SPI report, X-ray images, and reflow profile plot |
 
 ### CM DFM Review
-Request a DFM (Design for Manufacturability) review from the CM before build. Key items for CM feedback:
-- Stencil aperture design for 0.35mm pitch WLCSP
-- Via-in-pad handling under WLCSP footprints
-- 0201 tomb-stoning risk assessment
-- Dual-reflow thermal compatibility of bottom-side parts
-- Component-specific thermal limits
+
+Request a DFM (Design for Manufacturability) review from the CM before build. **Require evidence for each item** — a verbal "we can do it" is not sufficient for WLCSP assembly.
+
+| DFM Item | Required Evidence |
+|----------|-------------------|
+| Stencil aperture design for 0.35mm WLCSP | Aperture report showing area ratio ≥0.50 for U1 (160µm pads) |
+| Via-in-pad under WLCSP (filled + capped) | Process spec showing IPC-4761 Type VII compliance |
+| 0201 tombstoning risk | Assessment based on pad geometry and reflow profile |
+| Dual-reflow bottom-side capability | Confirmation U7 (LGA-8, 8×6mm) survives second reflow; adhesive plan if needed |
+| SPI validation | SPI equipment spec and acceptance criteria (height ±20%, volume ±30%) |
+| X-ray capability | 2D X-ray minimum; angled/laminography for first articles |
+| Reflow profile | Thermocouple profile plot at 4 locations (under U1, near 0201, board edge, board center) |
+| Solder mask registration | ±25µm or better for WLCSP pad clearance |
+| Board flatness | Bow/twist ≤0.5% per IPC-6012 for thin (0.6mm) board |
+
+### Reference Standards
+
+| Standard | Applies To |
+|----------|-----------|
+| IPC-7525 | Stencil design guidelines, area ratio calculations |
+| IPC-J-STD-001 | Soldering requirements, acceptance criteria |
+| IPC-A-610 | Visual acceptance criteria for electronic assemblies |
+| IPC-7095 | BGA/WLCSP design and assembly (area ratio, voiding) |
+| IPC-4761 | Via-in-pad fill and cap requirements (Type VII) |
+| J-STD-020 | Moisture sensitivity level (MSL) classification |
+| J-STD-033 | Handling, packing, shipping of moisture-sensitive devices |
+
+### Post-Assembly Functional Test
+
+After visual/X-ray inspection, verify basic functionality:
+1. **Power-on:** Apply 3.7V to VBAT — current draw should be <5mA (sleep) or ~15mA (active BLE)
+2. **SWD connection:** Connect J-Link — nRF5340 should respond (see `SWD-DEBUG-ACCESS.md`)
+3. **BLE advertising:** After firmware flash, device should appear in nRF Connect app scan
+4. **IMU response:** Read LSM6DS3TR-C WHO_AM_I register (0x0F) via SWD — should return 0x69
+5. **Flash access:** Read JEDEC ID from NAND (U7) and SPI flash (U12) — should match datasheets
+6. **Microphone:** Record 1s audio — signal should be non-zero (not stuck at DC)
+
+### ESD & Handling
+
+- **ESD-sensitive components:** All ICs, MEMS mics. Handle with grounded wrist strap on ESD mat.
+- **MEMS microphone (MIC1, MIC2):** Do NOT ultrasonic clean or expose to liquids — acoustic port damage. No-clean flux only.
+- **WLCSP rework:** Not field-repairable. If X-ray shows defect, scrap the board or attempt rework only with BGA rework station and new stencil. Do not hand-solder WLCSP.
