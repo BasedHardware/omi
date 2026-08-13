@@ -36,7 +36,7 @@ nRF7002 (WiFi 5GHz) ────────────────────
 
 ### RF Switch Control (U10, FM8625H)
 
-**Verified from KiCad PCB (`OMI.kicad_pcb`) net assignments:**
+**Verified from KiCad PCB (`OMI.kicad_pcb`) net assignments and FM8625H datasheet (FUMAN Elec, SPDT switch, DFN-6):**
 
 | U10 Pin | Function | Net Name | Connected To |
 |---------|----------|----------|-------------|
@@ -56,13 +56,13 @@ nRF7002 (WiFi 5GHz) ────────────────────
 
 ### RF Path Loss Budget
 
-| Path | Components in Chain | Estimated Insertion Loss | Notes |
-|------|---------------------|--------------------------|-------|
-| BLE 2.4GHz | L3/L4 match + RF switch (U10) + diplexer (U3) low-band | ~1.5–2.5 dB total | Highest loss — three components in chain |
-| WiFi 2.4GHz | RF switch (U10) + diplexer (U3) low-band | ~1.0–2.0 dB total | nRF7002 has internal matching; no external matching network on this path |
-| WiFi 5GHz | Diplexer (U3) high-band only | ~0.5–1.0 dB | Shortest path, lowest loss |
+| Path | Components in Chain | Estimated Insertion Loss | Source / Basis |
+|------|---------------------|--------------------------|----------------|
+| BLE 2.4GHz | L3/L4 match (~0.2 dB) + RF switch U10 (~0.5 dB) + diplexer U3 low-band (~0.8 dB) | **~1.5 dB typical** | FM8625H: IL typ 0.45 dB at 2.4 GHz (datasheet Table 2); LFD182G45: IL typ 0.8 dB low band (Murata); L3/L4: estimated from inductor Q |
+| WiFi 2.4GHz | RF switch U10 (~0.5 dB) + diplexer U3 low-band (~0.8 dB) | **~1.3 dB typical** | Same switch + diplexer; nRF7002 has internal matching (no external network loss) |
+| WiFi 5GHz | Diplexer U3 high-band only (~1.0 dB) | **~1.0 dB typical** | LFD182G45: IL typ 1.0 dB high band (Murata); shortest path |
 
-**⚠ These are estimates.** Request S-parameter data from Murata (U3) and FUMAN (U10) for accurate link budgets. Measure actual insertion loss with a VNA on populated boards.
+**⚠ Inductor Q and matching loss estimates need measurement.** Request S-parameter data from Murata (U3) and FUMAN (U10) for exact values. Measure actual end-to-end insertion loss with a VNA on populated boards — the values above are typical datasheet numbers and do not include PCB trace loss, connector transitions, or manufacturing variation.
 
 ## RF-Critical Components — DO NOT SUBSTITUTE
 
@@ -112,7 +112,11 @@ The Omi device uses a **CNC aluminium enclosure** (front cover case-a, back cove
 
 - **Detuning:** Metal near the antenna shifts the resonant frequency. The antenna feed was tuned for the production enclosure geometry.
 - **Absorption:** Aluminium absorbs and reflects RF energy, reducing antenna efficiency.
-- **Acoustic ports as RF windows (hypothesis — not measured):** The microphone holes in the enclosure may serve as RF apertures — do not block them with conductive material. A CNC aluminum enclosure needs a verified RF window/slot strategy; this assumption should be confirmed with VNA measurement in the final enclosure.
+- **RF window/slot strategy:** The CNC aluminum enclosure must have deliberate RF apertures to allow 2.4 GHz and 5 GHz signals to radiate. Potential RF paths include:
+  - **Acoustic ports** (microphone holes) — may serve as RF apertures; do not block with conductive material
+  - **Deliberate slots or gaps** in the enclosure aligned with the antenna radiation pattern
+  - **Non-conductive sections** (plastic inserts, anodized gaps) that break the enclosure shielding
+  - **⚠ This strategy is not documented in the design files.** Measure S11 with a VNA inside the final enclosure to verify the antenna resonates at 2.4 GHz and 5 GHz. Without a verified RF window, the metal enclosure will severely attenuate all wireless signals.
 
 **⚠ If using a different enclosure:** The RF matching network may need re-tuning. This requires a VNA (Vector Network Analyzer) and expertise in antenna matching. Without re-tuning, expect degraded BLE range and WiFi throughput.
 

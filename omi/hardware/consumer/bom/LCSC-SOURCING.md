@@ -5,20 +5,21 @@
 
 ## Coverage
 
-| Metric | Count |
-|--------|-------|
-| Unique MPNs searched | 63 |
-| Found on LCSC | 48 (76%) |
-| Not on LCSC | 15 (24%) |
-| LCSC but out of stock | 9 |
-| JLCPCB Basic parts | 0 |
-| JLCPCB Extended parts | 48 |
+| Metric | Count | Notes |
+|--------|-------|-------|
+| Unique MPNs searched | 63 | All 3 boards combined |
+| Found on LCSC (listed) | 48 (76%) | Have an LCSC part number |
+| — In stock at search time | 39 (62%) | Actually orderable on 2026-08-11 |
+| — Out of stock on LCSC | 9 (14%) | Listed but unavailable — see backup section |
+| Not on LCSC at all | 15 (24%) | Require consignment from other distributors |
+| JLCPCB Basic parts | 0 | — |
+| JLCPCB Extended parts | 48 | All LCSC parts are Extended (feeder fee applies) |
 
-**All LCSC-available parts are JLCPCB Extended** — none are Basic. See "Cost Breakdown" below for full budget estimate including extended feeder fees, consignment handling, and assembly costs.
+**Effective availability: 39 of 63 MPNs (62%)** can be ordered from LCSC today. The remaining 24 (9 OOS + 15 not listed) require alternate sourcing or consignment. See "Cost Breakdown" below for full budget estimate including extended feeder fees, consignment handling, and assembly costs.
 
 ## Not on LCSC — Requires Consignment or Alternate Sourcing
 
-These 15 MPNs must be sourced from authorized distributors or manufacturer direct, then consigned to the PCBA house. For each part: order 20% extra for attrition (JLCPCB minimum attrition policy). Ship components in original reels/tubes — loose parts are not accepted for machine placement.
+These 15 MPNs must be sourced from authorized distributors or manufacturer direct, then consigned to the PCBA house. For each part: order extra for attrition — **JLCPCB shows the required minimum per line item on the order page** (typically 10–30% depending on package; fine-pitch and WLCSP parts may require more). Ship components in original reels/tubes — loose parts are not accepted for machine placement.
 
 ### ICs (4 parts — highest sourcing risk)
 
@@ -78,18 +79,29 @@ These parts have LCSC numbers but were out of stock at search time. For each, a 
 
 ### Cost Breakdown (estimated, 5-unit prototype run)
 
+**One-time setup fees (per order, regardless of board count):**
+
 | Item | Estimated Cost | Notes |
 |------|---------------|-------|
-| Extended part feeder loading | ~$3 × 48 = $144 | One-time per unique part, per order |
-| Standard assembly fee (mainboard) | ~$50–80 per board | Higher than Economic due to WLCSP |
-| PCB fabrication (mainboard, 4L HDI) | ~$15–30 per board | 5-unit minimum |
-| PCB fabrication (charger, 2L) | ~$5–10 per board | Standard 2-layer |
-| Stencil (mainboard) | ~$15–25 | 0.075–0.10mm, electropolished |
-| X-ray inspection | ~$10–20 per board | Required for WLCSP QC |
+| Extended part feeder loading | ~$3 × 48 parts = **$144** | One-time per unique LCSC part, per order |
+| Stencil — mainboard (0.075mm, electropolished) | ~$15–25 | Nano-coat adds ~$5 |
+| Stencil — charger (0.12mm, standard) | ~$8–12 | Standard laser-cut |
 | Consigned parts shipping to JLCPCB | ~$30–50 | DHL/FedEx to Shenzhen |
-| Component cost (LCSC parts) | ~$25–40 per board | Dominated by nRF5340 (~$8 if LCSC restocks) |
-| Component cost (consigned parts) | ~$40–70 per board | nRF5340, nRF7002, flash, mic, connectors (most expensive parts are consigned) |
-| **Total per board (prototype)** | **~$150–250** | Decreases significantly at >50 units |
+| **Setup subtotal** | **~$200–230** | Amortized over 5 boards = ~$40–46/board |
+
+**Per-board costs:**
+
+| Item | Estimated Cost | Notes |
+|------|---------------|-------|
+| PCB fabrication — mainboard (4L HDI, 0.6mm) | ~$15–30 | Via-in-pad, ENIG, 5-unit min |
+| PCB fabrication — charger (2L, ~1.0mm) | ~$5–10 | Standard 2-layer |
+| PCB fabrication — FPC (2L flex, PI) | ~$8–15 | Includes coverlay + stiffener |
+| Standard assembly fee — mainboard | ~$50–80 | Higher tier required for WLCSP |
+| X-ray inspection | ~$10–20 | Required for U1/U2 WLCSP QC |
+| LCSC component cost | ~$25–40 | Passives + available ICs (nRF5340 ~$8 if restocked) |
+| Consigned component cost | ~$40–70 | nRF5340, nRF7002, NAND, SPI flash, mics, connectors |
+| **Per-board subtotal** | **~$155–265** | |
+| **Total per board (incl. amortized setup)** | **~$195–310** | Decreases significantly at >50 units |
 
 ### Consignment Process
 
@@ -143,7 +155,7 @@ Before placing a PCBA order:
 2. **Source consigned parts** from authorized distributors — allow 1–2 weeks for DigiKey/Mouser shipping
 3. **Confirm JLCPCB assembly type** — Standard (not Economic) required for mainboard
 4. **Request JLCPCB DFM review** before paying — verify they accept 0.6mm 4-layer HDI with WLCSP
-5. **Order 20–30% extra** consigned parts for attrition (varies by package — JLCPCB shows per-line minimums)
+5. **Order extra consigned parts for attrition** — JLCPCB shows required minimum per line item on the order page (typically 10–30% depending on package; WLCSP may be higher)
 6. **Budget prototype overbuild** — order 5+ boards even if you need 1–2, for yield risk and rework impracticality on WLCSP
 7. **Verify RoHS compliance** — all LCSC parts are marked RoHS; confirm consigned parts meet same standard
 8. **Check JLCPCB consignment rules** — customs deposit may apply for international shipments; storage fees after 30 days

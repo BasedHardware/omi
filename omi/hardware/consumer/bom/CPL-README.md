@@ -33,7 +33,7 @@ JLCPCB-compatible CSV:
 
 ### 1. Preview in JLCPCB Assembly Viewer
 
-Upload BOM + CPL + Gerbers to JLCPCB. **Visually inspect every component** in their assembly preview before confirming the order. Pay special attention to:
+Upload BOM + CPL + Gerbers to JLCPCB. **Visually inspect every component** in their assembly preview before confirming the order. Pay special attention to rotation (§2), WLCSP pin-1 (§3), bottom-side placement (§4), and X-ray requirements (§8).
 
 ### 2. Rotation Corrections
 
@@ -73,11 +73,11 @@ ICs:              U5  (LSM6DS3TR-C, IMU, LGA-14, 2.5×3mm)
 
 **⚠ This is NOT a trivial bottom side.** U7 (NAND, 8×6mm) is the largest back-side part. Discuss bottom-side reflow capability with your CM before ordering. See `STENCIL-REFLOW-NOTES.md` for detailed assembly guidance.
 
-Order dual-side assembly (Standard, not Economic). **Let the CM decide reflow order** based on component mass distribution — heavy bottom-side parts (U7 at 8×6mm) may influence whether bottom or top goes first. See `STENCIL-REFLOW-NOTES.md` for full dual-reflow guidance, X-ray requirements, and stencil specifications.
+Order dual-side assembly — use the service tier that supports dual-side + WLCSP/BGA assembly (at JLCPCB this means **Standard** or **Advanced**, not Economic; other fabs may label tiers differently). **Let the CM decide reflow order** based on component mass distribution — heavy bottom-side parts (U7 at 8×6mm) may influence whether bottom or top goes first. See `STENCIL-REFLOW-NOTES.md` for full dual-reflow guidance, X-ray requirements, and stencil specifications.
 
 ### 5. Package Name Mapping
 
-CPL uses KiCad footprint library names (e.g., `C0201`, `R0402`, `WLCSP94-0.35-...`). Note: KiCad's footprint says `WLCSP94` but U1 has 95 pads — this is a footprint naming artifact, not an error. JLCPCB matches components by LCSC part number from the BOM, not by CPL package name. Ensure BOM has LCSC part numbers (see `LCSC-SOURCING.md`) for proper matching.
+CPL uses KiCad footprint library names (e.g., `C0201`, `R0402`, `WLCSP94-0.35-...`). Note: KiCad's footprint says `WLCSP94` but U1 has **95 pads** — verified in the KiCad PCB source (footprint `WLCSP94-0.35-4x4.4-nrf5340` contains 95 pad primitives). The "94" in the library name is a naming artifact, not a pad count. JLCPCB matches components by LCSC part number from the BOM, not by CPL package name. Ensure BOM has LCSC part numbers (see `LCSC-SOURCING.md`) for proper matching.
 
 ### 6. Bottom-Side Rotation
 
@@ -93,18 +93,54 @@ Bottom-side components are mirrored in the KiCad export. **Verify in the JLCPCB 
 
 Coordinates use the **drill/place file origin** set in KiCad (`--use-drill-file-origin`). This matches the origin used for Gerber drill files, ensuring CPL placement aligns with the PCB.
 
+### 8. X-Ray Inspection (REQUIRED)
+
+WLCSP and DSBGA joints are hidden — visual inspection cannot verify solder quality. **Require X-ray inspection** for these packages in the CPL:
+
+| Ref | Package | X-Ray |
+|-----|---------|-------|
+| U1 (nRF5340) | WLCSP-95 | **Required** — 100% X-ray first 3–5 boards |
+| U2 (nRF7002) | WLCSP-81 | **Required** — same as U1 |
+| U13 (TPS628438) | DSBGA-6 | **Required** — verify all balls connected |
+| U15 (BQ25101) | DSBGA-6 | **Required** — same as U13 |
+| U14 (GLF73910) | WLCSP-4 (bottom) | **Required** — bottom-side WLCSP |
+
+See `STENCIL-REFLOW-NOTES.md` for X-ray acceptance criteria (voiding <25%, no bridges, no head-in-pillow).
+
+### 9. Vendor Capability Check
+
+Before ordering, confirm the PCBA vendor supports **all** of these:
+
+- [ ] 0.35mm pitch WLCSP placement (±25µm accuracy, vision alignment)
+- [ ] Dual-side assembly with reflow on both sides
+- [ ] 0201 (0.6×0.3mm) pick-and-place
+- [ ] Bottom-side IC reflow (5 ICs including 8×6mm LGA)
+- [ ] BGA/WLCSP X-ray inspection
+- [ ] SPI (solder paste inspection) before placement
+
+If any capability is missing, choose a different vendor. See `STENCIL-REFLOW-NOTES.md` for the full CM DFM review checklist.
+
 ## Regeneration
 
 To regenerate from KiCad source:
 
 ```bash
-# Full export (includes test points)
+# Mainboard CPL (then filter test points TP1-TP18)
 kicad-cli pcb export pos --format csv --units mm --side both \
-  --use-drill-file-origin <board>.kicad_pcb -o output.csv
+  --use-drill-file-origin OMI.kicad_pcb -o mainboard-cpl-raw.csv
+grep -v "^TP" mainboard-cpl-raw.csv > mainboard-cpl.csv
 
-# Then filter test points (TP1-TP18) from mainboard output
-# and rename headers for JLCPCB upload if needed:
+# Charger CPL
+kicad-cli pcb export pos --format csv --units mm --side both \
+  --use-drill-file-origin OMI-Charger.kicad_pcb -o charger-cpl.csv
+
+# FPC CPL
+kicad-cli pcb export pos --format csv --units mm --side both \
+  --use-drill-file-origin OMI-FPC.kicad_pcb -o fpc-cpl.csv
+
+# Rename headers for JLCPCB upload:
 #   Ref → Designator, Val → Comment, PosX → Mid X, PosY → Mid Y, Side → Layer
+# The Val column in KiCad export maps to Comment in JLCPCB's format.
 ```
 
 ### BOM/CPL Consistency Check
@@ -114,3 +150,16 @@ Before uploading, verify:
 2. **Designator match:** Every designator in CPL appears in BOM and vice versa (for placed parts)
 3. **Side match:** Bottom-side designators in CPL match the list above (24 parts including 5 ICs)
 4. **Origin match:** CPL coordinates use the same origin as gerber drill files (drill/place file origin)
+
+Quick consistency check (bash):
+```bash
+# Compare designators between BOM and CPL for mainboard
+# Extract CPL designators (skip header)
+cut -d',' -f1 mainboard-cpl.csv | tail -n+2 | sort > /tmp/cpl-refs.txt
+# Extract BOM designators (filter to component rows, expand multi-ref entries)
+cut -d',' -f1 mainboard-bom.csv | tail -n+2 | tr ';' '\n' | sort > /tmp/bom-refs.txt
+# Show mismatches
+diff /tmp/cpl-refs.txt /tmp/bom-refs.txt
+# Lines prefixed < are in CPL but not BOM (test points, fiducials)
+# Lines prefixed > are in BOM but not CPL (DNP parts, custom/accessory rows)
+```

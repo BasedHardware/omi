@@ -28,11 +28,11 @@ Parts are classified into three tiers:
 | Power ICs (U8, U16 LDO) | ⚠️ | Must match voltage, current, package, pinout. Very few share XTDFN-4 footprint. |
 | Power ICs (U13 buck, U15 charger) | 🚫 | TI DSBGA-6 packages. No verified alternate; use exact MPN. |
 | IMU (U5 LSM6DS3TR-C) | ⚠️ | LGA-14 (2.5×3mm), back side. Other 6-axis IMUs exist in same package but require firmware driver and I2C/SPI address verification. |
-| SPI Flash (U12 P25Q16SH) | ⚠️ | USON-8 (3×2mm), back side. Other 128Mbit SPI flash may be pin-compatible but require SFDP table and QE bit behavior matching for firmware. |
+| SPI Flash (U12 P25Q16SH) | ⚠️ | USON-8 (3×2mm), back side. Other **16 Mbit** SPI NOR flash may be pin-compatible but require SFDP table and QE bit behavior matching for firmware. |
 | RGB LED (D2, D7 MHPA0606RGBDT) | 🚫 | 0606 (0.69×0.69mm) — no LCSC alternate in this footprint. Use exact MPN from MEIHUA. |
 | Tactile switch (K2 TS-1001S) | ⚠️ | 2.6×1.6×0.53mm ultra-low-profile. Must match footprint and profile height exactly for enclosure fit. |
 | MOSFETs (Q1, Q2, Q7) | 🚫 | No verified alternate. Use exact MPN; see details below. |
-| Logic (U9 NAND gate) | ✅ | 74LVC1G00 in SC70-5 — prefer Schmitt-trigger versions (SGMICRO, Nexperia). |
+| Logic (U9 NAND gate) | ✅ | 74LVC1G00 in SC70-5 — any manufacturer (SGMICRO, Nexperia, TI). Note: TI version lacks Schmitt-trigger inputs (see details below). |
 | General passives (R, C not in RF path) | ✅ | Any equivalent value/tolerance/package from major vendor. |
 | 0Ω resistors | ✅ | Any 0Ω jumper in same package. |
 
@@ -78,8 +78,8 @@ General-purpose 0201 resistors and capacitors can be substituted with equivalent
 
 | Alternate MPN | Manufacturer | LCSC | Package | Verified |
 |--------------|--------------|------|---------|----------|
-| 74LVC1G00GW,125 | Nexperia | C12078 | SC70-5 | ✅ Drop-in. Schmitt-trigger inputs (same as original SGMICRO). |
-| SN74LVC1G00DCKR | TI | C7468 | SC70-5 | ⚠️ **Non-Schmitt.** TI version has input transition-rate limits (20ns/V at 1.8V, 10ns/V at 3.3V) instead of Schmitt-trigger inputs. Safe if input edges are fast; verify in circuit. |
+| 74LVC1G00GW,125 | Nexperia | C12078 | SC70-5 | ✅ Drop-in. Nexperia datasheet shows Schmitt-trigger inputs. Verify your circuit tolerates the hysteresis if switching thresholds are critical. |
+| SN74LVC1G00DCKR | TI | C7468 | SC70-5 | ✅ Drop-in. TI version has standard CMOS inputs (no Schmitt-trigger hysteresis) with input transition-rate limits (20ns/V at 1.8V, 10ns/V at 3.3V). Safe if input edges are clean. |
 
 ## ⚠️ Candidate — Requires EE Review
 
