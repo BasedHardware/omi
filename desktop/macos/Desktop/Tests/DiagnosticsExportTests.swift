@@ -133,7 +133,11 @@ import XCTest
     func testLocalBundleDropsOversizedLogLinesBeforeRegexRedaction() throws {
       let logPath = tempDir.appendingPathComponent("omi-dev.log").path
       let secret = "SUPERSECRETKEY123"
-      let oversizedLine = "[10:00:00.000] [app] api_key=\(secret) " + String(repeating: "x", count: 20 * 1024)
+      let oversizedLine =
+        "[10:00:00.000] [app] api_key=\(secret) "
+        + String(
+          repeating: "x",
+          count: DiagnosticLogRedactionPolicy.maximumLineLengthForRegexRedaction + 1)
       try oversizedLine.write(toFile: logPath, atomically: true, encoding: .utf8)
 
       let text = DesktopDiagnosticsManager.shared.buildLocalDiagnosticsText(logPath: logPath)
