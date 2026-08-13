@@ -163,6 +163,16 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "all changes must be free of whitespace errors and conflict markers"
+  - id: git-author-identity
+    command: ["python3", ".github/scripts/check_git_author_identity.py", "--base", "{base}", "--head", "{head}"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "PR #11525's commits were minted as Ratchet Test because a leftover repo-local user.email overrode the global identity; GitHub then showed a generic avatar"
+  - id: git-author-identity-tests
+    command: ["python3", ".github/scripts/test_check_git_author_identity.py"]
+    triggers: [".github/scripts/check_git_author_identity.py", ".github/scripts/test_check_git_author_identity.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the author-identity guard must reject a clone-local fixture override and a fixture-authored commit range"
   - id: package-architecture-map-guardrail-tests
     command: ["python3", ".github/scripts/test_check_package_architecture_maps.py"]
     triggers: [".github/scripts/check_package_architecture_maps.py", ".github/scripts/test_check_package_architecture_maps.py", ".github/scripts/package_architecture_baseline.json", ".github/checks-manifest.yaml"]
