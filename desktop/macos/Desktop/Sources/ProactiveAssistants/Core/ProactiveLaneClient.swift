@@ -110,17 +110,23 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
 actor ProactiveLaneClient {
   static let shared = ProactiveLaneClient()
   static var backendBaseURL: String { DesktopBackendEnvironment.rustBackendURL() }
+  static let defaultQuotaCooldownSeconds = 10 * 60
   private let session: URLSession
   private let baseURL: () -> String
   private let authorization: () async throws -> String
+  private let now: @Sendable () -> Date
+  private var quotaCooldownUntil: Date?
+  private var loggedQuotaSkip = false
 
   init(
     session: URLSession = .shared,
     baseURL: @escaping () -> String = { ProactiveLaneClient.backendBaseURL },
-    authorization: (() async throws -> String)? = nil
+    authorization: (() async throws -> String)? = nil,
+    now: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.session = session
     self.baseURL = baseURL
+    self.now = now
     self.authorization =
       authorization ?? {
         let authService = await MainActor.run { AuthService.shared }
@@ -138,6 +144,7 @@ actor ProactiveLaneClient {
     maxCompletionTokens: Int = 1024,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ProactiveLaneResult {
+    try checkQuotaCooldown()
     if let authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw ProactiveLaneClientError.ownerChanged
@@ -194,9 +201,43 @@ actor ProactiveLaneClient {
     }
     guard let http = response as? HTTPURLResponse else { throw ProactiveLaneClientError.invalidResponse }
     guard (200..<300).contains(http.statusCode) else {
-      throw ProactiveLaneClientError.http(status: http.statusCode, retryAfterSeconds: nil)
+      let retryAfter: Int?
+      if http.statusCode == 429 {
+        retryAfter = Self.parseRetryAfterSeconds(from: http)
+        armQuotaCooldown(retryAfterSeconds: retryAfter)
+      } else {
+        retryAfter = nil
+      }
+      throw ProactiveLaneClientError.http(status: http.statusCode, retryAfterSeconds: retryAfter)
     }
     return try Self.parseEnvelope(data)
+  }
+
+  private func checkQuotaCooldown() throws {
+    guard let until = quotaCooldownUntil else { return }
+    let current = now()
+    if current >= until {
+      quotaCooldownUntil = nil
+      loggedQuotaSkip = false
+      return
+    }
+    if !loggedQuotaSkip {
+      loggedQuotaSkip = true
+      log("Proactive lane skipped: quota_cooldown")
+    }
+    let remaining = max(1, Int(ceil(until.timeIntervalSince(current))))
+    throw ProactiveLaneClientError.http(status: 429, retryAfterSeconds: remaining)
+  }
+
+  private func armQuotaCooldown(retryAfterSeconds: Int?) {
+    let delay = retryAfterSeconds.flatMap { $0 > 0 ? $0 : nil } ?? Self.defaultQuotaCooldownSeconds
+    quotaCooldownUntil = now().addingTimeInterval(TimeInterval(delay))
+    loggedQuotaSkip = false
+  }
+
+  static func parseRetryAfterSeconds(from response: HTTPURLResponse) -> Int? {
+    guard let raw = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
+    return Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
   }
 
   static func parseEnvelope(_ data: Data) throws -> ProactiveLaneResult {
