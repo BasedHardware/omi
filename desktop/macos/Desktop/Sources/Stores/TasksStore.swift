@@ -37,7 +37,7 @@ class TasksStore: ObservableObject {
   }
 
   /// Legacy surfaces deliberately preserve a local edit while offline; the
-  /// cohort-only inline task controls roll a rejected mutation back instead.
+  /// universal inline task controls roll a rejected mutation back instead.
   enum TaskUpdateRemoteFailureBehavior: Equatable, Sendable {
     case preserveLocalEdit
     case rollbackForChatFirst

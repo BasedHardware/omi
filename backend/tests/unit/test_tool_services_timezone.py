@@ -29,7 +29,6 @@ import utils.conversations.render as render  # noqa: E402
 import utils.retrieval.tool_services.action_items as action_items_svc  # noqa: E402
 import utils.retrieval.tool_services.memories as memories_svc  # noqa: E402
 import utils.retrieval.tools.memory_tools as memory_tools  # noqa: E402
-from utils.memory.memory_system import MemorySystem  # noqa: E402
 
 # 22:00 UTC on 2026-06-26 is 19:00 the same day in Sao Paulo (UTC-3) — the reporter's 3-hour skew.
 UTC_INSTANT = datetime(2026, 6, 26, 22, 0, 0, tzinfo=timezone.utc)
@@ -60,6 +59,7 @@ def _memory(created_at):
         content="Likes espresso",
         created_at=created_at,
         category=SimpleNamespace(value="preferences"),
+        is_locked=False,
     )
 
 
@@ -69,9 +69,8 @@ def _run_action_items(monkeypatch, items):
 
 
 def _stub_canonical_memory_search(monkeypatch, module, memories):
-    """Point ``module`` at the canonical memory system and return ``memories`` from its search."""
+    """Return ``memories`` from universal MemoryService search."""
     matches = [SimpleNamespace(memory=m, score=0.9) for m in memories]
-    monkeypatch.setattr(module, "pin_memory_system", lambda *a, **k: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         module,
         "MemoryService",

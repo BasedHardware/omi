@@ -74,13 +74,23 @@ class TaskIntelligenceOutcomeCode(str, Enum):
 
 
 class TaskIntelligenceRolloutDecision(BaseModel):
-    """Pure rollout decision; memory cohort membership is an independent input."""
+    """Universal task decision for one authenticated account.
+
+    The ``memory_cohort_eligible`` field is retained as a released-wire
+    compatibility diagnostic. It is deliberately constant and is never used
+    to derive any task authority.
+    """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
     uid: str = Field(min_length=1)
     workflow_mode: TaskWorkflowMode
-    memory_cohort_eligible: bool
+    # Deprecated compatibility diagnostic; universal task authority is not
+    # selected by memory enrollment.
+    # Retained only as a released-wire diagnostic. The old cohort signal is
+    # gone; accepting ``False`` would let callers publish a stale eligibility
+    # result even though every authenticated account is universal.
+    memory_cohort_eligible: Literal[True] = True
     account_generation: int = Field(default=0, ge=0)
     legacy_reads_authoritative: bool
     legacy_writes_enabled: bool
@@ -95,9 +105,9 @@ class TaskWorkflowControl(BaseModel):
     """Persisted workflow metadata plus the derived Chat-first capability.
 
     ``workflow_mode`` remains readable for legacy records and operational
-    history. It is not an entitlement. ``chat_first_ui`` is derived only from
-    the canonical-memory selector; persistence excludes it so clients cannot
-    turn a sampled response into later authority.
+    history. It is not an entitlement. ``chat_first_ui`` is derived from the
+    universal task decision; persistence excludes it so clients cannot turn a
+    sampled response into later authority.
     """
 
     model_config = ConfigDict(extra='forbid', frozen=True)

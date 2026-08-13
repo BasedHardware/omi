@@ -563,8 +563,7 @@ extension AppState {
               kind: .meeting,
               rawReference: active ? "meeting-active" : "meeting-ended"
             ) {
-              let matched = TaskContextSubjectMatcher.shared.resolve(event)
-              Task { await TaskContextualResurfacingService.shared.observe(matched) }
+              Task { await ContextSubjectBindingService.shared.resolveAndObserve(event) }
             }
           }
         )

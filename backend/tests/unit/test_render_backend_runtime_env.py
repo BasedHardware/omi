@@ -111,7 +111,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     memory_env = _MODULE['_render_env_vars'](memory_job['env'])
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
-    assert 'MEMORY_ENABLED_USERS=' in memory_env
+    assert 'MEMORY_ENABLED_USERS' not in memory_env
     assert 'MEMORY_MODE=off' in memory_env
     assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED=false' in memory_env
     assert 'TYPESENSE_HOST_PORT=443' in memory_env
@@ -191,7 +191,7 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     job_env = _job_env_block(out, 'memory_maintenance_job')
     assert 'MEMORY_MODE=off' in job_env
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in job_env
-    assert 'MEMORY_ENABLED_USERS=' in job_env
+    assert 'MEMORY_ENABLED_USERS' not in job_env
 
     assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
 
