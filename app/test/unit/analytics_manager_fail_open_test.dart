@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/firmware_update_telemetry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -92,6 +94,25 @@ void main() {
 
     expect(AnalyticsManager.queuedEventCountForTesting, 200);
     expect(AnalyticsManager.droppedEventCountForTesting, 5);
+  });
+
+  test('firmware update telemetry emits one terminal outcome', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    final attempt = FirmwareUpdateTelemetry.start(
+      device: BtDevice(id: 'transport-id', name: 'Omi', type: DeviceType.omi, rssi: -50, firmwareRevision: '3.1.0'),
+      protocol: 'mcumgr',
+    );
+
+    attempt.completed(toVersion: '3.2.0');
+    attempt.failed(failureClass: 'late_error');
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events.map((event) => event.eventName), ['Firmware Update Started', 'Firmware Update Completed']);
+    expect(adapter.events.last.properties, containsPair('from_version', '3.1.0'));
+    expect(adapter.events.last.properties, containsPair('to_version', '3.2.0'));
+    expect(adapter.events.last.properties, isNot(contains('transport-id')));
   });
 }
 
