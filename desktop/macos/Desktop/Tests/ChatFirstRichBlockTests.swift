@@ -293,6 +293,30 @@ final class ChatFirstRichBlockTests: XCTestCase {
     )
   }
 
+  func testTaskCardRetainsCompletedPresentationWhileCanonicalTaskRehydrates() {
+    let completed = task(id: "task-1", completed: true)
+
+    XCTAssertEqual(
+      ChatFirstTaskCardPresentation.displayTask(
+        liveTask: nil,
+        retainedCompletedTask: completed
+      ),
+      completed
+    )
+    XCTAssertNil(
+      ChatFirstTaskCardPresentation.displayTask(
+        liveTask: nil,
+        retainedCompletedTask: task(id: "task-1", completed: false)
+      )
+    )
+    XCTAssertNil(
+      ChatFirstTaskCardPresentation.displayTask(
+        liveTask: task(id: "task-1", completed: true, taskStatus: "superseded"),
+        retainedCompletedTask: completed
+      )
+    )
+  }
+
   func testTaskCaptureLinksFailClosedOutsideTheOmiDeviceArchive() {
     let omiCaptureTask = task(
       id: "omi-task",
@@ -321,7 +345,8 @@ final class ChatFirstRichBlockTests: XCTestCase {
     id: String,
     completed: Bool,
     conversationID: String? = nil,
-    source: String? = nil
+    source: String? = nil,
+    taskStatus: String? = nil
   ) -> TaskActionItem {
     TaskActionItem(
       id: id,
@@ -329,7 +354,8 @@ final class ChatFirstRichBlockTests: XCTestCase {
       completed: completed,
       createdAt: Date(timeIntervalSince1970: 0),
       conversationId: conversationID,
-      source: source
+      source: source,
+      taskStatus: taskStatus
     )
   }
 }

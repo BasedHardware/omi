@@ -127,6 +127,7 @@ class TasksStore: ObservableObject {
     var fetchAllTaskIds: ((_ ownerID: String) async throws -> [String])?
     var fetchSelectionTaskIds: ((_ completed: Bool, _ ownerID: String) async throws -> [String])?
     var fetchTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)?
+    var loadTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)?
     var reconcileVisibility: ((_ items: [TaskActionItem], _ ownerID: String) async throws -> Int)?
     var fetchDeletedPage: ((_ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage)?
     var syncPage:
@@ -158,6 +159,7 @@ class TasksStore: ObservableObject {
       fetchAllTaskIds: ((_ ownerID: String) async throws -> [String])? = nil,
       fetchSelectionTaskIds: ((_ completed: Bool, _ ownerID: String) async throws -> [String])? = nil,
       fetchTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)? = nil,
+      loadTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)? = nil,
       reconcileVisibility: ((_ items: [TaskActionItem], _ ownerID: String) async throws -> Int)? = nil,
       fetchDeletedPage: ((_ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage)? = nil,
       syncPage: (
@@ -185,6 +187,7 @@ class TasksStore: ObservableObject {
       self.fetchAllTaskIds = fetchAllTaskIds
       self.fetchSelectionTaskIds = fetchSelectionTaskIds
       self.fetchTaskDetail = fetchTaskDetail
+      self.loadTaskDetail = loadTaskDetail
       self.reconcileVisibility = reconcileVisibility
       self.fetchDeletedPage = fetchDeletedPage
       self.syncPage = syncPage
@@ -1427,7 +1430,7 @@ class TasksStore: ObservableObject {
     return .init(items: page.items.map { $0.retired() }, hasMore: page.hasMore)
   }
 
-  private func syncPage(
+  func syncPage(
     _ items: [TaskActionItem],
     overrideStagedDeletions: Bool = false,
     lease: OwnerOperationLease,
@@ -1682,7 +1685,7 @@ class TasksStore: ObservableObject {
     }
   }
 
-  private func refreshDashboard(
+  func refreshDashboard(
     lease: OwnerOperationLease,
     operations: OwnerBoundOperations
   ) async {
@@ -2775,71 +2778,6 @@ class TasksStore: ObservableObject {
     }
   }
 
-  /// Hydrates a canonical goal-detail task through the owner-fenced store
-  /// before a goal page attempts any mutation.
-  func resolveCanonicalTask(
-    id: String,
-    expectedOwnerID: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
-    operations: OwnerBoundOperations = OwnerBoundOperations()
-  ) async -> TaskActionItem? {
-    let normalizedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !normalizedID.isEmpty,
-      let lease = captureOwnerLease(
-        expectedOwnerID: expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot
-      )
-    else { return nil }
-
-    if let existing = tasks.first(where: { $0.id == normalizedID && $0.deleted != true }) {
-      return existing
-    }
-    do {
-      let remoteTask: TaskActionItem?
-      if let fetchTaskDetail = operations.fetchTaskDetail {
-        remoteTask = try await fetchTaskDetail(normalizedID, lease.ownerID)
-      } else {
-        remoteTask = try await APIClient.shared.getActionItem(
-          id: normalizedID,
-          expectedOwnerId: lease.ownerID,
-          authorizationSnapshot: lease.authorizationSnapshot
-        )
-      }
-      guard isCurrent(lease),
-        let remoteTask,
-        remoteTask.id == normalizedID,
-        remoteTask.deleted != true
-      else { return nil }
-      try await syncPage([remoteTask], lease: lease, operations: operations)
-      guard isCurrent(lease),
-        let hydratedTask = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: normalizedID),
-        hydratedTask.deleted != true
-      else { return nil }
-      publishHydratedCanonicalTask(hydratedTask)
-      await refreshDashboard(lease: lease, operations: operations)
-      guard isCurrent(lease) else { return nil }
-      return hydratedTask
-    } catch {
-      guard isCurrent(lease) else { return nil }
-      self.error = "This task is no longer available."
-      logError("TasksStore: Failed to hydrate canonical task", error: error)
-      return nil
-    }
-  }
-
-  private func publishHydratedCanonicalTask(_ task: TaskActionItem) {
-    incompleteTasks.removeAll { $0.id == task.id }
-    completedTasks.removeAll { $0.id == task.id }
-    deletedTasks.removeAll { $0.id == task.id }
-    if task.deleted == true {
-      deletedTasks.insert(task, at: 0)
-    } else if task.completed {
-      completedTasks.insert(task, at: 0)
-    } else {
-      incompleteTasks.insert(task, at: 0)
-    }
-  }
-
   func toggleTask(
     _ task: TaskActionItem,
     expectedOwnerID: String? = nil,
@@ -2900,8 +2838,8 @@ class TasksStore: ObservableObject {
 
     // 4. Update in-memory arrays immediately (optimistic UI)
     if newCompleted {
-      incompleteTasks.removeAll { $0.id == task.id }
       completedTasks.insert(updatedTask, at: 0)
+      incompleteTasks.removeAll { $0.id == task.id }
 
       // Compact relevance scores to fill the gap
       if let score = task.relevanceScore {
@@ -2935,8 +2873,8 @@ class TasksStore: ObservableObject {
         }
       }
     } else {
-      completedTasks.removeAll { $0.id == task.id }
       incompleteTasks.insert(updatedTask, at: 0)
+      completedTasks.removeAll { $0.id == task.id }
     }
 
     // 5. Refresh dashboard arrays immediately (SQLite was already updated in step 1)
@@ -3073,11 +3011,11 @@ class TasksStore: ObservableObject {
     }
     guard isCurrent(lease) else { return }
     if attemptedCompleted {
-      completedTasks.removeAll { $0.id == task.id }
       incompleteTasks.insert(task, at: 0)
+      completedTasks.removeAll { $0.id == task.id }
     } else {
-      incompleteTasks.removeAll { $0.id == task.id }
       completedTasks.insert(task, at: 0)
+      incompleteTasks.removeAll { $0.id == task.id }
     }
     self.error = backendError.localizedDescription
   }
