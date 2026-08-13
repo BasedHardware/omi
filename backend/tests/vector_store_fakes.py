@@ -98,4 +98,42 @@ class FakeVectorStore:
             yield page
 
 
-__all__ = ["FakeVectorStore"]
+class PineconeIndexVectorStore:
+    """Adapt the neutral vector-store port (ADR-0033) onto a Pinecone-index-shaped fake, so suites
+    that drive a ``MagicMock`` index (asserting on ``index.query``/``index.upsert`` call kwargs) run
+    against ``vector_db._vector_store()`` unchanged. Mirrors the production Pinecone adapter's shape."""
+
+    def __init__(self, index: Any):
+        self._i = index
+
+    def upsert(self, namespace, records):
+        recs = list(records)
+        self._i.upsert(vectors=recs, namespace=namespace)
+        return len(recs)
+
+    def query(self, namespace, vector, *, top_k, filter=None, include_metadata=True, include_values=False):
+        return self._i.query(
+            vector=vector,
+            top_k=top_k,
+            include_metadata=include_metadata,
+            include_values=include_values,
+            filter=filter,
+            namespace=namespace,
+        )["matches"]
+
+    def update_metadata(self, namespace, id, set_metadata):
+        self._i.update(id, set_metadata=set_metadata, namespace=namespace)
+
+    def delete_by_ids(self, namespace, ids):
+        ids = list(ids)
+        self._i.delete(ids=ids, namespace=namespace)
+        return len(ids)
+
+    def delete_by_filter(self, namespace, filter):
+        self._i.delete(filter=filter, namespace=namespace)
+
+    def list_ids(self, namespace, *, prefix):
+        yield from self._i.list(prefix=prefix, namespace=namespace)
+
+
+__all__ = ["FakeVectorStore", "PineconeIndexVectorStore"]

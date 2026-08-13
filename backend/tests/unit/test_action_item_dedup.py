@@ -24,6 +24,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
+from tests.vector_store_fakes import PineconeIndexVectorStore
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -102,7 +103,8 @@ def _setup_mocks(
         fake_index.query = MagicMock(side_effect=query_raises)
     else:
         fake_index.query = MagicMock(return_value=query_response or {'matches': []})
-    monkeypatch.setattr(vector_db, 'index', None if index_none else fake_index)
+    monkeypatch.setattr(vector_db, '_vector_store', lambda: PineconeIndexVectorStore(fake_index))
+    monkeypatch.setattr(vector_db, 'is_vector_available', lambda: not index_none)
 
     fake_embeddings = MagicMock()
     if embed_raises is not None:

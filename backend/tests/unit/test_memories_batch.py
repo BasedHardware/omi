@@ -60,13 +60,15 @@ if 'utils.llm.clients' not in sys.modules:
 
 
 from database import vector_db  # noqa: E402
+from tests.vector_store_fakes import PineconeIndexVectorStore
 
 
 class TestUpsertMemoryVectorsBatch:
     def _setup_mocks(self, monkeypatch, *, index_none=False):
         fake_index = MagicMock()
         fake_index.upsert = MagicMock(return_value={'upserted_count': 2})
-        monkeypatch.setattr(vector_db, 'index', None if index_none else fake_index)
+        monkeypatch.setattr(vector_db, '_vector_store', lambda: PineconeIndexVectorStore(fake_index))
+        monkeypatch.setattr(vector_db, 'is_vector_available', lambda: not index_none)
 
         fake_embeddings = MagicMock()
         fake_embeddings.embed_documents = MagicMock(
