@@ -261,6 +261,22 @@ describe("versioned agent run events", () => {
     expect(errorStore.append(errorEvent).kind).toBe("appended");
     expect(errorStore.append({ ...errorEvent, eventId: "run-error:4:duplicate-error", sequence: 4 }).kind)
       .toBe("rejected");
+
+    const mismatchStore = createInMemoryAgentRunEventStore();
+    expect(mismatchStore.append({ ...accepted, eventId: "run-mismatch:1:accepted",
+      runId: "run-mismatch", sequence: 1 }).kind).toBe("appended");
+    expect(mismatchStore.append({ ...request, eventId: "run-mismatch:2:request",
+      runId: "run-mismatch", sequence: 2 }).kind).toBe("appended");
+    const mismatchedResult = { ...result, eventId: "run-mismatch:3:result",
+      runId: "run-mismatch", sequence: 3, toolName: "safe.different" };
+    expect(mismatchStore.append(mismatchedResult).kind).toBe("rejected");
+    expect(() => mismatchStore.restore({
+      runs: [{ runId: "run-mismatch", events: [
+        { ...accepted, eventId: "run-mismatch:1:accepted", runId: "run-mismatch", sequence: 1 },
+        { ...request, eventId: "run-mismatch:2:request", runId: "run-mismatch", sequence: 2 },
+        mismatchedResult,
+      ] }],
+    })).toThrow("invalid agent run snapshot tool ordering");
   });
 
   test("UI projection drops internal events and redaction scanner catches forbidden fields", () => {

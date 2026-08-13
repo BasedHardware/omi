@@ -536,7 +536,8 @@ export const createInMemoryAgentRunEventStore = (): AgentRunEventStore => {
       if (event.sequence !== log.events.length + 1) return { kind: "rejected", reason: "sequence" };
       if (event.kind === "run_accepted") return { kind: "rejected", reason: "ordering" };
       if ((event.kind === "tool_result" || event.kind === "tool_error")
-        && !log.events.some((prior) => prior.kind === "tool_request" && prior.callId === event.callId)) {
+        && !log.events.some((prior) => prior.kind === "tool_request" && prior.callId === event.callId
+          && prior.toolName === event.toolName && prior.attemptId === event.attemptId)) {
         return { kind: "rejected", reason: "ordering" };
       }
       if ((event.kind === "tool_result" || event.kind === "tool_error")
@@ -597,7 +598,8 @@ export const createInMemoryAgentRunEventStore = (): AgentRunEventStore => {
         }
         for (const [index, event] of events.entries()) {
           if ((event.kind === "tool_result" || event.kind === "tool_error")
-            && !events.slice(0, index).some((prior) => prior.kind === "tool_request" && prior.callId === event.callId)) {
+            && !events.slice(0, index).some((prior) => prior.kind === "tool_request" && prior.callId === event.callId
+              && prior.toolName === event.toolName && prior.attemptId === event.attemptId)) {
             throw new TypeError("invalid agent run snapshot tool ordering");
           }
           if ((event.kind === "tool_result" || event.kind === "tool_error")
@@ -750,7 +752,8 @@ export const projectAgentRunTimeline = (
       terminalSeen = true;
     }
     if ((event.kind === "tool_result" || event.kind === "tool_error")
-      && !parsed.slice(0, index).some((prior) => prior.kind === "tool_request" && prior.callId === event.callId)) {
+      && !parsed.slice(0, index).some((prior) => prior.kind === "tool_request" && prior.callId === event.callId
+        && prior.toolName === event.toolName && prior.attemptId === event.attemptId)) {
       return null;
     }
     if (event.kind === "approval_resolved"

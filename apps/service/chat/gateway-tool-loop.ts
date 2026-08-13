@@ -124,6 +124,22 @@ const validateToolSchema = (
   return Object.freeze({ type: "function", function: loop.tool });
 };
 
+const validatesAgainstToolSchema = (
+  schema: GatewayReadOnlyToolSchema,
+  input: unknown,
+): boolean => {
+  const record = ownPlainObject(input);
+  if (record === null) return false;
+  const propertyNames = Object.keys(schema.parameters.properties);
+  if (Object.keys(record).some((name) => !propertyNames.includes(name))) return false;
+  if (schema.parameters.required.some((name) => !Object.hasOwn(record, name))) return false;
+  return Object.entries(record).every(([name, value]) => {
+    const property = schema.parameters.properties[name];
+    return property !== undefined && typeof value === "string"
+      && (property.enum === undefined || property.enum.includes(value));
+  });
+};
+
 export const validateGatewayReadOnlyToolLoop = (
   loop: GatewayReadOnlyToolLoopOptions,
 ): Readonly<{ type: "function"; function: GatewayReadOnlyToolSchema }> => validateToolSchema(loop);
@@ -185,6 +201,11 @@ const priorOutcome = (
   }
   const terminal = events.find((event) =>
     (event.kind === "tool_result" || event.kind === "tool_error") && event.callId === callId);
+  if (terminal !== undefined && (terminal.toolName !== request.toolName
+    || terminal.attemptId !== request.attemptId)) {
+    return Object.freeze({ kind: "failed", callId, code: "tool_idempotency_conflict",
+      summary: "The tool replay conflicts with the durable result.", retryable: false });
+  }
   if (terminal?.kind === "tool_result") return Object.freeze({
     kind: "completed", callId, summary: terminal.resultSummary,
     durationMs: terminal.durationMs, retryable: terminal.retryable,
@@ -274,6 +295,7 @@ export const startGatewayReadOnlyToolLoop = (
       let callId = "";
       let toolName = "";
       let argumentsJson = "";
+      let sawToolCallFragment = false;
       try {
         while (!options.isCancelled()) {
           const next = await reader.read();
@@ -284,6 +306,7 @@ export const startGatewayReadOnlyToolLoop = (
           for (const event of events) {
             const data = sseDataPayloads(event).join("\n");
             if (data.length === 0) continue;
+            if (sawDone) throw new TypeError("gateway data followed terminal marker");
             if (data === "[DONE]") { sawDone = true; continue; }
             const record = ownPlainObject(JSON.parse(data));
             if (record === null) throw new TypeError("invalid gateway SSE payload");
@@ -295,6 +318,7 @@ export const startGatewayReadOnlyToolLoop = (
               if (typeof content === "string" && content.length > 0) input.onDelta(content);
               const calls = delta?.tool_calls;
               if (calls !== undefined) {
+                sawToolCallFragment = true;
                 if (!Array.isArray(calls) || calls.length !== 1 || round !== 0) {
                   throw new TypeError("invalid bounded gateway tool call");
                 }
@@ -342,6 +366,10 @@ export const startGatewayReadOnlyToolLoop = (
         options.fail(gatewayFailure("generation_provider_failed"));
         return;
       }
+      if (sawToolCallFragment && callId.length === 0 && toolName.length === 0 && argumentsJson.length === 0) {
+        options.fail(gatewayFailure("generation_provider_failed"));
+        return;
+      }
       if (callId.length === 0 && toolName.length === 0 && argumentsJson.length === 0) {
         options.complete();
         return;
@@ -381,28 +409,49 @@ export const startGatewayReadOnlyToolLoop = (
           options.fail(gatewayFailure("generation_provider_failed"));
           return;
         }
+      } else if (!validatesAgainstToolSchema(options.loop.tool, parsedInput)) {
+        try {
+          outcome = appendSyntheticFailure(ledger, input, canonicalCallId, toolName, idem,
+            "tool_invalid_input", "The tool request is invalid.");
+        } catch {
+          options.fail(gatewayFailure("generation_provider_failed"));
+          return;
+        }
       } else {
+        const definition = options.loop.registry.resolve(toolName)!;
+        try {
+          ledger.toolRequest({
+            runId: input.generationId, attemptId, callId: canonicalCallId,
+            toolName, timeoutMs: definition.timeoutMs, idempotencyKey: idem,
+          });
+        } catch {
+          options.fail(gatewayFailure("generation_provider_failed"));
+          return;
+        }
         let ledgerError = false;
+        let terminalRecorded = false;
         const runner = createAgentToolRunner({
           registry: options.loop.registry,
           nowEpochMilliseconds: options.loop.nowEpochMilliseconds,
           scheduler: options.loop.scheduler,
           onEvent: (event: AgentToolTraceEvent): void => {
             try {
-              if (event.kind === "tool_request") ledger.toolRequest({
-                runId: input.generationId, attemptId, callId: event.callId,
-                toolName: event.toolName, timeoutMs: event.timeoutMs, idempotencyKey: idem,
-              });
-              if (event.kind === "tool_result") ledger.toolResult({
+              if (event.kind === "tool_result") {
+                ledger.toolResult({
                 runId: input.generationId, attemptId, callId: event.callId,
                 toolName: event.toolName, resultSummary: event.summary,
                 durationMs: event.durationMs, retryable: event.retryable,
-              });
-              if (event.kind === "tool_error") ledger.toolError({
+                });
+                terminalRecorded = true;
+              }
+              if (event.kind === "tool_error") {
+                ledger.toolError({
                 runId: input.generationId, attemptId, callId: event.callId,
                 toolName: event.toolName, errorCode: event.code,
                 errorSummary: event.summary, retryable: event.retryable,
-              });
+                });
+                terminalRecorded = true;
+              }
             } catch { ledgerError = true; }
           },
         });
@@ -415,6 +464,16 @@ export const startGatewayReadOnlyToolLoop = (
         });
         activeRunner = null;
         if (options.isCancelled()) return;
+        if (!ledgerError && !terminalRecorded && outcome.kind === "failed") {
+          try {
+            ledger.toolError({
+              runId: input.generationId, attemptId, callId: outcome.callId,
+              toolName, errorCode: outcome.code, errorSummary: outcome.summary,
+              retryable: outcome.retryable,
+            });
+            terminalRecorded = true;
+          } catch { ledgerError = true; }
+        }
         if (ledgerError || outcome.kind === "pending_approval" || outcome.kind === "cancelled") {
           options.fail(gatewayFailure("generation_provider_failed"));
           return;

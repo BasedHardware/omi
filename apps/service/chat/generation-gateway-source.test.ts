@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import { createChatGenerationContextPacket } from "./generation-context";
-import { createAgentRunEventSupervisor, createInMemoryAgentRunEventStore } from "./agent-run-events";
+import { createAgentRunEventSupervisor, createInMemoryAgentRunEventStore,
+  type AgentRunEventStore } from "./agent-run-events";
 import { createAgentToolRegistry, type AgentToolDefinition } from "./agent-tools";
 import {
   createGatewayChatGenerationSource,
@@ -187,6 +188,99 @@ describe("gateway chat generation source", () => {
       expect(durable).not.toContain("person-42");
       expect(durable).not.toContain("provider-private-id");
     }
+  });
+
+  test("enforces the advertised schema even when the injected registry validator is permissive", async () => {
+    const store = seedAgentLedger();
+    let executions = 0;
+    const responses = [
+      toolCallStream("provider-call", "safe.fixture_status", "{\"secret\":\"raw\"}"),
+      stream(JSON.stringify({ choices: [{ delta: { content: "Rejected safely." } }] }), "[DONE]"),
+    ];
+    const source = createGatewayChatGenerationSource({
+      gatewayUrl: "https://gateway.internal",
+      laneId: "omi:auto:chat-agent",
+      serviceToken: "service-secret",
+      readOnlyToolLoop: {
+        registry: createAgentToolRegistry([safeReadTool(async () => {
+          executions += 1;
+          return { summary: "must not run", durationMs: 1, retryable: false };
+        }, { validateInput: () => true })]),
+        tool: readOnlyToolSchema,
+        agentRunEvents: store,
+        nowEpochMilliseconds: () => 2,
+      },
+      fetch: async () => responses.shift()!,
+    });
+    const answer = await new Promise<string>((resolve, reject) => {
+      const text: string[] = [];
+      source.start(input({ onDelta: (delta) => text.push(delta),
+        onComplete: () => resolve(text.join("")), onError: reject }));
+    });
+    expect(answer).toBe("Rejected safely.");
+    expect(executions).toBe(0);
+    expect(JSON.stringify(store.snapshot())).toContain("tool_invalid_input");
+    expect(JSON.stringify(store.snapshot())).not.toContain("secret");
+  });
+
+  test("does not execute when the durable tool request cannot be recorded", async () => {
+    const backing = seedAgentLedger();
+    let executions = 0;
+    const rejectingStore: AgentRunEventStore = Object.freeze({
+      append(raw: unknown) {
+        if ((raw as { kind?: unknown })?.kind === "tool_request") {
+          return { kind: "rejected" as const, reason: "ordering" as const };
+        }
+        return backing.append(raw);
+      },
+      list: (runId) => backing.list(runId),
+      snapshot: () => backing.snapshot(),
+      restore: (snapshot) => backing.restore(snapshot),
+      reset: () => backing.reset(),
+    });
+    const source = createGatewayChatGenerationSource({
+      gatewayUrl: "https://gateway.internal",
+      laneId: "omi:auto:chat-agent",
+      serviceToken: "service-secret",
+      readOnlyToolLoop: {
+        registry: createAgentToolRegistry([safeReadTool(async () => {
+          executions += 1;
+          return { summary: "must not run", durationMs: 1, retryable: false };
+        })]),
+        tool: readOnlyToolSchema,
+        agentRunEvents: rejectingStore,
+        nowEpochMilliseconds: () => 2,
+      },
+      fetch: async () => toolCallStream("provider-call"),
+    });
+    const failure = await new Promise<unknown>((resolve) => source.start(input({ onError: resolve })));
+    expect(failure).toEqual({ code: "generation_provider_failed", retryable: true });
+    expect(executions).toBe(0);
+    expect(backing.list("generation-1").filter((event) => event.kind === "tool_request")).toHaveLength(0);
+  });
+
+  test("rejects gateway data after the terminal SSE marker", async () => {
+    let completed = 0;
+    const store = seedAgentLedger();
+    const source = createGatewayChatGenerationSource({
+      gatewayUrl: "https://gateway.internal",
+      laneId: "omi:auto:chat-agent",
+      serviceToken: "service-secret",
+      readOnlyToolLoop: {
+        registry: createAgentToolRegistry([safeReadTool(async () => ({
+          summary: "must not run", durationMs: 1, retryable: false,
+        }))]),
+        tool: readOnlyToolSchema,
+        agentRunEvents: store,
+        nowEpochMilliseconds: () => 2,
+      },
+      fetch: async () => stream("[DONE]", JSON.stringify({ choices: [{ delta: { content: "late" } }] })),
+    });
+    const failure = await new Promise<unknown>((resolve) => source.start(input({
+      onComplete: () => { completed += 1; }, onError: resolve,
+    })));
+    expect(failure).toEqual({ code: "generation_provider_failed", retryable: true });
+    expect(completed).toBe(0);
   });
 
   test("cancellation aborts a hanging safe tool and timeout records one terminal error", async () => {
