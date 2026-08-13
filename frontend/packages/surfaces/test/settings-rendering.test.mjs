@@ -31,6 +31,28 @@ function textOf(rendered) {
   return rendered.container.textContent ?? "";
 }
 
+test("mobile Settings renders as a dismissible sheet without persistent navigation", async () => {
+  const returnHref = "?platform=mobile&route=home";
+  const rendered = await renderSettings("signed-in", {
+    presentation: "sheet",
+    returnHref,
+  });
+  try {
+    const main = rendered.container.querySelector('main[data-settings-presentation="sheet"]');
+    const dialog = rendered.container.querySelector('.settings-sheet-panel[role="dialog"]');
+    assert.ok(main && dialog);
+    assert.equal(dialog.getAttribute("aria-modal"), "true");
+    assert.equal(dialog.getAttribute("aria-labelledby"), "settings-sheet-title");
+    assert.equal(rendered.container.querySelector("#settings-sheet-title")?.textContent, EN_MESSAGES["settings.title"]);
+    const close = rendered.container.querySelector(`a.settings-sheet-close[aria-label="${EN_MESSAGES["common.close"]}"]`);
+    assert.equal(close?.getAttribute("href"), returnHref);
+    assert.equal(rendered.container.querySelector(".production-nav"), null, "sheet presentation does not invent a second persistent navigation layer");
+    assert.notEqual(rendered.window.document.activeElement, close, "opening the fixture does not steal host focus");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("signed-out is a chosen state with sign-in, never error or entitlement-absence tone", async () => {
   const rendered = await renderSettings("signed-out");
   try {

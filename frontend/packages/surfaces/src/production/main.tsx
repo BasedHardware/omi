@@ -23,7 +23,8 @@ import {
 import type { SchemaDocument } from "@omi-core/wire-listen";
 import { createPlatformProductionStoreFactory, parseGenerationSelectionFromEntries, resolveGenerationSelection } from "./ProductionStores.js";
 import { createPlatformProductionListenStore } from "./createPlatformListenStore.js";
-import { generationMismatch, resolveProductionRoute } from "./production-routing.js";
+import { generationMismatch, resolveProductionRoute, resolveSettingsReturnRoute } from "./production-routing.js";
+import { productionRouteHref } from "./ProductionChrome.js";
 import { MemoriesProduction } from "./MemoriesProduction.js";
 import { ConversationsProduction } from "./ConversationsProduction.js";
 import { TasksProduction, type TasksProductionProps } from "./TasksProduction.js";
@@ -98,6 +99,8 @@ const requestedPlatform = query.get("platform");
 const platform: "mobile" | "desktop" = requestedPlatform === "desktop" || requestedPlatform === "mobile"
   ? requestedPlatform
   : matchMedia("(min-width: 760px)").matches ? "desktop" : "mobile";
+const settingsPresentation = platform === "mobile" && query.get("presentation") === "sheet" ? "sheet" : "page";
+const settingsReturnHref = productionRouteHref(resolveSettingsReturnRoute(query.get("return")));
 const listenSource = platform;
 type ThemeSelection = "default" | "system" | ColorMode;
 const requestedTheme = query.get("theme");
@@ -335,7 +338,7 @@ if (query.get("lab") === "1") {
   } else if (chatFixture) {
     root.render(<StrictMode><ChatProduction store={fixtureChatStore(chatFixture)} fixture={chatFixture} locale={locale} onReady={() => emitReady(`fixture:${chatFixture}`)} /></StrictMode>);
   } else if (settingsFixture) {
-    root.render(<StrictMode><SettingsProduction store={fixtureSettingsStore(settingsFixture)} fixture={settingsFixture} locale={locale} onReady={() => emitReady(`fixture:${settingsFixture}`)} /></StrictMode>);
+    root.render(<StrictMode><SettingsProduction store={fixtureSettingsStore(settingsFixture)} fixture={settingsFixture} locale={locale} presentation={settingsPresentation} returnHref={settingsReturnHref} onReady={() => emitReady(`fixture:${settingsFixture}`)} /></StrictMode>);
   } else if (homeFixture) {
     root.render(<StrictMode><HomeProduction sources={{ memories: fixtureStore("normal"), conversations: fixtureConversationStore("normal") }} source={{ kind: "fixture", fixture: "home" }} locale={locale} onReady={() => emitReady("fixture:home")} /></StrictMode>);
   } else if (taskFixture) {
@@ -458,7 +461,7 @@ if (query.get("lab") === "1") {
         } else if (route === "settings") {
           const store = await createPlatformProductionSettingsStore(http, appearancePreference);
           markRendered("settings", null);
-          root.render(<StrictMode><SettingsProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-settings")} /></StrictMode>);
+          root.render(<StrictMode><SettingsProduction store={store} locale={locale} presentation={settingsPresentation} returnHref={settingsReturnHref} onReady={() => emitReady("bridge:platform-settings")} /></StrictMode>);
         } else if (route === "memories") {
           const store = await stores.openMemories();
           markRendered("memories-legacy", "legacy");

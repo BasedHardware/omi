@@ -24,6 +24,7 @@ export type ProductionRouteName =
   | "settings"
   | "unsupported";
 export type MemoriesGeneration = "legacy" | "platform";
+export type SettingsReturnRoute = Exclude<ProductionRouteName, "settings" | "unsupported">;
 
 export type ProductionRouteInput = {
   /** `?route=` — the host naming a destination explicitly. */
@@ -80,6 +81,25 @@ export function resolveProductionRoute(input: ProductionRouteInput): ProductionR
   const hostNamedSomething = requestedQa !== null;
   if (!hostNamedSomething && memoriesGeneration === "platform") return "memories";
   return "home";
+}
+
+/** A Settings sheet may return only to a real, non-Settings destination. */
+export function resolveSettingsReturnRoute(requestedRoute: string | null): SettingsReturnRoute {
+  switch (requestedRoute) {
+    case "home":
+    case "memories":
+    case "conversations":
+    case "folders":
+    case "tasks":
+    case "rewind":
+    case "apps":
+    case "brain-map":
+    case "listen":
+    case "chat":
+      return requestedRoute;
+    default:
+      return "home";
+  }
 }
 
 /**
