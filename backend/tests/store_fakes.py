@@ -348,7 +348,11 @@ class FakeDocumentStore:
         return _FakeBatch(self)
 
 
-def install_fake_db_client(monkeypatch: Any, backing: Optional[Dict[str, Dict[str, Any]]] = None) -> "FakeDocumentStore":
+def install_fake_db_client(
+    monkeypatch: Any,
+    backing: Optional[Dict[str, Dict[str, Any]]] = None,
+    store: Optional["FakeDocumentStore"] = None,
+) -> "FakeDocumentStore":
     """Inject the neutral ``db_client`` facade over a fresh ``FakeDocumentStore`` for domain modules
     that thread the raw client (``from database._client import db``) under ADR-0044.
 
@@ -359,7 +363,9 @@ def install_fake_db_client(monkeypatch: Any, backing: Optional[Dict[str, Dict[st
     from database import _client
     from database.store.firestore_facade import NeutralFirestoreClient
 
-    fake = FakeDocumentStore(backing=backing)
+    # ``store`` lets a test supply a FakeDocumentStore subclass (e.g. one that races a concurrent
+    # delete) and still drive it through the facade; otherwise a fresh fake is created.
+    fake = store if store is not None else FakeDocumentStore(backing=backing)
     client = NeutralFirestoreClient(fake)
     monkeypatch.setattr(_client, "get_firestore_client", lambda: client)
     monkeypatch.setattr(_client, "_firestore_client", client, raising=False)

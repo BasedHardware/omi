@@ -2,17 +2,17 @@
 delete, not fail the whole request with a raw provider error.
 
 The reorder endpoint promises: ids that no longer exist come back in ``missing_ids`` while the rest
-are applied. The pre-port implementation used a plain ``store.exists()`` gate followed by a separate
-``store.update()`` — a TOCTOU window where a delete landing in between made ``update()`` raise a raw
-not-found (Firestore) and 500 the request. The fix runs the existence gate and the write inside one
-transaction, so a vanished doc is normalized to ``missing_ids``. Exercised through the real
-``_store()`` seam via ``FakeDocumentStore``.
+are applied. Each row is a standalone ``update()`` that raises ``NotFound`` on a vanished document
+(the write itself is the existence gate — no separate pre-read TOCTOU window), so a delete landing
+the instant before the write is normalized to ``missing_ids`` rather than 500-ing the request.
+Exercised through the ADR-0044 facade seam (``install_fake_db_client``): the fake's neutral
+``NotFound`` is translated by the facade to the ``google`` ``NotFound`` the source catches.
 """
 
 from types import SimpleNamespace
 
 from database import action_items as action_items_db
-from tests.store_fakes import FakeDocumentStore
+from tests.store_fakes import FakeDocumentStore, install_fake_db_client
 
 _UID = 'uid'
 
@@ -22,7 +22,7 @@ def _entry(item_id, *, sort_order=None, indent_level=None):
 
 
 def _bind(monkeypatch, store):
-    monkeypatch.setattr(action_items_db, '_store', lambda: store)
+    install_fake_db_client(monkeypatch, store=store)
 
 
 def _seed(store, item_id):
@@ -63,26 +63,22 @@ def test_noop_entry_is_reported_before_any_store_access(monkeypatch):
 
 
 def test_concurrent_delete_is_normalized_to_missing_ids(monkeypatch):
-    """A doc present when the request arrives but deleted as its write transaction begins must land
-    in missing_ids without raising. ``update`` on the vanished path raises to prove the write is
-    gated inside the transaction (never a blind post-read update)."""
-
-    class _ConcurrentDelete(Exception):
-        pass
+    """A doc present when the request arrives but deleted the instant its write begins must land in
+    missing_ids without raising. The racing store drops the doc right before its ``update``, so the
+    write hits a vanished path and raises NotFound — proving the write itself is the gate (never a
+    blind pre-read + update), and that the facade surfaces it as the NotFound the source catches."""
 
     class _ConcurrentDeleteStore(FakeDocumentStore):
         def __init__(self, racing_id):
             super().__init__()
             self._racing_id = racing_id
-
-        def run_transaction(self, fn, *, attempts=3):
-            # The delete lands the instant this reorder's transactions start running.
-            self._docs.pop(f'users/{_UID}/action_items/{self._racing_id}', None)
-            return super().run_transaction(fn)
+            self._deleted = False
 
         def update(self, path, data):
-            if path.endswith(f'/{self._racing_id}'):
-                raise _ConcurrentDelete('document deleted concurrently')
+            if path.endswith(f'/{self._racing_id}') and not self._deleted:
+                # The concurrent delete lands the instant before our write.
+                self._deleted = True
+                self._docs.pop(path, None)
             return super().update(path, data)
 
     store = _ConcurrentDeleteStore('racing')
