@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3697
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3775
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "Deleted-lane retirement authority: fetchDeletedPage stamps retirement after both transports so neither can write a retired row as live"
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "flushPendingBackendDeletions plus the tombstone/ack wiring in deleteTask and restoreTask: the retry half of the deletion-tombstone contract that stops deleted tasks resurrecting."
   },
   "threshold": 1500
 }
