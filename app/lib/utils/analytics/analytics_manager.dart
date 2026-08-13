@@ -572,7 +572,10 @@ class AnalyticsManager {
       track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
   void memorySearched(String query, int resultsCount) {
-    track('Fact Searched', properties: {'search_query_length': query.length, 'results_count': resultsCount});
+    track(
+      'Fact Searched',
+      properties: _searchProperties(query: query, resultsCount: resultsCount, surface: 'facts'),
+    );
   }
 
   void memorySearchCleared(int totalFactsCount) {
@@ -1058,11 +1061,7 @@ class AnalyticsManager {
   void searchQueryEntered(String query, int resultsCount) {
     track(
       'Search Query Entered',
-      properties: {
-        'query_length': query.length,
-        'query_word_count': query.split(' ').length,
-        'results_count': resultsCount,
-      },
+      properties: _searchProperties(query: query, resultsCount: resultsCount, surface: 'conversations'),
     );
   }
 
@@ -1076,8 +1075,7 @@ class AnalyticsManager {
     required int conversationIndexInResults,
   }) {
     var properties = getConversationEventProperties(conversation);
-    properties['search_query'] = searchQuery;
-    properties['search_query_length'] = searchQuery.length;
+    properties.addAll(_searchProperties(query: searchQuery, surface: 'conversations'));
     properties['conversation_index_in_results'] = conversationIndexInResults;
     track('Conversation Opened From Search', properties: properties);
   }
@@ -1142,15 +1140,9 @@ class AnalyticsManager {
     required int resultsCount,
     required String activeTab,
   }) {
-    track(
-      'Conversation Detail Search Query Entered',
-      properties: {
-        'conversation_id': conversationId,
-        'query_length': query.length,
-        'results_count': resultsCount,
-        'active_tab': activeTab,
-      },
-    );
+    final properties = _searchProperties(query: query, resultsCount: resultsCount, surface: 'conversation_detail');
+    properties.addAll({'conversation_id': conversationId, 'active_tab': activeTab});
+    track('Conversation Detail Search Query Entered', properties: properties);
   }
 
   void conversationReprocessedWithApp({
@@ -1383,7 +1375,10 @@ class AnalyticsManager {
   // ============================================================================
 
   void appsSearched({required String searchTerm, required int resultCount}) {
-    track('Apps Searched', properties: {'search_term': searchTerm, 'result_count': resultCount});
+    track(
+      'Apps Searched',
+      properties: _searchProperties(query: searchTerm, resultsCount: resultCount, surface: 'apps'),
+    );
   }
 
   void appsFilterMyApps({required bool enabled}) {
@@ -1958,6 +1953,17 @@ class AnalyticsManager {
       return out;
     }
     return value.toString();
+  }
+
+  static Map<String, dynamic> _searchProperties({required String query, required String surface, int? resultsCount}) {
+    final trimmedQuery = query.trim();
+    final properties = <String, dynamic>{
+      'query_length': query.length,
+      'query_word_count': trimmedQuery.isEmpty ? 0 : trimmedQuery.split(RegExp(r'\s+')).length,
+      'search_surface': surface,
+    };
+    if (resultsCount != null) properties['results_count'] = resultsCount;
+    return properties;
   }
 }
 
