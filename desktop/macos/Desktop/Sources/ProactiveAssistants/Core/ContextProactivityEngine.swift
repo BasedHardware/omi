@@ -48,7 +48,7 @@ enum ContextDirectorTaskSelection {
       tasks
       .filter { task in
         !task.completed && !task.isRetired && !task.isPendingSuggestion
-          && (task.dueAt == nil || task.dueAt! <= cutoff)
+          && task.dueAt.map { $0 <= cutoff } != false
       }
       .sorted { lhs, rhs in
         let left = lhs.dueAt ?? .distantFuture
