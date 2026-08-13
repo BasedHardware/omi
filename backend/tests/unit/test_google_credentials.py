@@ -120,3 +120,33 @@ def test_customer_data_service_account_pins_json_identity_and_project(monkeypatc
     assert project_id == 'based-hardware'
     assert credentials is fake_credentials
     assert os.environ['GOOGLE_APPLICATION_CREDENTIALS'] == str(credentials_path)
+
+
+def test_customer_entitlement_service_account_reads_auth_file_without_adc(monkeypatch, tmp_path):
+    credentials_path = tmp_path / 'firebase-auth.json'
+    credentials_path.write_text(
+        '{"type":"service_account","project_id":"based-hardware","client_email":"nik-164@based-hardware.iam.gserviceaccount.com"}',
+        encoding='utf-8',
+    )
+    monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
+    monkeypatch.delenv('GOOGLE_APPLICATION_CREDENTIALS', raising=False)
+    monkeypatch.setenv('FIREBASE_AUTH_CREDENTIALS_PATH', str(credentials_path))
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
+
+    fake_credentials = object()
+
+    def fake_from_info(info):
+        assert info['project_id'] == 'based-hardware'
+        return fake_credentials
+
+    monkeypatch.setattr(
+        'google.oauth2.service_account.Credentials.from_service_account_info',
+        fake_from_info,
+    )
+
+    credentials, project_id = google_credentials.customer_entitlement_service_account()
+
+    assert project_id == 'based-hardware'
+    assert credentials is fake_credentials
+    assert 'GOOGLE_APPLICATION_CREDENTIALS' not in os.environ
+    assert google_credentials.customer_data_service_account() is None
