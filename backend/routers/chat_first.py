@@ -20,6 +20,7 @@ import database.goals as goals_db
 import database.task_intelligence_control as task_control_db
 from models.chat_first import (
     CaptureLinkSpec,
+    ConversationLinkSpec,
     ChatFirstBlockSpec,
     ChatFirstBlockValidationReceipt,
     ChatFirstBlockValidationRequest,
@@ -173,6 +174,15 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
             and capture.get('source') == 'omi'
             and not capture.get('discarded', False)
             and not capture.get('is_locked', False)
+        )
+    if isinstance(block, ConversationLinkSpec):
+        conversation = conversations_db.get_conversation(uid, block.conversation_id)
+        return bool(
+            conversation
+            and conversation.get('source') == 'desktop'
+            and not conversation.get('discarded', False)
+            and not conversation.get('is_locked', False)
+            and conversation.get('status') == 'completed'
         )
     if isinstance(block, MemoryLinkSpec):
         try:

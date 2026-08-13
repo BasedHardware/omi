@@ -150,6 +150,31 @@ def test_chat_first_validate_rejects_non_omi_or_discarded_capture_links(monkeypa
     assert response.json() == {'accepted': False, 'code': 'entity_unavailable', 'blocks': []}
 
 
+def test_chat_first_validate_admits_completed_desktop_conversation_link(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    monkeypatch.setattr(
+        chat_first_router.conversations_db,
+        'get_conversation',
+        lambda uid, conversation_id: {
+            'id': conversation_id,
+            'source': 'desktop',
+            'status': 'completed',
+            'discarded': False,
+        },
+    )
+
+    response = _client().post(
+        '/v1/chat-first/blocks/validate',
+        json=_request(
+            blocks=[{'type': 'conversationLink', 'conversation_id': 'desktop-1', 'summary': 'Meeting notes ready'}]
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json()['accepted'] is True
+    assert response.json()['blocks'][0]['conversation_id'] == 'desktop-1'
+
+
 def test_chat_first_validate_fails_closed_before_entity_resolution_when_capability_is_off(monkeypatch):
     monkeypatch.setattr(
         chat_first_router.task_control_db,

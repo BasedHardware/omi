@@ -177,15 +177,20 @@ async def finalize_persisted_conversation(
         # commit, and keep this product hint failure-isolated from the source
         # finalization outcome.
         source = getattr(conversation, 'source', None)
-        if getattr(source, 'value', source) == 'omi':
+        source_value = getattr(source, 'value', source)
+        external_data = getattr(conversation, 'external_data', None) or {}
+        is_desktop_meeting = source_value == 'desktop' and external_data.get('conversation_role') == 'meeting'
+        if source_value == 'omi' or is_desktop_meeting:
             try:
                 structured = getattr(conversation, 'structured', None)
                 summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                persist_capture_arrival_intent(
-                    uid,
-                    conversation_id=conversation_id,
-                    summary=summary,
-                )
+                intent_kwargs = {
+                    'conversation_id': conversation_id,
+                    'summary': summary,
+                }
+                if is_desktop_meeting:
+                    intent_kwargs['is_desktop_meeting'] = True
+                persist_capture_arrival_intent(uid, **intent_kwargs)
             except Exception as error:
                 logger.warning(
                     'chat-first capture arrival intent failed after finalization uid=%s error=%s',

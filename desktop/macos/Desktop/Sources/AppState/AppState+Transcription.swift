@@ -19,7 +19,9 @@ extension AppState {
     guard !isTranscribing else { return }
     sttSession.prepareForStart()
     silentMicRecoveryAttempts = 0
-    meetingEndFinalizationInProgress = false
+    currentConversationRole = .ambient
+    meetingBoundaryInProgress = false
+    pendingMeetingState = nil
 
     // Paywall hard-stop: every code path that enables the mic + WS streaming
     // funnels through here, including auto-restart from sleep and toggle
@@ -88,7 +90,8 @@ extension AppState {
         // Always streaming via Python backend /v4/listen
         transcriptionService = try TranscriptionService(
           language: effectiveLanguage,
-          clientConversationId: clientConversationId
+          clientConversationId: clientConversationId,
+          conversationRole: currentConversationRole
         )
       }
 
@@ -550,29 +553,41 @@ extension AppState {
 
     let mode = effectiveSystemAudioMode
 
-    // The meeting detector runs only in "Only during meetings" mode.
-    if mode == .onlyDuringMeetings {
-      if meetingDetector == nil {
-        let detector = MeetingDetector(
-          onInitialStateObserved: { [weak self] in
-            Task { @MainActor in await self?.reconcileCapture() }
-          },
-          onChange: { [weak self] active in
-            Task { @MainActor in await self?.reconcileCapture() }
-            if let event = TaskLocalContextEvent.normalized(
-              kind: .meeting,
-              rawReference: active ? "meeting-active" : "meeting-ended"
-            ) {
-              Task { await ContextSubjectBindingService.shared.resolveAndObserve(event) }
-            }
-          }
-        )
-        meetingDetector = detector
-        detector.start()
+    // Meeting observation runs for every microphone transcription mode. It is
+    // used both by the meetings-only capture gate and by Always-mode logical
+    // conversation boundaries; the detector never decides whether audio runs.
+    if meetingDetector == nil, audioSource == .microphone {
+      let meetingProbe: @Sendable () -> Bool = {
+        if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { return true }
+        // The browser-title fallback is appropriate for a user-selected
+        // meetings-only capture gate, but is too weak to create a notes-ready
+        // conversation in Always mode (a Meet lobby tab is not a call).
+        return mode == .onlyDuringMeetings && ConferencingApps.browserCallWindowPresent()
       }
-    } else {
-      meetingDetector?.stop()
-      meetingDetector = nil
+      let detector = MeetingDetector(
+        isMeetingNow: meetingProbe,
+        onInitialStateObserved: { [weak self] in
+          Task { @MainActor in
+            guard let self, let active = self.meetingDetector?.isMeetingActive else { return }
+            await self.handleMeetingObservation(active: active)
+            await self.reconcileCapture()
+          }
+        },
+        onChange: { [weak self] active in
+          Task { @MainActor in
+            await self?.handleMeetingObservation(active: active)
+            await self?.reconcileCapture()
+          }
+          if let event = TaskLocalContextEvent.normalized(
+            kind: .meeting,
+            rawReference: active ? "meeting-active" : "meeting-ended"
+          ) {
+            Task { await ContextSubjectBindingService.shared.resolveAndObserve(event) }
+          }
+        }
+      )
+      meetingDetector = detector
+      detector.start()
     }
 
     let meetingStateReady = mode != .onlyDuringMeetings || meetingDetector?.hasObservedState == true
@@ -626,35 +641,6 @@ extension AppState {
       }
     }
 
-    if !meetingEndFinalizationInProgress,
-      MeetingConversationBoundaryPolicy.shouldFinishConversation(
-        mode: mode,
-        meetingStateReady: meetingStateReady,
-        shouldCapture: shouldCapture,
-        segmentCount: totalSegmentCount,
-        hasSpeakerSegments: !speakerSegments.isEmpty
-      )
-    {
-      meetingEndFinalizationInProgress = true
-      log("Transcription: Meeting ended — finishing conversation and waiting for the next meeting")
-      Task { @MainActor in
-        defer { self.meetingEndFinalizationInProgress = false }
-        guard
-          MeetingConversationBoundaryPolicy.shouldFinishConversation(
-            mode: self.effectiveSystemAudioMode,
-            meetingStateReady: self.meetingDetector?.hasObservedState == true,
-            shouldCapture: self.meetingDetector?.isMeetingActive == true,
-            segmentCount: self.totalSegmentCount,
-            hasSpeakerSegments: !self.speakerSegments.isEmpty
-          )
-        else {
-          log("Transcription: skipped meeting-ended finalization because meeting state changed")
-          return
-        }
-        _ = await self.finishConversation(finalizationReason: .meetingEnded)
-      }
-    }
-
     captureGateInFlight = false
     if let recoveryReason = pendingCoreAudioCaptureRecoveryReason {
       pendingCoreAudioCaptureRecoveryReason = nil
@@ -664,6 +650,54 @@ extension AppState {
     if captureReconcilePending {
       captureReconcilePending = false
       await reconcileCapture()
+    }
+  }
+
+  /// Serializes detector edges with session rotation. A second edge that lands
+  /// while local STT tails are flushing replaces the pending level; after the
+  /// current rotation completes we converge to the newest observed state.
+  private func handleMeetingObservation(active: Bool) async {
+    guard isTranscribing else { return }
+    if meetingBoundaryInProgress {
+      pendingMeetingState = active
+      return
+    }
+    guard
+      let transition = MeetingConversationBoundaryPolicy.transition(
+        previousRole: currentConversationRole,
+        meetingActive: active)
+    else { return }
+
+    meetingBoundaryInProgress = true
+    log("Transcription: meeting boundary — role=\(transition.nextRole.rawValue)")
+    let result = await finishConversation(
+      finalizationReason: transition.finalizationReason,
+      allowEmptyRotation: true,
+      nextConversationRole: transition.nextRole)
+    let rotationSucceeded: Bool
+    if case .error(let message) = result {
+      rotationSucceeded = false
+      log("Transcription: meeting boundary rotation failed — \(message)")
+      currentConversationRole = MeetingConversationBoundaryPolicy.committedRole(
+        previousRole: currentConversationRole,
+        transition: transition,
+        rotationSucceeded: false)
+      meetingBoundaryInProgress = false
+      pendingMeetingState = nil
+      _ = stopTranscription()
+      return
+    } else {
+      rotationSucceeded = true
+    }
+    currentConversationRole = MeetingConversationBoundaryPolicy.committedRole(
+      previousRole: currentConversationRole,
+      transition: transition,
+      rotationSucceeded: rotationSucceeded)
+    meetingBoundaryInProgress = false
+
+    if let pending = pendingMeetingState {
+      pendingMeetingState = nil
+      await handleMeetingObservation(active: pending)
     }
   }
 
@@ -1007,9 +1041,11 @@ extension AppState {
   /// Finish the current conversation and keep recording for a new one.
   /// Disconnects the WebSocket (triggers backend conversation processing) then reconnects.
   func finishConversation(
-    finalizationReason: TranscriptionFinalizationReason = .finishAndContinue
+    finalizationReason: TranscriptionFinalizationReason = .finishAndContinue,
+    allowEmptyRotation: Bool = false,
+    nextConversationRole: MeetingConversationBoundaryPolicy.Role? = nil
   ) async -> FinishConversationResult {
-    guard totalSegmentCount > 0 || !speakerSegments.isEmpty else {
+    guard allowEmptyRotation || totalSegmentCount > 0 || !speakerSegments.isEmpty else {
       log("Transcription: No segments to finish")
       return .discarded
     }
@@ -1159,7 +1195,8 @@ extension AppState {
       } else {
         transcriptionService = try TranscriptionService(
           language: effectiveLanguage,
-          clientConversationId: nextClientConversationId
+          clientConversationId: nextClientConversationId,
+          conversationRole: nextConversationRole ?? currentConversationRole
         )
         transcriptionService?.start(
           onSegments: { [weak self] segments in
@@ -1266,7 +1303,8 @@ extension AppState {
     pendingCoreAudioCaptureRecoveryReason = nil
     silentMicRecoveryAttempts = 0
     isAwaitingMeeting = false
-    meetingEndFinalizationInProgress = false
+    meetingBoundaryInProgress = false
+    pendingMeetingState = nil
 
     // Stop system audio capture first (if available)
     if #available(macOS 14.4, *) {
@@ -1347,7 +1385,8 @@ extension AppState {
     recordingStartTime = nil
     currentSessionId = nil
     currentClientConversationId = nil
-    meetingEndFinalizationInProgress = false
+    meetingBoundaryInProgress = false
+    pendingMeetingState = nil
 
     // Track transcription stopped
     AnalyticsManager.shared.transcriptionStopped(wordCount: totalWordCount)

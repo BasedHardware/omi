@@ -114,6 +114,7 @@ class TranscriptionService: @unchecked Sendable {
   private let streamingMode: StreamingMode
   private let contextKeywords: [String]
   private let clientConversationId: String?
+  private let conversationRole: MeetingConversationBoundaryPolicy.Role
 
   /// Python backend base URL for transcription endpoints.
   /// Resolution order: explicit OMI_PYTHON_API_URL → production https://api.omi.me/
@@ -183,13 +184,15 @@ class TranscriptionService: @unchecked Sendable {
     language: String = "en",
     mode: StreamingMode = .conversation,
     contextKeywords: [String] = [],
-    clientConversationId: String? = nil
+    clientConversationId: String? = nil,
+    conversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
   ) throws {
     self.apiKey = ""  // Not needed — Python backend uses Firebase auth
     self.language = language
     self.streamingMode = mode
     self.contextKeywords = Self.sanitizedContextKeywords(contextKeywords)
     self.clientConversationId = clientConversationId?.trimmingCharacters(in: .whitespacesAndNewlines)
+    self.conversationRole = conversationRole
     log(
       "TranscriptionService: Initialized for \(mode == .conversation ? "/v4/listen" : "/v2/voice-message/transcribe-stream"), language=\(language), contextKeywords=\(self.contextKeywords.count)"
     )
@@ -210,6 +213,7 @@ class TranscriptionService: @unchecked Sendable {
     self.streamingMode = .ptt  // Batch doesn't stream, but PTT is the correct context
     self.contextKeywords = []
     self.clientConversationId = nil
+    self.conversationRole = .ambient
     log("TranscriptionService: Initialized for batch (PTT) mode via Python backend")
   }
 
@@ -381,6 +385,7 @@ class TranscriptionService: @unchecked Sendable {
       if let clientConversationId, !clientConversationId.isEmpty {
         items.append(URLQueryItem(name: "client_conversation_id", value: clientConversationId))
       }
+      items.append(URLQueryItem(name: "conversation_role", value: conversationRole.rawValue))
       queryItems = items
     case .ptt:
       // PTT-only transcription — no conversation lifecycle

@@ -60,6 +60,11 @@ final class ChatFirstRichBlockTests: XCTestCase {
         momentTimestampMs: 42_000,
         summary: "Planning conversation"
       ),
+      .conversationLink(
+        id: "conversation-link",
+        conversationId: "conversation-1",
+        summary: "Meeting notes"
+      ),
       .memoryLink(id: "memory-link", memoryId: "memory-1", summary: "Launch constraint"),
     ]
 
@@ -96,7 +101,13 @@ final class ChatFirstRichBlockTests: XCTestCase {
     XCTAssertEqual(timestamp, 42_000)
     XCTAssertEqual(captureSummary, "Planning conversation")
 
-    guard case .memoryLink(_, let memoryID, let memorySummary) = restored[4] else {
+    guard case .conversationLink(_, let conversationID, let conversationSummary) = restored[4] else {
+      return XCTFail("conversation link should survive persisted replay")
+    }
+    XCTAssertEqual(conversationID, "conversation-1")
+    XCTAssertEqual(conversationSummary, "Meeting notes")
+
+    guard case .memoryLink(_, let memoryID, let memorySummary) = restored[5] else {
       return XCTFail("memory link should survive persisted replay")
     }
     XCTAssertEqual(memoryID, "memory-1")

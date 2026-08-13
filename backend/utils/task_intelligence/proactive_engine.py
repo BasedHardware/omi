@@ -8,6 +8,7 @@ from typing import Callable, Literal, Protocol
 import database.chat_first_intents as intent_db
 from models.chat_first import (
     CaptureLinkSpec,
+    ConversationLinkSpec,
     ChatFirstBlockSpec,
     ChatFirstSubject,
     ColdStartSequence,
@@ -280,6 +281,7 @@ def persist_capture_arrival_intent(
     expected_generation: int | None = None,
     now: datetime | None = None,
     eligibility_resolver: Callable[[str], ChatFirstEligibility] = resolve_chat_first_eligibility,
+    is_desktop_meeting: bool = False,
 ) -> ProactiveIntent | None:
     """Persist the deterministic capture receipt without calling an LLM.
 
@@ -298,13 +300,22 @@ def persist_capture_arrival_intent(
         assert eligibility.account_generation is not None
         bounded_summary = summary.strip()[:200]
         if not bounded_summary:
-            return None
+            if not is_desktop_meeting:
+                return None
+            bounded_summary = 'Your meeting notes are ready.'
+        block: ChatFirstBlockSpec
+        if is_desktop_meeting:
+            block = ConversationLinkSpec(
+                type='conversationLink', conversation_id=conversation_id, summary=bounded_summary
+            )
+        else:
+            block = CaptureLinkSpec(type='captureLink', conversation_id=conversation_id, summary=bounded_summary)
         intent, created = intent_db.create_intent(
             uid,
             source='capture_arrival',
             continuity_key=f'capture:{conversation_id}',
             subject=ChatFirstSubject(kind='capture', id=conversation_id),
-            blocks=[CaptureLinkSpec(type='captureLink', conversation_id=conversation_id, summary=bounded_summary)],
+            blocks=[block],
             account_generation=eligibility.account_generation,
             now=resolved_now,
         )

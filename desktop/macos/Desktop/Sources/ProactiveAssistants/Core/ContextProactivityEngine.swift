@@ -142,6 +142,8 @@ actor ContextProactivityEngine {
       \(ScreenDerivedContent.untrustedPreamble)
       Decide whether interrupting now adds concrete value. Return silence unless the validated
       facts support a specific, timely action. Use only supplied bucket-entry refs.
+      Never announce that meeting notes, a transcript, or a call summary are ready. The
+      conversation-finalization lane owns that claim and attaches the exact conversation link.
 
       \(stableBucket)
 

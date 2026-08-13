@@ -114,6 +114,8 @@ struct AIResponseView: View {
         return ["chatFirstGoal", id].joined(separator: "\u{1E}")
       case .captureLink(let id, _, _, _):
         return ["chatFirstCapture", id].joined(separator: "\u{1E}")
+      case .conversationLink(let id, _, _):
+        return ["chatFirstConversation", id].joined(separator: "\u{1E}")
       case .memoryLink(let id, _, _):
         return ["chatFirstMemory", id].joined(separator: "\u{1E}")
       case .agentSpawn(
@@ -210,7 +212,7 @@ struct AIResponseView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         // The floating/notch surface never opts into rich chat-first controls.
         // Keep journaled blocks inert if an older runtime projects them here.
-        case .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink:
+        case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
           EmptyView()
         case .agentSpawn(
           _, let pillId, let sessionId, let runId, let title, let objective, let provider

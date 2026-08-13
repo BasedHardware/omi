@@ -452,6 +452,8 @@ extension APIClient {
     let language: String
     // swift-format-ignore
     let client_conversation_id: String?
+    // swift-format-ignore
+    let conversation_role: String
   }
 
   struct CreateConversationFromSegmentsResponse: Decodable {

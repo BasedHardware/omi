@@ -497,7 +497,7 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     XCTAssertEqual(segments.first?["text"] as? String, "saved transcript for recovery")
   }
 
-  func testFinalizationRecoversStaleBackendBindingWithExactClientRecordingId() async throws {
+  func testRetryingMeetingFinalizationRecoversExactIdAndWakesChat() async throws {
     FinalizationRecoveryURLStub.reset()
     setenv("OMI_PYTHON_API_URL", "https://finalization-recovery.test/", 1)
     let config = URLSessionConfiguration.ephemeral
@@ -519,13 +519,21 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
       finalizationStrategy: .cloudReconcile
     )
     try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: "stale-backend-id")
-    try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+    try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .meetingEnded)
+    let wake = expectation(description: "meeting completion wakes Chat")
+    let observer = NotificationCenter.default.addObserver(
+      forName: .desktopMeetingConversationDidComplete, object: nil, queue: .main
+    ) { _ in
+      wake.fulfill()
+    }
+    defer { NotificationCenter.default.removeObserver(observer) }
 
     await ConversationFinalizationService.shared.finalizeSession(
       id: sessionId,
-      reason: .userStop,
+      reason: .retry,
       allowCloudForceProcess: true
     )
+    await fulfillment(of: [wake], timeout: 1)
 
     let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
     let session = try XCTUnwrap(storedSession)

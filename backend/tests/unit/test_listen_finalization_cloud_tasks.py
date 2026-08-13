@@ -1021,7 +1021,21 @@ async def test_finalizer_never_logs_a_provider_exception_body(monkeypatch, caplo
 
 
 @pytest.mark.anyio
-async def test_completed_conversation_replays_only_the_durable_fanout_boundary(monkeypatch):
+@pytest.mark.parametrize(
+    ('source', 'external_data', 'expected_intent_kwargs'),
+    [
+        ('omi', None, {'conversation_id': 'conversation-1', 'summary': 'Captured title'}),
+        (
+            'desktop',
+            {'conversation_role': 'meeting'},
+            {'conversation_id': 'conversation-1', 'summary': 'Captured title', 'is_desktop_meeting': True},
+        ),
+        ('desktop', {'conversation_role': 'ambient'}, None),
+    ],
+)
+async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
+    monkeypatch, source, external_data, expected_intent_kwargs
+):
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
@@ -1029,7 +1043,8 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
         id='conversation-1',
         status=ConversationStatus.completed,
         language='en',
-        source=SimpleNamespace(value='omi'),
+        source=SimpleNamespace(value=source),
+        external_data=external_data,
         structured=SimpleNamespace(title='Captured title', overview='Captured overview'),
     )
     integrations = AsyncMock(return_value=[])
@@ -1071,7 +1086,10 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
     extracted.assert_called_once_with('uid-1', conversation)
     assert disposition == ConversationFinalizationDisposition.completed
     completed.assert_called_once_with('job-1', 2, 3)
-    capture_arrival.assert_called_once_with('uid-1', conversation_id='conversation-1', summary='Captured title')
+    if expected_intent_kwargs is None:
+        capture_arrival.assert_not_called()
+    else:
+        capture_arrival.assert_called_once_with('uid-1', **expected_intent_kwargs)
 
 
 @pytest.mark.anyio

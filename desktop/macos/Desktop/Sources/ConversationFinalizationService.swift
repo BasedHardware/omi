@@ -111,6 +111,11 @@ actor ConversationFinalizationService {
         }
         try await finalizeCloudSession(session: latestSession, allowForceProcess: allowCloudForceProcess)
       }
+      if session.finalizationReason == .meetingEnded || reason == .meetingEnded {
+        await MainActor.run {
+          NotificationCenter.default.post(name: .desktopMeetingConversationDidComplete, object: nil)
+        }
+      }
     } catch {
       await markRetryableFailure(sessionId: sessionId, error: error)
     }
@@ -178,7 +183,8 @@ actor ConversationFinalizationService {
       started_at: iso.string(from: bundle.session.startedAt),
       finished_at: bundle.session.finishedAt.map { iso.string(from: $0) },
       language: bundle.session.language,
-      client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId)
+      client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId),
+      conversation_role: bundle.session.finalizationReason == .meetingEnded ? "meeting" : "ambient"
     )
     let response = try await apiClient.createConversationFromSegments(request)
     let status = LocalConversationStatus(rawValue: response.status) ?? .processing
@@ -545,6 +551,11 @@ actor ConversationFinalizationService {
   ) -> ConversationCreatedTelemetry {
     ConversationCreatedTelemetry(session: session, conversationId: conversationId)
   }
+}
+
+extension Notification.Name {
+  static let desktopMeetingConversationDidComplete = Notification.Name(
+    "com.omi.desktop.meetingConversationDidComplete")
 }
 
 struct ConversationCreatedTelemetry: Equatable, Sendable {

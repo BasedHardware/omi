@@ -449,7 +449,9 @@ class AppState: ObservableObject {
   /// transcription session. This lives above `AudioCaptureService` because each
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
   var silentMicRecoveryAttempts = 0
-  var meetingEndFinalizationInProgress = false
+  var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
+  var meetingBoundaryInProgress = false
+  var pendingMeetingState: Bool?
   @Published var isAwaitingMeeting = false
 
   var effectiveSystemAudioMode: AssistantSettings.SystemAudioCaptureMode {

@@ -28,6 +28,7 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
   private var didLoadTranscriptFirstPage = false
   private var lastAttemptAt: Date?
   private var requestTask: Task<Void, Never>?
+  private var pendingCompletionBypass = false
   private var requestGeneration = 0
   private let now: () -> Date
 
@@ -61,6 +62,7 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
     requestGeneration &+= 1
     requestTask?.cancel()
     requestTask = nil
+    pendingCompletionBypass = false
   }
 
   /// `ChatFirstShell` alone forwards app foreground events. This is never
@@ -70,16 +72,35 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
     requestMaterialization(windowForeground: true)
   }
 
+  /// Conversation processing completed while rich Chat is already visible.
+  /// This exact completion signal bypasses only the foreground debounce; all
+  /// route, owner, first-page, and in-flight gates remain authoritative.
   @discardableResult
-  private func requestMaterialization(windowForeground: Bool) -> Bool {
+  func meetingConversationDidComplete() -> Bool {
+    if requestTask != nil {
+      pendingCompletionBypass = true
+      return true
+    }
+    return requestMaterialization(windowForeground: true, bypassMinimumInterval: true)
+  }
+
+  @discardableResult
+  private func requestMaterialization(
+    windowForeground: Bool,
+    bypassMinimumInterval: Bool = false
+  ) -> Bool {
     guard
-      ChatFirstPromptMaterializationPolicy.shouldStart(
-        hasChatFirstMainChatContext: driver?.materializationContext() != nil,
-        transcriptFirstPageLoaded: didLoadTranscriptFirstPage,
-        isRunning: requestTask != nil,
-        lastAttemptAt: lastAttemptAt,
-        now: now()
-      ), let driver
+      let driver,
+      driver.materializationContext() != nil,
+      didLoadTranscriptFirstPage,
+      requestTask == nil,
+      bypassMinimumInterval
+        || ChatFirstPromptMaterializationPolicy.shouldStart(
+          hasChatFirstMainChatContext: true,
+          transcriptFirstPageLoaded: true,
+          isRunning: false,
+          lastAttemptAt: lastAttemptAt,
+          now: now())
     else { return false }
 
     lastAttemptAt = now()
@@ -90,6 +111,10 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
       await self.materialize(using: driver, windowForeground: windowForeground, generation: generation)
       if self.requestGeneration == generation {
         self.requestTask = nil
+        if self.pendingCompletionBypass {
+          self.pendingCompletionBypass = false
+          _ = self.requestMaterialization(windowForeground: true, bypassMinimumInterval: true)
+        }
       }
     }
     return true

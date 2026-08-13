@@ -126,6 +126,51 @@ final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
     XCTAssertEqual(driver.acknowledgementBatches, [pendingReceipts, pendingReceipts])
   }
 
+  @MainActor
+  func testMeetingCompletionBypassesForegroundDebounceOnlyWhileChatIsVisible() async {
+    let now = Date(timeIntervalSinceReferenceDate: 10_000)
+    let driver = FakePromptMaterializationDriver(
+      context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
+      pendingReceipts: .empty,
+      response: ChatFirstMaterializePromptsResponse(intents: [])
+    )
+    let coordinator = ChatFirstPromptMaterializationCoordinator(now: { now })
+    coordinator.activate(driver: driver)
+
+    XCTAssertFalse(coordinator.meetingConversationDidComplete())
+    coordinator.chatTranscriptFirstPageDidLoad()
+    for _ in 0..<20 where driver.fetchReceiptBatches.count < 1 { await Task.yield() }
+    XCTAssertEqual(driver.fetchReceiptBatches.count, 1)
+
+    XCTAssertTrue(coordinator.meetingConversationDidComplete())
+    for _ in 0..<20 where driver.fetchReceiptBatches.count < 2 { await Task.yield() }
+    XCTAssertEqual(driver.fetchReceiptBatches.count, 2)
+
+    coordinator.chatTranscriptDidDisappear()
+    XCTAssertFalse(coordinator.meetingConversationDidComplete())
+  }
+
+  @MainActor
+  func testMeetingCompletionDuringFetchCoalescesOneImmediateFollowUp() async {
+    let driver = FakePromptMaterializationDriver(
+      context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
+      pendingReceipts: .empty,
+      response: ChatFirstMaterializePromptsResponse(intents: [])
+    )
+    driver.suspendNextFetch = true
+    let coordinator = ChatFirstPromptMaterializationCoordinator()
+    coordinator.activate(driver: driver)
+
+    coordinator.chatTranscriptFirstPageDidLoad()
+    for _ in 0..<20 where !driver.isFetchSuspended { await Task.yield() }
+    XCTAssertEqual(driver.fetchReceiptBatches.count, 1)
+    XCTAssertTrue(coordinator.meetingConversationDidComplete())
+
+    driver.resumeFetch()
+    for _ in 0..<40 where driver.fetchReceiptBatches.count < 2 { await Task.yield() }
+    XCTAssertEqual(driver.fetchReceiptBatches.count, 2)
+  }
+
   func testArrivalScrollPolicyFollowsFreshChatButPreservesScrollback() {
     XCTAssertEqual(
       ChatArrivalScrollPolicy.action(oldCount: 0, newCount: 2, mode: .followingBottom),
@@ -148,6 +193,9 @@ private final class FakePromptMaterializationDriver: ChatFirstPromptMaterializat
   private var storedPendingReceipts: ChatFirstPromptReceiptBatch
   private let response: ChatFirstMaterializePromptsResponse
   var acknowledgementError: Error?
+  var suspendNextFetch = false
+  private(set) var isFetchSuspended = false
+  private var fetchContinuation: CheckedContinuation<Void, Never>?
   private(set) var fetchReceiptBatches: [ChatFirstPromptReceiptBatch] = []
   private(set) var acknowledgementBatches: [ChatFirstPromptReceiptBatch] = []
   private(set) var materializedBatches: [[ChatFirstPromptIntent]] = []
@@ -177,7 +225,20 @@ private final class FakePromptMaterializationDriver: ChatFirstPromptMaterializat
     receipts: ChatFirstPromptReceiptBatch
   ) async throws -> ChatFirstMaterializePromptsResponse {
     fetchReceiptBatches.append(receipts)
+    if suspendNextFetch {
+      suspendNextFetch = false
+      await withCheckedContinuation {
+        isFetchSuspended = true
+        fetchContinuation = $0
+      }
+    }
     return response
+  }
+
+  func resumeFetch() {
+    isFetchSuspended = false
+    fetchContinuation?.resume()
+    fetchContinuation = nil
   }
 
   func acknowledge(_ receipts: ChatFirstPromptReceiptBatch) async throws {

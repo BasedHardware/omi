@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import logging
+from types import SimpleNamespace
 
 import pytest
 
@@ -140,6 +141,43 @@ def test_capture_arrival_is_failure_isolated_and_bounds_the_persisted_summary(mo
 
     assert result is None
     assert created[0]['blocks'][0].summary == 'x' * 200
+
+
+def test_desktop_meeting_arrival_persists_exact_conversation_link(monkeypatch):
+    created = []
+    monkeypatch.setattr(
+        engine.intent_db,
+        'create_intent',
+        lambda *args, **kwargs: created.append(kwargs) or (SimpleNamespace(), True),
+    )
+    monkeypatch.setattr(engine, '_meter', lambda *args: None)
+
+    engine.persist_capture_arrival_intent(
+        'user-1',
+        conversation_id='conversation-1',
+        summary='Weekly planning',
+        is_desktop_meeting=True,
+        now=NOW,
+        eligibility_resolver=lambda _uid: ChatFirstEligibility(enabled=True, account_generation=7),
+    )
+
+    assert created[0]['continuity_key'] == 'capture:conversation-1'
+    assert created[0]['blocks'][0].model_dump() == {
+        'type': 'conversationLink',
+        'conversation_id': 'conversation-1',
+        'summary': 'Weekly planning',
+    }
+
+    engine.persist_capture_arrival_intent(
+        'user-1',
+        conversation_id='conversation-2',
+        summary='',
+        is_desktop_meeting=True,
+        now=NOW,
+        eligibility_resolver=lambda _uid: ChatFirstEligibility(enabled=True, account_generation=7),
+    )
+
+    assert created[1]['blocks'][0].summary == 'Your meeting notes are ready.'
 
 
 def test_proactive_failure_logs_redact_authenticated_uid(monkeypatch, caplog):

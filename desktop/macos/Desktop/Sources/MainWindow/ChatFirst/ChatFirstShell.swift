@@ -81,6 +81,9 @@ struct ChatFirstShell: View {
     .onChange(of: navigation.route) { _, route in
       syncMemoryDestination(for: route)
     }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopMeetingConversationDidComplete)) { _ in
+      _ = promptMaterializationCoordinator.meetingConversationDidComplete()
+    }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenMemoryAtlasRequested)) { _ in
       memoryDestinationRawValue = MemoryHubDestination.brainMap.rawValue
       navigation.selectPrimary(.memories)

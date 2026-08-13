@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 from enum import Enum
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -67,6 +67,7 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
+from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1133,6 +1134,7 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
     client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
     client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
+    conversation_role: Literal['ambient', 'meeting'] = 'ambient'
 
     @field_validator('client_session_id')
     @classmethod
@@ -1461,6 +1463,31 @@ def _conversation_response_from_data(conversation: dict) -> ConversationResponse
     )
 
 
+def _persist_desktop_meeting_arrival(uid: str, request: CreateConversationFromTranscriptRequest, conversation) -> None:
+    external_data = conversation.get('external_data') if isinstance(conversation, dict) else conversation.external_data
+    stored_role = (external_data or {}).get('conversation_role')
+    if stored_role != 'meeting':
+        return
+    source = conversation.get('source') if isinstance(conversation, dict) else conversation.source
+    status = conversation.get('status') if isinstance(conversation, dict) else conversation.status
+    discarded = conversation.get('discarded', False) if isinstance(conversation, dict) else conversation.discarded
+    source = source.value if hasattr(source, 'value') else source
+    status = status.value if hasattr(status, 'value') else status
+    if source != ConversationSource.desktop.value or discarded or status != ConversationStatus.completed.value:
+        return
+    conversation_id = conversation['id'] if isinstance(conversation, dict) else conversation.id
+    structured = conversation.get('structured') if isinstance(conversation, dict) else conversation.structured
+    structured = structured or {}
+    title = structured.get('title') if isinstance(structured, dict) else structured.title
+    overview = structured.get('overview') if isinstance(structured, dict) else structured.overview
+    persist_capture_arrival_intent(
+        uid,
+        conversation_id=conversation_id,
+        summary=title or overview or '',
+        is_desktop_meeting=True,
+    )
+
+
 def _create_conversation_from_segments(
     uid: str,
     request: CreateConversationFromTranscriptRequest,
@@ -1550,6 +1577,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                _persist_desktop_meeting_arrival(uid, request, existing_conversation)
                 return _conversation_response_from_data(existing_conversation)
 
     resolved_client_device_id = client_device_id or request.client_device_id
@@ -1572,6 +1600,7 @@ def _create_conversation_from_segments(
             external_data={
                 'from_segments_client_session_id': request.client_session_id,
                 'from_segments_claimed_at': datetime.now(timezone.utc),
+                'conversation_role': request.conversation_role,
             },
             status=ConversationStatus.processing,
         )
@@ -1586,6 +1615,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                _persist_desktop_meeting_arrival(uid, request, existing_conversation)
                 return _conversation_response_from_data(existing_conversation)
             raise HTTPException(status_code=409, detail="Conversation creation already in progress")
     else:
@@ -1622,6 +1652,8 @@ def _create_conversation_from_segments(
             conversation.id,
         )
         lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
+
+    _persist_desktop_meeting_arrival(uid, request, conversation)
 
     return ConversationResponse(
         id=conversation.id,

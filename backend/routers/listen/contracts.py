@@ -39,6 +39,7 @@ class ListenRequest:
     vad_gate_override: Optional[str] = None
     call_id: Optional[str] = None
     client_conversation_id: Optional[str] = None
+    conversation_role: str = 'ambient'
     client_device_context: Optional[ClientDeviceContext] = None
     owner_persistence_blocked: asyncio.Event = field(default_factory=asyncio.Event)
 

@@ -401,6 +401,61 @@ struct CaptureLinkView: View {
   }
 }
 
+struct ConversationLinkView: View {
+  let conversationID: String
+  let summary: String
+  let navigation: ChatFirstShellNavigation
+
+  @State private var isOpening = false
+  @State private var isUnavailable = false
+
+  var body: some View {
+    Group {
+      if isUnavailable {
+        ChatFirstUnavailableBlockView(entityName: "Conversation")
+      } else {
+        ChatFirstLinkBlockView(
+          eyebrow: "Meeting notes ready",
+          systemImage: "text.document",
+          summary: summary,
+          actionTitle: "Open conversation",
+          isOpening: isOpening,
+          accessibilityID: "chat-first-conversation-\(conversationID)-open"
+        ) {
+          openConversation()
+        }
+      }
+    }
+    .onAppear {
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(kind: .conversationLink, outcome: .rendered, action: .none)
+      )
+    }
+  }
+
+  private func openConversation() {
+    guard !isOpening else { return }
+    isOpening = true
+    Task { @MainActor in
+      defer { isOpening = false }
+      do {
+        _ = try await APIClient.shared.getConversation(id: conversationID)
+        ConversationDetailAutomationState.shared.requestOpen(
+          conversationId: conversationID, showTranscript: false)
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .conversationLink, outcome: .acted, action: .open)
+        )
+        navigation.selectPrimary(.conversations, origin: .chatDeeplink)
+      } catch {
+        isUnavailable = true
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .conversationLink, outcome: .stalePlaceholder, action: .open)
+        )
+      }
+    }
+  }
+}
+
 struct MemoryLinkView: View {
   let memoryID: String
   let summary: String

@@ -76,6 +76,12 @@ class CaptureLinkSpec(_StrictModel):
     summary: str = Field(min_length=1, max_length=200)
 
 
+class ConversationLinkSpec(_StrictModel):
+    type: Literal['conversationLink']
+    conversation_id: StableId
+    summary: str = Field(min_length=1, max_length=200)
+
+
 class MemoryLinkSpec(_StrictModel):
     type: Literal['memoryLink']
     memory_id: StableId
@@ -83,7 +89,7 @@ class MemoryLinkSpec(_StrictModel):
 
 
 ChatFirstBlockSpec = Annotated[
-    Union[QuestionCardSpec, TaskCardSpec, GoalLinkSpec, CaptureLinkSpec, MemoryLinkSpec],
+    Union[QuestionCardSpec, TaskCardSpec, GoalLinkSpec, CaptureLinkSpec, ConversationLinkSpec, MemoryLinkSpec],
     Field(discriminator='type'),
 ]
 
@@ -268,6 +274,7 @@ def stable_block_id(*, uid: str, generation: int, block: ChatFirstBlockSpec) -> 
 
 __all__ = [
     'CaptureLinkSpec',
+    'ConversationLinkSpec',
     'ChatFirstBlockSpec',
     'ChatFirstBlockValidationReceipt',
     'ChatFirstBlockValidationRequest',
