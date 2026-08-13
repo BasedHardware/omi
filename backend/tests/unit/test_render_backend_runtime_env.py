@@ -301,12 +301,20 @@ def test_auto_dev_memory_maintenance_workflow_selects_only_its_job():
     assert 'Duration: $((SECONDS - started_at))s' in text
 
 
-def test_backend_service_deploys_remove_retired_canonical_promotion_env_vars():
-    retired = (
-        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,'
-        'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,'
-        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
+def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
+    from scripts.runtime_env_memory_contract import RETIRED_CANONICAL_MEMORY_ENV
+
+    retired = ','.join(
+        name
+        for name in (
+            'MEMORY_ENABLED_USERS',
+            'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+            'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS',
+            'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        )
+        if name in RETIRED_CANONICAL_MEMORY_ENV
     )
+    assert set(retired.split(',')) == set(RETIRED_CANONICAL_MEMORY_ENV)
     workflow_root = Path(__file__).resolve().parents[3] / '.github/workflows'
     deploy_action = Path(__file__).resolve().parents[3] / '.github/actions/deploy-backend-stack/action.yml'
     deploy_action_text = deploy_action.read_text(encoding='utf-8')
