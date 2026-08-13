@@ -13,6 +13,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -106,6 +107,36 @@ function insideCore(file, label) {
   if (!path.isAbsolute(file)) throw new Error(`${label} must be absolute`);
   const resolved = path.resolve(file);
   if (!resolved.startsWith(`${coreRoot}${path.sep}`)) throw new Error(`${label} must be inside the core worktree`);
+  return resolved;
+}
+function treeUsage(root, limitBytes, limitFiles) {
+  let bytes = 0;
+  let files = 0;
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      if (entry.isSymbolicLink()) throw new Error("surfaces dist must not contain symlinks");
+      if (entry.isDirectory()) visit(target);
+      else if (entry.isFile()) {
+        const size = statSync(target).size;
+        bytes += size; files += 1;
+        if (bytes > limitBytes || files > limitFiles) throw new Error("surfaces dist exceeds the bounded native-fixture budget");
+      } else throw new Error("surfaces dist contains a non-regular entry");
+    }
+  };
+  visit(root);
+  return { bytes, files };
+}
+
+export function validateSurfacesDist(dist, limitBytes = 64 * 1024 * 1024, limitFiles = 4096) {
+  const resolved = realpathSync(dist);
+  if (!resolved.startsWith(`${realpathSync(coreRoot)}${path.sep}`) || !statSync(resolved).isDirectory()) {
+    throw new Error("surfaces dist must be a real core-owned directory");
+  }
+  if (!existsSync(path.join(resolved, "index.html")) || !statSync(path.join(resolved, "index.html")).isFile()) {
+    throw new Error("surfaces dist must contain index.html");
+  }
+  treeUsage(resolved, limitBytes, limitFiles);
   return resolved;
 }
 function gitHead(root) {
@@ -304,7 +335,8 @@ export function withIosCaptureLock(callback) {
     catch (error) {
       if (error?.code !== "EEXIST" || lstatSync(lockDir).isSymbolicLink() || !lstatSync(lockDir).isDirectory()) throw error;
       let owner;
-      try { owner = readJson(ownerPath, "iOS runtime capture lock"); } catch { owner = null; }
+      try { owner = readJson(ownerPath, "iOS runtime capture lock"); }
+      catch { throw new Error("iOS runtime capture lock exists without a valid owner; remove it only after confirming no capture process is active"); }
       const ownerPid = owner?.pid;
       if (Number.isInteger(ownerPid) && ownerPid > 0) {
         try { process.kill(ownerPid, 0); throw new Error(`iOS runtime capture is already active in pid ${ownerPid}`); }
@@ -334,8 +366,7 @@ function runMac(manifest, outputDir) {
   const screenshot = path.join(outputDir, "probe.png");
   mkdirSync(outputDir, { recursive: true });
   const env = allowedEnvironment();
-  const surfacesDist = path.resolve(env.OMI_SURFACES_DIST || path.join(coreRoot, "packages/surfaces/dist"));
-  if (!surfacesDist.startsWith(`${coreRoot}${path.sep}`) || !existsSync(path.join(surfacesDist, "index.html"))) throw new Error("OMI_SURFACES_DIST must be an existing core-owned surfaces dist");
+  const surfacesDist = validateSurfacesDist(path.resolve(env.OMI_SURFACES_DIST || path.join(coreRoot, "packages/surfaces/dist")));
   env.OMI_SURFACES_DIST = surfacesDist;
   const scratch = path.join(outputDir, "home");
   mkdirSync(scratch, { recursive: true });
@@ -344,6 +375,7 @@ function runMac(manifest, outputDir) {
   // run IDs contain underscores and coordinate prose, so bind them through a
   // deterministic digest instead of weakening that native-shell boundary.
   env.OMI_APP_NAME = macRuntimeAppName(manifest.run_id);
+  env.OMI_BUILD_DIR = path.join(outputDir, "macos-fixture");
   env.OMI_SURFACE_PORT = "5290"; env.OMI_FIXTURE_CAPTURE_WAIT_SECONDS = "5";
   env.OMI_PROBE_JS = runtimeProbeScript(manifest); env.OMI_PROBE_DELAY = "5"; env.OMI_PROBE_SETTLE = "1";
   env.OMI_PROBE_PENDING_VALUE = "OMI_RUNTIME_PENDING";
@@ -363,33 +395,37 @@ function runMac(manifest, outputDir) {
     "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","),
     "--", "/bin/bash", launcher, ...args,
   ];
-  const started = new Date();
-  const guarded = spawnSync(process.execPath, guardArgs, { cwd: coreRoot, env, encoding: "utf8", timeout: 310_000, maxBuffer: 64 * 1024 * 1024 });
-  const finished = new Date();
-  if (!existsSync(guardResult)) throw new Error("macOS runtime foreground guard produced no terminal receipt");
-  const custody = readJson(guardResult, "macOS runtime foreground guard");
-  validateForegroundCustody(custody);
-  if (guarded.status !== 0) throw new Error(`macOS native runtime foreground custody failed (${custody.monitor_error || custody.error || custody.status || guarded.status})`);
-  const stdout = readFileSync(stdoutPath, "utf8");
-  const stderr = readFileSync(stderrPath, "utf8");
-  const log = path.join(coreRoot, ".build/polish-fixture", `${env.OMI_APP_NAME}.run.log`);
-  const combined = `${stdout}\n${stderr}\n${existsSync(log) ? readFileSync(log, "utf8") : ""}`;
-  const marker = parseMacProbe(combined, manifest);
-  // The PNG exists only to drive the fixture launcher's bounded exit path; it
-  // is deliberately not retained or presented as runtime evidence.
-  rmSync(screenshot, { force: true });
-  return {
-    marker,
-    started,
-    finished,
-    argv: [process.execPath, ...guardArgs],
-    stdout,
-    stderr,
-    probe: runtimeProbeScript(manifest),
-    foregroundCustody: custody,
-    commandTimeoutSeconds: 310,
-    commandCwd: ".",
-  };
+  try {
+    const started = new Date();
+    const guarded = spawnSync(process.execPath, guardArgs, { cwd: coreRoot, env, encoding: "utf8", timeout: 310_000, maxBuffer: 64 * 1024 * 1024 });
+    const finished = new Date();
+    if (!existsSync(guardResult)) throw new Error("macOS runtime foreground guard produced no terminal receipt");
+    const custody = readJson(guardResult, "macOS runtime foreground guard");
+    validateForegroundCustody(custody);
+    if (guarded.status !== 0) throw new Error(`macOS native runtime foreground custody failed (${custody.monitor_error || custody.error || custody.status || guarded.status})`);
+    const stdout = readFileSync(stdoutPath, "utf8");
+    const stderr = readFileSync(stderrPath, "utf8");
+    const log = path.join(env.OMI_BUILD_DIR, `${env.OMI_APP_NAME}.run.log`);
+    const combined = `${stdout}\n${stderr}\n${existsSync(log) ? readFileSync(log, "utf8") : ""}`;
+    const marker = parseMacProbe(combined, manifest);
+    return {
+      marker,
+      started,
+      finished,
+      argv: [process.execPath, ...guardArgs],
+      stdout,
+      stderr,
+      probe: runtimeProbeScript(manifest),
+      foregroundCustody: custody,
+      commandTimeoutSeconds: 310,
+      commandCwd: ".",
+    };
+  } finally {
+    // The PNG and scratch app exist only to drive the bounded native probe.
+    rmSync(screenshot, { force: true });
+    rmSync(env.OMI_BUILD_DIR, { recursive: true, force: true });
+    rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 function inputEntry(file, relative) {
@@ -468,8 +504,7 @@ function runIos(manifest, outputDir) {
   requireIosDiskHeadroom(outputDir);
   const scratch = path.join(outputDir, "home"); mkdirSync(scratch, { recursive: true }); env.HOME = scratch; env.PUB_CACHE = path.join(scratch, ".pub-cache"); env.XDG_CACHE_HOME = path.join(scratch, ".cache");
   const surfacesDist = process.env.SURFACES_DIST || process.env.OMI_SURFACES_DIST;
-  const resolvedSurfacesDist = surfacesDist ? path.resolve(surfacesDist) : "";
-  if (!resolvedSurfacesDist.startsWith(`${coreRoot}${path.sep}`) || !existsSync(path.join(resolvedSurfacesDist, "index.html"))) throw new Error("SURFACES_DIST must point to an existing core-owned surfaces dist/index.html");
+  const resolvedSurfacesDist = validateSurfacesDist(surfacesDist ? path.resolve(surfacesDist) : "");
   env.SURFACES_DIST = resolvedSurfacesDist;
   const nodeBin = env.NODE_BIN || process.execPath;
   const flutterBin = env.FLUTTER_BIN || path.join(process.env.HOME || "/Users/dazheng", ".local/share/mise/installs/flutter/3.44.5/bin/flutter");
