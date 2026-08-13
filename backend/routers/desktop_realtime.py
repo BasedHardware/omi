@@ -116,7 +116,7 @@ async def _post_json(
 
 
 def _record_session(uid: str, token: str, provider: str, model: str, expires_at: str) -> None:
-    get_firestore_client().collection("users").document(uid).collection("realtime_sessions").document(
+    get_customer_firestore_client().collection("users").document(uid).collection("realtime_sessions").document(
         hashlib.sha256(token.encode()).hexdigest()
     ).set(
         {
