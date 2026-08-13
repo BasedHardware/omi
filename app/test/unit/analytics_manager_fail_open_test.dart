@@ -56,6 +56,46 @@ void main() {
     expect(adapter.interactionContexts, [const _InteractionContext(screenName: 'Settings', target: 'screen')]);
   });
 
+  test('recording upload lifecycle keeps one correlation schema through the analytics boundary', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    final analytics = AnalyticsManager();
+
+    analytics.recordingUploadStarted(
+      attemptId: 'attempt-1',
+      recordingId: 'recording-1',
+      fileCount: 2,
+      totalBytes: 4096,
+      claimsLiveCapture: true,
+    );
+    analytics.recordingUploadCompleted(
+      attemptId: 'attempt-1',
+      recordingId: 'recording-1',
+      fileCount: 2,
+      totalBytes: 4096,
+      claimsLiveCapture: true,
+      durationSeconds: 1.25,
+      result: 'accepted',
+    );
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events.map((event) => event.eventName), ['Recording Upload Started', 'Recording Upload Completed']);
+    expect(adapter.events.first.properties, {
+      'upload_attempt_id': 'attempt-1',
+      'recording_id': 'recording-1',
+      'file_count': 2,
+      'total_bytes': 4096,
+      'claims_live_capture': true,
+      'upload_source': 'offline_audio_queue',
+    });
+    expect(adapter.events.last.properties, {
+      ...adapter.events.first.properties,
+      'duration_seconds': 1.25,
+      'result': 'accepted',
+    });
+  });
+
   test('track retries adapter failures without throwing through the caller', () async {
     final adapter = _FakeAnalyticsAdapter(trackFailuresBeforeSuccess: 1);
     AnalyticsManager.configure(adapter);
