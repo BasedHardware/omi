@@ -13,6 +13,21 @@ class WebhookType(str, Enum):
     day_summary = 'day_summary'
 
 
+def webhook_url_from_setting(wtype: WebhookType | str, value: Optional[str]) -> str:
+    """The endpoint a stored webhook setting points at, or '' when none is configured.
+
+    audio_bytes stores '<url>,<seconds>', so clearing only the URL leaves a ',5' setting
+    that is not an empty string yet has nowhere to deliver to. Every caller deciding
+    whether a webhook is configured must read the setting through here.
+    """
+    if not value:
+        return ''
+    # WebhookType is a str enum, so this holds for the raw wire value too.
+    if wtype == WebhookType.audio_bytes:
+        value = value.split(',')[0]
+    return value.strip()
+
+
 LOCATION_CONTEXT_PURPOSE = 'chat_city_context'
 LOCATION_CONTEXT_DISCLOSED_PROVIDERS = ('Google Maps', 'the configured AI chat provider')
 
@@ -206,3 +221,12 @@ class UserSubscriptionResponse(BaseModel):
         if value.plan in {PlanType.plus, PlanType.unlimited_v2}:
             raise ValueError("mobile plan IDs require a versioned app-client subscription contract")
         return value
+
+
+class AvailableLanguage(BaseModel):
+    code: str
+    name: str
+
+
+class AvailableLanguagesResponse(BaseModel):
+    languages: List[AvailableLanguage]

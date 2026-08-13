@@ -14,7 +14,7 @@ import 'device_transport.dart';
 class NativeBleTransport extends DeviceTransport {
   final String _peripheralUuid;
   final bool requiresBond;
-  final BleHostApi _hostApi = BleHostApi();
+  final BleHostApi _hostApi;
   final StreamController<DeviceTransportState> _connectionStateController =
       StreamController<DeviceTransportState>.broadcast();
 
@@ -28,7 +28,8 @@ class NativeBleTransport extends DeviceTransport {
 
   DeviceTransportState _state = DeviceTransportState.disconnected;
 
-  NativeBleTransport(this._peripheralUuid, {this.requiresBond = false}) {
+  NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
+      : _hostApi = hostApi ?? BleHostApi() {
     BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
       onConnectionState: _handleConnectionState,
@@ -83,12 +84,12 @@ class NativeBleTransport extends DeviceTransport {
 
   @override
   Future<void> disconnect() async {
-    if (_state == DeviceTransportState.disconnected) return;
+    if (_state == DeviceTransportState.disconnected && _streamControllers.isEmpty) return;
 
     _updateState(DeviceTransportState.disconnecting);
 
     // Unsubscribe all active streams
-    for (final key in _streamControllers.keys.toList()) {
+    for (final key in _activeSubscriptionKeys.toList()) {
       final parts = key.split(':');
       if (parts.length == 2) {
         try {
@@ -97,6 +98,8 @@ class NativeBleTransport extends DeviceTransport {
       }
     }
 
+    _activeSubscriptionKeys.clear();
+    _subscribedSubscriptionKeys.clear();
     _closeAllStreams();
     _services = [];
 
@@ -112,7 +115,7 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Future<bool> isConnected() async {
     try {
-      return _hostApi.isPeripheralConnected(_peripheralUuid);
+      return await _hostApi.isPeripheralConnected(_peripheralUuid);
     } catch (e) {
       return false;
     }
@@ -121,7 +124,7 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Future<bool> ping() async {
     try {
-      return _hostApi.isPeripheralConnected(_peripheralUuid);
+      return await _hostApi.isPeripheralConnected(_peripheralUuid);
     } catch (e) {
       return false;
     }
@@ -145,18 +148,23 @@ class NativeBleTransport extends DeviceTransport {
 
     if (!_streamControllers.containsKey(key)) {
       _streamControllers[key] = StreamController<List<int>>.broadcast();
+      _activeSubscriptionKeys.add(key);
       if (_hasCharacteristic(serviceUuid, characteristicUuid)) {
-        _subscribeCharacteristic(serviceUuid, characteristicUuid);
+        unawaited(_subscribeCharacteristic(serviceUuid, characteristicUuid));
       }
     }
 
     return _streamControllers[key]!.stream;
   }
 
-  void _subscribeCharacteristic(String serviceUuid, String characteristicUuid) {
+  Future<void> _subscribeCharacteristic(String serviceUuid, String characteristicUuid) async {
+    final key = '${serviceUuid.toLowerCase()}:${characteristicUuid.toLowerCase()}';
+    if (_subscribedSubscriptionKeys.contains(key)) return;
+    _subscribedSubscriptionKeys.add(key);
     try {
-      _hostApi.subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid);
+      await _hostApi.subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid);
     } catch (e) {
+      _subscribedSubscriptionKeys.remove(key);
       Logger.debug('[NativeBleTransport] Failed to subscribe $serviceUuid:$characteristicUuid: $e');
     }
   }
@@ -203,6 +211,8 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Future<void> dispose() async {
     BleBridge.instance.unregisterPeripheral(_peripheralUuid);
+    _activeSubscriptionKeys.clear();
+    _subscribedSubscriptionKeys.clear();
     _closeAllStreams();
     await _connectionStateController.close();
   }
@@ -235,6 +245,7 @@ class NativeBleTransport extends DeviceTransport {
 
   /// Track which characteristics were subscribed so we can re-subscribe on reconnect.
   final Set<String> _activeSubscriptionKeys = {};
+  final Set<String> _subscribedSubscriptionKeys = {};
 
   void _handleConnectionState(bool connected, String? error) {
     if (!connected) {
@@ -242,11 +253,12 @@ class NativeBleTransport extends DeviceTransport {
       // On the 2nd call _streamControllers is already empty; overwriting _activeSubscriptionKeys
       // with {} would prevent re-subscription on the next reconnect.
       if (_streamControllers.isNotEmpty) {
-        _activeSubscriptionKeys.clear();
         _activeSubscriptionKeys.addAll(_streamControllers.keys);
+      } else {
+        _activeSubscriptionKeys.clear();
       }
 
-      _closeAllStreams();
+      _subscribedSubscriptionKeys.clear();
       _services = [];
       _updateState(DeviceTransportState.disconnected);
 
@@ -260,7 +272,9 @@ class NativeBleTransport extends DeviceTransport {
   void _handleDeviceReady(List<BleService> services) {
     if (_deviceReadyCompleter != null && !_deviceReadyCompleter!.isCompleted) {
       // Initial connection
+      _services = services;
       _deviceReadyCompleter!.complete(services);
+      _subscribeActiveCharacteristics();
     } else {
       // Auto-reconnect from native — re-subscribe to characteristics
       _resubscribeAfterReconnect(services);
@@ -269,6 +283,15 @@ class NativeBleTransport extends DeviceTransport {
 
   bool _isResubscribing = false;
 
+  void _subscribeActiveCharacteristics() {
+    for (final key in _activeSubscriptionKeys) {
+      final parts = key.split(':');
+      if (parts.length == 2 && _hasCharacteristic(parts[0], parts[1])) {
+        unawaited(_subscribeCharacteristic(parts[0], parts[1]));
+      }
+    }
+  }
+
   void _resubscribeAfterReconnect(List<BleService> services) {
     if (_isResubscribing) return;
     _isResubscribing = true;
@@ -276,12 +299,17 @@ class NativeBleTransport extends DeviceTransport {
     try {
       _services = services;
 
-      // Re-create stream controllers and re-subscribe to previously active characteristics
+      // Native re-emits ready for a link that is already up, so keep live controllers.
       for (final key in _activeSubscriptionKeys) {
         final parts = key.split(':');
         if (parts.length == 2) {
-          _streamControllers[key] = StreamController<List<int>>.broadcast();
-          _subscribeCharacteristic(parts[0], parts[1]);
+          final controller = _streamControllers[key];
+          if (controller == null || controller.isClosed) {
+            _streamControllers[key] = StreamController<List<int>>.broadcast();
+          }
+          if (_hasCharacteristic(parts[0], parts[1])) {
+            unawaited(_subscribeCharacteristic(parts[0], parts[1]));
+          }
         }
       }
 

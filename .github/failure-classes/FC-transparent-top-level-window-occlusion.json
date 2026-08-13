@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-transparent-top-level-window-occlusion",
+  "violated_contract": "An always-on-top transparent window must not own screen area beyond its currently visible interactive surface; returning nil from a descendant view's hit test does not transfer the top-level window event to an underlying window.",
+  "canonical_prevention": "Size the top-level window to the currently rendered surface at every stable state, snap its frame only at presentation boundaries, and behaviorally assert that points outside the visible surface are outside the window frame.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift"
+  ],
+  "evidence_prs": [9584],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/**"
+  ],
+  "status": "open"
+}

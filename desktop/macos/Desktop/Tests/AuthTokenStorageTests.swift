@@ -400,5 +400,9 @@ final class AuthTokenStorageTests: XCTestCase {
     UserDefaults.standard.removeObject(forKey: .authTokenExpiry)
     UserDefaults.standard.removeObject(forKey: .authTokenUserId)
     UserDefaults.standard.removeObject(forKey: .authUserId)
+    UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+    UserDefaults.standard.removeObject(forKey: .automationOwnerABackup)
+    UserDefaults.standard.removeObject(forKey: .authIsSignedIn)
+    UserDefaults.standard.removeObject(forKey: .authUserEmail)
   }
 }

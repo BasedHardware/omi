@@ -209,10 +209,9 @@ def test_get_action_items_tool_rejects_foreign_conversation_under_scope():
     get_items.assert_not_called()
 
 
-def test_search_memories_tool_fail_closed_on_use_memory_under_timeframe():
+def test_search_memories_tool_filters_matches_to_timeframe_scope():
     import utils.retrieval.tools.memory_tools as memory_tools
-    from utils.memory.default_read_rollout import MemoryReadDecision
-    from utils.memory.memory_system import MemorySystem
+    from models.memories import MemoryCategory
 
     cfg = {
         "configurable": {
@@ -223,16 +222,27 @@ def test_search_memories_tool_fail_closed_on_use_memory_under_timeframe():
             },
         }
     }
-    fake = type(
-        "D",
-        (),
-        {"read_decision": MemoryReadDecision.USE_MEMORY, "text": "LEAKED", "fallback_reason": None},
-    )()
+
+    in_scope = MagicMock()
+    in_scope.memory.is_locked = False
+    in_scope.memory.created_at = datetime(2026, 8, 9, 12, tzinfo=timezone.utc)
+    in_scope.memory.content = "IN_SCOPE_FACT"
+    in_scope.memory.category = MemoryCategory.interesting
+    in_scope.score = 0.9
+
+    leaked = MagicMock()
+    leaked.memory.is_locked = False
+    leaked.memory.created_at = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    leaked.memory.content = "LEAKED"
+    leaked.memory.category = MemoryCategory.interesting
+    leaked.score = 0.95
+
+    service = MagicMock()
+    service.search.return_value = [leaked, in_scope]
     with (
-        patch.object(memory_tools, "pin_memory_system", return_value=MemorySystem.LEGACY),
-        patch.object(memory_tools, "search_memory_default_chat_memories_vector_decision_text", return_value=fake),
+        patch.object(memory_tools, "MemoryService", return_value=service),
         patch.object(memory_tools.notification_db, "get_user_time_zone", return_value="UTC"),
     ):
         out = memory_tools.search_memories_tool.invoke({"query": "dogs"}, config=cfg)
-    assert "timeframe" in out.lower()
+    assert "IN_SCOPE_FACT" in out
     assert "LEAKED" not in out

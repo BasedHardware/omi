@@ -204,6 +204,7 @@ def _configure_compute_cleanup(monkeypatch, client):
 def _stub_new_external_cleanup_boundaries(monkeypatch):
     monkeypatch.setattr(account_deletion, 'delete_agent_vm_for_account', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_account_credentials', MagicMock())
+    monkeypatch.setattr(account_deletion, '_delete_memory_maintenance_registry', MagicMock())
 
 
 def test_agent_vm_account_cleanup_deletes_mid_migration_candidate_and_reused_state_disk(monkeypatch):
@@ -1164,6 +1165,11 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
         lambda uid: calls.append(('firestore', uid)) or {'status': 'ok'},
     )
     monkeypatch.setattr(
+        account_deletion,
+        '_delete_memory_maintenance_registry',
+        lambda uid: calls.append(('memory_registry', uid)),
+    )
+    monkeypatch.setattr(
         account_deletion.users_db, 'mark_user_deletion_wipe_completed', lambda uid: calls.append(('wipe_done', uid))
     )
 
@@ -1177,6 +1183,7 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
         ('twilio', 'uid1'),
         ('purge', 'uid1'),
         ('firestore', 'uid1'),
+        ('memory_registry', 'uid1'),
         ('wipe_done', 'uid1'),
     ]
 
@@ -1202,6 +1209,72 @@ def test_background_wipe_defers_completion_for_late_vm_cleanup(monkeypatch):
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock(return_value=False))
 
     assert account_deletion.background_wipe_user_data('uid1') is False
+
+
+def _stub_wipe_steps_after_billing(monkeypatch):
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_derived_user_data',
+        MagicMock(
+            return_value={
+                'required_failures': [],
+                'best_effort_failures': [],
+                'vectors_deleted': 0,
+                'recordings_deleted': 0,
+            }
+        ),
+    )
+    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock(return_value={'status': 'ok'}))
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock(return_value=True))
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_billing_failed', MagicMock())
+    monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
+
+
+def test_background_wipe_proceeds_when_subscription_is_already_canceled(monkeypatch):
+    """#11289: Stripe rejects cancel_at_period_end on a canceled subscription.
+
+    The billing step owns the goal state (not billing), so an already-canceled subscription
+    must satisfy it. Otherwise the wipe fails, the reconciler re-enqueues it every 5 minutes,
+    and the user's data is never deleted.
+    """
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'get_user_subscription',
+        MagicMock(return_value=SimpleNamespace(stripe_subscription_id='sub_123')),
+    )
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.stripe_utils, 'is_subscription_terminal', MagicMock(return_value=True))
+
+    assert account_deletion.background_wipe_user_data('uid1') is True
+
+    account_deletion.stripe_utils.is_subscription_terminal.assert_called_once_with('sub_123')
+    account_deletion.users_db.delete_user_data.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_billing_failed.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
+
+
+def test_background_wipe_still_fails_when_subscription_is_not_terminal(monkeypatch):
+    """A cancel that failed while the subscription can still bill stays a hard failure."""
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'get_user_subscription',
+        MagicMock(return_value=SimpleNamespace(stripe_subscription_id='sub_123')),
+    )
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.stripe_utils, 'is_subscription_terminal', MagicMock(return_value=False))
+
+    assert account_deletion.background_wipe_user_data('uid1') is False
+
+    account_deletion.users_db.delete_user_data.assert_not_called()
+    account_deletion.auth.delete_account.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_billing_failed.assert_called_once()
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
 
 
 def test_gce_project_uses_deployed_google_cloud_project(monkeypatch):
@@ -1255,7 +1328,9 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
         'get_conversation_ids',
         lambda uid: calls.append(('get_conversations', uid)) or next(conversation_calls),
     )
-    monkeypatch.setattr(account_deletion, 'get_memory_ids', lambda uid: calls.append(('get_memories', uid)) or ['m1'])
+    monkeypatch.setattr(
+        account_deletion, '_historical_memory_ids', lambda uid: calls.append(('get_memories', uid)) or ['m1']
+    )
     monkeypatch.setattr(
         account_deletion, 'get_action_item_ids', lambda uid: calls.append(('get_actions', uid)) or ['a1']
     )
@@ -1323,7 +1398,7 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
     monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(side_effect=Exception('read down')))
     monkeypatch.setattr(account_deletion, 'delete_conversation_vectors_batch', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_transcript_chunk_vectors_batch', MagicMock())
-    monkeypatch.setattr(account_deletion, 'get_memory_ids', MagicMock(return_value=['m1']))
+    monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=['m1']))
     monkeypatch.setattr(
         account_deletion, 'delete_memory_vectors_batch', MagicMock(side_effect=Exception('pinecone down'))
     )
@@ -1361,7 +1436,7 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
 def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monkeypatch):
     monkeypatch.setattr(account_deletion.vector_db, 'index', None)
     monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(return_value=['c1']))
-    monkeypatch.setattr(account_deletion, 'get_memory_ids', MagicMock(return_value=['m1']))
+    monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=['m1']))
     monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=['a1']))
     monkeypatch.setattr(account_deletion, 'get_screen_activity_ids', MagicMock(return_value=['s1']))
     monkeypatch.setattr(account_deletion, 'delete_conversation_vectors_batch', MagicMock())

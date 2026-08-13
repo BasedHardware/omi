@@ -1,11 +1,11 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1741,
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1606
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1792,
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1755
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Task candidate context now carries only backend action-item IDs, while local SQLite/staged evidence remains id-less so the model cannot target it for a backend mutation.",
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "A nonisolated UserNotifications callback bridge now performs an explicit MainActor hop so macOS callback queues cannot trap the public app at launch. Rewind capture policy adds per-app heartbeat and preview skip logic inline; also registers SuggestionAssistant (event-driven) with logic in Assistants/Suggestions/."
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Recent semantically equivalent screen captures elect one durable delivery leader and retry the complete owner-scoped outbox before new extraction, while prompt context prevents repeated observations from forking Suggested candidates.",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "Screen lock, sleep, wake, account-generation changes, capture leases, and context-visit interruption remain coordinated by the single plugin lifecycle authority."
   },
   "threshold": 1500
 }

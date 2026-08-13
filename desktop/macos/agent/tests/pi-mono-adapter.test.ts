@@ -948,6 +948,15 @@ describe("PiMonoAdapter restart lifecycle", () => {
     expect(onRestart).toHaveBeenCalledWith("systemPrompt");
     expect(spawn).toHaveBeenCalledTimes(2);
   });
+
+  it("runs disposal bookkeeping even when stop fails", async () => {
+    const onDisposed = vi.fn();
+    const adapter = new PiMonoAdapter({ authToken: "test-token", onDisposed });
+    vi.spyOn(adapter, "stop").mockRejectedValueOnce(new Error("stop failed"));
+
+    await expect(adapter.dispose()).rejects.toThrow("stop failed");
+    expect(onDisposed).toHaveBeenCalledOnce();
+  });
 });
 
 describe("PiMonoAdapter source-level invariants", () => {

@@ -495,6 +495,26 @@ final class FloatingBarGeometryTests: XCTestCase {
       ))
   }
 
+  /// Regression: with a conversation open but no expanded response (the "thinking" state), the
+  /// notch window's fixed 430×527 frame accepted clicks everywhere, parking an invisible dead zone
+  /// over the main window's Tasks/Rewind/Apps pills. Whole-window hits belong only to content that
+  /// visibly fills the window: an expanded response panel or a notification card.
+  func testAThinkingConversationDoesNotOwnTheWholeNotchWindow() {
+    XCTAssertFalse(
+      FloatingControlBarGeometry.notchWholeWindowHitsAllowed(
+        showingAIConversation: true, showingAIResponse: false, hasNotification: false),
+      "thinking without a response panel must keep the content-derived hit region")
+    XCTAssertFalse(
+      FloatingControlBarGeometry.notchWholeWindowHitsAllowed(
+        showingAIConversation: false, showingAIResponse: false, hasNotification: false))
+    XCTAssertTrue(
+      FloatingControlBarGeometry.notchWholeWindowHitsAllowed(
+        showingAIConversation: true, showingAIResponse: true, hasNotification: false))
+    XCTAssertTrue(
+      FloatingControlBarGeometry.notchWholeWindowHitsAllowed(
+        showingAIConversation: false, showingAIResponse: false, hasNotification: true))
+  }
+
   func testNotchChromeActivationIgnoresHorizontalGlowOutsets() {
     let windowFrame = NSRect(x: 500, y: 800, width: 360, height: 58)
 
@@ -512,5 +532,39 @@ final class FloatingBarGeometryTests: XCTestCase {
         chromeHeight: 17,
         horizontalOutset: 24
       ))
+  }
+
+  func testTransparentPanelIgnoresMouseOutsideItsVisibleHitRegion() {
+    let frame = NSRect(x: 500, y: 800, width: 360, height: 58)
+    let visibleLocalRegion = NSRect(x: 24, y: 24, width: 312, height: 34)
+
+    XCTAssertFalse(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 680, y: 790),
+        windowFrame: frame,
+        isVisible: true,
+        acceptsMouseHit: visibleLocalRegion.contains),
+      "an ordered-in panel stays ready to receive the tracking event when the pointer enters")
+    XCTAssertTrue(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 510, y: 810),
+        windowFrame: frame,
+        isVisible: true,
+        acceptsMouseHit: visibleLocalRegion.contains),
+      "transparent glow margin must pass through to the window underneath")
+    XCTAssertFalse(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 680, y: 840),
+        windowFrame: frame,
+        isVisible: true,
+        acceptsMouseHit: visibleLocalRegion.contains),
+      "visible notch chrome remains interactive")
+    XCTAssertTrue(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 680, y: 840),
+        windowFrame: frame,
+        isVisible: false,
+        acceptsMouseHit: { _ in true }),
+      "an ordered-out panel must never retain event ownership")
   }
 }
