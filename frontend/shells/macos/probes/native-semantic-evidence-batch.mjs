@@ -508,6 +508,7 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
       : null;
     let child = null;
     const readinessPath = path.join(outRoot, "runtime", coordinate.run_id, "semantic-readiness.json");
+    mkdirSync(path.dirname(readinessPath), { recursive: true });
     const readiness = {
       schema: "omi.native-semantic-readiness/v1",
       coordinate: coordinateKey(coordinate),
