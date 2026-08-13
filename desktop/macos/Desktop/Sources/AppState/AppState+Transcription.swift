@@ -767,18 +767,18 @@ extension AppState {
         recoveryAttempts: silentMicRecoveryAttempts)
       stopTranscription()
       // An unauthorized app receives exactly this symptom — endless zero samples — so
-      // the policy checks permission before blaming the hardware and sending the user
-      // to swap mics.
+      // the policy checks permission before blaming the hardware.
       switch MicrophoneCaptureAuthorizationPolicy.terminalAlert(
         for: AudioCaptureService.authorizationStatus())
       {
       case .permission:
         surfaceMicrophonePermissionAlert()
       case .hardware:
-        showAlert(
-          title: "Microphone Isn't Capturing Audio",
-          message:
-            "Omi stopped recording because your microphone returned no audio. Check your input device and try again.")
+        // Deliberately no modal. The "Microphone Isn't Capturing Audio" alert looped at
+        // the user every ~90s whenever a route stayed silent and became the single most
+        // hated dialog in the app (removed Aug 2026 at Nik's request). Recording already
+        // stopped above — the UI state change is the signal; telemetry keeps the counter.
+        log("Transcription: silent capture exhausted on an authorized mic — stopping without modal")
       }
     }
   }
