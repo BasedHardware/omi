@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
-"""Keep the Firestore persistence boundary sealed: database/ is the only door (WP1).
+"""Keep the Firestore persistence boundary sealed: database/ is the only door (WP1; ADR-0044).
 
 Outside ``backend/database/`` (and the documented exceptions below) no module may:
-  * import the client / SDK — ``database._client``, ``google.cloud.firestore*``,
-    ``firebase_admin.firestore`` (or ``from firebase_admin import firestore``); or
+  * construct a RAW SDK client — ``firestore.Client()`` / ``firestore.AsyncClient()`` /
+    ``firestore_v1.Client()`` / ``firebase_admin.firestore.client()``; or
+  * import ``database._client`` — the raw client builder (callers receive an injected ``db_client``
+    facade, ADR-0044, or go through ``database.store``); or
   * import ``database.sentinels`` — it re-exports Firestore SDK sentinels (``DELETE_FIELD``, …)
-    that do not translate on the Mongo adapter; neutral ``database.store.sentinels`` is the port; or
-  * run a raw persistence op — a ``.document(...)`` / ``.collection(...)`` /
-    ``.collection_group(...)`` / ``.transaction(...)`` method call.
+    that do not translate on the Mongo adapter; neutral ``database.store.sentinels`` is the port.
+
+ADR-0044: importing the Firestore SDK for constants/decorators/``FieldFilter`` (``from google.cloud
+import firestore``) and running ``.document()``/``.collection()``/``.transaction()`` on the injected
+``db_client`` facade ARE allowed — upstream threads that facade through the domain, and it is itself a
+database/ port. The only remaining leak is building your own SDK client, caught above.
 
 Blessed database/ ports (``database.document_store``, ``database.store`` and its
 ``database.store.sentinels``, ``database.firestore_errors``, ``database.document_ids`` and every
-other ``database.*`` module except the Firestore-specific ``database.sentinels``) are allowed
+other ``database.*`` module except ``database._client`` / ``database.sentinels``) are allowed
 everywhere — that is how callers reach persistence now.
 
-Ratchets against a baseline (WP1 target: empty). Companion of ADR-0001/0002/0004: this is the
+Ratchets against a baseline (WP1 target: empty). Companion of ADR-0001/0002/0004/0044: this is the
 seal that makes the storage layer swappable (Firestore | Mongo | ArcadeDB) in WP2.
 """
 
@@ -38,40 +43,62 @@ DEFAULT_BASELINE = Path('.github/scripts/firestore_persistence_boundary_baseline
 # directly must fail this boundary too (the upstream migrations are on the neutral port; verified 0).
 EXCLUDED_PREFIXES = ('database/', 'tests/', 'testing/', 'scripts/', 'agent-proxy/')
 
-_FORBIDDEN_OP_METHODS = frozenset({'document', 'collection', 'collection_group', 'transaction'})
-
 
 def _is_forbidden_import_module(module: str | None) -> bool:
     if not module:
         return False
     return (
-        module == 'database._client'
-        or module.startswith('database._client.')
-        or module == 'google.cloud.firestore'
-        or module.startswith('google.cloud.firestore')
-        or module == 'firebase_admin.firestore'
-        or module.startswith('firebase_admin.firestore')
         # ``database.sentinels`` re-exports Firestore SDK sentinels (DELETE_FIELD, ArrayUnion, …).
         # Domain code writing through the neutral store must use ``database.store.sentinels`` instead —
         # a Firestore sentinel does not translate on the Mongo adapter (it is stored as a literal).
-        or module == 'database.sentinels'
+        module == 'database.sentinels'
         or module.startswith('database.sentinels.')
     )
+    # NOTE (ADR-0044): ``from database._client import db / get_firestore_client`` is allowed — ``db``
+    # is the neutral facade proxy (Mongo) / the real SDK client (Firestore backend), i.e. the
+    # sanctioned way to obtain a ``db_client``. The raw leak — building an SDK client directly — is
+    # caught by ``_is_client_construction``.
+    # NOTE (ADR-0044): importing the Firestore SDK itself is NO LONGER forbidden. Upstream threads a
+    # ``db_client`` (the neutral facade on Mongo) and passes Firestore constants/decorators
+    # (``firestore.Query.DESCENDING``, ``SERVER_TIMESTAMP``, ``FieldFilter``, ``transactional``) into
+    # it; the facade translates them. The leak that still matters — constructing a RAW client — is
+    # caught by ``_is_client_construction`` below, not by banning the import.
 
 
 def _is_forbidden_firestore_member(name: str) -> bool:
-    # A ``from google.cloud import <name>`` / ``from firebase_admin import <name>`` member that reaches
-    # the Firestore SDK: ``firestore`` and the versioned client packages ``firestore_v1``,
-    # ``firestore_admin_v1``, … (``from google.cloud import firestore_v1`` bypasses the plain-import seal).
-    return name == 'firestore' or name.startswith('firestore_') or name.startswith('firestore.')
+    # ADR-0044: ``from google.cloud import firestore`` (and the versioned packages) is allowed —
+    # domain code uses the SDK only for constants/decorators/FieldFilter passed to the injected
+    # ``db_client`` facade. Constructing a raw client is what stays forbidden (see below).
+    del name
+    return False
+
+
+# firestore.Client() / firestore.AsyncClient() / firestore_v1.Client() / firebase_admin.firestore.client()
+_CLIENT_CTOR_ATTRS = frozenset({'Client', 'AsyncClient'})
+
+
+def _is_client_construction(node: ast.Call) -> bool:
+    """A raw Firestore/Firebase client construction — the one persistence leak still forbidden outside
+    ``database/`` (ADR-0044). Domain code must receive an injected ``db_client`` (the neutral facade),
+    never build its own SDK client."""
+    func = node.func
+    if not isinstance(func, ast.Attribute):
+        return False
+    receiver = func.value
+    base = receiver.id if isinstance(receiver, ast.Name) else (receiver.attr if isinstance(receiver, ast.Attribute) else '')
+    if func.attr in _CLIENT_CTOR_ATTRS:  # firestore.Client(...) / firestore_v1.AsyncClient(...)
+        return base == 'firestore' or base.startswith('firestore_')
+    if func.attr == 'client':  # firebase_admin.firestore.client(...)
+        return base == 'firestore'
+    return False
 
 
 def _is_forbidden_database_member(name: str) -> bool:
-    # ``from database import _client`` (parent-package form) reaches the raw client, and
     # ``from database import sentinels`` reaches the Firestore SDK sentinels (use
-    # ``database.store.sentinels`` instead). The remaining blessed ``database.*`` ports
-    # (document_store, firestore_errors, document_ids, store, …) stay allowed.
-    return name == '_client' or name.startswith('_client.') or name == 'sentinels' or name.startswith('sentinels.')
+    # ``database.store.sentinels`` instead). ``from database import _client`` is allowed (ADR-0044:
+    # it yields the facade accessors ``db`` / ``get_firestore_client``). The remaining blessed
+    # ``database.*`` ports (document_store, firestore_errors, document_ids, store, …) stay allowed.
+    return name == 'sentinels' or name.startswith('sentinels.')
 
 
 def _forbidden_dynamic_import(node: ast.Call) -> bool:
@@ -122,7 +149,10 @@ class _BoundaryVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
-        if isinstance(node.func, ast.Attribute) and node.func.attr in _FORBIDDEN_OP_METHODS:
+        # ADR-0044: ``.document()/.collection()/.transaction()`` are no longer flagged — they run on
+        # the injected ``db_client`` facade (a database/ port). The forbidden leak is constructing a
+        # raw SDK client, or dynamically importing the raw client module.
+        if _is_client_construction(node):
             self.count += 1
         elif _forbidden_dynamic_import(node):
             self.count += 1

@@ -16,39 +16,42 @@ _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
 
 
-def test_flags_forbidden_client_and_sdk_imports():
+def test_allows_facade_accessor_and_sdk_imports():
+    # ADR-0044: obtaining the facade (``from database._client import db``) and importing the Firestore
+    # SDK for constants/decorators/FieldFilter are BOTH allowed — ``db`` is the neutral facade proxy
+    # and the SDK values are consumed by it. None of these is a raw-client construction.
     source = '''
 import database._client
-from database._client import db, run_transactional
+from database._client import db, run_transactional, get_firestore_client
+from database import _client
 from google.cloud import firestore
-from google.cloud.firestore_v1 import Increment
+from google.cloud.firestore_v1 import Increment, transactional
 import google.cloud.firestore
 from firebase_admin import firestore as fb_firestore
 '''
-    # 6 forbidden import statements above.
-    assert _MODULE.count_boundary_violations(source) == 6
+    assert _MODULE.count_boundary_violations(source) == 0
 
 
-def test_flags_parent_package_client_and_sdk_imports():
-    # Regression: parent-package import forms bypassed the seal — ``from google.cloud import
-    # firestore_v1`` (versioned client, not the literal ``firestore`` member) and ``from database
-    # import _client`` (raw client via its parent package).
-    source = '''
-from google.cloud import firestore_v1
-from database import _client
-'''
-    assert _MODULE.count_boundary_violations(source) == 2
-
-
-def test_flags_raw_ops_regardless_of_receiver():
-    source = '''
+def test_allows_facade_ops_and_flags_raw_client_construction():
+    # ADR-0044: ``.document()/.collection()/.transaction()`` on the injected facade are allowed; what
+    # stays forbidden is constructing a RAW SDK client (the only way to bypass the facade).
+    allowed = '''
 snapshot = db_client.document(path).get()
 rows = client.collection(name).stream()
 hit = db.collection_group("events").where("k", "==", v)
 txn = self._db_client.transaction()
+order = firestore.Query.DESCENDING
+stamp = firestore.SERVER_TIMESTAMP
 '''
-    # 4 raw persistence-op method calls.
-    assert _MODULE.count_boundary_violations(source) == 4
+    assert _MODULE.count_boundary_violations(allowed) == 0
+
+    forbidden = '''
+a = firestore.Client()
+b = firestore.AsyncClient()
+c = firestore_v1.Client(project="p")
+d = firebase_admin.firestore.client()
+'''
+    assert _MODULE.count_boundary_violations(forbidden) == 4
 
 
 def test_flags_firestore_sentinels_import():
@@ -81,7 +84,8 @@ def test_collect_counts_excludes_boundary_and_allowlisted_dirs(tmp_path):
     backend = tmp_path / 'backend'
     for rel in ('database', 'tests', 'testing', 'scripts', 'agent-proxy', 'routers'):
         (backend / rel).mkdir(parents=True)
-    leak = 'from database._client import db\nx = db.document("p").get()\n'
+    # A raw SDK client construction is the forbidden leak (ADR-0044); facade use around it is fine.
+    leak = 'from google.cloud import firestore\ndb = firestore.Client()\nx = db.document("p").get()\n'
     (backend / 'database' / 'users.py').write_text(leak)          # boundary: allowed
     (backend / 'tests' / 'test_x.py').write_text(leak)            # tests: allowed
     (backend / 'testing' / 'harness.py').write_text(leak)         # testing: allowed
@@ -90,7 +94,7 @@ def test_collect_counts_excludes_boundary_and_allowlisted_dirs(tmp_path):
     (backend / 'routers' / 'leaky.py').write_text(leak)           # runtime router: FLAGGED
 
     counts = _MODULE.collect_counts(tmp_path, Path('backend'))
-    assert counts == {'backend/routers/leaky.py': 2}
+    assert counts == {'backend/routers/leaky.py': 1}
 
 
 def test_reports_only_count_increases_over_baseline():
