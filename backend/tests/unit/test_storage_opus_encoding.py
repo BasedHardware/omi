@@ -16,16 +16,37 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from utils.other import storage as storage_mod
+from tests.object_store_fakes import FakeObjectStore
 
 requires_native_opus = pytest.mark.skipif(storage_mod.opuslib is None, reason="native libopus is not installed")
 
 
+class _RecordingObjectStore(FakeObjectStore):
+    """FakeObjectStore that records delete/get_bytes keys, so tests can assert which extensions the
+    delete/download fallback tried (was the GCS ``mock_bucket.blob.call_args_list`` inspection)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.deleted: list[str] = []
+        self.fetched: list[str] = []
+
+    def delete(self, bucket, key):
+        self.deleted.append(key)
+        return super().delete(bucket, key)
+
+    def get_bytes(self, bucket, key):
+        self.fetched.append(key)
+        return super().get_bytes(bucket, key)
+
+
 @pytest.fixture(autouse=True)
-def _mock_storage_client(monkeypatch):
-    """storage binds ``storage_client = storage.Client(...)`` at import time; patch the
-    module attribute with a fresh MagicMock per test so bucket/blob setup works and is
-    restored at teardown (sanctioned monkeypatch seam, no sys.modules mutation)."""
-    monkeypatch.setattr(storage_mod, "storage_client", MagicMock())
+def _object_store(monkeypatch):
+    """storage.py reads/writes through the neutral object-store port (_object_store()), not a raw
+    GCS storage_client. Inject a fresh in-memory recording FakeObjectStore per test so upload/list/
+    delete/download run against it; tests seed and assert on it via ``storage_mod._object_store()``."""
+    store = _RecordingObjectStore()
+    monkeypatch.setattr(storage_mod, "_object_store", lambda: store)
+    return store
 
 
 @requires_native_opus
@@ -150,18 +171,9 @@ class TestExtensionHelpers:
 class TestUploadOpusEncoding:
     """Tests for upload_audio_chunk with always-on Opus encoding."""
 
-    def _setup_mock_bucket(self):
-        mock_bucket = MagicMock()
-        mock_blob = MagicMock()
-        mock_bucket.blob.return_value = mock_blob
-        storage_mod.storage_client.bucket.return_value = mock_bucket
-        return mock_bucket, mock_blob
-
     @patch.object(storage_mod, 'users_db')
     def test_opus_standard_extension(self, mock_users_db):
         """Standard upload uses .opus extension."""
-        _, mock_blob = self._setup_mock_bucket()
-
         path = storage_mod.upload_audio_chunk(
             chunk_data=b'\x00' * 640,
             uid='test-uid',
@@ -177,7 +189,6 @@ class TestUploadOpusEncoding:
     @patch.object(storage_mod, 'users_db')
     def test_opus_enhanced_extension(self, mock_users_db, mock_encryption):
         """Enhanced upload uses .opus.enc extension."""
-        _, mock_blob = self._setup_mock_bucket()
         mock_encryption.encrypt_audio_chunk.return_value = b'\x01' * 50
 
         path = storage_mod.upload_audio_chunk(
@@ -194,7 +205,6 @@ class TestUploadOpusEncoding:
     @patch.object(storage_mod, 'users_db')
     def test_opus_data_passed_to_encryption(self, mock_users_db, mock_encryption):
         """Encrypted upload passes Opus data (not raw PCM) to encryption."""
-        _, mock_blob = self._setup_mock_bucket()
         mock_encryption.encrypt_audio_chunk.return_value = b'\x01' * 50
 
         pcm_data = b'\x00' * 160000
@@ -214,22 +224,16 @@ class TestUploadOpusEncoding:
 class TestListAudioChunksExtensions:
     """Tests for list_audio_chunks with all extension types."""
 
-    def _make_mock_blob(self, name, size=1000):
-        blob = MagicMock()
-        blob.name = name
-        blob.size = size
-        return blob
+    def _seed(self, name, size=1000):
+        # list_audio_chunks reads _object_store().list(bucket, prefix); seed keys into the fake store.
+        storage_mod._object_store().put(storage_mod.private_cloud_sync_bucket, name, b'\x00' * size)
 
     def test_lists_all_extension_types(self):
         """list_audio_chunks recognizes .bin, .enc, .opus, .opus.enc."""
-        mock_bucket = MagicMock()
-        mock_bucket.list_blobs.return_value = [
-            self._make_mock_blob('chunks/uid/conv/1000.000.bin', 160000),
-            self._make_mock_blob('chunks/uid/conv/1005.000.enc', 160100),
-            self._make_mock_blob('chunks/uid/conv/1010.000.opus', 8000),
-            self._make_mock_blob('chunks/uid/conv/1015.000.opus.enc', 8100),
-        ]
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('chunks/uid/conv/1000.000.bin', 160000)
+        self._seed('chunks/uid/conv/1005.000.enc', 160100)
+        self._seed('chunks/uid/conv/1010.000.opus', 8000)
+        self._seed('chunks/uid/conv/1015.000.opus.enc', 8100)
 
         chunks = storage_mod.list_audio_chunks('uid', 'conv')
 
@@ -241,11 +245,7 @@ class TestListAudioChunksExtensions:
 
     def test_opus_enc_timestamp_parsing(self):
         """Double extension .opus.enc correctly extracts timestamp."""
-        mock_bucket = MagicMock()
-        mock_bucket.list_blobs.return_value = [
-            self._make_mock_blob('chunks/uid/conv/1234567890.123.opus.enc', 8000),
-        ]
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('chunks/uid/conv/1234567890.123.opus.enc', 8000)
 
         chunks = storage_mod.list_audio_chunks('uid', 'conv')
 
@@ -254,12 +254,8 @@ class TestListAudioChunksExtensions:
 
     def test_ignores_unknown_extensions(self):
         """Unknown extensions are skipped."""
-        mock_bucket = MagicMock()
-        mock_bucket.list_blobs.return_value = [
-            self._make_mock_blob('chunks/uid/conv/1000.000.bin', 160000),
-            self._make_mock_blob('chunks/uid/conv/1005.000.txt', 500),
-        ]
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('chunks/uid/conv/1000.000.bin', 160000)
+        self._seed('chunks/uid/conv/1005.000.txt', 500)
 
         chunks = storage_mod.list_audio_chunks('uid', 'conv')
 
@@ -270,113 +266,65 @@ class TestDeleteAudioChunksExtensions:
     """Tests for delete_audio_chunks with all extension types."""
 
     def test_tries_all_extensions(self):
-        """delete_audio_chunks tries .enc, .bin, .opus.enc, .opus."""
-        mock_bucket = MagicMock()
-        mock_blob = MagicMock()
-        mock_blob.exists.return_value = False
-        mock_bucket.blob.return_value = mock_blob
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        """delete_audio_chunks deletes every single-chunk extension present (.enc, .bin, .opus.enc, .opus)."""
+        store = storage_mod._object_store()
+        bucket = storage_mod.private_cloud_sync_bucket
+        for ext in ('.enc', '.bin', '.opus.enc', '.opus'):
+            store.put(bucket, f'chunks/uid/conv/1000.000{ext}', b'\x00' * 100)
 
         storage_mod.delete_audio_chunks('uid', 'conv', [1000.0])
 
-        # Should have tried all 4 extensions
-        paths_tried = [call[0][0] for call in mock_bucket.blob.call_args_list]
+        # every seeded extension was deleted (recorded delete keys, was mock_bucket.blob.call_args_list)
+        paths_tried = store.deleted
         assert any('.enc' in p and '.opus' not in p for p in paths_tried)
         assert any('.bin' in p for p in paths_tried)
         assert any('.opus.enc' in p for p in paths_tried)
         assert any('.opus' in p and '.enc' not in p for p in paths_tried)
 
 
-class _FakeNotFound(Exception):
-    """Fake NotFound exception for testing (storage_mod.NotFound is mocked)."""
-
-    pass
-
-
 class TestDownloadFallbackPath:
     """Tests for download_audio_chunks_and_merge fallback behavior."""
 
-    def _blob_factory(self, ext_data_map):
-        """Return a blob factory. ext_data_map: dict of ext -> bytes.
-        Missing extensions raise _FakeNotFound."""
+    def _seed(self, ext, data):
+        # download reads _object_store().get_bytes(bucket, path); an absent ext raises ObjectNotFound.
+        storage_mod._object_store().put(
+            storage_mod.private_cloud_sync_bucket, f'chunks/uid/conv/1000.000.{ext}', data
+        )
 
-        def factory(path):
-            mock_blob = MagicMock()
-            for ext, data in ext_data_map.items():
-                if path.endswith(f'.{ext}'):
-                    mock_blob.download_as_bytes.return_value = data
-                    return mock_blob
-            mock_blob.download_as_bytes.side_effect = _FakeNotFound('not found')
-            return mock_blob
-
-        return factory
-
-    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     @patch.object(storage_mod, 'encryption')
     def test_fallback_opus_corrupt_to_legacy_bin(self, mock_encryption):
         """When .opus.enc exists but decrypt fails, falls back to .bin."""
-        mock_bucket = MagicMock()
         pcm_data = b'\x00' * 640
-
-        mock_bucket.blob.side_effect = self._blob_factory(
-            {
-                'opus.enc': b'corrupt-opus-data',
-                'bin': pcm_data,
-            }
-        )
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('opus.enc', b'corrupt-opus-data')
+        self._seed('bin', pcm_data)
         mock_encryption.decrypt_audio_file.side_effect = Exception("decrypt failed")
 
         result = storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0], fill_gaps=False)
         assert result == pcm_data
 
-    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     def test_fallback_all_not_found_raises(self):
         """When no extension exists for a timestamp, raises FileNotFoundError."""
-        mock_bucket = MagicMock()
-        mock_bucket.blob.side_effect = self._blob_factory({})  # nothing available
-        storage_mod.storage_client.bucket.return_value = mock_bucket
-
+        # nothing seeded -> every get_bytes raises ObjectNotFound
         with pytest.raises(FileNotFoundError):
             storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0], fill_gaps=False)
 
     @requires_native_opus
-    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     def test_opus_decode_success_no_fallback(self):
         """When .opus chunk is valid, uses it without trying .bin."""
-        mock_bucket = MagicMock()
         pcm_data = b'\x00' * 640
-        opus_data = storage_mod.encode_pcm_to_opus(pcm_data)
-
-        call_log = []
-        original_factory = self._blob_factory({'opus': opus_data})
-
-        def tracking_factory(path):
-            call_log.append(path)
-            return original_factory(path)
-
-        mock_bucket.blob.side_effect = tracking_factory
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('opus', storage_mod.encode_pcm_to_opus(pcm_data))
 
         result = storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0], fill_gaps=False)
         assert len(result) == len(pcm_data)
-        # Should NOT have tried .bin after .opus succeeded
-        assert not any(p.endswith('.bin') for p in call_log)
+        # Should NOT have fetched .bin after .opus succeeded (recorded get_bytes keys)
+        assert not any(p.endswith('.bin') for p in storage_mod._object_store().fetched)
 
-    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     def test_fallback_opus_decode_error_to_bin(self):
         """When .opus data is malformed (decode raises), falls back to .bin."""
-        mock_bucket = MagicMock()
         pcm_data = b'\x00' * 640
         bad_opus = b'\x01\x00\x00\x00\x80\x02\x00\x00\xff\xff'  # 1 pkt, pcm_len=640, bad pkt_len
-
-        mock_bucket.blob.side_effect = self._blob_factory(
-            {
-                'opus': bad_opus,
-                'bin': pcm_data,
-            }
-        )
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('opus', bad_opus)
+        self._seed('bin', pcm_data)
 
         result = storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0], fill_gaps=False)
         assert result == pcm_data
@@ -417,19 +365,12 @@ class TestBatchExtensionHelpers:
 class TestListAudioChunksBatch:
     """Tests for list_audio_chunks with batch blobs."""
 
-    def _make_mock_blob(self, name, size=1000):
-        blob = MagicMock()
-        blob.name = name
-        blob.size = size
-        return blob
+    def _seed(self, name, size=1000):
+        storage_mod._object_store().put(storage_mod.private_cloud_sync_bucket, name, b'\x00' * size)
 
     def test_lists_batch_bin_blobs(self):
         """list_audio_chunks recognizes .batch.bin with range timestamp."""
-        mock_bucket = MagicMock()
-        mock_bucket.list_blobs.return_value = [
-            self._make_mock_blob('chunks/uid/conv/1000.000-1010.000.batch.bin', 480000),
-        ]
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('chunks/uid/conv/1000.000-1010.000.batch.bin', 480000)
 
         chunks = storage_mod.list_audio_chunks('uid', 'conv')
 
@@ -440,11 +381,7 @@ class TestListAudioChunksBatch:
 
     def test_lists_batch_enc_blobs(self):
         """list_audio_chunks recognizes .batch.enc with range timestamp."""
-        mock_bucket = MagicMock()
-        mock_bucket.list_blobs.return_value = [
-            self._make_mock_blob('chunks/uid/conv/1000.000-1010.000.batch.enc', 500000),
-        ]
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('chunks/uid/conv/1000.000-1010.000.batch.enc', 500000)
 
         chunks = storage_mod.list_audio_chunks('uid', 'conv')
 
@@ -454,11 +391,7 @@ class TestListAudioChunksBatch:
 
     def test_single_timestamp_batch(self):
         """Batch blob with single timestamp (short conversation)."""
-        mock_bucket = MagicMock()
-        mock_bucket.list_blobs.return_value = [
-            self._make_mock_blob('chunks/uid/conv/1000.000.batch.bin', 160000),
-        ]
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('chunks/uid/conv/1000.000.batch.bin', 160000)
 
         chunks = storage_mod.list_audio_chunks('uid', 'conv')
 
@@ -468,13 +401,9 @@ class TestListAudioChunksBatch:
 
     def test_mixed_single_and_batch_blobs(self):
         """Conversation with both single-chunk and batch blobs (migration period)."""
-        mock_bucket = MagicMock()
-        mock_bucket.list_blobs.return_value = [
-            self._make_mock_blob('chunks/uid/conv/1000.000.opus', 8000),
-            self._make_mock_blob('chunks/uid/conv/1005.000.opus', 8000),
-            self._make_mock_blob('chunks/uid/conv/1010.000-1025.000.batch.bin', 480000),
-        ]
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('chunks/uid/conv/1000.000.opus', 8000)
+        self._seed('chunks/uid/conv/1005.000.opus', 8000)
+        self._seed('chunks/uid/conv/1010.000-1025.000.batch.bin', 480000)
 
         chunks = storage_mod.list_audio_chunks('uid', 'conv')
 
@@ -486,11 +415,7 @@ class TestListAudioChunksBatch:
 
     def test_is_batch_false_for_single_blobs(self):
         """Single-chunk blobs have is_batch=False."""
-        mock_bucket = MagicMock()
-        mock_bucket.list_blobs.return_value = [
-            self._make_mock_blob('chunks/uid/conv/1000.000.opus.enc', 8000),
-        ]
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('chunks/uid/conv/1000.000.opus.enc', 8000)
 
         chunks = storage_mod.list_audio_chunks('uid', 'conv')
 
@@ -501,112 +426,56 @@ class TestListAudioChunksBatch:
 class TestDeleteAudioChunksBatch:
     """Tests for delete_audio_chunks with batch blobs."""
 
+    def _seed(self, name, size=1000):
+        storage_mod._object_store().put(storage_mod.private_cloud_sync_bucket, name, b'\x00' * size)
+
     def test_deletes_single_timestamp_batch(self):
         """Finds and deletes batch blob with single timestamp."""
-        mock_bucket = MagicMock()
-        blob_map = {}
-
-        def blob_factory(path):
-            if path not in blob_map:
-                b = MagicMock()
-                b.name = path
-                b.exists.return_value = path.endswith('.batch.bin')
-                blob_map[path] = b
-            return blob_map[path]
-
-        mock_bucket.blob.side_effect = blob_factory
-        mock_bucket.list_blobs.return_value = []
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        store = storage_mod._object_store()
+        batch_path = 'chunks/uid/conv/1000.000.batch.bin'
+        self._seed(batch_path, 160000)
 
         storage_mod.delete_audio_chunks('uid', 'conv', [1000.0])
 
-        batch_path = 'chunks/uid/conv/1000.000.batch.bin'
-        assert batch_path in blob_map
-        blob_map[batch_path].delete.assert_called_once()
+        assert batch_path in store.deleted
+        assert not store.exists(storage_mod.private_cloud_sync_bucket, batch_path)
 
     def test_deletes_range_named_batch_via_scan(self):
         """Finds and deletes range-named batch blob by scanning."""
-        mock_bucket = MagicMock()
-
-        single_blob = MagicMock()
-        single_blob.exists.return_value = False
-        mock_bucket.blob.return_value = single_blob
-
-        batch_blob = MagicMock()
-        batch_blob.name = 'chunks/uid/conv/1000.000-1010.000.batch.bin'
-        mock_bucket.list_blobs.return_value = [batch_blob]
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        store = storage_mod._object_store()
+        batch_path = 'chunks/uid/conv/1000.000-1010.000.batch.bin'
+        self._seed(batch_path, 480000)
 
         storage_mod.delete_audio_chunks('uid', 'conv', [1000.0, 1005.0, 1010.0])
 
-        batch_blob.delete.assert_called_once()
+        assert not store.exists(storage_mod.private_cloud_sync_bucket, batch_path)
 
 
 class TestDownloadBatchBlobs:
     """Tests for download_audio_chunks_and_merge with batch blobs."""
 
-    def _make_mock_blob(self, name, size=1000):
-        blob = MagicMock()
-        blob.name = name
-        blob.size = size
-        return blob
+    def _seed(self, name, data):
+        storage_mod._object_store().put(storage_mod.private_cloud_sync_bucket, name, data)
 
-    @patch.object(storage_mod, 'NotFound', type('FakeNotFound', (Exception,), {}))
     def test_downloads_batch_blob_once(self):
         """Batch blob covering multiple timestamps is downloaded once."""
-        mock_bucket = MagicMock()
+        store = storage_mod._object_store()
         pcm_data = b'\x00' * 480000
-
-        batch_blob_listed = self._make_mock_blob('chunks/uid/conv/1000.000-1010.000.batch.bin', 480000)
-        mock_bucket.list_blobs.return_value = [batch_blob_listed]
-
-        download_calls = []
-
-        def blob_factory(path):
-            b = MagicMock()
-            download_calls.append(path)
-            if path == 'chunks/uid/conv/1000.000-1010.000.batch.bin':
-                b.download_as_bytes.return_value = pcm_data
-            else:
-                b.download_as_bytes.side_effect = storage_mod.NotFound('not found')
-            return b
-
-        mock_bucket.blob.side_effect = blob_factory
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('chunks/uid/conv/1000.000-1010.000.batch.bin', pcm_data)
 
         result = storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0, 1005.0, 1010.0], fill_gaps=False)
 
         assert result == pcm_data
-        batch_downloads = [p for p in download_calls if 'batch' in p]
+        batch_downloads = [p for p in store.fetched if 'batch' in p]
         assert len(batch_downloads) == 1
 
-    @patch.object(storage_mod, 'NotFound', type('FakeNotFound', (Exception,), {}))
     @requires_native_opus
     def test_mixed_single_and_batch_download(self):
         """Mix of single-chunk and batch blobs downloads correctly."""
-        mock_bucket = MagicMock()
         single_pcm = b'\x01' * 160000
         batch_pcm = b'\x02' * 320000
-
-        mock_bucket.list_blobs.return_value = [
-            self._make_mock_blob('chunks/uid/conv/1000.000.opus', 8000),
-            self._make_mock_blob('chunks/uid/conv/1005.000-1015.000.batch.bin', 320000),
-        ]
-
-        opus_encoded_single = storage_mod.encode_pcm_to_opus(single_pcm)
-
-        def blob_factory(path):
-            b = MagicMock()
-            if path == 'chunks/uid/conv/1005.000-1015.000.batch.bin':
-                b.download_as_bytes.return_value = batch_pcm
-            elif path.endswith('.opus') and '1000.000' in path:
-                b.download_as_bytes.return_value = opus_encoded_single
-            else:
-                b.download_as_bytes.side_effect = storage_mod.NotFound('not found')
-            return b
-
-        mock_bucket.blob.side_effect = blob_factory
-        storage_mod.storage_client.bucket.return_value = mock_bucket
+        self._seed('chunks/uid/conv/1000.000.opus', storage_mod.encode_pcm_to_opus(single_pcm))
+        self._seed('chunks/uid/conv/1005.000-1015.000.batch.bin', batch_pcm)
 
         result = storage_mod.download_audio_chunks_and_merge(
             'uid', 'conv', [1000.0, 1005.0, 1010.0, 1015.0], fill_gaps=False
