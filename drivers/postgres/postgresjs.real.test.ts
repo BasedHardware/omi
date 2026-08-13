@@ -77,6 +77,8 @@ import {
   defineMemoryStrategyAssignmentPolicy,
   registerMemoryStrategy,
 } from "../../core/consolidate/strategy-assignment";
+import type { AttributionCalibrationRequest } from
+  "../../core/consolidate/attribution-calibration";
 import {
   DURABLE_MEMORY_WORK_VERSION,
   acceptDurableMemoryWork,
@@ -154,10 +156,14 @@ import { materializeListenFormationSnapshot } from
   "../../apps/service/listen/formation-ingestion";
 import { defineListenAttributionBeliefInputStager } from
   "../../apps/service/listen/attribution-belief-input-source";
+import { ATTRIBUTION_BELIEF_SHADOW_RESULT_VERSION } from
+  "../../apps/service/workers/attribution-belief-shadow-producer";
 import {
   createPostgresAcceptedFormationBeliefSource,
   createPostgresListenAttributionBeliefInputRepository,
 } from "./listen-attribution-belief-input";
+import { createPostgresListenAttributionBeliefOneShotRuntime } from
+  "./listen-attribution-belief-one-shot-runtime";
 import {
   createPostgresMemoryQueryEvaluationGraphSource,
   createPostgresMemoryQueryEvaluationInputRepository,
@@ -1050,6 +1056,95 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       [accountId, beliefSnapshot.work_id]);
       expect([...beliefRows]).toEqual([{ count: 2, contains_text: false }]);
 
+      const beliefStrategy = (role: "baseline" | "candidate") => registerMemoryStrategy({
+        version: MEMORY_STRATEGY_VERSION,
+        strategy_id: `strategy:listen-belief:${role}:${suffix}`,
+        work_kind: "identity_cluster",
+        coordinates: {
+          strategy_version: `listen-belief:${role}:v1`,
+          model_version: "injected-calibrator:qualification:v1",
+          prompt_version: `listen-belief:${role}:prompt:v1`,
+          policy_version: "listen-belief:shadow-policy:v1",
+          code_version: "listen-belief:shadow-code:v1",
+          schema_version: "listen-belief:shadow-schema:v1",
+          tokenizer_version: "none", tool_version: "none",
+          result_contract_version: ATTRIBUTION_BELIEF_SHADOW_RESULT_VERSION,
+          speaker_strategy_version: "none", boundary_strategy_version: "none",
+        },
+      });
+      const beliefStrategies = [beliefStrategy("baseline"), beliefStrategy("candidate")];
+      const beliefPolicy = defineMemoryStrategyAssignmentPolicy({
+        policy_id: `policy:listen-belief:${suffix}`,
+        work_kind: "identity_cluster", unit_kind: "session",
+        key_version: "listen-belief-assignment-key:v1",
+        authority_strategy_id: beliefStrategies[0]!.strategy_id,
+        shadow_candidates: [{
+          strategy_id: beliefStrategies[1]!.strategy_id, basis_points: 10_000,
+        }],
+      }, beliefStrategies);
+      const beliefInput = beliefStage.set.inputs[0]!;
+      const beliefAssignment = createMemoryStrategyAssigner(new Uint8Array(32).fill(37)).assign({
+        owner_account_id: accountId, unit_ref: beliefInput.input_ref,
+        policy: beliefPolicy, strategies: beliefStrategies,
+      });
+      let calibratorCalls = 0;
+      const beliefRuntime = createPostgresListenAttributionBeliefOneShotRuntime({
+        pool: appRolePool,
+        resolve_calibrator: async (_strategy, evaluationRole) => ({
+          calibrate: async (calibrationRequest: AttributionCalibrationRequest) => {
+            calibratorCalls += 1;
+            const preferred = calibrationRequest.hypotheses.length === 1 ? 1_000_000
+              : evaluationRole === "baseline" ? 600_000 : 750_000;
+            const remaining = 1_000_000 - preferred;
+            const otherCount = calibrationRequest.hypotheses.length - 1;
+            let allocated = 0;
+            return {
+              probabilities: calibrationRequest.hypotheses.map((hypothesis, index) => {
+                const probability = index === 0 ? preferred
+                  : index === calibrationRequest.hypotheses.length - 1
+                    ? remaining - allocated
+                    : Math.floor(remaining / otherCount);
+                if (index > 0) allocated += probability;
+                return { hypothesis_id: hypothesis.hypothesis_id, probability_micros: probability };
+              }),
+            };
+          },
+        }),
+      });
+      const beliefReplayRequest = {
+        input_ref: beliefInput.input_ref,
+        input_frontier: beliefInput.input.graph_frontier,
+        assignment_bundle: beliefAssignment,
+        evaluation_run_id: `mer1_${sha256CanonicalContent({
+          qualification: "listen-belief-one-shot", suffix,
+        })}`,
+        repeats: 2,
+      };
+      const beliefEvaluation = await beliefRuntime.run(shadowContext, beliefReplayRequest);
+      expect(beliefEvaluation).toMatchObject({
+        kind: "completed", model_calls: 4, reused_results: 0,
+      });
+      if (beliefEvaluation.kind !== "completed") throw new Error("listen_belief_evaluation_stopped");
+      expect(beliefEvaluation.pairs).toHaveLength(2);
+      expect(calibratorCalls).toBe(4);
+      const beliefEvaluationReplay = await beliefRuntime.run(shadowContext, beliefReplayRequest);
+      expect(beliefEvaluationReplay).toMatchObject({
+        kind: "completed", model_calls: 0, reused_results: 4,
+      });
+      expect(calibratorCalls).toBe(4);
+      expect(JSON.stringify(beliefEvaluationReplay)).not.toContain("quiet workspace");
+      const beliefEvaluationRows = await ownerSql.unsafe<{
+        baselines: number; candidates: number; pairs: number;
+      }[]>(`SELECT
+        (SELECT count(*)::int FROM omi_memory.memory_strategy_evaluation_baselines
+          WHERE account_id = $1 AND evaluation_run_id = $2) AS baselines,
+        (SELECT count(*)::int FROM omi_memory.memory_strategy_shadow_results
+          WHERE account_id = $1 AND evaluation_run_id = $2) AS candidates,
+        (SELECT count(*)::int FROM omi_memory.memory_strategy_evaluation_pairs
+          WHERE account_id = $1 AND evaluation_run_id = $2) AS pairs`,
+      [accountId, beliefReplayRequest.evaluation_run_id]);
+      expect([...beliefEvaluationRows]).toEqual([{ baselines: 2, candidates: 2, pairs: 2 }]);
+
       await ownerSql.begin(async (transaction) => {
         await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
             (account_id, application_id, credential_id, credential_generation,
@@ -1066,6 +1161,9 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       });
       await expect(beliefSource.load(shadowContext, beliefSnapshot.work_id)).resolves.toEqual({
         kind: "authorization_denied", reason: "grant_inactive",
+      });
+      await expect(beliefRuntime.run(shadowContext, beliefReplayRequest)).resolves.toEqual({
+        kind: "source_stopped", stop_code: "authorization_or_context",
       });
 
       await expect(delivery.claimNext(acceptContext)).resolves.toEqual({ kind: "none_available" });
@@ -1196,6 +1294,8 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         for (const table of [
           "listen_formation_delivery_heads", "listen_formation_delivery_revisions",
           "memory_listen_attribution_belief_inputs", "memory_formation_work_inputs",
+          "memory_strategy_evaluation_pairs", "memory_strategy_evaluation_baselines",
+          "memory_strategy_shadow_results",
           "memory_work_heads", "memory_work_state_revisions", "memory_work_input_manifest",
           "memory_work_acceptances", "memory_work_execution_policies",
           "memory_strategy_shadow_assignments", "memory_strategy_assignment_bundles",
