@@ -133,25 +133,13 @@ actor ContextProactivityEngine {
       return
     }
 
-    let taskContext = await MainActor.run {
-      (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks).prefix(20)
-        .map { "- \($0.description)" }.joined(separator: "\n")
+    let taskDescriptions = await MainActor.run {
+      (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks).prefix(20).map(\.description)
     }
-    let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
-    let prompt = """
-      \(ScreenDerivedContent.untrustedPreamble)
-      Decide whether interrupting now adds concrete value. Return silence unless the validated
-      facts support a specific, timely action. Use only supplied bucket-entry refs.
-
-      \(stableBucket)
-
-      == OPEN OR OVERDUE TASKS ==
-      \(taskContext)
-
-      == CURRENT FRAME METADATA ==
-      App: \(currentFrame.appName)
-      Window: \(currentFrame.windowTitle ?? "")
-      """
+    let prompt = ContextProactivityPromptBuilder.directorPrompt(
+      snapshot: snapshot,
+      tasks: taskDescriptions,
+      frame: currentFrame)
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.activeFenceIsValid(fence)

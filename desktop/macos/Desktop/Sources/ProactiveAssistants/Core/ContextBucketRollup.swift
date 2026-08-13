@@ -93,6 +93,47 @@ enum ContextBucketPromptAssembler {
   }
 }
 
+enum ContextProactivityPromptBuilder {
+  static func extractionPrompt(frame: CapturedFrame, fence: ContextVisitFence) -> String {
+    let evidenceRef = frame.screenshotId.map { "screenshot:\($0)" } ?? "visit:\(fence.visitID)"
+    return extractionPrompt(appName: frame.appName, windowTitle: frame.windowTitle, evidenceRef: evidenceRef)
+  }
+
+  static func extractionPrompt(appName: String, windowTitle: String?, evidenceRef: String) -> String {
+    """
+    \(ScreenDerivedContent.untrustedPreamble)
+    Produce a 150-400 token ambient narrative and discrete factual records. Facts are
+    proposals; include an identifier, surviving evidence text, and evidence ref for each.
+    App: \(appName)
+    Window: \(windowTitle ?? "")
+    Evidence ref: \(evidenceRef)
+    """
+  }
+
+  static func directorPrompt(
+    snapshot: ContextBucketSnapshot,
+    tasks: [String],
+    frame: CapturedFrame
+  ) -> String {
+    let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
+    let taskContext = tasks.prefix(20).map { "- \($0)" }.joined(separator: "\n")
+    return """
+      \(ScreenDerivedContent.untrustedPreamble)
+      Decide whether interrupting now adds concrete value. Return silence unless the validated
+      facts support a specific, timely action. Use only supplied bucket-entry refs.
+
+      \(stableBucket)
+
+      == OPEN OR OVERDUE TASKS ==
+      \(taskContext)
+
+      == CURRENT FRAME METADATA ==
+      App: \(frame.appName)
+      Window: \(frame.windowTitle ?? "")
+      """
+  }
+}
+
 extension ContextBucketStore {
   func writeExtraction(
     _ extraction: BucketExtraction,
@@ -444,15 +485,7 @@ actor ContextBucketRollupWriter {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceIsValid(fence)
     else { return }
-    let evidenceRef = frame.screenshotId.map { "screenshot:\($0)" } ?? "visit:\(fence.visitID)"
-    let prompt = """
-      \(ScreenDerivedContent.untrustedPreamble)
-      Produce a 150-400 token ambient narrative and discrete factual records. Facts are
-      proposals; include an identifier, surviving evidence text, and evidence ref for each.
-      App: \(frame.appName)
-      Window: \(frame.windowTitle ?? "")
-      Evidence ref: \(evidenceRef)
-      """
+    let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
     do {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.extractionOperation,
