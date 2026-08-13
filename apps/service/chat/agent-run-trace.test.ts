@@ -11,10 +11,14 @@ import { canonicalTraceJson, exportAgentRunTrace, replayAgentRunTrace } from "./
 
 const HASH = `sha256:${"a".repeat(64)}`;
 
-const makeStore = (capabilityId = "internal-capability") => {
+const makeStore = (
+  capabilityId = "internal-capability",
+  runId = "internal-run-42",
+  attemptId = "internal-attempt-1",
+) => {
   const result = runAgentRunScenario({
-    runId: "internal-run-42",
-    attemptId: "internal-attempt-1",
+    runId,
+    attemptId,
     capability: { capabilityId, tier: "deterministic-scripted", adapter: "scripted", deterministic: true },
     context: {
       contextReceiptId: "internal-context", sourceKind: "memory", sourceRef: "internal-source",
@@ -131,6 +135,37 @@ describe("agent-run redacted export and hermetic replay", () => {
     expect(exported.bytes).toContain("capability:1");
     expect(exported.bytes).not.toContain('"cap"');
     expect(replayAgentRunTrace(JSON.parse(exported.bytes)).projection.events.length).toBeGreaterThan(0);
+  });
+
+  test("generated labels do not collide with valid short or event-like source IDs", () => {
+    const shortIds = makeStore("cap", "run:1", "attempt");
+    const snapshot = shortIds.store.snapshot();
+    shortIds.store.restore({
+      runs: snapshot.runs.map((run) => ({
+        ...run,
+        events: run.events.map((event, index) => index === 0 ? { ...event, eventId: "event:1" } : event),
+      })),
+    });
+    const labels = exportAgentRunTrace(shortIds.store, shortIds.runId, { buildId: "platform-test-build" });
+    expect(labels.bundle.runId).toBe("run:1");
+    expect(labels.bundle.eventTrace[0]?.attemptLabel).toBe("attempt:1");
+    expect(labels.bundle.eventTrace[0]?.eventLabel).toBe("event:1");
+    expect(replayAgentRunTrace(JSON.parse(labels.bytes)).projection.events.length).toBeGreaterThan(0);
+
+    for (const [runId, attemptId] of [["a", "attempt-safe"], ["run-safe", "id"]] as const) {
+      const source = makeStore("cap", runId, attemptId);
+      const sourceSnapshot = source.store.snapshot();
+      source.store.restore({
+        runs: sourceSnapshot.runs.map((run) => ({
+          ...run,
+          events: run.events.map((event, index) => index === 0
+            ? { ...event, safeSummary: runId === "a" ? "a" : "id" }
+            : event),
+        })),
+      });
+      expect(() => exportAgentRunTrace(source.store, source.runId, { buildId: "platform-test-build" }))
+        .toThrow("raw");
+    }
   });
 
   test("CLI replays only the artifact and emits a bounded receipt", () => {
