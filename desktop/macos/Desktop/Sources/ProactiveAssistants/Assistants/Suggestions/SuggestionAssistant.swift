@@ -133,6 +133,9 @@ actor SuggestionAssistant: ProactiveAssistant {
     let enabled = await isEnabled
     let excluded = await MainActor.run { SuggestionAssistantSettings.shared.isAppExcluded(frame.appName) }
     let snoozed = await MainActor.run { FloatingControlBarManager.shared.isSnoozed }
+    let isWithinActivePeriod = await MainActor.run {
+      NotificationService.isWithinActivePeriod(now: Date())
+    }
     let cooldown = await cooldownInterval
 
     let now = Date()
@@ -142,6 +145,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       isEnabled: enabled,
       isAppExcluded: excluded,
       isSnoozed: snoozed,
+      isWithinActivePeriod: isWithinActivePeriod,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
       cooldown: cooldown,

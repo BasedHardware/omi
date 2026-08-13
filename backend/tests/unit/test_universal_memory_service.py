@@ -629,10 +629,11 @@ def test_export_preserves_full_locked_historical_content(service_mod, monkeypatc
     raw["is_locked"] = True
     raw["content"] = "locked content " * 20
 
-    def get_memories(_uid, _limit, offset, **_kwargs):
-        return [raw] if offset == 0 else []
-
-    monkeypatch.setattr(service_mod.memories_db, "get_memories", get_memories)
+    record = service_mod.HistoricalMemoryRecord(
+        memory=service_mod.HistoricalMemoryAdapter._historical_memory(raw, include_locked_content=True),
+        locator=service_mod.MemoryLocator("uid-test", "legacy", "locked-export"),
+    )
+    service.history.iter_all_live = MagicMock(return_value=iter([record]))
     monkeypatch.setattr(
         service_mod,
         "iter_authoritative_product_memory_items",

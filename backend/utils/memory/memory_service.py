@@ -610,6 +610,7 @@ class HistoricalMemoryAdapter:
         *,
         device_scope_request: Optional[DeviceScopeRequest],
         drop_updated_at_present: bool = False,
+        include_locked_content: bool = False,
     ) -> List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]]:
         slots: List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]] = []
         for raw, scan_cursor in zip(payloads, cursors):
@@ -620,7 +621,7 @@ class HistoricalMemoryAdapter:
             if raw.get('user_review') is False or raw.get('invalid_at') is not None:
                 slots.append((None, scan_cursor))
                 continue
-            record = self._adapt(uid, raw)
+            record = self._adapt(uid, raw, include_locked_content=include_locked_content)
             if record is None or not self.matches_device(record, device_scope_request):
                 slots.append((None, scan_cursor))
             else:
@@ -634,6 +635,7 @@ class HistoricalMemoryAdapter:
         limit: int = 100,
         start_after: Optional[Tuple[datetime, str]] = None,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_locked_content: bool = False,
     ) -> Tuple[List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]], bool]:
         """Bounded updated_at-present historical keyset page."""
         bounded_limit = max(1, min(int(limit or 100), self.MAX_PAGE_SIZE))
@@ -652,6 +654,7 @@ class HistoricalMemoryAdapter:
             cursors,
             device_scope_request=device_scope_request,
             drop_updated_at_present=False,
+            include_locked_content=include_locked_content,
         )
         return slots, exhausted
 
@@ -662,6 +665,7 @@ class HistoricalMemoryAdapter:
         limit: int = 100,
         start_after: Optional[Tuple[datetime, str]] = None,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_locked_content: bool = False,
     ) -> Tuple[List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]], bool]:
         """Bounded created_at historical keyset page with updated_at-present filtered out."""
         bounded_limit = max(1, min(int(limit or 100), self.MAX_PAGE_SIZE))
@@ -680,6 +684,7 @@ class HistoricalMemoryAdapter:
             cursors,
             device_scope_request=device_scope_request,
             drop_updated_at_present=True,
+            include_locked_content=include_locked_content,
         )
         return slots, exhausted
 
@@ -752,37 +757,45 @@ class HistoricalMemoryAdapter:
         device_scope_request: Optional[DeviceScopeRequest] = None,
         include_locked_content: bool = True,
     ) -> Iterator[HistoricalMemoryRecord]:
-        """Stream historical live rows in stable newest-first pages."""
+        """Stream every historical live row through stable dual-keyset scans."""
         page_size = max(1, min(int(page_size or 500), self.MAX_PAGE_SIZE))
-        offset = 0
-        while True:
-            try:
-                raw_rows = memories_db.get_memories(
+
+        def records(kind: str) -> Iterator[HistoricalMemoryRecord]:
+            cursor: Optional[Tuple[datetime, str]] = None
+            exhausted = False
+            while not exhausted:
+                reader = self.read_updated_scan_page if kind == "updated" else self.read_created_scan_page
+                slots, exhausted = reader(
                     uid,
-                    page_size,
-                    offset,
-                    sort="updated_or_created_desc",
-                    **self._firestore_kwargs(),
+                    limit=page_size,
+                    start_after=cursor,
+                    device_scope_request=device_scope_request,
+                    include_locked_content=include_locked_content,
                 )
-            except Exception as exc:
-                raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
-            if not raw_rows:
-                break
-            page_records: List[HistoricalMemoryRecord] = []
-            for raw in raw_rows:
-                record = self._adapt(uid, raw, include_locked_content=include_locked_content)
-                if record is not None and self.matches_device(record, device_scope_request):
-                    page_records.append(record)
-            page_records.sort(
-                key=lambda record: (
-                    -self._timestamp(record.memory).timestamp(),
-                    record.memory.id,
-                )
+                if not slots and not exhausted:
+                    raise HTTPException(status_code=503, detail="Historical memory scan made no progress")
+                for record, cursor in slots:
+                    if record is None:
+                        continue
+                    yield record
+
+        updated = records("updated")
+        created = records("created")
+        updated_record = next(updated, None)
+        created_record = next(created, None)
+        while updated_record is not None or created_record is not None:
+            take_updated = created_record is None or (
+                updated_record is not None
+                and self._timestamp(updated_record.memory) >= self._timestamp(created_record.memory)
             )
-            yield from page_records
-            offset += len(raw_rows)
-            if len(raw_rows) < page_size:
-                break
+            if take_updated:
+                assert updated_record is not None
+                yield updated_record
+                updated_record = next(updated, None)
+            else:
+                assert created_record is not None
+                yield created_record
+                created_record = next(created, None)
 
     def all_live(self, uid: str, *, page_size: int = 500) -> List[HistoricalMemoryRecord]:
         """Enumerate historical live rows in bounded pages for explicit export only."""

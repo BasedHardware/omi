@@ -113,6 +113,59 @@ def test_iter_export_memories_streams_without_materializing_history(service_mod,
     assert streamed == ["h-0", "h-1", "h-2"]
 
 
+def test_historical_export_iterator_uses_keysets_past_legacy_5000_window(service_mod):
+    adapter = service_mod.HistoricalMemoryAdapter(db_client=object())
+    updated_rows = [
+        service_mod.HistoricalMemoryRecord(
+            memory=service_mod.MemoryDB.model_validate(
+                {
+                    **_sample_memory_dict(f"updated-{index}"),
+                    "created_at": datetime(2026, 1, 3 - index, tzinfo=timezone.utc),
+                    "updated_at": datetime(2026, 1, 3 - index, tzinfo=timezone.utc),
+                }
+            ),
+            locator=service_mod.MemoryLocator("uid-test", "legacy", f"updated-{index}"),
+        )
+        for index in range(2)
+    ]
+    created_row = service_mod.HistoricalMemoryRecord(
+        memory=service_mod.MemoryDB.model_validate(
+            {
+                **_sample_memory_dict("created-only"),
+                "created_at": datetime(2026, 1, 2, 12, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 1, 2, 12, tzinfo=timezone.utc),
+            }
+        ),
+        locator=service_mod.MemoryLocator("uid-test", "legacy", "created-only"),
+    )
+    updated_calls = []
+    created_calls = []
+
+    def read_updated(_uid, *, start_after=None, **_kwargs):
+        updated_calls.append(start_after)
+        if start_after is None:
+            return [
+                (updated_rows[0], (datetime(2026, 1, 3, tzinfo=timezone.utc), "updated-0")),
+                (updated_rows[1], (datetime(2026, 1, 2, tzinfo=timezone.utc), "updated-1")),
+            ], False
+        return [], True
+
+    def read_created(_uid, *, start_after=None, **_kwargs):
+        created_calls.append(start_after)
+        return [(created_row, (datetime(2026, 1, 2, 12, tzinfo=timezone.utc), "created-only"))], True
+
+    adapter.read_updated_scan_page = read_updated
+    adapter.read_created_scan_page = read_created
+
+    assert [record.memory.id for record in adapter.iter_all_live("uid-test", page_size=2)] == [
+        "updated-0",
+        "created-only",
+        "updated-1",
+    ]
+    assert updated_calls == [None, (datetime(2026, 1, 2, tzinfo=timezone.utc), "updated-1")]
+    assert created_calls == [None]
+
+
 def test_developer_list_requests_pending_processing(monkeypatch):
     """Just-created required-processing memories must be requested on list."""
     from tests.unit import test_dev_api_memories_pagination as page_mod

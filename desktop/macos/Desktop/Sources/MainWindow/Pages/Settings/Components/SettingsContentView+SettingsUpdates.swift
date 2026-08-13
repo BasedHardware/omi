@@ -3,6 +3,27 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+@MainActor
+private final class NotificationSettingsSyncQueue {
+  static let shared = NotificationSettingsSyncQueue()
+
+  private var tail: Task<Void, Never>?
+
+  func enqueue(enabled: Bool?, frequency: Int?, revision: Int) {
+    let previous = tail
+    tail = Task {
+      await previous?.value
+      do {
+        _ = try await APIClient.shared.updateNotificationSettings(
+          enabled: enabled, frequency: frequency)
+        NotificationService.completeNotificationSettingsSync(revision: revision)
+      } catch {
+        logError("Failed to update notification settings", error: error)
+      }
+    }
+  }
+}
+
 extension SettingsContentView {
   func openURLInDefaultBrowser(_ url: URL) {
     if let appURL = NSWorkspace.shared.urlForApplication(toOpen: url) {
@@ -45,15 +66,10 @@ extension SettingsContentView {
       UserDefaults.standard.set(frequency, forKey: NotificationService.frequencyDefaultsKey)
     }
     let syncRevision = NotificationService.beginNotificationSettingsSync()
-    Task {
-      do {
-        let _ = try await APIClient.shared.updateNotificationSettings(
-          enabled: enabled, frequency: frequency)
-        NotificationService.completeNotificationSettingsSync(revision: syncRevision)
-      } catch {
-        logError("Failed to update notification settings", error: error)
-      }
-    }
+    // Preserve request order. A fast slider drag can otherwise let an older PATCH
+    // arrive after the newest value and win the backend's last-write-wins update.
+    NotificationSettingsSyncQueue.shared.enqueue(
+      enabled: enabled, frequency: frequency, revision: syncRevision)
   }
 
   func updateLanguage(_ language: String) {

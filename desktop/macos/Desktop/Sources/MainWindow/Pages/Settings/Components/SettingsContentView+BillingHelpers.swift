@@ -819,19 +819,9 @@ extension SettingsContentView {
             notificationsEnabled = NotificationService.areNotificationsEnabled()
             notificationFrequency = NotificationService.currentFrequencyLevel()
             if notificationSettingsPendingNow {
-              let retryRevision = notificationSettingsRevisionNow
               let retryEnabled = notificationsEnabled
               let retryFrequency = notificationFrequency
-              Task {
-                do {
-                  _ = try await APIClient.shared.updateNotificationSettings(
-                    enabled: retryEnabled,
-                    frequency: retryFrequency)
-                  NotificationService.completeNotificationSettingsSync(revision: retryRevision)
-                } catch {
-                  logError("Failed to retry notification settings sync", error: error)
-                }
-              }
+              updateNotificationSettings(enabled: retryEnabled, frequency: retryFrequency)
             }
           } else {
             notificationsEnabled = notifications.enabled

@@ -13,6 +13,7 @@ final class SuggestionGatePolicyTests: XCTestCase {
     isEnabled: Bool = true,
     isAppExcluded: Bool = false,
     isSnoozed: Bool = false,
+    isWithinActivePeriod: Bool = true,
     lastEvaluationAt: Date? = nil,
     cooldown: TimeInterval = 180,
     dwell: TimeInterval = 999,
@@ -24,6 +25,7 @@ final class SuggestionGatePolicyTests: XCTestCase {
       isEnabled: isEnabled,
       isAppExcluded: isAppExcluded,
       isSnoozed: isSnoozed,
+      isWithinActivePeriod: isWithinActivePeriod,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
       cooldown: cooldown,
@@ -50,6 +52,10 @@ final class SuggestionGatePolicyTests: XCTestCase {
 
   func testSnoozedBarDoesNotEvaluate() {
     XCTAssertEqual(decide(isSnoozed: true), .skippedSnoozed)
+  }
+
+  func testQuietPeriodDoesNotEvaluate() {
+    XCTAssertEqual(decide(isWithinActivePeriod: false), .skippedQuietPeriod)
   }
 
   func testCooldownBlocksUntilItHasFullyElapsed() {
