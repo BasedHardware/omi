@@ -2902,15 +2902,13 @@ class FakeClient:
 
 
 def test_empty_rollout_cohort_cannot_advance_without_observed_success(monkeypatch):
-    client = FakeClient()
-    client.collection("agent_vm_rollouts").document("development").set(
-        {"releaseId": RELEASE.release_id, "phase": "sentinel", "successfulRuns": 2}
-    )
-    monkeypatch.setattr(reconciler, "get_firestore_client", lambda: client)
+    store = _FakeStore()
+    store.set("agent_vm_rollouts/development", {"releaseId": RELEASE.release_id, "phase": "sentinel", "successfulRuns": 2})
+    monkeypatch.setattr(reconciler, "_store", lambda: store)
 
     reconciler._advance_rollout("development", RELEASE.release_id, "sentinel", [], 0)
 
-    state = client.collection("agent_vm_rollouts").document("development").data
+    state = store.get("agent_vm_rollouts/development").to_dict()
     assert state["phase"] == "sentinel"
     assert state["successfulRuns"] == 0
 
@@ -2997,11 +2995,9 @@ def test_recognized_rollout_phase_honors_manifest_and_environment_overrides(monk
 
 
 def test_stored_invalid_rollout_phase_fails_closed(monkeypatch):
-    client = FakeClient()
-    client.collection("agent_vm_rollouts").document("development").set(
-        {"releaseId": RELEASE.release_id, "phase": "remaindr", "successfulRuns": 0}
-    )
-    monkeypatch.setattr(reconciler, "get_firestore_client", lambda: client)
+    store = _FakeStore()
+    store.set("agent_vm_rollouts/development", {"releaseId": RELEASE.release_id, "phase": "remaindr", "successfulRuns": 0})
+    monkeypatch.setattr(reconciler, "_store", lambda: store)
 
     with pytest.raises(ValueError, match="stored Agent VM rollout phase is invalid"):
         reconciler._rollout_phase("development", RELEASE.release_id, RELEASE.to_mapping())
@@ -3326,8 +3322,10 @@ def test_missing_404_consumes_the_observed_start_request_before_cleanup_grace(mo
 
     assert result.state == "cleanup_pending"
     fields, kwargs = updates[-1]
-    assert fields["startRequested"] is lifecycle.DELETE_FIELD
-    assert fields["startRequestedAt"] is lifecycle.DELETE_FIELD
+    # The reconciler writes the neutral store-port DELETE sentinel (facade-translated to Firestore's
+    # DELETE_FIELD on-write); lifecycle's own transactions use google's DELETE_FIELD directly.
+    assert fields["startRequested"] is reconciler.sentinels.DELETE
+    assert fields["startRequestedAt"] is reconciler.sentinels.DELETE
     assert kwargs["consume_start_request_at"] == 450.0
 
 
@@ -3472,78 +3470,81 @@ class OwnerSnapshot:
         return self.data
 
 
-class OwnerQuery:
-    def __init__(self, snapshots: list[OwnerSnapshot], *, query_error: bool = False) -> None:
-        self.snapshots = snapshots
-        self.query_error = query_error
-        self.filter: Any = None
-        self.limit_value = 0
+class _FakeStore:
+    """Neutral store-port fake for reconciler tests. ``_owners`` drives it via query() (records the
+    filters/limit, and can raise on the targeted query to exercise the bounded-scan fallback); the
+    rollout state functions drive it via get()/set() on a path. Replaces the old Firestore-Client-
+    shaped OwnerClient/FakeClient now that jobs.agent_vm_reconciler reads through _store()."""
 
-    def where(self, *, filter: Any) -> "OwnerQuery":
-        if self.query_error:
-            raise RuntimeError("legacy emulator")
-        self.filter = filter
-        return self
+    def __init__(self, snapshots: Sequence[OwnerSnapshot] = (), *, filtered_query_raises: bool = False) -> None:
+        self._snapshots = list(snapshots)
+        self._filtered_raises = filtered_query_raises
+        self.queries: list[tuple[Any, Any]] = []
+        self._docs: dict[str, dict[str, Any]] = {}
 
-    def limit(self, value: int) -> "OwnerQuery":
-        self.limit_value = value
-        return self
+    def query(self, collection: str, *, filters: Any = None, limit: Any = None, **_kwargs: Any):
+        self.queries.append((filters, limit))
+        if filters and self._filtered_raises:
+            raise RuntimeError("targeted Agent VM owner query unsupported (capability mismatch)")
+        return list(self._snapshots)
 
-    def stream(self) -> list[OwnerSnapshot]:
-        return self.snapshots[: self.limit_value]
+    def get(self, path: str) -> FakeSnapshot:
+        snapshot = FakeSnapshot()
+        data = self._docs.get(path)
+        snapshot.exists = bool(data)
+        snapshot.to_dict = lambda: dict(data or {})  # type: ignore[method-assign]
+        return snapshot
 
-
-class OwnerClient:
-    def __init__(self, query: OwnerQuery) -> None:
-        self.query = query
-
-    def collection(self, name: str) -> OwnerQuery:
-        assert name == "users"
-        return self.query
+    def set(self, path: str, fields: dict[str, Any], merge: bool = False, **_kwargs: Any) -> None:
+        if merge and path in self._docs:
+            self._docs[path].update(fields)
+        else:
+            self._docs[path] = dict(fields)
 
 
 def test_owner_discovery_uses_targeted_existing_user_field(monkeypatch):
-    query = OwnerQuery(
+    store = _FakeStore(
         [
             OwnerSnapshot("owner", {"agentVm": {"vmName": "omi-agent-owner", "authToken": "token"}}),
             OwnerSnapshot("invalid", {"agentVm": {"vmName": "missing-token"}}),
         ]
     )
-    monkeypatch.setattr(reconciler, "get_firestore_client", lambda: OwnerClient(query))
+    monkeypatch.setattr(reconciler, "_store", lambda: store)
 
     assert reconciler._owners() == [("owner", {"vmName": "omi-agent-owner", "authToken": "token"})]
-    assert query.filter.field_path == "agentVm.vmName"
-    assert query.limit_value == reconciler.OWNER_DISCOVERY_LIMIT + 1
+    filters, limit = store.queries[0]
+    assert filters == [("agentVm.vmName", ">=", "")]
+    assert limit == reconciler.OWNER_DISCOVERY_LIMIT + 1
 
 
 def test_owner_discovery_legacy_fallback_is_bounded_and_fails_closed(monkeypatch):
-    query = OwnerQuery(
+    store = _FakeStore(
         [OwnerSnapshot(str(index), {}) for index in range(3)],
-        query_error=True,
+        filtered_query_raises=True,
     )
     monkeypatch.setenv("AGENT_VM_OWNER_FALLBACK_SCAN_LIMIT", "2")
-    monkeypatch.setattr(reconciler, "get_firestore_client", lambda: OwnerClient(query))
+    monkeypatch.setattr(reconciler, "_store", lambda: store)
 
     with pytest.raises(RuntimeError, match="compatibility scan exhausted"):
         reconciler._owners()
 
 
 def test_owner_discovery_legacy_fallback_supports_existing_small_fleets(monkeypatch):
-    query = OwnerQuery(
+    store = _FakeStore(
         [
             OwnerSnapshot("non-owner", {}),
             OwnerSnapshot("owner", {"agentVm": {"vmName": "omi-agent-owner", "authToken": "token"}}),
         ],
-        query_error=True,
+        filtered_query_raises=True,
     )
     monkeypatch.setenv("AGENT_VM_OWNER_FALLBACK_SCAN_LIMIT", "3")
-    monkeypatch.setattr(reconciler, "get_firestore_client", lambda: OwnerClient(query))
+    monkeypatch.setattr(reconciler, "_store", lambda: store)
 
     assert reconciler._owners() == [("owner", {"vmName": "omi-agent-owner", "authToken": "token"})]
 
 
 def test_owner_discovery_selects_a_durable_migration_without_manifest_opt_in(monkeypatch):
-    users = OwnerQuery(
+    store = _FakeStore(
         [
             OwnerSnapshot("cohort", {"agentVm": {"vmName": "cohort", "authToken": "token"}}),
             OwnerSnapshot(
@@ -3558,13 +3559,7 @@ def test_owner_discovery_selects_a_durable_migration_without_manifest_opt_in(mon
             ),
         ]
     )
-
-    class DurableClient:
-        def collection(self, name: str) -> OwnerQuery:
-            assert name == "users"
-            return users
-
-    monkeypatch.setattr(reconciler, "get_firestore_client", lambda: DurableClient())
+    monkeypatch.setattr(reconciler, "_store", lambda: store)
 
     owners = reconciler._owners()
 
