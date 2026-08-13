@@ -110,6 +110,12 @@ threshold, model, modality, presentation rule, or action policy. It has no
 authoritative belief store, route, runtime poller, or product composition and
 therefore cannot change product memory.
 
+`apps/service/listen/attribution-belief-input.ts` is the first modality
+adapter. It turns finalized Listen `is_user` observations into owner,
+source-local, and unknown hypotheses with dependency-grouped support and
+counter-evidence. The noisy bit remains evidence only; no transcript text,
+typed owner authority, probability, threshold, or product behavior is emitted.
+
 ## Acceptance boundary
 
 Before activation, tests and held-out evaluation must prove:
