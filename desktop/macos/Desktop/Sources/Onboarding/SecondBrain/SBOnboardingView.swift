@@ -73,11 +73,11 @@ struct SBOnboardingView: View {
       ViewThatFits(in: .horizontal) {
         HStack(spacing: 8) {
           backButton
-          skipButton
+          if model.canSkipOnboarding { skipButton }
         }
         VStack(alignment: .trailing, spacing: 8) {
           backButton
-          skipButton
+          if model.canSkipOnboarding { skipButton }
         }
       }
       .padding(.top, 20).padding(.trailing, 24)
@@ -150,6 +150,10 @@ struct SBOnboardingView: View {
         .onChange(of: model.streamingText) { _, _ in scrollDown(proxy) }
         .onChange(of: model.shortcutPicked) { _, _ in scrollDown(proxy) }
         .onChange(of: model.shortcutPressed) { _, _ in scrollDown(proxy) }
+        // Tapping "Custom shortcut" enters recording mode, which expands the widget with
+        // instructions/refusal text below the preset rows. Without this scroll trigger the new
+        // content is clipped below the fold.
+        .onChange(of: model.shortcutRecording) { _, _ in scrollDown(proxy) }
         // Revealing the assistants list grows the widget *below* the fold, so without this the
         // rows it just opened are clipped by the card's lower edge and nothing moves.
         .onChange(of: showAIAssistants) { _, _ in scrollDown(proxy) }
@@ -631,9 +635,7 @@ struct SBOnboardingView: View {
             Text(opt.sub).inkStyle(InkType.statusLabel, color: Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
             Spacer()
-            if model.shortcutRecording {
-              Text("Press a key").inkStyle(InkType.statusLabel, color: Ink.secondary)
-            } else if model.chosenShortcut == opt.shortcut {
+            if model.chosenShortcut == opt.shortcut {
               Text("✓").inkStyle(InkType.statusLabel, color: Ink.primary)
             }
           }
@@ -649,6 +651,24 @@ struct SBOnboardingView: View {
         }
         .buttonStyle(.plain)
       }
+      Button {
+        model.beginShortcutRecording(isTalk: isTalk)
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: "keyboard")
+            .font(.system(size: 13, weight: .medium))
+          Text("Custom shortcut").inkStyle(InkType.rowCopy, color: Ink.primary)
+          Spacer()
+          Text(model.shortcutRecording ? "Press it now" : "Set your own")
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(shortcutOptionShape.fill(model.shortcutRecording ? Ink.rowFillHover : .clear))
+        .overlay(shortcutOptionShape.strokeBorder(Ink.hairline, lineWidth: 1))
+        .contentShape(shortcutOptionShape)
+      }
+      .buttonStyle(.plain)
       if model.shortcutRecording {
         // A bare key is refused (`acceptsRecordedChord`) because a global bare `L` would make every
         // `L` typed anywhere open Omi. The refusal used to be silent, so the step looked broken to
@@ -679,20 +699,13 @@ struct SBOnboardingView: View {
         }
         .padding(.top, 6)
       }
-      // Continue only appears once the key has actually been pressed; before that,
-      // the same secondary Skip capsule every other step offers, so the user is never stuck.
+      // Shortcut setup is required: Continue appears only after the selected shortcut has been
+      // pressed, and there is deliberately no skip action on either shortcut stage.
       Group {
-        if model.shortcutPressed {
+        if model.shortcutPicked, model.shortcutPressed {
           SBInkButton(title: "Continue", isDefaultAction: true) {
             isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen()
           }
-        } else {
-          Button {
-            isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen()
-          } label: {
-            Text("Skip for now").frame(maxWidth: .infinity)
-          }
-          .buttonStyle(InkButtonStyle(kind: .secondary))
         }
       }
       .padding(.top, 6)

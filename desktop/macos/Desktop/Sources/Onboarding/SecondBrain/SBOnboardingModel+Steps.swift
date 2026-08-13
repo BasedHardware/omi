@@ -513,7 +513,12 @@ extension SBOnboardingModel {
       shortcutTokens = rememberedSelection.displayTokens
       chosenShortcut = rememberedSelection
     } else {
+      // Same reset as `beginShortcutRecording` but with recording left off: the fresh
+      // stage shows the preset rows + a Custom button instead of entering capture mode,
+      // so `handleShortcutEvent` only recognizes the three preset candidates until the
+      // user explicitly taps Custom.
       beginShortcutRecording(isTalk: isTalk)
+      shortcutRecording = false
     }
     GlobalShortcutManager.shared.setRegistrationSuspended(true)
     if savedMainMenu == nil { savedMainMenu = NSApp.mainMenu }
@@ -702,10 +707,13 @@ extension SBOnboardingModel {
   }
 
   func answerShortcutOpen() {
-    advance(userAnswer: shortcutPressed ? "Works" : (shortcutPicked ? "Set" : "Skip"), to: .shortcutTalk)
+    guard shortcutPicked, shortcutPressed else { return }
+    advance(userAnswer: "Works", to: .shortcutTalk)
   }
   func answerShortcutTalk() {
-    advance(userAnswer: shortcutPressed ? "Works" : (shortcutPicked ? "Set" : "Skip"), to: .screenDemo)
+    guard shortcutPicked, shortcutPressed else { return }
+    UserDefaults.standard.set(true, forKey: Self.shortcutsCompletedKey)
+    advance(userAnswer: "Works", to: .screenDemo)
   }
 }
 

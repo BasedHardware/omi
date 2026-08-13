@@ -316,9 +316,9 @@ final class SBOnboardingModel: ObservableObject {
     // Both steps used to invite "press any key", and `acceptsRecordedChord` then refused a bare key
     // in silence — correct (a global bare `L` is unrecoverable) but unexplained. Name the rule.
     case .shortcutOpen:
-      return "How do you want to open me? Choose one, or press your own — it needs ⌘, ⌃ or ⌥."
+      return "How do you want to open me? Choose one, or pick Custom to set your own — it needs ⌘, ⌃ or ⌥."
     case .shortcutTalk:
-      return "And to talk to me hands-free? Choose one, or hold your own modifier key."
+      return "And to talk to me hands-free? Choose one, or pick Custom to hold your own modifier key."
     case .screenDemo:
       return "Here's the fun part."
     case .agents:
@@ -377,6 +377,11 @@ final class SBOnboardingModel: ObservableObject {
   /// in System Settings) resumes where you left off instead of restarting.
   static let resumeStepKey = "sbOnboardingResumeStep"
 
+  /// Persisted when the user completes both required shortcut stages through the
+  /// new onboarding flow. Legacy resume states persisted before shortcuts were
+  /// mandatory lacked this flag, so `begin()` clamps them back through the steps.
+  static let shortcutsCompletedKey = "sbOnboardingShortcutsCompleted"
+
   func begin() {
     guard thread.isEmpty && streamingText == nil else { return }
     // Re-hydrate the editable drafts from what was already saved, so stepping
@@ -390,8 +395,16 @@ final class SBOnboardingModel: ObservableObject {
     let savedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
     recordSetupStateDisagreementAtRead(savedRaw: savedRaw)
     if savedRaw > Step.promise.rawValue, let resumed = Step(rawValue: savedRaw) {
+      // A legacy resume state persisted before shortcuts were mandatory bypasses the new
+      // required gate. Clamp it back to the first shortcut stage so the user completes both.
+      let shortcutsDone = UserDefaults.standard.bool(forKey: Self.shortcutsCompletedKey)
+      var effective = resumed
+      if !shortcutsDone, effective.rawValue > Step.shortcutTalk.rawValue {
+        effective = .shortcutOpen
+        UserDefaults.standard.set(Step.shortcutOpen.rawValue, forKey: Self.resumeStepKey)
+      }
       // Skip a resumed permission step the user granted while away.
-      let target = firstUnaskedStep(from: resumed)
+      let target = firstUnaskedStep(from: effective)
       step = target
       streamMessage(for: target)
       return
@@ -526,6 +539,15 @@ final class SBOnboardingModel: ObservableObject {
 
   var canGoBack: Bool {
     step != .promise
+  }
+
+  /// The full-onboarding escape hatch stays unavailable until both required shortcut stages have
+  /// been completed. A persisted flag records that the user went through both stages; legacy resume
+  /// states from before shortcuts were mandatory are clamped back in `begin()`, so the only way to
+  /// reach a stage past `shortcutTalk` with this flag set is through the guarded shortcut answers.
+  var canSkipOnboarding: Bool {
+    step.rawValue > Step.shortcutTalk.rawValue
+      && UserDefaults.standard.bool(forKey: Self.shortcutsCompletedKey)
   }
 
   /// Tear down any live monitors/tasks a step installed before leaving it.
