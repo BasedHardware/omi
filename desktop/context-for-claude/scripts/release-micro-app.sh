@@ -143,6 +143,19 @@ is_valid_sparkle_public_key "$PUBLIC_KEY" \
 [[ -n "$GITHUB_TOKEN" ]] \
     || die "$GITHUB_TOKEN_ENV is required for GitHub release publication"
 
+# Everything publication needs, checked before the build rather than after it. The build, three
+# notarization round-trips and the DMG take roughly forty minutes; discovering a missing CLI, a bad
+# token or an already-published tag at the end of that wastes the run and leaves a signed artifact
+# with nowhere to go. The same checks repeat immediately before `gh release create`, where they guard
+# against a change during the build instead.
+command -v gh >/dev/null 2>&1 \
+    || die "GitHub CLI (gh) is required for publication but is not on PATH"
+GH_TOKEN="$GITHUB_TOKEN" gh auth status --hostname github.com >/dev/null 2>&1 \
+    || die "$GITHUB_TOKEN_ENV did not authenticate against github.com"
+if GH_TOKEN="$GITHUB_TOKEN" gh release view "$TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
+    die "GitHub release '$TAG' already exists; releases are immutable in this helper"
+fi
+
 if [[ -n "$NOTES_FILE" ]]; then
     [[ -f "$NOTES_FILE" ]] || die "notes file does not exist: $NOTES_FILE"
     RELEASE_NOTES="$(<"$NOTES_FILE")"
@@ -157,6 +170,14 @@ fi
 TOP_LEVEL="$(git -C "$PACKAGE_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
 [[ -n "$TOP_LEVEL" ]] || die "package checkout is not a Git worktree"
 TAG_SHA="$(git -C "$TOP_LEVEL" rev-parse "refs/tags/$TAG^{commit}" 2>/dev/null || true)"
+if [[ -z "$TAG_SHA" ]]; then
+    # A CI checkout is routinely built from the tagged *commit* without the tag ref itself present,
+    # so an absent ref does not mean an absent tag. Fetch just this one tag before concluding it is
+    # missing; .github/scripts/desktop_release_doctor.py force-fetches the same way, for the same
+    # reason. Failure is left to the comparison below, which reports it with the real cause.
+    git -C "$TOP_LEVEL" fetch --no-tags origin "+refs/tags/$TAG:refs/tags/$TAG" >/dev/null 2>&1 || true
+    TAG_SHA="$(git -C "$TOP_LEVEL" rev-parse "refs/tags/$TAG^{commit}" 2>/dev/null || true)"
+fi
 HEAD_SHA="$(git -C "$TOP_LEVEL" rev-parse HEAD 2>/dev/null || true)"
 [[ -n "$TAG_SHA" && "$TAG_SHA" == "$HEAD_SHA" ]] \
     || die "HEAD is not the exact commit named by tag '$TAG'; refusing to publish"
