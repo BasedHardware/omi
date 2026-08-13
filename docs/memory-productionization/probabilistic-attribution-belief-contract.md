@@ -1,7 +1,8 @@
 # Probabilistic multimodal attribution belief contract
 
-Status: ratified architecture; pure belief kernel and injected calibration seam
-implemented; persistence, modality adapters, calibration, and activation pending
+Status: ratified architecture; pure belief kernel, injected calibration seam,
+and isolated shadow producer implemented; authoritative persistence, modality
+adapters, calibration, and activation pending
 
 Decision: David, 2026-08-12 America/New_York
 
@@ -100,9 +101,14 @@ complete integer-micro distribution, and returns only the belief plus content-sa
 response, result, strategy, and revision receipts. The request exposes an owner-scope digest
 and opaque coordinates rather than owner identity or observation text.
 
-This seam does not select a calibrator, weighting function, threshold, model, modality,
-storage plane, presentation rule, or action policy. It has no driver, persistence adapter,
-worker, route, or composition and therefore cannot change product memory.
+`apps/service/workers/attribution-belief-shadow-producer.ts` binds that seam to
+an exact copied evaluation input and a minted `identity_cluster` strategy. It
+uses the existing isolated experiment repository and paired offline replay
+coordinator for durable baseline/candidate results and zero-call replay. This
+shadow producer still does not select a calibrator, weighting function,
+threshold, model, modality, presentation rule, or action policy. It has no
+authoritative belief store, route, runtime poller, or product composition and
+therefore cannot change product memory.
 
 ## Acceptance boundary
 
