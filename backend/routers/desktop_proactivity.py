@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from dataclasses import dataclass
 from collections.abc import Mapping
 from enum import Enum
 from typing import Any
@@ -15,10 +16,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from database import redis_db, users as users_db
 from models.users import PlanType, Subscription
+from utils.env_loader import EnvStage, resolve_stage_from_env
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.desktop_llm_stub import llm_stub_enabled
-from utils.llm.gateway_client import get_llm_gateway_base_url, llm_gateway_headers
+from utils.llm.gateway_client import llm_gateway_headers
+from utils.llm.gateway_observability import record_direct_exception_surface
+from utils.llm.providers import get_openai_api_key
+from utils.observability.fallback import record_fallback
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import (
     DESKTOP_ACCESS_TIER_ARCHITECT,
@@ -49,18 +54,32 @@ _DIRECT_MODELS = {
 }
 
 
-def _proactive_provider_request(
-    request: "ProactiveCompletionRequest", uid: str, request_id: str
-) -> tuple[str, dict[str, str], dict[str, Any]]:
+@dataclass(frozen=True)
+class _ProviderRequest:
+    url: str
+    headers: dict[str, str]
+    payload: dict[str, Any]
+    fallback_class: str
+
+
+def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str, request_id: str) -> _ProviderRequest:
     payload = _gateway_payload(request)
     gateway_url = os.getenv("OMI_LLM_GATEWAY_URL", "").strip()
     if gateway_url:
         headers = llm_gateway_headers(feature=f"desktop_{request.operation.value}")
         headers["X-Omi-User-Uid"] = uid
         headers["X-Omi-Request-ID"] = request_id
-        return f"{gateway_url.rstrip('/')}/v1/chat/completions", headers, payload
+        return _ProviderRequest(
+            url=f"{gateway_url.rstrip('/')}/v1/chat/completions",
+            headers=headers,
+            payload=payload,
+            fallback_class="none",
+        )
 
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    stage = resolve_stage_from_env()
+    if stage not in {EnvStage.DEV.value, EnvStage.LOCAL.value}:
+        raise HTTPException(status_code=503, detail="Proactive model gateway is not configured")
+    api_key = get_openai_api_key()
     if not api_key:
         raise HTTPException(status_code=503, detail="Proactive model provider is not configured")
     payload["model"] = _DIRECT_MODELS[request.operation.value]
@@ -68,10 +87,20 @@ def _proactive_provider_request(
     payload["messages"] = request.messages
     payload.pop("prompt_cache_key", None)
     payload.pop("prompt_cache_options", None)
-    return (
-        "https://api.openai.com/v1/chat/completions",
-        {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        payload,
+    record_fallback(
+        component="llm_gateway",
+        from_mode="gateway",
+        to_mode="direct_openai",
+        reason="config_incomplete",
+        outcome="recovered",
+        log=logger,
+    )
+    record_direct_exception_surface(surface="desktop_context_proactivity.dev_direct_openai")
+    return _ProviderRequest(
+        url="https://api.openai.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        payload=payload,
+        fallback_class="dev_direct_openai",
     )
 
 
@@ -334,16 +363,19 @@ async def proactive_completion(
 
     await _consume_quota(uid, request.operation)
     request_id = str(uuid4())
-    provider_url, headers, payload = _proactive_provider_request(request, uid, request_id)
     try:
+        provider_request = _proactive_provider_request(request, uid, request_id)
         async with get_llm_gateway_semaphore():
             response = await get_llm_gateway_client().post(
-                provider_url,
-                headers=headers,
-                json=payload,
+                provider_request.url,
+                headers=provider_request.headers,
+                json=provider_request.payload,
             )
         response.raise_for_status()
         response_body = response.json()
+    except HTTPException:
+        await _release_quota(uid, request.operation)
+        raise
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         await _release_quota(uid, request.operation)
         raise HTTPException(status_code=502, detail="Proactive model unavailable") from exc
@@ -363,7 +395,7 @@ async def proactive_completion(
         provider_model=provider_model if isinstance(provider_model, str) else "unknown",
         usage=usage,
         cache_write=usage.cache_write_tokens > 0,
-        fallback_class="unknown",
+        fallback_class=provider_request.fallback_class,
         response=response_body,
     )
 

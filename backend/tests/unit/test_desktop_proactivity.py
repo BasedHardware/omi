@@ -218,7 +218,6 @@ async def test_gateway_failure_releases_reserved_quota(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
-    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_base_url", lambda: "http://gateway")
     monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
 
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
@@ -230,17 +229,32 @@ async def test_gateway_failure_releases_reserved_quota(monkeypatch):
 
 def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
     monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "dev-provider-key")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    fallbacks = []
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
 
-    url, headers, payload = desktop_proactivity._proactive_provider_request(
-        request("proactive_extraction"), "user-1", "request-1"
-    )
+    provider = desktop_proactivity._proactive_provider_request(request("proactive_extraction"), "user-1", "request-1")
 
-    assert url == "https://api.openai.com/v1/chat/completions"
-    assert headers == {"Authorization": "Bearer dev-provider-key", "Content-Type": "application/json"}
-    assert payload["model"] == "gpt-5-nano"
-    assert "prompt_cache_key" not in payload
-    assert "prompt_cache_options" not in payload
+    assert provider.url == "https://api.openai.com/v1/chat/completions"
+    assert provider.headers == {"Authorization": "Bearer dev-provider-key", "Content-Type": "application/json"}
+    assert provider.payload["model"] == "gpt-5-nano"
+    assert "prompt_cache_key" not in provider.payload
+    assert "prompt_cache_options" not in provider.payload
+    assert provider.fallback_class == "dev_direct_openai"
+    assert fallbacks[0]["component"] == "llm_gateway"
+
+
+def test_direct_provider_fallback_fails_closed_outside_dev(monkeypatch):
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OMI_ENV_STAGE", "prod")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "prod-provider-key")
+
+    with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
+        desktop_proactivity._proactive_provider_request(request(), "user-1", "request-1")
+
+    assert unavailable.value.status_code == 503
+    assert unavailable.value.detail == "Proactive model gateway is not configured"
 
 
 def test_configured_gateway_remains_authoritative(monkeypatch):
@@ -251,14 +265,39 @@ def test_configured_gateway_remains_authoritative(monkeypatch):
         lambda **_: {"Authorization": "Bearer gateway"},
     )
 
-    url, headers, payload = desktop_proactivity._proactive_provider_request(
-        request("proactive_reasoning"), "user-1", "request-1"
+    provider = desktop_proactivity._proactive_provider_request(request("proactive_reasoning"), "user-1", "request-1")
+
+    assert provider.url == "http://172.16.63.232/v1/chat/completions"
+    assert provider.headers["X-Omi-User-Uid"] == "user-1"
+    assert provider.headers["X-Omi-Request-ID"] == "request-1"
+    assert provider.payload["model"] == "omi:auto:desktop-proactive-reasoning"
+    assert provider.fallback_class == "none"
+
+
+@pytest.mark.asyncio
+async def test_provider_configuration_failure_releases_reserved_quota(monkeypatch):
+    released = []
+
+    async def allow(*_):
+        return None
+
+    async def release(uid, operation):
+        released.append((uid, operation))
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", allow)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(
+        desktop_proactivity,
+        "_proactive_provider_request",
+        lambda *_: (_ for _ in ()).throw(desktop_proactivity.HTTPException(status_code=503, detail="missing")),
     )
 
-    assert url == "http://172.16.63.232/v1/chat/completions"
-    assert headers["X-Omi-User-Uid"] == "user-1"
-    assert headers["X-Omi-Request-ID"] == "request-1"
-    assert payload["model"] == "omi:auto:desktop-proactive-reasoning"
+    with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
+        await desktop_proactivity.proactive_completion(request(), uid="user-1")
+
+    assert unavailable.value.status_code == 503
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
 
 
 @pytest.mark.asyncio
@@ -296,7 +335,6 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "_consume_quota", allow)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
-    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_base_url", lambda: "http://gateway")
     monkeypatch.setattr(
         desktop_proactivity,
         "llm_gateway_headers",
@@ -313,4 +351,4 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
     assert result.provider_model == "gpt-5.6-luna-2026-08-01"
     assert result.usage.cached_tokens == 1024
     assert result.cache_write is False
-    assert result.fallback_class == "unknown"
+    assert result.fallback_class == "none"
