@@ -750,9 +750,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     }.value
     guard isMonitoring else { return }
 
-    // Skip capture during system modes that block ScreenCaptureKit (Mission Control, Expose, etc.)
-    // This avoids burning through consecutive failures and generating unnecessary error events
+    // Skip system modes that block ScreenCaptureKit without burning failure events.
     if let mode = probe.specialSystemMode {
+      logCaptureGate("special_system_mode")
       log("SpecialModeDetection: \(mode.logDescription)")
       return
     }

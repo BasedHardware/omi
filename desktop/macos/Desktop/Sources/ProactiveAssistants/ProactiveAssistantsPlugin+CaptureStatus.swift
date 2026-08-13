@@ -8,8 +8,9 @@ extension ProactiveAssistantsPlugin {
   func automationCaptureStatusSnapshot() -> ProactiveCaptureStatusSnapshot {
     ProactiveCaptureStatusSnapshot(
       isMonitoring: isMonitoring,
-      hasScreenRecordingPermission: hasScreenRecordingPermission,
+      hasScreenRecordingPermission: ScreenCaptureService.checkPermission(),
       screenAnalysisEnabled: AssistantSettings.shared.screenAnalysisEnabled,
+      contextBucketsEnabled: ContextBucketsFeature.isEnabled,
       captureHealth: screenCaptureHealth.rawValue,
       captureGate: automationCaptureGateLabel,
       systemIdleBucket: Self.automationSystemIdleBucket(for: systemIdleSeconds()),
@@ -27,7 +28,8 @@ extension ProactiveAssistantsPlugin {
       return "flowing"
     case .some(.some(let reason)):
       switch reason {
-      case "idle", "excluded_app", "waiting_for_user_window", "no_window_id", "external_capture_yield":
+      case "idle", "excluded_app", "waiting_for_user_window", "no_window_id", "external_capture_yield",
+        "special_system_mode":
         return reason
       default:
         return "other"

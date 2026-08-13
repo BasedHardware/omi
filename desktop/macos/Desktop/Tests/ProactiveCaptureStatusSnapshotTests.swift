@@ -38,12 +38,14 @@
           "is_monitoring",
           "has_screen_recording_permission",
           "screen_analysis_enabled",
+          "context_buckets_enabled",
           "capture_health",
           "capture_gate",
           "system_idle_bucket",
           "current_app_excluded",
         ]))
       XCTAssertTrue(detail["current_app_excluded"].map { ["true", "false", "unknown"].contains($0) } ?? false)
+      XCTAssertTrue(detail["context_buckets_enabled"].map { ["true", "false"].contains($0) } ?? false)
       XCTAssertTrue(
         detail["system_idle_bucket"].map {
           ["active", "recent", "settling", "idle", "unknown"].contains($0)
