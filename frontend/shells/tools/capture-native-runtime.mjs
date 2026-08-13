@@ -14,6 +14,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statfsSync,
   statSync,
@@ -265,6 +266,7 @@ export function macRuntimeAppName(runId) {
 }
 
 export function cleanupIosIntermediates(outputDir) {
+  assertIosOutputDirCustody(outputDir);
   const transientPaths = [
     path.join(outputDir, "DerivedData"),
     path.join(outputDir, "Runner.xcresult"),
@@ -274,6 +276,48 @@ export function cleanupIosIntermediates(outputDir) {
     path.join(iosRoot, "app/build"),
   ];
   for (const transientPath of transientPaths) rmSync(transientPath, { recursive: true, force: true });
+}
+
+export function assertIosOutputDirCustody(outputDir) {
+  const resolvedRoot = realpathSync(coreRoot);
+  const requested = path.resolve(outputDir);
+  const relative = path.relative(resolvedRoot, requested);
+  if (!relative || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("iOS runtime output must be a child of the real core worktree");
+  }
+  let cursor = resolvedRoot;
+  for (const segment of relative.split(path.sep)) {
+    cursor = path.join(cursor, segment);
+    if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
+      throw new Error("iOS runtime output must not contain symlink components");
+    }
+  }
+  if (realpathSync(requested) !== requested) throw new Error("iOS runtime output authority is not canonical");
+}
+
+export function withIosCaptureLock(callback) {
+  const lockDir = path.join(coreRoot, ".build/ios-native-runtime-capture.lock");
+  const ownerPath = path.join(lockDir, "owner.json");
+  mkdirSync(path.dirname(lockDir), { recursive: true });
+  const acquire = () => {
+    try { mkdirSync(lockDir); }
+    catch (error) {
+      if (error?.code !== "EEXIST" || lstatSync(lockDir).isSymbolicLink() || !lstatSync(lockDir).isDirectory()) throw error;
+      let owner;
+      try { owner = readJson(ownerPath, "iOS runtime capture lock"); } catch { owner = null; }
+      const ownerPid = owner?.pid;
+      if (Number.isInteger(ownerPid) && ownerPid > 0) {
+        try { process.kill(ownerPid, 0); throw new Error(`iOS runtime capture is already active in pid ${ownerPid}`); }
+        catch (probeError) { if (probeError?.code !== "ESRCH") throw probeError; }
+      }
+      rmSync(lockDir, { recursive: true, force: true });
+      mkdirSync(lockDir);
+    }
+    writeFileSync(ownerPath, stable({ schema: "omi.polish.ios-runtime-lock/v1", pid: process.pid }), { mode: 0o600 });
+  };
+  acquire();
+  try { return callback(); }
+  finally { rmSync(lockDir, { recursive: true, force: true }); }
 }
 
 export function requireIosDiskHeadroom(outputDir, minimumFreeBytes = iosMinimumFreeBytes) {
@@ -496,7 +540,7 @@ function main() {
     return;
   }
   let capture;
-  try { capture = manifest.shell === "macos" ? runMac(manifest, outputDir) : runIos(manifest, outputDir); } catch (error) { fail(error instanceof Error ? error.message : String(error)); return; }
+  try { capture = manifest.shell === "macos" ? runMac(manifest, outputDir) : withIosCaptureLock(() => runIos(manifest, outputDir)); } catch (error) { fail(error instanceof Error ? error.message : String(error)); return; }
   const artifact = { schema: "omi.polish.runtime/v1", ...metadata(manifest), events: capture.marker.events };
   const artifactPath = path.join(outputDir, "runtime.json"); const artifactBytes = Buffer.from(stable(artifact)); writeFileSync(artifactPath, artifactBytes, { mode: 0o600 });
   const receipt = { schema: "omi.polish.runtime-preparation/v1", ...metadata(manifest), command: { argv: capture.argv, cwd: capture.commandCwd, cwd_root: "core", exit_code: 0, started_at: capture.started.toISOString(), finished_at: capture.finished.toISOString(), timeout_seconds: capture.commandTimeoutSeconds || 300, stdout_sha256: sha256(Buffer.from(capture.stdout)), stderr_sha256: sha256(Buffer.from(capture.stderr)) }, ...(capture.query ? { surface_query: capture.query, build_commands: capture.buildCommands } : {}), ...(capture.foregroundCustody ? { foreground_custody: capture.foregroundCustody } : {}), artifact: { root: "core", path: path.relative(coreRoot, artifactPath), sha256: sha256(artifactBytes) } };
