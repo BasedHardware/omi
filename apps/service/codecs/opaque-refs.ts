@@ -23,6 +23,7 @@ const CITATION_REF = /^cit1_[a-f0-9]{64}$/;
 const TRACE_REF = /^tr1_[a-f0-9]{64}$/;
 const SOURCE_IMPACT_REF = /^si1_[a-f0-9]{64}$/;
 const SOURCE_IMPACT_CURSOR = /^sic1_[a-f0-9]{64}$/;
+const MEMORY_EXPORT_REF = /^mxr1_[a-f0-9]{64}$/;
 const SOURCE_IMPACT_AFTER_KEY = /^[0-4]:[a-f0-9]{64}$/;
 /**
  * The tasks read wire's public item handle.
@@ -57,6 +58,19 @@ const DOMAIN_TASK_ITEM_REF = "omi.service.opaque-task-item-ref.v1";
 const DOMAIN_TASK_FRONTIER = "omi.service.opaque-task-frontier.v1";
 const DOMAIN_SOURCE_IMPACT_REF = "omi.service.opaque-source-impact-ref.v1";
 const DOMAIN_SOURCE_IMPACT_CURSOR = "omi.service.opaque-source-impact-cursor.v1";
+const DOMAIN_MEMORY_EXPORT_REF = "omi.service.opaque-memory-export-ref.v1";
+
+export type MemoryExportRefKind =
+  | "memory"
+  | "lineage"
+  | "revision"
+  | "evidence"
+  | "event"
+  | "capture";
+
+const MEMORY_EXPORT_REF_KINDS = new Set<MemoryExportRefKind>([
+  "memory", "lineage", "revision", "evidence", "event", "capture",
+]);
 
 const SOURCE_IMPACT_KINDS = new Set<SourceImpactItemKind>([
   "event", "evidence", "provisional_claim", "canonical_claim", "product_projection",
@@ -76,6 +90,7 @@ export interface ReaderScopedOpaqueCodecs {
   readonly encodeItemRef: (input: string) => string;
   readonly encodeCitationRef: (input: string) => string;
   readonly encodeTraceRef: (input: string) => string;
+  readonly encodeMemoryExportRef: (kind: MemoryExportRefKind, input: string) => string;
   /**
    * The ratified tasks read wire's public item id
    * (`DAVID-tasks-read-epoch-and-ci` D2: "`id` is the ratified opaque ref, not
@@ -200,6 +215,18 @@ export const createReaderScopedOpaqueCodecs = (
       encodeOpaque(readerSubkey, DOMAIN_CITATION_REF, "cit1_", CITATION_REF, input),
     encodeTraceRef: (input: string): string =>
       encodeOpaque(readerSubkey, DOMAIN_TRACE_REF, "tr1_", TRACE_REF, input),
+    encodeMemoryExportRef: (kind: MemoryExportRefKind, input: string): string => {
+      if (!MEMORY_EXPORT_REF_KINDS.has(kind)) {
+        return configurationError("memory export reference kind is invalid");
+      }
+      return encodeOpaque(
+        readerSubkey,
+        DOMAIN_MEMORY_EXPORT_REF,
+        "mxr1_",
+        MEMORY_EXPORT_REF,
+        `${kind}\0${input}`,
+      );
+    },
     encodeTaskItemRef: (input: string): string =>
       encodeOpaque(readerSubkey, DOMAIN_TASK_ITEM_REF, "task1_", TASK_ITEM_REF, input),
     encodeTaskFrontier: (input: string): string =>

@@ -24,6 +24,10 @@ import {
   type ApplicationMemoryReadAuthorizationRequest,
 } from "../../../core/retrieve/authorization-boundary";
 import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
+import {
+  buildOwnerMemoryExport,
+  type OwnerMemoryExportBundle,
+} from "../../../core/retrieve/owner-memory-export";
 import type {
   AcceptedCoverageState,
   ContentSafeRecallTrace,
@@ -395,6 +399,17 @@ export interface DirectAuthorizedMemoryReadConfig {
   readonly granularity?: ReadItemGranularity;
   readonly acceptedCoverageState?: AcceptedCoverageState;
   readonly stmCoverageState?: StmCoverageState;
+}
+
+export interface DirectAuthorizedMemoryExportConfig {
+  /** Fresh application authorization plus an exact reader-relative graph projection per call. */
+  readonly loadAuthorized: () => Promise<DirectAuthorizedMemoryProjectionLoad>;
+  readonly produceRenders: (
+    projected: ApplicationGrantProjectedTreeInputSnapshot,
+  ) => Promise<readonly RenderNode[]>;
+  readonly codecRootSecret: Uint8Array;
+  /** Exact maximum encoded bytes per complete-memory chunk; no item is split. */
+  readonly chunkMaxBytes: number;
 }
 
 /**
@@ -771,6 +786,47 @@ export const readDirectAuthorizedMemoryPage = async (
       }
     }
     return result;
+  }
+  throw new ApplicationReadInvalidatedError();
+};
+
+/**
+ * Route-free private export over one fully revalidated authorized projection.
+ *
+ * The export is assembled only from temporal-leaf renders, includes exact
+ * claim/evidence lineage with reader-scoped opaque references, and is returned
+ * only after a final live authorization/graph check. It chooses no route,
+ * storage sink, approval workflow, retention duration, or sharing policy.
+ */
+export const exportDirectAuthorizedMemories = async (
+  config: DirectAuthorizedMemoryExportConfig,
+): Promise<OwnerMemoryExportBundle> => {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const beforeRender = snapshotDirectAuthorizedLoad(await config.loadAuthorized());
+    const allRenders = await config.produceRenders(beforeRender.projected);
+    const afterRender = snapshotDirectAuthorizedLoad(await config.loadAuthorized());
+    if (directLoadSignature(beforeRender) !== directLoadSignature(afterRender)) continue;
+
+    const leafIds = new Set(selectNodesForGranularity(
+      buildDeterministicAnchors(beforeRender.projected).nodes,
+      "temporal_leaf",
+    ).map((node) => node.node_id));
+    const renders = [...allRenders]
+      .filter((render) => leafIds.has(render.node_id))
+      .sort((left, right) => compareStrings(left.node_id, right.node_id));
+    const codecs = createReaderScopedOpaqueCodecs({
+      root_secret: config.codecRootSecret,
+      reader_projection_digest: beforeRender.projected.reader_projection_digest,
+    });
+    const bundle = buildOwnerMemoryExport({
+      projected: beforeRender.projected,
+      renders,
+      exported_at_epoch_seconds: afterRender.db_now_epoch_seconds,
+      chunk_max_bytes: config.chunkMaxBytes,
+      encode_ref: codecs.encodeMemoryExportRef,
+    });
+    const finalLoad = snapshotDirectAuthorizedLoad(await config.loadAuthorized());
+    if (directLoadSignature(beforeRender) === directLoadSignature(finalLoad)) return bundle;
   }
   throw new ApplicationReadInvalidatedError();
 };

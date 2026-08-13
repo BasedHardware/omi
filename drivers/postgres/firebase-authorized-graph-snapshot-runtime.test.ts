@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { PostgresTransactionPool } from "./connection";
 import {
   createPostgresFirebaseAuthorizedGraphSnapshotRuntime,
+  createPostgresFirebaseAuthorizedGraphSnapshotRuntimeForCapability,
   projectFirebaseAuthorizedGraphSnapshotLoad,
 } from
   "./firebase-authorized-graph-snapshot-runtime";
@@ -52,6 +53,10 @@ describe("PostgreSQL Firebase-authorized graph snapshot runtime", () => {
         verifyIdToken: async () => ({}),
       },
     })).toThrow("deployed Firebase identity forbids the Auth emulator");
+    expect(() => createPostgresFirebaseAuthorizedGraphSnapshotRuntimeForCapability(
+      base,
+      "memories.write" as never,
+    )).toThrow("invalid Firebase-authorized graph capability");
   });
 
   test("rejects a structural loaded-outcome lookalike without sealed authority", () => {

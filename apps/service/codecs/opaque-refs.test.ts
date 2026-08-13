@@ -24,6 +24,7 @@ const STABLE_VISIBLE_KEY = /^vk1_[a-f0-9]{64}$/;
 const ITEM_REF = /^mem1_[a-f0-9]{64}$/;
 const CITATION_REF = /^cit1_[a-f0-9]{64}$/;
 const TRACE_REF = /^tr1_[a-f0-9]{64}$/;
+const MEMORY_EXPORT_REF = /^mxr1_[a-f0-9]{64}$/;
 
 const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
 
@@ -58,11 +59,13 @@ describe("reader-scoped opaque reference codecs", () => {
     const item = codecs.encodeItemRef(input);
     const citation = codecs.encodeCitationRef(input);
     const trace = codecs.encodeTraceRef(input);
+    const exported = codecs.encodeMemoryExportRef("memory", input);
 
     expect(STABLE_VISIBLE_KEY.test(visible)).toBeTrue();
     expect(ITEM_REF.test(item)).toBeTrue();
     expect(CITATION_REF.test(citation)).toBeTrue();
     expect(TRACE_REF.test(trace)).toBeTrue();
+    expect(MEMORY_EXPORT_REF.test(exported)).toBeTrue();
 
     expect(parseSynthesizedItemId(item)).not.toBeNull();
     expect(parseCitationRef(citation)).not.toBeNull();
@@ -80,8 +83,9 @@ describe("reader-scoped opaque reference codecs", () => {
       hexDigest(codecs.encodeItemRef(input)),
       hexDigest(codecs.encodeCitationRef(input)),
       hexDigest(codecs.encodeTraceRef(input)),
+      hexDigest(codecs.encodeMemoryExportRef("memory", input)),
     ];
-    expect(new Set(digests).size).toBe(4);
+    expect(new Set(digests).size).toBe(5);
   });
 
   test("never leaks the raw input through the opaque handle", () => {
@@ -95,6 +99,7 @@ describe("reader-scoped opaque reference codecs", () => {
       codecs.encodeItemRef(raw),
       codecs.encodeCitationRef(raw),
       codecs.encodeTraceRef(raw),
+      codecs.encodeMemoryExportRef("memory", raw),
     ]) {
       expect(leaksForbiddenRef(encoded, forbidden)).toBeFalse();
       expect(encoded.includes(raw)).toBeFalse();
@@ -113,12 +118,19 @@ describe("reader-scoped opaque reference codecs", () => {
     expect(readerA.encodeVisibleKey(input)).not.toBe(readerB.encodeVisibleKey(input));
     expect(readerA.encodeCitationRef(input)).not.toBe(readerB.encodeCitationRef(input));
     expect(readerA.encodeTraceRef(input)).not.toBe(readerB.encodeTraceRef(input));
+    expect(readerA.encodeMemoryExportRef("memory", input))
+      .not.toBe(readerB.encodeMemoryExportRef("memory", input));
+    expect(readerA.encodeMemoryExportRef("memory", input))
+      .not.toBe(readerA.encodeMemoryExportRef("lineage", input));
 
     // red-proof: inject Math.random or Date.now into the digest and same-reader equality fails
     expect(readerA.encodeItemRef(input)).toBe(aItem);
     expect(readerA.encodeVisibleKey(input)).toBe(readerA.encodeVisibleKey(input));
     expect(readerA.encodeCitationRef(input)).toBe(readerA.encodeCitationRef(input));
     expect(readerA.encodeTraceRef(input)).toBe(readerA.encodeTraceRef(input));
+    expect(readerA.encodeMemoryExportRef("memory", input))
+      .toBe(readerA.encodeMemoryExportRef("memory", input));
+    expect(() => readerA.encodeMemoryExportRef("unknown" as never, input)).toThrow(TypeError);
   });
 
   test("source-impact refs and cursors are reader-scoped, domain-separated, and stateless", () => {

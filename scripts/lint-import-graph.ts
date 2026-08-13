@@ -455,6 +455,7 @@ const storageProvenanceAllowMarker = "storage-provenance-ok(";
 const queryEvaluationCompositionRoot = "apps/service/composition/memory-query-evaluation.ts";
 const authorizedLedgerContextCompositionRoot = "apps/service/auth/firebase-application-authorization.ts";
 const externallyAuthorizedProjectionOwner = "drivers/postgres/firebase-authorized-graph-snapshot-runtime.ts";
+const memoryExportRuntimeOwner = "drivers/postgres/firebase-authorized-memory-export-runtime.ts";
 const sourceImpactCompositionRoot = "apps/service/composition/source-impact.ts";
 const sourceImpactCodecModule = "apps/service/codecs/opaque-refs.ts";
 const durableWorkRunnerImporters = new Set([
@@ -519,6 +520,14 @@ for (const file of files(root)) {
       failures.push(
         `${shown}: externally authorized projection evidence is private to ${externallyAuthorizedProjectionOwner}; `
         + "consume the sealed Firebase/PostgreSQL product-read runtime instead",
+      );
+    }
+    if (shown !== externallyAuthorizedProjectionOwner
+      && shown !== memoryExportRuntimeOwner
+      && shown !== "scripts/lint-import-graph.ts"
+      && /\bcreatePostgresFirebaseAuthorizedGraphSnapshotRuntimeForCapability\b/.test(code)) {
+      failures.push(
+        `${shown}: capability-selecting graph authorization is private to the sealed memory export runtime`,
       );
     }
     if (shown.startsWith("apps/")

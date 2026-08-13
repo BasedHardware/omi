@@ -10,6 +10,7 @@ import { snapshot } from "../../../core/retrieve/tree.fixture";
 import { produceQaRenders } from "../../qa/renders";
 import { createQaCursorAdapter } from "../../qa/cursor-bindings";
 import {
+  exportDirectAuthorizedMemories,
   readDirectAuthorizedMemoryPage,
   type DirectAuthorizedMemoryProjectionLoad,
 } from "./memory-read";
@@ -148,5 +149,43 @@ describe("direct Firebase/PostgreSQL-authorized memory read", () => {
     expect(sequence.filter((entry) => entry === "authorized-load")).toHaveLength(6);
     expect(sequence.filter((entry) => entry === "trace")).toHaveLength(0);
     expect(traces).toEqual([]);
+  });
+});
+
+describe("direct Firebase/PostgreSQL-authorized memory export", () => {
+  test("exports complete lineage only after final authority revalidation", async () => {
+    const sequence: string[] = [];
+    const stable = load("export");
+    let index = 0;
+    const exported = await exportDirectAuthorizedMemories({
+      loadAuthorized: async () => {
+        sequence.push("authorized-load");
+        return [stable, load("export", 1_800_000_001), load("export", 1_800_000_002)][index++]!;
+      },
+      produceRenders: async (projected) => {
+        sequence.push("render");
+        return produceQaRenders(projected);
+      },
+      codecRootSecret: new Uint8Array(32).fill(0x52),
+      chunkMaxBytes: 64 * 1024,
+    });
+    expect(sequence).toEqual(["authorized-load", "render", "authorized-load", "authorized-load"]);
+    expect(exported.manifest.counts).toEqual({ memories: 1, lineages: 1, sources: 1, chunks: 1 });
+    expect(exported.chunk_json[0]).toContain("evidence");
+    expect(exported.chunk_json[0]).not.toContain("lineage:a");
+  });
+
+  test("a late authority change releases no export bundle", async () => {
+    const stable = load("export");
+    const revoked = load("revoked");
+    const loads = [stable, stable, revoked, stable, stable, revoked];
+    let index = 0;
+    await expect(exportDirectAuthorizedMemories({
+      loadAuthorized: async () => loads[index++]!,
+      produceRenders: produceQaRenders,
+      codecRootSecret: new Uint8Array(32).fill(0x52),
+      chunkMaxBytes: 64 * 1024,
+    })).rejects.toThrow("application read invalidated during revalidation");
+    expect(index).toBe(6);
   });
 });

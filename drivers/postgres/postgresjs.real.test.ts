@@ -113,6 +113,8 @@ import {
 } from "./firebase-authorized-graph-snapshot-runtime";
 import { createPostgresFirebaseAuthorizedMemoryReadRuntime } from
   "./firebase-authorized-memory-read-runtime";
+import { createPostgresFirebaseAuthorizedMemoryExportRuntime } from
+  "./firebase-authorized-memory-export-runtime";
 import { createPostgresFirebaseAuthorizedLedgerRuntime } from "./firebase-authorized-ledger-runtime";
 import { createPostgresPredicateBatchWorkInputRepository } from "./predicate-batch-work-input";
 import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
@@ -2122,12 +2124,14 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const credentialId = `credential:${suffix}`;
     const grantId = `grant:${suffix}`;
     const readGrantId = `grant:${suffix}:read`;
+    const exportGrantId = `grant:${suffix}:export`;
     const firebaseProjectId = `firebase-project-${suffix}`;
     const firebaseUid = `firebase-user-${suffix}`;
     const controlHash = "1".repeat(64);
     const credentialHash = "2".repeat(64);
     const grantHash = "3".repeat(64);
     const readGrantHash = "5".repeat(64);
+    const exportGrantHash = "6".repeat(64);
     const now = Math.floor(Date.now() / 1_000);
 
     await ownerSql.begin(async (transaction) => {
@@ -2179,6 +2183,18 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
            capability, grant_id, grant_version)
         VALUES ($1, $2, $3, 4, 'memories.read', $4, 1)`,
       [accountId, applicationId, credentialId, readGrantId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 4, 'memories.export', $4, 1, 'active', true,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+      [accountId, applicationId, credentialId, exportGrantId, exportGrantHash]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version)
+        VALUES ($1, $2, $3, 4, 'memories.export', $4, 1)`,
+      [accountId, applicationId, credentialId, exportGrantId]);
       await transaction.unsafe(`INSERT INTO omi_memory.firebase_identity_bindings
           (firebase_project_id, firebase_uid, account_id, principal_id,
            source_control_revision)
@@ -2841,6 +2857,64 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     expect(productPage).not.toBeNull();
     expect(productPage!.items.length).toBeGreaterThan(0);
     expect(productReadTraces).toBe(1);
+    const firebaseMemoryExport = createPostgresFirebaseAuthorizedMemoryExportRuntime({
+      authorization: {
+        pool: appRolePool,
+        project_id: firebaseProjectId,
+        runtime_mode: "deployed",
+        id_token_adapter: {
+          verification_source: "firebase_production",
+          verifyIdToken: async () => firebaseClaims,
+        },
+        application_id: applicationId,
+        context_ttl_seconds: 60,
+      },
+      product: {
+        account_timezone: "UTC",
+        codec_root_secret: new Uint8Array(32).fill(0x56),
+        produce_renders: produceQaRenders,
+        chunk_max_bytes: 64 * 1024,
+      },
+    });
+    const memoryExport = await firebaseMemoryExport.export(
+      "header.payload.signature",
+      now,
+    );
+    expect(memoryExport.kind).toBe("loaded");
+    if (memoryExport.kind !== "loaded") throw new Error("expected owner memory export");
+    const exportManifest = JSON.parse(memoryExport.manifest_json) as {
+      contractVersion: string;
+      counts: { memories: number; lineages: number; sources: number; chunks: number };
+    };
+    expect(exportManifest.contractVersion).toBe("owner-memory-export-v1");
+    expect(exportManifest.counts.memories).toBeGreaterThan(0);
+    expect(exportManifest.counts.lineages).toBeGreaterThan(0);
+    expect(exportManifest.counts.sources).toBeGreaterThan(0);
+    expect(exportManifest.counts.chunks).toBe(memoryExport.chunk_json.length);
+    expect(memoryExport.chunk_json.join("\n")).not.toContain(`lineage:${suffix}:visible-product`);
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 4, 'memories.export', $4, 2, 'revoked', false,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+      [accountId, applicationId, credentialId, exportGrantId, "7".repeat(64)]);
+      await transaction.unsafe(`UPDATE omi_memory.application_grant_heads
+          SET grant_version = 2
+        WHERE account_id = $1 AND application_id = $2 AND credential_id = $3
+          AND credential_generation = 4 AND capability = 'memories.export'`,
+      [accountId, applicationId, credentialId]);
+    });
+    await expect(firebaseMemoryExport.export("header.payload.signature", now)).resolves.toEqual({
+      kind: "denied", outcome: "authorization",
+    });
+    const readAfterExportRevocation = await firebaseProductRead.read(
+      "header.payload.signature",
+      now,
+      { limit: 100, cursor: null },
+    );
+    expect(readAfterExportRevocation.kind).toBe("loaded");
     await expect(firebaseRuntime.append("header.payload.signature", now, firebaseAppend))
       .resolves.toEqual({
         kind: "completed",

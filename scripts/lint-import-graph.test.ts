@@ -44,6 +44,7 @@ test("authority fences reject issuer construction and raw PostgreSQL capabilitie
   const postgresFixture = join(platformRoot, "apps", "service", "routes", "postgres-transaction-tripwire-fixture.ts");
   const driverCapabilityFixture = join(platformRoot, "drivers", "postgres", "connection-capability-tripwire-fixture.ts");
   const projectionFixture = join(platformRoot, "apps", "service", "routes", "external-projection-tripwire-fixture.ts");
+  const graphCapabilityFixture = join(platformRoot, "drivers", "postgres", "graph-capability-tripwire-fixture.ts");
   try {
     writeFileSync(issuerFixture, [
       'import * as authorityInternals from "../apps/service/auth/authorized-context-internal";',
@@ -65,6 +66,10 @@ test("authority fences reject issuer construction and raw PostgreSQL capabilitie
       'import { projectApplicationDefaultReadTreeInputFromAuthorizationEvidence as bypass } from "../../../core/retrieve/authorization-boundary";',
       "export const raw = bypass;",
     ].join("\n"));
+    writeFileSync(graphCapabilityFixture, [
+      'import { createPostgresFirebaseAuthorizedGraphSnapshotRuntimeForCapability as bypass } from "./firebase-authorized-graph-snapshot-runtime";',
+      "export const raw = bypass;",
+    ].join("\n"));
     const result = runLint();
     expect(result.status).not.toBe(0);
     const output = `${result.stdout}${result.stderr}`;
@@ -72,11 +77,13 @@ test("authority fences reject issuer construction and raw PostgreSQL capabilitie
     expect(output).toContain("application code may not import the raw PostgreSQL");
     expect(output).toContain("authorized raw PostgreSQL connection capability is private");
     expect(output).toContain("externally authorized projection evidence is private");
+    expect(output).toContain("capability-selecting graph authorization is private");
   } finally {
     rmSync(issuerFixture, { force: true });
     rmSync(postgresFixture, { force: true });
     rmSync(driverCapabilityFixture, { force: true });
     rmSync(projectionFixture, { force: true });
+    rmSync(graphCapabilityFixture, { force: true });
   }
 });
 

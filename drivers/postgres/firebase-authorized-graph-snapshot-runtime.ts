@@ -39,6 +39,8 @@ export interface PostgresFirebaseAuthorizedGraphSnapshotRuntime {
   ): Promise<FirebaseAuthorizedGraphSnapshotOutcome>;
 }
 
+export type FirebaseAuthorizedGraphCapability = "memories.read" | "memories.export";
+
 const AUTHORITY_FAILURES = new Set([
   "authorization_state_denied", "expired_context", "stale_epoch",
   "destination_inactive", "lifecycle_inactive", "credential_inactive",
@@ -146,12 +148,17 @@ export const projectFirebaseAuthorizedGraphSnapshotLoad = (
  * locks through every awaited snapshot query, so no graph bytes can be loaded
  * under a preliminary-only authorization decision.
  */
-export const createPostgresFirebaseAuthorizedGraphSnapshotRuntime = (
+/** @internal Driver-only constructor; product routes must use a sealed runtime. */
+export const createPostgresFirebaseAuthorizedGraphSnapshotRuntimeForCapability = (
   optionsValue: PostgresFirebaseAuthorizedGraphSnapshotRuntimeOptions,
+  capability: FirebaseAuthorizedGraphCapability,
 ): PostgresFirebaseAuthorizedGraphSnapshotRuntime => {
+  if (capability !== "memories.read" && capability !== "memories.export") {
+    throw new TypeError("invalid Firebase-authorized graph capability");
+  }
   const { authorizer, pool } = createPostgresFirebaseAuthorizationRuntime(
     optionsValue,
-    "memories.read",
+    capability,
   );
   const graphs = createPostgresAuthoritativeGraphSnapshotRepository({ pool });
   return Object.freeze({
@@ -180,3 +187,8 @@ export const createPostgresFirebaseAuthorizedGraphSnapshotRuntime = (
     },
   });
 };
+
+export const createPostgresFirebaseAuthorizedGraphSnapshotRuntime = (
+  optionsValue: PostgresFirebaseAuthorizedGraphSnapshotRuntimeOptions,
+): PostgresFirebaseAuthorizedGraphSnapshotRuntime =>
+  createPostgresFirebaseAuthorizedGraphSnapshotRuntimeForCapability(optionsValue, "memories.read");
