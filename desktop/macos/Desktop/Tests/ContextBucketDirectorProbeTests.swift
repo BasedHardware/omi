@@ -260,6 +260,7 @@
       }
       XCTAssertEqual(descriptor?.safety, "network_or_model")
       XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("deliver notifications") }) == true)
+      XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("reasoning quota") }) == true)
       XCTAssertEqual(
         descriptor?.params,
         [

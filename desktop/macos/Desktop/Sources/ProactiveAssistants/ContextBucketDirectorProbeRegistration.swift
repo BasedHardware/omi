@@ -13,6 +13,7 @@
         safety: "network_or_model",
         sideEffects: [
           "may call model/backend services",
+          "eligible replays consume the signed-in account's proactivity reasoning quota",
           "does not write the database, change gates/settings, graduate tasks, or deliver notifications",
         ]
       ) { params in
