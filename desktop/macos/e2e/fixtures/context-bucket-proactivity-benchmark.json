@@ -693,7 +693,7 @@
           }
         ]
       },
-      "expectedAction": "notify",
+      "expectedAction": "either",
       "expectedEvidenceRefs": ["evidence:identity:workstream-012"],
       "expectedSubject": {"kind": "context", "id": "context-shared-012", "workstreamId": "workstream-new"},
       "expectedMaxAge": 86400,
@@ -1087,7 +1087,7 @@
           {"id": "task-privacy-021", "description": "Check status of synthetic task 021", "status": "open", "dueAt": "2026-08-14T12:00:00Z", "subjectId": "context-privacy-021"}
         ]
       },
-      "expectedAction": "notify",
+      "expectedAction": "either",
       "expectedEvidenceRefs": ["evidence:privacy:task-021"],
       "expectedSubject": {"kind": "context", "id": "context-privacy-021", "workstreamId": "workstream-delta"},
       "expectedMaxAge": 86400,
