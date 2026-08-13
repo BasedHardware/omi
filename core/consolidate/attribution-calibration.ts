@@ -272,6 +272,15 @@ const provisionalFor = (input: CalibrateAttributionBeliefInput): AttributionBeli
   }
 };
 
+/** Exact content-safe coordinate for one normalized calibrator request. This
+ * lets offline evaluators verify a persisted receipt without replaying the
+ * calibrator or exposing owner bytes. */
+export const attributionCalibrationRequestDigest = (
+  input: CalibrateAttributionBeliefInput,
+): string => sha256CanonicalRedacted(
+  requestFor(provisionalFor(normalizeInput(input))) as unknown as CanonicalJson,
+);
+
 export const calibrateAttributionBelief = async (
   input: CalibrateAttributionBeliefInput,
   calibrator: AttributionCalibratorPort,

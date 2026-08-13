@@ -4,6 +4,7 @@ import { attributionEvidenceFactorRef, type AttributionEvidenceFactor } from "./
 import {
   ATTRIBUTION_CALIBRATION_RECEIPT_VERSION,
   AttributionCalibrationError,
+  attributionCalibrationRequestDigest,
   calibrateAttributionBelief,
   hypothesisIdForCalibrationCandidate,
   type AttributionCalibrationErrorCode,
@@ -89,6 +90,7 @@ describe("dependency-aware attribution calibration seam", () => {
     expect(Object.isFrozen(seen[0]!.evidence_groups[0]!.factors)).toBe(true);
     expect(output.belief.hypotheses.map((item) => item.probability_micros)).toEqual([700_000, 300_000]);
     expect(output.receipt.version).toBe(ATTRIBUTION_CALIBRATION_RECEIPT_VERSION);
+    expect(output.receipt.request_digest).toBe(attributionCalibrationRequestDigest(input));
     expect(output.receipt.belief_revision_id).toBe(output.belief.belief_revision_id);
     for (const value of [output.receipt.request_digest, output.receipt.response_digest, output.receipt.result_digest]) {
       expect(value).toMatch(/^[a-f0-9]{64}$/);
