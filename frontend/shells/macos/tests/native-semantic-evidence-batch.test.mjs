@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { foregroundApplicationFromResults, lockedGuiBlock } from "../probes/native-semantic-evidence-batch.mjs";
+import { canonicalBatchId, foregroundApplicationFromResults, lockedGuiBlock } from "../probes/native-semantic-evidence-batch.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const core = resolve(root, "../..");
@@ -93,6 +93,16 @@ test("semantic batch emits exact AX coverage and immutable prepared inputs", () 
     const unproved = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--assemble-receipt", "--result-path", join(out, "batch-result.json")], { encoding: "utf8" });
     assert.equal(unproved.status, 2); assert.match(unproved.stderr, /lacks a completed replay proof/);
     writeFileSync(join(out, "batch-result.json"), firstResultBytes);
+    for (const tamperedAuthority of [
+      { ...result.authority, fixture: false },
+      { ...result.authority, focus_policy: { ...result.authority.focus_policy, ax: "monitor-disabled" } },
+    ]) {
+      writeFileSync(join(out, "batch-result.json"), JSON.stringify({ ...result, authority: tamperedAuthority }));
+      const tampered = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--assemble-receipt", "--result-path", join(out, "batch-result.json")], { encoding: "utf8" });
+      assert.equal(tampered.status, 2);
+      assert.match(tampered.stderr, /authority does not match the prepared fixture\/focus authority/);
+    }
+    writeFileSync(join(out, "batch-result.json"), firstResultBytes);
     const assembled = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--assemble-receipt", "--result-path", join(out, "batch-result.json")], { encoding: "utf8" });
     assert.equal(assembled.status, 0, assembled.stderr); const receiptPath = assembled.stdout.match(/file=(.+\.receipt\.json)/)?.[1]; assert.ok(receiptPath);
     const receiptBytes = readFileSync(join(core, receiptPath), "utf8"); const receipt = JSON.parse(receiptBytes); assert.match(receipt.batch_id, /^batch-v1-[0-9a-f]{64}$/); assert.equal(receipt.coverage[0].command_receipt.capture_class, "native_fixture"); assert.doesNotMatch(receiptBytes, /"pid"\s*:/);
@@ -100,6 +110,15 @@ test("semantic batch emits exact AX coverage and immutable prepared inputs", () 
     rmSync(scratch, { recursive: true, force: true });
     rmSync(join(root, ".build", `semantic-batch-test-${process.pid}`), { recursive: true, force: true });
   }
+});
+
+test("semantic batch identity binds the exact authority", () => {
+  const members = { m0000: { run_id: "semantic-ax_snapshot" } };
+  const authority = { fixture: true, focus_policy: { ax: "guarded" } };
+  assert.notEqual(
+    canonicalBatchId("input-v1-test", "capture", members, authority),
+    canonicalBatchId("input-v1-test", "capture", members, { ...authority, fixture: false }),
+  );
 });
 
 test("foreground classification fails closed and identifies a locked loginwindow", () => {

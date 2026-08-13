@@ -2,7 +2,7 @@
 /**
  * Run one native CLI command while continuously observing the macOS foreground
  * application. The helper never activates or restores an app. A probe fault,
- * focus change, timeout, or missing terminal result fails closed.
+ * forbidden fixture focus, timeout, or missing terminal result fails closed.
  */
 import { execFile, spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";

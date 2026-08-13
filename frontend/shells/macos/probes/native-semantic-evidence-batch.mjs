@@ -16,6 +16,18 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const coreRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const wrapperPath = path.resolve(fileURLToPath(import.meta.url));
 const nativeForbiddenForegroundPolicy = "sampled-20ms-forbidden-fixture-foreground-detection-no-activation-request";
+function expectedSemanticAuthority() {
+  return {
+    fixture: true,
+    bridge: "disabled",
+    credentials: false,
+    production_api: false,
+    focus_policy: {
+      ax: nativeForbiddenForegroundPolicy,
+      keyboard: "explicit-temporary-focus-consent-and-proven-restoration",
+    },
+  };
+}
 const domains = new Set(["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"]);
 const states = new Set(["ready", "error", "empty"]);
 const themes = new Set(["light", "dark"]);
@@ -364,7 +376,7 @@ function sidecarDocument(coordinate, probe, evidence) {
   return { schema: "omi.native-semantic-sidecar/v1", coordinate: coordinateKey(coordinate), run_id: coordinate.run_id, source_shas: coordinate.source_shas, capture_class: coordinate.capture_class, source_tier: coordinate.source_tier, target: { bundle_id: coordinate.target.bundle_id, process_name: coordinate.target.process_name, process_name_bound: true, runtime_pid_redacted: true }, evidence_schema: evidence.schema, matrix_eligible: probe.matrixEligible === true, domain_landmark: coordinate.landmark, frontmost_restored: coordinate.kind === "keyboard_trace" ? probe.frontmostRestored === true : null };
 }
 function writePrepared(file, manifestPath, manifest, probePath, fixture, offset, limit) {
-  const descriptor = { schema: "omi.native-semantic-prepared/v2", source_shas: manifest.source_shas, manifest_path: `core:${authorityRelative(manifestPath)}`, manifest_sha256: hashFile(manifestPath), shell: "macos", offset, limit, coordinate_run_ids: manifest.coordinates.slice(offset, offset + limit).map((coordinate) => coordinate.run_id), capture_class: manifest.capture_class, probe: `core:${authorityRelative(probePath)}`, fixture_app: `core:${authorityRelative(fixture.app)}`, fixture_executable: `core:${authorityRelative(fixture.executable)}`, bundle_id: fixture.bundleId, process_name: fixture.executableName, launch: { method: "direct-executable", activation_policy: "accessory", readiness: "stderr:display-mode: background-semantic" }, authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { ax: nativeForbiddenForegroundPolicy, keyboard: "explicit-temporary-focus-consent-and-proven-restoration" } }, input_set: inputSet(manifestPath, probePath, fixture.files) };
+  const descriptor = { schema: "omi.native-semantic-prepared/v2", source_shas: manifest.source_shas, manifest_path: `core:${authorityRelative(manifestPath)}`, manifest_sha256: hashFile(manifestPath), shell: "macos", offset, limit, coordinate_run_ids: manifest.coordinates.slice(offset, offset + limit).map((coordinate) => coordinate.run_id), capture_class: manifest.capture_class, probe: `core:${authorityRelative(probePath)}`, fixture_app: `core:${authorityRelative(fixture.app)}`, fixture_executable: `core:${authorityRelative(fixture.executable)}`, bundle_id: fixture.bundleId, process_name: fixture.executableName, launch: { method: "direct-executable", activation_policy: "accessory", readiness: "stderr:display-mode: background-semantic" }, authority: expectedSemanticAuthority(), input_set: inputSet(manifestPath, probePath, fixture.files) };
   writeAtomic(file, descriptor);
   return descriptor;
 }
@@ -377,7 +389,7 @@ function loadPrepared(file, manifestPath, manifest, offset, limit) {
   const descriptor = JSON.parse(readFileSync(file, "utf8"));
   const descriptorKeys = ["authority", "bundle_id", "capture_class", "coordinate_run_ids", "fixture_app", "fixture_executable", "input_set", "launch", "limit", "manifest_path", "manifest_sha256", "offset", "probe", "process_name", "schema", "shell", "source_shas"];
   if (descriptor.schema !== "omi.native-semantic-prepared/v2" || Object.keys(descriptor).sort().join(",") !== descriptorKeys.sort().join(",") || descriptor.source_shas.core !== manifest.source_shas.core || descriptor.source_shas.platform !== manifest.source_shas.platform || descriptor.manifest_path !== `core:${authorityRelative(manifestPath)}` || descriptor.manifest_sha256 !== hashFile(manifestPath) || descriptor.capture_class !== manifest.capture_class || descriptor.shell !== "macos" || descriptor.offset !== offset || descriptor.limit !== limit) fail("prepared semantic input set is stale");
-  if (manifest.capture_class !== "native_fixture" || canonical(descriptor.authority) !== canonical({ fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { ax: nativeForbiddenForegroundPolicy, keyboard: "explicit-temporary-focus-consent-and-proven-restoration" } })) fail("prepared semantic authority is not fixture-only");
+  if (manifest.capture_class !== "native_fixture" || canonical(descriptor.authority) !== canonical(expectedSemanticAuthority())) fail("prepared semantic authority is not fixture-only");
   if (canonical(descriptor.launch) !== canonical({ method: "direct-executable", activation_policy: "accessory", readiness: "stderr:display-mode: background-semantic" })) fail("prepared semantic launch policy is invalid");
   const expectedRunIds = manifest.coordinates.slice(offset, offset + limit).map((coordinate) => coordinate.run_id);
   if (canonical(descriptor.coordinate_run_ids) !== canonical(expectedRunIds)) fail("prepared semantic coordinate range is stale");
@@ -390,7 +402,7 @@ function loadPrepared(file, manifestPath, manifest, offset, limit) {
   // capture command's effective input set below.
   return { descriptor, probePath, fixture, input: inputSet(manifestPath, probePath, [...fixture.files, file]) };
 }
-function canonicalBatchId(inputSetId, command, members) { return `batch-v1-${sha256(canonical({ command, input_set_id: inputSetId, members }))}`; }
+export function canonicalBatchId(inputSetId, command, members, authority) { return `batch-v1-${sha256(canonical({ authority, command, input_set_id: inputSetId, members }))}`; }
 async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
   const { offset, limit } = captureRange(args, manifest);
   const prepared = loadPrepared(preparedPath, manifestPath, manifest, offset, limit);
@@ -463,9 +475,10 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
 function assemble(args, manifestPath, manifest, outRoot) {
   const resultPath = coreFile(args.result_path, "--result-path"); const result = JSON.parse(readFileSync(resultPath, "utf8"));
   if (result.schema !== "omi.polish.native-semantic-batch-result/v1" || result.manifest_path !== `core:${authorityRelative(manifestPath)}` || result.manifest_sha256 !== hashFile(manifestPath) || canonical(result.source_shas) !== canonical(manifest.source_shas) || !result.input_set?.id || typeof result.command !== "string" || !Array.isArray(result.argv) || !result.members || typeof result.members !== "object") fail("batch result is stale or malformed");
+  if (canonical(result.authority) !== canonical(expectedSemanticAuthority())) fail("batch result authority does not match the prepared fixture/focus authority");
   if (!Array.isArray(result.input_set.entries) || !sha64.test(result.input_set.tree_sha256 || "") || result.input_set.id !== `input-v1-${result.input_set.tree_sha256}` || sha256(canonical(result.input_set.entries)) !== result.input_set.tree_sha256 || result.coordinate_count !== Object.keys(result.members).length) fail("batch result input set or member count is malformed");
   if (result.replay_proof !== true || !result.argv.includes("--replay-proof")) fail("batch result lacks a completed replay proof");
-  const members = result.members; const batchId = canonicalBatchId(result.input_set.id, result.command, members); const artifactHashes = {}; const before = {}; const created = {}; const seenRuns = new Set();
+  const members = result.members; const batchId = canonicalBatchId(result.input_set.id, result.command, members, result.authority); const artifactHashes = {}; const before = {}; const created = {}; const seenRuns = new Set();
   for (const [memberId, member] of Object.entries(members)) {
     if (!/^m\d{4}$/.test(memberId) || !Array.isArray(member.coordinate) || member.coordinate.length !== 7 || typeof member.run_id !== "string" || member.evidence?.root !== "core" || member.sidecar?.root !== "core") fail("batch result member is malformed");
     if (seenRuns.has(member.run_id)) fail("batch result contains duplicate run_id"); seenRuns.add(member.run_id);
