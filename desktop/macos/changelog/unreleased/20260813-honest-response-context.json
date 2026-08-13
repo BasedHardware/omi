@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Response Context to show tools, tokens, and admitted kernel sources instead of a guessed model"
+}
