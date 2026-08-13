@@ -182,20 +182,29 @@ const REMAPPED_TRACE_KEYS = new Set([
   "admissionLabel", "capabilityLabel", "sourceDigest", "projectionDigest", "traceDigest",
   "bundleDigest", "eventId", "attemptId", "contextReceiptId",
 ]);
+const PROSE_TRACE_KEYS = new Set([
+  "safeSummary", "redactedPreview", "inclusionReason", "resultSummary", "errorSummary", "reason",
+]);
 
-const jsonContentStringValues = (value: unknown, visit: (text: string) => void): void => {
+const jsonContentStringValues = (
+  value: unknown,
+  visit: (text: string) => void,
+  insideProse = false,
+): void => {
   if (typeof value === "string") {
-    visit(value);
+    if (insideProse) visit(value);
     return;
   }
   if (value === null || typeof value !== "object") return;
   if (Array.isArray(value)) {
-    value.forEach((item) => jsonContentStringValues(item, visit));
+    value.forEach((item) => jsonContentStringValues(item, visit, insideProse));
     return;
   }
   if (!isRecord(value)) return;
   for (const [key, item] of Object.entries(value)) {
-    if (!REMAPPED_TRACE_KEYS.has(key)) jsonContentStringValues(item, visit);
+    if (!REMAPPED_TRACE_KEYS.has(key)) {
+      jsonContentStringValues(item, visit, insideProse || PROSE_TRACE_KEYS.has(key));
+    }
   }
 };
 

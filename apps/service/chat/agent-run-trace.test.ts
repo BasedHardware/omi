@@ -135,6 +135,12 @@ describe("agent-run redacted export and hermetic replay", () => {
     expect(exported.bytes).toContain("capability:1");
     expect(exported.bytes).not.toContain('"cap"');
     expect(replayAgentRunTrace(JSON.parse(exported.bytes)).projection.events.length).toBeGreaterThan(0);
+
+    // Source identifiers may legitimately equal an adapter/tool value. They
+    // are not leaked merely because the same value is present in a semantic
+    // field; only source-visible prose is checked below.
+    const semanticCollision = makeStore("scripted");
+    expect(() => exportAgentRunTrace(semanticCollision.store, semanticCollision.runId, { buildId: "platform-test-build" })).not.toThrow();
   });
 
   test("generated labels do not collide with valid short or event-like source IDs", () => {
@@ -151,6 +157,24 @@ describe("agent-run redacted export and hermetic replay", () => {
     expect(labels.bundle.eventTrace[0]?.attemptLabel).toBe("attempt:1");
     expect(labels.bundle.eventTrace[0]?.eventLabel).toBe("event:1");
     expect(replayAgentRunTrace(JSON.parse(labels.bytes)).projection.events.length).toBeGreaterThan(0);
+
+    const productionIds = makeStore(
+      "550e8400-e29b-41d4-a716-446655440000",
+      "run-production-uuid",
+      "1d7f4b24-5c7e-4c46-9f32-7eb87f4d7c2a",
+    );
+    const productionSnapshot = productionIds.store.snapshot();
+    productionIds.store.restore({
+      runs: productionSnapshot.runs.map((run) => ({
+        ...run,
+        events: run.events.map((event, index) => index === 0
+          ? { ...event, eventId: "8f5e2c15-8a4c-4d79-9d0b-8d2e4f7b1a33" }
+          : event),
+      })),
+    });
+    const productionExport = exportAgentRunTrace(productionIds.store, productionIds.runId, { buildId: "platform-test-build" });
+    expect(productionExport.bytes).not.toContain(productionIds.runId);
+    expect(replayAgentRunTrace(JSON.parse(productionExport.bytes)).projection.events.length).toBeGreaterThan(0);
 
     for (const [runId, attemptId] of [["a", "attempt-safe"], ["run-safe", "id"]] as const) {
       const source = makeStore("cap", runId, attemptId);
