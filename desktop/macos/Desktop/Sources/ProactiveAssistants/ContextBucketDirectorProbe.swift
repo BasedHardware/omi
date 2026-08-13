@@ -17,6 +17,7 @@
     typealias Completion = (
       _ operation: String,
       _ prompt: String,
+      _ uncachedPrompt: String?,
       _ imageData: Data?,
       _ jsonSchema: [String: Any],
       _ cacheKey: String?,
@@ -30,12 +31,13 @@
     init(client: ProactiveLaneClient = .shared, isNonProduction: Bool? = nil) {
       self.isNonProduction = isNonProduction ?? AppBuild.isNonProduction
       self.completion = {
-        operation, prompt, imageData, jsonSchema, cacheKey, maxCompletionTokens,
+        operation, prompt, uncachedPrompt, imageData, jsonSchema, cacheKey, maxCompletionTokens,
         authorizationSnapshot in
         let schema = SendableSchema(jsonSchema)
         return try await client.complete(
           operation: operation,
           prompt: prompt,
+          uncachedPrompt: uncachedPrompt,
           imageData: imageData,
           jsonSchema: schema.value,
           cacheKey: cacheKey,
@@ -85,15 +87,14 @@
         windowTitle: input.window,
         frameNumber: 0,
         captureTime: input.capturedAt)
-      let prompt = ContextProactivityPromptBuilder.directorPrompt(
-        snapshot: snapshot,
-        tasks: input.tasks,
-        frame: frame)
+      let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
+      let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(tasks: input.tasks, frame: frame)
       let cacheKey = "bucket:\(snapshot.bucketID):v\(snapshot.version)"
       let started = DispatchTime.now().uptimeNanoseconds
       let result = try await completion(
         ModelQoS.Proactivity.reasoningOperation,
         prompt,
+        uncachedPrompt,
         nil,
         ContextProactivityEngine.schema,
         cacheKey,

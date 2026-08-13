@@ -127,19 +127,30 @@ enum ContextProactivityPromptBuilder {
     tasks: [ContextDirectorTaskContext],
     frame: CapturedFrame
   ) -> String {
+    "\(directorStablePrompt(snapshot: snapshot))\n\n\(directorVolatilePrompt(tasks: tasks, frame: frame))"
+  }
+
+  static func directorStablePrompt(snapshot: ContextBucketSnapshot) -> String {
     let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
-    let taskLines: [String] = tasks.prefix(20).map { task -> String in
-      guard let dueAt = task.dueAt else { return "- \(task.description)" }
-      return "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))"
-    }
-    let taskContext = taskLines.joined(separator: "\n")
     return """
       \(ScreenDerivedContent.untrustedPreamble)
       Decide whether interrupting now adds concrete value. Return silence unless the validated
       facts support a specific, timely action. Use only supplied bucket-entry refs.
 
       \(stableBucket)
+      """
+  }
 
+  static func directorVolatilePrompt(
+    tasks: [ContextDirectorTaskContext],
+    frame: CapturedFrame
+  ) -> String {
+    let taskLines: [String] = tasks.prefix(20).map { task -> String in
+      guard let dueAt = task.dueAt else { return "- \(task.description)" }
+      return "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))"
+    }
+    let taskContext = taskLines.joined(separator: "\n")
+    return """
       == OPEN OR OVERDUE TASKS ==
       \(taskContext)
 

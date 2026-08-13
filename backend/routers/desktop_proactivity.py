@@ -301,9 +301,9 @@ def _gateway_payload(request: ProactiveCompletionRequest) -> dict[str, Any]:
 def _add_explicit_cache_breakpoint(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Mark the stable prompt prefix for the gateway's explicit cache protocol.
 
-    The desktop client sends the stable bucket prompt as the first text part and the
-    current frame as a later image part.  Keep the marker before image content so the
-    gateway can cache the text prefix without changing the visible prompt.
+    The desktop client sends the stable bucket prompt as the first text part, followed
+    by volatile task/frame metadata and then the current image. Keep the marker after
+    only that first text part so per-frame timestamps do not rewrite the cache prefix.
     """
     copied = [dict(message) for message in messages]
     for message in reversed(copied):
@@ -315,15 +315,15 @@ def _add_explicit_cache_breakpoint(messages: list[dict[str, Any]]) -> list[dict[
             ):
                 return copied
             marker = {"type": "text", "text": "", "prompt_cache_breakpoint": {"mode": "explicit"}}
-            image_index = next(
+            first_volatile_index = next(
                 (
                     index
-                    for index, part in enumerate(parts)
-                    if isinstance(part, dict) and part.get("type") == "image_url"
+                    for index, part in enumerate(parts[1:], start=1)
+                    if isinstance(part, dict) and part.get("type") in {"text", "image_url"}
                 ),
                 len(parts),
             )
-            parts.insert(image_index, marker)
+            parts.insert(first_volatile_index, marker)
             message["content"] = parts
             return copied
         if isinstance(content, str):

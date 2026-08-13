@@ -32,6 +32,12 @@ enum ContextDirectorEligibility {
   }
 }
 
+enum ContextDirectorGrounding {
+  static func permitsNonSilence(entryRefs: [String], factIDs: [String]) -> Bool {
+    !entryRefs.isEmpty && !factIDs.isEmpty
+  }
+}
+
 extension ContextBucketStore {
   func activeFenceIsValid(_ fence: ContextVisitFence) async -> Bool {
     let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
@@ -144,8 +150,8 @@ actor ContextProactivityEngine {
         ContextDirectorTaskContext(description: $0.description, dueAt: $0.dueAt)
       }
     }
-    let prompt = ContextProactivityPromptBuilder.directorPrompt(
-      snapshot: snapshot,
+    let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
+    let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
       tasks: taskContext,
       frame: currentFrame)
     guard
@@ -177,6 +183,7 @@ actor ContextProactivityEngine {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.reasoningOperation,
         prompt: prompt,
+        uncachedPrompt: uncachedPrompt,
         imageData: currentFrame.jpegData,
         jsonSchema: Self.schema,
         cacheKey: "bucket:\(snapshot.bucketID):v\(snapshot.version)",
@@ -197,11 +204,18 @@ actor ContextProactivityEngine {
       let decision = try JSONDecoder().decode(ContextDirectorDecision.self, from: Data(result.content.utf8)).clamped()
       let entryRefs = await store.validatedEntryRefs(
         decision.bucketEntryRefs, bucketID: snapshot.bucketID)
+      let factIDs =
+        decision.decision == "silence"
+        ? []
+        : await store.validatedFactIDs(
+          decision.factIDs,
+          snapshotFacts: snapshot.validatedFacts,
+          bucketID: snapshot.bucketID)
       let provenance: [String: Any] = [
         "bucket_id": snapshot.bucketID,
         "bucket_version_id": snapshot.versionID,
         "bucket_entry_refs": entryRefs,
-        "fact_ids": decision.factIDs,
+        "fact_ids": factIDs,
         "reasoning": decision.reasoning,
         "provider_model": ContextProactivityTelemetry.boundedProviderModel(result.providerModel),
         "cached_tokens": result.usage.cachedTokens,
@@ -218,7 +232,7 @@ actor ContextProactivityEngine {
           message: nil, state: "suppressed")
         return
       }
-      guard !entryRefs.isEmpty else {
+      guard ContextDirectorGrounding.permitsNonSilence(entryRefs: entryRefs, factIDs: factIDs) else {
         try await store.completeDelivery(
           id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
           message: nil, state: "suppressed")
@@ -267,7 +281,7 @@ actor ContextProactivityEngine {
       if decision.decision == "task_candidate" {
         graduationSucceeded = await CandidateSink.shared.graduateValidatedFacts(
           deliveryID: deliveryID,
-          factIDs: decision.factIDs,
+          factIDs: factIDs,
           authorizationSnapshot: authorizationSnapshot)
       }
       guard

@@ -45,6 +45,7 @@ actor ProactiveLaneClient {
   func complete(
     operation: String,
     prompt: String,
+    uncachedPrompt: String? = nil,
     imageData: Data? = nil,
     jsonSchema: [String: Any],
     cacheKey: String? = nil,
@@ -57,6 +58,9 @@ actor ProactiveLaneClient {
       }
     }
     var content: [[String: Any]] = [["type": "text", "text": prompt]]
+    if let uncachedPrompt, !uncachedPrompt.isEmpty {
+      content.append(["type": "text", "text": uncachedPrompt])
+    }
     if let imageData {
       content.append([
         "type": "image_url",

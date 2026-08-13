@@ -55,11 +55,11 @@
       ]
       let probe = ContextBucketDirectorProbe(
         completion: {
-          operation, prompt, imageData, schema, cacheKey,
+          operation, prompt, uncachedPrompt, imageData, schema, cacheKey,
           maxCompletionTokens, authorizationSnapshot in
           await recorder.save(
             operation: operation,
-            prompt: prompt,
+            prompt: prompt + "\n\n" + (uncachedPrompt ?? ""),
             imageData: imageData,
             schemaKeys: Set(schema.keys),
             cacheKey: cacheKey,
@@ -117,7 +117,7 @@
     func testReplayClampsUntrustedDecisionAndDoesNotInvokeDelivery() async throws {
       let recorder = CallRecorder()
       let probe = ContextBucketDirectorProbe(
-        completion: { operation, _, _, _, _, _, _ in
+        completion: { operation, _, _, _, _, _, _, _ in
           await recorder.save(
             operation: operation,
             prompt: "",
@@ -172,7 +172,7 @@
     func testReplayReturnsEffectiveSilenceWithoutModelForIneligibleSnapshot() async throws {
       let recorder = CallRecorder()
       let probe = ContextBucketDirectorProbe(
-        completion: { operation, _, _, _, _, _, _ in
+        completion: { operation, _, _, _, _, _, _, _ in
           await recorder.save(
             operation: operation,
             prompt: "unexpected",
@@ -225,7 +225,7 @@
     func testReplayReturnsEffectiveSilenceForZeroWorthinessWithoutModel() async throws {
       let recorder = CallRecorder()
       let probe = ContextBucketDirectorProbe(
-        completion: { operation, _, _, _, _, _, _ in
+        completion: { operation, _, _, _, _, _, _, _ in
           await recorder.save(
             operation: operation, prompt: "unexpected", imageData: nil, schemaKeys: [], cacheKey: nil,
             maxCompletionTokens: 0, authorizationSnapshotWasPresent: false)
@@ -271,7 +271,7 @@
     func testReplayFailsClosedOutsideNonProductionBeforeClientCall() async {
       let recorder = CallRecorder()
       let probe = ContextBucketDirectorProbe(
-        completion: { operation, _, _, _, _, _, _ in
+        completion: { operation, _, _, _, _, _, _, _ in
           await recorder.save(
             operation: operation,
             prompt: "called",

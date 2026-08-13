@@ -45,6 +45,32 @@ def test_operation_pins_lane_and_only_reasoning_enables_explicit_cache():
     assert parts[1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
 
 
+def test_reasoning_cache_breakpoint_precedes_volatile_text_and_image():
+    def parts_for(captured_at: str):
+        request_value = request("proactive_reasoning", cache_key="bucket-7-version-3")
+        request_value.messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "stable bucket"},
+                    {"type": "text", "text": f"captured at: {captured_at}"},
+                    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,"}},
+                ],
+            }
+        ]
+        return desktop_proactivity._gateway_payload(request_value)["messages"][0]["content"]
+
+    parts = parts_for("2026-08-13T16:00:00Z")
+    later_parts = parts_for("2026-08-13T16:00:01Z")
+
+    assert parts[0] == {"type": "text", "text": "stable bucket"}
+    assert parts[1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+    assert parts[2]["text"].startswith("captured at:")
+    assert parts[3]["type"] == "image_url"
+    assert parts[:2] == later_parts[:2]
+    assert parts[2:] != later_parts[2:]
+
+
 def test_request_requires_strict_valid_nested_json_schema():
     payload = request().model_dump(mode="json")
     payload["response_format"] = {

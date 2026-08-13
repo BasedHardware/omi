@@ -410,6 +410,45 @@ actor ContextBucketStore {
     return normalized.filter { allowed.contains($0) }.map { "entry:\($0)" }
   }
 
+  func validatedFactIDs(_ ids: [String], snapshotFacts: [String], bucketID: String) async -> [String] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    return
+      (try? await pool.read { db in
+        try Self.validatedFactIDs(ids, snapshotFacts: snapshotFacts, bucketID: bucketID, in: db)
+      }) ?? []
+  }
+
+  static func validatedFactIDs(
+    _ ids: [String],
+    snapshotFacts: [String],
+    bucketID: String,
+    in db: Database
+  ) throws -> [String] {
+    let normalized = ids.map { $0.hasPrefix("fact:") ? String($0.dropFirst(5)) : $0 }
+    let snapshotIDs = Set(snapshotFacts.compactMap(Self.snapshotFactID))
+    let citedSnapshotIDs = normalized.filter { snapshotIDs.contains($0) }
+    guard !citedSnapshotIDs.isEmpty else { return [] }
+    var arguments: StatementArguments = [bucketID]
+    arguments += StatementArguments(citedSnapshotIDs)
+    let rows = try String.fetchAll(
+      db,
+      sql: """
+        SELECT id FROM bucket_facts
+        WHERE bucketID = ? AND validityState = 'validated'
+          AND id IN (\(citedSnapshotIDs.map { _ in "?" }.joined(separator: ",")))
+        """,
+      arguments: arguments)
+    let allowed = Set(rows)
+    return citedSnapshotIDs.filter { allowed.contains($0) }.map { "fact:\($0)" }
+  }
+
+  private static func snapshotFactID(_ fact: String) -> String? {
+    guard fact.hasPrefix("fact:") else { return nil }
+    let id = fact.dropFirst(5).prefix { !$0.isWhitespace }
+    return id.isEmpty ? nil : String(id)
+  }
+
   private func pool(for fence: ContextVisitFence) async throws -> DatabasePool {
     let (pool, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool, generation == fence.poolEpoch else { throw ContextBucketStoreError.staleFence }
