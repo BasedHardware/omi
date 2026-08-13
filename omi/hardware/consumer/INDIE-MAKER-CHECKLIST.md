@@ -27,16 +27,16 @@ But you don't need to build it from scratch. The Omi factory already produces th
 
 ## What's in the Repo
 
-Everything needed to manufacture the Omi consumer device is open-source (MIT license):
+Design files and manufacturing references for the Omi consumer device are open-source (MIT license). Some components must be obtained separately — see "What's NOT in the Repo" below.
 
 ### For Kit Builders
 
 | What You Need | File | Status |
 |--------------|------|--------|
-| Assembly steps | [KIT-ASSEMBLY.md](KIT-ASSEMBLY.md) | ✅ Complete |
-| Firmware flashing | [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) | ✅ Complete |
-| Battery safety | [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | ✅ Complete |
-| Build path selection | [BUILD-GUIDE.md](BUILD-GUIDE.md) | ✅ Complete |
+| Assembly steps | [KIT-ASSEMBLY.md](KIT-ASSEMBLY.md) | ✅ Documented |
+| Firmware flashing | [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) | ✅ Documented |
+| Battery safety | [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | ✅ Documented |
+| Build path selection | [BUILD-GUIDE.md](BUILD-GUIDE.md) | ✅ Documented |
 
 ### For DIY Builders (Engineers)
 
@@ -66,27 +66,21 @@ Everything needed to manufacture the Omi consumer device is open-source (MIT lic
 
 ---
 
-## Quality Audit Summary
+## Known Constraints
 
-These docs went through 6 rounds of Codex review + a source-of-truth audit against the actual KiCad PCB/schematic files and factory BOM. Major corrections found and fixed:
+Things to be aware of that these docs cannot solve:
 
-**Critical (would have caused build failure):**
-- W25Q16JW → W25Q16JV — JW is 1.8V family, would be destroyed on the 3.3V rail
-- Reversed battery wiring — no reverse-polarity protection; destroys the BQ25101
-- DSBGA/BGA pitch values all listed as 0.5mm — actual pitches are 0.35mm (U13), 0.4mm (U6, U11, U15)
-
-**Important (wrong specs or processes):**
-- FPC bend radius 1.8mm → 2.2mm (IPC-2223C requires total thickness including coverlay)
-- FM8625H switching time <100ns → 2–20µs (budget SPDT, not premium)
-- PI965 Section II: standalone lithium-ion cells are cargo-only (not passenger aircraft)
-- JLCPCB standard service lacks blind/buried vias — must select HDI service
-- nrfutil: pip install installs deprecated v6 — use standalone download
-
-**20+ additional corrections** across 6 rounds — see [Codex Review History](#codex-review-history) below for the full list.
+- **No VNA measurements** in the final enclosure yet — RF antenna notes are based on design analysis, not measured S-parameters
+- **No PCB photos** with test point locations labeled — SWD doc describes locations from silkscreen only
+- **JLCPCB pricing changes** — component costs and consignment quotes are estimates, not live quotes
+- **Suntech BTB connector pitch** — listed as 0.35mm from KiCad, not independently confirmed by datasheet
 
 ---
 
-## Codex Review History
+## Appendix: Review History
+
+<details>
+<summary>These docs went through 6 rounds of automated review (Codex) + a source-of-truth audit against the KiCad PCB/schematic files and factory BOM. 20+ corrections found and fixed. Click to expand.</summary>
 
 | Round | Issue Caught | Impact |
 |-------|-------------|--------|
@@ -112,3 +106,5 @@ These docs went through 6 rounds of Codex review + a source-of-truth audit again
 | R6b | W25Q16JW → W25Q16JV (1.8V → 3.3V family) | Would destroy flash IC |
 | R6b | PI965 Section II cargo-only for UN3480 | Shipping rejection |
 | R6b | Max discharge ≥250mA → ≥300mA | Battery protection trips |
+
+</details>

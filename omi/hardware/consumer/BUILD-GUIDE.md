@@ -26,12 +26,13 @@ The Omi factory already produces these boards at scale. Ordering pre-assembled s
 
 | Item | Description |
 |------|-------------|
-| Mainboard PCBA | Fully assembled and tested. nRF5340, nRF7002, all 144 components soldered, X-ray verified. |
-| Charger PCBA | Assembled. 8 components. |
+| Mainboard PCBA | Fully assembled and tested. nRF5340, nRF7002, 144 placements soldered, X-ray verified. |
+| Charger PCBA | Assembled. 8 placements. |
 | FPC | Assembled with BTB connector and charging contact ring. |
 | Battery | 150mAh LiPo coin cell with protection circuit, pre-tested. |
 | Enclosure | CNC AL6061-T6, anodized, laser-engraved (2 parts: case-a, case-b). |
-| Hardware bag | Magnets (×4), screws (×3), foam tape, dust filters (×2), vibration motor, necklace cord. |
+| Internal parts | Wrapper (PC+ABS), silicone pad, frame, LED guide. |
+| Hardware bag | Magnets (×4), screws (×3, M1.4×3mm), foam tape, Kapton tape, dust filters (×2), vibration motor, necklace cord. |
 
 ### What You Provide
 
@@ -46,15 +47,15 @@ The Omi factory already produces these boards at scale. Ordering pre-assembled s
 
 **See [KIT-ASSEMBLY.md](KIT-ASSEMBLY.md) for the detailed guide.** Summary:
 
-1. **Inspect** — verify all parts are present and undamaged
-2. **Flash firmware** — connect J-Link to SWD test points, flash network + app core
-3. **Connect FPC** — mate BTB connector from FPC to mainboard
-4. **Solder battery** — 2 wires, verify polarity first (⚠ reversed polarity destroys the charger IC)
+1. **Solder motor** — solder vibration motor wires (board unpowered)
+2. **Connect FPC** — mate BTB connector from FPC to mainboard
+3. **Flash firmware** — temporarily power board, connect J-Link to SWD test points, flash both cores
+4. **Solder battery** — verify polarity first (⚠ reversed polarity destroys the charger IC), insulate with Kapton
 5. **Test** — BLE scan, microphone, IMU
-6. **Assemble** — place PCB in case-b, insulate battery, route FPC, close case-a
+6. **Assemble** — place internal parts and PCB in case-b, route FPC, close case-a
 7. **Final test** — BLE range, charging, pair with app
 
-**Time:** 1–2 hours. **Difficulty:** Moderate (soldering 2 wires, careful assembly).
+**Time:** 1–2 hours. **Difficulty:** Moderate (soldering 4 wires, careful assembly).
 
 ### How to Order a Kit
 
@@ -79,7 +80,7 @@ Pricing depends on quantity. Expect ~$80–120/unit at 10+ units.
 |-----------|--------|
 | **HDI PCB** | 4-layer, 0.6mm, blind/buried vias, impedance-controlled. Custom quote required — JLCPCB doesn't stock this as standard. |
 | **WLCSP assembly** | 0.35mm pitch requires Standard/Advanced tier PCBA, Type 5 solder paste, X-ray inspection. |
-| **24 consigned parts** | Not on LCSC. Must source from DigiKey, Mouser, CS Semi, Puya Semi, Suntech, and others — then ship to JLCPCB. |
+| **15 consigned parts** | Not on LCSC. Must source from DigiKey, Mouser, CS Semi, Puya Semi, Suntech, and others — then ship to JLCPCB for consignment assembly. |
 | **No reverse polarity protection** | One wrong battery wire → dead BQ25101 → board scrapped. |
 | **CNC enclosure** | Custom machining. Laser engraving on case-a improves RF (surface current disruption). |
 
@@ -87,10 +88,10 @@ Pricing depends on quantity. Expect ~$80–120/unit at 10+ units.
 
 | Category | Cost |
 |----------|------|
-| PCB fabrication (3 boards) | $140–275 |
+| PCB fabrication (3 board types ×5 each) | $140–275 |
 | PCBA setup (stencils, feeders, X-ray) | $200–230 |
-| LCSC components (39 in-stock) | $125–200 |
-| Consigned components (24 parts) | $200–350 |
+| LCSC components (48 MPNs in stock) | $125–200 |
+| Consigned components (15 MPNs not on LCSC) | $200–350 |
 | Consignment shipping | $30–50 |
 | Battery (×5) | $25–50 |
 | CNC enclosure (×5) | $150–500 |
@@ -103,8 +104,8 @@ Pricing depends on quantity. Expect ~$80–120/unit at 10+ units.
 1. Clone this repo and read the engineering reference docs (see table below)
 2. Order mainboard PCB — HDI specs in [IMPEDANCE-STACKUP.md](electrical/IMPEDANCE-STACKUP.md)
 3. Order charger PCB and FPC — flex specs in [FPC-FLEX-FAB-NOTES.md](electrical/FPC-FLEX-FAB-NOTES.md)
-4. Source components — 39 on LCSC, 24 consigned. See [LCSC-SOURCING.md](bom/LCSC-SOURCING.md)
-5. Order PCBA from JLCPCB Standard tier — use [CPL-README.md](bom/CPL-README.md) for rotation/pin-1
+4. Source components — 63 unique MPNs total: 48 available on LCSC, 15 must be consigned. See [LCSC-SOURCING.md](bom/LCSC-SOURCING.md)
+5. Order PCBA — select Standard or Advanced assembly tier for WLCSP capability (PCB fabrication is separate; HDI service is required for mainboard). Use [CPL-README.md](bom/CPL-README.md) for rotation/pin-1
 6. Specify stencil and reflow — [STENCIL-REFLOW-NOTES.md](electrical/STENCIL-REFLOW-NOTES.md)
 7. Order battery — [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) (dangerous goods shipping, allow 2–4 weeks)
 8. Order CNC enclosure from a machining service
@@ -151,29 +152,37 @@ See [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) for complete instructi
 # Download nrfutil from nordicsemi.com, then:
 nrfutil install device
 
-# Flash network core FIRST
-nrfutil device recover --core Network
+# Flash network core FIRST (BLE controller)
 nrfutil device program --firmware net_core.hex --core Network --verify
 
-# Flash application core
-nrfutil device recover --core Application
+# Flash application core (app logic + nRF7002 Wi-Fi host driver)
 nrfutil device program --firmware app_core.hex --core Application --verify --reset
+
+# If program fails with access-protection error, recover first:
+# nrfutil device recover --core Network
+# nrfutil device recover --core Application
+# Then re-run the program commands above
 ```
 
 ### Battery Safety
 
 - ⚠ **Verify polarity with a multimeter before soldering.** Reversed polarity destroys the BQ25101.
+- Use only protected LiPo cells with an integrated protection circuit
+- Inspect for swelling or damage before use — do not use a damaged cell
 - Solder at ≤350°C, ≤3 seconds per joint
-- Insulate battery from aluminium enclosure with Kapton tape
-- See [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) for full safety requirements
+- Insulate solder joints and wires with Kapton tape
+- Insulate battery from aluminium enclosure with foam tape
+- Do not short, puncture, or charge unattended during initial bring-up
+- Use a current-limited supply (100mA limit) for first power-up if available
+- See [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) for full safety and shipping requirements
 
 ### Testing
 
 | Test | Method | Pass |
 |------|--------|------|
-| Power-on | Apply 3.7V to VBAT, measure current | 1–5mA (sleep) or 10–20mA (BLE advertising) |
+| Power-on | Apply 3.7V to VBAT, measure current | 1–5mA (sleep) or 10–20mA (BLE advertising only) |
 | BLE | nRF Connect app scan | RSSI > -70 dBm at 1m |
-| WiFi | Firmware log | Connects to 2.4GHz AP |
+| WiFi | Firmware log | Connects to 2.4GHz AP (note: Wi-Fi TX draws 191–260mA) |
 | Microphone | Record via app | Non-zero audio signal |
 | IMU | Read WHO_AM_I | Returns 0x69 |
 | Charging | Connect to dock | LED indicates charging |

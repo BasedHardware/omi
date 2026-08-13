@@ -7,12 +7,12 @@ Licensed under MIT (see [LICENSE](LICENSE)).
 ## What's Inside
 
 ### Electrical (`electrical/`)
-- **Mainboard** (nRF5340 + nRF7002): Altium source, Gerber files, schematics (v1.2)
-- **Charger Board**: Altium source, Gerber files, schematic (v1.0)
-- **FPC (Flexible PCB)**: Altium source, Gerber files, schematic (v1.0)
+- **Mainboard** (nRF5340 + nRF7002): KiCad 9 source (in `altium/` zips — legacy folder name), Gerber files, schematics (v1.2)
+- **Charger Board**: KiCad 9 source, Gerber files, schematic (v1.0)
+- **FPC (Flexible PCB)**: KiCad 9 source, Gerber files, schematic (v1.0)
 
 ### Bill of Materials (`bom/`)
-- 88 components with manufacturer part numbers (MPN)
+- 88 unique BOM lines (63 unique MPNs, 154 total placements across 3 boards)
 - Available in CSV and XLSX formats
 
 ### Mechanical (`mechanical/`)
@@ -38,7 +38,7 @@ Licensed under MIT (see [LICENSE](LICENSE)).
 | Component | Specification |
 |-----------|---------------|
 | Processor | nRF5340 dual-core Bluetooth LE SoC |
-| Wi-Fi | nRF7002 Wi-Fi 6 chip |
+| Wi-Fi | nRF7002 Wi-Fi 6 companion IC (2.4 GHz active in current RF path) |
 | Audio | 2x TDK T5838 bottom-port PDM microphones |
 | Storage | CSNP4GCR01 4Gbit NAND Flash |
 | IMU | LSM6DS3TR-C 6-axis accelerometer/gyroscope |
@@ -79,6 +79,7 @@ The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Bui
 | [FPC-FLEX-FAB-NOTES.md](electrical/FPC-FLEX-FAB-NOTES.md) | FPC fabrication, bend radius, quality |
 | [RF-ANTENNA-NOTES.md](electrical/RF-ANTENNA-NOTES.md) | RF architecture, switch control, enclosure strategy |
 | [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | Battery selection, safety, shipping |
+| [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) | Debug probe wiring, test points, firmware flashing |
 | [ALTERNATES.md](bom/ALTERNATES.md) | Substitute parts (approved / candidate / rejected) |
 
 ## File Checksums (SHA-256)
