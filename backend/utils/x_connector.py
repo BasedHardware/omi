@@ -38,6 +38,7 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.executors import db_executor, run_blocking
+import database.x_sync_registry as x_sync_registry
 from utils.log_sanitizer import sanitize
 from utils import social
 from utils.integration_telemetry import (
@@ -577,7 +578,9 @@ async def run_x_sync_job() -> Dict:
     """Incrementally sync every connected X user. Errors are isolated per user;
     a slow/failed account never blocks the others."""
     try:
-        uids = [d.id for d in db.collection(_REGISTRY_COLLECTION).stream()]
+        # Offload the synchronous store read to db_executor; running it inline would block the event
+        # loop (and every other async task) for the duration of the query.
+        uids = await run_blocking(db_executor, x_sync_registry.list_sync_user_ids)
     except Exception as e:
         logger.error(f'x_connector: sync job could not list users: {e}')
         return {'users': 0, 'synced': 0, 'new_posts': 0}
