@@ -298,6 +298,36 @@ const payloadKeys = (kind: AgentRunEvent["kind"]): readonly string[] => {
   }
 };
 
+const traceDetails = (eventTrace: readonly AgentRunTraceEvent[]) => ({
+  contextReceipts: eventTrace
+    .filter((event) => event.kind === "context_receipt")
+    .map((event) => ({
+      sequence: event.sequence,
+      contextLabel: event.payload.contextLabel!,
+      sourceKind: event.payload.sourceKind!,
+      policyDecision: event.payload.policyDecision!,
+    })),
+  toolEnvelopes: eventTrace
+    .filter((event) => event.kind === "tool_request" || event.kind === "tool_result" || event.kind === "tool_error")
+    .map((event) => ({
+      sequence: event.sequence,
+      kind: event.kind,
+      callLabel: event.payload.callLabel!,
+      toolName: event.payload.toolName!,
+      outcome: event.kind === "tool_result" ? "succeeded" : event.kind === "tool_error" ? "failed" : "requested",
+    })),
+  timings: eventTrace.map((event) => ({
+    sequence: event.sequence,
+    createdAt: event.createdAt,
+    durationMs: event.payload.durationMs ?? null,
+  })),
+  durableState: eventTrace.map((event) => ({
+    sequence: event.sequence,
+    stateLabel: event.eventLabel,
+    stateKind: event.kind,
+  })),
+});
+
 const validateTraceBundle = (value: unknown): AgentRunTraceBundle => {
   if (!isRecord(value) || !exactKeys(value, ["buildId", "bundleDigest", "contextReceipts", "durableState", "eventTrace", "projection", "projectionDigest", "runId", "schema", "schemaVersion", "timings", "toolEnvelopes", "traceDigest"])) fail("bundle shape");
   if (value.schema !== AGENT_RUN_TRACE_SCHEMA || value.schemaVersion !== CURRENT_AGENT_RUN_TRACE_SCHEMA_VERSION
@@ -310,6 +340,12 @@ const validateTraceBundle = (value: unknown): AgentRunTraceBundle => {
   if (eventTrace.length === 0 || eventTrace[0]!.kind !== "run_accepted") fail("empty or unaccepted trace");
   for (const [index, event] of eventTrace.entries()) {
     if (event.runLabel !== value.runId || event.sequence !== index + 1 || !exactKeys(event.payload, payloadKeys(event.kind))) fail("trace ordering");
+  }
+  const derivedDetails = traceDetails(eventTrace);
+  for (const key of ["contextReceipts", "toolEnvelopes", "timings", "durableState"] as const) {
+    if (canonicalTraceJson(value[key] as JsonValue) !== canonicalTraceJson(derivedDetails[key] as JsonValue)) {
+      fail(`${key} does not match event trace`);
+    }
   }
   const detailShapes: readonly (readonly string[])[] = [
     ["contextLabel", "policyDecision", "sequence", "sourceKind"],
@@ -400,10 +436,7 @@ export const exportAgentRunTrace = (
   // into the bundle before the remapper had a chance to run.
   const projection = projectAgentRunTimeline(eventTrace.map(syntheticEvent));
   if (projection === null) fail("run has no valid projection");
-  const contextReceipts = eventTrace.filter((event) => event.kind === "context_receipt").map((event) => ({ sequence: event.sequence, contextLabel: event.payload.contextLabel!, sourceKind: event.payload.sourceKind!, policyDecision: event.payload.policyDecision! }));
-  const toolEnvelopes = eventTrace.filter((event) => event.kind === "tool_request" || event.kind === "tool_result" || event.kind === "tool_error").map((event) => ({ sequence: event.sequence, kind: event.kind, callLabel: event.payload.callLabel!, toolName: event.payload.toolName!, outcome: event.kind === "tool_result" ? "succeeded" : event.kind === "tool_error" ? "failed" : "requested" }));
-  const timings = eventTrace.map((event) => ({ sequence: event.sequence, createdAt: event.createdAt, durationMs: event.payload.durationMs ?? null }));
-  const durableState = eventTrace.map((event) => ({ sequence: event.sequence, stateLabel: event.eventLabel, stateKind: event.kind }));
+  const { contextReceipts, toolEnvelopes, timings, durableState } = traceDetails(eventTrace);
   const redactedProjection = JSON.parse(canonicalTraceJson(projection as unknown as JsonValue)) as AgentRunVisibleTimeline;
   const traceWithoutDigests = { schema: AGENT_RUN_TRACE_SCHEMA, schemaVersion: CURRENT_AGENT_RUN_TRACE_SCHEMA_VERSION, buildId: input.buildId, runId: safeRunId, eventTrace, contextReceipts, toolEnvelopes, timings, durableState, projection: redactedProjection } as const;
   const traceDigest = digest(canonicalTraceJson(eventTrace as unknown as JsonValue));

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,7 +7,7 @@ import { spawnSync } from "node:child_process";
 
 import { createInMemoryAgentRunEventStore } from "./agent-run-events";
 import { runAgentRunScenario } from "./agent-run-scenario";
-import { exportAgentRunTrace, replayAgentRunTrace } from "./agent-run-trace";
+import { canonicalTraceJson, exportAgentRunTrace, replayAgentRunTrace } from "./agent-run-trace";
 
 const HASH = `sha256:${"a".repeat(64)}`;
 
@@ -72,6 +73,16 @@ describe("agent-run redacted export and hermetic replay", () => {
     for (const [key, value] of detailMutations) {
       expect(() => replayAgentRunTrace({ ...exported.bundle, [key]: value })).toThrow();
     }
+    const recomputedDetails = {
+      ...exported.bundle,
+      contextReceipts: [...exported.bundle.contextReceipts, { ...exported.bundle.contextReceipts[0]! }],
+    };
+    const { bundleDigest: _ignoredDigest, ...unsignedRecomputedDetails } = recomputedDetails;
+    const recomputedDigest = `sha256:${createHash("sha256")
+      .update(canonicalTraceJson(unsignedRecomputedDetails as Parameters<typeof canonicalTraceJson>[0]), "utf8")
+      .digest("hex")}`;
+    expect(() => replayAgentRunTrace({ ...recomputedDetails, bundleDigest: recomputedDigest }))
+      .toThrow("contextReceipts");
 
     const attachment = {
       ...exported.bundle,
