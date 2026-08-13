@@ -399,7 +399,11 @@ final class SBOnboardingModel: ObservableObject {
       // required gate. Clamp it back to the first shortcut stage so the user completes both.
       let shortcutsDone = UserDefaults.standard.bool(forKey: Self.shortcutsCompletedKey)
       var effective = resumed
-      if !shortcutsDone, effective.rawValue > Step.shortcutTalk.rawValue {
+      // Clamp values >= shortcutTalk (not just >) because a legacy resume at exactly
+      // shortcutTalk without the completion flag means the user never selected or
+      // exercised Open Omi — completing only the Talk stage would set the flag and
+      // bypass Open Omi entirely.
+      if !shortcutsDone, effective.rawValue >= Step.shortcutTalk.rawValue {
         effective = .shortcutOpen
         UserDefaults.standard.set(Step.shortcutOpen.rawValue, forKey: Self.resumeStepKey)
       }

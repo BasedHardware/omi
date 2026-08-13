@@ -348,19 +348,32 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     UserDefaults.standard.set(SBOnboardingModel.Step.screenDemo.rawValue, forKey: resumeKey)
     UserDefaults.standard.set(false, forKey: completedKey)
 
+    // Hold a strong reference to AppState for the life of the test. SBOnboardingModel
+    // stores appState as `unowned`, so a temporary would be deallocated before begin()
+    // touches it.
+    let appState = AppState()
     let model = SBOnboardingModel(
-      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+      appState: appState, chatProvider: ChatProvider(), onComplete: nil)
     model.begin()
 
     // The model should clamp back to the first shortcut stage, not bypass it.
     XCTAssertEqual(model.step, .shortcutOpen)
     XCTAssertFalse(model.canSkipOnboarding)
 
+    // A legacy resume at exactly shortcutTalk (without the completion flag) is also
+    // clamped back to shortcutOpen — completing only Talk would bypass Open Omi.
+    UserDefaults.standard.set(SBOnboardingModel.Step.shortcutTalk.rawValue, forKey: resumeKey)
+    UserDefaults.standard.set(false, forKey: completedKey)
+    let modelMid = SBOnboardingModel(
+      appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    modelMid.begin()
+    XCTAssertEqual(modelMid.step, .shortcutOpen)
+
     // A user who genuinely completed shortcuts resumes past them.
     UserDefaults.standard.set(SBOnboardingModel.Step.screenDemo.rawValue, forKey: resumeKey)
     UserDefaults.standard.set(true, forKey: completedKey)
     let model2 = SBOnboardingModel(
-      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+      appState: appState, chatProvider: ChatProvider(), onComplete: nil)
     model2.begin()
     XCTAssertGreaterThan(model2.step.rawValue, SBOnboardingModel.Step.shortcutTalk.rawValue)
     XCTAssertTrue(model2.canSkipOnboarding)
