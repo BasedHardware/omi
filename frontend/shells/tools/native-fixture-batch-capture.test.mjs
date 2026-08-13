@@ -10,7 +10,7 @@ import test from "node:test";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const producer = path.join(root, "shells/tools/capture-native-fixture-batch.mjs");
-const { canonicalizeScreenshotForTest } = await import(producer);
+const { assertMacForegroundProbeTransitionForTest, canonicalizeScreenshotForTest } = await import(producer);
 const coreSha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const platformSha = "1".repeat(40);
 
@@ -289,6 +289,15 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(mainStoryboard, /customClass="CaptureFlutterViewController"/);
   assert.match(iosProject, /CaptureFlutterViewController\.swift in Sources/);
   assert.match(source, /simctl.*ui.*appearance/);
+  assert.match(source, /\/usr\/bin\/lsappinfo/);
+  assert.match(source, /macForegroundApplication\(`\$\{coordinate\.run_id\}: preflight`\)/);
+  assert.match(source, /assertMacForegroundUnchanged\(foreground, `\$\{coordinate\.run_id\}: simulator launch`\)/);
+  assert.match(source, /assertMacForegroundUnchanged\(foreground, `\$\{coordinate\.run_id\}: simulator screenshot`\)/);
+  assert.match(source, /assertMacForegroundUnchanged\(foreground, `\$\{coordinate\.run_id\}: cleanup`\)/);
+  assert.match(source, /assertMacForegroundUnchanged\(foreground, `\$\{coordinate\.run_id\}: iOS fixture preparation`\)/);
+  assert.match(source, /preserve-macos-foreground-fail-closed/);
+  assert.doesNotMatch(source, /open(?:Sync)?\([^\n]*Simulator/);
+  assert.doesNotMatch(source, /osascript/);
   assert.match(source, /elapsedSeconds/);
   assert.match(source, /canonicalizeScreenshot/);
   assert.match(source, /value < 16/);
@@ -301,6 +310,23 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /validAccessibilities = new Set\(\["none"\]\)/);
   assert.doesNotMatch(source, /const env = \{ \.\.\.process\.env \}/);
   assert.doesNotMatch(source, /OMI_API_TOKEN/);
+});
+
+test("iOS foreground guard fails closed against fake probe errors and focus changes", () => {
+  const front = { status: 0, signal: null, stdout: "ASN:0x0-0x1001:\n" };
+  assert.doesNotThrow(() => assertMacForegroundProbeTransitionForTest(front, { ...front }));
+  assert.throws(
+    () => assertMacForegroundProbeTransitionForTest(front, { ...front, stdout: "ASN:0x0-0x2002:\n" }),
+    /foreground application changed during headless iOS fixture capture/,
+  );
+  assert.throws(
+    () => assertMacForegroundProbeTransitionForTest(front, { ...front, status: 1, stdout: "" }),
+    /unable to bind the current macOS foreground application/,
+  );
+  assert.throws(
+    () => assertMacForegroundProbeTransitionForTest({ ...front, error: { code: "ETIMEDOUT" } }, front),
+    /foreground-app probe timed out/,
+  );
 });
 
 test("screenshot canonicalization removes low-bit compositor jitter but preserves visible changes", () => {

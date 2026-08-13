@@ -359,6 +359,36 @@ function runCommand(spec, label) {
   return result;
 }
 
+function foregroundApplicationFromProbe(result, label) {
+  if (result.error?.code === "ETIMEDOUT" || result.signal === "SIGTERM") fail(`${label}: foreground-app probe timed out`);
+  if (result.status !== 0 || !/^ASN:0x[0-9a-f]+-0x[0-9a-f]+:$/i.test(result.stdout.trim())) {
+    fail(`${label}: unable to bind the current macOS foreground application`);
+  }
+  return result.stdout.trim();
+}
+
+function macForegroundApplication(label) {
+  return foregroundApplicationFromProbe(spawnSync("/usr/bin/lsappinfo", ["front"], {
+    cwd: coreRoot,
+    encoding: "utf8",
+    timeout: 5_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  }), label);
+}
+
+function assertMacForegroundUnchanged(expected, label) {
+  const observed = macForegroundApplication(label);
+  if (observed !== expected) {
+    fail(`${label}: macOS foreground application changed during headless iOS fixture capture`);
+  }
+}
+
+export function assertMacForegroundProbeTransitionForTest(before, after) {
+  const expected = foregroundApplicationFromProbe(before, "test preflight");
+  const observed = foregroundApplicationFromProbe(after, "test cleanup");
+  if (observed !== expected) fail("test cleanup: macOS foreground application changed during headless iOS fixture capture");
+}
+
 function writeAtomic(file, value) {
   const temporary = `${file}.tmp-${process.pid}`;
   writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
@@ -880,11 +910,18 @@ function captureMac(coordinate, artifact, output, timeoutSeconds) {
 }
 
 function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
+  // `simctl` talks directly to an already-Booted CoreSimulator device and does
+  // not need Simulator.app to launch or activate. Bind the user's current
+  // frontmost application before any device mutation and fail the coordinate
+  // if it changes. We deliberately do not try to "restore" focus: doing so
+  // would itself be an activating UI operation and could mask a regression.
+  const foreground = macForegroundApplication(`${coordinate.run_id}: preflight`);
   verifyIosDevice(coordinate, artifact.env);
   if (!artifact.appearanceByDevice.has(coordinate.device.udid)) artifact.appearanceByDevice.set(coordinate.device.udid, queryIosAppearance(coordinate.device.udid, artifact.env));
   if (!artifact.geometryByDevice.has(coordinate.device.udid)) artifact.geometryByDevice.set(coordinate.device.udid, queryIosGeometry(coordinate.device.udid, artifact.env));
   setIosAppearance(coordinate.device.udid, coordinate.theme, artifact.env);
   setIosGeometry(coordinate.device.udid, coordinate.viewport, artifact.env);
+  assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: simulator configuration`);
   terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: terminate prior app`);
   const stdoutPath = `${output}.app.stdout`;
   const stderrPath = `${output}.app.stderr`;
@@ -901,6 +938,7 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
   try {
     launched = true;
     runCommand(commandSpec("xcrun", ["simctl", "launch", `--stdout=${stdoutPath}`, `--stderr=${stderrPath}`, coordinate.device.udid, artifact.bundleId, `--omi-capture-query=${coordinate.surface_query}`, `--omi-capture-run-id=${coordinate.run_id}`, `--omi-capture-nonce=${readinessNonce}`], coreRoot, artifact.env, 30), `${coordinate.run_id}: launch capture app`);
+    assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: simulator launch`);
     waitForIosReadiness(coordinate, artifact, markerPath, readinessNonce, waitSeconds);
     // CoreSimulator can report DOM readiness one compositor frame before its
     // text/glyph surfaces settle. Capture and discard that first native frame
@@ -910,26 +948,32 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
     const warmupOutput = `${output}.warmup.png`;
     rmSync(warmupOutput, { force: true });
     runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", warmupOutput], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: settle simulator compositor`);
+    assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: simulator warmup screenshot`);
     rmSync(warmupOutput, { force: true });
     runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", output], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: simulator screenshot`);
+    assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: simulator screenshot`);
   } finally {
     if (launched) terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: cleanup app`);
     rmSync(stdoutPath, { force: true });
     rmSync(stderrPath, { force: true });
+    assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: cleanup`);
   }
 }
 
 function prepareIosArtifact(artifact, coordinates) {
+  const foreground = macForegroundApplication("iOS fixture preparation preflight");
   for (const coordinate of coordinates.filter((entry) => entry.shell === "ios")) {
     if (!artifact.installedDevices.has(coordinate.device.udid)) {
       verifyIosDevice(coordinate, artifact.env);
       runCommand(commandSpec("xcrun", ["simctl", "install", coordinate.device.udid, artifact.app], coreRoot, artifact.env, 120), `${coordinate.run_id}: install capture app once for device`);
+      assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: simulator install`);
       artifact.installedDevices.add(coordinate.device.udid);
     }
     if (!artifact.frozenDevices.has(coordinate.device.udid)) {
       freezeIosStatusBar(coordinate.device.udid, artifact.env);
       artifact.frozenDevices.add(coordinate.device.udid);
     }
+    assertMacForegroundUnchanged(foreground, `${coordinate.run_id}: iOS fixture preparation`);
   }
 }
 
@@ -1059,7 +1103,7 @@ function main() {
     coordinate_count: coordinates.length,
     build_once: ["macos", "ios"].filter((name) => coordinates.some((coordinate) => coordinate.shell === name)),
     coordinates: coordinates.map((coordinate) => ({ run_id: coordinate.run_id, shell: coordinate.shell, device: coordinate.device, viewport: coordinate.viewport, surface_query: coordinate.surface_query, kind: coordinate.kind })),
-    authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
+    authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, focus_policy: { ios: "preserve-macos-foreground-fail-closed" }, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
     replay_proof: Boolean(args.replay_proof),
     prepared_input_set: args.prepare ? null : authorityRelative(preparedPath),
     estimated_seconds: estimatedSeconds,
