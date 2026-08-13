@@ -100,18 +100,21 @@ describe("agent-run redacted export and hermetic replay", () => {
     expect(() => replayAgentRunTrace(attachment)).toThrow("attachment");
 
     // Every prose-bearing event payload is inside the same denylist walk;
-    // exercise each shape rather than only the top-level projection summary.
+    // exercise each shape and opaque separator rather than only the top-level
+    // projection summary.
     for (const payloadKey of ["redactedPreview", "inclusionReason", "resultSummary"] as const) {
       const eventIndex = exported.bundle.eventTrace.findIndex((event) => payloadKey in event.payload);
       expect(eventIndex).toBeGreaterThanOrEqual(0);
       const event = exported.bundle.eventTrace[eventIndex]!;
-      const poisoned = {
-        ...exported.bundle,
-        eventTrace: exported.bundle.eventTrace.map((candidate, index) => index === eventIndex
-          ? { ...candidate, payload: { ...candidate.payload, [payloadKey]: "attachment_opaque123" } }
-          : candidate),
-      };
-      expect(() => replayAgentRunTrace(poisoned)).toThrow("attachment");
+      for (const marker of ["attachment_opaque123", "attachment/opaque123", "attachment.opaque123"] as const) {
+        const poisoned = {
+          ...exported.bundle,
+          eventTrace: exported.bundle.eventTrace.map((candidate, index) => index === eventIndex
+            ? { ...candidate, payload: { ...candidate.payload, [payloadKey]: marker } }
+            : candidate),
+        };
+        expect(() => replayAgentRunTrace(poisoned)).toThrow("attachment");
+      }
       expect(event.payload[payloadKey]).not.toBe("attachment_opaque123");
     }
 

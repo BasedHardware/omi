@@ -37,7 +37,7 @@ const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/u;
 // Attachment references are intentionally opaque.  Even when a caller puts
 // one in a prose field (rather than an `attachmentId` key), it must not leave
 // this export boundary.
-const BARE_ATTACHMENT_REFERENCE = /\battachment[_-][A-Za-z0-9][A-Za-z0-9._:@+-]*/iu;
+const BARE_ATTACHMENT_REFERENCE = /\battachment[_/.\-][A-Za-z0-9][A-Za-z0-9._:@+\-/]*/iu;
 const EVENT_KINDS = new Set<AgentRunEvent["kind"]>([
   "run_accepted", "capability_receipt", "context_receipt", "status", "tool_request",
   "tool_result", "tool_error", "approval_requested", "approval_resolved", "usage",
