@@ -9,12 +9,14 @@ import {
   gateReplay,
   assertIosOutputDirCustody,
   cleanupIosIntermediates,
+  cleanupCaptureTransients,
   macRuntimeAppName,
   parseMacProbe,
   prepareRuntimeOutputDir,
   runtimeProbeScript,
   runtimeFixtureName,
   requireIosDiskHeadroom,
+  requireSimulatorCacheBudget,
   validateSurfacesDist,
   withIosCaptureLock,
   validateHostMarker,
@@ -201,6 +203,27 @@ test("native surfaces input is bounded and rejects symlinks", () => {
     rmSync(path.join(scratch, "huge.js"));
     assert.equal(spawnSync("ln", ["-s", path.join(scratch, "index.html"), path.join(scratch, "linked")]).status, 0);
     assert.throws(() => validateSurfacesDist(scratch, 32, 2), /symlink/);
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test("simulator cache and retained capture logs are bounded", () => {
+  const scratch = mkdtempSync(path.join(root, ".build", "runtime-cache-bound-test-"));
+  const device = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE";
+  try {
+    const cache = path.join(scratch, device, "data/Library/Caches");
+    mkdirSync(cache, { recursive: true });
+    writeFileSync(path.join(cache, "small"), "ok\n");
+    assert.deepEqual(requireSimulatorCacheBudget(device, scratch, 8, 4), { bytes: 3, files: 1 });
+    writeFileSync(path.join(cache, "large"), "x".repeat(16));
+    assert.throws(() => requireSimulatorCacheBudget(device, scratch, 8, 4), /byte budget/);
+    const output = path.join(root, ".build", "runtime-log-cleanup-test");
+    mkdirSync(output, { recursive: true });
+    writeFileSync(path.join(output, "runtime.json"), "evidence\n");
+    for (const name of ["foreground-guard.json", "xcodebuild.stdout", "xcodebuild.stderr"]) writeFileSync(path.join(output, name), "transient\n");
+    cleanupCaptureTransients(output);
+    assert.equal(readFileSync(path.join(output, "runtime.json"), "utf8"), "evidence\n");
+    assert.equal(existsSync(path.join(output, "xcodebuild.stdout")), false);
+    rmSync(output, { recursive: true, force: true });
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 });
 

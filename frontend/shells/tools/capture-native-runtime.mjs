@@ -131,21 +131,21 @@ export function prepareRuntimeOutputDir(file) {
   if (realpathSync(requested) !== requested) throw new Error("--output-dir authority is not canonical");
   return requested;
 }
-function treeUsage(root, limitBytes, limitEntries) {
+export function treeUsage(root, limitBytes, limitEntries, label = "tree") {
   let bytes = 0;
   let files = 0;
   let entries = 0;
   const visit = (directory) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       entries += 1;
-      if (entries > limitEntries) throw new Error("surfaces dist exceeds the bounded native-fixture budget");
+      if (entries > limitEntries) throw new Error(`${label} exceeds its bounded entry budget`);
       const target = path.join(directory, entry.name);
       if (entry.isSymbolicLink()) throw new Error("surfaces dist must not contain symlinks");
       if (entry.isDirectory()) visit(target);
       else if (entry.isFile()) {
         const size = statSync(target).size;
         bytes += size; files += 1;
-        if (bytes > limitBytes) throw new Error("surfaces dist exceeds the bounded native-fixture budget");
+        if (bytes > limitBytes) throw new Error(`${label} exceeds its bounded byte budget`);
       } else throw new Error("surfaces dist contains a non-regular entry");
     }
   };
@@ -161,8 +161,23 @@ export function validateSurfacesDist(dist, limitBytes = 64 * 1024 * 1024, limitE
   if (!existsSync(path.join(resolved, "index.html")) || !statSync(path.join(resolved, "index.html")).isFile()) {
     throw new Error("surfaces dist must contain index.html");
   }
-  treeUsage(resolved, limitBytes, limitEntries);
+  treeUsage(resolved, limitBytes, limitEntries, "surfaces dist");
   return resolved;
+}
+
+export function requireSimulatorCacheBudget(device, devicesRoot, limitBytes = 8 * 1024 * 1024 * 1024, limitEntries = 100_000) {
+  if (!/^[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}$/.test(device)) throw new Error("simulator UDID is malformed");
+  const cache = path.join(devicesRoot, device, "data/Library/Caches");
+  if (!existsSync(cache)) return { bytes: 0, files: 0 };
+  return treeUsage(cache, limitBytes, limitEntries, "iOS simulator cache");
+}
+
+export function cleanupCaptureTransients(outputDir) {
+  prepareRuntimeOutputDir(outputDir);
+  for (const name of [
+    "foreground-guard.json", "foreground-guard.stdout.log", "foreground-guard.stderr.log",
+    "xcodebuild.stdout", "xcodebuild.stderr", "capture.log",
+  ]) rmSync(path.join(outputDir, name), { force: true });
 }
 function gitHead(root) {
   const result = spawnSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" });
@@ -532,6 +547,7 @@ function runIos(manifest, outputDir) {
     try { inventoryDocument = JSON.parse(inventory.stdout); } catch { throw new Error("iOS simulator inventory is malformed"); }
     const boundDevice = Object.values(inventoryDocument.devices || {}).flat().find((candidate) => candidate.udid === device);
     if (!boundDevice || boundDevice.state !== "Booted" || boundDevice.name !== manifest.device.model) throw new Error("manifest iOS simulator is not the exact booted device");
+    requireSimulatorCacheBudget(device, path.join(process.env.HOME || "/Users/dazheng", "Library/Developer/CoreSimulator/Devices"));
     const query = manifest.surface_query;
     const bundle = spawnSync(nodeBin, [path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], { cwd: coreRoot, env, encoding: "utf8", timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
     if (bundle.status !== 0) throw new Error(`iOS surfaces bundle preparation failed (${bundle.status ?? "signal"})`);
@@ -590,13 +606,15 @@ function main() {
     try { gateReplay(manifest, manifestPath, path.resolve(args.replay_input), path.resolve(args.replay_output), outputDir, args.emit_gate_records !== "false"); } catch (error) { fail(error.message); }
     return;
   }
-  let capture;
-  try { capture = manifest.shell === "macos" ? runMac(manifest, outputDir) : withIosCaptureLock(() => runIos(manifest, outputDir)); } catch (error) { fail(error instanceof Error ? error.message : String(error)); return; }
-  const artifact = { schema: "omi.polish.runtime/v1", ...metadata(manifest), events: capture.marker.events };
-  const artifactPath = path.join(outputDir, "runtime.json"); const artifactBytes = Buffer.from(stable(artifact)); writeFileSync(artifactPath, artifactBytes, { mode: 0o600 });
-  const receipt = { schema: "omi.polish.runtime-preparation/v1", ...metadata(manifest), command: { argv: capture.argv, cwd: capture.commandCwd, cwd_root: "core", exit_code: 0, started_at: capture.started.toISOString(), finished_at: capture.finished.toISOString(), timeout_seconds: capture.commandTimeoutSeconds || 300, stdout_sha256: sha256(Buffer.from(capture.stdout)), stderr_sha256: sha256(Buffer.from(capture.stderr)) }, ...(capture.query ? { surface_query: capture.query, build_commands: capture.buildCommands } : {}), ...(capture.foregroundCustody ? { foreground_custody: capture.foregroundCustody } : {}), artifact: { root: "core", path: path.relative(coreRoot, artifactPath), sha256: sha256(artifactBytes) } };
-  writeFileSync(path.join(outputDir, "runtime-preparation-receipt.json"), stable(receipt), { mode: 0o600 });
-  console.log(`NATIVE_RUNTIME_EVIDENCE: path=${path.relative(coreRoot, artifactPath)} sha256=${sha256(artifactBytes)} run_id=${manifest.run_id}`);
+  try {
+    const capture = manifest.shell === "macos" ? runMac(manifest, outputDir) : withIosCaptureLock(() => runIos(manifest, outputDir));
+    const artifact = { schema: "omi.polish.runtime/v1", ...metadata(manifest), events: capture.marker.events };
+    const artifactPath = path.join(outputDir, "runtime.json"); const artifactBytes = Buffer.from(stable(artifact)); writeFileSync(artifactPath, artifactBytes, { mode: 0o600 });
+    const receipt = { schema: "omi.polish.runtime-preparation/v1", ...metadata(manifest), command: { argv: capture.argv, cwd: capture.commandCwd, cwd_root: "core", exit_code: 0, started_at: capture.started.toISOString(), finished_at: capture.finished.toISOString(), timeout_seconds: capture.commandTimeoutSeconds || 300, stdout_sha256: sha256(Buffer.from(capture.stdout)), stderr_sha256: sha256(Buffer.from(capture.stderr)) }, ...(capture.query ? { surface_query: capture.query, build_commands: capture.buildCommands } : {}), ...(capture.foregroundCustody ? { foreground_custody: capture.foregroundCustody } : {}), artifact: { root: "core", path: path.relative(coreRoot, artifactPath), sha256: sha256(artifactBytes) } };
+    writeFileSync(path.join(outputDir, "runtime-preparation-receipt.json"), stable(receipt), { mode: 0o600 });
+    console.log(`NATIVE_RUNTIME_EVIDENCE: path=${path.relative(coreRoot, artifactPath)} sha256=${sha256(artifactBytes)} run_id=${manifest.run_id}`);
+  } catch (error) { fail(error instanceof Error ? error.message : String(error)); }
+  finally { cleanupCaptureTransients(outputDir); }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || "").href) {
