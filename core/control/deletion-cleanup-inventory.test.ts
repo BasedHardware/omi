@@ -65,8 +65,8 @@ describe("complete-source inventory", () => {
     expect(forward.report).toEqual(reversed.report);
     expect(forward.verified_inventory).toEqual(reversed.verified_inventory);
     expect(forward.report).toMatchObject({
-      supplied_source_count: 11,
-      required_source_count: 11,
+      supplied_source_count: 12,
+      required_source_count: 12,
       missing_surfaces: [],
       unfenced_surfaces: [],
       blockers: [],
@@ -112,7 +112,7 @@ describe("complete-source inventory", () => {
     };
     const result = verifyDeletionCleanupInventory(input(released));
     expect(result.report).toMatchObject({
-      supplied_source_count: 11,
+      supplied_source_count: 12,
       missing_surfaces: [],
       unfenced_surfaces: ["experiment_results", "external_objects"],
       blockers: ["source_fence_not_held"],
