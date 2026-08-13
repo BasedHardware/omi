@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
-import { genericPolicyClassifier, project, projectTreeInputSnapshot, readerVisibleSubgraph, retrieveCommittedGraph, type GraphSnapshot, type ReaderVisibleAbsence } from "./index";
+import {
+  genericPolicyClassifier,
+  project,
+  projectTreeInputSnapshot,
+  readerVisibleSubgraph,
+  retrieveCommittedGraph,
+  type GraphSnapshot,
+  type PolicyClass,
+  type ReaderVisibleAbsence,
+} from "./index";
 import type { RequestContext } from "./grant";
 
 const labels = (sensitivity: string, extra: readonly string[] = []) => [`subject:generic`, `sensitivity:${sensitivity}`, "capture:generic", ...extra];
@@ -12,6 +21,73 @@ const bytes = (graph: GraphSnapshot, ctx: RequestContext): string => JSON.string
 const genericGrant = { grant_id: "generic", policy_classes: [{ subject_class: "generic", sensitivity: "generic", capture_class: "generic" }] };
 const owner: RequestContext = { reader_account_id: "owner", grant: genericGrant };
 const reader: RequestContext = { reader_account_id: "reader", grant: genericGrant };
+
+test("P7 exhaustive reader policy matrix makes every hidden known triple byte-equal to absence", () => {
+  const dimensions = {
+    subject_class: ["generic", "owner", "bystander", "restricted"],
+    sensitivity: ["generic", "private", "health", "restricted"],
+    capture_class: ["generic", "voice", "screen", "restricted"],
+  } as const;
+  const policies: PolicyClass[] = [];
+  for (const subject_class of dimensions.subject_class) {
+    for (const sensitivity of dimensions.sensitivity) {
+      for (const capture_class of dimensions.capture_class) {
+        policies.push({ subject_class, sensitivity, capture_class });
+      }
+    }
+  }
+  expect(policies).toHaveLength(64);
+  const claims = policies.map((policy, index) => claim(
+    `policy-${index.toString().padStart(2, "0")}`,
+    [`subject:${policy.subject_class}`, `sensitivity:${policy.sensitivity}`,
+      `capture:${policy.capture_class}`],
+  ));
+  const graph: GraphSnapshot = {
+    owner_account_id: "owner", claims, entities: [],
+    adjacency: claims.map((item) => ({
+      claim_revision_id: item.revision_id,
+      entity_id: `entity:${item.revision_id}`,
+      role_slot_id: "subject",
+    })),
+  };
+  expect(project(graph, owner).claims).toHaveLength(64);
+
+  for (let index = 0; index < policies.length; index += 1) {
+    const policy = policies[index]!;
+    const exactReader: RequestContext = {
+      reader_account_id: "reader",
+      grant: { grant_id: `grant:${index}`, policy_classes: [policy] },
+    };
+    const expectedRevisionId = claims[index]!.revision_id;
+    const physicallyAbsent = without(
+      graph, claims.filter((item) => item.revision_id !== expectedRevisionId)
+        .map((item) => item.revision_id),
+    );
+    const projected = project(graph, exactReader);
+    expect(projected.claims.map((item) => item.revision_id)).toEqual([expectedRevisionId]);
+    expect(bytes(graph, exactReader)).toBe(bytes(physicallyAbsent, exactReader));
+  }
+
+  const unknown = claim("policy-unknown", [
+    "subject:future-subject", "sensitivity:future-sensitivity", "capture:future-capture",
+  ]);
+  const unknownGraph: GraphSnapshot = {
+    owner_account_id: "owner", claims: [unknown], entities: [],
+    adjacency: [{ claim_revision_id: unknown.revision_id, entity_id: "entity:unknown", role_slot_id: "subject" }],
+  };
+  const forgedUnknownReader: RequestContext = {
+    reader_account_id: "reader",
+    grant: { grant_id: "grant:unknown", policy_classes: [{
+      subject_class: "future-subject",
+      sensitivity: "future-sensitivity",
+      capture_class: "future-capture",
+    }] },
+  };
+  expect(project(unknownGraph, forgedUnknownReader).claims).toEqual([]);
+  expect(bytes(unknownGraph, forgedUnknownReader)).toBe(bytes({
+    owner_account_id: "owner", claims: [], entities: [], adjacency: [],
+  }, forgedUnknownReader));
+});
 
 test("G2/G3 adversarial D35: a tombstoned last citation and a purge fence leave zero owner-visible trace, while active evidence restores the claim", () => {
   const retracted = claim("retracted", labels("generic"), "lineage:retracted", ["e:retracted"]);
