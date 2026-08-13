@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, test } from "bun:test";
 
+import { DELETION_DISPOSAL_GROUPS } from "../../../core/control/deletion-cleanup-inventory";
 import { POSTGRES_MIGRATIONS } from "./manifest";
 import {
   POSTGRES_DELETION_SURFACE_TABLES,
@@ -155,6 +156,33 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
       .toContain("account_terminal_deletion_exports");
     expect(disposalRows.map((row) => row.name))
       .not.toContain("account_terminal_deletion_exports");
+  });
+
+  test("orders every cross-surface foreign key child before its parent", () => {
+    const tableSurface = new Map(Object.entries(POSTGRES_DELETION_SURFACE_TABLES)
+      .flatMap(([surface, names]) => names.map((name) => [name, surface] as const)));
+    const surfaceGroup = new Map(DELETION_DISPOSAL_GROUPS.flatMap((group, index) =>
+      group.map((surface) => [surface, index] as const)));
+    expect(new Set(DELETION_DISPOSAL_GROUPS.flat()).size)
+      .toBe(DELETION_DISPOSAL_GROUPS.flat().length);
+    for (const table of tables) {
+      const childSurface = tableSurface.get(table.name);
+      const parents = [...table.body.matchAll(/REFERENCES omi_memory\.([a-z0-9_]+)/g)]
+        .map((match) => match[1]!);
+      for (const parent of parents) {
+        const parentSurface = tableSurface.get(parent);
+        if (childSurface === undefined && parentSurface !== undefined) {
+          throw new Error(`retained table ${table.name} references disposable ${parent}`);
+        }
+        if (childSurface === undefined || parentSurface === undefined) continue;
+        const childGroup = surfaceGroup.get(childSurface as never);
+        const parentGroup = surfaceGroup.get(parentSurface as never);
+        if (childGroup === undefined || parentGroup === undefined) {
+          throw new Error(`unranked surface ${childSurface} -> ${parentSurface}`);
+        }
+        expect(childGroup, `${table.name} -> ${parent}`).toBeLessThanOrEqual(parentGroup);
+      }
+    }
   });
 
   test("makes every authority relationship structurally account-scoped", () => {

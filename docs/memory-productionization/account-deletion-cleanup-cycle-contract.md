@@ -6,9 +6,12 @@ One cleanup cycle runs under a single adapter-owned deletion fence. It scans
 all twelve v3 surfaces, verifies the complete source inventory, applies the
 deletion-dominance planner, disposes only surfaces the plan reports remaining,
 then scans and verifies all twelve surfaces again before returning `complete`.
-Disposal follows one closed dependency order: externally derived/indexed and
+Disposal follows closed dependency groups: externally derived/indexed and
 product surfaces precede durable work and authoritative memory; account access
-is last. Inventory presentation order is never used as SQL deletion order.
+is last. `durable_work` and `staged_results` are one atomic group because their
+immediate PostgreSQL foreign keys cross in both directions. Their inventory
+counts stay distinct, but no adapter may delete one while leaving the other.
+Inventory presentation order is never used as SQL deletion order.
 
 An unverified or active legal hold, missing policy/export/restore coordinate,
 or any planner blocker performs no disposal. Scanner failures, malformed or

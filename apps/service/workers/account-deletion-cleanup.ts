@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { isProxy } from "node:util/types";
 
 import {
+  DELETION_DISPOSAL_GROUPS,
   verifyDeletionCleanupInventory,
   type DeletionCleanupSurface,
   type DeletionInventorySourceReceipt,
@@ -14,25 +15,8 @@ import {
 
 const OPERATION_REF = /^opref1_[0-9a-f]{64}$/;
 
-/** Child/derived surfaces precede their authoritative inputs. */
-export const DELETION_DISPOSAL_ORDER = Object.freeze([
-  "external_objects",
-  "search_documents",
-  "vector_embeddings",
-  "rebuildable_groups_indexes",
-  "product_projections",
-  "experiment_results",
-  "staged_results",
-  "durable_work",
-  "authoritative_memory",
-  "migration_state",
-  "stranded_product_data",
-  "account_access",
-] as const satisfies readonly DeletionCleanupSurface[]);
-
-const disposalRank = new Map<DeletionCleanupSurface, number>(
-  DELETION_DISPOSAL_ORDER.map((surface, index) => [surface, index]),
-);
+export { DELETION_DISPOSAL_GROUPS } from
+  "../../../core/control/deletion-cleanup-inventory";
 
 export interface DeletionCleanupDispositionReceipt {
   readonly version: "deletion-cleanup-disposition-v1";
@@ -43,7 +27,9 @@ export interface DeletionCleanupDispositionReceipt {
 
 export interface HeldDeletionCleanupSession {
   scanAll(): Promise<readonly DeletionInventorySourceReceipt[]>;
-  dispose(surface: DeletionCleanupSurface): Promise<DeletionCleanupDispositionReceipt>;
+  dispose(
+    surfaces: readonly DeletionCleanupSurface[],
+  ): Promise<readonly DeletionCleanupDispositionReceipt[]>;
 }
 
 export interface AccountDeletionCleanupPort {
@@ -221,22 +207,28 @@ export const runAccountDeletionCleanupCycle = async (
     if (beforePlan.mode !== "deleted_cleanup_ready") return retryable("postcondition_failed");
 
     const dispositions: DeletionCleanupDispositionReceipt[] = [];
-    const orderedSurfaces = [...beforePlan.cleanup.remaining_surfaces]
-      .sort((left, right) => disposalRank.get(left)! - disposalRank.get(right)!);
-    for (const surface of orderedSurfaces) {
-      let receipt: DeletionCleanupDispositionReceipt;
+    const remaining = new Set(beforePlan.cleanup.remaining_surfaces);
+    for (const group of DELETION_DISPOSAL_GROUPS) {
+      if (!group.some((surface) => remaining.has(surface))) continue;
+      let receipts: readonly DeletionCleanupDispositionReceipt[];
       try {
-        receipt = await session.dispose(surface);
+        receipts = await session.dispose(group);
       } catch {
         return retryable("disposal_failed");
       }
-      if (receipt.version !== "deletion-cleanup-disposition-v1"
-        || receipt.surface !== surface
-        || (receipt.result !== "disposed" && receipt.result !== "already_absent")
-        || !/^[0-9a-f]{64}$/.test(receipt.receipt_digest)) {
+      if (!Array.isArray(receipts) || receipts.length !== group.length
+        || new Set(receipts.map((receipt) => receipt.surface)).size !== group.length) {
         return retryable("disposal_failed");
       }
-      dispositions.push(Object.freeze({ ...receipt }));
+      for (const surface of group) {
+        const receipt = receipts.find((candidate) => candidate.surface === surface);
+        if (receipt === undefined || receipt.version !== "deletion-cleanup-disposition-v1"
+          || (receipt.result !== "disposed" && receipt.result !== "already_absent")
+          || !/^[0-9a-f]{64}$/.test(receipt.receipt_digest)) {
+          return retryable("disposal_failed");
+        }
+        dispositions.push(Object.freeze({ ...receipt }));
+      }
     }
 
     let after;
@@ -258,7 +250,9 @@ export const runAccountDeletionCleanupCycle = async (
       kind: "complete" as const,
       before_inventory_digest: before.report.inventory_digest,
       after_inventory_digest: after.report.inventory_digest,
-      disposed_surfaces: Object.freeze(dispositions.map((receipt) => receipt.surface)),
+      disposed_surfaces: Object.freeze(dispositions
+        .filter((receipt) => receipt.result === "disposed")
+        .map((receipt) => receipt.surface)),
       disposition_set_digest: digest({
         version: "deletion-disposition-set-v1",
         operation_ref: input.operation_ref,

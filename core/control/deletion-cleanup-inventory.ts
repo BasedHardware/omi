@@ -23,6 +23,25 @@ export const DELETION_CLEANUP_SURFACES = Object.freeze([
 
 export type DeletionCleanupSurface = typeof DELETION_CLEANUP_SURFACES[number];
 
+/**
+ * Total child-first disposal groups. Durable work and staged results are one
+ * atomic group because their immediate PostgreSQL references cross in both
+ * directions.
+ */
+export const DELETION_DISPOSAL_GROUPS = Object.freeze([
+  Object.freeze(["external_objects"]),
+  Object.freeze(["search_documents"]),
+  Object.freeze(["vector_embeddings"]),
+  Object.freeze(["rebuildable_groups_indexes"]),
+  Object.freeze(["product_projections"]),
+  Object.freeze(["durable_work", "staged_results"]),
+  Object.freeze(["experiment_results"]),
+  Object.freeze(["authoritative_memory"]),
+  Object.freeze(["migration_state"]),
+  Object.freeze(["stranded_product_data"]),
+  Object.freeze(["account_access"]),
+] as const satisfies readonly (readonly DeletionCleanupSurface[])[]);
+
 export interface DeletionInventoryTerminalCoordinate {
   readonly account_id: string;
   readonly control_revision: number;

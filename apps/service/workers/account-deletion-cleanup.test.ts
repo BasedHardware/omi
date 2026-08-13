@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { AccountControlProjection } from "../../../core/control/account-control";
 import {
   DELETION_CLEANUP_SURFACES,
+  DELETION_DISPOSAL_GROUPS,
   DELETION_INVENTORY_CONTRACT_VERSION,
   DELETION_INVENTORY_SOURCE_RECEIPT_VERSION,
   type DeletionCleanupSurface,
@@ -13,7 +14,6 @@ import type {
   TerminalDeletionExportReceipt,
 } from "../../../core/control/deletion-dominance";
 import {
-  DELETION_DISPOSAL_ORDER,
   runAccountDeletionCleanupCycle,
   type AccountDeletionCleanupPort,
   type HeldDeletionCleanupSession,
@@ -79,15 +79,19 @@ const port = (
       calls.push("scan");
       return receipts(remaining);
     },
-    async dispose(surface) {
+    async dispose(surfaces) {
       expect(active).toBe(true);
-      calls.push(`dispose:${surface}`);
+      calls.push(`dispose:${surfaces.join("+")}`);
       if (options.failDispose) throw new Error("sensitive provider failure");
-      if (!options.staleAfter) remaining.set(surface, 0);
-      return {
-        version: "deletion-cleanup-disposition-v1" as const,
-        surface, result: "disposed" as const, receipt_digest: hash("d"),
-      };
+      return surfaces.map((surface) => {
+        const existed = (remaining.get(surface) ?? 0) > 0;
+        if (!options.staleAfter) remaining.set(surface, 0);
+        return {
+          version: "deletion-cleanup-disposition-v1" as const,
+          surface, result: existed ? "disposed" as const : "already_absent" as const,
+          receipt_digest: hash("d"),
+        };
+      });
     },
   };
   const adapter: AccountDeletionCleanupPort = {
@@ -103,14 +107,15 @@ const port = (
 };
 
 describe("account deletion cleanup cycle", () => {
-  test("deletion order covers every inventory surface exactly once", () => {
-    expect(new Set(DELETION_DISPOSAL_ORDER).size).toBe(DELETION_CLEANUP_SURFACES.length);
-    expect([...DELETION_DISPOSAL_ORDER].sort()).toEqual([...DELETION_CLEANUP_SURFACES].sort());
-    expect(DELETION_DISPOSAL_ORDER.indexOf("product_projections"))
-      .toBeLessThan(DELETION_DISPOSAL_ORDER.indexOf("authoritative_memory"));
-    expect(DELETION_DISPOSAL_ORDER.indexOf("durable_work"))
-      .toBeLessThan(DELETION_DISPOSAL_ORDER.indexOf("authoritative_memory"));
-    expect(DELETION_DISPOSAL_ORDER.at(-1)).toBe("account_access");
+  test("deletion groups cover every inventory surface exactly once", () => {
+    const order = DELETION_DISPOSAL_GROUPS.flat();
+    expect(new Set(order).size).toBe(DELETION_CLEANUP_SURFACES.length);
+    expect([...order].sort()).toEqual([...DELETION_CLEANUP_SURFACES].sort());
+    expect(order.indexOf("product_projections"))
+      .toBeLessThan(order.indexOf("authoritative_memory"));
+    expect(order.indexOf("durable_work")).toBeLessThan(order.indexOf("experiment_results"));
+    expect(DELETION_DISPOSAL_GROUPS).toContainEqual(["durable_work", "staged_results"]);
+    expect(order.at(-1)).toBe("account_access");
   });
 
   test("disposes only reported surfaces and proves zero under the same held fence", async () => {
