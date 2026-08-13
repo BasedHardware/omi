@@ -87,6 +87,31 @@ test("data-source badge exposes the exact visible provenance at every source kin
   }
 });
 
+test("normal product copy stays user-first while technical provenance is disclosure-only", async () => {
+  const technicalVocabulary = /\b(?:backend|bridge|projection|consolidation|fixture|opaque|cursor|epoch|adapter|transport|schema)\b/i;
+  const diagnosticKeys = new Set([
+    "memoriesPlatform.lineage",
+    "memoriesPlatform.synthesisVersion",
+    "memoriesPlatform.inputDigest",
+    "memoriesPlatform.outputDigest",
+    "memoriesPlatform.sourceIdentifier",
+    "memoriesPlatform.sourceType",
+    "memoriesPlatform.observedAt",
+    "memoriesPlatform.lineageUnavailable",
+  ]);
+  for (const [key, value] of Object.entries(EN_MESSAGES)) {
+    if (key.startsWith("qa.") || diagnosticKeys.has(key)) continue;
+    assert.doesNotMatch(value, technicalVocabulary, `${key} is ordinary product copy, not diagnostics`);
+  }
+  const sourceBadge = await read("src/production/ProductionPrimitives.tsx");
+  assert.doesNotMatch(sourceBadge, /detail: source\.fixture/, "raw fixture selectors never become visible copy");
+  const memories = await read("src/production/MemoriesPlatformProduction.tsx");
+  assert.match(memories, /aria-expanded=\{detailsOpen\}/);
+  const disclosure = memories.indexOf("{detailsOpen && details.length > 0 && (");
+  const lineage = memories.indexOf('className="proposition-lineage"');
+  assert.ok(disclosure >= 0 && lineage > disclosure, "technical lineage is behind an explicit disclosure");
+});
+
 test("operation errors announce once and unchanged store rerenders are quiet", async () => {
   const ProductionOperationError = await loadProductionExport("ProductionPrimitives.tsx", "ProductionOperationError");
   let setError;
