@@ -331,6 +331,31 @@ def persist_capture_arrival_intent(
         return None
 
 
+def persist_desktop_meeting_arrival(uid: str, conversation) -> None:
+    """Repair-safe adapter from a completed desktop conversation to its exact Chat receipt."""
+
+    source = conversation.get('source') if isinstance(conversation, dict) else conversation.source
+    status = conversation.get('status') if isinstance(conversation, dict) else conversation.status
+    discarded = conversation.get('discarded', False) if isinstance(conversation, dict) else conversation.discarded
+    external_data = conversation.get('external_data') if isinstance(conversation, dict) else conversation.external_data
+    source = source.value if hasattr(source, 'value') else source
+    status = status.value if hasattr(status, 'value') else status
+    if (external_data or {}).get('conversation_role') != 'meeting':
+        return
+    if source != 'desktop' or discarded or status != 'completed':
+        return
+    conversation_id = conversation['id'] if isinstance(conversation, dict) else conversation.id
+    structured = (conversation.get('structured') if isinstance(conversation, dict) else conversation.structured) or {}
+    title = structured.get('title') if isinstance(structured, dict) else structured.title
+    overview = structured.get('overview') if isinstance(structured, dict) else structured.overview
+    persist_capture_arrival_intent(
+        uid,
+        conversation_id=conversation_id,
+        summary=title or overview or '',
+        is_desktop_meeting=True,
+    )
+
+
 def persist_daily_opener_intent(
     uid: str,
     *,

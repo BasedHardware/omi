@@ -1,6 +1,6 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 2008,
+    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 2023,
     "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": 1594,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3433,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4318,
@@ -11,7 +11,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1505
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "Assistant metadata controls now occupy a real in-layout hit-test strip with shared top/leading insets and stable pointer targets; chat-first blocks, timestamps, ratings, and copy/context actions remain one row-level rendering boundary rather than parallel transcript renderers.",
+    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "Assistant metadata controls now occupy a real in-layout hit-test strip with shared top/leading insets and stable pointer targets; chat-first blocks, timestamps, ratings, and copy/context actions remain one row-level rendering boundary rather than parallel transcript renderers. +15 projects the typed conversationLink through the existing exhaustive row grouping and rendering switches; the card view itself remains extracted in ChatFirstContentBlockViews.",
     "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": "One-line onOpenRewind closure threads the Activity hub's rewind route from the page host that owns the rail index.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "Rebase reconciliation applies the pinned swift-format to the main-branch app-detail safety fixes; runtime behavior is unchanged. Apps search now owns an explicit unknown/loading/completed/failed presentation state so the UI never flashes a false empty result before filtering completes. Apple Notes persists import history but requires a fresh explicit verification before projecting a current connected state, preserving the passive-read integration boundary.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Chat-first entry state remains colocated with the dashboard's canonical route selection and lifecycle synchronization. Home ask bar now auto-grows as a multi-line TextField so long messages wrap instead of scrolling off-screen; the Home prompt rail also receives the ask bar's outer trailing edge so the custom rail aligns flush with it; shared ChatComposerLayout sizing and conversation identity keep the dashboard and home chat surfaces aligned; a component split is tracked follow-up.",

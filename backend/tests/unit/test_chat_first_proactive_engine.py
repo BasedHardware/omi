@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 import logging
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -178,6 +179,33 @@ def test_desktop_meeting_arrival_persists_exact_conversation_link(monkeypatch):
     )
 
     assert created[1]['blocks'][0].summary == 'Your meeting notes are ready.'
+
+
+def test_desktop_meeting_adapter_uses_stored_role_and_rejects_retry_reclassification(monkeypatch):
+    persist = MagicMock()
+    monkeypatch.setattr(engine, 'persist_capture_arrival_intent', persist)
+    ambient = {
+        'id': 'ambient-1',
+        'source': 'desktop',
+        'status': 'completed',
+        'discarded': False,
+        'structured': {'title': 'Ambient capture'},
+        'external_data': {'conversation_role': 'ambient'},
+    }
+    meeting = {
+        **ambient,
+        'id': 'meeting-1',
+        'structured': {'title': 'Design review'},
+        'external_data': {'conversation_role': 'meeting'},
+    }
+
+    engine.persist_desktop_meeting_arrival('user-1', ambient)
+    persist.assert_not_called()
+
+    engine.persist_desktop_meeting_arrival('user-1', meeting)
+    persist.assert_called_once_with(
+        'user-1', conversation_id='meeting-1', summary='Design review', is_desktop_meeting=True
+    )
 
 
 def test_proactive_failure_logs_redact_authenticated_uid(monkeypatch, caplog):
