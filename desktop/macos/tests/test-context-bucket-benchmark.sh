@@ -78,6 +78,7 @@ assert detailed["polarity_matched"] is True
 assert detailed["decision_matched"] is True
 assert detailed["forbidden_output_matched"] is False
 assert detailed["forbidden_terms_matched"] == []
+assert detailed["failure_reasons"] == []
 
 leaking_case = {**case, "forbiddenOutputTerms": ["synthetic MESSAGE"]}
 with patch.object(benchmark.request, "urlopen", return_value=Response()):
@@ -86,6 +87,7 @@ assert leaking["polarity_matched"] is True
 assert leaking["decision_matched"] is True
 assert leaking["forbidden_output_matched"] is True
 assert leaking["forbidden_terms_matched"] == ["synthetic MESSAGE"]
+assert leaking["failure_reasons"] == ["forbidden_output"]
 assert leaking["matched"] is False
 
 wrong_type_case = {**case, "allowedDecisions": ["resurface"]}
@@ -93,6 +95,7 @@ with patch.object(benchmark.request, "urlopen", return_value=Response()):
     wrong_type = benchmark.invoke_case(wrong_type_case, 47910)
 assert wrong_type["polarity_matched"] is True
 assert wrong_type["decision_matched"] is False
+assert wrong_type["failure_reasons"] == ["decision"]
 assert wrong_type["matched"] is False
 
 envelope["result"]["detail"]["decision"] = "unexpected"

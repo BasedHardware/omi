@@ -171,6 +171,13 @@ def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
     polarity_matched = expected == "either" or expected == polarity
     allowed_decisions = case.get("allowedDecisions", [])
     decision_matched = not allowed_decisions or decision in allowed_decisions
+    failure_reasons = []
+    if not polarity_matched:
+        failure_reasons.append("polarity")
+    if not decision_matched:
+        failure_reasons.append("decision")
+    if forbidden_terms_matched:
+        failure_reasons.append("forbidden_output")
     result = {
         "id": case["id"],
         "expectedAction": expected,
@@ -181,6 +188,7 @@ def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
         "decision_matched": decision_matched,
         "forbidden_output_matched": bool(forbidden_terms_matched),
         "forbidden_terms_matched": forbidden_terms_matched,
+        "failure_reasons": failure_reasons,
         "model": detail.get("model"),
         "latency_ms": detail.get("latency_ms"),
     }
@@ -233,7 +241,7 @@ def main() -> int:
                 )
         print(json.dumps(results, indent=2))
         matched = sum(result["matched"] for result in results)
-        print(f"context bucket director replay: {matched}/{len(results)} polarity matches")
+        print(f"context bucket director replay: {matched}/{len(results)} behavioral contracts passed")
         return 0 if matched == len(results) else 1
     print(f"context bucket benchmark contract passed: {total} cases, {director} director mappings")
     return 0
