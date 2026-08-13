@@ -32,8 +32,15 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def git(self, *args: str) -> None:
-        subprocess.run(["git", *args], cwd=self.root, check=True, capture_output=True, text=True)
+    def git(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-c", "core.hooksPath=/dev/null", *args],
+            cwd=self.root,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=RATCHET.clean_git_env(),
+        )
 
     def write_source(self, relative: str, lines: int) -> None:
         path = self.root / relative
@@ -43,13 +50,7 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
     def commit_base(self) -> str:
         self.git("add", ".")
         self.git("commit", "-qm", "base")
-        return subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=self.root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        return self.git("rev-parse", "HEAD").stdout.strip()
 
     def evaluate(self, base: str, changed: set[str], body: str = "") -> list[str]:
         exceptions, parse_failures = RATCHET.parse_exceptions(body)
@@ -121,25 +122,13 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
             source.write("".join(f"candidate-{index}\n" for index in range(10)))
         self.git("add", relative)
         self.git("commit", "-qm", "candidate growth")
-        head = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=self.root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        head = self.git("rev-parse", "HEAD").stdout.strip()
 
         self.git("checkout", "-qb", "target", common)
         path.write_text("".join(f"base-{index}\n" for index in range(100, 1600)), encoding="utf-8")
         self.git("add", relative)
         self.git("commit", "-qm", "target reduction")
-        base = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=self.root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        base = self.git("rev-parse", "HEAD").stdout.strip()
 
         candidate_tree = RATCHET.synthetic_merge_tree(self.root, base, head)
         failures = RATCHET.evaluate_changes(
@@ -211,6 +200,8 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
         try:
             RATCHET.os.environ["GIT_DIR"] = "/wrong/repository"
             RATCHET.os.environ["GIT_WORK_TREE"] = "/wrong/worktree"
+            RATCHET.os.environ["GIT_COMMON_DIR"] = "/wrong/common-directory"
+            RATCHET.os.environ["GIT_INDEX_FILE"] = "/wrong/index"
             cleaned = RATCHET.clean_git_env()
         finally:
             RATCHET.os.environ.clear()
@@ -218,6 +209,8 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
 
         self.assertNotIn("GIT_DIR", cleaned)
         self.assertNotIn("GIT_WORK_TREE", cleaned)
+        self.assertNotIn("GIT_COMMON_DIR", cleaned)
+        self.assertNotIn("GIT_INDEX_FILE", cleaned)
 
 
 if __name__ == "__main__":

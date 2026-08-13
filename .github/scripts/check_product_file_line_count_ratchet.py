@@ -48,17 +48,6 @@ VENDORED_PARTS = {
     "target",
 }
 TEST_PARTS = {"test", "tests", "Tests"}
-_GIT_ENV_SCRUB = {
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_QUARANTINE_PATH",
-    "GIT_INDEX_FILE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_PREFIX",
-}
-
-
 @dataclass(frozen=True)
 class LineCountException:
     path: str
@@ -69,7 +58,10 @@ class LineCountException:
 
 
 def clean_git_env() -> dict[str, str]:
-    return {key: value for key, value in os.environ.items() if key not in _GIT_ENV_SCRUB}
+    # Hooks and nested Git commands may export repository-specific variables beyond the familiar
+    # GIT_DIR/GIT_WORK_TREE pair (for example GIT_COMMON_DIR or GIT_INDEX_FILE). None are inputs to
+    # this check, so drop the entire Git namespace before operating on the explicit ``cwd`` repo.
+    return {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
 
 
 def repo_root(explicit: str | None) -> Path:
