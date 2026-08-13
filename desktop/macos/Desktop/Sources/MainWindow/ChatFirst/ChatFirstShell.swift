@@ -335,7 +335,8 @@ struct ChatFirstShell: View {
           highlightedSettingId: $highlightedSettingID,
           onBack: {
             _ = navigation.handleEscapeNavigation()
-          }
+          },
+          appState: appState
         )
         SettingsPage(
           appState: appState,
