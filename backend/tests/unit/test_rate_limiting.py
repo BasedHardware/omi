@@ -49,6 +49,7 @@ def _rate_limit_stubs():
     firestore_stub.FieldFilter = MagicMock()
     fv1_stub = ModuleType("google.cloud.firestore_v1")
     fv1_stub.FieldFilter = MagicMock()
+    fv1_stub.transactional = MagicMock()
 
     redis_pkg = ModuleType("redis")
     redis_pkg.Redis = MagicMock
