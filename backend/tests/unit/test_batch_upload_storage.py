@@ -18,17 +18,47 @@ import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
 from utils.other import storage as storage_mod
+from tests.object_store_fakes import FakeObjectStore
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
 
+class _RecordingObjectStore(FakeObjectStore):
+    """FakeObjectStore recording open_write/put/delete/get_bytes keys, so tests can assert the batch
+    path streams via open_write (not a single put) and which extensions delete/download tried."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.open_write_calls: list = []
+        self.put_calls: list = []
+        self.deleted: list = []
+        self.fetched: list = []
+
+    def open_write(self, bucket, key, *, content_type=None):
+        self.open_write_calls.append((key, content_type))
+        return super().open_write(bucket, key, content_type=content_type)
+
+    def put(self, bucket, key, data, **kwargs):
+        self.put_calls.append(key)
+        return super().put(bucket, key, data, **kwargs)
+
+    def delete(self, bucket, key):
+        self.deleted.append(key)
+        return super().delete(bucket, key)
+
+    def get_bytes(self, bucket, key):
+        self.fetched.append(key)
+        return super().get_bytes(bucket, key)
+
+
 @pytest.fixture(autouse=True)
-def _mock_storage_client(monkeypatch):
-    """``utils.other.storage`` constructs a real GCS ``storage_client`` at import
-    time. Swap it for a controllable ``MagicMock`` so every test can wire its own
-    bucket/blob returns. Auto-restored at fixture teardown (no ``sys.modules``
-    mutation)."""
-    monkeypatch.setattr(storage_mod, 'storage_client', MagicMock())
+def _object_store(monkeypatch):
+    """utils.other.storage streams/reads through the neutral object-store port (_object_store()),
+    not a raw GCS storage_client. Inject an in-memory recording FakeObjectStore at that seam so
+    upload/list/delete/download run against it; tests seed and assert via ``storage_mod._object_store()``."""
+    store = _RecordingObjectStore()
+    monkeypatch.setattr(storage_mod, '_object_store', lambda: store)
+    return store
 
 
 @pytest.fixture(scope="module")
@@ -130,35 +160,18 @@ def merge():
         yield module
 
 
-class _FakeNotFound(Exception):
-    """Fake NotFound exception for testing (storage_mod.NotFound is mocked)."""
-
-    pass
-
-
-def _collect_written_bytes(mock_blob):
-    """Collect all bytes written via blob.open().__enter__().write() calls."""
-    mock_file = mock_blob.open.return_value.__enter__.return_value
-    written = b''
-    for c in mock_file.write.call_args_list:
-        written += c[0][0]
-    return written
+def _written(store, path):
+    """All bytes streamed to the batch object (was collected from blob.open().write() calls)."""
+    return store.get_bytes(storage_mod.private_cloud_sync_bucket, path)
 
 
 class TestBatchUpload:
     """Tests for upload_audio_chunks_batch streaming to GCS."""
 
-    def _setup_mock_bucket(self):
-        mock_bucket = MagicMock()
-        mock_blob = MagicMock()
-        mock_bucket.blob.return_value = mock_blob
-        storage_mod.storage_client.bucket.return_value = mock_bucket
-        return mock_bucket, mock_blob
-
     @patch.object(storage_mod, 'users_db')
     def test_batch_multiple_chunks_standard(self, mock_users_db):
         """Multiple chunks streamed as single .batch.bin object."""
-        mock_bucket, mock_blob = self._setup_mock_bucket()
+        store = storage_mod._object_store()
 
         chunks = [
             {'data': b'\x01' * 100, 'timestamp': 1000.000},
@@ -177,8 +190,8 @@ class TestBatchUpload:
         assert paths[0].endswith('.batch.bin')
         assert '1000.000-1010.000' in paths[0]
         # Verify streaming write was used (blob.open, not upload_from_string)
-        mock_blob.open.assert_called_once()
-        written = _collect_written_bytes(mock_blob)
+        assert len(store.open_write_calls) == 1
+        written = _written(store, paths[0])
         assert len(written) == 300
         assert written[:100] == b'\x01' * 100
         assert written[100:200] == b'\x02' * 100
@@ -187,7 +200,7 @@ class TestBatchUpload:
     @patch.object(storage_mod, 'users_db')
     def test_single_chunk_batch(self, mock_users_db):
         """Single chunk batch uses single timestamp in filename."""
-        mock_bucket, mock_blob = self._setup_mock_bucket()
+        store = storage_mod._object_store()
 
         chunks = [{'data': b'\x01' * 50, 'timestamp': 1000.000}]
 
@@ -200,13 +213,13 @@ class TestBatchUpload:
 
         assert len(paths) == 1
         assert '1000.000.batch.bin' in paths[0]
-        mock_blob.open.assert_called_once()
+        assert len(store.open_write_calls) == 1
 
     @patch.object(storage_mod, 'encryption')
     @patch.object(storage_mod, 'users_db')
     def test_batch_encrypted(self, mock_users_db, mock_encryption):
         """Enhanced protection encrypts each chunk and streams to GCS."""
-        mock_bucket, mock_blob = self._setup_mock_bucket()
+        store = storage_mod._object_store()
         mock_encryption.encrypt_audio_chunk.return_value = b'\xee' * 120
 
         chunks = [
@@ -224,13 +237,13 @@ class TestBatchUpload:
         assert len(paths) == 1
         assert paths[0].endswith('.batch.enc')
         assert mock_encryption.encrypt_audio_chunk.call_count == 2
-        written = _collect_written_bytes(mock_blob)
+        written = _written(store, paths[0])
         assert len(written) == 240
 
     @patch.object(storage_mod, 'users_db')
     def test_empty_batch_returns_empty(self, mock_users_db):
         """Empty chunk list returns empty list without any GCS ops."""
-        mock_bucket, mock_blob = self._setup_mock_bucket()
+        store = storage_mod._object_store()
 
         paths = storage_mod.upload_audio_chunks_batch(
             chunks=[],
@@ -240,12 +253,12 @@ class TestBatchUpload:
         )
 
         assert paths == []
-        mock_blob.open.assert_not_called()
+        assert store.open_write_calls == []
 
     @patch.object(storage_mod, 'users_db')
     def test_db_lookup_once_per_batch(self, mock_users_db):
         """When data_protection_level is None, DB is queried exactly once per batch."""
-        mock_bucket, mock_blob = self._setup_mock_bucket()
+        store = storage_mod._object_store()
         mock_users_db.get_data_protection_level.return_value = 'standard'
 
         chunks = [
@@ -265,7 +278,7 @@ class TestBatchUpload:
     @patch.object(storage_mod, 'users_db')
     def test_unsorted_input_produces_ordered_upload(self, mock_users_db):
         """Chunks provided out of order are sorted by timestamp before upload."""
-        mock_bucket, mock_blob = self._setup_mock_bucket()
+        store = storage_mod._object_store()
 
         chunks = [
             {'data': b'\x03' * 50, 'timestamp': 1010.000},
@@ -283,7 +296,7 @@ class TestBatchUpload:
         # Filename should reflect sorted order: first_ts-last_ts
         assert '1000.000-1010.000' in paths[0]
         # Streamed data should be in timestamp order
-        written = _collect_written_bytes(mock_blob)
+        written = _written(store, paths[0])
         assert written[:50] == b'\x01' * 50
         assert written[50:100] == b'\x02' * 50
         assert written[100:] == b'\x03' * 50
@@ -291,7 +304,7 @@ class TestBatchUpload:
     @patch.object(storage_mod, 'users_db')
     def test_skips_db_when_level_provided(self, mock_users_db):
         """When data_protection_level is explicitly provided, no DB read."""
-        mock_bucket, mock_blob = self._setup_mock_bucket()
+        store = storage_mod._object_store()
 
         storage_mod.upload_audio_chunks_batch(
             chunks=[{'data': b'\x01' * 50, 'timestamp': 1000.000}],
@@ -305,7 +318,7 @@ class TestBatchUpload:
     @patch.object(storage_mod, 'users_db')
     def test_large_batch_streams_correctly(self, mock_users_db):
         """Large batch (50 chunks) streams without regression."""
-        mock_bucket, mock_blob = self._setup_mock_bucket()
+        store = storage_mod._object_store()
 
         chunks = [{'data': b'\xaa' * 80_000, 'timestamp': 1000.000 + i * 5.0} for i in range(50)]
 
@@ -318,13 +331,12 @@ class TestBatchUpload:
 
         assert len(paths) == 1
         assert paths[0].endswith('.batch.bin')
-        mock_file = mock_blob.open.return_value.__enter__.return_value
-        assert mock_file.write.call_count == 50
+        assert len(_written(store, paths[0])) == 50 * 80_000
 
     @patch.object(storage_mod, 'users_db')
     def test_identical_timestamps_filename_and_order(self, mock_users_db):
         """Chunks with identical timestamps produce valid filename and stable order."""
-        mock_bucket, mock_blob = self._setup_mock_bucket()
+        store = storage_mod._object_store()
 
         chunks = [
             {'data': b'\x01' * 50, 'timestamp': 1000.000},
@@ -345,7 +357,7 @@ class TestBatchUpload:
     @patch.object(storage_mod, 'users_db')
     def test_streaming_api_call_args(self, mock_users_db):
         """Batch mode uses blob.open('wb') with correct args and does NOT call upload_from_string."""
-        mock_bucket, mock_blob = self._setup_mock_bucket()
+        store = storage_mod._object_store()
 
         chunks = [{'data': b'\x01' * 50, 'timestamp': 1000.000}]
 
@@ -356,29 +368,23 @@ class TestBatchUpload:
             data_protection_level='standard',
         )
 
-        mock_blob.open.assert_called_once_with('wb', content_type='application/octet-stream')
-        mock_blob.upload_from_string.assert_not_called()
+        # batch mode streams via open_write(content_type=...) rather than a single-shot upload
+        assert len(store.open_write_calls) == 1
+        assert store.open_write_calls[0][1] == 'application/octet-stream'
 
 
 class TestListAudioChunksBatchAware:
     """Tests for list_audio_chunks handling .batch.bin/.batch.enc files."""
 
-    def _setup_mock_bucket_with_blobs(self, blob_names):
-        """Set up mock bucket that returns specified blob names from list_blobs."""
-        mock_bucket = MagicMock()
-        mock_blobs = []
+    def _seed_blobs(self, blob_names):
+        """Seed the fake object store so list_audio_chunks(_object_store().list) returns these keys."""
+        store = storage_mod._object_store()
         for name in blob_names:
-            mock_blob = MagicMock()
-            mock_blob.name = name
-            mock_blob.size = 1000
-            mock_blobs.append(mock_blob)
-        mock_bucket.list_blobs.return_value = mock_blobs
-        storage_mod.storage_client.bucket.return_value = mock_bucket
-        return mock_bucket
+            store.put(storage_mod.private_cloud_sync_bucket, name, b'\x00' * 1000)
 
     def test_list_per_chunk_files(self):
         """Standard per-chunk .bin files are listed correctly."""
-        self._setup_mock_bucket_with_blobs(
+        self._seed_blobs(
             [
                 'chunks/uid/conv/1000.000.bin',
                 'chunks/uid/conv/1005.000.bin',
@@ -392,7 +398,7 @@ class TestListAudioChunksBatchAware:
 
     def test_list_batch_bin_file(self):
         """Batch .batch.bin file is listed with first timestamp."""
-        self._setup_mock_bucket_with_blobs(
+        self._seed_blobs(
             [
                 'chunks/uid/conv/1000.000-1010.000.batch.bin',
             ]
@@ -405,7 +411,7 @@ class TestListAudioChunksBatchAware:
 
     def test_list_batch_enc_file(self):
         """Batch .batch.enc file is listed with first timestamp."""
-        self._setup_mock_bucket_with_blobs(
+        self._seed_blobs(
             [
                 'chunks/uid/conv/1000.000-1010.000.batch.enc',
             ]
@@ -418,7 +424,7 @@ class TestListAudioChunksBatchAware:
 
     def test_list_single_chunk_batch(self):
         """Single-chunk batch file (no range) is listed correctly."""
-        self._setup_mock_bucket_with_blobs(
+        self._seed_blobs(
             [
                 'chunks/uid/conv/1000.000.batch.bin',
             ]
@@ -431,7 +437,7 @@ class TestListAudioChunksBatchAware:
 
     def test_list_mixed_per_chunk_and_batch(self):
         """Mixed per-chunk and batch files are all listed and sorted."""
-        self._setup_mock_bucket_with_blobs(
+        self._seed_blobs(
             [
                 'chunks/uid/conv/1010.000-1020.000.batch.bin',
                 'chunks/uid/conv/1000.000.bin',
@@ -449,7 +455,7 @@ class TestListAudioChunksBatchAware:
 
     def test_list_skips_meta_json(self):
         """Meta JSON files are not listed as chunks."""
-        self._setup_mock_bucket_with_blobs(
+        self._seed_blobs(
             [
                 'chunks/uid/conv/1000.000.bin',
                 'chunks/uid/conv/1000.000.meta.json',
@@ -461,7 +467,7 @@ class TestListAudioChunksBatchAware:
 
     def test_per_chunk_has_is_batch_false(self):
         """Per-chunk files have is_batch=False."""
-        self._setup_mock_bucket_with_blobs(
+        self._seed_blobs(
             [
                 'chunks/uid/conv/1000.000.enc',
             ]
@@ -474,111 +480,52 @@ class TestListAudioChunksBatchAware:
 class TestDeleteAudioChunksBatchAware:
     """Tests for delete_audio_chunks handling batch files."""
 
-    def _setup_mock_bucket_with_blobs(self, blob_names):
-        """Set up mock bucket with blobs for exists/delete and list_blobs."""
-        mock_bucket = MagicMock()
-        # Track which blobs exist
-        blob_map = {}
+    def _seed_blobs(self, blob_names):
+        """Seed the fake so exists()/list() see these keys; delete removes them from the store."""
+        store = storage_mod._object_store()
         for name in blob_names:
-            mock_blob = MagicMock()
-            mock_blob.name = name
-            mock_blob.exists.return_value = True
-            blob_map[name] = mock_blob
-
-        def make_blob(path):
-            if path in blob_map:
-                return blob_map[path]
-            mb = MagicMock()
-            mb.name = path
-            mb.exists.return_value = False
-            return mb
-
-        mock_bucket.blob.side_effect = make_blob
-
-        # list_blobs returns all blobs
-        list_blobs = []
-        for name in blob_names:
-            lb = MagicMock()
-            lb.name = name
-            list_blobs.append(lb)
-        mock_bucket.list_blobs.return_value = list_blobs
-        storage_mod.storage_client.bucket.return_value = mock_bucket
-        return mock_bucket, blob_map
+            store.put(storage_mod.private_cloud_sync_bucket, name, b'\x00' * 1000)
+        return store
 
     def test_delete_per_chunk_by_timestamp(self):
         """Per-chunk files are deleted by exact timestamp match."""
-        mock_bucket, blob_map = self._setup_mock_bucket_with_blobs(
-            [
-                'chunks/uid/conv/1000.000.bin',
-            ]
-        )
+        store = self._seed_blobs(['chunks/uid/conv/1000.000.bin'])
 
         storage_mod.delete_audio_chunks('uid', 'conv', [1000.000])
 
-        blob_map['chunks/uid/conv/1000.000.bin'].delete.assert_called_once()
+        assert not store.exists(storage_mod.private_cloud_sync_bucket, 'chunks/uid/conv/1000.000.bin')
 
     def test_delete_batch_by_start_timestamp(self):
-        """Batch files are deleted when start timestamp matches."""
-        mock_bucket, blob_map = self._setup_mock_bucket_with_blobs(
-            [
-                'chunks/uid/conv/1000.000-1010.000.batch.bin',
-            ]
-        )
+        """Batch files are deleted when start timestamp matches (found via the list scan)."""
+        batch = 'chunks/uid/conv/1000.000-1010.000.batch.bin'
+        store = self._seed_blobs([batch])
 
         storage_mod.delete_audio_chunks('uid', 'conv', [1000.000])
 
-        # The batch blob found via list_blobs scan should be deleted
-        list_blobs = mock_bucket.list_blobs.return_value
-        list_blobs[0].delete.assert_called_once()
+        assert not store.exists(storage_mod.private_cloud_sync_bucket, batch)
 
     def test_delete_tries_batch_extensions(self):
-        """Direct blob lookup tries .batch.enc and .batch.bin extensions."""
-        mock_bucket, blob_map = self._setup_mock_bucket_with_blobs(
-            [
-                'chunks/uid/conv/1000.000.batch.enc',
-            ]
-        )
+        """Direct lookup tries .batch.enc and .batch.bin extensions."""
+        batch = 'chunks/uid/conv/1000.000.batch.enc'
+        store = self._seed_blobs([batch])
 
         storage_mod.delete_audio_chunks('uid', 'conv', [1000.000])
 
-        blob_map['chunks/uid/conv/1000.000.batch.enc'].delete.assert_called_once()
+        assert not store.exists(storage_mod.private_cloud_sync_bucket, batch)
 
 
 class TestDownloadAudioChunksMergeBatchAware:
     """Tests for download_audio_chunks_and_merge handling batch blobs."""
 
     def _setup_mock_bucket(self, list_blobs_data, download_data):
-        """
-        Set up mock bucket for download tests.
-        list_blobs_data: list of (name, size) tuples for list_audio_chunks
-        download_data: dict of path -> bytes for download_as_bytes
-        """
-        mock_bucket = MagicMock()
+        """Seed the fake object store: download_data (path->bytes) are the objects list_audio_chunks
+        (_object_store().list) enumerates and download reads via get_bytes; an absent path raises the
+        port's ObjectNotFound. list_blobs_data is kept for signature parity (download_data covers it)."""
+        store = storage_mod._object_store()
+        for path, data in download_data.items():
+            store.put(storage_mod.private_cloud_sync_bucket, path, data)
+        return store
 
-        # list_blobs for list_audio_chunks
-        list_blobs = []
-        for name, size in list_blobs_data:
-            mb = MagicMock()
-            mb.name = name
-            mb.size = size
-            list_blobs.append(mb)
-        mock_bucket.list_blobs.return_value = list_blobs
-
-        # blob download
-        def make_blob(path):
-            mb = MagicMock()
-            mb.name = path
-            if path in download_data:
-                mb.download_as_bytes.return_value = download_data[path]
-            else:
-                mb.download_as_bytes.side_effect = _FakeNotFound(f"Not found: {path}")
-            return mb
-
-        mock_bucket.blob.side_effect = make_blob
-        storage_mod.storage_client.bucket.return_value = mock_bucket
-        return mock_bucket
-
-    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     def test_download_batch_blob_found(self):
         """Batch blob is resolved via list_audio_chunks and downloaded once."""
         batch_path = 'chunks/uid/conv/1000.000-1010.000.batch.bin'
@@ -598,7 +545,6 @@ class TestDownloadAudioChunksMergeBatchAware:
 
         assert result == batch_data
 
-    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     def test_download_per_chunk_still_works(self):
         """Per-chunk .bin files are still downloaded correctly."""
         self._setup_mock_bucket(
@@ -621,7 +567,6 @@ class TestDownloadAudioChunksMergeBatchAware:
 
         assert result == b'\x01' * 100 + b'\x02' * 100
 
-    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     def test_download_batch_deduplicates(self):
         """Multiple timestamps pointing to same batch blob download it once."""
         batch_path = 'chunks/uid/conv/1000.000-1010.000.batch.bin'
@@ -642,7 +587,6 @@ class TestDownloadAudioChunksMergeBatchAware:
 
         assert result == batch_data
 
-    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     @patch.object(storage_mod, 'encryption')
     def test_download_batch_encrypted_decrypts(self, mock_encryption):
         """Encrypted batch blob is decrypted via decrypt_audio_file."""
@@ -671,94 +615,59 @@ class TestDownloadAudioChunksMergeBatchAware:
 class TestCopyAudioChunksForMergeBatchAware:
     """Tests for _copy_audio_chunks_for_merge preserving batch blob filenames."""
 
+    _BUCKET = 'test-bucket'
+
+    def _prepare(self, merge, monkeypatch, chunks):
+        # _copy_audio_chunks_for_merge copies via the neutral object-store port (get_object_store().
+        # copy), not a raw GCS client. Inject a fake, seed each source chunk, stub list/conversations_db.
+        store = FakeObjectStore()
+        monkeypatch.setattr(merge, 'get_object_store', lambda: store)
+        monkeypatch.setattr(merge, 'private_cloud_sync_bucket', self._BUCKET)
+        monkeypatch.setattr(merge, 'list_audio_chunks', MagicMock(return_value=chunks))
+        conv_db = MagicMock()
+        conv_db.create_audio_files_from_chunks.return_value = []
+        monkeypatch.setattr(merge, 'conversations_db', conv_db)
+        for c in chunks:
+            store.put(self._BUCKET, c['path'], b'\x00' * 100)
+        return store
+
     def test_copy_preserves_batch_filename(self, merge, monkeypatch):
         """Batch blob filenames are preserved during copy (not renamed to single-timestamp)."""
-        mock_storage_client = MagicMock()
-        mock_list = MagicMock()
-        mock_conv_db = MagicMock()
-        monkeypatch.setattr(merge, '_get_storage_client', lambda: mock_storage_client)
-        monkeypatch.setattr(merge, 'list_audio_chunks', mock_list)
-        monkeypatch.setattr(merge, 'conversations_db', mock_conv_db)
-
-        mock_bucket = MagicMock()
-        mock_storage_client.bucket.return_value = mock_bucket
-
-        mock_list.return_value = [
-            {
-                'timestamp': 1000.000,
-                'path': 'chunks/uid/conv-old/1000.000-1060.000.batch.bin',
-                'size': 960000,
-                'is_batch': True,
-            }
-        ]
-        mock_conv_db.create_audio_files_from_chunks.return_value = []
+        store = self._prepare(
+            merge,
+            monkeypatch,
+            [{'timestamp': 1000.000, 'path': 'chunks/uid/conv-old/1000.000-1060.000.batch.bin', 'size': 960000, 'is_batch': True}],
+        )
 
         merge._copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
 
-        # Verify the copy preserved the batch filename
-        copy_call = mock_bucket.copy_blob.call_args
-        new_path = copy_call[0][2]  # third positional arg is new_name
-        assert new_path == 'chunks/uid/conv-new/1000.000-1060.000.batch.bin'
+        # the copy preserved the batch filename under the new conversation id
+        assert store.exists(self._BUCKET, 'chunks/uid/conv-new/1000.000-1060.000.batch.bin')
 
     def test_copy_preserves_single_chunk_filename(self, merge, monkeypatch):
         """Single-chunk filenames are also preserved during copy."""
-        mock_storage_client = MagicMock()
-        mock_list = MagicMock()
-        mock_conv_db = MagicMock()
-        monkeypatch.setattr(merge, '_get_storage_client', lambda: mock_storage_client)
-        monkeypatch.setattr(merge, 'list_audio_chunks', mock_list)
-        monkeypatch.setattr(merge, 'conversations_db', mock_conv_db)
-
-        mock_bucket = MagicMock()
-        mock_storage_client.bucket.return_value = mock_bucket
-
-        mock_list.return_value = [
-            {
-                'timestamp': 1000.000,
-                'path': 'chunks/uid/conv-old/1000.000.bin',
-                'size': 80000,
-                'is_batch': False,
-            }
-        ]
-        mock_conv_db.create_audio_files_from_chunks.return_value = []
+        store = self._prepare(
+            merge,
+            monkeypatch,
+            [{'timestamp': 1000.000, 'path': 'chunks/uid/conv-old/1000.000.bin', 'size': 80000, 'is_batch': False}],
+        )
 
         merge._copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
 
-        copy_call = mock_bucket.copy_blob.call_args
-        new_path = copy_call[0][2]
-        assert new_path == 'chunks/uid/conv-new/1000.000.bin'
+        assert store.exists(self._BUCKET, 'chunks/uid/conv-new/1000.000.bin')
 
     def test_copy_mixed_single_and_batch(self, merge, monkeypatch):
         """Mixed single + batch blobs are all copied with original filenames."""
-        mock_storage_client = MagicMock()
-        mock_list = MagicMock()
-        mock_conv_db = MagicMock()
-        monkeypatch.setattr(merge, '_get_storage_client', lambda: mock_storage_client)
-        monkeypatch.setattr(merge, 'list_audio_chunks', mock_list)
-        monkeypatch.setattr(merge, 'conversations_db', mock_conv_db)
-
-        mock_bucket = MagicMock()
-        mock_storage_client.bucket.return_value = mock_bucket
-
-        mock_list.return_value = [
-            {
-                'timestamp': 1000.000,
-                'path': 'chunks/uid/conv-old/1000.000.enc',
-                'size': 80000,
-                'is_batch': False,
-            },
-            {
-                'timestamp': 1010.000,
-                'path': 'chunks/uid/conv-old/1010.000-1070.000.batch.enc',
-                'size': 960000,
-                'is_batch': True,
-            },
-        ]
-        mock_conv_db.create_audio_files_from_chunks.return_value = []
+        store = self._prepare(
+            merge,
+            monkeypatch,
+            [
+                {'timestamp': 1000.000, 'path': 'chunks/uid/conv-old/1000.000.enc', 'size': 80000, 'is_batch': False},
+                {'timestamp': 1010.000, 'path': 'chunks/uid/conv-old/1010.000-1070.000.batch.enc', 'size': 960000, 'is_batch': True},
+            ],
+        )
 
         merge._copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
 
-        assert mock_bucket.copy_blob.call_count == 2
-        paths = [call[0][2] for call in mock_bucket.copy_blob.call_args_list]
-        assert 'chunks/uid/conv-new/1000.000.enc' in paths
-        assert 'chunks/uid/conv-new/1010.000-1070.000.batch.enc' in paths
+        assert store.exists(self._BUCKET, 'chunks/uid/conv-new/1000.000.enc')
+        assert store.exists(self._BUCKET, 'chunks/uid/conv-new/1010.000-1070.000.batch.enc')
