@@ -174,12 +174,14 @@ def test_nested_task_export_carries_owning_parent_id(monkeypatch):
     user_document.collection.return_value = parent_collection
     users_collection = MagicMock()
     users_collection.document.return_value = user_document
-    monkeypatch.setattr(data_export.database_client.db, 'collection', MagicMock(return_value=users_collection))
+    mock_db = MagicMock()
+    mock_db.collection.return_value = users_collection
+    monkeypatch.setattr(data_export.database_client, 'db', mock_db)
 
     records = list(_REAL_ITER_USER_NESTED_SUBCOLLECTION('uid1', 'workstreams', 'events'))
 
     assert records == [{'kind': 'progress', 'id': 'event-1', 'parent_id': 'workstream-1'}]
-    data_export.database_client.db.collection.assert_called_once_with('users')
+    mock_db.collection.assert_called_once_with('users')
     users_collection.document.assert_called_once_with('uid1')
     user_document.collection.assert_called_once_with('workstreams')
     parent.reference.collection.assert_called_once_with('events')
