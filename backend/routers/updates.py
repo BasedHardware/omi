@@ -916,7 +916,7 @@ async def get_desktop_appcast_xml(
 async def download_latest_desktop_release(
     platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
     channel: str = Query(default="stable", pattern="^(beta|stable)$"),
-    identity: str = Query(default="stable", pattern="^(stable|beta)$"),
+    identity: Optional[str] = Query(default=None, pattern="^(stable|beta)$"),
 ):
     """
     Serve the latest desktop release installer as an auto-download landing page.
@@ -924,9 +924,20 @@ async def download_latest_desktop_release(
     channel in the legacy release metadata; the requested channel is strict
     (404 when empty — QA/tooling contract).
     Defaults to stable channel (for macos.omi.me). Use channel=beta for QA.
-    identity=beta serves the separately-installable "Omi Beta" DMG, which runs
-    side-by-side with stable.
+    identity selects which installer that channel serves: identity=beta is the
+    separately-installable "Omi Beta" DMG that runs side-by-side with stable.
+    When identity is absent it follows the channel (channel=beta alone serves
+    the beta-identity DMG — the macos.omi.me/beta redirect contract); pass
+    identity explicitly to request the cross product.
     """
+    if identity is None:
+        # macos.omi.me/beta redirects here with only channel=beta — the URL-map redirect
+        # cannot add identity=beta, and defaulting identity to "stable" made the public
+        # beta link serve the stable-identity omi.dmg (production bundle id, production
+        # services) from the beta pointer. A user who asked for a channel implicitly
+        # asked for that channel's identity; explicit identity=stable&channel=beta stays
+        # available for tooling that genuinely wants the cross product.
+        identity = channel
     if identity == "beta":
         channel = "beta"
     desktop_releases = await _get_live_desktop_releases(platform)

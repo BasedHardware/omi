@@ -20,6 +20,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AuthorizedToolExecution.swift
   - desktop/macos/Desktop/Sources/Chat/ChatOmiMark.swift
   - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
+  - desktop/macos/Desktop/Sources/Chat/MessageMetadata.swift
   - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubbleSupport.swift

@@ -163,6 +163,38 @@ async def finalize_persisted_conversation(
             idempotency_key=fanout['fanout_key'],
             require_delivery=True,
         )
+        # Publish the content-free capture-arrival intent before marking the
+        # durable fanout projection completed. Desktop waits on that projection
+        # before waking Chat; ordering the marker first closes the small window
+        # where a completed projection existed without a notes-ready intent.
+        source = getattr(conversation, 'source', None)
+        source_value = getattr(source, 'value', source)
+        external_data = getattr(conversation, 'external_data', None) or {}
+        is_desktop_meeting = (
+            source_value == 'desktop'
+            and external_data.get('conversation_role') == 'meeting'
+            and external_data.get('conversation_finalization_reason') != 'max_duration_rotation'
+            and not getattr(conversation, 'discarded', False)
+        )
+        if (source_value == 'omi' and not getattr(conversation, 'discarded', False)) or is_desktop_meeting:
+            try:
+                structured = getattr(conversation, 'structured', None)
+                summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
+                if is_desktop_meeting:
+                    persist_capture_arrival_intent(
+                        uid,
+                        conversation_id=conversation_id,
+                        summary=summary,
+                        is_desktop_meeting=True,
+                    )
+                else:
+                    persist_capture_arrival_intent(uid, conversation_id=conversation_id, summary=summary)
+            except Exception as error:
+                logger.warning(
+                    'chat-first capture arrival intent failed during finalization uid=%s error=%s',
+                    sanitize_pii(uid),
+                    type(error).__name__,
+                )
         fanout_completed = await run_blocking(
             db_executor,
             lifecycle_service.complete_finalization_fanout,
@@ -172,26 +204,6 @@ async def finalize_persisted_conversation(
         )
         if not fanout_completed:
             raise ConversationFinalizationError('fanout_completion_conflict')
-        # The conversation and all derived effects are now durably finalized.
-        # Persist the content-free capture-arrival intent only after that
-        # commit, and keep this product hint failure-isolated from the source
-        # finalization outcome.
-        source = getattr(conversation, 'source', None)
-        if getattr(source, 'value', source) == 'omi':
-            try:
-                structured = getattr(conversation, 'structured', None)
-                summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                persist_capture_arrival_intent(
-                    uid,
-                    conversation_id=conversation_id,
-                    summary=summary,
-                )
-            except Exception as error:
-                logger.warning(
-                    'chat-first capture arrival intent failed after finalization uid=%s error=%s',
-                    sanitize_pii(uid),
-                    type(error).__name__,
-                )
         return ConversationFinalizationDisposition.completed
     except Exception as error:
         # Provider and validation exceptions can contain transcript excerpts.

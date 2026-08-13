@@ -16,10 +16,10 @@ struct ConversationsPage: View {
 
   // Listening mode — used only to decide whether the manual "Start Recording"
   // affordance is meaningful (see startRecordingButton gating).
-  @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
-    AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
-  private var listeningCaptureMode: AssistantSettings.SystemAudioCaptureMode {
-    CaptureListeningLogic.listeningCaptureMode(raw: systemAudioCaptureModeRaw)
+  @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) private var audioRecordingModeRaw =
+    AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
+  private var audioRecordingMode: AssistantSettings.AudioRecordingMode {
+    CaptureListeningLogic.audioRecordingMode(raw: audioRecordingModeRaw)
   }
 
   // Search state
@@ -227,7 +227,7 @@ struct ConversationsPage: View {
         // nothing is transcribing misleads the user into thinking capture is
         // active — during an actual meeting isTranscribing is already true and
         // the live transcript replaces this button.
-        if !appState.isTranscribing && listeningCaptureMode == .always {
+        if !appState.isTranscribing && audioRecordingMode == .always {
           startRecordingButton
         }
       }

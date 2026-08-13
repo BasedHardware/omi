@@ -735,9 +735,7 @@ final class DesktopAutomationActionRegistry {
       run: handler)
   }
 
-  func unregister(_ name: String) {
-    entries[name] = nil
-  }
+  func unregister(_ name: String) { entries[name] = nil }
 
   func descriptors() -> [DesktopAutomationActionDescriptor] {
     entries.values.map(\.descriptor).sorted { $0.name < $1.name }
@@ -935,8 +933,7 @@ final class DesktopAutomationActionRegistry {
       summary: "Configure the non-production contextual task interruption gate",
       params: [
         "enabled", "shipped_cohorts_enabled", "daily_limit", "minimum_spacing_seconds",
-        "quiet_start_minute", "quiet_end_minute", "notifications_enabled", "frequency",
-        "task_notifications_enabled",
+        "notifications_enabled", "frequency", "task_notifications_enabled",
       ]
     ) { params in
       var configuration = ProactiveTaskInterruptionSettings.load()
@@ -947,12 +944,6 @@ final class DesktopAutomationActionRegistry {
       configuration.minimumSpacing = TimeInterval(
         max(
           0, intParam(params["minimum_spacing_seconds"], default: Int(configuration.minimumSpacing))))
-      configuration.quietHoursStartMinute = min(
-        max(
-          0, intParam(params["quiet_start_minute"], default: configuration.quietHoursStartMinute)), 1439)
-      configuration.quietHoursEndMinute = min(
-        max(
-          0, intParam(params["quiet_end_minute"], default: configuration.quietHoursEndMinute)), 1439)
       ProactiveTaskInterruptionSettings.save(configuration)
       if params["notifications_enabled"] != nil {
         UserDefaults.standard.set(
@@ -1016,7 +1007,7 @@ final class DesktopAutomationActionRegistry {
       safety: "network_or_model",
       sideEffects: [
         "may call model/backend services",
-        "may deliver a user-visible suggestion during the configured active period",
+        "may deliver a user-visible suggestion when notification controls allow",
       ]
     ) { params in
       let app = params["app"].flatMap { $0.isEmpty ? nil : $0 }
@@ -1027,6 +1018,7 @@ final class DesktopAutomationActionRegistry {
       )
     }
 
+    registerContextBucketDirectorProbe()
     register(
       name: "set_contextual_task_focus",
       summary: "Set deterministic focus suppression for contextual task interruptions",
@@ -1250,9 +1242,7 @@ final class DesktopAutomationActionRegistry {
       params: ["enabled"]
     ) { params in
       let enabled = boolParam(params["enabled"], default: true)
-      AssistantSettings.shared.transcriptionEnabled = enabled
-      NotificationCenter.default.post(
-        name: .toggleTranscriptionRequested, object: nil, userInfo: ["enabled": enabled])
+      AssistantSettings.shared.audioRecordingMode = enabled ? .onlyMeetings : .off
       return ["enabled": enabled ? "true" : "false"]
     }
 
@@ -1271,6 +1261,8 @@ final class DesktopAutomationActionRegistry {
       case "inject_multi":
         return await appState.automationInjectCaptureTestTranscriptMulti(
           segmentsJSON: params["segments"] ?? params["text"] ?? "")
+      case "meeting_start", "meeting_end":
+        return ["conversation_role": appState.automationObserveMeetingBoundary(active: phase == "meeting_start")]
       case "stop":
         return await appState.automationStopCaptureTestSession()
       case "lifecycle":
@@ -1282,7 +1274,7 @@ final class DesktopAutomationActionRegistry {
         _ = await appState.automationInjectCaptureTestTranscript(text: marker)
         return await appState.automationStopCaptureTestSession()
       default:
-        return ["error": "phase must be start, inject, inject_multi, stop, or lifecycle"]
+        return ["error": "phase must be start, inject, inject_multi, meeting_start, meeting_end, stop, or lifecycle"]
       }
     }
 
@@ -3422,34 +3414,13 @@ final class DesktopAutomationActionRegistry {
       let appState = await MainActor.run { AppState.current }
       let hasPermission = appState?.hasNotificationPermission ?? false
       let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
-      let activePeriod = await MainActor.run { NotificationService.currentActivePeriod() }
       return [
+        "schema": "enabled,frequency,frequency_label,has_permission,banners_disabled",
         "enabled": settings.enabled ? "true" : "false",
         "frequency": "\(settings.frequency)",
         "frequency_label": settings.frequencyDescription,
         "has_permission": hasPermission ? "true" : "false",
         "banners_disabled": bannersDisabled ? "true" : "false",
-        "active_start_minute": "\(activePeriod.startMinute)",
-        "active_end_minute": "\(activePeriod.endMinute)",
-      ]
-    }
-
-    register(
-      name: "set_notification_active_period",
-      summary: "Set the device-local proactive notification active period",
-      params: ["start_minute", "end_minute"]
-    ) { params in
-      let current = await MainActor.run { NotificationService.currentActivePeriod() }
-      let startMinute = intParam(params["start_minute"], default: current.startMinute)
-      let endMinute = intParam(params["end_minute"], default: current.endMinute)
-      let saved = await MainActor.run { () -> NotificationActivePeriod in
-        NotificationService.updateActivePeriod(startMinute: startMinute, endMinute: endMinute)
-        return NotificationService.currentActivePeriod()
-      }
-      return [
-        "saved": "true",
-        "active_start_minute": "\(saved.startMinute)",
-        "active_end_minute": "\(saved.endMinute)",
       ]
     }
 
@@ -3543,7 +3514,8 @@ final class DesktopAutomationActionRegistry {
         "insight_enabled": insight.isEnabled ? "true" : "false",
         "memory_enabled": memory.isEnabled ? "true" : "false",
         "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
-        "transcription_enabled": assistant.transcriptionEnabled ? "true" : "false",
+        "transcription_enabled": assistant.audioRecordingMode != .off ? "true" : "false",
+        "audio_recording_mode": assistant.audioRecordingMode.rawValue,
         "multi_chat_enabled": UserDefaults.standard.bool(forKey: .multiChatEnabled) ? "true" : "false",
       ]
     }

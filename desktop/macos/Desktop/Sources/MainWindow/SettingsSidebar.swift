@@ -23,12 +23,6 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"],
       section: .general, icon: "gearshape", settingId: "general.screencapture"),
     SettingsSearchItem(
-      name: "System Audio", subtitle: "When to record audio from other apps",
-      keywords: [
-        "system audio", "meeting", "zoom", "google meet", "teams", "call", "capture", "recording",
-        "speaker",
-      ], section: .general, icon: "speaker.wave.2", settingId: "general.systemaudio"),
-    SettingsSearchItem(
       name: "Notifications", subtitle: "macOS permission and banner status",
       keywords: ["alerts", "notify", "banners", "system settings", "permission"], section: .general,
       icon: "gearshape",
@@ -60,8 +54,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["screen capture", "screenshot", "monitor", "recording", "rewind"],
       section: .general, icon: "rectangle.dashed.badge.record", settingId: "general.screencapture"),
     SettingsSearchItem(
-      name: "Audio Recording", subtitle: "Toggle audio recording and transcription",
-      keywords: ["audio", "microphone", "recording", "transcription", "mic"], section: .general,
+      name: "Audio Recording", subtitle: "Off, Always On, or Only Meetings",
+      keywords: [
+        "audio", "microphone", "recording", "transcription", "mic", "meeting", "zoom", "google meet",
+        "teams", "call", "system audio",
+      ], section: .general,
       icon: "mic.fill", settingId: "general.audiorecording"),
     SettingsSearchItem(
       name: "Storage", subtitle: "View frame count and disk usage",
@@ -114,11 +111,6 @@ struct SettingsSearchItem: Identifiable {
       name: "Notification Frequency", subtitle: "How often to receive notifications",
       keywords: ["frequency", "how often", "interval"], section: .notifications, icon: "bell",
       settingId: "notifications.frequency"),
-    SettingsSearchItem(
-      name: "Notification Active Period", subtitle: "Choose when proactive notifications may appear",
-      keywords: ["active period", "quiet hours", "schedule", "24 hour", "time"],
-      section: .notifications, icon: "bell",
-      settingId: "notifications.activeperiod"),
     SettingsSearchItem(
       name: "Task Notifications",
       subtitle: "Allow interruptions when a task needs attention",

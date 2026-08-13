@@ -184,6 +184,10 @@ struct QueryAnswerSource: Identifiable, Equatable {
         return QueryAnswerSource(
           id: id, origin: .conversation(id: conversationId),
           summary: summary.isEmpty ? "Conversation" : summary)
+      case .conversationLink(let id, let conversationId, let summary):
+        return QueryAnswerSource(
+          id: id, origin: .conversation(id: conversationId),
+          summary: summary.isEmpty ? "Conversation" : summary)
       case .memoryLink(let id, _, let summary):
         return QueryAnswerSource(
           id: id, origin: .memory, summary: summary.isEmpty ? "Memory" : summary)

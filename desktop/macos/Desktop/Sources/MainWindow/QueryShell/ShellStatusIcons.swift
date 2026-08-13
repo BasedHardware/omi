@@ -321,9 +321,8 @@ struct ShellStatusIcons: View {
   @State private var isTogglingListening = false
 
   @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
-  @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
-  @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
-    AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
+  @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) private var audioRecordingModeRaw =
+    AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
 
   var body: some View {
     HStack(spacing: 2) {
@@ -367,7 +366,7 @@ struct ShellStatusIcons: View {
     ShellStatusTooltip.audio(
       state: listeningState,
       mode: CaptureListeningLogic.listeningModeTitle(
-        appState: appState, raw: systemAudioCaptureModeRaw))
+        appState: appState, raw: audioRecordingModeRaw))
   }
 
   private var captureState: HomeStatusState {
@@ -381,7 +380,7 @@ struct ShellStatusIcons: View {
   private func toggleListening() {
     CaptureListeningLogic.toggleListening(
       appState: appState,
-      transcriptionEnabled: $transcriptionEnabled,
+      audioRecordingModeRaw: $audioRecordingModeRaw,
       isTogglingListening: $isTogglingListening)
   }
 
