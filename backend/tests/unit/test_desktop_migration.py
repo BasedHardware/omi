@@ -1769,36 +1769,29 @@ class TestScoreComputation:
 
     def test_default_tab_overall_when_lowest_weekly(self):
         """default_tab is 'overall' when overall score exceeds weekly."""
+
+        def _agg(n):
+            # Firestore count() aggregation shape: q.count().get()[0][0].value
+            m = MagicMock()
+            m.get.return_value = [[MagicMock(value=n)]]
+            return m
+
         mock_col = MagicMock()
-
-        # Daily: 0 tasks
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = []
-
-        # Weekly: 0/1 = 0%
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_query.stream.return_value = [self._make_mock_doc({'completed': False})]
-
-        # Overall: 1/1 = 100%
-        mock_col.stream.return_value = [self._make_mock_doc({'completed': True})]
-
-        call_count = [0]
-
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
-            else:
-                return weekly_query
-
-        mock_col.where = col_where
+        # Daily/weekly are filtered streams; overall is now count()-based aggregation (get_scores
+        # totals the collection via count(), not a full stream). filtered.stream() is consumed in
+        # order: daily (empty), weekly (one incomplete), overall's deleted-subset (empty).
+        filtered = MagicMock()
+        filtered.where.return_value = filtered
+        filtered.stream.side_effect = [[], [self._make_mock_doc({'completed': False})], []]
+        filtered.count.return_value = _agg(1)  # overall completed = 1
+        mock_col.where.return_value = filtered
+        mock_col.count.return_value = _agg(1)  # overall total = 1  -> overall 1/1 = 100%
 
         with patch.object(action_items_db, 'db') as patched_db:
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
             result = action_items_db.get_scores('test-uid', date='2025-01-15')
 
+        # daily 0/0, weekly 0/1 (0%), overall 1/1 (100%) -> highest is overall
         assert result['default_tab'] == 'overall'
 
 
