@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 import { POSTGRES_MIGRATIONS } from "./manifest";
+import {
+  POSTGRES_DELETION_SURFACE_TABLES,
+  POSTGRES_RETAINED_DELETION_SAFETY_TABLES,
+} from "../deletion-surface-registry";
 
 const directory = new URL("./", import.meta.url);
 const migrationSql = POSTGRES_MIGRATIONS.map((migration) => ({
@@ -134,6 +138,23 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(allSql).not.toMatch(/CREATE\s+(?:TABLE|TYPE).*\b(?:search|embedding|experiment)/i);
     expect(allSql).not.toMatch(/\b(?:pgvector|tsvector|CREATE\s+ROLE|server_version|postgres:\d+)\b/i);
     expect(allSql).not.toContain("ON DELETE CASCADE");
+  });
+
+  test("classifies every PostgreSQL table once for deletion or retained safety", () => {
+    const disposalRows = Object.entries(POSTGRES_DELETION_SURFACE_TABLES)
+      .flatMap(([surface, names]) => names.map((name) => ({ surface, name })));
+    const allClassified = [
+      ...disposalRows.map((row) => row.name),
+      ...POSTGRES_RETAINED_DELETION_SAFETY_TABLES,
+    ];
+    expect(new Set(allClassified).size).toBe(allClassified.length);
+    expect([...allClassified].sort()).toEqual([...expectedTables].sort());
+    expect(disposalRows.some((row) => row.surface === "authoritative_memory")).toBe(true);
+    expect(disposalRows.some((row) => row.surface === "account_access")).toBe(true);
+    expect(POSTGRES_RETAINED_DELETION_SAFETY_TABLES)
+      .toContain("account_terminal_deletion_exports");
+    expect(disposalRows.map((row) => row.name))
+      .not.toContain("account_terminal_deletion_exports");
   });
 
   test("makes every authority relationship structurally account-scoped", () => {
