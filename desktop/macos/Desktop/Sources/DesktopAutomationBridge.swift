@@ -735,9 +735,7 @@ final class DesktopAutomationActionRegistry {
       run: handler)
   }
 
-  func unregister(_ name: String) {
-    entries[name] = nil
-  }
+  func unregister(_ name: String) { entries[name] = nil }
 
   func descriptors() -> [DesktopAutomationActionDescriptor] {
     entries.values.map(\.descriptor).sorted { $0.name < $1.name }
@@ -1027,6 +1025,7 @@ final class DesktopAutomationActionRegistry {
       )
     }
 
+    registerContextBucketDirectorProbe()
     register(
       name: "set_contextual_task_focus",
       summary: "Set deterministic focus suppression for contextual task interruptions",

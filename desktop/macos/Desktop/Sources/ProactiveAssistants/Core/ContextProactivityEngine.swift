@@ -26,6 +26,43 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
   }
 }
 
+enum ContextDirectorEligibility {
+  static func permitsEvaluation(of snapshot: ContextBucketSnapshot) -> Bool {
+    snapshot.notifyWorthiness > 0 && !snapshot.validatedFacts.isEmpty
+  }
+}
+
+enum ContextDirectorGrounding {
+  static func permitsNonSilence(entryRefs: [String], factIDs: [String]) -> Bool {
+    !entryRefs.isEmpty && !factIDs.isEmpty
+  }
+}
+
+enum ContextDirectorTaskSelection {
+  static let maximumCount = 20
+  static let futureHorizon: TimeInterval = 48 * 60 * 60
+
+  static func select(from tasks: [TaskActionItem], now: Date) -> [ContextDirectorTaskContext] {
+    let cutoff = now.addingTimeInterval(futureHorizon)
+    return
+      tasks
+      .filter { task in
+        !task.completed && !task.isRetired && !task.isPendingSuggestion
+      }
+      .sorted { lhs, rhs in
+        let leftIsReference = lhs.dueAt.map { $0 > cutoff } ?? false
+        let rightIsReference = rhs.dueAt.map { $0 > cutoff } ?? false
+        if leftIsReference != rightIsReference { return !leftIsReference }
+        let left = lhs.dueAt ?? .distantFuture
+        let right = rhs.dueAt ?? .distantFuture
+        if left != right { return left < right }
+        return lhs.createdAt > rhs.createdAt
+      }
+      .prefix(maximumCount)
+      .map { ContextDirectorTaskContext(description: $0.description, dueAt: $0.dueAt) }
+  }
+}
+
 extension ContextBucketStore {
   func activeFenceIsValid(_ fence: ContextVisitFence) async -> Bool {
     let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
@@ -95,7 +132,7 @@ actor ContextProactivityEngine {
     else { return }
     // Facts are the only source of notification worthiness. A bucket containing
     // ambient narrative alone cannot purchase a frontier-model call.
-    guard snapshot.notifyWorthiness > 0, !snapshot.validatedFacts.isEmpty else { return }
+    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
     guard
       let currentFrame = await MainActor.run(body: {
         AssistantCoordinator.shared.trackedFrameForDirector(startedAt: fence.startedAt)
@@ -134,26 +171,14 @@ actor ContextProactivityEngine {
     }
 
     let taskContext = await MainActor.run {
-      (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks).prefix(20)
-        .map { "- \($0.description)" }.joined(separator: "\n")
+      ContextDirectorTaskSelection.select(
+        from: TasksStore.shared.incompleteTasks,
+        now: currentFrame.captureTime)
     }
-    let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
-    let prompt = """
-      \(ScreenDerivedContent.untrustedPreamble)
-      Decide whether interrupting now adds concrete value. Return silence unless the validated
-      facts support a specific, timely action. Use only supplied bucket-entry refs.
-      Never announce that meeting notes, a transcript, or a call summary are ready. The
-      conversation-finalization lane owns that claim and attaches the exact conversation link.
-
-      \(stableBucket)
-
-      == OPEN OR OVERDUE TASKS ==
-      \(taskContext)
-
-      == CURRENT FRAME METADATA ==
-      App: \(currentFrame.appName)
-      Window: \(currentFrame.windowTitle ?? "")
-      """
+    let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
+    let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
+      tasks: taskContext,
+      frame: currentFrame)
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.activeFenceIsValid(fence)
@@ -183,6 +208,7 @@ actor ContextProactivityEngine {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.reasoningOperation,
         prompt: prompt,
+        uncachedPrompt: uncachedPrompt,
         imageData: currentFrame.jpegData,
         jsonSchema: Self.schema,
         cacheKey: "bucket:\(snapshot.bucketID):v\(snapshot.version)",
@@ -203,11 +229,18 @@ actor ContextProactivityEngine {
       let decision = try JSONDecoder().decode(ContextDirectorDecision.self, from: Data(result.content.utf8)).clamped()
       let entryRefs = await store.validatedEntryRefs(
         decision.bucketEntryRefs, bucketID: snapshot.bucketID)
+      let factIDs =
+        decision.decision == "silence"
+        ? []
+        : await store.validatedFactIDs(
+          decision.factIDs,
+          snapshotFacts: snapshot.validatedFacts,
+          bucketID: snapshot.bucketID)
       let provenance: [String: Any] = [
         "bucket_id": snapshot.bucketID,
         "bucket_version_id": snapshot.versionID,
         "bucket_entry_refs": entryRefs,
-        "fact_ids": decision.factIDs,
+        "fact_ids": factIDs,
         "reasoning": decision.reasoning,
         "provider_model": ContextProactivityTelemetry.boundedProviderModel(result.providerModel),
         "cached_tokens": result.usage.cachedTokens,
@@ -224,7 +257,7 @@ actor ContextProactivityEngine {
           message: nil, state: "suppressed")
         return
       }
-      guard !entryRefs.isEmpty else {
+      guard ContextDirectorGrounding.permitsNonSilence(entryRefs: entryRefs, factIDs: factIDs) else {
         try await store.completeDelivery(
           id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
           message: nil, state: "suppressed")
@@ -273,7 +306,7 @@ actor ContextProactivityEngine {
       if decision.decision == "task_candidate" {
         graduationSucceeded = await CandidateSink.shared.graduateValidatedFacts(
           deliveryID: deliveryID,
-          factIDs: decision.factIDs,
+          factIDs: factIDs,
           authorizationSnapshot: authorizationSnapshot)
       }
       guard

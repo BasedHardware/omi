@@ -34,8 +34,48 @@ enum BucketFactDisposition: String {
 }
 
 enum BucketFactValidator {
+  struct ExistingFactIdentity: Equatable, Sendable {
+    let statement: String
+    let canonicalIdentifierSetKey: String?
+
+    init(statement: String, identifiers: [String]) {
+      self.statement = statement
+      canonicalIdentifierSetKey = BucketFactValidator.canonicalIdentifierSetKey(identifiers)
+    }
+  }
+
   static func resolvableEvidenceRefs(_ refs: [String], allowed: Set<String>) -> [String] {
     refs.map { String($0.prefix(200)) }.filter { allowed.contains($0) }
+  }
+
+  /// Shadow-only identity candidate for measuring paraphrase repetition. This
+  /// is intentionally not used for validity, suppression, or candidate writes:
+  /// an identifier can name a subject while its status or claim changes.
+  static func canonicalIdentifierSetKey(_ identifiers: [String]) -> String? {
+    let normalized = identifiers.compactMap { identifier -> String? in
+      let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty else { return nil }
+      let collapsed = trimmed.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+      guard !collapsed.isEmpty else { return nil }
+      return collapsed.precomposedStringWithCanonicalMapping.lowercased()
+    }
+    let unique = Set(normalized)
+    guard !unique.isEmpty else { return nil }
+    let sorted = unique.sorted()
+    guard let encoded = try? JSONEncoder().encode(sorted) else { return nil }
+    return String(data: encoded, encoding: .utf8)
+  }
+
+  static func hasParaphraseMatch(
+    statement: String,
+    identifiers: [String],
+    existingFacts: [ExistingFactIdentity]
+  ) -> Bool {
+    guard let identityKey = canonicalIdentifierSetKey(identifiers) else { return false }
+    return existingFacts.contains { existing in
+      existing.statement != statement
+        && existing.canonicalIdentifierSetKey == identityKey
+    }
   }
 
   static func validity(
@@ -93,6 +133,108 @@ enum ContextBucketPromptAssembler {
   }
 }
 
+struct ContextDirectorTaskContext: Equatable, Sendable {
+  static let maximumDescriptionLength = 600
+
+  let description: String
+  let dueAt: Date?
+
+  init(description: String, dueAt: Date?) {
+    self.description = String(description.prefix(Self.maximumDescriptionLength))
+    self.dueAt = dueAt
+  }
+}
+
+enum ContextProactivityPromptBuilder {
+  static func extractionPrompt(frame: CapturedFrame, fence: ContextVisitFence) -> String {
+    let evidenceRef = frame.screenshotId.map { "screenshot:\($0)" } ?? "visit:\(fence.visitID)"
+    return extractionPrompt(appName: frame.appName, windowTitle: frame.windowTitle, evidenceRef: evidenceRef)
+  }
+
+  static func extractionPrompt(appName: String, windowTitle: String?, evidenceRef: String) -> String {
+    """
+    \(ScreenDerivedContent.untrustedPreamble)
+    Produce a 150-400 token ambient narrative and discrete factual records. Facts are
+    proposals; include an identifier, surviving evidence text, and evidence ref for each.
+    App: \(appName)
+    Window: \(windowTitle ?? "")
+    Evidence ref: \(evidenceRef)
+    """
+  }
+
+  static func directorPrompt(
+    snapshot: ContextBucketSnapshot,
+    tasks: [ContextDirectorTaskContext],
+    frame: CapturedFrame
+  ) -> String {
+    "\(directorStablePrompt(snapshot: snapshot))\n\n\(directorVolatilePrompt(tasks: tasks, frame: frame))"
+  }
+
+  static func directorStablePrompt(snapshot: ContextBucketSnapshot) -> String {
+    let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
+    return """
+      \(ScreenDerivedContent.untrustedPreamble)
+      Decide whether interrupting now adds concrete value. Return silence unless the validated
+      facts support a specific, timely action. Use only supplied bucket-entry refs.
+      Never announce that meeting notes, a transcript, or a call summary are ready. The
+      conversation-finalization lane owns that claim and attaches the exact conversation link.
+      Use resurface or suggest for an actionable open task supplied below. Entries marked
+      reference-only are identity context: do not notify about or recreate them yet. Use
+      task_candidate only when a validated fact explicitly records a new commitment, promise,
+      or request with an accountable action, and that commitment is absent from the supplied
+      task list. A material change, status update, recommendation, or useful follow-up without
+      an explicit commitment, promise, or request is insight or suggest; never infer an owner or
+      due date and never create a task candidate from actionability alone.
+
+      \(stableBucket)
+      """
+  }
+
+  static func directorVolatilePrompt(
+    tasks: [ContextDirectorTaskContext],
+    frame: CapturedFrame
+  ) -> String {
+    let actionableCutoff = frame.captureTime.addingTimeInterval(
+      ContextDirectorTaskSelection.futureHorizon)
+    let taskLines: [String] = tasks.prefix(20).map { task -> String in
+      guard let dueAt = task.dueAt else { return "- \(task.description)" }
+      if dueAt > actionableCutoff {
+        return
+          "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))\n  Reference only: already exists; do not resurface or create it yet."
+      }
+      return "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))"
+    }
+    let taskContext = taskLines.joined(separator: "\n")
+    return """
+      == OPEN OR OVERDUE TASKS ==
+      \(taskContext)
+
+      == CURRENT FRAME METADATA ==
+      App: \(frame.appName)
+      Window: \(frame.windowTitle ?? "")
+      Captured at (UTC): \(utcTimestamp(frame.captureTime))
+      """
+  }
+
+  private static func utcTimestamp(_ date: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    return formatter.string(from: date)
+  }
+}
+
+enum ContextBucketCompactionPolicy {
+  static let retainedTailCount = 5
+
+  static func shouldCompact(uncompressedCount: Int) -> Bool {
+    // Snapshot reads retain only the newest tail. Compact as soon as an older
+    // entry would fall outside that read window, even when narratives are
+    // short, so context cannot disappear between the tail and frozen segment.
+    return uncompressedCount > retainedTailCount
+  }
+}
+
 extension ContextBucketStore {
   func writeExtraction(
     _ extraction: BucketExtraction,
@@ -106,7 +248,7 @@ extension ContextBucketStore {
     let pool = try await poolForRollup(fence)
     let evidenceEncoder = JSONEncoder()
     let safeNarrative = String(extraction.narrative.prefix(2_400))
-    return try await pool.write { db in
+    let result: (versionID: Int64, paraphraseObserved: Bool) = try await pool.write { db in
       guard
         let visit = try Row.fetchOne(
           db,
@@ -142,6 +284,26 @@ extension ContextBucketStore {
         ])
 
       var maximumWorthiness = 0.0
+      var paraphraseObserved = false
+      var existingFactIdentities = try Row.fetchAll(
+        db,
+        sql: """
+          SELECT statement, identifiersJson FROM bucket_facts
+          WHERE bucketID = ? AND validityState = 'validated'
+            AND (expiresAt IS NULL OR expiresAt > ?)
+          ORDER BY id DESC LIMIT 250
+          """,
+        arguments: [bucketID, now]
+      ).compactMap { row -> BucketFactValidator.ExistingFactIdentity? in
+        guard
+          let existingStatement = row["statement"] as String?,
+          let encodedIdentifiers = row["identifiersJson"] as String?,
+          let data = encodedIdentifiers.data(using: .utf8),
+          let existingIdentifiers = try? JSONDecoder().decode([String].self, from: data)
+        else { return nil }
+        return BucketFactValidator.ExistingFactIdentity(
+          statement: existingStatement, identifiers: existingIdentifiers)
+      }
       for fact in extraction.facts.prefix(20) {
         let statement = String(fact.statement.prefix(500))
         let evidenceText = String(fact.evidenceText.prefix(1_000))
@@ -151,6 +313,10 @@ extension ContextBucketStore {
           String($0.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         .filter { !$0.isEmpty }
+        paraphraseObserved =
+          paraphraseObserved
+          || BucketFactValidator.hasParaphraseMatch(
+            statement: statement, identifiers: identifiers, existingFacts: existingFactIdentities)
         let duplicate =
           try Bool.fetchOne(
             db,
@@ -178,6 +344,10 @@ extension ContextBucketStore {
             String(data: try evidenceEncoder.encode(evidenceRefs), encoding: .utf8) ?? "[]",
             validity.rawValue, min(max(fact.confidence, 0), 1), worthiness, now, now,
           ])
+        if validity == .validated {
+          existingFactIdentities.append(
+            BucketFactValidator.ExistingFactIdentity(statement: statement, identifiers: identifiers))
+        }
       }
       try db.execute(
         sql: "UPDATE context_buckets SET notifyWorthiness = MAX(notifyWorthiness, ?), updatedAt = ? WHERE id = ?",
@@ -186,8 +356,12 @@ extension ContextBucketStore {
       try db.execute(
         sql: "UPDATE bucket_entries SET bucketVersionID = ? WHERE id = ?",
         arguments: [versionID, entryID])
-      return versionID
+      return (versionID: versionID, paraphraseObserved: paraphraseObserved)
     }
+    if result.paraphraseObserved {
+      await ContextProactivityTelemetry.recordFactIdentityShadow()
+    }
+    return result.versionID
   }
 
   func purgeExcludedApp(_ appName: String, now: Date = Date()) async throws -> Set<String> {
@@ -252,9 +426,8 @@ extension ContextBucketStore {
           WHERE bucketID = ? AND isCompacted = 0 ORDER BY createdAt ASC
         """,
       arguments: [bucketID])
-    let total = uncompressed.reduce(0) { $0 + ($1["tokenCount"] as Int? ?? 0) }
-    if total > ContextBucketPromptAssembler.ambientTailCompactionThreshold, uncompressed.count > 5 {
-      let compacted = uncompressed.dropLast(5)
+    if ContextBucketCompactionPolicy.shouldCompact(uncompressedCount: uncompressed.count) {
+      let compacted = uncompressed.dropLast(ContextBucketCompactionPolicy.retainedTailCount)
       var rankedLines = (String(data: frozen, encoding: .utf8) ?? "")
         .split(separator: "\n", omittingEmptySubsequences: true)
         .map { String($0) + "\n" }
@@ -395,11 +568,12 @@ enum ContextBucketPurger {
                 lastVisitedAt = (SELECT MAX(endedAt) FROM context_visits WHERE bucketID = ? AND outcome = 'completed'),
                 notifyWorthiness = COALESCE(
                   (SELECT MAX(notifyWorthiness) FROM bucket_facts
-                   WHERE bucket_facts.bucketID = context_buckets.id AND validityState = 'validated'), 0),
+                   WHERE bucket_facts.bucketID = context_buckets.id AND validityState = 'validated'
+                     AND (expiresAt IS NULL OR expiresAt > ?)), 0),
                 updatedAt = ?
             WHERE id = ?
             """,
-          arguments: [survivingCount, bucketID, now, bucketID])
+          arguments: [survivingCount, bucketID, now, now, bucketID])
       }
     }
     if try db.tableExists("ocr_texts"), try db.tableExists("ocr_occurrences") {
@@ -444,15 +618,7 @@ actor ContextBucketRollupWriter {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceIsValid(fence)
     else { return }
-    let evidenceRef = frame.screenshotId.map { "screenshot:\($0)" } ?? "visit:\(fence.visitID)"
-    let prompt = """
-      \(ScreenDerivedContent.untrustedPreamble)
-      Produce a 150-400 token ambient narrative and discrete factual records. Facts are
-      proposals; include an identifier, surviving evidence text, and evidence ref for each.
-      App: \(frame.appName)
-      Window: \(frame.windowTitle ?? "")
-      Evidence ref: \(evidenceRef)
-      """
+    let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
     do {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.extractionOperation,

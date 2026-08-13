@@ -45,6 +45,32 @@ def test_operation_pins_lane_and_only_reasoning_enables_explicit_cache():
     assert parts[1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
 
 
+def test_reasoning_cache_breakpoint_precedes_volatile_text_and_image():
+    def parts_for(captured_at: str):
+        request_value = request("proactive_reasoning", cache_key="bucket-7-version-3")
+        request_value.messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "stable bucket"},
+                    {"type": "text", "text": f"captured at: {captured_at}"},
+                    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,"}},
+                ],
+            }
+        ]
+        return desktop_proactivity._gateway_payload(request_value)["messages"][0]["content"]
+
+    parts = parts_for("2026-08-13T16:00:00Z")
+    later_parts = parts_for("2026-08-13T16:00:01Z")
+
+    assert parts[0] == {"type": "text", "text": "stable bucket"}
+    assert parts[1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+    assert parts[2]["text"].startswith("captured at:")
+    assert parts[3]["type"] == "image_url"
+    assert parts[:2] == later_parts[:2]
+    assert parts[2:] != later_parts[2:]
+
+
 def test_request_requires_strict_valid_nested_json_schema():
     payload = request().model_dump(mode="json")
     payload["response_format"] = {
@@ -287,6 +313,161 @@ def test_configured_gateway_remains_authoritative(monkeypatch):
     assert provider.headers["X-Omi-Request-ID"] == "request-1"
     assert provider.payload["model"] == "omi:auto:desktop-proactive-reasoning"
     assert provider.fallback_class == "none"
+
+
+def test_direct_extraction_length_retry_gate_is_shape_and_provider_scoped():
+    direct = desktop_proactivity._ProviderRequest(
+        url="https://api.openai.com/v1/chat/completions",
+        headers={},
+        payload={},
+        fallback_class="dev_direct_openai",
+    )
+    gateway = desktop_proactivity._ProviderRequest(
+        url="http://gateway/v1/chat/completions",
+        headers={},
+        payload={},
+        fallback_class="none",
+    )
+
+    empty = {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
+    truncated = {"choices": [{"finish_reason": "length", "message": {"content": '{"summary":'}}]}
+    truncated_scalar = {"choices": [{"finish_reason": "length", "message": {"content": '{"summary":1'}}]}
+    truncated_literal = {"choices": [{"finish_reason": "length", "message": {"content": '{"summary":true'}}]}
+    schema_mismatch = {"choices": [{"finish_reason": "length", "message": {"content": '{"summary":3}'}}]}
+    malformed_shape = {"choices": [{"finish_reason": "length", "message": {"content": None}}]}
+    refusal = {"choices": [{"finish_reason": "length", "message": {"content": None, "refusal": "not allowed"}}]}
+
+    assert desktop_proactivity._should_retry_direct_extraction(empty, request(), direct)
+    assert desktop_proactivity._should_retry_direct_extraction(truncated, request(), direct)
+    assert desktop_proactivity._should_retry_direct_extraction(truncated_scalar, request(), direct)
+    assert desktop_proactivity._should_retry_direct_extraction(truncated_literal, request(), direct)
+    assert not desktop_proactivity._should_retry_direct_extraction(schema_mismatch, request(), direct)
+    assert not desktop_proactivity._should_retry_direct_extraction(malformed_shape, request(), direct)
+    assert not desktop_proactivity._should_retry_direct_extraction(refusal, request(), direct)
+    assert not desktop_proactivity._should_retry_direct_extraction(empty, request("proactive_reasoning"), direct)
+    assert not desktop_proactivity._should_retry_direct_extraction(empty, request(), gateway)
+
+
+@pytest.mark.asyncio
+async def test_direct_extraction_retries_length_once_without_extra_quota_reservation(monkeypatch):
+    calls = []
+    consumed = []
+    fallbacks = []
+
+    class DirectClient:
+        async def post(self, url, *, headers, json):
+            calls.append((url, headers, json))
+            body = (
+                {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
+                if len(calls) == 1
+                else {
+                    "model": "gpt-5-nano",
+                    "choices": [{"finish_reason": "stop", "message": {"content": '{"summary":"ok"}'}}],
+                }
+            )
+            return httpx.Response(200, request=httpx.Request("POST", url), json=body)
+
+    class Semaphore:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    async def consume(uid, operation):
+        consumed.append((uid, operation))
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
+
+    result = await desktop_proactivity.proactive_completion(request(), uid="user-1")
+
+    assert len(calls) == 2
+    assert calls[0][2]["max_completion_tokens"] == 1024
+    assert calls[1][2]["max_completion_tokens"] == 2400
+    assert consumed == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+    assert result.response["choices"][0]["message"]["content"] == '{"summary":"ok"}'
+    assert len(fallbacks) == 2
+    assert fallbacks[0] | {"log": None} == {
+        "component": "llm_gateway",
+        "from_mode": "gateway",
+        "to_mode": "direct_openai",
+        "reason": "config_incomplete",
+        "outcome": "recovered",
+        "log": None,
+    }
+    assert fallbacks[1] | {"log": None} == {
+        "component": "llm_gateway",
+        "from_mode": "direct_openai",
+        "to_mode": "direct_openai_retry",
+        "reason": "capability_mismatch",
+        "outcome": "recovered",
+        "log": None,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("final_failure", ["invalid", "provider"])
+async def test_direct_extraction_length_retry_releases_quota_once_after_final_failure(monkeypatch, final_failure):
+    calls = []
+    released = []
+    fallbacks = []
+
+    class DirectClient:
+        async def post(self, url, *, headers, json):
+            calls.append(json)
+            if len(calls) == 2 and final_failure == "provider":
+                raise httpx.ConnectError("provider unavailable")
+            return httpx.Response(
+                200,
+                request=httpx.Request("POST", url),
+                json={"choices": [{"finish_reason": "length", "message": {"content": ""}}]},
+            )
+
+    class Semaphore:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    async def allow(*_):
+        return None
+
+    async def release(uid, operation):
+        released.append((uid, operation))
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: fallbacks.append(values))
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", allow)
+    monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
+
+    with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
+        await desktop_proactivity.proactive_completion(request(), uid="user-1")
+
+    assert unavailable.value.status_code == 502
+    assert [payload["max_completion_tokens"] for payload in calls] == [1024, 2400]
+    assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
+    assert len(fallbacks) == 2
+    assert fallbacks[0]["from_mode"] == "gateway"
+    assert fallbacks[0]["to_mode"] == "direct_openai"
+    assert fallbacks[0]["outcome"] == "recovered"
+    assert fallbacks[1]["component"] == "llm_gateway"
+    assert fallbacks[1]["from_mode"] == "direct_openai"
+    assert fallbacks[1]["to_mode"] == "direct_openai_retry"
+    assert fallbacks[1]["reason"] == "capability_mismatch"
+    assert fallbacks[1]["outcome"] == "exhausted"
 
 
 @pytest.mark.asyncio

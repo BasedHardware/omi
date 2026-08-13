@@ -23,4 +23,10 @@ final class ProactiveLaneClientTests: XCTestCase {
     XCTAssertEqual(ContextProactivityTelemetry.boundedProviderModel("gpt-5.6-luna"), "gpt-5.6-luna")
     XCTAssertEqual(ContextProactivityTelemetry.boundedProviderModel("attacker-controlled-model"), "other")
   }
+
+  func testClientErrorsExposeOnlyStableSafeClassifications() {
+    XCTAssertEqual(ProactiveLaneClientError.invalidResponse.localizedDescription, "proactive_invalid_response")
+    XCTAssertEqual(ProactiveLaneClientError.http(429).localizedDescription, "proactive_http_error status=429")
+    XCTAssertEqual(ProactiveLaneClientError.ownerChanged.localizedDescription, "proactive_owner_changed")
+  }
 }

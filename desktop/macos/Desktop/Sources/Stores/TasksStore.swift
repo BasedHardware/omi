@@ -1405,17 +1405,26 @@ class TasksStore: ObservableObject {
     operations: OwnerBoundOperations
   ) async throws -> OwnerBoundOperations.ActionItemsPage {
     guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+    let page: OwnerBoundOperations.ActionItemsPage
     if let fetchDeletedPage = operations.fetchDeletedPage {
-      return try await fetchDeletedPage(offset, limit, lease.ownerID)
+      page = try await fetchDeletedPage(offset, limit, lease.ownerID)
+    } else {
+      let response = try await APIClient.shared.getActionItems(
+        limit: limit,
+        offset: offset,
+        deleted: true,
+        expectedOwnerId: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot
+      )
+      page = .init(items: response.items, hasMore: response.hasMore)
     }
-    let response = try await APIClient.shared.getActionItems(
-      limit: limit,
-      offset: offset,
-      deleted: true,
-      expectedOwnerId: lease.ownerID,
-      authorizationSnapshot: lease.authorizationSnapshot
-    )
-    return .init(items: response.items, hasMore: response.hasMore)
+    // The lane is the authority on retirement, not `isRetired`'s re-derivation
+    // from whatever fields this response happened to carry. Stamping it here —
+    // after both transports, so neither can skip it — is what stops a retired
+    // row being written to the local cache as live and resurfacing as a live
+    // task. Every caller of this page (first load and auto-refresh) syncs it
+    // into SQLite, so normalizing anywhere later would leave one path wrong.
+    return .init(items: page.items.map { $0.retired() }, hasMore: page.hasMore)
   }
 
   private func syncPage(
