@@ -62,7 +62,7 @@ Design files and manufacturing references for the Omi consumer device are open-s
 | J-Link debug probe | [SEGGER](https://www.segger.com/products/debug-probes/j-link/) | ~$20 for EDU Mini |
 | Battery (150mAh LiPo coin cell) | Battery supplier | See [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) — dangerous goods shipping |
 | CNC enclosure | Machining service | AL6061-T6, STEP files in `mechanical/` |
-| Consigned components (24 parts) | DigiKey, Mouser, etc. | See [LCSC-SOURCING.md](bom/LCSC-SOURCING.md) |
+| Consigned components (15 MPNs not on LCSC) | DigiKey, Mouser, etc. | See [LCSC-SOURCING.md](bom/LCSC-SOURCING.md) |
 
 ---
 

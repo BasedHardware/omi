@@ -28,7 +28,7 @@ This guide is for Kit Build buyers. You received assembled PCBAs, battery, enclo
 Open the kit and verify all items are present:
 
 - [ ] Mainboard PCBA (round, ~24mm diameter)
-- [ ] Charger PCBA (small board with pogo pin pads)
+- [ ] Charger PCBA (small board with pogo pin pads — this is the **charging dock**, not installed in the wearable)
 - [ ] FPC (thin flex cable with BTB connector and charging ring)
 - [ ] Battery (coin cell, 2 wires — red and black)
 - [ ] Case-A (aluminium top cover, laser-engraved)
@@ -47,6 +47,8 @@ Open the kit and verify all items are present:
 
 ⚠ **If any item is missing or damaged, contact the Omi team before proceeding.**
 
+📷 **Reference photos:** See `assembly/photos/` in this repo for exploded view, component identification, and materials-labeled images.
+
 ---
 
 ## Step 1: Solder Vibration Motor (Board Unpowered)
@@ -61,7 +63,7 @@ Solder all connections **before** connecting the battery. Working on an unpowere
 
 ## Step 2: Connect FPC
 
-The FPC (Flexible Printed Circuit) connects the mainboard to the charger board's charging contacts.
+The FPC (Flexible Printed Circuit) carries the charging contact ring and BTB connector. The contact ring on the FPC magnetically aligns with the charger dock's pogo pins for wireless charging.
 
 1. **Locate the BTB connector** on the mainboard (small, low-profile, one side)
 2. **Look for the keying mark** — one side of the connector has a small alignment feature or dot
@@ -103,7 +105,9 @@ See [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) for test point locatio
 
 ### Flash
 
-Download `nrfutil` from [nordicsemi.com](https://www.nordicsemi.com/Products/Development-tools/nrf-util) (standalone binary — do NOT use `pip install nrfutil`, that's the deprecated v6).
+**Get firmware files:** Download `net_core.hex` and `app_core.hex` from the [Omi releases page](https://github.com/BasedHardware/omi/releases) matching your hardware revision (v1.2). Or build from source using the [firmware guide](https://docs.omi.me/doc/developer/firmware/Compile_firmware).
+
+**Get nrfutil:** Download from [nordicsemi.com](https://www.nordicsemi.com/Products/Development-tools/nrf-util) (standalone binary — do NOT use `pip install nrfutil`, that's the deprecated v6).
 
 ```bash
 # Install the device command
@@ -189,7 +193,7 @@ If any test fails, debug now. See [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACC
 ### Place Components
 
 1. **Silicone pad** — place in case-b as a cushion layer
-2. **Wrapper** — seat the PC+ABS wrapper shell into case-b (this is the primary RF window — do not omit it)
+2. **Wrapper** — seat the PC+ABS wrapper shell into case-b (designed as the primary RF window — do not omit it)
 3. **Frame** — place the SLA frame to hold the PCB in position
 4. **Mainboard** — seat the mainboard PCBA into the frame. It fits in one orientation only.
 5. **LED guide** — place the translucent LED guide over the LED on the mainboard
@@ -225,7 +229,7 @@ If any test fails, debug now. See [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACC
 | BLE not advertising | Firmware not flashed | Re-flash both cores |
 | No audio | Mic dust filter blocking, or firmware issue | Check dust filter placement, re-flash |
 | Won't charge | FPC not connected, or charger board issue | Re-seat BTB connector |
-| Weak BLE signal | Wrapper (PC+ABS shell) missing or case-a not laser-engraved | Ensure wrapper is installed between PCB and case (it's the primary RF window). Case-a laser engraving provides secondary RF improvement. |
+| Weak BLE signal | Wrapper (PC+ABS shell) missing or case-a not laser-engraved | Ensure wrapper is installed between PCB and case (designed as the primary RF window). Case-a laser engraving is designed for secondary RF improvement. |
 | Case won't close | FPC routed wrong, or component misplaced | Open, re-route FPC with ≥2.2mm bend radius |
 
 ---

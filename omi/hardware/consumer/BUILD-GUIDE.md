@@ -20,7 +20,7 @@ The Omi consumer device is an advanced wearable (nRF5340 + nRF7002, WLCSP packag
 
 **Buy pre-assembled electronics from the Omi factory, do final assembly yourself.**
 
-The Omi factory already produces these boards at scale. Ordering pre-assembled subassemblies eliminates the hardest parts (HDI PCB fabrication, WLCSP assembly, 24-part consignment sourcing, X-ray inspection).
+The Omi factory already produces these boards at scale. Ordering pre-assembled subassemblies eliminates the hardest parts (HDI PCB fabrication, WLCSP assembly, consignment sourcing, X-ray inspection).
 
 ### What You Get in a Kit
 
@@ -82,7 +82,7 @@ Pricing depends on quantity. Expect ~$80–120/unit at 10+ units.
 | **WLCSP assembly** | 0.35mm pitch requires Standard/Advanced tier PCBA, Type 5 solder paste, X-ray inspection. |
 | **15 consigned parts** | Not on LCSC. Must source from DigiKey, Mouser, CS Semi, Puya Semi, Suntech, and others — then ship to JLCPCB for consignment assembly. |
 | **No reverse polarity protection** | One wrong battery wire → dead BQ25101 → board scrapped. |
-| **CNC enclosure** | Custom machining. Laser engraving on case-a improves RF (surface current disruption). |
+| **CNC enclosure** | Custom machining. Laser engraving on case-a is designed to improve RF (surface current disruption) — no final-enclosure VNA data available yet. |
 
 ### Estimated Cost (5 units)
 
@@ -146,6 +146,10 @@ Start with Path 2. Additionally:
 
 ### Firmware Flashing
 
+Get firmware hex files from:
+- **Pre-built releases:** [github.com/BasedHardware/omi/releases](https://github.com/BasedHardware/omi/releases) — download `net_core.hex` and `app_core.hex` matching your hardware revision (v1.2)
+- **Build from source:** Follow the [firmware build guide](https://docs.omi.me/doc/developer/firmware/Compile_firmware) — requires nRF Connect SDK
+
 See [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) for complete instructions. Quick summary:
 
 ```bash
@@ -173,7 +177,7 @@ nrfutil device program --firmware app_core.hex --core Application --verify --res
 - Insulate solder joints and wires with Kapton tape
 - Insulate battery from aluminium enclosure with foam tape
 - Do not short, puncture, or charge unattended during initial bring-up
-- Use a current-limited supply (100mA limit) for first power-up if available
+- Use a current-limited supply for first power-up if available (100mA for BLE-only bring-up; raise to 500mA before Wi-Fi testing — nRF7002 TX draws up to 260mA)
 - See [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) for full safety and shipping requirements
 
 ### Testing
