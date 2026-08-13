@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import sys
 from urllib import error, request
 
@@ -32,6 +33,8 @@ DIRECTOR_CASES = {
     "commitment-explicit-due-date",
     "commitment-ambiguous-mention",
 }
+
+STABLE_PROACTIVE_ERROR = re.compile(r"\bproactive_(?:http_error status=\d{3}|invalid_response|owner_changed)\b")
 
 
 def map_case(case: dict) -> dict[str, str]:
@@ -128,7 +131,15 @@ def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
         with request.urlopen(bridge_request, timeout=45) as response:
             envelope = json.load(response)
     except error.HTTPError as exc:
-        raise RuntimeError(f"{case['id']}: probe returned HTTP {exc.code}") from exc
+        stable_error = None
+        try:
+            error_envelope = json.loads(exc.read(4096))
+            match = STABLE_PROACTIVE_ERROR.search(str(error_envelope.get("error", "")))
+            stable_error = match.group(0) if match else None
+        except (AttributeError, json.JSONDecodeError, UnicodeDecodeError):
+            pass
+        suffix = f" ({stable_error})" if stable_error else ""
+        raise RuntimeError(f"{case['id']}: probe returned HTTP {exc.code}{suffix}") from exc
     if envelope.get("ok") is not True:
         raise RuntimeError(f"{case['id']}: probe failed: {envelope.get('error', 'unknown error')}")
     result = envelope.get("result", envelope)

@@ -6,6 +6,7 @@ python3 desktop/macos/scripts/context-bucket-benchmark.py
 
 python3 - <<'PY'
 import importlib.util
+import io
 from pathlib import Path
 import sys
 import types
@@ -83,4 +84,21 @@ with patch.object(
         assert str(exc) == "synthetic-text-output: probe returned HTTP 400"
     else:
         raise AssertionError("HTTP probe failure must carry the scenario ID")
+
+stable_error_body = io.BytesIO(
+    b'{"ok":false,"error":"action failed: proactive_http_error status=429"}'
+)
+with patch.object(
+    benchmark.request,
+    "urlopen",
+    side_effect=error.HTTPError("http://127.0.0.1", 400, "Bad Request", None, stable_error_body),
+):
+    try:
+        benchmark.invoke_case(case, 47910)
+    except RuntimeError as exc:
+        assert str(exc) == (
+            "synthetic-text-output: probe returned HTTP 400 (proactive_http_error status=429)"
+        )
+    else:
+        raise AssertionError("stable proactive failure must survive the bridge envelope")
 PY
