@@ -401,6 +401,86 @@ struct CaptureLinkView: View {
   }
 }
 
+struct ConversationLinkView: View {
+  let conversationID: String
+  let summary: String
+  let navigation: ChatFirstShellNavigation
+
+  @State private var isOpening = false
+  @State private var isUnavailable = false
+
+  var body: some View {
+    Group {
+      if isUnavailable {
+        ChatFirstUnavailableBlockView(entityName: "Conversation")
+      } else {
+        ChatFirstLinkBlockView(
+          eyebrow: "Meeting notes ready",
+          systemImage: "text.document",
+          summary: summary,
+          actionTitle: "Open conversation",
+          isOpening: isOpening,
+          accessibilityID: "chat-first-conversation-\(conversationID)-open"
+        ) {
+          openConversation()
+        }
+      }
+    }
+    .onAppear {
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(kind: .conversationLink, outcome: .rendered, action: .none)
+      )
+    }
+  }
+
+  private func openConversation() {
+    guard !isOpening else { return }
+    isOpening = true
+    let resolutionGeneration = navigation.beginConversationLinkResolution()
+    Task { @MainActor in
+      defer { isOpening = false }
+      do {
+        let conversation = try await APIClient.shared.getConversation(id: conversationID)
+        guard
+          let conversation = ChatFirstConversationLinkPolicy.validatedConversation(
+            conversation,
+            requestedID: conversationID
+          )
+        else {
+          throw URLError(.cannotParseResponse)
+        }
+        guard
+          navigation.completeConversationLinkResolution(
+            conversation: conversation,
+            generation: resolutionGeneration)
+        else { return }
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .conversationLink, outcome: .acted, action: .open)
+        )
+      } catch {
+        isUnavailable = true
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .conversationLink, outcome: .stalePlaceholder, action: .open)
+        )
+      }
+    }
+  }
+}
+
+/// The detail fetch is authoritative for a conversation link. Keep a small
+/// pure policy around the ID check so malformed or mismatched responses take
+/// the same unavailable path as a failed request instead of opening a nearby
+/// paginated row.
+enum ChatFirstConversationLinkPolicy {
+  static func validatedConversation(
+    _ conversation: ServerConversation?,
+    requestedID: String
+  ) -> ServerConversation? {
+    guard let conversation, conversation.id == requestedID else { return nil }
+    return conversation
+  }
+}
+
 struct MemoryLinkView: View {
   let memoryID: String
   let summary: String

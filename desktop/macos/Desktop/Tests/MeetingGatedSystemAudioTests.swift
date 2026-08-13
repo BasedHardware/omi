@@ -352,84 +352,46 @@ import XCTest
 
   final class MeetingConversationBoundaryPolicyTests: XCTestCase {
 
-    func testMeetingGateClosingWithSegmentsFinishesConversation() {
-      XCTAssertTrue(
-        MeetingConversationBoundaryPolicy.shouldFinishConversation(
-          mode: .onlyDuringMeetings,
-          meetingStateReady: true,
-          shouldCapture: false,
-          segmentCount: 12,
-          hasSpeakerSegments: false
-        )
+    func testAmbientToMeetingClosesAmbientConversation() {
+      XCTAssertEqual(
+        MeetingConversationBoundaryPolicy.transition(previousRole: .ambient, meetingActive: true),
+        .init(nextRole: .meeting, finalizationReason: .meetingStarted)
       )
     }
 
-    func testMeetingGateClosingWithOnlyInMemorySegmentsFinishesConversation() {
-      XCTAssertTrue(
-        MeetingConversationBoundaryPolicy.shouldFinishConversation(
-          mode: .onlyDuringMeetings,
-          meetingStateReady: true,
-          shouldCapture: false,
-          segmentCount: 0,
-          hasSpeakerSegments: true
-        )
+    func testMeetingToAmbientClosesMeetingConversation() {
+      XCTAssertEqual(
+        MeetingConversationBoundaryPolicy.transition(previousRole: .meeting, meetingActive: false),
+        .init(nextRole: .ambient, finalizationReason: .meetingEnded)
       )
     }
 
-    func testWaitingForFirstMeetingDoesNotFinishEmptySession() {
-      XCTAssertFalse(
-        MeetingConversationBoundaryPolicy.shouldFinishConversation(
-          mode: .onlyDuringMeetings,
-          meetingStateReady: true,
-          shouldCapture: false,
-          segmentCount: 0,
-          hasSpeakerSegments: false
-        )
+    func testStableAmbientDoesNotRotate() {
+      XCTAssertNil(
+        MeetingConversationBoundaryPolicy.transition(previousRole: .ambient, meetingActive: false)
       )
     }
 
-    func testNonMeetingModesDoNotUseMeetingEndBoundary() {
-      XCTAssertFalse(
-        MeetingConversationBoundaryPolicy.shouldFinishConversation(
-          mode: .always,
-          meetingStateReady: true,
-          shouldCapture: false,
-          segmentCount: 12,
-          hasSpeakerSegments: true
-        )
-      )
-      XCTAssertFalse(
-        MeetingConversationBoundaryPolicy.shouldFinishConversation(
-          mode: .never,
-          meetingStateReady: true,
-          shouldCapture: false,
-          segmentCount: 12,
-          hasSpeakerSegments: true
-        )
+    func testStableMeetingDoesNotRotate() {
+      XCTAssertNil(
+        MeetingConversationBoundaryPolicy.transition(previousRole: .meeting, meetingActive: true)
       )
     }
 
-    func testActiveMeetingDoesNotFinishConversation() {
-      XCTAssertFalse(
-        MeetingConversationBoundaryPolicy.shouldFinishConversation(
-          mode: .onlyDuringMeetings,
-          meetingStateReady: true,
-          shouldCapture: true,
-          segmentCount: 12,
-          hasSpeakerSegments: true
-        )
+    func testFailedRotationDoesNotCommitTheDetectedRole() throws {
+      let transition = try XCTUnwrap(
+        MeetingConversationBoundaryPolicy.transition(previousRole: .ambient, meetingActive: true)
       )
-    }
 
-    func testUnreadyMeetingStateDoesNotFinishExistingConversation() {
-      XCTAssertFalse(
-        MeetingConversationBoundaryPolicy.shouldFinishConversation(
-          mode: .onlyDuringMeetings,
-          meetingStateReady: false,
-          shouldCapture: false,
-          segmentCount: 12,
-          hasSpeakerSegments: true
-        )
+      XCTAssertEqual(
+        MeetingConversationBoundaryPolicy.committedRole(
+          previousRole: .ambient, transition: transition, rotationSucceeded: false),
+        .ambient
+      )
+      XCTAssertEqual(
+        MeetingConversationBoundaryPolicy.committedRole(
+          previousRole: .ambient, transition: transition, rotationSucceeded: true),
+        .meeting
       )
     }
   }

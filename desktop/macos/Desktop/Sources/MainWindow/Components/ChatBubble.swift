@@ -456,6 +456,15 @@ struct ChatBubble: View {
           navigation: chatFirstRichBlockContext.navigation
         )
       )
+    case .conversationLink(_, let conversationID, let summary):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        ConversationLinkView(
+          conversationID: conversationID,
+          summary: summary,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
     case .memoryLink(_, let memoryID, let summary):
       guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
       return AnyView(
@@ -1095,6 +1104,7 @@ enum ContentBlockGroup: Identifiable {
   case taskCard(id: String, taskID: String)
   case goalLink(id: String, goalID: String, summary: String)
   case captureLink(id: String, conversationID: String, momentTimestampMs: Int?, summary: String)
+  case conversationLink(id: String, conversationID: String, summary: String)
   case memoryLink(id: String, memoryID: String, summary: String)
   case agentSpawn(
     id: String,
@@ -1126,6 +1136,7 @@ enum ContentBlockGroup: Identifiable {
     case .taskCard(let id, _): return id
     case .goalLink(let id, _, _): return id
     case .captureLink(let id, _, _, _): return id
+    case .conversationLink(let id, _, _): return id
     case .memoryLink(let id, _, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
@@ -1185,6 +1196,10 @@ enum ContentBlockGroup: Identifiable {
             summary: summary
           )
         )
+      case .conversationLink(let id, let conversationID, let summary):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.conversationLink(id: id, conversationID: conversationID, summary: summary))
       case .memoryLink(let id, let memoryID, let summary):
         flushToolCalls()
         guard richBlockRenderingEnabled else { continue }
@@ -1260,8 +1275,8 @@ enum ContentBlockGroup: Identifiable {
       switch group {
       case .text(_, let text):
         return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : group
-      case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink, .agentSpawn,
-        .agentCompletion:
+      case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
+        .agentSpawn, .agentCompletion:
         return group
       case .thinking:
         return isStreaming ? group : nil

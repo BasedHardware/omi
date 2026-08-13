@@ -1,11 +1,11 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": 1795,
-    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3444
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3450
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": "Deletion tombstones (markActionItemDeletedPendingBackendSync, getPendingBackendDeletionIds, hydration guard): a deletion the server has not acknowledged must leave a durable local record, or cloud hydration resurrects deleted tasks — 450 came back after one reinstall.",
-    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Context-bucket migration records the exact consumed owner and uses the signed-out fallback only when an anonymous database was actually moved."
+    "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": "The bounded incomplete-task storage surface reads all dated rows and pages only No Deadline rows, so TasksStore can preserve bucket boundaries without loading the entire undated local universe; it remains beside the existing task query and persistence owner rather than duplicating SQLite semantics. Single-snapshot dated/no-deadline reads prevent due-date races from omitting tasks. Deletion tombstones remain durable until backend acknowledgement so cloud hydration cannot resurrect deleted tasks.",
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Context-bucket migration records the exact consumed owner and uses the signed-out fallback only when an anonymous database was actually moved; +6 adds the backward-compatible persisted conversation-role column for crash-safe meeting finalization."
   },
   "threshold": 1500
 }

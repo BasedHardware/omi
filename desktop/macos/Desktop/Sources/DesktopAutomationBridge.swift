@@ -1263,6 +1263,8 @@ final class DesktopAutomationActionRegistry {
       case "inject_multi":
         return await appState.automationInjectCaptureTestTranscriptMulti(
           segmentsJSON: params["segments"] ?? params["text"] ?? "")
+      case "meeting_start", "meeting_end":
+        return ["conversation_role": appState.automationObserveMeetingBoundary(active: phase == "meeting_start")]
       case "stop":
         return await appState.automationStopCaptureTestSession()
       case "lifecycle":
@@ -1274,7 +1276,7 @@ final class DesktopAutomationActionRegistry {
         _ = await appState.automationInjectCaptureTestTranscript(text: marker)
         return await appState.automationStopCaptureTestSession()
       default:
-        return ["error": "phase must be start, inject, inject_multi, stop, or lifecycle"]
+        return ["error": "phase must be start, inject, inject_multi, meeting_start, meeting_end, stop, or lifecycle"]
       }
     }
 
