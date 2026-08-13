@@ -3,28 +3,30 @@
 This package owns task-intelligence policy and orchestration. HTTP routes live
 in `backend/routers/`; durable records, leases, and transaction boundaries live
 in `backend/database/`; public request and stored-record contracts live in
-`backend/models/`. Callers must resolve the user’s server-owned rollout before
-performing feature work and must not substitute a client claim or a default-on
-fallback.
+`backend/models/`. Every authenticated owner uses this authority. Callers must
+preserve account-generation, malformed-control, ownership, idempotency, device,
+and proactive-choice fences; memory cohort or storage origin is never a task
+entitlement.
 
-## Rollout and cohort authority
+## Universal workflow authority
 
-`chat_first_eligibility.py` loads the persisted task-workflow control and is
-the reusable, fail-closed authority for Chat-first ingress. It passes that
-control's workflow mode and account generation to `rollout.py`, which resolves
-canonical-memory cohort membership; the derived capability is enabled only for
-the canonical read-mode task-intelligence cohort with the explicit UI flag on.
-A control read, rollout, or memory-system error disables the feature. The
-returned generation is part of the capability fence, so Chat-first stores,
-providers, metrics, and intent creation must be downstream of that decision;
-they must not substitute a client claim or cached enablement.
+`chat_first_eligibility.py` loads persisted task-workflow control and is the
+reusable, fail-closed authority for Chat-first ingress. `rollout.py` validates
+workflow mode, account generation, and explicit proactive/UI choice for any
+authenticated UID. A missing or malformed generation disables mutation rather
+than selecting another task system. The returned generation fences Chat-first
+stores, providers, metrics, and intent creation; callers must not substitute a
+client claim or cached enablement.
 
 ## Capture and candidate lifecycle
 
 - `capture_policy.py` is the pure confidence and ownership policy used by every
   capture adapter.
-- `backend_capture.py` adapts backend payloads into that policy; `conversation_capture.py`
-  owns the legacy conversation extraction/reconciliation boundary.
+- `backend_capture.py` adapts backend payloads into that policy;
+  `conversation_capture.py` owns the universal conversation
+  extraction/reconciliation boundary. Candidate capture either owns the whole
+  extracted batch or declines it explicitly so the compatibility writer cannot
+  create mixed duplicates or silent drops.
 - `candidate_service.py` owns candidate acceptance, rejection, expiry, and the
   post-commit task-integration handoff. `staged_migration.py` migrates only the
   legacy staged-task representation through that lifecycle.
@@ -57,3 +59,8 @@ When adding a feature-specific writer or adapter, update its manifest/fixture
 and tests in the same change. Keep raw user content out of rollout diagnostics,
 intent metrics, and fixtures; feature-disabled paths must be inert before any
 feature store or provider is touched.
+
+Task production modules must not import `canonical_memory_cohort`,
+`memory_system`, or UID inventory helpers. Recurrence evidence may flow from
+memory consolidation into a workstream Candidate, but failure or absence of
+that handoff never disables tasks.

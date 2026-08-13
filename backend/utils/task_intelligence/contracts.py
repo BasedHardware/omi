@@ -2,6 +2,7 @@
 
 import ast
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, cast
@@ -217,13 +218,32 @@ def discover_backend_writer_anchors(*, repository_root: Path = REPOSITORY_ROOT) 
     discovered: set[tuple[str, str]] = set()
     backend_root = repository_root / 'backend'
     if backend_root.exists():
-        for path in backend_root.rglob('*.py'):
-            relative_parts = path.relative_to(backend_root).parts
-            if any(part in _BACKEND_SOURCE_EXCLUDED_DIR_NAMES or part.startswith('.') for part in relative_parts):
-                continue
-            if path.name in {'action_items.py', 'goals.py'} and path.parent.name == 'database':
-                continue
-            discovered.update(_python_writer_anchors(path, repository_root=repository_root))
+        # Walk only source directories. Test workers may create and remove
+        # backend/_temp concurrently; os.walk tolerates that race while
+        # Path.rglob can abort the whole contract scan with FileNotFoundError.
+        def _on_walk_error(exc: OSError) -> None:
+            # A worker may create/remove backend/_temp while the contract scan
+            # runs. That disposable subtree is intentionally excluded; every
+            # other traversal failure must fail closed rather than silently
+            # weakening writer-anchor coverage.
+            path = Path(exc.filename) if exc.filename else None
+            if path is not None and any(part.startswith('_temp') for part in path.parts):
+                return
+            raise ValueError(f'cannot inspect backend source tree: {exc}') from exc
+
+        for current_root, dir_names, file_names in os.walk(backend_root, onerror=_on_walk_error):
+            dir_names[:] = [
+                name
+                for name in dir_names
+                if name not in _BACKEND_SOURCE_EXCLUDED_DIR_NAMES and not name.startswith(('.', '_temp'))
+            ]
+            for file_name in file_names:
+                if not file_name.endswith('.py'):
+                    continue
+                path = Path(current_root) / file_name
+                if path.name in {'action_items.py', 'goals.py'} and path.parent.name == 'database':
+                    continue
+                discovered.update(_python_writer_anchors(path, repository_root=repository_root))
 
     for relative_root, suffix in (
         ('desktop/macos/Desktop/Sources', '*.swift'),

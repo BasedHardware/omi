@@ -28,6 +28,7 @@ export class AdapterWorker {
   private activeAttemptId: string | null = null;
   private activeBindingId: string | null = null;
   private pinnedBindingId: string | null = null;
+  private unhealthy = false;
 
   constructor(workerId: string, adapter: RuntimeAdapter) {
     this.workerId = workerId;
@@ -39,7 +40,7 @@ export class AdapterWorker {
   }
 
   canRun(binding?: AdapterBindingHandle): boolean {
-    if (this.isBusy) return false;
+    if (this.isBusy || this.unhealthy) return false;
     if (!this.adapter.capabilities.requiresPinnedWorker) return true;
     if (!this.pinnedBindingId) return true;
     return Boolean(binding?.bindingId && binding.bindingId === this.pinnedBindingId);
@@ -54,8 +55,16 @@ export class AdapterWorker {
   }
 
   get idlePinnedBindingId(): string | null {
-    if (this.isBusy) return null;
+    if (this.isBusy || this.unhealthy) return null;
     return this.pinnedBindingId;
+  }
+
+  get pinnedBindingIdForRecovery(): string | null {
+    return this.pinnedBindingId;
+  }
+
+  markUnhealthy(): void {
+    this.unhealthy = true;
   }
 
   releaseIdlePinnedBinding(): string | null {
@@ -129,6 +138,34 @@ type WorkerLeaseResolver = (worker: AdapterWorker) => void;
 interface WorkerLeaseOptions {
   onIdlePinnedBindingEvicted?: (bindingId: string) => void;
   protectPinnedBindingAfterWork?: boolean;
+  recycleWorkerOnError?: boolean;
+  shouldRecycleWorkerOnError?: (error: unknown) => boolean;
+  onWorkerBindingInvalidated?: (bindingId: string | null) => void;
+  onWorkerRecycled?: (
+    bindingId: string | null,
+    outcome: { stopSucceeded: boolean; bindingInvalidationSucceeded: boolean }
+  ) => void;
+}
+
+export class AdapterWorkerRecycledError extends Error {
+  readonly bindingId: string | null;
+  readonly stopSucceeded: boolean;
+  readonly bindingInvalidationSucceeded: boolean;
+  readonly originalError: unknown;
+
+  constructor(
+    originalError: unknown,
+    bindingId: string | null,
+    stopSucceeded: boolean,
+    bindingInvalidationSucceeded: boolean
+  ) {
+    super(originalError instanceof Error ? originalError.message : String(originalError));
+    this.name = "AdapterWorkerRecycledError";
+    this.bindingId = bindingId;
+    this.stopSucceeded = stopSucceeded;
+    this.bindingInvalidationSucceeded = bindingInvalidationSucceeded;
+    this.originalError = originalError;
+  }
 }
 
 interface PendingWorkerLease {
@@ -238,11 +275,66 @@ export class AdapterWorkerPool {
       const result = await worker.runExclusive(attemptId, binding, () => work(worker));
       succeeded = true;
       return result;
+    } catch (error) {
+      if (
+        !options?.recycleWorkerOnError
+        || options.shouldRecycleWorkerOnError?.(error) === false
+      ) throw error;
+      const bindingId = worker.pinnedBindingIdForRecovery;
+      // Poison synchronously before the finally block drains waiters. Otherwise
+      // a queued lease can reacquire this process-local worker after its throw.
+      worker.markUnhealthy();
+      const index = this.workers.indexOf(worker);
+      if (index >= 0) this.workers.splice(index, 1);
+      if (bindingId) this.protectedPinnedBindingIds.delete(bindingId);
+      this.rejectWaitersForRecycledBinding(bindingId);
+      let bindingInvalidationSucceeded = true;
+      try {
+        options.onWorkerBindingInvalidated?.(bindingId);
+      } catch {
+        bindingInvalidationSucceeded = false;
+        // Keep this bounded: persistence exceptions may contain database paths.
+        console.error("[agent-runtime] worker recovery binding invalidation failed");
+      }
+      let stopSucceeded = true;
+      try {
+        await worker.adapter.stop();
+      } catch {
+        stopSucceeded = false;
+      }
+      try {
+        options.onWorkerRecycled?.(bindingId, {
+          stopSucceeded,
+          bindingInvalidationSucceeded,
+        });
+      } catch {
+        // Telemetry must not prevent deterministic worker cleanup. The thrown
+        // recovery error still carries both bounded lifecycle outcomes.
+        console.error("[agent-runtime] worker recovery event persistence failed");
+      }
+      throw new AdapterWorkerRecycledError(
+        error,
+        bindingId,
+        stopSucceeded,
+        bindingInvalidationSucceeded
+      );
     } finally {
       if (succeeded && options?.protectPinnedBindingAfterWork) {
         this.protectPinnedBinding(worker.idlePinnedBindingId);
       }
       this.drainWaiters();
+    }
+  }
+
+  private rejectWaitersForRecycledBinding(bindingId: string | null): void {
+    if (!bindingId) return;
+    for (let i = this.waiters.length - 1; i >= 0; i -= 1) {
+      const waiter = this.waiters[i]!;
+      if (waiter.binding?.bindingId !== bindingId) continue;
+      this.waiters.splice(i, 1);
+      const error = new Error(`Adapter binding was recycled: ${bindingId}`);
+      error.name = "StaleAdapterBindingError";
+      waiter.reject(error);
     }
   }
 

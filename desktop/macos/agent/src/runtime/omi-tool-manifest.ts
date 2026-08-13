@@ -1657,7 +1657,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "swiftTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Create Canonical Goal", "Create a user-confirmed canonical goal in Chat-first.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
     ]),
     intendedForAgents: true,
     runtimePreconditions: ["Requires a server-authoritative chat-first capability on the current main Chat run."],
@@ -1680,7 +1680,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "swiftTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Get Canonical Goals", "Read canonical goal records for a Chat-first response.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
     ]),
     intendedForAgents: true,
     runtimePreconditions: ["Requires a server-authoritative chat-first capability on the current main Chat run."],
@@ -1718,7 +1718,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "swiftTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Render Chat Blocks", "Add validated structured cards to the current main Chat response.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
     ]),
     intendedForAgents: true,
     runtimePreconditions: [
@@ -1751,7 +1751,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     capabilityDoc: doc(
       "Show Rewind Evidence",
       "Attach one local historical screenshot as evidence on the current main Chat response.",
-      ["Only available to the server-enabled chat-first main Chat cohort."],
+      ["Available when the server-projected Chat-first capability is active."],
     ),
     intendedForAgents: true,
     runtimePreconditions: [
@@ -1795,7 +1795,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "nodeTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Search Chat History", "Recover a bounded older decision from the current Chat transcript.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
       "The parent kernel searches only the caller-owned current journal generation.",
     ]),
     intendedForAgents: true,
