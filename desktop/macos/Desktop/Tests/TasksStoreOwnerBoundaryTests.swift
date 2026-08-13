@@ -297,6 +297,7 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
       "updateCompletionStatus(",
       "updateActionItemFields(",
       "deleteActionItemByBackendId(",
+      "deleteActionItemsByBackendIds(",
       "compactScoresAfterRemoval(",
       "hardDeleteAbsentTasks(",
       "markAbsentTasksAsStaged(",
@@ -1035,6 +1036,61 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   }
 
   @MainActor
+  func testBulkDeleteRemoteRejectionPreservesEveryLocalRow() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+    let locked = task(id: "locked")
+    let unlocked = task(id: "unlocked")
+    store.incompleteTasks = [locked, unlocked]
+    var remoteAttempts = 0
+    var localDeletes = 0
+    let operations = TasksStore.BulkDeleteOperations(
+      loadLocalTasks: { [locked, unlocked] },
+      deleteLocalTaskIDs: { _, _ in localDeletes += 1 },
+      deleteRemoteTaskIDs: { _, _, _ in
+        remoteAttempts += 1
+        throw TasksStoreOwnerBoundaryFailure.backendRejected
+      }
+    )
+
+    let outcome = await store.deleteMultipleTasks(
+      ids: [locked.id, unlocked.id],
+      expectedOwnerID: "owner-a",
+      operations: operations
+    )
+
+    XCTAssertEqual(outcome, .remoteFailure(confirmedIDs: []))
+    XCTAssertEqual(remoteAttempts, 1)
+    XCTAssertEqual(localDeletes, 0)
+    XCTAssertEqual(store.incompleteTasks, [locked, unlocked])
+  }
+
+  @MainActor
+  func testBulkDeleteConfirmsRemoteBeforeCommittingLocalMutation() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+    let first = task(id: "first")
+    let second = task(id: "second")
+    store.incompleteTasks = [first, second]
+    var operationOrder: [String] = []
+    let operations = TasksStore.BulkDeleteOperations(
+      loadLocalTasks: { [first, second] },
+      deleteLocalTaskIDs: { _, _ in operationOrder.append("local") },
+      deleteRemoteTaskIDs: { _, _, _ in operationOrder.append("remote") }
+    )
+
+    let outcome = await store.deleteMultipleTasks(
+      ids: [first.id, second.id],
+      expectedOwnerID: "owner-a",
+      operations: operations
+    )
+
+    XCTAssertEqual(outcome, .deletedEverywhere)
+    XCTAssertEqual(operationOrder, ["remote", "local"])
+    XCTAssertTrue(store.incompleteTasks.isEmpty)
+  }
+
+  @MainActor
   private func task(id: String, completed: Bool = false, dueAt: Date? = nil) -> TaskActionItem {
     TaskActionItem(
       id: id,
@@ -1132,19 +1188,20 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
           await MainActor.run {
             NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
           }
+        },
+        { defaults in
+          if let authOwnerID {
+            defaults.set(authOwnerID, forKey: .authUserId)
+          } else {
+            defaults.removeObject(forKey: .authUserId)
+          }
+          if let automationOverrideID {
+            defaults.set(automationOverrideID, forKey: .automationOwnerOverride)
+          } else {
+            defaults.removeObject(forKey: .automationOwnerOverride)
+          }
         }
-      ) { defaults in
-        if let authOwnerID {
-          defaults.set(authOwnerID, forKey: .authUserId)
-        } else {
-          defaults.removeObject(forKey: .authUserId)
-        }
-        if let automationOverrideID {
-          defaults.set(automationOverrideID, forKey: .automationOwnerOverride)
-        } else {
-          defaults.removeObject(forKey: .automationOwnerOverride)
-        }
-      }
+      )
     } catch {
       XCTFail("owner transition failed: \(error)")
     }

@@ -796,6 +796,116 @@ import XCTest
     XCTAssertFalse(window.frame.contains(pointInsideFormerDeadZone))
   }
 
+  func testPresentingDuringNotchRetractionKeepsThePanelVisibleAndRestoresItsContent() {
+    let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
+    let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    let previousDraggableBarEnabled = ShortcutSettings.shared.draggableBarEnabled
+    ShortcutSettings.shared.draggableBarEnabled = false
+    unsetenv("OMI_FORCE_NO_NOTCH")
+    setenv("OMI_FORCE_NOTCH", "1", 1)
+    defer {
+      ShortcutSettings.shared.draggableBarEnabled = previousDraggableBarEnabled
+      if let previousForceNoNotch {
+        setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NO_NOTCH")
+      }
+      if let previousForceNotch {
+        setenv("OMI_FORCE_NOTCH", previousForceNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NOTCH")
+      }
+    }
+
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+    let scheduler = UncancellableRetractionScheduler()
+    window.notchRetractionScheduler = scheduler
+    var staleRetractionCompletionCount = 0
+
+    window.beginNotchRetraction { staleRetractionCompletionCount += 1 }
+    window.showNotification(
+      FloatingBarNotification(
+        ownerID: "owner",
+        title: "Replacement notification",
+        message: "Must remain visible",
+        assistantId: "test"),
+      animated: false)
+    scheduler.fire()
+
+    XCTAssertEqual(
+      staleRetractionCompletionCount, 0,
+      "replacement content must invalidate the stale retraction completion")
+    XCTAssertEqual(window.state.currentNotification?.title, "Replacement notification")
+    XCTAssertEqual(window.state.notchRevealProgress, 1, accuracy: 0.001)
+  }
+
+  func testStartingPushToTalkDuringNotchRetractionKeepsThePanelVisible() {
+    let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
+    let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    let previousDraggableBarEnabled = ShortcutSettings.shared.draggableBarEnabled
+    ShortcutSettings.shared.draggableBarEnabled = false
+    unsetenv("OMI_FORCE_NO_NOTCH")
+    setenv("OMI_FORCE_NOTCH", "1", 1)
+    defer {
+      ShortcutSettings.shared.draggableBarEnabled = previousDraggableBarEnabled
+      if let previousForceNoNotch {
+        setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NO_NOTCH")
+      }
+      if let previousForceNotch {
+        setenv("OMI_FORCE_NOTCH", previousForceNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NOTCH")
+      }
+    }
+
+    let window = FloatingControlBarWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 360, height: 58),
+      styleMask: [.borderless, .nonactivatingPanel],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+    let scheduler = UncancellableRetractionScheduler()
+    window.notchRetractionScheduler = scheduler
+    var staleRetractionCompletionCount = 0
+
+    window.beginNotchRetraction { staleRetractionCompletionCount += 1 }
+    window.resizeForPTTState(expanded: true)
+    scheduler.fire()
+
+    XCTAssertEqual(
+      staleRetractionCompletionCount, 0,
+      "active push-to-talk must invalidate the stale retraction completion")
+    XCTAssertEqual(window.state.notchRevealProgress, 1, accuracy: 0.001)
+  }
+
+  func testDisabledBarDoesNotOrderOutAReplacementConversationAfterCloseSettles() {
+    let manager = FloatingControlBarManager.shared
+    let previousEnabled = manager.isEnabled
+    manager.isEnabled = false
+    defer { manager.isEnabled = previousEnabled }
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+
+    window.state.showingAIConversation = true
+    XCTAssertFalse(window.shouldOrderOutAfterConversationClose)
+    window.state.showingAIConversation = false
+    XCTAssertTrue(window.shouldOrderOutAfterConversationClose)
+  }
+
   func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
     let windowSource = try floatingControlBarWindowSource()
     let viewSource = try floatingControlBarViewSource()
@@ -2179,6 +2289,25 @@ import XCTest
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Logger.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+}
+
+@MainActor
+private final class UncancellableRetractionScheduler: DelayedActionScheduling {
+  private var action: (@MainActor () -> Void)?
+
+  func schedule(
+    after interval: TimeInterval,
+    action: @escaping @MainActor () -> Void
+  ) -> DelayedActionCancellation {
+    _ = interval
+    self.action = action
+    return ManualDelayedActionCancellation()
+  }
+
+  func fire() {
+    action?()
+    action = nil
   }
 }
 

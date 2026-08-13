@@ -62,7 +62,6 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   /// the point of `reach`: the pill the user presses and the claim the test checks are now one thing.
   case apps
   case permissions
-  case help
   /// The chronological activity spine — Home's former landing surface, now the Memory hub's first
   /// view. Appended last so the established cases keep their raw values.
   case activity
@@ -77,11 +76,11 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case memoryHubView
     /// A row in the Settings section list, which the bar's gear opens.
     ///
-    /// This case exists because two pages had `nil` for an answer. `PermissionsPage` and `HelpPage`
-    /// render correctly and always did; their only writers were the sidebar the glass shell stopped
-    /// rendering, so they became pages with no door — and the gear's own tooltip has been promising
-    /// "permissions" the whole time. The row mounts the same page the shell's route does, so this
-    /// is a way in rather than a second, smaller version of it (INV-NAV-1).
+    /// This case exists because `PermissionsPage` had `nil` for an answer. It renders correctly and
+    /// always did; its only writer was the sidebar the glass shell stopped rendering, so it became a
+    /// page with no door — and the gear's own tooltip has been promising "permissions" the whole
+    /// time. The row mounts the same page the shell's route does, so this is a way in rather than a
+    /// second, smaller version of it (INV-NAV-1).
     case settingsSidebar
   }
 
@@ -97,7 +96,6 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .rewind: return "Rewind"
     case .apps: return "Apps"
     case .permissions: return "Permissions"
-    case .help: return "Help"
     case .activity: return "Activity"
     }
   }
@@ -111,7 +109,6 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .rewind: return .rewind
     case .apps: return .apps
     case .permissions: return .permissions
-    case .help: return .help
     }
   }
 
@@ -122,15 +119,14 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .memories: return .memories
     case .brainMap: return .brainMap
     case .activity: return .activity
-    case .home, .tasks, .rewind, .apps, .permissions, .help: return nil
+    case .home, .tasks, .rewind, .apps, .permissions: return nil
     }
   }
 
-  /// The Settings row that opens this page, for the two the Settings list owns.
+  /// The Settings row that opens this page, for the one the Settings list owns.
   var settingsSection: SettingsContentView.SettingsSection? {
     switch self {
     case .permissions: return .permissions
-    case .help: return .help
     case .home, .conversations, .memories, .brainMap, .activity, .tasks, .rewind, .apps: return nil
     }
   }
@@ -138,7 +134,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   var reach: Reach {
     switch self {
     case .conversations, .memories, .brainMap, .activity: return .memoryHubView
-    case .permissions, .help: return .settingsSidebar
+    case .permissions: return .settingsSidebar
     case .home, .tasks, .rewind, .apps: return .topBar
     }
   }

@@ -35,9 +35,6 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
-          MEMORY_ENABLED_USERS:
-            category: memory_rollout
-            value: ''
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -58,7 +55,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -245,7 +242,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -323,7 +320,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -385,9 +382,6 @@ environments:
               env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
               provisional: true
               category: service_auth
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -517,9 +511,6 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -659,9 +650,6 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -789,9 +777,6 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -950,9 +935,6 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'false'
@@ -1027,9 +1009,6 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
-          MEMORY_ENABLED_USERS:
-            category: memory_rollout
-            value: ''
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -1050,7 +1029,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1223,7 +1202,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -1299,9 +1278,6 @@ environments:
               env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
               provisional: true
               category: service_auth
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -1445,9 +1421,6 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -1588,9 +1561,6 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -1719,9 +1689,6 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -1862,9 +1829,6 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'false'

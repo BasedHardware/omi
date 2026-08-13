@@ -1,20 +1,19 @@
-"""Pure task-intelligence entitlement decisions.
+"""Pure universal task-intelligence decisions.
 
-Canonical-memory membership is the only eligibility input. Workflow controls
-remain persisted generation fences and diagnostics, not rollout gates.
+Authenticated ownership is the entitlement. Workflow controls remain persisted
+generation fences and diagnostics, not memory-cohort rollout gates.
 """
 
 # LIFECYCLE: permanent
 
 from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowControl, TaskWorkflowMode
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 
 def resolve_task_intelligence_rollout(
     *,
     uid: str,
     workflow_mode: TaskWorkflowMode | str,
-    memory_cohort_eligible: bool,
+    memory_cohort_eligible: bool | None = None,
     account_generation: int = 0,
 ) -> TaskIntelligenceRolloutDecision:
     mode = workflow_mode if isinstance(workflow_mode, TaskWorkflowMode) else TaskWorkflowMode(workflow_mode)
@@ -23,19 +22,21 @@ def resolve_task_intelligence_rollout(
     if account_generation < 0:
         raise ValueError('account_generation must be nonnegative')
 
-    canonical_entitled = memory_cohort_eligible
+    # ``memory_cohort_eligible`` is accepted only for released-call-site and
+    # response compatibility. It is intentionally ignored as authority.
+    del memory_cohort_eligible
     return TaskIntelligenceRolloutDecision(
         uid=uid,
         workflow_mode=mode,
-        memory_cohort_eligible=memory_cohort_eligible,
+        memory_cohort_eligible=True,
         account_generation=account_generation,
-        legacy_reads_authoritative=not canonical_entitled,
-        legacy_writes_enabled=not canonical_entitled,
-        intelligence_evaluation_enabled=canonical_entitled,
-        canonical_sidecar_writes_enabled=canonical_entitled,
-        canonical_reads_authoritative=canonical_entitled,
-        compatibility_projection_required=canonical_entitled,
-        intelligence_product_enabled=canonical_entitled,
+        legacy_reads_authoritative=False,
+        legacy_writes_enabled=False,
+        intelligence_evaluation_enabled=True,
+        canonical_sidecar_writes_enabled=True,
+        canonical_reads_authoritative=True,
+        compatibility_projection_required=False,
+        intelligence_product_enabled=True,
     )
 
 
@@ -46,13 +47,14 @@ def resolve_task_intelligence_for_user(
     account_generation: int = 0,
     db_client=None,
 ) -> TaskIntelligenceRolloutDecision:
-    """Compose workflow mode with the authoritative canonical-memory selector."""
+    """Resolve one universal task decision for any authenticated UID."""
 
-    memory_cohort_eligible = resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
+    # Keep ``db_client`` in the released signature; task entitlement no longer
+    # consults a memory selector or any per-UID allowlist.
+    del db_client
     return resolve_task_intelligence_rollout(
         uid=uid,
         workflow_mode=workflow_mode,
-        memory_cohort_eligible=memory_cohort_eligible,
         account_generation=account_generation,
     )
 
@@ -60,9 +62,8 @@ def resolve_task_intelligence_for_user(
 def resolve_chat_first_ui(rollout: TaskIntelligenceRolloutDecision) -> bool:
     """Return the server-owned Chat-first capability for one resolved user.
 
-    The canonical-memory entitlement is already composed into the rollout. The
-    persisted UI flag and workflow mode are intentionally ignored: neither may
-    suppress an enrolled account.
+    The persisted UI flag and workflow mode are intentionally ignored: neither
+    may suppress an authenticated account.
     """
 
     return rollout.intelligence_product_enabled
@@ -81,7 +82,8 @@ def effective_task_workflow_control(
 
     return control.model_copy(
         update={
-            'workflow_mode': TaskWorkflowMode.read if rollout.intelligence_product_enabled else TaskWorkflowMode.off,
+            'workflow_mode': TaskWorkflowMode.read,
+            'chat_first_ui': resolve_chat_first_ui(rollout),
         }
     )
 

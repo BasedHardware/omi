@@ -3909,11 +3909,21 @@ class ChatProvider: ObservableObject {
     guard !normalizedQuestionID.isEmpty, !normalizedOptionID.isEmpty, let ownerID = runtimeOwnerId else { return }
     let surface = mainChatSurfaceReference()
     guard chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil else { return }
+    let session: AgentSurfaceSession
+    do {
+      session = try await resolveKernelQuerySession(surface: surface, requestedModelProfile: nil)
+    } catch {
+      logError("Question-card session resolution failed", error: error)
+      errorMessage = "That suggestion is no longer available."
+      return
+    }
     _ = await sendMessage(
       "",
       surfaceRef: surface,
       turnOwner: .mainChat,
       clientTurnId: Self.questionInteractionContinuityKey(
+        ownerID: ownerID,
+        conversationID: session.conversationId,
         questionID: normalizedQuestionID,
         optionID: normalizedOptionID
       ),
@@ -3925,7 +3935,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// Root-only prompt materialization is inert until this main-chat surface
-  /// has a current cohort capability projection.
+  /// has a current server capability projection.
   func chatFirstMaterializationContext() -> ChatFirstMaterializationContext? {
     guard let ownerID = runtimeOwnerId else { return nil }
     let surface = mainChatSurfaceReference()
@@ -4539,6 +4549,7 @@ class ChatProvider: ObservableObject {
         preAdmittedQuestionReply = continuation
         await kernelTurnProjection.refresh(surface: resolvedSurface)
       } catch {
+        logError("Question-card selection failed", error: error)
         errorMessage = "That suggestion is no longer available."
         telemetryAttempt.fail(errorClass: .sessionSetup)
         clearChatTelemetryState(for: sendGen)
@@ -5500,7 +5511,7 @@ class ChatProvider: ObservableObject {
           telemetryAttempt.fail(
             errorClass: errorClass,
             partialResponse: hadPartialResponse,
-            detail: .from(error),
+            detail: recordAgentRuntimeRecoveryDiagnostics(error),
             watchdogFired: watchdogFired
           )
           logError(
@@ -5732,8 +5743,17 @@ class ChatProvider: ObservableObject {
     return (user: attemptId, assistant: "\(attemptId)-assistant")
   }
 
-  nonisolated static func questionInteractionContinuityKey(questionID: String, optionID: String) -> String {
-    "qri_\(sha256Prefix("\(questionID)\u{0}\(optionID)", byteCount: 16))"
+  /// Must remain byte-for-byte identical to the local kernel's continuity key.
+  /// Question IDs can repeat across users and conversations (notably sparse
+  /// cold-start IDs), so the canonical owner and conversation are part of the
+  /// idempotency scope rather than a client-only approximation.
+  nonisolated static func questionInteractionContinuityKey(
+    ownerID: String,
+    conversationID: String,
+    questionID: String,
+    optionID: String
+  ) -> String {
+    "qri_\(sha256Prefix("\(ownerID)\u{0}\(conversationID)\u{0}\(questionID)\u{0}\(optionID)", byteCount: 16))"
   }
 
   nonisolated private static func questionInteractionTurnID(continuityKey: String, role: String) -> String {

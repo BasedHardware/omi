@@ -2,6 +2,77 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.169",
+      "date": "2026-08-13",
+      "changes": [
+        "Improved proactive-notification monitoring so missing analytics configuration is reported accurately"
+      ]
+    },
+    {
+      "version": "0.12.168",
+      "date": "2026-08-13",
+      "changes": [
+        "Added context-aware proactive help that carries useful evidence across repeated work without exposing excluded apps",
+        "Memory and tasks now use one consistent system for every account while preserving existing memories and task history",
+        "Improved proactive notifications with adjustable active hours, persistent frequency and permission state, type-specific chat badges, and reliable message actions",
+        "Fixed a crash that could occur while refreshing the live voice context",
+        "Fixed a crash that could occur when opening exported memories in another app",
+        "Fixed desktop chat getting stuck after a local agent error",
+        "Fixed realtime voice audio recovery after an audio-device change"
+      ]
+    },
+    {
+      "version": "0.12.165",
+      "date": "2026-08-12",
+      "changes": [
+        "Fixed Select All so it includes every task, not just the currently loaded page"
+      ]
+    },
+    {
+      "version": "0.12.164",
+      "date": "2026-08-12",
+      "changes": [
+        "Fixed the free-plan monthly limit not applying to voice conversations, agents, and other AI features — all AI surfaces now share the same limit"
+      ]
+    },
+    {
+      "version": "0.12.163",
+      "date": "2026-08-11",
+      "changes": [
+        "Advice analysis now keeps working when notifications are muted, and automatic update checks no longer show a failure just because your Mac is offline."
+      ]
+    },
+    {
+      "version": "0.12.162",
+      "date": "2026-08-11",
+      "changes": [
+        "Replaced the in-app support chat with a Join Discord button in Settings → About"
+      ]
+    },
+    {
+      "version": "0.12.161",
+      "date": "2026-08-11",
+      "changes": [
+        "Fixed the main Omi window disappearing when you switch apps — it now stays open and shows up in the app switcher"
+      ]
+    },
+    {
+      "version": "0.12.160",
+      "date": "2026-08-11",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.159",
+      "date": "2026-08-11",
+      "changes": [
+        "Stopped the reserved account-migration prompt from flashing and blocking clicks during normal app launch",
+        "Fixed Omi Beta dead zones that prevented clicks on navigation and filter controls",
+        "Reduced macOS candidate build time while preserving signed Beta verification"
+      ]
+    },
+    {
       "version": "0.12.158",
       "date": "2026-08-11",
       "changes": [

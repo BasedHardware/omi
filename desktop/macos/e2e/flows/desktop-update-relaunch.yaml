@@ -5,6 +5,7 @@ description: Verify a signed desktop update is reported installed only after the
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/UpdateRelaunchWindowPolicy.swift
+  - desktop/macos/Desktop/Sources/Updater/UpdaterCheckTelemetry.swift
   - desktop/macos/Desktop/Sources/UpdaterViewModel.swift
   - desktop/macos/Desktop/Sources/DesktopUpdatePolicyManager.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopUpdateStatusPresentation.swift
