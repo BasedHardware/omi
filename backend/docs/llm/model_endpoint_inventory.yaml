@@ -77,6 +77,13 @@ model_config_features:
     - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
     - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
 surfaces:
+  - surface: desktop_context_proactivity
+    code_path: backend/routers/desktop_proactivity.py:proactive_completion
+    current_provider_model: gateway lanes desktop_proactive_extraction and desktop_proactive_reasoning; direct OpenAI only when OMI_ENV_STAGE is dev or local and the gateway URL is absent
+    request_shape: non-streaming strict structured output with optional explicit prompt caching on reasoning
+    gateway_lane_capability_needed: OpenAI-compatible structured-output lanes with explicit-cache support for reasoning
+    migration_status: acknowledged_direct_dev_recovery_surface; production remains gateway-only and fails closed, while dev and local record shared fallback telemetry when recovering through direct OpenAI
+    test_guardrail_coverage: backend/tests/unit/test_desktop_proactivity.py and backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: public_shared_conversation_chat
     code_path: backend/routers/public_shared_conversation_chat.py:public_shared_conversation_chat
     current_provider_model: gateway-only openai/gpt-5-nano
