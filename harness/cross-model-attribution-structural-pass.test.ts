@@ -12,6 +12,7 @@ import { attributionEvidenceFactorRef } from "../core/consolidate/attribution-be
 import type { ModelPort } from "../drivers/model/port";
 import type { ModelOperationalTelemetryEvent, ModelTelemetrySink } from "../drivers/model/telemetry";
 import {
+  CROSS_MODEL_ATTRIBUTION_FAILURE_VERSION,
   CROSS_MODEL_ATTRIBUTION_FROZEN_MANIFEST_DIGEST,
   CROSS_MODEL_ATTRIBUTION_MANIFEST_VERSION,
   CrossModelStructuralPassError,
@@ -71,8 +72,11 @@ const manifest = (): CrossModelStructuralManifest => ({
   ],
 });
 
+type Mode = "valid" | "malformed" | "coordinate_drift" | "later_coordinate_drift" | "oversized_output" | "tie";
+type ProfileName = "deepseek-flash" | "glm";
+
 const event = (
-  profile: "deepseek-flash" | "glm",
+  profile: ProfileName,
   promptDigest: string,
 ): ModelOperationalTelemetryEvent => ({
   version: "model-operational-telemetry-v1", stage: "provider_attempt", outcome: "success",
@@ -89,12 +93,18 @@ const event = (
   attempt: 1, duration_ms: 1, token_counts: { input: 100, output: 20, total: 120 },
 });
 
+const modeFor = (
+  modes: Mode | Partial<Record<ProfileName, Mode>>,
+  profile: ProfileName,
+): Mode => (typeof modes === "string" ? modes : (modes[profile] ?? "valid"));
+
 const dependencies = (
-  mode: "valid" | "malformed" | "coordinate_drift" | "later_coordinate_drift" | "oversized_output" = "valid",
+  modes: Mode | Partial<Record<ProfileName, Mode>> = "valid",
 ): CrossModelStructuralPassDependencies => ({
   create_model: (profile, telemetry: ModelTelemetrySink): ModelPort => ({
     invoke: async (request) => {
       const calibration = request.input as AttributionCalibrationRequest;
+      const mode = modeFor(modes, profile);
       const telemetryEvent = event(profile, digest(profile === "glm" ? "7" : "8"));
       const laterDrift = mode === "later_coordinate_drift"
         && calibration.observation_ref.endsWith(digest("4"));
@@ -105,9 +115,10 @@ const dependencies = (
           : telemetryEvent);
       if (mode === "malformed") return { probabilities: [] };
       const support = calibration.evidence_groups[0]!.factors[0]!.direction === "support";
+      const ownerMicros = mode === "tie" ? 500_000 : (support ? 700_000 : 300_000);
       return { probabilities: calibration.hypotheses.map((hypothesis) => ({
         hypothesis_id: hypothesis.hypothesis_id,
-        probability_micros: hypothesis.kind === "owner" ? (support ? 700_000 : 300_000) : (support ? 300_000 : 700_000),
+        probability_micros: hypothesis.kind === "owner" ? ownerMicros : 1_000_000 - ownerMicros,
       })) };
     },
     render: async () => ({ summary_text: "", citations: [] }),
@@ -125,10 +136,14 @@ const output = () => {
 };
 
 describe("bounded cross-model attribution structural pass", () => {
-  test("runs DeepSeek then GLM under exact accounting and retains separate content-free artifacts", async () => {
+  test("runs DeepSeek and GLM in parallel under exact accounting and retains separate content-free artifacts", async () => {
     const target = output();
     const result = await runCrossModelAttributionStructuralPass(manifest(), target, dependencies());
-    expect(result).toMatchObject({ status: "passed", structural_signature: ["owner", "unknown", "owner"] });
+    expect(result).toMatchObject({
+      status: "passed",
+      execution: "parallel",
+      structural_signature: ["owner", "unknown", "owner"],
+    });
     for (const profile of ["deepseek-flash", "glm"]) {
       const artifact = JSON.parse(readFileSync(join(target, `${profile}.json`), "utf8"));
       expect(artifact).toMatchObject({ profile, usage: { input: 300, output: 60, total: 360 } });
@@ -137,19 +152,60 @@ describe("bounded cross-model attribution structural pass", () => {
     expect(JSON.parse(readFileSync(join(target, "summary.json"), "utf8"))).toEqual(result);
   });
 
-  test("fails before provider construction for profile/resource drift or hostile manifest shapes", async () => {
-    let constructed = 0;
+  test("keeps both provider calls in flight rather than sequencing GLM after DeepSeek", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
     const deps = dependencies();
-    await expect(runCrossModelAttributionStructuralPass(manifest(), output(), {
+    const result = await runCrossModelAttributionStructuralPass(manifest(), output(), {
+      ...deps,
+      create_model: (profile, telemetry, maxTokens) => {
+        const model = deps.create_model(profile, telemetry, maxTokens);
+        return {
+          ...model,
+          invoke: async (...invokeArgs) => {
+            inFlight += 1;
+            maxInFlight = Math.max(maxInFlight, inFlight);
+            try { return await model.invoke(...invokeArgs); }
+            finally { inFlight -= 1; }
+          },
+        };
+      },
+    });
+    expect(result).toMatchObject({ status: "passed", execution: "parallel" });
+    expect(maxInFlight).toBe(2);
+  });
+
+  test("fails before provider construction for profile/resource drift or hostile manifest shapes", async () => {
+    let constructed: string[] = [];
+    const deps = dependencies();
+    const target = output();
+    await expect(runCrossModelAttributionStructuralPass(manifest(), target, {
       ...deps,
       resource_digest: (profile) => profile === "deepseek-flash" ? digest("9") : deps.resource_digest(profile),
-      create_model: (...args) => { constructed += 1; return deps.create_model(...args); },
+      create_model: (profile, telemetry, maxTokens) => {
+        constructed.push(profile);
+        return deps.create_model(profile, telemetry, maxTokens);
+      },
     })).rejects.toMatchObject({ code: "profile_coordinate_mismatch" });
-    expect(constructed).toBe(0);
+    expect(constructed).toEqual(["glm"]);
+    expect(JSON.parse(readFileSync(join(target, "failure.json"), "utf8"))).toMatchObject({
+      execution: "parallel",
+      profiles: [
+        { profile: "deepseek-flash", status: "failed", code: "profile_coordinate_mismatch", provider_calls_attempted: 0 },
+        { profile: "glm", status: "passed", code: null, provider_calls_attempted: 3, completed_cases: 3 },
+      ],
+    });
 
+    constructed = [];
     const getter = Object.defineProperty({}, "version", { enumerable: true, get: () => CROSS_MODEL_ATTRIBUTION_MANIFEST_VERSION });
-    await expect(runCrossModelAttributionStructuralPass(getter, output(), deps))
-      .rejects.toBeInstanceOf(CrossModelStructuralPassError);
+    await expect(runCrossModelAttributionStructuralPass(getter, output(), {
+      ...deps,
+      create_model: (profile, telemetry, maxTokens) => {
+        constructed.push(profile);
+        return deps.create_model(profile, telemetry, maxTokens);
+      },
+    })).rejects.toBeInstanceOf(CrossModelStructuralPassError);
+    expect(constructed).toEqual([]);
   });
 
   test("pins the exact held-out manifest and every preregistered budget", () => {
@@ -174,67 +230,193 @@ describe("bounded cross-model attribution structural pass", () => {
       .toThrow(expect.objectContaining({ code: "manifest_digest_mismatch" }));
   });
 
-  test("stops on the first malformed provider result and never advances to GLM", async () => {
+  test("still attempts GLM when DeepSeek is malformed and retains a diagnostic failure receipt", async () => {
     let profiles = 0;
-    const deps = dependencies("malformed");
-    await expect(runCrossModelAttributionStructuralPass(manifest(), output(), {
+    const deps = dependencies({ "deepseek-flash": "malformed", glm: "valid" });
+    const target = output();
+    await expect(runCrossModelAttributionStructuralPass(manifest(), target, {
       ...deps, create_model: (...args) => { profiles += 1; return deps.create_model(...args); },
     })).rejects.toMatchObject({ code: "provider_or_contract_failure" });
-    expect(profiles).toBe(1);
+    expect(profiles).toBe(2);
+    const failure = JSON.parse(readFileSync(join(target, "failure.json"), "utf8"));
+    expect(failure).toMatchObject({
+      version: CROSS_MODEL_ATTRIBUTION_FAILURE_VERSION,
+      status: "failed",
+      execution: "parallel",
+      code: "provider_or_contract_failure",
+      provider_calls_attempted: 4,
+      completed_cases: [
+        { profile: "deepseek-flash", count: 0 },
+        { profile: "glm", count: 3 },
+      ],
+      profiles: [
+        {
+          profile: "deepseek-flash",
+          status: "failed",
+          code: "provider_or_contract_failure",
+          provider_calls_attempted: 1,
+          failing_case: {
+            case_id: "case-owner-support",
+            code: "provider_or_contract_failure",
+            tied: false,
+            hypotheses: [],
+          },
+        },
+        { profile: "glm", status: "passed", code: null, provider_calls_attempted: 3, failing_case: null },
+      ],
+    });
+    expect(JSON.stringify(failure)).not.toContain("account:cross-model-structural-heldout");
   });
 
-  test("stops after one call on provenance drift or a per-call completion overrun", async () => {
+  test("stops that provider on provenance drift or a per-call completion overrun without dropping GLM", async () => {
     for (const [mode, code] of [
       ["coordinate_drift", "profile_coordinate_mismatch"],
       ["oversized_output", "accounting_failed"],
     ] as const) {
-      let calls = 0;
-      const deps = dependencies(mode);
+      const calls = { "deepseek-flash": 0, glm: 0 };
+      const deps = dependencies({ "deepseek-flash": mode, glm: "valid" });
       const target = output();
       await expect(runCrossModelAttributionStructuralPass(manifest(), target, {
         ...deps,
-        create_model: (...args) => {
-          const model = deps.create_model(...args);
-          return { ...model, invoke: async (...invokeArgs) => { calls += 1; return model.invoke(...invokeArgs); } };
+        create_model: (profile, telemetry, maxTokens) => {
+          const model = deps.create_model(profile, telemetry, maxTokens);
+          return { ...model, invoke: async (...invokeArgs) => {
+            calls[profile] += 1;
+            return model.invoke(...invokeArgs);
+          } };
         },
       })).rejects.toMatchObject({ code });
-      expect(calls).toBe(1);
+      expect(calls).toEqual({ "deepseek-flash": 1, glm: 3 });
       expect(JSON.parse(readFileSync(join(target, "failure.json"), "utf8"))).toMatchObject({
         status: "failed",
+        execution: "parallel",
         code,
+        version: CROSS_MODEL_ATTRIBUTION_FAILURE_VERSION,
         manifest_digest: CROSS_MODEL_ATTRIBUTION_FROZEN_MANIFEST_DIGEST,
-        failed_profile: "deepseek-flash",
-        provider_calls_attempted: 1,
+        provider_calls_attempted: 4,
         completed_cases: [
           { profile: "deepseek-flash", count: 0 },
-          { profile: "glm", count: 0 },
+          { profile: "glm", count: 3 },
+        ],
+        profiles: [
+          { profile: "deepseek-flash", status: "failed", code, provider_calls_attempted: 1 },
+          { profile: "glm", status: "passed", code: null, provider_calls_attempted: 3 },
         ],
       });
     }
   });
 
-  test("stops immediately when any non-provider coordinate drifts between calls", async () => {
-    let calls = 0;
+  test("stops immediately when any non-provider coordinate drifts between calls on that provider", async () => {
+    const calls = { "deepseek-flash": 0, glm: 0 };
     const deps = dependencies();
     const target = output();
     await expect(runCrossModelAttributionStructuralPass(manifest(), target, {
       ...deps,
       create_model: (profile, telemetry, maxTokens) => {
         const model = deps.create_model(profile, (telemetryEvent) => {
-          calls += 1;
-          telemetry(calls === 2
+          calls[profile] += 1;
+          telemetry(profile === "deepseek-flash" && calls[profile] === 2
             ? { ...telemetryEvent, coordinates: { ...telemetryEvent.coordinates, policy_version: "drifted-policy-v2" } }
             : telemetryEvent);
         }, maxTokens);
         return model;
       },
     })).rejects.toMatchObject({ code: "profile_coordinate_mismatch" });
-    expect(calls).toBe(2);
+    expect(calls).toEqual({ "deepseek-flash": 2, glm: 3 });
     expect(JSON.parse(readFileSync(join(target, "failure.json"), "utf8"))).toMatchObject({
-      provider_calls_attempted: 2,
+      execution: "parallel",
+      provider_calls_attempted: 5,
       completed_cases: [
         { profile: "deepseek-flash", count: 1 },
+        { profile: "glm", count: 3 },
+      ],
+    });
+  });
+
+  test("retains hypothesis micros and tie diagnostics without dropping the failing case or weakening unique-top", async () => {
+    const heldOut = manifest();
+    const ownerId = hypothesisIdForCalibrationCandidate(heldOut.cases[0]!.input, { kind: "owner", target_ref: null });
+    const unknownId = hypothesisIdForCalibrationCandidate(heldOut.cases[0]!.input, { kind: "unknown", target_ref: null });
+    const target = output();
+    await expect(runCrossModelAttributionStructuralPass(
+      heldOut,
+      target,
+      dependencies({ "deepseek-flash": "tie", glm: "tie" }),
+    )).rejects.toMatchObject({ code: "ambiguous_structural_result" });
+    const failure = JSON.parse(readFileSync(join(target, "failure.json"), "utf8"));
+    expect(failure).toMatchObject({
+      version: CROSS_MODEL_ATTRIBUTION_FAILURE_VERSION,
+      execution: "parallel",
+      code: "ambiguous_structural_result",
+      provider_calls_attempted: 2,
+      completed_cases: [
+        { profile: "deepseek-flash", count: 0 },
         { profile: "glm", count: 0 },
+      ],
+    });
+    for (const profile of ["deepseek-flash", "glm"] as const) {
+      const row = failure.profiles.find((entry: { profile: string }) => entry.profile === profile);
+      expect(row).toMatchObject({
+        status: "failed",
+        code: "ambiguous_structural_result",
+        provider_calls_attempted: 1,
+        failing_case: {
+          case_id: "case-owner-support",
+          code: "ambiguous_structural_result",
+          tied: true,
+          hypotheses: [
+            { hypothesis_id: ownerId, kind: "owner", probability_micros: 500_000 },
+            { hypothesis_id: unknownId, kind: "unknown", probability_micros: 500_000 },
+          ],
+          token_counts: { input: 100, output: 20, total: 120 },
+        },
+      });
+      expect(row.failing_case.request_digest).toMatch(/^[a-f0-9]{64}$/);
+      expect(row.failing_case.response_digest).toMatch(/^[a-f0-9]{64}$/);
+      expect(row.failing_case.prompt_digest).toMatch(/^[a-f0-9]{64}$/);
+      expect(row.failing_case.accounting_digest).toMatch(/^[a-f0-9]{64}$/);
+    }
+    expect(JSON.stringify(failure)).not.toContain("account:cross-model-structural-heldout");
+  });
+
+  test("still measures GLM unique-top when DeepSeek ties on the retained support case", async () => {
+    const calls = { "deepseek-flash": 0, glm: 0 };
+    const deps = dependencies({ "deepseek-flash": "tie", glm: "valid" });
+    const target = output();
+    await expect(runCrossModelAttributionStructuralPass(manifest(), target, {
+      ...deps,
+      create_model: (profile, telemetry, maxTokens) => {
+        const model = deps.create_model(profile, telemetry, maxTokens);
+        return { ...model, invoke: async (...invokeArgs) => {
+          calls[profile] += 1;
+          return model.invoke(...invokeArgs);
+        } };
+      },
+    })).rejects.toMatchObject({ code: "ambiguous_structural_result" });
+    expect(calls).toEqual({ "deepseek-flash": 1, glm: 3 });
+    const failure = JSON.parse(readFileSync(join(target, "failure.json"), "utf8"));
+    expect(failure.profiles).toMatchObject([
+      {
+        profile: "deepseek-flash",
+        status: "failed",
+        code: "ambiguous_structural_result",
+        failing_case: { case_id: "case-owner-support", tied: true },
+      },
+      {
+        profile: "glm",
+        status: "passed",
+        code: null,
+        provider_calls_attempted: 3,
+        completed_cases: 3,
+        failing_case: null,
+      },
+    ]);
+    expect(JSON.parse(readFileSync(join(target, "glm.json"), "utf8"))).toMatchObject({
+      profile: "glm",
+      cases: [
+        { case_id: "case-owner-support", top_kind: "owner" },
+        { case_id: "case-owner-counter", top_kind: "unknown" },
+        { case_id: "case-independent-support", top_kind: "owner" },
       ],
     });
   });

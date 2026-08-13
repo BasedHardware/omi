@@ -8,6 +8,7 @@ import {
   type AttributionCalibratorPort,
   type AttributionCalibrationRequest,
   type CalibrateAttributionBeliefInput,
+  type CalibratedAttributionBelief,
 } from "../core/consolidate/attribution-calibration";
 import type { AttributionHypothesisKind } from "../core/consolidate/attribution-belief";
 import { sha256CanonicalRedacted, type CanonicalJson } from "../core/ledger";
@@ -27,7 +28,7 @@ export const CROSS_MODEL_ATTRIBUTION_MANIFEST_VERSION =
 export const CROSS_MODEL_ATTRIBUTION_RESULT_VERSION =
   "cross-model-attribution-structural-result-v1" as const;
 export const CROSS_MODEL_ATTRIBUTION_FAILURE_VERSION =
-  "cross-model-attribution-structural-failure-v1" as const;
+  "cross-model-attribution-structural-failure-v2" as const;
 export const CROSS_MODEL_ATTRIBUTION_FROZEN_MANIFEST_DIGEST =
   "4d60523f51c401a66b499b73c545a64e8c3c71397564455ca5473b1467e5fcb3" as const;
 
@@ -69,14 +70,39 @@ export interface CrossModelStructuralPassDependencies {
   readonly now_ms: () => number;
 }
 
+export interface CrossModelStructuralHypothesisDiagnostic {
+  readonly hypothesis_id: string;
+  readonly kind: AttributionHypothesisKind;
+  readonly probability_micros: number;
+}
+
+export interface CrossModelStructuralCaseDiagnostic {
+  readonly case_id: string;
+  readonly code: string;
+  readonly tied: boolean;
+  readonly hypotheses: readonly CrossModelStructuralHypothesisDiagnostic[];
+  readonly request_digest: string | null;
+  readonly response_digest: string | null;
+  readonly result_digest: string | null;
+  readonly prompt_digest: string | null;
+  readonly accounting_digest: string | null;
+  readonly token_counts: Readonly<{ input: number; output: number; total: number }> | null;
+}
+
 export class CrossModelStructuralPassError extends Error {
-  constructor(readonly code: string) {
+  constructor(
+    readonly code: string,
+    readonly diagnostic: CrossModelStructuralCaseDiagnostic | null = null,
+  ) {
     super(code);
     this.name = "CrossModelStructuralPassError";
   }
 }
 
-const fail = (code: string): never => { throw new CrossModelStructuralPassError(code); };
+const fail = (
+  code: string,
+  diagnostic: CrossModelStructuralCaseDiagnostic | null = null,
+): never => { throw new CrossModelStructuralPassError(code, diagnostic); };
 
 const exact = (value: unknown, keys: readonly string[], code = "invalid_manifest"): Record<string, unknown> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)
@@ -211,6 +237,86 @@ const exactCoordinates = (
   right: ModelOperationalTelemetryEvent["coordinates"],
 ): boolean => JSON.stringify(left) === JSON.stringify(right);
 
+const tokenCounts = (
+  event: ModelOperationalTelemetryEvent | undefined,
+): Readonly<{ input: number; output: number; total: number }> | null => {
+  if (!event) return null;
+  return Object.freeze({
+    input: event.token_counts.input,
+    output: event.token_counts.output,
+    total: event.token_counts.total,
+  });
+};
+
+const caseDiagnostic = (
+  caseId: string,
+  code: string,
+  tied: boolean,
+  result: CalibratedAttributionBelief | null,
+  event: ModelOperationalTelemetryEvent | undefined,
+): CrossModelStructuralCaseDiagnostic => {
+  const counts = tokenCounts(event);
+  const hypotheses = result?.belief.hypotheses ?? [];
+  return Object.freeze({
+    case_id: caseId,
+    code,
+    tied,
+    hypotheses: Object.freeze(hypotheses.map((hypothesis): CrossModelStructuralHypothesisDiagnostic => Object.freeze({
+      hypothesis_id: hypothesis.hypothesis_id,
+      kind: hypothesis.kind,
+      probability_micros: hypothesis.probability_micros,
+    }))),
+    request_digest: result?.receipt.request_digest ?? null,
+    response_digest: result?.receipt.response_digest ?? null,
+    result_digest: result?.receipt.result_digest ?? null,
+    prompt_digest: event?.prompt_digest ?? null,
+    accounting_digest: counts === null ? null : sha256CanonicalRedacted(counts),
+    token_counts: counts,
+  });
+};
+
+const usageOrNull = (
+  events: readonly ModelOperationalTelemetryEvent[],
+  maxCompletionTokensPerCall: number,
+) => {
+  try { return totalUsage(events, maxCompletionTokensPerCall); }
+  catch { return null; }
+};
+
+type ProfileOutcome = {
+  readonly profile: Profile;
+  readonly status: "passed" | "failed";
+  readonly code: string | null;
+  readonly provider_calls_attempted: number;
+  readonly completed_cases: number;
+  readonly usage: Readonly<{ input: number; output: number; total: number }> | null;
+  readonly wall_clock_ms: number | null;
+  readonly failing_case: CrossModelStructuralCaseDiagnostic | null;
+  readonly result: Readonly<Record<string, unknown>> | null;
+};
+
+const profileFailure = (
+  profile: Profile,
+  code: string,
+  providerCallsAttempted: number,
+  completedCases: number,
+  events: readonly ModelOperationalTelemetryEvent[],
+  maxCompletionTokensPerCall: number,
+  started: number | null,
+  nowMs: number,
+  diagnostic: CrossModelStructuralCaseDiagnostic | null,
+): ProfileOutcome => Object.freeze({
+  profile,
+  status: "failed" as const,
+  code,
+  provider_calls_attempted: providerCallsAttempted,
+  completed_cases: completedCases,
+  usage: usageOrNull(events, maxCompletionTokensPerCall),
+  wall_clock_ms: started === null ? null : nowMs - started,
+  failing_case: diagnostic,
+  result: null,
+});
+
 const productionDependencies: CrossModelStructuralPassDependencies = Object.freeze({
   create_model: (profile: Profile, telemetry: ModelTelemetrySink, maxCompletionTokens: number) => withOfflineModelPipelineExclusivity(
     modelForProfile(profile, { telemetrySink: telemetry, maxCompletionTokens }),
@@ -245,27 +351,33 @@ export const runCrossModelAttributionStructuralPass = async (
   if (!isAbsolute(outputDirectory) || existsSync(output)) fail("invalid_output_directory");
   mkdirSync(output, { recursive: false });
   const manifestDigest = sha256CanonicalRedacted(manifest as unknown as CanonicalJson);
-  const profileResults: Record<string, unknown>[] = [];
-  let failedProfile: Profile | null = null;
-  let providerCallsAttempted = 0;
-  const completedCasesByProfile: Record<Profile, number> = { "deepseek-flash": 0, glm: 0 };
-  try {
-    for (const profileConfig of manifest.profiles) {
-      failedProfile = profileConfig.profile;
+
+  const runProfile = async (
+    profileConfig: CrossModelStructuralManifest["profiles"][number],
+  ): Promise<ProfileOutcome> => {
+    let providerCallsAttempted = 0;
+    let completedCases = 0;
+    const events: ModelOperationalTelemetryEvent[] = [];
+    let started: number | null = null;
+    try {
       if (dependencies.resource_digest(profileConfig.profile) !== profileConfig.resource_digest
-        || dependencies.model_version(profileConfig.profile) !== profileConfig.model_version) fail("profile_coordinate_mismatch");
-      const events: ModelOperationalTelemetryEvent[] = [];
+        || dependencies.model_version(profileConfig.profile) !== profileConfig.model_version) {
+        fail("profile_coordinate_mismatch");
+      }
       const model = dependencies.create_model(
         profileConfig.profile,
-        (event) => { events.push(event); },
+        (event: ModelOperationalTelemetryEvent) => { events.push(event); },
         manifest.budgets.max_completion_tokens_per_call,
       );
-      const started = dependencies.now_ms();
+      started = dependencies.now_ms();
+      const startedMs = started;
       const signal = AbortSignal.timeout(manifest.budgets.max_wall_clock_ms_per_profile);
       const cases: Record<string, unknown>[] = [];
       let baselineCoordinates: ModelOperationalTelemetryEvent["coordinates"] | null = null;
       for (const structuralCase of manifest.cases) {
-        if (sha256CanonicalRedacted(manifest as unknown as CanonicalJson) !== manifestDigest) fail("manifest_digest_mismatch");
+        if (sha256CanonicalRedacted(manifest as unknown as CanonicalJson) !== manifestDigest) {
+          fail("manifest_digest_mismatch");
+        }
         const eventCount = events.length;
         const calibrator: AttributionCalibratorPort = Object.freeze({
           calibrate: (request: AttributionCalibrationRequest, lossSignal?: AbortSignal) => {
@@ -276,42 +388,70 @@ export const runCrossModelAttributionStructuralPass = async (
             });
           },
         });
-        let result;
+        let result: CalibratedAttributionBelief | null = null;
         try { result = await calibrateAttributionBelief(structuralCase.input, calibrator, signal); }
-        catch { return fail("provider_or_contract_failure"); }
+        catch {
+          fail(
+            "provider_or_contract_failure",
+            caseDiagnostic(
+              structuralCase.case_id, "provider_or_contract_failure", false, null, events[eventCount],
+            ),
+          );
+        }
         const newEvents = events.slice(eventCount);
-        if (newEvents.length !== 1) fail("accounting_failed");
-        if (!sameCoordinates(newEvents[0]!, profileConfig)) fail("profile_coordinate_mismatch");
+        const diagnosticFor = (code: string, tied: boolean) => caseDiagnostic(
+          structuralCase.case_id, code, tied, result, newEvents[0],
+        );
+        if (newEvents.length !== 1) fail("accounting_failed", diagnosticFor("accounting_failed", false));
+        if (!sameCoordinates(newEvents[0]!, profileConfig)) {
+          fail("profile_coordinate_mismatch", diagnosticFor("profile_coordinate_mismatch", false));
+        }
         if (baselineCoordinates === null) baselineCoordinates = newEvents[0]!.coordinates;
-        else if (!exactCoordinates(newEvents[0]!.coordinates, baselineCoordinates)) fail("profile_coordinate_mismatch");
-        const currentUsage = totalUsage(events, manifest.budgets.max_completion_tokens_per_call);
+        else if (!exactCoordinates(newEvents[0]!.coordinates, baselineCoordinates)) {
+          fail("profile_coordinate_mismatch", diagnosticFor("profile_coordinate_mismatch", false));
+        }
+        const currentUsage = (() => {
+          try { return totalUsage(events, manifest.budgets.max_completion_tokens_per_call); }
+          catch { return fail("accounting_failed", diagnosticFor("accounting_failed", false)); }
+        })();
         if (currentUsage.input > manifest.budgets.max_input_tokens_per_profile
           || currentUsage.output > manifest.budgets.max_output_tokens_per_profile
-          || currentUsage.total > manifest.budgets.max_total_tokens_per_profile) fail("token_budget_exceeded");
-        const currentWallClock = dependencies.now_ms() - started;
+          || currentUsage.total > manifest.budgets.max_total_tokens_per_profile) {
+          fail("token_budget_exceeded", diagnosticFor("token_budget_exceeded", false));
+        }
+        const currentWallClock = dependencies.now_ms() - startedMs;
         if (currentWallClock < 0
-          || currentWallClock > manifest.budgets.max_wall_clock_ms_per_profile) fail("wall_clock_budget_exceeded");
+          || currentWallClock > manifest.budgets.max_wall_clock_ms_per_profile) {
+          fail("wall_clock_budget_exceeded", diagnosticFor("wall_clock_budget_exceeded", false));
+        }
+        if (result === null) fail("provider_or_contract_failure", diagnosticFor("provider_or_contract_failure", false));
         const top = [...result.belief.hypotheses].sort((left, right) =>
           right.probability_micros - left.probability_micros);
-        if (!top[0] || top[0].probability_micros === top[1]?.probability_micros) fail("ambiguous_structural_result");
-        if (top[0].kind !== structuralCase.expected_top_kind) fail("structural_expectation_failed");
+        const tied = !top[0] || top[0].probability_micros === top[1]?.probability_micros;
+        if (tied) fail("ambiguous_structural_result", diagnosticFor("ambiguous_structural_result", true));
+        const winner = top[0];
+        if (!winner || winner.kind !== structuralCase.expected_top_kind) {
+          fail("structural_expectation_failed", diagnosticFor("structural_expectation_failed", false));
+        }
         cases.push(Object.freeze({
           case_id: structuralCase.case_id,
           request_digest: result.receipt.request_digest,
           response_digest: result.receipt.response_digest,
           result_digest: result.receipt.result_digest,
-          top_kind: top[0].kind,
-          top_probability_micros: top[0].probability_micros,
+          top_kind: winner.kind,
+          top_probability_micros: winner.probability_micros,
           prompt_digest: newEvents[0]!.prompt_digest,
         }));
-        completedCasesByProfile[profileConfig.profile] += 1;
+        completedCases += 1;
       }
       const usage = totalUsage(events, manifest.budgets.max_completion_tokens_per_call);
       if (usage.input > manifest.budgets.max_input_tokens_per_profile
         || usage.output > manifest.budgets.max_output_tokens_per_profile
         || usage.total > manifest.budgets.max_total_tokens_per_profile) fail("token_budget_exceeded");
-      const wallClockMs = dependencies.now_ms() - started;
-      if (wallClockMs < 0 || wallClockMs > manifest.budgets.max_wall_clock_ms_per_profile) fail("wall_clock_budget_exceeded");
+      const wallClockMs = dependencies.now_ms() - startedMs;
+      if (wallClockMs < 0 || wallClockMs > manifest.budgets.max_wall_clock_ms_per_profile) {
+        fail("wall_clock_budget_exceeded");
+      }
       const coordinates = events[0]!.coordinates;
       const profileResult = Object.freeze({
         version: CROSS_MODEL_ATTRIBUTION_RESULT_VERSION,
@@ -324,40 +464,99 @@ export const runCrossModelAttributionStructuralPass = async (
         cases: Object.freeze(cases),
       });
       await Bun.write(`${output}/${profileConfig.profile}.json`, `${JSON.stringify(profileResult, null, 2)}\n`);
-      profileResults.push(profileResult);
+      return Object.freeze({
+        profile: profileConfig.profile,
+        status: "passed" as const,
+        code: null,
+        provider_calls_attempted: providerCallsAttempted,
+        completed_cases: completedCases,
+        usage,
+        wall_clock_ms: wallClockMs,
+        failing_case: null,
+        result: profileResult,
+      });
+    } catch (error) {
+      const diagnostic = error instanceof CrossModelStructuralPassError ? error.diagnostic : null;
+      const code = error instanceof CrossModelStructuralPassError ? error.code : "structural_pass_failed";
+      return profileFailure(
+        profileConfig.profile, code, providerCallsAttempted, completedCases, events,
+        manifest.budgets.max_completion_tokens_per_call, started, dependencies.now_ms(), diagnostic,
+      );
     }
-    const signatures = profileResults.map((result) =>
-      (result["cases"] as readonly Record<string, unknown>[]).map((entry) => entry["top_kind"]));
-    if (JSON.stringify(signatures[0]) !== JSON.stringify(signatures[1])) fail("cross_model_structural_disagreement");
-    const summary = Object.freeze({
-      version: CROSS_MODEL_ATTRIBUTION_RESULT_VERSION,
-      status: "passed",
-      manifest_digest: manifestDigest,
-      profiles: Object.freeze(profileResults.map((result) => Object.freeze({
-        profile: result["profile"], resource_digest: result["resource_digest"],
-        artifact_digest: sha256CanonicalRedacted(result as CanonicalJson),
-      }))),
-      structural_signature: Object.freeze(signatures[0]!),
+  };
+
+  const writeFailure = async (
+    code: string,
+    outcomes: readonly ProfileOutcome[],
+  ): Promise<void> => {
+    const ordered = PROFILE_ORDER.map((profile) => {
+      const outcome = outcomes.find((entry) => entry.profile === profile);
+      return outcome ?? profileFailure(
+        profile, "structural_pass_failed", 0, 0, [], manifest.budgets.max_completion_tokens_per_call,
+        null, dependencies.now_ms(), null,
+      );
     });
-    await Bun.write(`${output}/summary.json`, `${JSON.stringify(summary, null, 2)}\n`);
-    return summary;
-  } catch (error) {
-    const code = error instanceof CrossModelStructuralPassError ? error.code : "structural_pass_failed";
     const failure = Object.freeze({
       version: CROSS_MODEL_ATTRIBUTION_FAILURE_VERSION,
       status: "failed",
+      execution: "parallel",
       code,
       manifest_digest: manifestDigest,
-      failed_profile: failedProfile,
-      provider_calls_attempted: providerCallsAttempted,
-      completed_cases: Object.freeze(PROFILE_ORDER.map((profile) => Object.freeze({
-        profile,
-        count: completedCasesByProfile[profile],
+      provider_calls_attempted: ordered.reduce((sum, outcome) => sum + outcome.provider_calls_attempted, 0),
+      completed_cases: Object.freeze(ordered.map((outcome) => Object.freeze({
+        profile: outcome.profile,
+        count: outcome.completed_cases,
+      }))),
+      profiles: Object.freeze(ordered.map((outcome) => Object.freeze({
+        profile: outcome.profile,
+        status: outcome.status,
+        code: outcome.code,
+        provider_calls_attempted: outcome.provider_calls_attempted,
+        completed_cases: outcome.completed_cases,
+        usage: outcome.usage,
+        wall_clock_ms: outcome.wall_clock_ms,
+        failing_case: outcome.failing_case,
       }))),
     });
     await Bun.write(`${output}/failure.json`, `${JSON.stringify(failure, null, 2)}\n`).catch(() => undefined);
+  };
+
+  let outcomes: readonly ProfileOutcome[] = [];
+  try {
+    outcomes = await Promise.all(manifest.profiles.map((profileConfig) => runProfile(profileConfig)));
+    const ordered = PROFILE_ORDER.map((profile) => outcomes.find((entry) => entry.profile === profile)!);
+    const failed = ordered.filter((outcome) => outcome.status === "failed");
+    const passedResults = ordered.flatMap((outcome) => outcome.result ? [outcome.result] : []);
+    if (failed.length === 0 && passedResults.length === 2) {
+      const signatures = passedResults.map((result) =>
+        (result["cases"] as readonly Record<string, unknown>[]).map((entry) => entry["top_kind"]));
+      if (JSON.stringify(signatures[0]) !== JSON.stringify(signatures[1])) {
+        await writeFailure("cross_model_structural_disagreement", ordered);
+        fail("cross_model_structural_disagreement");
+      }
+      const summary = Object.freeze({
+        version: CROSS_MODEL_ATTRIBUTION_RESULT_VERSION,
+        status: "passed",
+        execution: "parallel",
+        manifest_digest: manifestDigest,
+        profiles: Object.freeze(passedResults.map((result) => Object.freeze({
+          profile: result["profile"], resource_digest: result["resource_digest"],
+          artifact_digest: sha256CanonicalRedacted(result as CanonicalJson),
+        }))),
+        structural_signature: Object.freeze(signatures[0]!),
+      });
+      await Bun.write(`${output}/summary.json`, `${JSON.stringify(summary, null, 2)}\n`);
+      return summary;
+    }
+    const overallCode = failed[0]?.code ?? "structural_pass_failed";
+    await writeFailure(overallCode, ordered);
+    fail(overallCode);
+  } catch (error) {
+    const code = error instanceof CrossModelStructuralPassError ? error.code : "structural_pass_failed";
+    if (!existsSync(`${output}/failure.json`)) await writeFailure(code, outcomes);
     throw error;
   }
+  return fail("structural_pass_failed");
 };
 
 const argument = (name: string): string | undefined => {
