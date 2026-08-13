@@ -61,6 +61,23 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
     XCTAssertTrue(queue.isEmpty)
   }
 
+  func testQueueDrainsClearedRatingAfterSync() {
+    var queue = ChatMessageRatingQueue()
+    queue.enqueue(messageId: "m1", rating: 1)
+    queue.enqueue(messageId: "m1", rating: nil)
+
+    XCTAssertTrue(queue.contains("m1"))
+    let unsynced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: false)
+    XCTAssertTrue(queue.drain(using: [unsynced]).isEmpty)
+
+    let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
+    let ready = queue.drain(using: [synced])
+    XCTAssertEqual(ready.count, 1)
+    XCTAssertEqual(ready.first?.messageId, "m1")
+    XCTAssertNil(ready.first?.rating)
+    XCTAssertTrue(queue.isEmpty)
+  }
+
   func testQueueDropsFailedJournalWithoutPersist() {
     var queue = ChatMessageRatingQueue()
     queue.enqueue(messageId: "m1", rating: 1)

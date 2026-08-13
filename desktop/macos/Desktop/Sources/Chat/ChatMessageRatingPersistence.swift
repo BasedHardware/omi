@@ -39,15 +39,17 @@ struct ChatMessageRatingQueue: Equatable {
   }
 
   func contains(_ messageId: String) -> Bool {
-    pending[messageId] != nil
+    pending.keys.contains(messageId)
   }
 
   /// Drain ratings whose messages can persist now. Failed-journal and missing
   /// rows are dropped without a persist payload so a 404 cannot revert them.
+  /// A queued `nil` is a clear-rating and must persist after sync; do not
+  /// collapse it with a missing key.
   mutating func drain(using messages: [ChatMessage]) -> [(messageId: String, rating: Int?)] {
     var persist: [(messageId: String, rating: Int?)] = []
-    for messageId in Array(pending.keys) {
-      guard let rating = pending[messageId] else { continue }
+    let snapshot = pending
+    for (messageId, rating) in snapshot {
       guard let message = messages.first(where: { $0.id == messageId }) else {
         pending.removeValue(forKey: messageId)
         continue
