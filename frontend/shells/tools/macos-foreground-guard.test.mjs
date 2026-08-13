@@ -51,3 +51,16 @@ test("foreground guard kills a resistant command group within its terminal deadl
     assert.throws(() => process.kill(descendant, 0));
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 });
+
+test("foreground guard kills a resistant descendant after its leader accepts TERM", () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), "omi-focus-descendant-"));
+  try {
+    const result = path.join(scratch, "result.json"); const stdout = path.join(scratch, "stdout"); const stderr = path.join(scratch, "stderr"); const pidFile = path.join(scratch, "descendant.pid");
+    const script = `/bin/sh -c 'trap "" TERM; exec >/dev/null 2>&1; sleep 30' & echo $! > '${pidFile}'; wait`;
+    const run = spawnSync(process.execPath, [helper, "--result", result, "--stdout", stdout, "--stderr", stderr, "--timeout", "1", "--", "/bin/sh", "-c", script], { encoding: "utf8", timeout: 5_000 });
+    assert.notEqual(run.status, 0);
+    const descendant = Number(readFileSync(pidFile, "utf8").trim());
+    assert.throws(() => process.kill(descendant, 0), undefined, "the same-group descendant must be absent before the guard returns");
+    assert.equal(JSON.parse(readFileSync(result, "utf8")).monitor_error, "guarded command timed out");
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
