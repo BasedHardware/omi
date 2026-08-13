@@ -244,7 +244,7 @@ class AnalyticsManager {
     });
   }
 
-  void identify() {
+  void identify({String? authMethod, DateTime? userCreatedAt, String userRole = 'member'}) {
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
       final adapter = _adapter;
       if (adapter == null) return;
@@ -256,8 +256,20 @@ class AnalyticsManager {
         return;
       }
       _instance.setPeopleValues();
+      _setUserPropertiesBatch({
+        if (authMethod != null) 'auth_method': authMethod,
+        if (userCreatedAt != null) 'user_created_at': userCreatedAt.toUtc().toIso8601String(),
+        'user_role': userRole,
+      });
       setNameAndEmail();
     });
+  }
+
+  void accountCreated({required String authProvider, String acquisitionSource = 'mobile_oauth'}) {
+    track(
+      'Account Created',
+      properties: {'is_first_auth': true, 'auth_provider': authProvider, 'acquisition_source': acquisitionSource},
+    );
   }
 
   void migrateUser(String newUid) {
