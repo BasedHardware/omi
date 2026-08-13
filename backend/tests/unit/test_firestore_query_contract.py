@@ -34,6 +34,7 @@ from database.firestore_index_registry import (
     firebase_index_manifest,
 )
 from scripts import firestore_query_coverage, generate_firestore_indexes
+from utils.memory import canonical_graph as canonical_graph_service
 
 
 class _RecordingQuery:
@@ -317,6 +318,58 @@ def test_generated_firestore_manifest_matches_the_checked_in_contract():
     )
     assert firebase_index_manifest()['indexes'].count(expected_conversations_status_finished) == 1
     assert CANONICAL_MEMORY_ATLAS_READ_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
+    assert CANONICAL_MEMORY_ATLAS_READ_QUERY.identifier == 'memory_items_canonical_atlas_read'
+    assert CANONICAL_MEMORY_ATLAS_READ_QUERY.index_requirement.signature == (
+        'memory_items',
+        'COLLECTION',
+        (
+            ('account_generation', 'ASCENDING'),
+            ('tier', 'ASCENDING'),
+            ('status', 'ASCENDING'),
+            ('processing_state', 'ASCENDING'),
+            ('updated_at', 'DESCENDING'),
+            ('__name__', 'DESCENDING'),
+        ),
+    )
+
+
+def _equality_plus_order_signature(collection_group, filters, orders):
+    """Composite Firestore requires for equality filters plus explicit orderings."""
+    fields = [(field_path, 'ASCENDING') for field_path, operator in filters if operator == '==']
+    fields.extend(orders)
+    if not fields or fields[-1][0] != '__name__':
+        fields.append(('__name__', orders[-1][1] if orders else 'ASCENDING'))
+    return (collection_group, 'COLLECTION', tuple(fields))
+
+
+def test_canonical_atlas_read_serving_query_requires_declared_composite():
+    """The live atlas list query must keep its apply-spec composite.
+
+    firestore_readiness failed on based-hardware-dev (run 31666135748) with
+    COLLECTION/memory_items (account_generation ASC, tier ASC, status ASC,
+    processing_state ASC, updated_at DESC, __name__ DESC)=MISSING. That tuple is
+    memory_items_canonical_atlas_read; dropping it from the apply spec while the
+    serving builder still uses it must fail here.
+    """
+    recorded = _StreamRecordingQuery(recorder=[])
+    client = SimpleNamespace(collection=lambda path: recorded)
+    revision = canonical_graph_service._CanonicalGraphRevision(
+        account_generation=3,
+        commit_sequence=1,
+        head_commit_id='head-atlas',
+    )
+
+    built = canonical_graph_service._build_canonical_graph_items_query(
+        client,
+        'atlas-index-user',
+        revision,
+        cursor_boundary=None,
+    )
+
+    assert built is not recorded
+    signature = _equality_plus_order_signature('memory_items', built._filters, built._orders)
+    assert signature == CANONICAL_MEMORY_ATLAS_READ_QUERY.index_requirement.signature
+    assert signature in _declared_index_signatures()
 
 
 @pytest.mark.slow
