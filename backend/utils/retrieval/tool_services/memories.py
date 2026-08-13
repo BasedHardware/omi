@@ -12,17 +12,10 @@ from models.memories import MemoryDB
 from utils.conversations.render import format_local_date, resolve_display_tz
 from utils.memory.memory_service import MemoryService
 from utils.retrieval.tool_services.conversations import parse_iso_date
+from utils.retrieval.safety import safe_isoformat
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_isoformat(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    isoformat = getattr(value, 'isoformat', None)
-    formatted = isoformat() if callable(isoformat) else value
-    return formatted if isinstance(formatted, str) else str(formatted)[:80]
 
 
 def get_memories_text(
@@ -100,7 +93,7 @@ def get_memories_text(
                     'source_id': memory.memory_id or memory.id,
                     'title': 'Memory',
                     'preview': str(memory.content or '')[:600],
-                    'created_at': _safe_isoformat(memory.created_at),
+                    'created_at': safe_isoformat(memory.created_at),
                 }
             )
 
@@ -146,7 +139,7 @@ def search_memories_text(
                         'source_id': memory.memory_id or memory.id,
                         'title': 'Memory',
                         'preview': str(memory.content or '')[:600],
-                        'created_at': _safe_isoformat(memory.created_at),
+                        'created_at': safe_isoformat(memory.created_at),
                     }
                 )
 

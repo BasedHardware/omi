@@ -124,7 +124,12 @@ struct OmiMarkdownContent: View, Equatable {
             case .codeBlock(let language, let code):
               codeBlockView(code, language: language)
             case .table(let table):
-              OmiMarkdownTableView(table: table, style: style, fontScale: fontScale)
+              OmiMarkdownTableView(
+                table: table,
+                style: style,
+                fontScale: fontScale,
+                citations: citations,
+                onOpenCitation: onOpenCitation)
             case .thematicBreak:
               thematicBreakView()
             }
@@ -964,12 +969,21 @@ private struct OmiMarkdownCitationContent: View {
   var body: some View {
     let fontSize = round(14 * fontScale)
     let source = OmiMarkdownContent.preprocessText(text)
-    if let masked = ChatCitationMask.mask(source, references: referencesByOrdinal),
+    if let citationMask = ChatCitationMask.mask(source, references: referencesByOrdinal),
+      let interactiveMask = ChatCitationMask.maskInlineCode(in: citationMask),
       let attributed = OmiMarkdownContent.styledAttributedString(
-        from: masked.markdown, style: style, fontSize: fontSize, fontScale: fontScale)
+        from: interactiveMask.markdown, style: style, fontSize: fontSize, fontScale: fontScale)
     {
       VStack(alignment: .leading, spacing: 0) {
-        ForEach(Array(ChatCitationMask.units(in: attributed, markers: masked.markers).enumerated()), id: \.offset) {
+        ForEach(
+          Array(
+            ChatCitationMask.units(
+              in: attributed,
+              citationMarkers: citationMask.markers,
+              codePlaceholders: interactiveMask.codePlaceholders
+            ).enumerated()),
+          id: \.offset
+        ) {
           _, line in
           if line.isEmpty {
             Color.clear.frame(height: fontSize * 0.45)
@@ -986,6 +1000,11 @@ private struct OmiMarkdownCitationContent: View {
                     reference: reference,
                     fontScale: fontScale,
                     onOpen: { onOpenCitation?($0) })
+                case .code(let value):
+                  OmiMarkdownInlineCodeCopyButton(
+                    code: value,
+                    style: style,
+                    fontScale: fontScale)
                 }
               }
             }
@@ -998,7 +1017,7 @@ private struct OmiMarkdownCitationContent: View {
   }
 }
 
-private enum ChatCitationMask {
+enum ChatCitationMask {
   struct Marker {
     let placeholder: String
     let reference: ChatCitationReference
@@ -1009,9 +1028,15 @@ private enum ChatCitationMask {
     let markers: [Marker]
   }
 
+  struct InteractiveMask {
+    let markdown: String
+    let codePlaceholders: [OmiMarkdownInlineCode.Placeholder]
+  }
+
   enum Unit {
     case text(AttributedString)
     case citation(ChatCitationReference)
+    case code(String)
   }
 
   static func mask(_ text: String, references: [Int: ChatCitationReference]) -> Masked? {
@@ -1044,11 +1069,41 @@ private enum ChatCitationMask {
     return Masked(markdown: markdown, markers: markers)
   }
 
-  static func units(in attributed: AttributedString, markers: [Marker]) -> [[Unit]] {
+  static func maskInlineCode(in citationMask: Masked) -> InteractiveMask? {
+    guard let codeMask = OmiMarkdownInlineCode.maskedMarkdown(citationMask.markdown) else {
+      return InteractiveMask(markdown: citationMask.markdown, codePlaceholders: [])
+    }
+    return InteractiveMask(
+      markdown: codeMask.markdown,
+      codePlaceholders: codeMask.placeholders)
+  }
+
+  static func units(
+    in attributed: AttributedString,
+    citationMarkers: [Marker],
+    codePlaceholders: [OmiMarkdownInlineCode.Placeholder]
+  ) -> [[Unit]] {
+    enum PlaceholderUnit {
+      case citation(ChatCitationReference)
+      case code(String)
+    }
+
     var lines: [[Unit]] = [[]]
     let rendered = String(attributed.characters)
     var renderedStart = rendered.startIndex
     var attributedStart = attributed.startIndex
+
+    let placeholders: [(marker: String, unit: PlaceholderUnit)] =
+      citationMarkers.map { ($0.placeholder, .citation($0.reference)) }
+      + codePlaceholders.map { ($0.marker, .code($0.code)) }
+
+    let orderedPlaceholders = placeholders.compactMap {
+      placeholder -> (
+        marker: String, unit: PlaceholderUnit, range: Range<String.Index>
+      )? in
+      guard let range = rendered.range(of: placeholder.marker) else { return nil }
+      return (placeholder.marker, placeholder.unit, range)
+    }.sorted { $0.range.lowerBound < $1.range.lowerBound }
 
     func appendText(_ range: Range<AttributedString.Index>) {
       var segmentStart = range.lowerBound
@@ -1074,17 +1129,20 @@ private enum ChatCitationMask {
       lines[lines.count - 1].append(.text(AttributedString(attributed[range])))
     }
 
-    for marker in markers {
-      guard
-        let markerRange = rendered.range(
-          of: marker.placeholder, range: renderedStart..<rendered.endIndex)
-      else { continue }
+    for placeholder in orderedPlaceholders {
+      let markerRange = placeholder.range
+      guard markerRange.lowerBound >= renderedStart else { continue }
       let lowerOffset = rendered.distance(from: rendered.startIndex, to: markerRange.lowerBound)
       let upperOffset = rendered.distance(from: rendered.startIndex, to: markerRange.upperBound)
       let lower = attributed.index(attributed.startIndex, offsetByCharacters: lowerOffset)
       let upper = attributed.index(attributed.startIndex, offsetByCharacters: upperOffset)
       appendText(attributedStart..<lower)
-      lines[lines.count - 1].append(.citation(marker.reference))
+      switch placeholder.unit {
+      case .citation(let reference):
+        lines[lines.count - 1].append(.citation(reference))
+      case .code(let value):
+        lines[lines.count - 1].append(.code(value))
+      }
       attributedStart = upper
       renderedStart = markerRange.upperBound
     }
@@ -1375,6 +1433,8 @@ private struct OmiMarkdownTableView: View {
   let table: OmiMarkdownTable
   let style: OmiMarkdown.Style
   let fontScale: CGFloat
+  let citations: [ChatCitationReference]
+  let onOpenCitation: ((ChatCitationReference) -> Void)?
 
   private var allRows: [[String]] {
     [table.header] + table.rows
@@ -1434,7 +1494,14 @@ private struct OmiMarkdownTableView: View {
     let metrics = columnMetrics(column, alignment: columnAlignment)
 
     Group {
-      if let inlineCopy = OmiMarkdownContent.inlineCopyContent(
+      if !citations.isEmpty {
+        OmiMarkdownCitationContent(
+          text: content,
+          style: style,
+          fontScale: fontScale,
+          citations: citations,
+          onOpenCitation: onOpenCitation)
+      } else if let inlineCopy = OmiMarkdownContent.inlineCopyContent(
         from: content,
         style: style,
         fontSize: fontSize,

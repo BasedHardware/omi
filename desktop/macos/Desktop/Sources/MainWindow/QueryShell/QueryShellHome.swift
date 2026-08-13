@@ -483,7 +483,8 @@ struct QueryShellHome: View {
       case .goal:
         context.navigation.open(focus: .goal(id: reference.sourceID))
       case .screenshot:
-        if let id = Int64(reference.sourceID) { RewindCitationFocusState.shared.request(id) }
+        guard let id = RewindCitationFocusState.parseScreenshotID(reference.sourceID) else { return }
+        RewindCitationFocusState.shared.request(id)
         context.navigation.selectMore(.rewind)
       case .web:
         if let url = reference.url { NSWorkspace.shared.open(url) }
@@ -501,10 +502,28 @@ struct QueryShellHome: View {
         guard await memoriesViewModel.openMemory(id: reference.sourceID) else { return }
         openMemories()
       }
-    case .task, .goal:
-      selectedIndex = SidebarNavItem.tasks.rawValue
+    case .task:
+      // TasksPage has a typed, owner-bound handoff. Resolve the exact task before changing pages;
+      // selecting the Tasks tab alone would silently discard the citation's identity.
+      Task { @MainActor in
+        guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+          let task = try? await APIClient.shared.getActionItem(
+            id: reference.sourceID,
+            expectedOwnerId: authorization.ownerID,
+            authorizationSnapshot: authorization),
+          RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+        else { return }
+        guard !task.isRetired else { return }
+        TaskNavigationRequestStore.shared.request(task: task)
+        selectedIndex = SidebarNavItem.tasks.rawValue
+      }
+    case .goal:
+      // QueryAnswerThread marks this kind unavailable in the legacy shell before rendering. Keep
+      // the routing boundary fail-closed as defense in depth.
+      return
     case .screenshot:
-      if let id = Int64(reference.sourceID) { RewindCitationFocusState.shared.request(id) }
+      guard let id = RewindCitationFocusState.parseScreenshotID(reference.sourceID) else { return }
+      RewindCitationFocusState.shared.request(id)
       openRewind()
     case .web:
       if let url = reference.url { NSWorkspace.shared.open(url) }

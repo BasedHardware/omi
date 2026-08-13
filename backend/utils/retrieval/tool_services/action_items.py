@@ -4,7 +4,7 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import database.action_items as action_items_db
 import database.notifications as notification_db
@@ -16,17 +16,10 @@ from utils.notifications import (
 )
 from utils.conversations.render import format_local_time, resolve_display_tz
 from utils.retrieval.tool_services.conversations import parse_iso_date
+from utils.retrieval.safety import safe_isoformat
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_isoformat(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    isoformat = getattr(value, 'isoformat', None)
-    formatted = isoformat() if callable(isoformat) else value
-    return formatted if isinstance(formatted, str) else str(formatted)[:80]
 
 
 def get_action_items_text(
@@ -135,7 +128,7 @@ def get_action_items_text(
                     'source_id': str(item.get('id') or ''),
                     'title': str(item.get('description') or 'Task')[:160],
                     'preview': str(item.get('description') or '')[:600],
-                    'created_at': _safe_isoformat(item.get('created_at')),
+                    'created_at': safe_isoformat(item.get('created_at')),
                 }
             )
     for i, item in enumerate(action_items, 1):

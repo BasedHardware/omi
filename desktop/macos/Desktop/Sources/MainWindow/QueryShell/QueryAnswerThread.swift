@@ -36,7 +36,7 @@ struct QueryAnswerThread: View {
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       ChatMessagesView(
-        messages: chatProvider.messages,
+        messages: citationSafeMessages,
         conversationIdentity: chatProvider.currentSessionId
           ?? ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
@@ -140,6 +140,32 @@ struct QueryAnswerThread: View {
     else { return }
     didReportChatFirstTranscriptPage = true
     chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptFirstPageDidLoad()
+  }
+
+  /// The legacy shell has no exact goal destination. Preserve the historical source preview but
+  /// make its marker unavailable before it reaches the renderer, instead of presenting a button
+  /// whose action cannot honor the cited identity. Chat-first keeps its typed goal route.
+  private var citationSafeMessages: [ChatMessage] {
+    guard chatFirstRichBlockContext == nil else { return chatProvider.messages }
+    return chatProvider.messages.map { message in
+      var message = message
+      message.contentBlocks = message.contentBlocks.map { block in
+        guard case .citation(let id, let reference) = block, reference.kind == .goal else {
+          return block
+        }
+        return .citation(
+          id: id,
+          reference: ChatCitationReference(
+            ordinal: reference.ordinal,
+            kind: .unavailable,
+            sourceID: "",
+            title: reference.displayTitle,
+            preview: reference.preview,
+            createdAt: reference.createdAt,
+            appName: reference.appName))
+      }
+      return message
+    }
   }
 
 }

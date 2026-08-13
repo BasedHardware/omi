@@ -315,11 +315,26 @@ struct RewindPage: View {
 
   @MainActor
   private func resolveCitationFocusIfNeeded() async {
-    guard let id = RewindCitationFocusState.shared.consume(),
+    // Keep the one-shot request queued until the owner's initial database load has completed. A
+    // notification can arrive while the destination is still mounting; consuming then would lose
+    // the citation before Rewind can resolve it.
+    guard viewModel.isReadyForCitationFocus,
+      let id = RewindCitationFocusState.shared.consume(),
       let screenshot = try? await RewindDatabase.shared.getScreenshot(id: id)
     else { return }
-    await viewModel.focusCitationScreenshot(screenshot)
-    currentIndex = viewModel.screenshots.firstIndex(where: { $0.id == id }) ?? currentIndex
+
+    // A citation jump owns the frame transition. Cancel the previous decode and clear its image so
+    // an old day's picture cannot remain visible while the exact target day is being sampled.
+    invalidatePendingFrameLoad()
+    currentImage = nil
+    currentIndex = 0
+    guard await viewModel.focusCitationScreenshot(screenshot),
+      let targetIndex = viewModel.screenshots.firstIndex(where: { $0.id == id })
+    else { return }
+
+    currentIndex = targetIndex
+    trackWindow.reveal(screenshot.timestamp.timeIntervalSince1970)
+    scheduleLoadCurrentFrame()
   }
 
   /// The AppKit track owns wheel/swipe input and forwards only gestures that begin on the timeline.
@@ -845,7 +860,7 @@ struct RewindPage: View {
 
   private func loadCurrentFrame(at requestedIndex: Int, requestID: UUID, sourceToken: String) async {
     let screenshots = activeScreenshots
-    guard requestedIndex < screenshots.count else { return }
+    guard requestedIndex >= 0, requestedIndex < screenshots.count else { return }
 
     isLoadingFrame = true
 

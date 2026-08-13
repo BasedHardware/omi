@@ -19,6 +19,7 @@ Endpoints:
 import logging
 from datetime import datetime
 from typing import Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field, field_validator
@@ -54,6 +55,16 @@ class ToolSource(BaseModel):
     app_name: Optional[str] = Field(default=None, max_length=80)
     url: Optional[str] = Field(default=None, max_length=2048)
 
+    @field_validator('url')
+    @classmethod
+    def require_http_url(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        parsed = urlsplit(value)
+        if parsed.scheme.lower() not in {'http', 'https'} or not parsed.netloc:
+            raise ValueError('url must be an absolute HTTP(S) URL')
+        return value
+
 
 class ToolResponse(BaseModel):
     tool_name: str
@@ -63,11 +74,12 @@ class ToolResponse(BaseModel):
 
 
 def _ok(tool_name: str, text: str, sources: Optional[list[dict]] = None) -> dict:
+    is_error = text.startswith("Error")
     return {
         "tool_name": tool_name,
         "result_text": text,
-        "is_error": text.startswith("Error"),
-        "sources": sources or [],
+        "is_error": is_error,
+        "sources": [] if is_error else (sources or []),
     }
 
 

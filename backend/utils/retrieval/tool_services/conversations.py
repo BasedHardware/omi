@@ -21,17 +21,25 @@ from utils.conversations.search import (
     merge_conversation_search_ids,
     parse_exact_conversation_reference,
 )
+from utils.retrieval.safety import safe_isoformat
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def _safe_isoformat(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    isoformat = getattr(value, 'isoformat', None)
-    formatted = isoformat() if callable(isoformat) else value
-    return formatted if isinstance(formatted, str) else str(formatted)[:80]
+def _append_conversation_source(source_sink: Optional[List[dict[str, Any]]], conversation: Conversation) -> None:
+    if source_sink is None:
+        return
+    structured = getattr(conversation, 'structured', None)
+    source_sink.append(
+        {
+            'kind': 'conversation',
+            'source_id': conversation.id,
+            'title': str(getattr(structured, 'title', None) or 'Conversation')[:160],
+            'preview': str(getattr(structured, 'overview', None) or '')[:600],
+            'created_at': safe_isoformat(getattr(conversation, 'created_at', None)),
+        }
+    )
 
 
 def parse_iso_date(date_str: str, param_name: str) -> datetime:
@@ -151,19 +159,8 @@ def get_conversations_text(
             logger.error(f"Error parsing conversation {conv_data.get('id')}: {e}")
             continue
 
-    if source_sink is not None:
-        for conversation in conversations[:128]:
-            source_sink.append(
-                {
-                    'kind': 'conversation',
-                    'source_id': conversation.id,
-                    'title': str(getattr(getattr(conversation, 'structured', None), 'title', None) or 'Conversation')[
-                        :160
-                    ],
-                    'preview': str(getattr(getattr(conversation, 'structured', None), 'overview', None) or '')[:600],
-                    'created_at': _safe_isoformat(getattr(conversation, 'created_at', None)),
-                }
-            )
+    for conversation in conversations[:128]:
+        _append_conversation_source(source_sink, conversation)
 
     return conversations_to_string(
         conversations,
@@ -285,21 +282,8 @@ def search_conversations_text(
                 logger.error("Error parsing conversation search result: %s", type(e).__name__)
                 continue
 
-        if source_sink is not None:
-            for conversation in conversations[:128]:
-                source_sink.append(
-                    {
-                        'kind': 'conversation',
-                        'source_id': conversation.id,
-                        'title': str(
-                            getattr(getattr(conversation, 'structured', None), 'title', None) or 'Conversation'
-                        )[:160],
-                        'preview': str(getattr(getattr(conversation, 'structured', None), 'overview', None) or '')[
-                            :600
-                        ],
-                        'created_at': _safe_isoformat(getattr(conversation, 'created_at', None)),
-                    }
-                )
+        for conversation in conversations[:128]:
+            _append_conversation_source(source_sink, conversation)
 
         match_kind = 'matching exactly' if exact_conversation_id else 'matching'
         result = f"Found {len(conversations)} conversations {match_kind} '{query}':\n\n"

@@ -3105,7 +3105,7 @@ class ChatToolExecutor {
 
     func annotated(_ response: APIClient.ToolResponse) async -> String {
       let sources: [APIClient.ToolSource]
-      if let typedSources = response.sources, !typedSources.isEmpty {
+      if let typedSources = response.sources {
         sources = typedSources
       } else {
         sources = await legacyListToolSources(

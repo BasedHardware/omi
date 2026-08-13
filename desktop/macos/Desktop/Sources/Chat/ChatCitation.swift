@@ -155,6 +155,16 @@ struct ChatPromptCitationLedger: Equatable, Sendable {
 }
 
 enum ChatCitationMarkup {
+  static func explicitlyRequestsSources(_ text: String) -> Bool {
+    guard
+      let expression = try? NSRegularExpression(
+        pattern: #"\b(?:citations?|cite|sources)\b"#, options: [.caseInsensitive])
+    else { return false }
+    return expression.firstMatch(
+      in: text,
+      range: NSRange(text.startIndex..<text.endIndex, in: text)) != nil
+  }
+
   /// Numeric citations outside inline-code spans, in reading order. Incomplete streaming markers
   /// and bracketed prose are left alone.
   static func ordinals(in text: String) -> [Int] {
@@ -191,9 +201,13 @@ enum ChatCitationMarkup {
     requestedSources: Bool = false,
     retrievedReferences: [ChatCitationReference] = []
   ) -> String {
-    guard ordinals(in: text).isEmpty else { return text }
     let fallback = selectedReferences.isEmpty && requestedSources ? retrievedReferences : selectedReferences
     guard !fallback.isEmpty else { return text }
+    let fallbackOrdinals = Set(fallback.map(\.ordinal))
+    let hasResolvedNumericCitation = ordinals(in: text).contains { fallbackOrdinals.contains($0) }
+    // Markdown web citations are already a complete, user-openable citation even though the
+    // numeric parser intentionally excludes their labels. Do not append a second source rail.
+    guard !hasResolvedNumericCitation, webReferences(in: text).isEmpty else { return text }
     let markers = fallback.prefix(8).map { "[\($0.ordinal)]" }.joined()
     return text + "\n\nSources: \(markers)"
   }
@@ -286,6 +300,7 @@ actor ChatCitationProvenanceRegistry {
         added.append(existing)
         continue
       }
+      guard bucket.count < maximumReferencesPerBucket else { break }
       let reference = ChatCitationReference(
         ordinal: bucket.count + 1,
         kind: kind,

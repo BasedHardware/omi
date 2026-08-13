@@ -81,6 +81,13 @@ class RewindViewModel: ObservableObject {
   /// Whether initial data has been loaded (prevents race condition with debounced search)
   private var isInitialized = false
 
+  /// Citation jumps temporarily own the screenshot list. Search and viewport callbacks must not
+  /// replace that list while the exact target is being admitted, or a sampled response can win the
+  /// race and leave the playhead on the old frame.
+  private var isCitationFocusInProgress = false
+  private var pinnedCitationScreenshot: Screenshot?
+  private var suppressNextEmptySearch = false
+
   /// Each visible viewport stays bounded even when capture contains hundreds of thousands of rows.
   /// Zooming or panning issues a fresh evenly sampled query for that continuous time window.
   static let timelineSampleTarget = 500
@@ -94,6 +101,10 @@ class RewindViewModel: ObservableObject {
   /// Set by RewindPage when the transcript/notes panel is expanded.
   /// Auto-refresh skips when true so the view tree stays stable and @State is preserved.
   var isTranscriptExpanded = false
+
+  /// The page may consume a pending citation only after the owner's initial database load has
+  /// completed. This prevents an early notification from consuming a request before Rewind is ready.
+  var isReadyForCitationFocus: Bool { isInitialized }
 
   // MARK: - Initialization
 
@@ -141,6 +152,9 @@ class RewindViewModel: ObservableObject {
     searchTask?.cancel()
     ownerReloadTask?.cancel()
     timelineLoadID = UUID()
+    isCitationFocusInProgress = false
+    pinnedCitationScreenshot = nil
+    suppressNextEmptySearch = false
     screenshots = []
     selectedScreenshot = nil
     searchQuery = ""
@@ -345,13 +359,21 @@ class RewindViewModel: ObservableObject {
   // MARK: - Search
 
   private func performSearch(query: String) async {
+    let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmedQuery.isEmpty, suppressNextEmptySearch {
+      // Citation focus clears the visible query itself. The debounced publisher still delivers that
+      // write, but must not immediately reload a sampled viewport over the exact target.
+      suppressNextEmptySearch = false
+      return
+    }
+
     // Skip if not yet initialized (prevents race condition with debounced publisher)
-    guard isInitialized, let ownerSnapshot = RewindCaptureOwnerSnapshot.capture() else { return }
+    guard isInitialized, !isCitationFocusInProgress,
+      let ownerSnapshot = RewindCaptureOwnerSnapshot.capture()
+    else { return }
 
     // Cancel any existing search
     searchTask?.cancel()
-
-    let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
 
     if trimmedQuery.isEmpty {
       // Restore the viewport that was visible before search.
@@ -427,6 +449,7 @@ class RewindViewModel: ObservableObject {
   // MARK: - Filtering
 
   func filterByApp(_ app: String?) async {
+    guard !isCitationFocusInProgress else { return }
     selectedApp = app
 
     if !searchQuery.isEmpty {
@@ -467,7 +490,7 @@ class RewindViewModel: ObservableObject {
   /// Load a bounded sample for the current continuous viewport. Queries are overscanned by one
   /// quarter-window on either side so a continuing pan keeps drawing while the next read is pending.
   func loadTimelineWindow(from start: Double, to end: Double, showLoading: Bool = false) async {
-    guard activeSearchQuery == nil, end > start,
+    guard activeSearchQuery == nil, !isCitationFocusInProgress, end > start,
       let ownerSnapshot = RewindCaptureOwnerSnapshot.capture()
     else { return }
     if showLoading { isLoading = true }
@@ -494,8 +517,22 @@ class RewindViewModel: ObservableObject {
       guard timelineLoadID == loadID, activeSearchQuery == nil, ownerSnapshot.isCurrent() else {
         return
       }
-      let displayable = await displayableScreenshots(from: results)
+      var displayable = await displayableScreenshots(from: results)
       guard ownerSnapshot.isCurrent() else { return }
+      if let pinned = pinnedCitationScreenshot,
+        let pinnedID = pinned.id,
+        pinned.timestamp.timeIntervalSince1970 >= queryStart,
+        pinned.timestamp.timeIntervalSince1970 <= queryEnd,
+        !displayable.contains(where: { $0.id == pinnedID }),
+        (await VideoChunkEncoder.shared.currentChunkPath) != pinned.videoChunkPath
+      {
+        displayable = Self.insertingCitationTarget(pinned, into: displayable)
+      }
+      // A successful viewport read has had its chance to preserve the one exact citation target.
+      // Keeping the value until this point also lets a delayed pan callback repair a sampled list.
+      if pinnedCitationScreenshot != nil {
+        pinnedCitationScreenshot = nil
+      }
       visibleTimelineRange = requested.start...(requested.start + requested.span)
       screenshots = displayable
     } catch {
@@ -511,8 +548,11 @@ class RewindViewModel: ObservableObject {
     await loadTimelineWindow(from: range.lowerBound, to: range.upperBound, showLoading: showLoading)
   }
 
-  private func loadScreenshotsForDate(_ date: Date) async {
-    guard let ownerSnapshot = RewindCaptureOwnerSnapshot.capture() else { return }
+  private func loadScreenshotsForDate(
+    _ date: Date,
+    ownerSnapshot suppliedOwnerSnapshot: RewindCaptureOwnerSnapshot? = nil
+  ) async {
+    guard let ownerSnapshot = suppliedOwnerSnapshot ?? RewindCaptureOwnerSnapshot.capture() else { return }
     isLoading = true
 
     let calendar = Calendar.current
@@ -524,7 +564,7 @@ class RewindViewModel: ObservableObject {
       var results = try await RewindDatabase.shared.getScreenshotsSampled(
         from: startOfDay,
         to: endOfDay,
-        targetCount: 500
+        targetCount: Self.timelineSampleTarget
       )
       guard ownerSnapshot.isCurrent() else { return }
 
@@ -609,10 +649,60 @@ class RewindViewModel: ObservableObject {
     AnalyticsManager.shared.rewindScreenshotViewed(timestamp: screenshot.timestamp)
   }
 
-  func focusCitationScreenshot(_ screenshot: Screenshot) async {
+  /// Admit an exact citation target into the active timeline even when the day loader returned an
+  /// evenly sampled subset. Returning `false` is intentional: the page must not claim focus while a
+  /// stale, deleted, or owner-invalid row is still selected.
+  @discardableResult
+  func focusCitationScreenshot(_ screenshot: Screenshot) async -> Bool {
+    guard let screenshotID = screenshot.id,
+      let ownerSnapshot = RewindCaptureOwnerSnapshot.capture()
+    else { return false }
+
+    isCitationFocusInProgress = true
+    pinnedCitationScreenshot = screenshot
+    suppressNextEmptySearch = true
+    searchTask?.cancel()
+    timelineLoadID = UUID()
+    searchQuery = ""
+    activeSearchQuery = nil
+    isSearching = false
+    selectedApp = nil
     selectedDate = Calendar.current.startOfDay(for: screenshot.timestamp)
-    await loadScreenshotsForDate(selectedDate)
-    selectScreenshot(screenshot)
+
+    defer {
+      isCitationFocusInProgress = false
+      if !ownerSnapshot.isCurrent() { pinnedCitationScreenshot = nil }
+    }
+
+    await loadScreenshotsForDate(selectedDate, ownerSnapshot: ownerSnapshot)
+    guard ownerSnapshot.isCurrent() else { return false }
+
+    // Active chunks are deliberately not displayable until finalized. Do not append one merely to
+    // make the row appear focused; that would produce a timeline marker for an unreadable frame.
+    if await VideoChunkEncoder.shared.currentChunkPath == screenshot.videoChunkPath {
+      return false
+    }
+
+    if !screenshots.contains(where: { $0.id == screenshotID }) {
+      screenshots = Self.insertingCitationTarget(screenshot, into: screenshots)
+    }
+    guard let focused = screenshots.first(where: { $0.id == screenshotID }) else { return false }
+    selectScreenshot(focused)
+    // Keep the exact row pinned through the viewport reveal that RewindPage performs next. That
+    // debounced sample owns clearing the pin after it has reinserted the target if necessary.
+    return true
+  }
+
+  /// Preserve one exact row alongside an otherwise sampled list. The helper is deterministic and
+  /// keeps timeline order stable, including when a target shares a timestamp with another frame.
+  static func insertingCitationTarget(_ target: Screenshot, into screenshots: [Screenshot]) -> [Screenshot] {
+    guard let targetID = target.id, !screenshots.contains(where: { $0.id == targetID }) else {
+      return screenshots
+    }
+    return (screenshots + [target]).sorted { lhs, rhs in
+      if lhs.timestamp != rhs.timestamp { return lhs.timestamp < rhs.timestamp }
+      return (lhs.id ?? Int64.min) < (rhs.id ?? Int64.min)
+    }
   }
 
   func selectNextScreenshot() {

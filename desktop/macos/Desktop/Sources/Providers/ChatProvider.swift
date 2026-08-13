@@ -1811,6 +1811,7 @@ class ChatProvider: ObservableObject {
     notificationContext: String?,
     screenPayload: [String: Any]?,
     includeScreenSource: Bool = true,
+    includePromptCitations: Bool = true,
     requestedModelProfile: String? = nil,
     pinnedSession: AgentSurfaceSession? = nil
   ) async throws -> KernelQueryContext {
@@ -1833,7 +1834,10 @@ class ChatProvider: ObservableObject {
     // enabled Chat-first session must not quietly inject legacy GoalStorage
     // rows into the model context.
     let includesLegacyGoals = !isChatFirstEnabled(for: surface)
-    let promptCitationLedger = makePromptCitationLedger(includesLegacyGoals: includesLegacyGoals)
+    let promptCitationLedger =
+      includePromptCitations
+      ? makePromptCitationLedger(includesLegacyGoals: includesLegacyGoals)
+      : ChatPromptCitationLedger(sources: [])
     let memoryText = formatMemoriesSection(citations: promptCitationLedger)
     let goalText = includesLegacyGoals ? formatGoalSection(citations: promptCitationLedger) : ""
     let taskText = formatTasksSection(citations: promptCitationLedger)
@@ -1946,7 +1950,8 @@ class ChatProvider: ObservableObject {
         systemPromptSuffix: nil,
         notificationContext: nil,
         screenPayload: nil,
-        includeScreenSource: false
+        includeScreenSource: false,
+        includePromptCitations: false
       )
       return KernelTurnProjection.voiceContextSnapshot(
         from: context.snapshot,
@@ -1975,11 +1980,6 @@ class ChatProvider: ObservableObject {
           ?? attachment.serverId.map { "omi-file:\($0)" }
       )
     }
-  }
-
-  private static func explicitlyRequestsSources(_ text: String) -> Bool {
-    let value = text.lowercased()
-    return value.contains("citation") || value.contains("cite ") || value.contains("sources")
   }
 
   /// Switch between bridge modes (Omi AI via piMono, or user's Claude OAuth)
@@ -4647,6 +4647,7 @@ class ChatProvider: ObservableObject {
         systemPromptSuffix: systemPromptSuffix,
         notificationContext: notificationContext,
         screenPayload: screenPayload,
+        includePromptCitations: turnOwner != .floatingVoice,
         requestedModelProfile: model,
         pinnedSession: pinnedSession
       )
@@ -5091,9 +5092,8 @@ class ChatProvider: ObservableObject {
         let resolvedMessageText = ChatCitationMarkup.appendingSelectedSources(
           to: messages[index].text.isEmpty ? queryResult.text : messages[index].text,
           selectedReferences: toolCitationSnapshot.selectedReferences,
-          requestedSources: Self.explicitlyRequestsSources(effectivePrompt),
-          retrievedReferences: durableToolReferences.isEmpty
-            ? toolCitationSnapshot.references : durableToolReferences)
+          requestedSources: ChatCitationMarkup.explicitlyRequestsSources(effectivePrompt),
+          retrievedReferences: allTerminalCitationReferences)
         messageText = resolvedMessageText
         messages[index].text = messageText
         messages[index].isStreaming = false

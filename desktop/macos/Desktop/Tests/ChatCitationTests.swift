@@ -147,6 +147,8 @@ final class ChatCitationTests: XCTestCase {
       ordinal: 2, kind: .task, sourceID: "task-2", title: "Ship video")
     let second = ChatCitationReference(
       ordinal: 5, kind: .conversation, sourceID: "conversation-5", title: "Planning call")
+    let prompt = ChatCitationReference(
+      ordinal: 5001, kind: .memory, sourceID: "memory-1", title: "Launch plan")
 
     XCTAssertEqual(
       ChatCitationMarkup.appendingSelectedSources(
@@ -161,11 +163,19 @@ final class ChatCitationTests: XCTestCase {
         to: "No selected blocks.",
         selectedReferences: [],
         requestedSources: true,
-        retrievedReferences: [first, second]),
-      "No selected blocks.\n\nSources: [2][5]")
+        retrievedReferences: [prompt]),
+      "No selected blocks.\n\nSources: [5001]")
+    XCTAssertEqual(
+      ChatCitationMarkup.appendingSelectedSources(
+        to: "Legacy marker [27].", selectedReferences: [first, second]),
+      "Legacy marker [27].\n\nSources: [2][5]")
+    XCTAssertEqual(
+      ChatCitationMarkup.appendingSelectedSources(
+        to: "Web source [8](https://example.com/source).", selectedReferences: [first, second]),
+      "Web source [8](https://example.com/source).")
   }
 
-  func testRegistryReturnsOnlyExplicitlySelectedCanonicalSources() async {
+  func testRegistryKeepsFullLedgerAndTrimmedSelection() async {
     let runID = UUID().uuidString
     let attemptID = UUID().uuidString
     let sources = [
@@ -186,6 +196,44 @@ final class ChatCitationTests: XCTestCase {
 
     XCTAssertEqual(snapshot.references.map(\.sourceID), ["task-1", "task-2"])
     XCTAssertEqual(snapshot.selectedReferences.map(\.sourceID), ["task-2"])
+  }
+
+  func testRegistryCapsEachAttemptAt128References() async {
+    let runID = UUID().uuidString
+    let attemptID = UUID().uuidString
+    let sources = (0..<129).map { index in
+      APIClient.ToolSource(
+        kind: "task", sourceID: "task-\(index)", title: "Task \(index)", preview: "Preview \(index)",
+        createdAt: nil, momentTimestampMs: nil, appName: nil, url: nil)
+    }
+
+    let registered = await ChatCitationProvenanceRegistry.shared.register(
+      sources, runID: runID, attemptID: attemptID)
+    let snapshot = await ChatCitationProvenanceRegistry.shared.consumeSnapshot(
+      runID: runID, attemptID: attemptID)
+
+    XCTAssertEqual(registered.count, 128)
+    XCTAssertEqual(snapshot.references.count, 128)
+    XCTAssertEqual(snapshot.references.last?.sourceID, "task-127")
+  }
+
+  @MainActor
+  func testConversationLinkBlocksParticipateInCitationSelection() {
+    let selection = ChatFirstBlockToolExecutor.citationSelection(
+      from: ["type": "conversationLink", "conversation_id": "conversation-7"])
+
+    XCTAssertEqual(selection?.kind, .conversation)
+    XCTAssertEqual(selection?.sourceID, "conversation-7")
+  }
+
+  @MainActor
+  func testExplicitSourceRequestsUseWholeWords() {
+    XCTAssertTrue(ChatCitationMarkup.explicitlyRequestsSources("Please show sources."))
+    XCTAssertTrue(ChatCitationMarkup.explicitlyRequestsSources("Please cite the relevant memory."))
+    XCTAssertTrue(ChatCitationMarkup.explicitlyRequestsSources("Include citations."))
+    XCTAssertFalse(ChatCitationMarkup.explicitlyRequestsSources("Include resources."))
+    XCTAssertFalse(ChatCitationMarkup.explicitlyRequestsSources("Explain open-source licensing."))
+    XCTAssertFalse(ChatCitationMarkup.explicitlyRequestsSources("Explain the source code."))
   }
 
   func testGuideTreatsMaliciousTitlesAsBoundedJSONData() {
