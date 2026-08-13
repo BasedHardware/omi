@@ -13,6 +13,7 @@ import type {
   TerminalDeletionExportReceipt,
 } from "../../../core/control/deletion-dominance";
 import {
+  DELETION_DISPOSAL_ORDER,
   runAccountDeletionCleanupCycle,
   type AccountDeletionCleanupPort,
   type HeldDeletionCleanupSession,
@@ -102,6 +103,16 @@ const port = (
 };
 
 describe("account deletion cleanup cycle", () => {
+  test("deletion order covers every inventory surface exactly once", () => {
+    expect(new Set(DELETION_DISPOSAL_ORDER).size).toBe(DELETION_CLEANUP_SURFACES.length);
+    expect([...DELETION_DISPOSAL_ORDER].sort()).toEqual([...DELETION_CLEANUP_SURFACES].sort());
+    expect(DELETION_DISPOSAL_ORDER.indexOf("product_projections"))
+      .toBeLessThan(DELETION_DISPOSAL_ORDER.indexOf("authoritative_memory"));
+    expect(DELETION_DISPOSAL_ORDER.indexOf("durable_work"))
+      .toBeLessThan(DELETION_DISPOSAL_ORDER.indexOf("authoritative_memory"));
+    expect(DELETION_DISPOSAL_ORDER.at(-1)).toBe("account_access");
+  });
+
   test("disposes only reported surfaces and proves zero under the same held fence", async () => {
     const fixture = port(new Map([
       ["authoritative_memory", 3], ["product_projections", 2], ["account_access", 1],
