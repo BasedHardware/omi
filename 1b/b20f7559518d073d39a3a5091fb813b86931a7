@@ -1,0 +1,20 @@
+desktop/context-for-claude/scripts/release-micro-app.sh
+  s_d58145f2e376ea::t_800e1a0ba53553 146-158
+  s_d58145f2e376ea::t_25fcc4208d86f2 173-180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "1bb20f7559518d073d39a3a5091fb813b86931a7",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
