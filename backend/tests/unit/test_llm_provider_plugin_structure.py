@@ -42,6 +42,15 @@ if 'langchain_google_genai' not in sys.modules:
     setattr(google_genai_stub, 'ChatGoogleGenerativeAI', ChatGoogleGenerativeAI)
     sys.modules['langchain_google_genai'] = google_genai_stub
 
+if 'langchain_anthropic' not in sys.modules:
+    anthropic_stub = types.ModuleType('langchain_anthropic')
+
+    class ChatAnthropic:
+        pass
+
+    setattr(anthropic_stub, 'ChatAnthropic', ChatAnthropic)
+    sys.modules['langchain_anthropic'] = anthropic_stub
+
 if 'langchain_openai' not in sys.modules:
     openai_stub = types.ModuleType('langchain_openai')
 
