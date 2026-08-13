@@ -15,17 +15,17 @@
 | JLCPCB Basic parts | 0 | — |
 | JLCPCB Extended parts | 48 | All LCSC parts are Extended (feeder fee applies) |
 
-**Effective availability: 39 of 63 MPNs (62%)** can be ordered from LCSC today. The remaining 24 (9 OOS + 15 not listed) require alternate sourcing or consignment. See "Cost Breakdown" below for full budget estimate including extended feeder fees, consignment handling, and assembly costs.
+**Effective availability at the 2026-08-11 stock check: 39 of 63 MPNs (62%)** were orderable from LCSC. Re-check stock before ordering — availability changes daily. The remaining 24 (9 OOS + 15 not listed) require alternate sourcing or consignment. See "Cost Breakdown" below for full budget estimate including extended feeder fees, consignment handling, and assembly costs.
 
 ## Not on LCSC — Requires Consignment or Alternate Sourcing
 
-These 15 MPNs must be sourced from authorized distributors or manufacturer direct, then consigned to the PCBA house. For each part: order extra for attrition — **JLCPCB shows the required minimum per line item on the order page** (typically 10–30% depending on package; fine-pitch and WLCSP parts may require more). Ship components in original reels/tubes — loose parts are not accepted for machine placement.
+These 15 MPNs must be sourced from authorized distributors or manufacturer direct, then consigned to the PCBA house. For each part: order extra for attrition — **JLCPCB shows the required minimum per line item on the order page** (typically 10–30% depending on package; fine-pitch and WLCSP parts may require more). Ship components in original reels/trays/tubes where possible. JLCPCB accepts loose parts with extra handling fee, but avoid loose parts for WLCSP/fine-pitch machine placement (higher risk of placement error).
 
 ### ICs (4 parts — highest sourcing risk)
 
 | MPN | Ref | Package | Sourcing Plan | MSL |
 |-----|-----|---------|---------------|-----|
-| nRF7002-CEAA-R7 | U2 | WLCSP-81 (3.75×3.385mm) | **Critical.** Only QFAA-R (QFN) variant on LCSC — **wrong package**. Source from DigiKey ([945-CEAA-R7](https://www.digikey.com/)) or Mouser. Verify WLCSP-81 package code. Nordic authorized distributors: DigiKey, Mouser, Arrow, Avnet. | MSL-1 |
+| nRF7002-CEAA-R7 | U2 | WLCSP-81 (3.75×3.385mm) | **Critical.** Only QFAA-R (QFN) variant on LCSC — **wrong package**. Source from DigiKey (search NRF7002-CEAA-R7) or Mouser. Verify WLCSP-81 package code. Nordic authorized distributors: DigiKey, Mouser, Arrow, Avnet. | MSL-1 |
 | CSNP4GCR01-DPW | U7 | LGA-8 (8×6×0.85mm) | Source from CS Semi (Changjiang Storage) authorized channel. **Do not use gray-market** — NAND flash requires firmware qualification and JEDEC ID verification. Contact CS Semi directly or use LCSC's sourcing request. | MSL-3 |
 | P25Q16SH-UXH-IR | U12 | USON-8 (2×3mm) | Puya Semi P25Q16SH series. LCSC has `-SSH` (SOIC-8) variant — **wrong package**. Verify USON-8 package. Source DigiKey/Mouser or Puya authorized. Check SFDP table and QE bit behavior match the target suffix. | MSL-1 |
 | GLF73910-BD01 | U14 | WLCSP (0.97×0.97mm) | Battery protection IC. Source from GLF (manufacturer) or DigiKey. **Do not substitute** without verifying OVP/UVP thresholds match BQ25101 charging profile. | MSL-1 |
@@ -57,7 +57,7 @@ These parts have LCSC numbers but were out of stock at search time. For each, a 
 
 | LCSC PN | MPN | Ref | Description | Backup |
 |---------|-----|-----|-------------|--------|
-| C3606597 | nRF5340-CLAA | U1 | Main SoC, WLCSP-95 | **Critical.** DigiKey 5765-NRF5340-CLAA-R-ND. Mouser 949-NRF5340-CLAA-R. MSL-1. X-ray required post-reflow. Standard assembly only (not Economic) at JLCPCB due to WLCSP. |
+| C3606597 | nRF5340-CLAA | U1 | Main SoC, WLCSP-95 | **Critical.** DigiKey (search NRF5340-CLAA-R). Mouser (search NRF5340-CLAA). MSL-1. X-ray required post-reflow. Standard assembly only (not Economic) at JLCPCB due to WLCSP. |
 | C2875272 | CJ17-400001010B20 | X3 | 40MHz crystal 4-pad | DigiKey or Mouser. Match: 40MHz, 10pF CL, 10ppm, 1.6×1.2mm, ≤80Ω ESR. |
 | C93230 | DST1610A | X1 | 32.768KHz crystal | DigiKey. Match: 32.768KHz, 12.5pF CL, 20ppm, **1.6×1.0mm 2-pad** (not 2.05×1.2mm). No verified LCSC alternate — Epson FC-12M is wrong package (2.05×1.2mm). |
 | C383245 | LN237N3T5G | Q1, Q2 | N-CH MOSFET SOT-883 | **No verified alternate.** Previously considered PMV65XNEA — rejected (MPN not found in Nexperia SOT-883 catalog). Source LRC direct. Match: N-CH, Vds≥30V, Id≥1.5A, SOT-883, verify D-G-S pinout. |
@@ -122,9 +122,9 @@ JLCPCB expects these column names in the BOM CSV:
 | `Qty` | `Qty` | Matches |
 | `Comment` | `Description` or `MPN` | Use MPN for exact match |
 | `Footprint` | (not in our BOM) | JLCPCB matches by LCSC PN, not footprint |
-| `LCSC Part #` | `LCSC_PN` | Rename column when uploading |
+| `LCSC Part #` or `JLCPCB Part #` | `LCSC_PN` | Rename column when uploading — JLCPCB's UI may accept either header name; check the current upload page |
 
-For the upload: filter out non-component rows (pcba-reference, assembly-header, pcb-reference, custom-part, accessory) and rename `LCSC_PN` to `LCSC Part #`.
+For the upload: filter out non-component rows (pcba-reference, assembly-header, pcb-reference, custom-part, accessory) and rename `LCSC_PN` to `LCSC Part #` (or `JLCPCB Part #` per the current upload UI).
 
 ## Per-Board Summary
 
@@ -145,7 +145,7 @@ For the upload: filter out non-component rows (pcba-reference, assembly-header, 
 
 LCSC part numbers were searched via LCSC.com product search on 2026-08-11. Stock status is a snapshot and changes frequently. **Always verify current stock and pricing before ordering.**
 
-LCSC part numbers are in each board's BOM CSV (`LCSC_PN`, `JLC_Status`, `Stock_Note` columns). For JLCPCB upload, rename `LCSC_PN` → `LCSC Part #` and filter to component rows only. **All 63 MPNs with their LCSC status are in the per-board BOM CSVs** — this doc covers only the hard-to-source and out-of-stock items.
+LCSC part numbers are in each board's BOM CSV (`LCSC_PN`, `JLC_Status`, `Stock_Note` columns). For JLCPCB upload, rename `LCSC_PN` → `LCSC Part #` (or `JLCPCB Part #` per the current upload UI) and filter to component rows only. **All 63 MPNs with their LCSC status are in the per-board BOM CSVs** — this doc covers only the hard-to-source and out-of-stock items.
 
 ## Pre-Order Checklist
 

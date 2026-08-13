@@ -100,7 +100,7 @@ Same situation as U8. The XTDFN-4 (1×1mm) package limits alternatives. If OOS, 
 
 ### U13: DC-DC Buck Converter (TPS628438YKAR, DSBGA-6)
 
-🚫 **No alternate.** TI TPS628438 in DSBGA-6 (1.8×1.8mm). No other buck converter shares this exact package, pinout, and integrated compensation. Source from TI authorized distributors (DigiKey LCSC C18197908).
+🚫 **No alternate.** TI TPS628438 in 6-DSBGA / YKA package (1.05×0.70mm). No other buck converter shares this exact package, pinout, and integrated compensation. Source from TI authorized distributors (DigiKey, LCSC C18197908).
 
 ### U15: Battery Charger (BQ25101YFPR, DSBGA-6)
 
@@ -158,7 +158,7 @@ These parts have no pin-compatible alternate. Plan inventory accordingly.
 
 | MPN | Manufacturer | Status | Notes |
 |-----|-------------|--------|-------|
-| W25Q16JWUXIQ (Winbond) | Winbond | ⚠️ **Unverified** | 16Mbit USON-8 (3×2mm). **Use -UXIQ suffix (USON-8), NOT -SSIQ (SOIC-8 — wrong package).** Verify LCSC availability and SFDP/QE compatibility. |
+| W25Q16JVUXIQ (Winbond) | Winbond | ⚠️ **Unverified** | 16Mbit USON-8 (2×3mm), **2.7–3.6V** (3V family). **Use -JVUXIQ, NOT -JWUXIQ** (JW is 1.65–1.95V / 1.8V family — would exceed Vmax on the Omi's 3.3V rail). **Use -UXIQ suffix (USON-8), NOT -SSIQ (SOIC-8 — wrong package).** Verify LCSC availability and SFDP/QE compatibility. |
 | GD25Q16CEIGR (GigaDevice) | GigaDevice | ⚠️ **Unverified** | 16Mbit USON-8. Verify package is 3×2mm (not 4×4mm WSON). |
 
 **If OOS:** Source Puya P25Q16SH from Puya Semi direct. LCSC has `-SSH` variant (SOIC-8) — **wrong package**, do not use.

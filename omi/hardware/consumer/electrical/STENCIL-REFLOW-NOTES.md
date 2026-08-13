@@ -11,7 +11,7 @@ The Omi mainboard uses advanced packages that **require professional PCBA assemb
 | nRF5340-CLAA (U1) | WLCSP-95 | **0.35mm** ball pitch | Cannot be hand-soldered |
 | nRF7002-CEAA-R7 (U2) | WLCSP-81 | **0.35mm** ball pitch | Cannot be hand-soldered |
 | BQ25101YFPR (U15) | DSBGA-6 | **0.4mm** ball pitch (per KiCad footprint `DSBGA6-0.4`) | Very difficult to hand-solder |
-| TPS628438YKAR (U13) | BGA-6 | **0.35mm** ball pitch (per KiCad footprint `BGA6-0.35`) | Cannot be hand-soldered (finer than WLCSP) |
+| TPS628438YKAR (U13) | BGA-6 | **0.35mm** ball pitch (per KiCad footprint `BGA6-0.35`) | Cannot be hand-soldered (same pitch as WLCSP U1/U2) |
 | TPS22916CYFPR (U6, U11) | WLCSP-4 | **0.4mm** ball pitch (per KiCad footprint `WLCSP4-0.4`) | Very difficult to hand-solder |
 | TXS0104EYZTR (U4) | DSBGA-12 | 0.5mm ball pitch (per KiCad footprint `DSBGA12_0d5`) | Very difficult to hand-solder |
 | Most passives | 0201 (0.6mm × 0.3mm) | N/A | Requires pick-and-place machine |
@@ -28,7 +28,7 @@ The Omi mainboard uses advanced packages that **require professional PCBA assemb
 | Material | Stainless steel, **laser-cut + electropolished** | Electropolish/nano-coat required for reliable paste release at area ratio <0.66. |
 | WLCSP aperture (U1) | **160µm rounded-square** (1:1 to PCB pad) | Area ratio at 75µm: 0.160/(4×0.075) = 0.53. Requires electropolish + nano-coat for release. Corners radiused R=20–30µm. |
 | WLCSP aperture (U2) | **200µm rounded-square** (1:1 to PCB pad) | Area ratio at 75µm: 0.200/(4×0.075) = 0.67 (passes IPC ≥0.66). |
-| DSBGA/BGA-6 aperture | **250–300µm** (per pad, 5–10% reduction) | Pitches vary: U4 0.5mm, U6/U11 0.4mm, U15 0.4mm, U13 **0.35mm** — verify U13 aperture area ratio at 75µm stencil (0.35mm pitch is tighter than WLCSP U2). |
+| DSBGA/BGA-6 aperture | **250–300µm** (per pad, 5–10% reduction) | Pitches vary: U4 0.5mm, U6/U11 0.4mm, U15 0.4mm, U13 **0.35mm** — verify U13 aperture area ratio at 75µm stencil (same 0.35mm pitch as U1/U2 WLCSP). |
 | 0201 aperture | **Home-plate or 10–20% reduced from pad** | Prevents bridging while maintaining adequate paste volume. |
 | Fiducial openings | Yes — match PCB fiducials | Required for stencil-to-PCB alignment. |
 | **SPI validation** | **Required** | Solder paste inspection for height/volume/alignment acceptance before placement. |

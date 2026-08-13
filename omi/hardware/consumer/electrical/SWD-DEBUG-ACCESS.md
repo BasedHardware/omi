@@ -43,7 +43,7 @@ Coordinates use the drill/place file origin (same as gerber and CPL files). See 
 
 The pinouts below are for the **10-pin ARM Cortex-M connector** (J-Link EDU Mini). If using a 20-pin probe, see the 20-pin mapping at the end of this section.
 
-### 10-Pin Connector — Minimum connections (3 wires + ground):
+### 10-Pin Connector — Minimum connections (4 required; reset optional):
 
 | J-Link 10-Pin | Signal | Connect To |
 |---------------|--------|------------|

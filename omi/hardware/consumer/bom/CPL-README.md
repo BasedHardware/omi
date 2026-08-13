@@ -141,8 +141,9 @@ kicad-cli pcb export pos --format csv --units mm --side both \
   --use-drill-file-origin OMI-FPC.kicad_pcb -o fpc-cpl.csv
 
 # Rename headers for JLCPCB upload:
-#   Ref → Designator, Val → Comment, PosX → Mid X, PosY → Mid Y, Side → Layer
-# The Val column in KiCad export maps to Comment in JLCPCB's format.
+#   Ref → Designator, PosX → Mid X, PosY → Mid Y, Rot → Rotation, Side → Layer
+# Val and Package columns: keep if the assembler accepts extra columns, otherwise remove.
+# Note: Comment is a BOM column, not a CPL column — do not rename Val to Comment in the CPL.
 ```
 
 ### BOM/CPL Consistency Check

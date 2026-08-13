@@ -77,9 +77,10 @@ Any LiPo cell meeting these criteria will work:
 
 - **LiPo batteries are regulated dangerous goods** (Class 9)
 - **Loose cells (not packed with equipment): UN3481 is for batteries packed with/in equipment; loose cells are UN3480.**
-  - **PI965 Section II** applies for small shipments of cells ≤20Wh (this cell is 0.56Wh): max 2 cells per inner package, max 8 per outer package, passenger aircraft permitted with appropriate marking and documentation
-  - **PI965 Section IB** applies for larger quantities: cargo-aircraft-only by default, Dangerous Goods documentation required, ship at ≤30% SoC
-  - UN38.3 test summary must accompany all lithium cell shipments regardless of section
+  - **PI965 Section II** applies for cells ≤20Wh (this cell is 0.56Wh) shipped alone in small quantities — reduced documentation requirements, but **passenger aircraft is forbidden** for standalone UN3480 lithium-ion cells (ICAO restriction, effective since 2020). Cargo aircraft only.
+  - **PI965 Section IB** applies for larger quantities of cells ≤20Wh / batteries ≤100Wh shipped alone — full Dangerous Goods documentation required, cargo-aircraft-only, ship at ≤30% SoC
+  - **PI965 Section IA** applies for cells >20Wh — not applicable to this cell (0.56Wh)
+  - UN38.3 test summary must be **made available** for all lithium cell shipments (does not have to physically accompany every shipment — a URL/QR code is acceptable per IATA guidance)
 - **Cells packed with equipment: UN3481 / PI966 Section II** — passenger aircraft permitted with restrictions
 - This cell is ~0.56Wh (150mAh × 3.7V), well under the 20Wh per-cell limit for Section II (battery packs have a separate 100Wh limit)
 - **Request the supplier provide the UN38.3 test summary** — required for all lithium cell shipments
@@ -91,7 +92,7 @@ Any LiPo cell meeting these criteria will work:
 
 | Parameter | Requirement | Notes |
 |-----------|-------------|-------|
-| **Max continuous discharge** | ≥250mA | nRF7002 WiFi TX draws 191mA at 2.4GHz / 260mA at 5GHz max power (Nordic PS), plus nRF5340, sensors, and regulator losses |
+| **Max continuous discharge** | ≥300mA (≥350mA preferred) | nRF7002 WiFi TX draws 191mA at 2.4GHz / 260mA at 5GHz max power (Nordic PS), plus nRF5340, sensors, and regulator losses — total can exceed 300mA during WiFi 5GHz TX |
 | **Max pulse discharge** | ≥500mA for 100ms | Boot-up inrush, WiFi TX bursts at max power with concurrent BLE |
 | **Internal resistance** | ≤500mΩ | High IR causes voltage sag during TX bursts — may trigger brown-out reset |
 | **Protection board trip current** | ≥800mA | Must not trip during WiFi 5GHz TX peaks (260mA radio + system overhead) |
@@ -127,7 +128,7 @@ Request from the cell supplier before ordering:
 |----------|-----------|-------|
 | **UN38.3 test summary** | **Yes** | Required for all lithium cell shipments. Ask for the summary, not just a declaration. |
 | **IEC 62133-2 or UL1642** | Recommended | Cell safety certification. Required for any product certification (CE, FCC, UL). |
-| **MSDS / SDS** | **Yes** | Material Safety Data Sheet — required by customs and shipping carriers. |
+| **MSDS / SDS** | Carrier-requested | IATA DGR does not require an SDS for battery articles, but most carriers and customs brokers request one. Keep on file. |
 | **RoHS / REACH declaration** | Recommended | Required for EU sale. Most reputable LiPo cells are compliant. |
 | **Lot / date code traceability** | **Yes** | Each cell must have a traceable lot code for warranty and recall tracking. |
 
