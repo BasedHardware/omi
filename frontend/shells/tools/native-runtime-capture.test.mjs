@@ -114,6 +114,9 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   assert.match(appDelegate, /OmiRuntimeProbeHandler\.retain\(runtimeProbeHandler, for: webView\)/);
   assert.match(iosHook, /omiRuntimeProbe/);
   assert.match(iosHook, /runtimeProbeHandler\?\.attach\(to: webView\)/);
+  assert.match(iosHook, /objc_setAssociatedObject\(\s*webView, &webViewRetentionKey, handler, \.OBJC_ASSOCIATION_RETAIN_NONATOMIC\)/);
+  assert.doesNotMatch(iosHook, /retainedByView|ObjectIdentifier\(webView\)/);
+  assert.match(iosHook, /precondition\(Thread\.isMainThread/);
   assert.match(iosHook, /omi\.native-runtime-marker\/v1/);
   assert.match(iosHook, /computed_style/);
   assert.match(iosHook, /attempts < 80/);

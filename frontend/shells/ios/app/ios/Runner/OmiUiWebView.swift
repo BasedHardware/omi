@@ -128,9 +128,11 @@ final class OmiUiWebView: NSObject, FlutterPlatformView {
 /// the fixture UI test; the production WebView never installs this handler.
 final class OmiRuntimeProbeHandler: NSObject, WKScriptMessageHandler {
   private static var installedKey: UInt8 = 0
+  private static var webViewRetentionKey: UInt8 = 0
 
   static func installIfRequested(on configuration: WKWebViewConfiguration) -> OmiRuntimeProbeHandler? {
     guard ProcessInfo.processInfo.environment["OMI_POLISH_RUNTIME_PROBE"] == "1" else { return nil }
+    precondition(Thread.isMainThread, "runtime probe configuration must be installed on the main thread")
     if let existing = objc_getAssociatedObject(configuration, &installedKey) as? OmiRuntimeProbeHandler {
       return existing
     }
@@ -146,13 +148,14 @@ final class OmiRuntimeProbeHandler: NSObject, WKScriptMessageHandler {
 
   private weak var webView: WKWebView?
 
-  private static var retainedByView: [ObjectIdentifier: OmiRuntimeProbeHandler] = [:]
-
   static func retain(_ handler: OmiRuntimeProbeHandler, for webView: WKWebView) {
-    retainedByView[ObjectIdentifier(webView)] = handler
+    precondition(Thread.isMainThread, "runtime probe retention must be attached on the main thread")
+    objc_setAssociatedObject(
+      webView, &webViewRetentionKey, handler, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
   }
 
   func attach(to webView: WKWebView) {
+    precondition(Thread.isMainThread, "runtime probe attachment must be bound on the main thread")
     self.webView = webView
   }
 
