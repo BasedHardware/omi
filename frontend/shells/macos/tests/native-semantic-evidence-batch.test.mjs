@@ -27,6 +27,21 @@ function lockedSessionSkipReason() {
 
 const lockedSession = lockedSessionSkipReason();
 
+test("AX readiness persists only after cleanup and cannot mask primary capture errors", () => {
+  const source = readFileSync(wrapper, "utf8");
+  const cleanup = source.lastIndexOf("await terminateExactChild(child)");
+  const foregroundAssertion = source.indexOf('assertFixtureNotForeground(prepared.fixture.bundleId, coordinate, "semantic cleanup")');
+  const monitorStop = source.indexOf("stopForbiddenForegroundMonitor(foregroundMonitor)");
+  const persist = source.indexOf("writeAtomic(readinessPath, readiness)");
+  assert.ok(cleanup >= 0 && foregroundAssertion > cleanup && monitorStop > foregroundAssertion && persist > monitorStop);
+  assert.match(source, /let primaryError = null/);
+  assert.match(source, /let cleanupError = null/);
+  assert.match(source, /let readinessWriteError = null/);
+  assert.match(source, /if \(primaryError\) throw primaryError/);
+  assert.match(source, /if \(cleanupError\) throw cleanupError/);
+  assert.match(source, /if \(readinessWriteError\) throw readinessWriteError/);
+});
+
 test("AX readiness retries only transient semantic absence and records eventual success", () => {
   let clock = 0;
   let calls = 0;
