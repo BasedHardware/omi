@@ -10,7 +10,7 @@ import test from "node:test";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const producer = path.join(root, "shells/tools/capture-native-fixture-batch.mjs");
-const { assertMacForegroundProbeTransitionForTest, canonicalizeScreenshotForTest, iosFocusPolicyForTest } = await import(producer);
+const { assertForegroundMonitorCompletionForTest, assertMacForegroundProbeTransitionForTest, canonicalizeScreenshotForTest, iosFocusPolicyForTest } = await import(producer);
 const coreSha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const platformSha = "1".repeat(40);
 
@@ -295,7 +295,7 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /assertMacForegroundUnchanged\(foreground, `\$\{coordinate\.run_id\}: simulator screenshot`\)/);
   assert.match(source, /assertMacForegroundUnchanged\(foreground, `\$\{coordinate\.run_id\}: cleanup`\)/);
   assert.match(source, /assertMacForegroundUnchanged\(foreground, `\$\{coordinate\.run_id\}: iOS fixture preparation`\)/);
-  assert.match(source, /bounded-continuous-macos-foreground-detection-no-activation/);
+  assert.match(source, /bounded-20ms-macos-foreground-change-detection-no-activation-request/);
   assert.match(source, /startForegroundMonitor/);
   assert.match(source, /iOS batch final restoration/);
   assert.doesNotMatch(source, /open(?:Sync)?\([^\n]*Simulator/);
@@ -348,6 +348,14 @@ test("iOS continuous foreground monitor observes the real host without activatin
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
+});
+
+test("iOS foreground custody fails closed when its monitor dies after readiness", () => {
+  assert.doesNotThrow(() => assertForegroundMonitorCompletionForTest(true));
+  assert.throws(() => assertForegroundMonitorCompletionForTest(false), /foreground monitor stopped without a terminal receipt/);
+  assert.throws(() => assertForegroundMonitorCompletionForTest(true, { reason: "changed" }), /focus custody failed: changed/);
+  const source = readFileSync(producer, "utf8");
+  assert.match(source, /finally \{\s*foregroundMonitor = null;\s*for \(const artifact of Object\.values\(artifacts\)\) cleanupEnvironment\(artifact\.env\);/);
 });
 
 test("screenshot canonicalization removes low-bit compositor jitter but preserves visible changes", () => {

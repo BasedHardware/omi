@@ -45,7 +45,7 @@ const safeRunId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
 const safeLocale = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/;
 const maxCoordinates = 1236;
 const maxBatchCoordinates = 32;
-const iosFocusPolicy = "bounded-continuous-macos-foreground-detection-no-activation";
+const iosFocusPolicy = "bounded-20ms-macos-foreground-change-detection-no-activation-request";
 const widthPolicy = {
   macos: {
     compact: { width: 760, height: 671, scale: 2, orientation: "landscape" },
@@ -422,7 +422,8 @@ function stopForegroundMonitor(monitor) {
   writeFileSync(monitor.stopPath, "stop\n", { mode: 0o600 });
   const deadline = Date.now() + 2_000;
   while (!existsSync(monitor.donePath) && Date.now() < deadline) sleepSync(10);
-  if (!existsSync(monitor.donePath)) {
+  const completed = existsSync(monitor.donePath);
+  if (!completed) {
     try { monitor.child.kill("SIGTERM"); } catch {}
   }
   let violation = null;
@@ -431,6 +432,11 @@ function stopForegroundMonitor(monitor) {
     catch { violation = { reason: "foreground monitor wrote malformed violation evidence" }; }
   }
   rmSync(monitor.monitorRoot, { recursive: true, force: true });
+  assertForegroundMonitorCompletion(completed, violation);
+}
+
+function assertForegroundMonitorCompletion(completed, violation) {
+  if (!completed) fail("iOS fixture capture focus custody failed: foreground monitor stopped without a terminal receipt");
   if (violation) fail(`iOS fixture capture focus custody failed: ${violation.reason}`);
 }
 
@@ -457,6 +463,7 @@ export function assertMacForegroundProbeTransitionForTest(before, after) {
 }
 
 export function iosFocusPolicyForTest() { return iosFocusPolicy; }
+export function assertForegroundMonitorCompletionForTest(completed, violation = null) { assertForegroundMonitorCompletion(completed, violation); }
 
 function writeAtomic(file, value) {
   const temporary = `${file}.tmp-${process.pid}`;
@@ -1213,8 +1220,11 @@ function main() {
       }
       if (foreground) assertMacForegroundUnchanged(foreground, "iOS fixture preparation cleanup");
     } finally {
-      try { stopForegroundMonitor(foregroundMonitor); } finally { foregroundMonitor = null; }
-      for (const artifact of Object.values(artifacts)) cleanupEnvironment(artifact.env);
+      try { stopForegroundMonitor(foregroundMonitor); }
+      finally {
+        foregroundMonitor = null;
+        for (const artifact of Object.values(artifacts)) cleanupEnvironment(artifact.env);
+      }
     }
     throw error;
   }
@@ -1317,8 +1327,11 @@ function main() {
       }
       if (foreground) assertMacForegroundUnchanged(foreground, "iOS batch final restoration");
     } finally {
-      try { stopForegroundMonitor(foregroundMonitor); } finally { foregroundMonitor = null; }
-      for (const artifact of Object.values(artifacts)) cleanupEnvironment(artifact.env);
+      try { stopForegroundMonitor(foregroundMonitor); }
+      finally {
+        foregroundMonitor = null;
+        for (const artifact of Object.values(artifacts)) cleanupEnvironment(artifact.env);
+      }
     }
   }
   const elapsedSeconds = Number(process.hrtime.bigint() - captureStarted) / 1e9;
