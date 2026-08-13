@@ -32,12 +32,30 @@ enum CandidateSinkDeliveryGate {
 actor CandidateSink {
   static let shared = CandidateSink()
 
-  private struct GraduationFact: Decodable, FetchableRecord, Sendable {
+  struct GraduationFact: Decodable, FetchableRecord, Sendable {
     let id: String
     let statement: String
     let evidenceText: String
     let confidence: Double
     let dispositionState: String
+  }
+
+  static func graduationFacts(
+    in db: Database, deliveryID: String, factIDs: [String], now: Date = Date()
+  ) throws -> [GraduationFact] {
+    var arguments: StatementArguments = [now, deliveryID]
+    arguments += StatementArguments(factIDs)
+    return try GraduationFact.fetchAll(
+      db,
+      sql: """
+          SELECT id, statement, evidenceText, confidence, dispositionState FROM bucket_facts
+          WHERE validityState = 'validated'
+          AND (expiresAt IS NULL OR expiresAt > ?)
+          AND dispositionState IN ('none', 'candidate_pending')
+          AND bucketID = (SELECT bucketID FROM proactive_deliveries WHERE id = ?)
+          AND id IN (\(factIDs.map { _ in "?" }.joined(separator: ",")))
+        """,
+      arguments: arguments)
   }
 
   /// Creates durable canonical candidates for validated facts. Callers that
@@ -56,18 +74,11 @@ actor CandidateSink {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
     let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { return false }
+    let now = Date()
     do {
       let facts = try await pool.read { db in
-        try GraduationFact.fetchAll(
-          db,
-          sql: """
-              SELECT id, statement, evidenceText, confidence, dispositionState FROM bucket_facts
-              WHERE validityState = 'validated'
-              AND dispositionState IN ('none', 'candidate_pending')
-              AND bucketID = (SELECT bucketID FROM proactive_deliveries WHERE id = ?)
-              AND id IN (\(normalizedFactIDs.map { _ in "?" }.joined(separator: ",")))
-            """,
-          arguments: StatementArguments([deliveryID] + normalizedFactIDs))
+        try Self.graduationFacts(
+          in: db, deliveryID: deliveryID, factIDs: normalizedFactIDs, now: now)
       }
       guard
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),

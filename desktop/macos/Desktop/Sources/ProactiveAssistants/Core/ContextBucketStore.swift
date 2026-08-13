@@ -327,7 +327,7 @@ actor ContextBucketStore {
                 WHERE referenceHash = ? AND bucketID IS NOT NULL
               """,
             arguments: [Self.referenceHash(key)]),
-          let snapshot = try Self.snapshot(in: db, bucketID: bucketID)
+          let snapshot = try Self.snapshot(in: db, bucketID: bucketID, now: Date())
         else { return nil }
         return snapshot
       }
@@ -337,7 +337,9 @@ actor ContextBucketStore {
     }
   }
 
-  private static func snapshot(in db: Database, bucketID: String) throws -> ContextBucketSnapshot? {
+  static func snapshot(in db: Database, bucketID: String, now: Date = Date()) throws
+    -> ContextBucketSnapshot?
+  {
     guard
       let version = try Row.fetchOne(
         db,
@@ -362,9 +364,10 @@ actor ContextBucketStore {
           ' [evidence: ' || evidenceText || '; refs: ' || evidenceRefsJson || ']'
         FROM bucket_facts
           WHERE bucketID = ? AND validityState = 'validated'
+            AND (expiresAt IS NULL OR expiresAt > ?)
           ORDER BY createdAt DESC LIMIT 20
         """,
-      arguments: [bucketID])
+      arguments: [bucketID, now])
     let worthiness =
       try Double.fetchOne(
         db, sql: "SELECT notifyWorthiness FROM context_buckets WHERE id = ?", arguments: [bucketID]) ?? 0
@@ -389,7 +392,7 @@ actor ContextBucketStore {
         contextGeneration: fence.contextGeneration,
         poolEpoch: fence.poolEpoch)
       guard persistedBucketID == fenceBucketID else { return nil }
-      return try Self.snapshot(in: db, bucketID: fenceBucketID)
+      return try Self.snapshot(in: db, bucketID: fenceBucketID, now: Date())
     }
   }
 
@@ -410,12 +413,15 @@ actor ContextBucketStore {
     return normalized.filter { allowed.contains($0) }.map { "entry:\($0)" }
   }
 
-  func validatedFactIDs(_ ids: [String], snapshotFacts: [String], bucketID: String) async -> [String] {
+  func validatedFactIDs(
+    _ ids: [String], snapshotFacts: [String], bucketID: String, now: Date = Date()
+  ) async -> [String] {
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { return [] }
     return
       (try? await pool.read { db in
-        try Self.validatedFactIDs(ids, snapshotFacts: snapshotFacts, bucketID: bucketID, in: db)
+        try Self.validatedFactIDs(
+          ids, snapshotFacts: snapshotFacts, bucketID: bucketID, now: now, in: db)
       }) ?? []
   }
 
@@ -423,19 +429,21 @@ actor ContextBucketStore {
     _ ids: [String],
     snapshotFacts: [String],
     bucketID: String,
+    now: Date = Date(),
     in db: Database
   ) throws -> [String] {
     let normalized = ids.map { $0.hasPrefix("fact:") ? String($0.dropFirst(5)) : $0 }
     let snapshotIDs = Set(snapshotFacts.compactMap(Self.snapshotFactID))
     let citedSnapshotIDs = normalized.filter { snapshotIDs.contains($0) }
     guard !citedSnapshotIDs.isEmpty else { return [] }
-    var arguments: StatementArguments = [bucketID]
+    var arguments: StatementArguments = [bucketID, now]
     arguments += StatementArguments(citedSnapshotIDs)
     let rows = try String.fetchAll(
       db,
       sql: """
         SELECT id FROM bucket_facts
         WHERE bucketID = ? AND validityState = 'validated'
+          AND (expiresAt IS NULL OR expiresAt > ?)
           AND id IN (\(citedSnapshotIDs.map { _ in "?" }.joined(separator: ",")))
         """,
       arguments: arguments)

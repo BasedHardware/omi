@@ -36,15 +36,18 @@ final class ContextProactivityEngineTests: XCTestCase {
 
   func testValidatedFactIDsRequireSnapshotMembershipAndCurrentBucketValidation() throws {
     let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
     try queue.write { db in
       XCTAssertEqual(
         try ContextBucketStore.validatedFactIDs(
-          ["fact:current", "old", "rejected", "other-bucket", "hallucinated"],
+          ["fact:current", "old", "expired", "rejected", "other-bucket", "hallucinated"],
           snapshotFacts: [
             "fact:current current statement", "fact:old accumulated statement",
+            "fact:expired stale statement",
             "fact:rejected stale statement", "fact:other-bucket unrelated statement",
           ],
           bucketID: "bucket-a",
+          now: now,
           in: db),
         ["fact:current", "fact:old"],
         "A prior-version fact remains grounded when the current snapshot includes it")
@@ -56,6 +59,43 @@ final class ContextProactivityEngineTests: XCTestCase {
           in: db),
         [])
     }
+  }
+
+  func testSnapshotExcludesExpiredValidatedFactsBeforeGarbageCollection() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+
+    let snapshot = try queue.read { db in
+      try XCTUnwrap(ContextBucketStore.snapshot(in: db, bucketID: "bucket-a", now: now))
+    }
+
+    XCTAssertTrue(snapshot.validatedFacts.contains { $0.hasPrefix("fact:current ") })
+    XCTAssertTrue(snapshot.validatedFacts.contains { $0.hasPrefix("fact:old ") })
+    XCTAssertFalse(snapshot.validatedFacts.contains { $0.hasPrefix("fact:expired ") })
+  }
+
+  func testCandidateGraduationExcludesExpiredValidatedFacts() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+
+    let factIDs = try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO proactive_deliveries
+            (id, bucketID, decisionType, lifecycleState, provenanceJson,
+             attemptedAt, expiresAt, createdAt)
+          VALUES ('delivery', 'bucket-a', 'task_candidate', 'attempted', '{}', ?, ?, ?)
+          """,
+        arguments: [now, now.addingTimeInterval(60), now])
+      return try CandidateSink.graduationFacts(
+        in: db,
+        deliveryID: "delivery",
+        factIDs: ["current", "expired"],
+        now: now
+      ).map(\.id)
+    }
+
+    XCTAssertEqual(factIDs, ["current"])
   }
 
   func testValidatedFactIDsFailClosedWhenDirectorCitesNothing() throws {
@@ -252,6 +292,7 @@ final class ContextProactivityEngineTests: XCTestCase {
       let facts: [(String, String, String, String)] = [
         ("old", "bucket-a", "entry-old", "validated"),
         ("current", "bucket-a", "entry-current", "validated"),
+        ("expired", "bucket-a", "entry-current", "validated"),
         ("rejected", "bucket-a", "entry-current", "rejected"),
         ("other-bucket", "bucket-b", "entry-other", "validated"),
       ]
@@ -266,6 +307,9 @@ final class ContextProactivityEngineTests: XCTestCase {
             """,
           arguments: [factID, bucketID, entryID, validity, now, now])
       }
+      try db.execute(
+        sql: "UPDATE bucket_facts SET expiresAt = ? WHERE id = 'expired'",
+        arguments: [now.addingTimeInterval(-1)])
     }
     return queue
   }
