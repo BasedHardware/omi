@@ -65,6 +65,26 @@ void main() {
     expect(provider.processingConversations, isEmpty);
   });
 
+  test('locked lifecycle detail is terminal and clears the processing card', () async {
+    // The list endpoint returns a redacted completed row for locked
+    // conversations while the detail endpoint returns 402. The HTTP adapter
+    // maps that 402 to an authoritative null result (ok: true), which must
+    // not leave the Processing card pinned forever.
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.completed)], ok: true),
+      conversationLifecycleFetcher: (_) async => (item: null, ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+
+    await provider.forceRefreshConversations();
+
+    expect(provider.processingConversations, isEmpty);
+    expect(provider.conversations.map((conversation) => conversation.id), ['c1']);
+  });
+
   test('refresh keeps processing cards the server still reports as processing', () async {
     final provider = ConversationProvider(
       conversationListFetcher: () async =>
@@ -243,6 +263,33 @@ void main() {
     await refresh;
 
     expect(provider.processingConversations, isEmpty);
+  });
+
+  test('unrelated websocket transition does not suppress a newly discovered row', () async {
+    final lifecycle = Completer<({ServerConversation? item, bool ok})>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('new', status: ConversationStatus.processing)], ok: true),
+      conversationLifecycleFetcher: (id) {
+        if (id == 'unrelated') {
+          return Future.value((item: _conversation('unrelated', status: ConversationStatus.completed), ok: true));
+        }
+        return lifecycle.future;
+      },
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('unrelated', status: ConversationStatus.processing));
+
+    final refresh = provider.forceRefreshConversations();
+    await Future<void>.delayed(Duration.zero);
+    // This unrelated completion must not suppress the newly discovered page
+    // row, which has no websocket mutation of its own.
+    provider.removeProcessingConversation('unrelated');
+    lifecycle.complete((item: _conversation('new', status: ConversationStatus.processing), ok: true));
+    await refresh;
+
+    expect(provider.processingConversations.map((conversation) => conversation.id), ['new']);
   });
 
   test('websocket completion during list fetch blocks a stale processing page row', () async {
@@ -630,6 +677,28 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(provider.conversationServerOffset, 50);
+  });
+
+  test('delete completion from a prior session cannot mutate the new session', () async {
+    final delete = Completer<bool>();
+    final provider = ConversationProvider(isSignedIn: () => true);
+    provider.conversationDeleteFetcherOverride = (_) => delete.future;
+    addTearDown(provider.dispose);
+
+    final oldConversation = _conversation('c1', status: ConversationStatus.completed, title: 'Old account');
+    provider.memoriesToDelete[oldConversation.id] = oldConversation;
+    provider.deleteConversationOnServer(oldConversation.id);
+
+    provider.clearUserData();
+    final newConversation = _conversation('c1', status: ConversationStatus.completed, title: 'New account');
+    provider.memoriesToDelete[newConversation.id] = newConversation;
+    provider.conversations = [newConversation];
+
+    delete.complete(true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.memoriesToDelete[newConversation.id], same(newConversation));
+    expect(provider.conversations.single, same(newConversation));
   });
 
   test('pending delete tombstone hides a row until DELETE settles', () async {

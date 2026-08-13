@@ -243,8 +243,12 @@ Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String c
   if (response.statusCode == 200) {
     return (item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>), ok: true);
   } else if (response.statusCode == 402) {
-    Logger.debug('Unlimited Plan Required for conversation: $conversationId');
-    return (item: null, ok: false);
+    // Locked conversations are still returned by the list endpoint as a
+    // redacted completed row, but their detail endpoint intentionally returns
+    // 402. Treat that response as an authoritative terminal result for
+    // lifecycle reconciliation so a stale Processing card is cleared.
+    Logger.debug('Conversation is locked/redacted: $conversationId');
+    return (item: null, ok: true);
   } else if (response.statusCode == 404) {
     return (item: null, ok: true);
   }

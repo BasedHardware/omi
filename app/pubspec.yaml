@@ -79,14 +79,14 @@ dependencies:
   uuid: ^4.4.0
   tuple: ^2.0.2
   googleapis_auth: 2.0.0
-  envied: 1.1.1
+  envied: 1.3.8
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
   nordic_dfu: ^6.1.4+hotfix
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3
-  json_annotation: ^4.9.0
-  json_serializable: ^6.9.5
+  json_annotation: ^4.12.0
+  json_serializable: ^6.14.1
   package_info_plus: ^8.0.1
   device_info_plus: ^11.5.0
   path_provider: 2.1.5
@@ -160,10 +160,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   fake_async: ^1.3.3
-  envied_generator: 1.1.1
-  build_runner: ^2.4.15
+  envied_generator: 1.3.8
+  build_runner: ^2.15.1
   flutter_flavorizr: ^2.2.3
-  flutter_gen_runner: 5.10.0
+  flutter_gen_runner: 5.15.0
   pigeon: ^26.0.1
 
 flutter_launcher_icons:

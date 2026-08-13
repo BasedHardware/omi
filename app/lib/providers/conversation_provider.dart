@@ -64,10 +64,10 @@ class ConversationProvider extends ChangeNotifier {
 
   List<ServerConversation> processingConversations = [];
 
-  // A websocket transition can arrive while lifecycle probes are in flight.
-  // Reconciliation compares this revision with its start snapshot so stale
-  // page/detail data cannot overwrite newer processing state.
-  int _processingStateRevision = 0;
+  // Per-conversation websocket transition versions. Reconciliation snapshots
+  // these before lifecycle probes so a completion/removal for row B cannot
+  // suppress an unrelated newly discovered row A.
+  final Map<String, int> _processingStateRevisionById = {};
 
   // Merge functionality state
   Set<String> mergingConversationIds = {};
@@ -167,7 +167,7 @@ class ConversationProvider extends ChangeNotifier {
     searchedConversations = [];
     groupedConversations = {};
     processingConversations = [];
-    _processingStateRevision++;
+    _processingStateRevisionById.clear();
     _conversationServerOffset = 0;
     _conversationServerHasMore = false;
     _conversationServerLoadedIds.clear();
@@ -283,7 +283,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void addProcessingConversation(ServerConversation conversation) {
-    _processingStateRevision++;
+    _bumpProcessingStateRevision(conversation.id);
     final existingIndex = processingConversations.indexWhere((item) => item.id == conversation.id);
     if (existingIndex == -1) {
       processingConversations.add(conversation);
@@ -297,10 +297,16 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void removeProcessingConversation(String conversationId) {
-    _processingStateRevision++;
+    _bumpProcessingStateRevision(conversationId);
     processingConversations.removeWhere((m) => m.id == conversationId);
     notifyListeners();
   }
+
+  void _bumpProcessingStateRevision(String conversationId) {
+    _processingStateRevisionById[conversationId] = (_processingStateRevisionById[conversationId] ?? 0) + 1;
+  }
+
+  Map<String, int> _processingStateRevisionSnapshot() => Map<String, int>.from(_processingStateRevisionById);
 
   void onConversationTap(String conversationId) {
     final idx = conversations.indexWhere((c) => c.id == conversationId);
@@ -473,7 +479,7 @@ class ConversationProvider extends ChangeNotifier {
     _conversationLoadingRevision = fetchRevision;
     final processingRowsAtStart = _realProcessingConversationsById();
     final processingIdsAtStart = processingRowsAtStart.keys.toSet();
-    final processingRevisionAtStart = _processingStateRevision;
+    final processingRevisionsAtStart = _processingStateRevisionSnapshot();
     final conversationsAtStart = <String, ServerConversation>{
       for (final conversation in conversations) conversation.id: conversation,
     };
@@ -508,7 +514,7 @@ class ConversationProvider extends ChangeNotifier {
       lifecycleResults,
       processingIdsAtStart,
       pageConversationIds,
-      processingRevisionAtStart,
+      processingRevisionsAtStart,
       processingRowsAtStart,
     );
     if (_conversationServerOffset == 0) {
@@ -574,7 +580,7 @@ class ConversationProvider extends ChangeNotifier {
     };
     final processingRowsAtStart = _realProcessingConversationsById();
     final processingIdsAtStart = processingRowsAtStart.keys.toSet();
-    final processingRevisionAtStart = _processingStateRevision;
+    final processingRevisionsAtStart = _processingStateRevisionSnapshot();
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;
@@ -634,7 +640,7 @@ class ConversationProvider extends ChangeNotifier {
       lifecycleResults,
       processingIdsAtStart,
       pageConversationIds,
-      processingRevisionAtStart,
+      processingRevisionsAtStart,
       processingRowsAtStart,
     );
     _conversationServerOffset = result.items.length;
@@ -982,7 +988,7 @@ class ConversationProvider extends ChangeNotifier {
     Map<String, ({ServerConversation? item, bool ok})> lifecycleResults,
     Set<String> processingIdsAtStart,
     Set<String> pageConversationIds,
-    int processingRevisionAtStart,
+    Map<String, int> processingRevisionsAtStart,
     Map<String, ServerConversation> processingRowsAtStart,
   ) {
     final localPlaceholder = processingConversations.where((conversation) => conversation.id == '0').toList();
@@ -1014,7 +1020,7 @@ class ConversationProvider extends ChangeNotifier {
       // websocket completion removed one while lifecycle GETs were in flight,
       // a stale detail response must not revive it here. This loop only admits
       // newly discovered active rows from the authoritative list page.
-      if (_processingStateRevision != processingRevisionAtStart ||
+      if (_processingStateRevisionById[conversation.id] != processingRevisionsAtStart[conversation.id] ||
           processingIdsAtStart.contains(conversation.id) ||
           !pageConversationIds.contains(conversation.id) ||
           !_matchesActiveConversationFilters(conversation)) {
@@ -1236,10 +1242,15 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void deleteConversationOnServer(String conversationId) {
+    final generation = _sessionGeneration;
     final wasLoadedFromServer = _conversationServerLoadedIds.contains(conversationId);
     final deleteFuture =
         conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId);
     unawaited(deleteFuture.then((succeeded) {
+      // A DELETE can outlive sign-out/account switching. Its result belongs
+      // to the session that started it; never let an old account mutate the
+      // new provider's tombstones, cursor, revision, or loading state.
+      if (generation != _sessionGeneration) return;
       // Only rebase the server cursor after the backend confirms deletion. A
       // failed DELETE leaves the row in the server sequence and must not make
       // the next page skip an item.
