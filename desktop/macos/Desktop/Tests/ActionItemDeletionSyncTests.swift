@@ -8,16 +8,16 @@ import XCTest
 /// once after a reinstall. A deletion the server has not acknowledged must therefore leave
 /// a tombstone that hydration refuses to overwrite and a retry pass can flush.
 final class ActionItemDeletionSyncTests: XCTestCase {
-  private var testUserId: String!
-  private var userDir: URL!
+  private var testUserId = ""
+  private var userDir: URL?
 
   override func setUp() async throws {
     try await super.setUp()
     testUserId = "deletion-sync-test-\(UUID().uuidString)"
     try await RewindDatabase.shared.switchUser(to: testUserId)
     await ActionItemStorage.shared.invalidateCache()
-    let appSupport = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let appSupport = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first)
     userDir =
       appSupport
       .appendingPathComponent("Omi", isDirectory: true)
