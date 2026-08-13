@@ -1166,3 +1166,46 @@ def test_goal_detail_aggregates_threads_tasks_and_progress_without_client_n_plus
 def test_device_local_evidence_requires_device_identity():
     with pytest.raises(ValueError):
         EvidenceRef(kind='local_screen', id='screen-1', scope='device_local')
+
+
+# --- focus reservation token (ADR-0044: the focused-set query cannot join the transactional read-set
+# on the Mongo-backed db_client facade, so a per-user focus_reservation doc serializes concurrent
+# focus mutations via a write-write conflict). Cubic review PR 10887, goals.py focus_goal. ---
+_RESERVATION_KEY = ('users', 'u1', 'task_intelligence_control', 'focus_reservation')
+
+
+def test_state_changing_focus_bumps_reservation_token(fake_db):
+    seed_control(fake_db)
+    create_goal(fake_db, 'g0')
+    assert _RESERVATION_KEY not in fake_db.rows  # untouched before any focus
+
+    goals_db.focus_goal('u1', 'g0', idempotency_key='focus-g0', account_generation=3, firestore_client=fake_db)
+    assert fake_db.rows[_RESERVATION_KEY]['version'] == 1
+
+    create_goal(fake_db, 'g1')
+    goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3, firestore_client=fake_db)
+    assert fake_db.rows[_RESERVATION_KEY]['version'] == 2  # each real focus advances the token
+
+
+def test_idempotent_focus_replay_does_not_touch_reservation(fake_db):
+    seed_control(fake_db)
+    create_goal(fake_db, 'g0')
+    goals_db.focus_goal('u1', 'g0', idempotency_key='focus-g0', account_generation=3, firestore_client=fake_db)
+    assert fake_db.rows[_RESERVATION_KEY]['version'] == 1
+
+    # Same idempotency key -> receipt replay returns the stored result without re-running the focus
+    # write path, so it must not consume a reservation bump.
+    goals_db.focus_goal('u1', 'g0', idempotency_key='focus-g0', account_generation=3, firestore_client=fake_db)
+    assert fake_db.rows[_RESERVATION_KEY]['version'] == 1
+
+
+def test_noop_refocus_does_not_touch_reservation(fake_db):
+    seed_control(fake_db)
+    create_goal(fake_db, 'g0')
+    goals_db.focus_goal('u1', 'g0', idempotency_key='focus-g0', account_generation=3, firestore_client=fake_db)
+    assert fake_db.rows[_RESERVATION_KEY]['version'] == 1
+
+    # Re-focusing an already-focused goal at its current rank changes nothing about the focused set
+    # (a fresh idempotency key so it is not a receipt replay) -> no serialization needed, no bump.
+    goals_db.focus_goal('u1', 'g0', idempotency_key='refocus-g0', account_generation=3, firestore_client=fake_db)
+    assert fake_db.rows[_RESERVATION_KEY]['version'] == 1

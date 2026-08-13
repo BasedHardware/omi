@@ -35,6 +35,13 @@ users_collection = 'users'
 DEFAULT_FOCUS_CAP = 5
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
 TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
+# Per-user serialization token for focus mutations. The focused-set is a collection query read inside
+# the transaction; the neutral db_client facade (ADR-0044) cannot make a Mongo collection query part
+# of the transactional read-set, so two concurrent focus_goal calls could each see a stale focused set
+# and jointly exceed focus_cap or collide on focus_rank. Every state-changing focus bumps this single
+# doc; two in-flight focus transactions then write-write-conflict on it (the store aborts one and
+# re-runs apply()), which re-reads a now-consistent focused set. See focus_goal.
+FOCUS_RESERVATION_DOCUMENT = 'focus_reservation'
 MUTATION_RECEIPTS_COLLECTION = 'workflow_mutation_receipts'
 # Legacy test/call-site compatibility only; new persistence paths use _get_db().
 db = _client.db
@@ -82,6 +89,16 @@ def _goal_control_ref(uid: str, *, firestore_client: Any):
         .document(uid)
         .collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
         .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
+    )
+
+
+def _goal_focus_reservation_ref(uid: str, *, firestore_client: Any):
+    return (
+        _get_db(firestore_client)
+        .collection(users_collection)
+        .document(uid)
+        .collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
+        .document(FOCUS_RESERVATION_DOCUMENT)
     )
 
 
@@ -544,6 +561,13 @@ def focus_goal(
         )
         if stored_result is not None:
             return normalize_goal_storage(stored_result, goal_id=goal_id)
+        # Read the focus reservation token into the transactional read-set before any write (reads
+        # before writes). A state-changing focus below bumps it; that write is what makes two
+        # concurrent focus transactions conflict, since the focused-set query cannot join the read-set
+        # on the Mongo-backed facade. Idempotent replays returned above never touch it.
+        reservation_ref = _goal_focus_reservation_ref(uid, firestore_client=client)
+        reservation_snapshot = reservation_ref.get(transaction=write_transaction)
+        reservation_version = (reservation_snapshot.to_dict() or {}).get('version', 0) if reservation_snapshot.exists else 0
         target_snapshot = target_ref.get(transaction=write_transaction)
         if not target_snapshot.exists:
             raise GoalNotFoundError(goal_id)
@@ -592,6 +616,10 @@ def focus_goal(
             'updated_at': now,
         }
         write_transaction.update(target_ref, patch)
+        # Serialize concurrent focus mutations: this write conflicts with any other in-flight focus
+        # transaction for the same user, forcing the store to retry apply() against a fresh focused set
+        # so focus_cap and focus_rank stay consistent.
+        write_transaction.set(reservation_ref, {'version': reservation_version + 1, 'updated_at': now})
         result = normalize_goal_storage({**target, **patch}, goal_id=goal_id)
         _finish_goal_mutation(
             write_transaction,

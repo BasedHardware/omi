@@ -15,9 +15,14 @@ emulate Firestore". Paths are logical ("users/{uid}/people/{pid}"); payloads are
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any, Dict, Iterable, List, Optional
 
+from google.api_core import exceptions as _gexc
+
 from database.store import sentinels as _neutral
+from database.store.errors import AlreadyExists as _StoreAlreadyExists
+from database.store.errors import NotFound as _StoreNotFound
 from database.store.records import StoredDocument
 
 # Google sentinels/types are only needed to RECOGNISE values upstream passes in; importing them here
@@ -84,6 +89,20 @@ def _is_transient_mongo_txn_error(exc: Exception) -> bool:
     return bool(has_label("TransientTransactionError") or has_label("UnknownTransactionCommitResult"))
 
 
+@contextlib.contextmanager
+def _firestore_errors():
+    """Re-raise neutral store errors as the ``google.api_core`` errors upstream code catches, so
+    ``except NotFound`` / ``except AlreadyExists`` around a ``db_client`` write behave identically on
+    the Mongo-backed facade as on real Firestore (ADR-0044). Without this an ``update`` on a missing
+    doc raises the neutral ``NotFound`` and escapes an upstream ``except FirestoreNotFound``."""
+    try:
+        yield
+    except _StoreNotFound as exc:
+        raise _gexc.NotFound(str(exc)) from exc
+    except _StoreAlreadyExists as exc:
+        raise _gexc.AlreadyExists(str(exc)) from exc
+
+
 class _Snapshot:
     """Firestore ``DocumentSnapshot`` shape over a neutral :class:`StoredDocument`."""
 
@@ -138,7 +157,10 @@ class _DocRef:
         # them by known name. Return empty so recursive-delete helpers terminate rather than crash.
         return []
 
-    def get(self, transaction: Optional["_FacadeTransaction"] = None) -> _Snapshot:
+    def get(self, transaction: Optional["_FacadeTransaction"] = None, *, timeout: Any = None, **_: Any) -> _Snapshot:
+        # ``timeout``/other Firestore read kwargs (retry, ...) are network-RPC concerns; a Mongo point
+        # read through the store port is local, so they are accepted and ignored.
+        del timeout
         if transaction is not None:
             return _Snapshot(self, transaction._read(self.path))
         return _Snapshot(self, self._client._store.get(self.path))
@@ -146,14 +168,23 @@ class _DocRef:
     def set(self, data: Dict[str, Any], merge: bool = False) -> None:
         self._client._store.set(self.path, _neutral_data(data), merge=merge)
 
-    def update(self, data: Dict[str, Any]) -> None:
-        self._client._store.update(self.path, _neutral_data(data))
+    def update(self, data: Dict[str, Any], option: Any = None) -> None:
+        # ``option`` (Firestore LastUpdateOption) is an optimistic-concurrency precondition ("only
+        # write if the doc's revision is unchanged"). The neutral store port has no revision-
+        # precondition primitive yet, so it is accepted but not enforced on Mongo (D37 debt). Callers
+        # that pass it (review_queue self-heal) already gate the write on a status check, so a rare
+        # lost-update is bounded, not silent corruption.
+        del option
+        with _firestore_errors():
+            self._client._store.update(self.path, _neutral_data(data))
 
     def create(self, data: Dict[str, Any]) -> None:
-        self._client._store.create(self.path, _neutral_data(data))
+        with _firestore_errors():
+            self._client._store.create(self.path, _neutral_data(data))
 
     def delete(self) -> None:
-        self._client._store.delete(self.path)
+        with _firestore_errors():
+            self._client._store.delete(self.path)
 
 
 class _Query:
@@ -320,13 +351,16 @@ class _FacadeTransaction:
         self._client._store._set(ref.path, _neutral_data(data), merge=merge, session=self._session)
 
     def update(self, ref: _DocRef, data: Dict[str, Any]) -> None:
-        self._client._store._update(ref.path, _neutral_data(data), session=self._session)
+        with _firestore_errors():
+            self._client._store._update(ref.path, _neutral_data(data), session=self._session)
 
     def create(self, ref: _DocRef, data: Dict[str, Any]) -> None:
-        self._client._store._create(ref.path, _neutral_data(data), session=self._session)
+        with _firestore_errors():
+            self._client._store._create(ref.path, _neutral_data(data), session=self._session)
 
     def delete(self, ref: _DocRef) -> None:
-        self._client._store._delete(ref.path, session=self._session)
+        with _firestore_errors():
+            self._client._store._delete(ref.path, session=self._session)
 
 
 class _FacadeBatch:
@@ -335,13 +369,16 @@ class _FacadeBatch:
     def __init__(self, client: "NeutralFirestoreClient") -> None:
         self._batch = client._store.batch()
 
-    def set(self, ref: _DocRef, data: Dict[str, Any], merge: bool = False) -> None:
+    def set(self, ref: _DocRef, data: Dict[str, Any], merge: bool = False, option: Any = None) -> None:
+        del option  # LastUpdateOption precondition: accepted, not enforced on Mongo (D37 debt)
         self._batch.set(ref.path, _neutral_data(data), merge=merge)
 
-    def update(self, ref: _DocRef, data: Dict[str, Any]) -> None:
+    def update(self, ref: _DocRef, data: Dict[str, Any], option: Any = None) -> None:
+        del option
         self._batch.update(ref.path, _neutral_data(data))
 
-    def delete(self, ref: _DocRef) -> None:
+    def delete(self, ref: _DocRef, option: Any = None) -> None:
+        del option
         self._batch.delete(ref.path)
 
     def commit(self) -> None:
