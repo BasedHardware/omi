@@ -791,12 +791,12 @@
           {"id": "task-fresh-014", "description": "Review synthetic follow-up 014", "status": "open", "dueAt": "2026-08-17T00:00:00Z", "subjectId": "task-fresh-014", "stableKey": "handoff-014"}
         ]
       },
-      "expectedAction": "notify",
+      "expectedAction": "either",
       "expectedEvidenceRefs": ["evidence:fresh:014-new"],
       "expectedSubject": {"kind": "task", "id": "task-fresh-014", "workstreamId": "workstream-alpha"},
       "expectedMaxAge": 172800,
       "forbidden": ["merge_distinct_stable_keys", "overwrite_task_013", "reuse_task_013_evidence"],
-      "rootCauseLabel": "new_identifier_requires_new_candidate"
+      "rootCauseLabel": "new_identifier_preserves_identity_without_forcing_interruption"
     },
     {
       "id": "freshness-expired-fact",
