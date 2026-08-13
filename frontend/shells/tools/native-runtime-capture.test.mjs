@@ -17,6 +17,8 @@ import {
   runtimeFixtureName,
   requireIosDiskHeadroom,
   requireSimulatorCacheBudget,
+  RuntimeCaptureFailure,
+  runtimeFailureReceipt,
   validateSurfacesDist,
   withIosCaptureLock,
   validateHostMarker,
@@ -225,6 +227,28 @@ test("simulator cache and retained capture logs are bounded", () => {
     assert.equal(existsSync(path.join(output, "xcodebuild.stdout")), false);
     rmSync(output, { recursive: true, force: true });
   } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test("failed native commands retain only bounded privacy-safe diagnostics", () => {
+  const m = manifest({ shell: "ios", device: { udid: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE", model: "iPad Air", orientation: "portrait" } });
+  const failure = new RuntimeCaptureFailure("build failed with secret raw output", "flutter_build", {
+    status: 1,
+    signal: null,
+    stdout: "Package resolution failed\n",
+    stderr: "No space left on device: token=never-retain-this\n",
+  });
+  const receipt = runtimeFailureReceipt(m, failure);
+  assert.equal(receipt.schema, "omi.polish.runtime-failure/v1");
+  assert.equal(receipt.stage, "flutter_build");
+  assert.equal(receipt.command.exit_code, 1);
+  assert.equal(receipt.command.stdout_bytes, 26);
+  assert.deepEqual(receipt.diagnostic_codes, ["disk_full", "dependency_setup"]);
+  assert.doesNotMatch(JSON.stringify(receipt), /never-retain-this|secret raw output/);
+  const internal = runtimeFailureReceipt(m, new Error("private internal details"));
+  assert.equal(internal.stage, "artifact_validation");
+  assert.equal(internal.command, null);
+  assert.deepEqual(internal.diagnostic_codes, ["internal_capture_failure"]);
+  assert.doesNotMatch(JSON.stringify(internal), /private internal details/);
 });
 
 test("macOS scratch app name binds arbitrary matrix run IDs without weakening launcher grammar", () => {

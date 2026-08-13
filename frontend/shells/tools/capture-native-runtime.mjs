@@ -75,6 +75,7 @@ const eventTypes = new Set(["lifecycle", "computed_style", "native_runtime"]);
 const namePattern = /^[a-z][a-z0-9_.-]{0,63}$/;
 const valuePattern = /^[A-Za-z0-9][A-Za-z0-9 ._():,/%+-]{0,255}$/;
 const secretPattern = /(?:api[_-]?key|authorization|bearer|password|secret|access[_-]?token|cookie|private[_-]?key)/i;
+const captureFailureStages = new Set(["preflight", "surface_bundle", "flutter_build", "native_test", "attachment_export", "artifact_validation"]);
 
 function sha256(bytes) { return createHash("sha256").update(bytes).digest("hex"); }
 export function runtimeFixtureName(domain) { return domain === "memories" ? "memories-platform" : domain; }
@@ -86,6 +87,44 @@ function canonicalValue(value) {
 }
 function canonicalBytes(value) { return Buffer.from(JSON.stringify(canonicalValue(value))); }
 function fail(message) { console.error(`ERROR: ${message}`); process.exitCode = 2; }
+
+export class RuntimeCaptureFailure extends Error {
+  constructor(message, stage, result = null) {
+    super(message);
+    this.stage = captureFailureStages.has(stage) ? stage : "artifact_validation";
+    this.result = result;
+  }
+}
+
+function diagnosticCodes(result) {
+  const text = `${result?.stdout || ""}\n${result?.stderr || ""}`;
+  const codes = [];
+  if (/no space left on device|disk(?: is)? full/i.test(text)) codes.push("disk_full");
+  if (/package resolution|pub get failed|could not find package|package_config|FlutterGeneratedPluginSwiftPackage/i.test(text)) codes.push("dependency_setup");
+  if (/simulator.*(?:unavailable|not booted|failed)|unable to boot/i.test(text)) codes.push("simulator_unavailable");
+  if (/xcode build done|failed to build ios app|xcodebuild/i.test(text)) codes.push("xcode_build");
+  return codes.length ? codes : ["unclassified_command_failure"];
+}
+
+export function runtimeFailureReceipt(manifest, failure) {
+  const result = failure instanceof RuntimeCaptureFailure ? failure.result : null;
+  const stdout = Buffer.from(result?.stdout || "");
+  const stderr = Buffer.from(result?.stderr || "");
+  return {
+    schema: "omi.polish.runtime-failure/v1",
+    ...metadata(manifest),
+    stage: failure instanceof RuntimeCaptureFailure ? failure.stage : "artifact_validation",
+    command: result ? {
+      exit_code: Number.isInteger(result.status) ? result.status : null,
+      signal: typeof result.signal === "string" ? result.signal : null,
+      stdout_sha256: sha256(stdout),
+      stderr_sha256: sha256(stderr),
+      stdout_bytes: stdout.length,
+      stderr_bytes: stderr.length,
+    } : null,
+    diagnostic_codes: result ? diagnosticCodes(result) : ["internal_capture_failure"],
+  };
+}
 function readJson(file, label) {
   try { return JSON.parse(readFileSync(file, "utf8")); }
   catch (error) { throw new Error(`${label} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`); }
@@ -550,10 +589,10 @@ function runIos(manifest, outputDir) {
     requireSimulatorCacheBudget(device, path.join(process.env.HOME || "/Users/dazheng", "Library/Developer/CoreSimulator/Devices"));
     const query = manifest.surface_query;
     const bundle = spawnSync(nodeBin, [path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], { cwd: coreRoot, env, encoding: "utf8", timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
-    if (bundle.status !== 0) throw new Error(`iOS surfaces bundle preparation failed (${bundle.status ?? "signal"})`);
+    if (bundle.status !== 0) throw new RuntimeCaptureFailure(`iOS surfaces bundle preparation failed (${bundle.status ?? "signal"})`, "surface_bundle", bundle);
     const flutterArgs = ["build", "ios", "--simulator", "--debug", "--dart-define=SURFACE_MODE=scheme", "--dart-define=SCHEME_BUNDLE=surfaces", `--dart-define=SURFACE_QUERY=${query}`];
     const flutter = spawnSync(flutterBin, flutterArgs, { cwd: path.join(iosRoot, "app"), env, encoding: "utf8", timeout: 300_000, maxBuffer: 64 * 1024 * 1024 });
-    if (flutter.status !== 0) throw new Error(`iOS Flutter fixture build failed (${flutter.status ?? "signal"})`);
+    if (flutter.status !== 0) throw new RuntimeCaptureFailure(`iOS Flutter fixture build failed (${flutter.status ?? "signal"})`, "flutter_build", flutter);
     const args = ["test", "-project", project, "-scheme", "Runner", "-destination", `platform=iOS Simulator,id=${device}`, "-only-testing", testOnly, "-parallel-testing-enabled", "NO", "-derivedDataPath", path.join(outputDir, "DerivedData"), "-resultBundlePath", resultBundle, "CODE_SIGNING_ALLOWED=NO", `FLUTTER_ROOT=${path.dirname(path.dirname(flutterBin))}`];
     const started = new Date();
     const guardResult = path.join(outputDir, "foreground-guard.json");
@@ -561,14 +600,14 @@ function runIos(manifest, outputDir) {
     const stderrPath = path.join(outputDir, "xcodebuild.stderr");
     const guarded = spawnSync(process.execPath, [foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","), "--", "xcodebuild", ...args], { cwd: path.join(iosRoot, "app"), env, encoding: "utf8", timeout: 310_000, maxBuffer: 16 * 1024 * 1024 });
     const finished = new Date();
-    if (!existsSync(guardResult)) throw new Error("iOS runtime foreground guard produced no terminal receipt");
+    if (!existsSync(guardResult)) throw new RuntimeCaptureFailure("iOS runtime foreground guard produced no terminal receipt", "native_test", guarded);
     const custody = readJson(guardResult, "iOS runtime foreground guard");
-    if (guarded.status !== 0 || custody.schema !== "omi.macos-foreground-guard/v1" || custody.monitor_error !== null || custody.error !== null || custody.status !== 0) throw new Error(`iOS native runtime foreground custody failed (${custody.monitor_error || custody.error || custody.status || guarded.status})`);
+    if (guarded.status !== 0 || custody.schema !== "omi.macos-foreground-guard/v1" || custody.monitor_error !== null || custody.error !== null || custody.status !== 0) throw new RuntimeCaptureFailure(`iOS native runtime foreground custody failed (${custody.monitor_error || custody.error || custody.status || guarded.status})`, "native_test", guarded);
     const result = { status: custody.status, stdout: readFileSync(stdoutPath, "utf8"), stderr: readFileSync(stderrPath, "utf8") };
     const exportDir = path.join(outputDir, "attachments"); mkdirSync(exportDir, { recursive: true });
     const testIdentifier = "test://com.apple.xcode/Runner/RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence";
     const exported = spawnSync("xcrun", ["xcresulttool", "export", "attachments", "--path", resultBundle, "--output-path", exportDir, "--test-id", testIdentifier], { cwd: coreRoot, env, encoding: "utf8", timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
-    if (exported.status !== 0) throw new Error(`iOS runtime attachment export failed (${exported.status ?? "signal"})`);
+    if (exported.status !== 0) throw new RuntimeCaptureFailure(`iOS runtime attachment export failed (${exported.status ?? "signal"})`, "attachment_export", exported);
     const exportedManifest = readJson(path.join(exportDir, "manifest.json"), "iOS runtime attachment manifest");
     if (!Array.isArray(exportedManifest) || exportedManifest.length !== 1 || !Array.isArray(exportedManifest[0].attachments)) throw new Error("iOS runtime attachment manifest is not exact");
     const attachments = exportedManifest[0].attachments.filter((item) => typeof item.suggestedHumanReadableName === "string" && /^OMI_NATIVE_IOS_RUNTIME_JSON(?:_\d+_[0-9A-F-]{36})?\.json$/.test(item.suggestedHumanReadableName));
@@ -613,7 +652,11 @@ function main() {
     const receipt = { schema: "omi.polish.runtime-preparation/v1", ...metadata(manifest), command: { argv: capture.argv, cwd: capture.commandCwd, cwd_root: "core", exit_code: 0, started_at: capture.started.toISOString(), finished_at: capture.finished.toISOString(), timeout_seconds: capture.commandTimeoutSeconds || 300, stdout_sha256: sha256(Buffer.from(capture.stdout)), stderr_sha256: sha256(Buffer.from(capture.stderr)) }, ...(capture.query ? { surface_query: capture.query, build_commands: capture.buildCommands } : {}), ...(capture.foregroundCustody ? { foreground_custody: capture.foregroundCustody } : {}), artifact: { root: "core", path: path.relative(coreRoot, artifactPath), sha256: sha256(artifactBytes) } };
     writeFileSync(path.join(outputDir, "runtime-preparation-receipt.json"), stable(receipt), { mode: 0o600 });
     console.log(`NATIVE_RUNTIME_EVIDENCE: path=${path.relative(coreRoot, artifactPath)} sha256=${sha256(artifactBytes)} run_id=${manifest.run_id}`);
-  } catch (error) { fail(error instanceof Error ? error.message : String(error)); }
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    writeFileSync(path.join(outputDir, "runtime-failure.json"), stable(runtimeFailureReceipt(manifest, failure)), { mode: 0o600 });
+    fail(failure.message);
+  }
   finally { cleanupCaptureTransients(outputDir); }
 }
 
