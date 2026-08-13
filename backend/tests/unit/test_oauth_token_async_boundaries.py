@@ -49,7 +49,9 @@ class _App:
 def _loaded_oauth_router() -> Iterator[tuple[ModuleType, ModuleType, ModuleType]]:
     firebase_auth = _module(
         'firebase_admin.auth',
-        verify_id_token=lambda _token: {'uid': 'user-1'},
+        # The neutral FirebaseAuthProvider delegates to firebase_admin.auth.verify_id_token with a
+        # check_revoked kwarg, so the stub must accept it (**_kw) to stay signature-compatible.
+        verify_id_token=lambda _token, **_kw: {'uid': 'user-1'},
         InvalidIdTokenError=_InvalidIdTokenError,
     )
     firebase_admin = _module('firebase_admin', auth=firebase_auth)
@@ -136,8 +138,10 @@ def test_oauth_token_routes_auth_and_app_reads_to_owned_executors() -> None:
             'redirect_url': 'https://app.test/complete',
             'state': 'opaque',
         }
+        # Auth verification now offloads the neutral provider's verify_token (a singleton bound
+        # method, == stable), which internally delegates to firebase_auth.verify_id_token.
         assert [(executor, func) for executor, func, _args in calls] == [
-            (oauth.critical_executor, firebase_auth.verify_id_token),
+            (oauth.critical_executor, oauth.get_auth_provider().verify_token),
             (oauth.db_executor, oauth.enforce_account_deletion_http_access),
             (oauth.db_executor, apps_db.get_app_by_id_db),
             (oauth.db_executor, oauth.is_user_app_enabled),
@@ -152,7 +156,7 @@ def test_oauth_token_verification_keeps_the_event_loop_responsive() -> None:
             release = threading.Event()
             loop = asyncio.get_running_loop()
 
-            def blocking_verify(_token: str) -> dict[str, str]:
+            def blocking_verify(_token: str, **_kw: Any) -> dict[str, str]:
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
                 return {'uid': 'user-1'}
@@ -182,7 +186,7 @@ def test_oauth_token_verification_keeps_the_event_loop_responsive() -> None:
 
 def test_oauth_token_preserves_invalid_token_status() -> None:
     with _loaded_oauth_router() as (oauth, firebase_auth, _apps_db):
-        firebase_auth.verify_id_token = lambda _token: (_ for _ in ()).throw(_InvalidIdTokenError('invalid'))
+        firebase_auth.verify_id_token = lambda _token, **_kw: (_ for _ in ()).throw(_InvalidIdTokenError('invalid'))
 
         with pytest.raises(HTTPException) as exc:
             asyncio.run(
@@ -195,4 +199,5 @@ def test_oauth_token_preserves_invalid_token_status() -> None:
             )
 
         assert exc.value.status_code == 401
-        assert 'Invalid Firebase ID token' in exc.value.detail
+        # Neutralized message is backend-agnostic ("sign-in token"), not firebase-specific.
+        assert 'Invalid sign-in token' in exc.value.detail
