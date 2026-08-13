@@ -24,6 +24,7 @@ struct SBOnboardingWidgetShape: Equatable {
   var screenDemoReady: Bool
   var screenDemoUnavailable: Bool
   var screenDemoDone: Bool
+  var shortcutRegistrationError: String? = nil
 }
 
 /// Drives the Second Brain conversational onboarding: a real chat with Omi that
@@ -127,6 +128,10 @@ final class SBOnboardingModel: ObservableObject {
   @Published var shortcutPicked = false
   @Published var shortcutPressed = false
   @Published var shortcutRecording = false
+  /// Set when the chosen Open Omi chord passed the local test press but Carbon could not claim it.
+  /// Keep the stage active so the user can choose another chord instead of finishing with a shortcut
+  /// that appears to work only inside onboarding.
+  @Published var shortcutRegistrationError: String?
   /// Set when the user pressed a bare key while recording. `acceptsRecordedChord` refuses it — a
   /// bare `L` bound as a **global** hotkey makes every `L` typed anywhere open Omi — and the refusal
   /// used to be silent, so the step simply stopped responding with nothing said. Cleared the moment
@@ -347,7 +352,8 @@ final class SBOnboardingModel: ObservableObject {
       permission: permissionKey(for: step).map { permissionPrimaryAction($0) },
       screenDemoReady: screenDemoPTTReady,
       screenDemoUnavailable: screenDemoPTTUnavailable,
-      screenDemoDone: screenDemoDone
+      screenDemoDone: screenDemoDone,
+      shortcutRegistrationError: shortcutRegistrationError
     )
   }
 

@@ -131,7 +131,7 @@ struct ShortcutsSettingsSection: View {
           shortcut: settings.pttShortcut,
           isRecording: recordingTarget == .pushToTalk,
           action: { startShortcutCapture(.pushToTalk) },
-          helperText: "One key or a key combination both work."
+          helperText: "Use a modifier key or a key combination."
         )
       }
     }
@@ -505,6 +505,10 @@ struct ShortcutsSettingsSection: View {
           event, allowModifierOnly: true)
       else {
         return false
+      }
+      guard ShortcutSettings.isSafePushToTalkShortcut(shortcut) else {
+        captureError = "Push-to-talk needs a modifier so regular typing won't start a voice turn."
+        return true
       }
       pendingModifierOnlyShortcut = nil
       settings.pttEnabled = true
