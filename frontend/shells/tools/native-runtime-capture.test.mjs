@@ -14,6 +14,7 @@ import {
   runtimeProbeScript,
   runtimeFixtureName,
   requireIosDiskHeadroom,
+  validateSurfacesDist,
   withIosCaptureLock,
   validateHostMarker,
   validateManifest,
@@ -110,6 +111,8 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   assert.match(source, /xcresulttool/);
   assert.match(source, /finally \{\s*cleanupIosIntermediates\(outputDir\)/);
   assert.match(source, /iosMinimumFreeBytes = 40 \* 1024 \* 1024 \* 1024/);
+  assert.match(source, /env\.OMI_BUILD_DIR = path\.join\(outputDir, "macos-fixture"\)/);
+  assert.match(source, /rmSync\(env\.OMI_BUILD_DIR, \{ recursive: true, force: true \}\)/);
   assert.match(source, /OMI_NATIVE_IOS_RUNTIME_JSON\(\?:_\\d\+_\[0-9A-F-\]\{36\}\)\?/);
   assert.match(source, /allowedEnvironment/);
   assert.match(source, /mkdirSync\(scratch, \{ recursive: true \}\)/);
@@ -172,6 +175,19 @@ test("iOS cleanup rejects symlinked output authority", () => {
     rmSync(scratch, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
   }
+});
+
+test("native surfaces input is bounded and rejects symlinks", () => {
+  const scratch = mkdtempSync(path.join(root, ".build", "runtime-surfaces-bound-test-"));
+  try {
+    writeFileSync(path.join(scratch, "index.html"), "ok\n");
+    assert.equal(validateSurfacesDist(scratch, 32, 2), scratch);
+    writeFileSync(path.join(scratch, "huge.js"), "x".repeat(64));
+    assert.throws(() => validateSurfacesDist(scratch, 32, 2), /bounded/);
+    rmSync(path.join(scratch, "huge.js"));
+    assert.equal(spawnSync("ln", ["-s", path.join(scratch, "index.html"), path.join(scratch, "linked")]).status, 0);
+    assert.throws(() => validateSurfacesDist(scratch, 32, 2), /symlink/);
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
 });
 
 test("macOS scratch app name binds arbitrary matrix run IDs without weakening launcher grammar", () => {
