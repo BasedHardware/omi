@@ -348,7 +348,7 @@ extension SettingsContentView {
       settingsCard(settingId: "advanced.insightassistant") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
-            Image(systemName: "lightbulb.fill")
+            Image(systemName: ProactiveNotificationBadge.insightSystemImage)
               .scaledFont(size: OmiType.subheading)
               .foregroundColor(Ink.secondary)
 

@@ -1,14 +1,15 @@
 from typing import Any, Dict, List, Optional, Tuple
 
-import database.memories as memories_db
 from database._client import db as firestore_db
 from database.auth import get_user_name
 from models.memories import Memory, MemoryDB
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Prompt context is a bounded default-visible intake — never a full account export.
+PROMPT_MEMORY_LIMIT = 1000
 
 
 def get_prompt_memories(uid: str) -> Tuple[Any, str]:
@@ -58,24 +59,38 @@ def safe_create_memory(memory_data: Dict[str, Any]) -> MemoryDB:
         raise
 
 
-def get_prompt_data(uid: str) -> Tuple[Optional[str], List[MemoryDB], List[MemoryDB], List[MemoryDB]]:
+def _is_prompt_visible(memory: MemoryDB) -> bool:
+    """Rejected, pending-review, locked, and invalidated rows stay out of prompts."""
+    if memory.is_locked:
+        return False
+    if memory.user_review is False:
+        return False
+    if memory.invalid_at is not None:
+        return False
+    return True
+
+
+def get_prompt_data(
+    uid: str,
+) -> Tuple[Optional[str], List[MemoryDB], List[MemoryDB], List[MemoryDB]]:
     # TODO: cache this
-    if resolve_memory_system(uid, db_client=firestore_db) == MemorySystem.CANONICAL:
-        existing_memories = [
-            memory.model_dump(mode='python')
-            for memory in MemoryService(db_client=firestore_db).read(uid, limit=1000)
-            if not getattr(memory, 'is_locked', False)
-        ]
-    else:
-        existing_memories = [m for m in memories_db.get_memories(uid, limit=1000) if not m.get('is_locked')]
+    # Use the default-visible list surface (processed, non-archive) with a hard
+    # page cap. Account export is intentionally not used for prompt intake.
+    existing_memories = MemoryService(db_client=firestore_db).read(
+        uid,
+        limit=PROMPT_MEMORY_LIMIT,
+        offset=0,
+        include_pending_processing=False,
+    )
 
     baseline: List[MemoryDB] = []
     user_made: List[MemoryDB] = []
     generated: List[MemoryDB] = []
 
-    for memory in existing_memories:
+    for memory_obj in existing_memories:
         try:
-            memory_obj = safe_create_memory(memory)
+            if not _is_prompt_visible(memory_obj):
+                continue
             if memory_obj.is_baseline:
                 baseline.append(memory_obj)
             elif memory_obj.manually_added:
@@ -83,7 +98,7 @@ def get_prompt_data(uid: str) -> Tuple[Optional[str], List[MemoryDB], List[Memor
             else:
                 generated.append(memory_obj)
         except Exception as e:
-            logger.error(f'Error creating memory from memory: {e}')
+            logger.error(f"Error routing memory into prompt buckets: {e}")
 
     user_name = get_user_name(uid)
     return user_name, baseline, user_made, generated

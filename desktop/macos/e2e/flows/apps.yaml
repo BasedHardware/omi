@@ -4,6 +4,7 @@ tier: manual
 description: Apps/Integrations marketplace flow — browse apps, filter by category, search, view app details
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Apps.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
   # S5b is the only place either of these is exercised where it can actually fail. `AppsPage`
   # presents its connector sheet with `.dismissableSheet`, which mounts a `ShellModalScrim`; Apps

@@ -44,7 +44,7 @@ struct QueryShellHome: View {
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject private var tasksStore = TasksStore.shared
   var taskChatCoordinator: TaskChatCoordinator? = nil
-  /// The cohort shell keeps the existing modern Home presentation even when the reversible legacy
+  /// The Chat-first shell keeps the existing modern Home presentation even when the reversible legacy
   /// preference is enabled. This is presentation-only; capability sampling and rich-block access
   /// remain owned by `ChatFirstShell`.
   var forceModernPresentation: Bool = false

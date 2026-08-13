@@ -42,6 +42,12 @@ generated_route_overrides:
   - feature: daily_summary_simple
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
+  - feature: desktop_proactive_extraction
+    primary: {provider: openai, model: gpt-5-nano}
+    provider_options: {reasoning_effort: minimal}
+  - feature: desktop_proactive_reasoning
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: low}
   - feature: external_structure
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}

@@ -148,13 +148,14 @@ extension SettingsContentView {
                       // Banners off — user needs to change style in System Settings
                       appState.openNotificationPreferences()
                     } else {
-                      // Auth not granted — try lsregister repair first
+                      // Request the native prompt when possible; a prior denial opens
+                      // System Settings immediately without restarting notification services.
                       AnalyticsManager.shared.notificationRepairTriggered(
                         reason: "settings_fix_button",
                         previousStatus: "not_authorized",
                         currentStatus: "not_authorized"
                       )
-                      appState.repairNotificationAndFallback()
+                      appState.requestNotificationPermission()
                     }
                   } else {
                     appState.openNotificationPreferences()

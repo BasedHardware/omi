@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3688
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3697
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "Suggestion triage: AI captures excluded from dashboard lanes, acceptSuggestedTask"
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "Deleted-lane retirement authority: fetchDeletedPage stamps retirement after both transports so neither can write a retired row as live"
   },
   "threshold": 1500
 }

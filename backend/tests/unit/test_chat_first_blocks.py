@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from models.task_intelligence import TaskWorkflowControl
 import routers.chat_first as chat_first_router
-from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+from tests.unit.universal_memory_test_helpers import configure_universal_memory
 
 
 def _client() -> TestClient:
@@ -16,7 +16,7 @@ def _client() -> TestClient:
 
 
 def _enable_chat_first(monkeypatch, *, generation: int = 7) -> None:
-    set_canonical_cohort(monkeypatch, 'user-1')
+    configure_universal_memory(monkeypatch, 'user-1')
     monkeypatch.setattr(
         chat_first_router.task_control_db,
         'get_task_workflow_control',
@@ -150,7 +150,7 @@ def test_chat_first_validate_rejects_non_omi_or_discarded_capture_links(monkeypa
     assert response.json() == {'accepted': False, 'code': 'entity_unavailable', 'blocks': []}
 
 
-def test_chat_first_validate_fails_closed_before_entity_resolution_outside_the_cohort(monkeypatch):
+def test_chat_first_validate_fails_closed_before_entity_resolution_when_capability_is_off(monkeypatch):
     monkeypatch.setattr(
         chat_first_router.task_control_db,
         'get_task_workflow_control',

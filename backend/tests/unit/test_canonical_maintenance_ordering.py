@@ -6,6 +6,7 @@ from unittest.mock import ANY, MagicMock, call, patch
 import pytest
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
+from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory.canonical_consolidation import ConsolidationReport
 from utils.memory.canonical_required_processing import RequiredMemoryProcessingReport
@@ -16,6 +17,19 @@ from utils.memory.short_term_promotion import (
 )
 
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _ready_universal_apply_control(monkeypatch):
+    monkeypatch.setattr(
+        "utils.memory.short_term_promotion.ensure_canonical_apply_control_state",
+        lambda uid, **_: MemoryControlState(
+            uid=uid,
+            head_commit_id="head0",
+            account_generation=1,
+            source_generation=1,
+        ),
+    )
 
 
 def test_maintenance_runs_normalization_ttl_and_one_l2_route_in_order():
@@ -204,29 +218,6 @@ def test_blocked_l2_output_never_falls_through_to_generic_promotion():
     assert report.promoted_count == 0
 
 
-def test_noncanonical_user_is_a_noop():
-    with (
-        patch(
-            "utils.memory.short_term_promotion.resolve_memory_system",
-            return_value=MemorySystem.LEGACY,
-        ),
-        patch("utils.memory.short_term_promotion.run_required_memory_processing") as required,
-        patch("utils.memory.short_term_promotion.run_canonical_consolidation") as route,
-        patch("utils.memory.short_term_promotion.run_canonical_memory_outbox_worker_tick") as outbox,
-    ):
-        report = run_canonical_short_term_maintenance(
-            "uid-legacy",
-            db_client=MagicMock(),
-            now=NOW,
-            run_id="run-legacy",
-        )
-
-    assert report.skipped_reason == "not_canonical_cohort"
-    required.assert_not_called()
-    route.assert_not_called()
-    outbox.assert_not_called()
-
-
 def test_projection_delete_callback_invalidates_keyword_kg_and_review_citations():
     uid = "uid-canonical"
     client = MagicMock()
@@ -235,7 +226,6 @@ def test_projection_delete_callback_invalidates_keyword_kg_and_review_citations(
     assertion_delete = MagicMock()
     kg_prune = MagicMock(return_value=2)
     review_purge = MagicMock(return_value=["review-1"])
-    compatibility_delete = MagicMock(return_value=True)
 
     outbox_runs = []
 
@@ -273,10 +263,6 @@ def test_projection_delete_callback_invalidates_keyword_kg_and_review_citations(
             "utils.memory.short_term_promotion.kg_db.delete_memory_graph_assertion",
             assertion_delete,
         ),
-        patch(
-            "utils.memory.short_term_promotion.delete_v3_compatibility_projection_item",
-            compatibility_delete,
-        ),
         patch("utils.memory.short_term_promotion.kg_db.prune_memory_citations_from_kg", kg_prune),
         patch(
             "utils.memory.short_term_promotion.purge_stale_review_conflicts_for_memories",
@@ -293,12 +279,6 @@ def test_projection_delete_callback_invalidates_keyword_kg_and_review_citations(
     assert report.outbox is not None
     assert report.outbox["delivered_count"] == 1
     assert report.outbox["retryable_failure_count"] == 0
-    compatibility_delete.assert_called_once_with(
-        uid,
-        "mem-retired",
-        expected_account_generation=1,
-        db_client=client,
-    )
     keyword_delete.assert_called_once_with(uid, "mem-retired", db_client=client)
     assertion_delete.assert_called_once_with(uid, "mem-retired", db_client=client)
     kg_prune.assert_called_once_with(uid, ["mem-retired"], db_client=client)
@@ -349,7 +329,6 @@ def test_projection_delete_preserves_pending_review_for_active_review_archive():
     assertion_delete = MagicMock()
     kg_prune = MagicMock(return_value=1)
     review_purge = MagicMock()
-    compatibility_delete = MagicMock(return_value=True)
 
     outbox_runs = []
 
@@ -387,10 +366,6 @@ def test_projection_delete_preserves_pending_review_for_active_review_archive():
             "utils.memory.short_term_promotion.kg_db.delete_memory_graph_assertion",
             assertion_delete,
         ),
-        patch(
-            "utils.memory.short_term_promotion.delete_v3_compatibility_projection_item",
-            compatibility_delete,
-        ),
         patch("utils.memory.short_term_promotion.kg_db.prune_memory_citations_from_kg", kg_prune),
         patch(
             "utils.memory.short_term_promotion.purge_stale_review_conflicts_for_memories",
@@ -407,12 +382,6 @@ def test_projection_delete_preserves_pending_review_for_active_review_archive():
     assert report.outbox is not None
     assert report.outbox["delivered_count"] == 1
     assert report.outbox["retryable_failure_count"] == 0
-    compatibility_delete.assert_called_once_with(
-        uid,
-        review_item.memory_id,
-        expected_account_generation=1,
-        db_client=client,
-    )
     keyword_delete.assert_called_once_with(uid, review_item.memory_id, db_client=client)
     assertion_delete.assert_called_once_with(uid, review_item.memory_id, db_client=client)
     kg_prune.assert_called_once_with(uid, [review_item.memory_id], db_client=client)
@@ -424,7 +393,6 @@ def test_projection_delete_failure_stays_retryable_and_does_not_partially_invali
     keyword_delete = MagicMock(return_value=True)
     kg_prune = MagicMock()
     review_purge = MagicMock()
-    compatibility_delete = MagicMock(return_value=True)
 
     outbox_runs = []
 
@@ -465,10 +433,6 @@ def test_projection_delete_failure_stays_retryable_and_does_not_partially_invali
             "utils.memory.short_term_promotion.kg_db.delete_memory_graph_assertion",
             side_effect=RuntimeError("injected assertion delete failure"),
         ),
-        patch(
-            "utils.memory.short_term_promotion.delete_v3_compatibility_projection_item",
-            compatibility_delete,
-        ),
         patch("utils.memory.short_term_promotion.kg_db.prune_memory_citations_from_kg", kg_prune),
         patch(
             "utils.memory.short_term_promotion.purge_stale_review_conflicts_for_memories",
@@ -485,12 +449,6 @@ def test_projection_delete_failure_stays_retryable_and_does_not_partially_invali
     assert report.outbox is not None
     assert report.outbox["delivered_count"] == 0
     assert report.outbox["retryable_failure_count"] == 1
-    compatibility_delete.assert_called_once_with(
-        uid,
-        "mem-retry",
-        expected_account_generation=1,
-        db_client=ANY,
-    )
     keyword_delete.assert_not_called()
     kg_prune.assert_not_called()
     review_purge.assert_not_called()

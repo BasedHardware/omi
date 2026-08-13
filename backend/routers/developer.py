@@ -8,13 +8,11 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 import database.folders as folders_db
-import database.memories as memories_db
 import database.conversations as conversations_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
 from database._client import db
-from database.vector_db import search_memories_by_vector, upsert_memory_vectors_batch
 
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
@@ -61,27 +59,14 @@ from utils.conversations.location import resolve_geolocation
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
-from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
-from utils.memory.memory_service import MemoryService
+from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
-from utils.mcp_memories import collect_filtered_memories
-from utils.memory.developer_memory_adapter import (
-    search_memory_default_developer_memories,
-    search_memory_default_developer_memories_vector,
-)
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
-from utils.memory.default_read_rollout import (
-    MemoryReadDecision,
-    guard_legacy_memory_write,
-    read_default_read_rollout,
-)
-from utils.observability import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -344,131 +329,62 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    # Grant check must run before the memory-system branch so a canonical-cohort
-    # user holding a legacy/read-only Developer key without a persisted default-read
-    # grant is denied, instead of listing canonical memories before authorization.
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
             status_code=app_key_grant.status_code,
             detail={
-                'enabled': False,
-                'reason': app_key_grant.reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-                'app_id': auth_context.app_id,
-                'key_id': auth_context.key_id,
+                "enabled": False,
+                "reason": app_key_grant.reason,
+                "consumer": "developer_api",
+                "archive_default_visible": False,
+                "archive_capability": False,
+                "app_id": auth_context.app_id,
+                "key_id": auth_context.key_id,
             },
         )
 
-    memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        # Over-fetch raw pages and let collect_filtered_memories apply category
-        # filtering during the scan, so categories=manual&limit=25 always returns
-        # up to 25 matching rows instead of filtering a single unfiltered page.
-        filtered = collect_filtered_memories(
-            lambda batch_offset, batch_limit: [
-                m.model_dump(mode='json')
-                for m in memorydb_list_with_locked_preview(
-                    MemoryService(db_client=db).read_pinned(uid, memory_system, batch_limit, batch_offset)
-                )
-            ],
-            limit=limit,
-            offset=offset,
-            categories=[c.value for c in category_list] if category_list else None,
-            sort='scoring_desc',
-        )
-        memories = filtered['memories']
-        return [CleanerMemory.model_validate(memory) for memory in memories]
-    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
-    memory_result = search_memory_default_developer_memories(
-        uid=uid,
-        query='',
-        limit=limit,
-        offset=offset,
-        db_client=db,
-        rollout_decision=memory_rollout,
-        categories=[c.value for c in category_list],
-    )
-
-    if memory_result.read_decision == MemoryReadDecision.USE_MEMORY:
-        return [CleanerMemory.model_validate(memory) for memory in memory_result.memories]
-    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
-        if memory_result.fallback_reason != 'missing_rollout_state':
-            raise HTTPException(
-                status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
-            )
-        # pin_memory_system above already resolved this account to LEGACY, so an absent
-        # memory_control/state doc is the expected un-enrolled state and the legacy
-        # `memories` collection is the authoritative read surface — not a fail-closed
-        # migration condition (#9892).
-        record_fallback(
-            component='other',
-            from_mode='memory_default_read',
-            to_mode='legacy_memories',
-            reason='policy',
-            outcome='recovered',
-        )
-
-    memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
-    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
-    # field or an out-of-enum category) doesn't fail the whole page with a 500. Mirrors the
-    # hardening already applied to GET /v3/memories.
+    service = MemoryService(db_client=db)
+    allowed = {category.value for category in category_list} if category_list else None
+    if allowed is None:
+        memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)
+        valid_memories = []
+        for memory in memories:
+            try:
+                valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
+            except (AttributeError, TypeError, ValidationError, ValueError):
+                logger.warning("Skipping malformed memory in Developer API list")
+        return valid_memories
+    # Category is a sparse filter.  Read ordered universal pages until the
+    # requested category page is filled instead of filtering after a raw page
+    # (which returned short/empty pages whenever non-matching memories led it).
+    target_end = offset + limit
+    scan_offset = 0
+    matched = []
+    max_scan = 5000
+    while scan_offset < max_scan and len(matched) < target_end:
+        batch_limit = min(500, max_scan - scan_offset)
+        batch = service.read(uid, limit=batch_limit, offset=scan_offset, include_pending_processing=True)
+        if not batch:
+            break
+        scan_offset += len(batch)
+        if allowed is None:
+            matched.extend(batch)
+        else:
+            matched.extend(memory for memory in batch if getattr(memory.category, "value", memory.category) in allowed)
+        if len(batch) < batch_limit:
+            break
+    memories = matched[offset:target_end]
     valid_memories = []
     for memory in memories:
-        if not isinstance(memory, dict) or not memory.get('id'):
-            logger.warning('Skipping malformed memory in Developer API memory list')
-            continue
-        if memory.get('is_locked', False):
-            content = str(memory.get('content') or '')
-            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
         try:
-            valid_memories.append(DeveloperMemory.model_validate(memory))
-        except ValidationError as e:
-            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
-            logger.warning(
-                f"Skipping invalid memory doc {memory.get('id', 'unknown')} for uid {uid}: "
-                f"missing/invalid fields {missing_fields}"
-            )
-            continue
+            valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
+        except (AttributeError, TypeError, ValidationError, ValueError):
+            # MemoryService normally returns validated MemoryDB rows, but a
+            # malformed historical adapter row must not turn this compatibility
+            # endpoint into a 500 for every otherwise healthy memory.
+            logger.warning("Skipping malformed memory in Developer API list")
     return valid_memories
-
-
-def _legacy_developer_vector_items(uid: str, query: str, limit: int) -> List[dict]:
-    """Relevance-ranked legacy `memories` results for a legacy-cohort vector search.
-
-    The default-read vector path returns USE_LEGACY_SAFE (or DENY + missing_rollout_state)
-    for an un-enrolled legacy account; that account's authoritative surface is the legacy
-    `memories` collection, so search it directly instead of failing closed. IDs come back
-    ordered by vector relevance; hydration preserves that order. Locked memories are
-    content-redacted exactly as GET /v1/dev/user/memories does. Scores aren't exposed by
-    the legacy index, so relevance_score is left null.
-    """
-    memory_ids = search_memories_by_vector(uid, query, limit)
-    if not memory_ids:
-        return []
-    hydrated = {
-        m['id']: m for m in memories_db.get_memories_by_ids(uid, memory_ids) if isinstance(m, dict) and m.get('id')
-    }
-    items: List[dict] = []
-    for memory_id in memory_ids:  # preserve vector-relevance order
-        memory = hydrated.get(memory_id)
-        if memory is None:
-            continue
-        content = str(memory.get('content') or '')
-        if memory.get('is_locked', False):
-            content = (content[:70] + '...') if len(content) > 70 else content
-        category = memory.get('category')
-        items.append(
-            {
-                'id': memory['id'],
-                'content': content,
-                'category': category if isinstance(category, str) and category.strip() else None,
-                'relevance_score': None,
-            }
-        )
-    return items
 
 
 @router.get(
@@ -484,18 +400,15 @@ def search_memories_vector(
     """Search developer-readable default memory memory through hydrated vector candidates.
 
     This narrow developer API vector endpoint fails closed unless the authenticated
-    Developer API app/key has a verified memories.read scope, a persisted app/key
-    default-read grant, and the server-owned rollout state enables developer_api
-    memory default-memory reads. Vector hits are hydrated from authoritative
+    Developer API app/key has a verified memories.read scope and a persisted app/key
+    default-read grant. Vector hits are hydrated through the universal repository
+    against authoritative
     `users/{uid}/memory_items` before returning results, so stale Short-term and
     Archive remain unavailable by default.
     """
 
     uid = auth_context.uid
 
-    # Grant check must run before the memory-system branch so a canonical-cohort
-    # user holding a legacy/read-only Developer key without a persisted default-read
-    # grant is denied, instead of searching canonical memories before authorization.
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
@@ -511,76 +424,21 @@ def search_memories_vector(
             },
         )
 
-    memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        matches = MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))
-        items = []
-        for match in matches:
-            memory = match.memory
-            items.append(
-                {
-                    'id': memory.id,
-                    'content': memory.content,
-                    'category': memory.category.value if hasattr(memory.category, 'value') else memory.category,
-                    'relevance_score': round(match.score, 4),
-                }
-            )
-        return {
-            'items': items,
-            'returned_count': len(items),
-            'archive_default_visible': False,
-            'policy': {
-                'consumer': 'developer_api',
-                'app_has_default_memory_grant': True,
-                'archive_capability': False,
-                'raw_provenance_capability': False,
-            },
+    matches = MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))
+    items = [
+        {
+            'id': match.memory.id,
+            'content': match.memory.content,
+            'category': (
+                match.memory.category.value if hasattr(match.memory.category, 'value') else match.memory.category
+            ),
+            'relevance_score': round(match.score, 4),
         }
-
-    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
-    memory_result = search_memory_default_developer_memories_vector(
-        uid=uid,
-        query=query,
-        limit=limit,
-        db_client=db,
-        rollout_decision=memory_rollout,
-    )
-    # A legacy-cohort account (explicit USE_LEGACY_SAFE, or an un-enrolled account whose
-    # only signal is missing_rollout_state) reads the legacy `memories` collection — the
-    # same recovery GET /v1/dev/user/memories and the MCP path already apply (#10094/#10095).
-    # Vector search previously failed closed with 403 here, so those accounts could list
-    # memories but not vector-search them (#10203).
-    serve_legacy = memory_result.should_use_legacy_fallback or (
-        memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}
-        and memory_result.fallback_reason == 'missing_rollout_state'
-    )
-    if serve_legacy:
-        record_fallback(
-            component='other',
-            from_mode='memory_default_read_vector',
-            to_mode='legacy_memories',
-            reason='policy',
-            outcome='recovered',
-        )
-        legacy_items = _legacy_developer_vector_items(uid, query, limit)
-        return {
-            'items': legacy_items,
-            'returned_count': len(legacy_items),
-            'archive_default_visible': False,
-            'policy': {
-                'consumer': 'developer_api',
-                'app_has_default_memory_grant': True,
-                'archive_capability': False,
-                'raw_provenance_capability': False,
-            },
-        }
-    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
-        raise HTTPException(
-            status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
-        )
+        for match in matches
+    ]
     return {
-        'items': memory_result.memories,
-        'returned_count': len(memory_result.memories),
+        'items': items,
+        'returned_count': len(items),
         'archive_default_visible': False,
         'policy': {
             'consumer': 'developer_api',
@@ -621,44 +479,6 @@ def create_memory(
 
     category = request.category if request.category else identify_category_for_memory(request.content.strip())
 
-    memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        memory = Memory(
-            content=request.content.strip(),
-            category=category,
-            visibility=request.visibility,
-            tags=request.tags,
-        )
-        memory_db = MemoryDB.from_memory(memory, uid, None, True)
-        memory_db = MemoryService(db_client=db).create_external_memory(
-            uid,
-            memory_db,
-            memory_system=memory_system,
-            consumer='developer_api',
-            operation='create_memory',
-            upsert_vector=False,
-            require_canonical_promotion=True,
-        )
-        capture_memory_write(
-            principal_id=uid,
-            source="developer_memory_create",
-            session_id=memory_db.id,
-            memories=[memory_db],
-        )
-        if memory.visibility == 'public':
-            postprocess_executor.submit(update_personas_async, uid)
-        return DeveloperMemory(
-            id=memory_db.id,
-            content=memory_db.content,
-            category=memory_db.category,
-            visibility=memory_db.visibility,
-            tags=memory_db.tags,
-            created_at=memory_db.created_at,
-            updated_at=memory_db.updated_at,
-            manually_added=memory_db.manually_added,
-            scoring=memory_db.scoring,
-        )
-
     memory = Memory(
         content=request.content.strip(),
         category=category,
@@ -669,7 +489,7 @@ def create_memory(
     memory_db = MemoryService(db_client=db).create_external_memory(
         uid,
         memory_db,
-        memory_system=memory_system,
+        memory_system=MemorySystem.CANONICAL,
         consumer='developer_api',
         operation='create_memory',
         upsert_vector=False,
@@ -745,14 +565,13 @@ def create_memories_batch(
         if memory.visibility == 'public':
             has_public = True
 
-    memory_system = pin_memory_system(uid, db_client=db)
     created_dbs = MemoryService(db_client=db).create_external_memory_batch(
         uid,
         memory_dbs,
-        memory_system=memory_system,
+        memory_system=MemorySystem.CANONICAL,
         consumer='developer_api',
         operation='batch_create_memories',
-        upsert_vectors=memory_system != MemorySystem.CANONICAL,
+        upsert_vectors=False,
         require_canonical_promotion=True,
     )
     capture_memory_write(
@@ -805,11 +624,10 @@ def delete_memory(
         )
     uid = auth_context.uid
 
-    memory_system = pin_memory_system(uid, db_client=db)
     MemoryService(db_client=db).delete_external_memory(
         uid,
         memory_id,
-        memory_system=memory_system,
+        memory_system=MemorySystem.CANONICAL,
         consumer='developer_api',
         operation='delete_memory',
         delete_vector=False,
@@ -853,63 +671,27 @@ def update_memory(
         )
 
     memory_service = MemoryService(db_client=db)
-    memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        # Validate existence before mutations so a missing memory returns 404
-        # (matching legacy) rather than letting the update helpers raise
-        # ValueError, which FastAPI surfaces as a 500.
-        if _read_canonical_memory_item(uid, memory_id, db_client=db) is None:
-            raise HTTPException(status_code=404, detail="Memory not found")
-        if request.content is not None and not request.content.strip():
-            raise HTTPException(status_code=422, detail="content must not be empty")
-        if request.content is not None:
-            memory_service.update_content(uid, memory_id, request.content.strip())
-        if request.visibility is not None:
-            if request.visibility not in ['public', 'private']:
-                raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
-            memory_service.update_visibility(uid, memory_id, request.visibility)
-        if request.tags is not None or request.category is not None:
-            memory_service.update_product_fields(
-                uid,
-                memory_id,
-                tags=request.tags,
-                category=request.category.value if request.category is not None else None,
-            )
-        item = _read_canonical_memory_item(uid, memory_id, db_client=db)
-        if item is None:
-            raise HTTPException(status_code=404, detail="Memory not found")
-        return memory_item_to_memorydb(item).model_dump()
-
-    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='update_memory')
-    if not write_guard.allowed:
-        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
-
-    memory = memories_db.get_memory(uid, memory_id)
-    if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
-    if memory.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
-
-    old_visibility = memory.get('visibility')
-
     if request.content is not None:
-        memories_db.edit_memory(uid, memory_id, request.content.strip())
-
+        if not request.content.strip():
+            raise HTTPException(status_code=422, detail="content must not be empty")
+        memory_service.update_content(uid, memory_id, request.content.strip())
     if request.visibility is not None:
         if request.visibility not in ['public', 'private']:
             raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
-        memories_db.change_memory_visibility(uid, memory_id, request.visibility)
-
-    update_data = {}
-    if request.tags is not None:
-        update_data['tags'] = request.tags
-    if request.category is not None:
-        update_data['category'] = request.category.value
-
-    if update_data:
-        memories_db.update_memory_fields(uid, memory_id, update_data)
-
-    return memories_db.get_memory(uid, memory_id)
+        memory_service.update_visibility(uid, memory_id, request.visibility)
+    if request.tags is not None or request.category is not None:
+        memory_service.update_product_fields(
+            uid,
+            memory_id,
+            tags=request.tags,
+            category=request.category.value if request.category is not None else None,
+        )
+    try:
+        return fetch_memory_dict(uid, memory_id, db_client=db)
+    except HTTPException:
+        raise
+    except (KeyError, ValueError):
+        raise HTTPException(status_code=404, detail="Memory not found")
 
 
 # ******************************************************

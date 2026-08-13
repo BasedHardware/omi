@@ -71,7 +71,7 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     }
   }
 
-  /// Maps every legacy-compatible automation name to its mounted cohort route.
+  /// Maps every legacy-compatible automation name to its mounted Chat-first route.
   /// Dashboard/Home are aliases for the canonical Chat surface: dispatch remains
   /// owned by `DesktopHomeView`, but the cohort never mounts a second Dashboard
   /// Home for either legacy name.
@@ -187,7 +187,7 @@ private struct ChatFirstPersistedNavigation: Codable, Equatable {
   var isSidebarCollapsed: Bool
 }
 
-/// Root-owned navigation and focus state for the cohort-only shell. The only
+/// Root-owned navigation and focus state for the universal shell. The only
 /// persisted values are route and collapse preference; a focus request is a
 /// transient deep-link contract and must be acknowledged by the destination
 /// only after that entity is visible.
@@ -291,7 +291,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   }
 
   /// Preserves the typed focus contract while allowing a relationship link to
-  /// choose its destination. Destinations must remain in the cohort primary
+  /// choose its destination. Destinations must remain in the Chat-first primary
   /// navigation; no legacy page can receive a pending focus.
   func open(focus: ChatFirstPendingFocus, destination: ChatFirstRoute) {
     guard destination.isPrimaryDestination else { return }

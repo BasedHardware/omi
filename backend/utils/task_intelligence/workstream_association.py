@@ -1,4 +1,4 @@
-"""Canonical-memory evidence association into durable workflow workstreams."""
+"""Evidence association into durable workflow workstreams."""
 
 import hashlib
 import json
@@ -35,7 +35,6 @@ from models.workstream_association import (
     RecurrenceOutcomeKind,
 )
 from utils.llm.gateway_client import invoke_chat_structured_gateway
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.metrics import TASK_WORKSTREAM_ASSOCIATION_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.task_intelligence import candidate_service
@@ -107,7 +106,7 @@ def _association_idempotency_key(evidence: AssociationEvidence, workstream_id: s
     return f'association_{hashlib.sha256(payload.encode("utf-8")).hexdigest()[:40]}'
 
 
-def associate_canonical_evidence(
+def associate_workflow_evidence(
     uid: str,
     evidence: AssociationEvidence,
     *,
@@ -137,8 +136,6 @@ def associate_canonical_evidence(
             telemetry(outcome.outcome)
         return outcome
 
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
-        return finish(AssociationOutcome(outcome=AssociationOutcomeKind.not_canonical_cohort))
     control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
 
     target_generation = control.account_generation if account_generation is None else account_generation
@@ -260,11 +257,6 @@ def consume_recurrence_signal(
     firestore_client: Any = None,
     create_candidate: Callable[..., Any] = candidate_service.create_candidate,
 ) -> RecurrenceConsumptionOutcome:
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
-        return RecurrenceConsumptionOutcome(
-            outcome=RecurrenceOutcomeKind.not_canonical_cohort,
-            signal_id=signal.signal_id,
-        )
     control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
     if control.account_generation != account_generation:
         raise recurrence_inbox_db.RecurrenceGenerationMismatchError('account generation mismatch')
@@ -285,7 +277,7 @@ def consume_recurrence_signal(
             capture_confidence=signal.confidence,
             ownership_confidence=0.5,
             evidence_refs=signal.evidence_refs,
-            source_surface='canonical_memory_recurrence',
+            source_surface='memory_recurrence',
             workstream_proposal=WorkstreamProposal(
                 title=signal.title,
                 objective=signal.objective,
@@ -315,8 +307,6 @@ def persist_recurrence_signals_for_maintenance(
     enqueue: Callable[..., RecurrenceInboxReceipt] = recurrence_inbox_db.enqueue_recurrence_signal,
 ) -> int:
     """Durably hand off a consolidation batch before its memory watermark advances."""
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
-        return 0
     control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
     signal_list = list(signals)
 
@@ -351,8 +341,6 @@ def drain_recurrence_inbox_for_maintenance(
     complete: Callable[..., None] = recurrence_inbox_db.complete_recurrence_receipt,
     retry: Callable[..., None] = recurrence_inbox_db.retry_recurrence_receipt,
 ) -> int:
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
-        return 0
     control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
 
     created = 0
@@ -426,6 +414,7 @@ __all__ = [
     'ASSOCIATION_INDEX_VERSION',
     'ASSOCIATION_POLICY_VERSION',
     'ASSOCIATION_PROMPT_V1',
+    'associate_workflow_evidence',
     'associate_canonical_evidence',
     'consume_recurrence_signal',
     'consume_recurrence_signals_for_maintenance',
@@ -433,3 +422,13 @@ __all__ = [
     'persist_recurrence_signals_for_maintenance',
     'rebuild_workstream_association_index',
 ]
+
+
+def associate_canonical_evidence(*args: Any, **kwargs: Any) -> AssociationOutcome:
+    """Deprecated compatibility alias for :func:`associate_workflow_evidence`.
+
+    The old symbol remains import-compatible for released/non-owned callers;
+    all new task code should use the neutral workflow entrypoint.
+    """
+
+    return associate_workflow_evidence(*args, **kwargs)

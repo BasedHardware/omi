@@ -12,9 +12,11 @@ import types
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+from models.memories import Memory, MemoryCategory
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -23,6 +25,7 @@ os.environ.setdefault(
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROCESS_CONVERSATION_PATH = BACKEND_DIR / "utils" / "conversations" / "process_conversation.py"
+_PROCESS_CONVERSATION_MODULE = None
 
 
 class _AutoMockModule(ModuleType):
@@ -51,6 +54,10 @@ def _collection_constant(relative_module: str, constant_name: str) -> str:
 
 def _ensure_process_conversation_importable():
     """Stub heavy deps so process_conversation can be imported in unit tests."""
+    global _PROCESS_CONVERSATION_MODULE
+    if _PROCESS_CONVERSATION_MODULE is not None:
+        return _PROCESS_CONVERSATION_MODULE
+
     stubs = [
         "anthropic",
         "av",
@@ -152,8 +159,8 @@ def _ensure_process_conversation_importable():
     )
     sys.modules["utils.task_intelligence.workstream_association"].associate_canonical_evidence = MagicMock()
 
-    sys.modules.pop("utils.conversations.process_conversation", None)
-    return importlib.import_module("utils.conversations.process_conversation")
+    _PROCESS_CONVERSATION_MODULE = importlib.import_module("utils.conversations.process_conversation")
+    return _PROCESS_CONVERSATION_MODULE
 
 
 class TestStoreSeparation:
@@ -177,10 +184,12 @@ class TestStoreSeparation:
 class TestExtractionSeamFanOut:
     """process_conversation must fan out to separate downstream writers."""
 
-    def test_process_conversation_submits_three_separate_postprocess_tasks(self):
+    def test_process_conversation_keeps_memory_fail_closed_and_task_goal_postprocess_separate(self):
         source = PROCESS_CONVERSATION_PATH.read_text(encoding="utf-8")
-        # Characterization of the live seam — WS-I must keep three distinct destinations.
-        assert "submit_with_context(postprocess_executor, _extract_memories" in source
+        # Memory source replacement is synchronous/fail-closed; task and goal
+        # projections remain independent postprocess destinations.
+        assert "_extract_memories(uid, conversation)" in source
+        assert "submit_with_context(postprocess_executor, _extract_memories" not in source
         assert "submit_with_context(postprocess_executor, _save_action_items" in source
         assert "submit_with_context(postprocess_executor, _update_goal_progress" in source
 
@@ -194,6 +203,7 @@ class TestExtractionSeamFanOut:
         from models.transcript_segment import TranscriptSegment
 
         submitted = []
+        extract_memories = MagicMock()
 
         def _capture_submit(_executor, fn, *args, **kwargs):
             submitted.append((fn, args))
@@ -230,6 +240,7 @@ class TestExtractionSeamFanOut:
             patch.object(pc, "_get_structured", return_value=(structured, False)),
             patch.object(pc, "_get_conversation_obj", return_value=conversation),
             patch.object(pc, "_trigger_apps"),
+            patch.object(pc, "_extract_memories", extract_memories),
             patch.object(pc.conversations_db, "upsert_conversation"),
             patch.object(pc, "submit_with_context", side_effect=_capture_submit),
             patch.object(pc, "TRANSCRIPT_CHUNK_INDEXING_ENABLED", False),
@@ -237,12 +248,10 @@ class TestExtractionSeamFanOut:
             pc.process_conversation("uid-boundary", "en", conversation, is_reprocess=True)
 
         submitted_fns = {fn.__name__ for fn, _ in submitted if callable(fn) and hasattr(fn, "__name__")}
-        assert "_extract_memories" in submitted_fns
+        extract_memories.assert_called_once_with("uid-boundary", conversation)
         assert "_save_action_items" in submitted_fns
         assert "_update_goal_progress" in submitted_fns
-        assert (
-            len(submitted_fns.intersection({"_extract_memories", "_save_action_items", "_update_goal_progress"})) == 3
-        )
+        assert "_extract_memories" not in submitted_fns
 
 
 class TestNoConversationAsMemory:
@@ -253,7 +262,6 @@ class TestNoConversationAsMemory:
 
         from models.conversation import Conversation
         from models.conversation_enums import CategoryEnum, ConversationSource
-        from models.memories import Memory, MemoryCategory
         from models.structured import Structured
         from models.transcript_segment import TranscriptSegment
 
@@ -279,37 +287,41 @@ class TestNoConversationAsMemory:
                 )
             ],
         )
-        extracted = Memory(content="User loves hiking on weekends.", category=MemoryCategory.interesting)
-
-        saved_payloads = []
+        memory_service = MagicMock()
+        candidate = types.SimpleNamespace(
+            content="User loves hiking on weekends.",
+            evidence_quotes=["I love hiking on weekends."],
+            speaker_label="SPEAKER_00",
+            speaker_scope="session-local",
+            about="the user",
+            risk_flags=[],
+            archive_class="general",
+        )
 
         with (
-            patch.object(pc.memories_db, "delete_memories_for_conversation") as mock_delete,
-            patch.object(pc, "delete_memory_vector"),
             patch.object(pc.users_db, "get_user_language_preference", return_value="en"),
-            patch.object(pc, "new_memories_extractor", return_value=[extracted]) as mock_extractor,
-            patch.object(pc, "find_similar_memories", return_value=[]),
-            patch.object(pc, "infer_subject_from_segments", return_value=(None, "unknown")),
-            patch.object(
-                pc.memories_db,
-                "save_memories",
-                side_effect=lambda _uid, rows: saved_payloads.extend(rows),
-            ),
+            patch.object(pc, "get_user_name", return_value="User"),
+            patch.object(pc, "MemoryService", return_value=memory_service),
+            patch.object(pc, "extract_canonical_l1_memory_candidates", return_value=[candidate]) as mock_extractor,
+            patch.object(pc, "infer_subject_from_segments", return_value=(None, pc.SubjectAttribution.unknown)),
+            patch.object(pc, "associate_canonical_evidence"),
             patch.object(pc, "record_usage"),
         ):
-            mock_delete.return_value = {"vector_delete_ids": []}
-            pc._extract_memories_inner("uid-extract", conversation)
+            pc._extract_memories_canonical("uid-extract", conversation, db_client=MagicMock())
 
         mock_extractor.assert_called_once()
         extractor_args = mock_extractor.call_args[0]
         assert extractor_args[0] == "uid-extract"
-        assert extractor_args[1] is conversation.transcript_segments
-        assert extractor_args[1] is not conversation
-        assert not isinstance(extractor_args[1], dict)
+        assert extractor_args[1] == conversation.id
+        assert extractor_args[2] is conversation.transcript_segments
+        assert extractor_args[2] is not conversation
+        assert not isinstance(extractor_args[2], dict)
 
-        assert len(saved_payloads) == 1
-        row = saved_payloads[0]
-        assert row["content"] == extracted.content
+        replacement = memory_service.replace_conversation_memories.call_args.args
+        assert replacement[:2] == ("uid-extract", conversation.id)
+        assert len(replacement[2]) == 1
+        row = replacement[2][0]
+        assert row["content"] == candidate.content
         assert row["conversation_id"] == conversation.id
         assert row["evidence"][0]["source_id"] == conversation.id
         # Must not be a verbatim Conversation document.
@@ -322,7 +334,6 @@ class TestNoConversationAsMemory:
 
         from models.conversation import Conversation
         from models.conversation_enums import CategoryEnum, ConversationSource
-        from models.memories import Memory, MemoryCategory
         from models.structured import Structured
 
         integration_text = "Imported email: user prefers morning meetings on Tuesdays."
@@ -339,40 +350,37 @@ class TestNoConversationAsMemory:
                 category=CategoryEnum.personal,
             ),
         )
+        memory_service = MagicMock()
         extracted = Memory(content="User prefers morning meetings on Tuesdays.", category=MemoryCategory.interesting)
 
-        saved_payloads = []
-
         with (
-            patch.object(pc.memories_db, "delete_memories_for_conversation") as mock_delete,
-            patch.object(pc, "delete_memory_vector"),
             patch.object(pc.users_db, "get_user_language_preference", return_value="en"),
+            patch.object(pc, "MemoryService", return_value=memory_service),
             patch.object(pc, "extract_memories_from_text", return_value=[extracted]) as mock_text_extractor,
-            patch.object(pc, "new_memories_extractor") as mock_segment_extractor,
-            patch.object(pc, "find_similar_memories", return_value=[]),
             patch.object(pc, "infer_subject_from_segments", return_value=(None, "unknown")),
-            patch.object(
-                pc.memories_db,
-                "save_memories",
-                side_effect=lambda _uid, rows: saved_payloads.extend(rows),
-            ),
+            patch.object(pc, "associate_canonical_evidence"),
             patch.object(pc, "record_usage"),
         ):
-            mock_delete.return_value = {"vector_delete_ids": []}
-            pc._extract_memories_inner("uid-ext", conversation)
+            pc._extract_memories_canonical("uid-ext", conversation, db_client=MagicMock())
 
         mock_text_extractor.assert_called_once_with(
-            "uid-ext", integration_text, "email", language="en", content_date=ANY
+            "uid-ext",
+            integration_text,
+            "email",
+            language="en",
+            content_date="2026-06-01",
+            strict=True,
         )
-        mock_segment_extractor.assert_not_called()
 
         text_arg = mock_text_extractor.call_args[0][1]
         assert text_arg == integration_text
         assert text_arg is not conversation
         assert not isinstance(text_arg, dict)
 
-        assert len(saved_payloads) == 1
-        row = saved_payloads[0]
+        replacement = memory_service.replace_conversation_memories.call_args.args
+        assert replacement[:2] == ("uid-ext", conversation.id)
+        assert len(replacement[2]) == 1
+        row = replacement[2][0]
         assert row["content"] == extracted.content
         assert row["conversation_id"] == conversation.id
         assert "transcript_segments" not in row

@@ -481,7 +481,7 @@ private struct ChatFirstLinkBlockView: View {
 }
 
 /// A compact typed destination control shared by rich Chat cards and the
-/// cohort-only Tasks page. Its closure is intentionally the only navigation
+/// universal Tasks page. Its closure is intentionally the only navigation
 /// surface: callers supply typed shell focus rather than model text or URLs.
 struct ChatFirstDestinationBadge: View {
   let title: String

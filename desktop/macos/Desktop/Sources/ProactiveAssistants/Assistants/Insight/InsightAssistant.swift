@@ -21,8 +21,10 @@ actor InsightAssistant: ProactiveAssistant {
       await MainActor.run {
         // Analysis eligibility is independent from delivery preference. A user can keep
         // Advice analysis on while opting out of interruptions; the latter is recorded as a
-        // delivery suppression after an advice item is generated.
-        InsightAssistantSettings.shared.isEnabled
+        // delivery suppression after an advice item is generated. The context-buckets
+        // engine owns this lane when enabled, so the legacy assistant becomes inactive.
+        !ContextBucketsFeature.isEnabled
+          && InsightAssistantSettings.shared.isEnabled
       }
     }
   }
@@ -577,6 +579,12 @@ actor InsightAssistant: ProactiveAssistant {
   private func processFrame(_ frame: CapturedFrame, since previousAnalysisTime: Date) async {
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     guard await isEnabled else { return }
+    // Continue collecting frames during quiet hours, but do not enter either
+    // paid extraction phase when the result cannot be presented.
+    let isWithinActivePeriod = await MainActor.run {
+      NotificationService.isWithinActivePeriod(now: Date())
+    }
+    guard isWithinActivePeriod else { return }
     do {
       guard let result = try await extractAdvice(from: frame, since: previousAnalysisTime) else {
         return
@@ -739,7 +747,18 @@ actor InsightAssistant: ProactiveAssistant {
         let query = toolCall.arguments["query"] as? String ?? ""
         sqlCount += 1
         log("Insight: P1 execute_sql iter \(iteration): \(query)")
-        let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
+        let privacyEnabled = await MainActor.run { ContextBucketsFeature.isEnabled }
+        let excluded = await MainActor.run { RewindSettings.shared.excludedApps }
+        var sqlArguments: [String: Any] = ["query": query]
+        if privacyEnabled {
+          sqlArguments = [
+            "query": InsightSQLPrivacy.filtered(query, excludedApps: excluded),
+            "read_only": true,
+          ]
+        }
+        let sqlToolCall = ToolCall(
+          name: "execute_sql",
+          arguments: sqlArguments, thoughtSignature: nil)
         let resultStr = await ChatToolExecutor.execute(sqlToolCall)
         let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
         log("Insight: P1 sql result (\(resultStr.count) chars): \(truncated)")
@@ -903,7 +922,18 @@ actor InsightAssistant: ProactiveAssistant {
         let query = toolCall.arguments["query"] as? String ?? ""
         sqlCount += 1
         log("Insight: P2 execute_sql iter \(p2Iteration): \(query)")
-        let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
+        let privacyEnabled = await MainActor.run { ContextBucketsFeature.isEnabled }
+        let excluded = await MainActor.run { RewindSettings.shared.excludedApps }
+        var sqlArguments: [String: Any] = ["query": query]
+        if privacyEnabled {
+          sqlArguments = [
+            "query": InsightSQLPrivacy.filtered(query, excludedApps: excluded),
+            "read_only": true,
+          ]
+        }
+        let sqlToolCall = ToolCall(
+          name: "execute_sql",
+          arguments: sqlArguments, thoughtSignature: nil)
         let resultStr = await ChatToolExecutor.execute(sqlToolCall)
         let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
         log("Insight: P2 sql result (\(resultStr.count) chars): \(truncated)")

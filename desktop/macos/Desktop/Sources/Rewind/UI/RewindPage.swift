@@ -172,6 +172,19 @@ struct RewindPage: View {
       screenAnalysisEnabled = state.captureEnabled
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
+    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      // RewindPage itself owns the decoded NSImage and frame-load task. Clearing
+      // only the view model would leave the previous owner's last frame visible
+      // while this persistent page reloads for the incoming account.
+      invalidatePendingFrameLoad()
+      currentImage = nil
+      currentIndex = 0
+      selectedGroupIndex = 0
+      searchViewMode = nil
+      selectedSpeakerSegment = nil
+      isTranscriptExpanded = false
+      LiveTranscriptMonitor.shared.clearSaved()
+    }
     .onReceive(NotificationCenter.default.publisher(for: .expandRewindTranscript)) { _ in
       OmiMotion.withGated(.easeInOut(duration: 0.2)) {
         isTranscriptExpanded = true

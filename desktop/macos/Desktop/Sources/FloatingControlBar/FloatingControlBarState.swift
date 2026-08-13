@@ -172,6 +172,31 @@ struct FloatingBarNotificationContext: Equatable {
   let currentActivity: String?
   let reasoning: String?
   let detail: String?
+  /// Durable lookup key into `proactive_deliveries`. Unlike the legacy card
+  /// context, this survives the old 60-second follow-up window.
+  let provenanceRef: String?
+
+  init(
+    sourceTitle: String,
+    assistantId: String,
+    sourceApp: String? = nil,
+    windowTitle: String? = nil,
+    contextSummary: String? = nil,
+    currentActivity: String? = nil,
+    reasoning: String? = nil,
+    detail: String? = nil,
+    provenanceRef: String? = nil
+  ) {
+    self.sourceTitle = sourceTitle
+    self.assistantId = assistantId
+    self.sourceApp = sourceApp
+    self.windowTitle = windowTitle
+    self.contextSummary = contextSummary
+    self.currentActivity = currentActivity
+    self.reasoning = reasoning
+    self.detail = detail
+    self.provenanceRef = provenanceRef
+  }
 }
 
 enum FloatingBarNotificationAction: Equatable {
@@ -187,6 +212,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
   let title: String
   let message: String
   let assistantId: String
+  let kind: ProactiveNotificationKind
   let context: FloatingBarNotificationContext?
   let action: FloatingBarNotificationAction?
   /// Optional opaque proactive-suggestion join keys. No card content or screen
@@ -203,6 +229,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     title: String,
     message: String,
     assistantId: String,
+    kind: ProactiveNotificationKind? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
@@ -213,6 +240,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.title = title
     self.message = message
     self.assistantId = assistantId
+    self.kind = kind ?? ProactiveNotificationKind.from(assistantId: assistantId)
     self.context = context
     self.action = action
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity

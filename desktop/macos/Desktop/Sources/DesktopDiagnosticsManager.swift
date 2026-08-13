@@ -1083,8 +1083,8 @@ final class DesktopDiagnosticsManager {
     "conversation", "transcript", "prompt", "response", "message", "memory", "title",
     "window", "screen", "ocr", "clipboard",
   ]
-
   private func redactSensitive(_ line: String, strictCloudRedaction: Bool = false) -> String {
+    if DiagnosticLogRedactionPolicy.shouldSkipRegexRedaction(line) { return "[redacted-oversize-log-line]" }
     let normalized = line.lowercased()
     if strictCloudRedaction, normalized.contains("device=[") {
       return "[redacted-device-bearing-log-line]"

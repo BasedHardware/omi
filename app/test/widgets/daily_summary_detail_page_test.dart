@@ -18,11 +18,7 @@ void main() {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: ThemeData.dark(),
-        home: DailySummaryDetailPage(
-          summaryId: 'summary-1',
-          summary: _summary(),
-          tileProvider: _MemoryTileProvider(),
-        ),
+        home: DailySummaryDetailPage(summaryId: 'summary-1', summary: _summary(), tileProvider: _MemoryTileProvider()),
       ),
     );
     await tester.pump();
@@ -39,9 +35,7 @@ void main() {
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Office'), findsOneWidget);
 
-    final rowSemantics = tester.widget<Semantics>(
-      find.ancestor(of: firstRow, matching: find.byType(Semantics)).first,
-    );
+    final rowSemantics = tester.widget<Semantics>(find.ancestor(of: firstRow, matching: find.byType(Semantics)).first);
     expect(rowSemantics.properties.label, 'Home, 8AM');
     expect(rowSemantics.properties.button, isTrue);
     expect(rowSemantics.properties.onTap, isNotNull);

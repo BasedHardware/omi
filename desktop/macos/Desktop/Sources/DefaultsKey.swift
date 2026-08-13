@@ -61,6 +61,8 @@ enum DefaultsKey: String {
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
+  case floatingBarCachedPlan = "floatingBar_cachedPlan"
+  case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
@@ -101,6 +103,20 @@ struct ScopedDefaultsKey {
     Self(rawValue: "TasksSortOrderMigrated.owner.\(ownerID)")
   }
 
+  static func pendingCanonicalReceiptInvalidation(
+    ownerID: String,
+    keyPrefix: String = "suggested.canonicalReceipt.pendingInvalidation."
+  ) -> Self {
+    Self(rawValue: "\(keyPrefix)\(ownerID)")
+  }
+
+  static func pendingCanonicalReceiptInvalidationTimestamps(
+    ownerID: String,
+    keyPrefix: String = "suggested.canonicalReceipt.pendingInvalidation."
+  ) -> Self {
+    Self(rawValue: "\(keyPrefix)\(ownerID).timestamps")
+  }
+
   static func importConnectorAvailabilityText(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
   }
@@ -123,6 +139,10 @@ extension UserDefaults {
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
   func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: ScopedDefaultsKey) -> Bool { bool(forKey: key.rawValue) }
+  func stringArray(forKey key: ScopedDefaultsKey) -> [String]? { stringArray(forKey: key.rawValue) }
+  func dictionary(forKey key: ScopedDefaultsKey) -> [String: Any]? {
+    dictionary(forKey: key.rawValue)
+  }
   func object(forKey key: ScopedDefaultsKey) -> Any? { object(forKey: key.rawValue) }
   func object(forKey key: DefaultsKey) -> Any? { object(forKey: key.rawValue) }
 

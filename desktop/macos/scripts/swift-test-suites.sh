@@ -19,7 +19,7 @@ WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-4}}"
 # cfprefsd service even when workers have distinct CFFIXED_USER_HOME values.
 # Keep the small auth cluster sequential and give each suite a fresh runtime;
 # the remaining hundreds of suites retain worker-level parallelism.
-SERIAL_SUITES="${OMI_SWIFT_TEST_SERIAL_SUITES:-APIClientAuthRetryTests AuthRefreshResilienceTests AuthSessionAttemptFenceTests AuthTokenStorageTests FirebaseAuthAvailabilityTests KernelJournalOwnerBoundAuthTests RuntimeOwnerIdentityTests}"
+SERIAL_SUITES="${OMI_SWIFT_TEST_SERIAL_SUITES:-APIClientAuthRetryTests AuthRefreshResilienceTests AuthSessionAttemptFenceTests AuthTokenStorageTests ChatToolExecutorCreateMemoryTests FirebaseAuthAvailabilityTests KernelJournalOwnerBoundAuthTests RuntimeOwnerIdentityTests}"
 PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
 # The per-suite budget must clear the slowest legitimate suite, not the median
 # one: MemoryAtlasPerformanceHarnessTests runs 19 tests whose XCTest `measure`

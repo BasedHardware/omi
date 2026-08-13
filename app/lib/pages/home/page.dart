@@ -782,10 +782,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         // Show slim green call bar on non-home/conversations tabs when a call is active
                         if (selectedIndex > 1) const ActiveCallTopBar(),
                         Expanded(
-                          child: IndexedStack(
-                            index: selectedIndex,
-                            children: _buildPages(selectedIndex),
-                          ),
+                          child: IndexedStack(index: selectedIndex, children: _buildPages(selectedIndex)),
                         ),
                       ],
                     ),

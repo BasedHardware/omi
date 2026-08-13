@@ -128,7 +128,7 @@ flowchart TD
 | `layer 1`, `L1`, "extracted conversation" | **Short-term memory** (`layer=short_term`) |
 | `layer 2`, `L2`, durable `memories` rows | **Long-term memory** (`layer=long_term`) |
 | `memory`, "new memory system" | (drop the codename) the canonical system |
-| `memory_items` + `short_term` + legacy `memories` | **One Memories store** with layer field (canonical cohort) |
+| `memory_items` + `short_term` + legacy `memories` | **One memory authority** with a read-only historical adapter |
 | bare "session" in memory docs | **Conversation** (persisted) or **capture session** (ephemeral) |
 | `action_items`, `goals` | **Workflow** — unchanged collections |
 
@@ -136,11 +136,11 @@ flowchart TD
 
 | Era | What it is | Key identifiers today | Canonical mapping | Disposition |
 |-----|------------|----------------------|-------------------|-------------|
-| **Legacy flat memories** | Original production store + extractor | `users/{uid}/memories`, `MemoryDB`, `new_memories_extractor`, `/v3/memories` | **Long-term** in unified Memories (`layer=long_term`) | **Migrate** → **Retire** store |
+| **Legacy flat memories** | Original production store + extractor | `users/{uid}/memories`, `MemoryDB`, `new_memories_extractor`, `/v3/memories` | Grandfathered historical Long-term compatibility; no fabricated promotion | **Read-only adapter**; lazy materialization on mutation |
 | **Legacy categories** | Old taxonomy on legacy rows | `core`, `hobbies`, `lifestyle`, `work`, `skills`, `learnings`, … | **Keep** as `category` metadata; UI filters use primary four (`interesting`, `system`, `manual`, `workflow`) | **Keep** (not layers) |
 | **Shadow short_term** *(retired)* | Was interim shadow write path (`OMI_MEMORY_SHORT_TERM_SHADOW_ENABLED`) | `users/{uid}/short_term` collection may still hold historical rows | **Short-term** in unified Memories (`layer=short_term`) | **Retired** write path; collection cleanup is separate |
 | **Canonical product memory** | Tiered store + ledger | `memory_items`, `MemoryTier`, `memory_commits`, neutral `memory_*` modules | **Canonical Memories store** | **Rename** complete; store is canonical |
-| **Rollout modes** | Gradual rollout control | `off` / `shadow` / `write` / `read`, `MEMORY_MODE` (compat), `MEMORY_ENABLED_USERS`, `memory_control/state` | **`MemorySystem`** + `resolve_memory_system(uid)` | **Collapse** |
+| **Rollout modes** | Retired per-user rollout control | `off` / `shadow` / `write` / `read`, `MEMORY_ENABLED_USERS`, `MemorySystem` | Global incident/readiness controls plus account-generation fences | **Retire selector and UID inventory** |
 | **`tier` product field** | Persisted item field | `short_term` / `long_term` / `archive` on `memory_items` | **`layer`** (same semantics) | **Rename** API + clients |
 | **`memory_reads.py`** | Merges legacy + shadow for reads | split-brain reader shim | Single Memories query by `layer` | **Retire** |
 
@@ -197,7 +197,7 @@ No active `/v1` or `/v2` memories REST API — `/v3` is the legacy product surfa
 | `L1MemoryArchiveItem`, `WorkingMemoryObservation` in **docs/comments** | working observation / short-term candidate | WS-G |
 | `durable_memory_patch`, `L2MemoryRoute` in **docs/comments** | promotion proposal / consolidation route | WS-G |
 | `context_only` as a user-visible tier | Archive or internal processing outcome only | WS-B, WS-G |
-| Rollout `off` / `shadow` / `write` / `read` | `MemorySystem = { legacy, canonical }` + cohort record | WS-E |
+| Per-UID rollout `off` / `shadow` / `write` / `read` | Universal repository + global incident/readiness controls | INV-MEM-5 |
 | `memory_items` collection name (optional) | `memories` or neutral canonical name (decide in WS-G) | WS-G |
 | `plugins_results`, `processing_memory_id` | Already mirrored — document sunset timeline | WS-D |
 | Legacy `category` values (`core`, `hobbies`, …) | Keep in DB; map to primary four in UI filters | WS-F |
@@ -217,7 +217,9 @@ externally-observable API strings. WS-G must **not** "correct" them toward the c
 
 ## Canonical Memories record schema (§1.2)
 
-The single record shape every canonical-cohort store/client converges on.
+The single record shape every store/client converges on. Historical adapter
+rows carry an explicit grandfathered admission marker internally; they do not
+pretend to have a canonical promotion receipt or graph assertion.
 
 | Field | Type | Meaning | Notes |
 |-------|------|---------|-------|
@@ -386,44 +388,47 @@ provenance via `conversation_id` / `evidence[].source_id`.
 
 ---
 
-## Ratified rollout decisions (§10) — Q3 superseded 2026-07-27
+## Ratified universal-authority decisions (§10) — Q1/Q2/Q4 superseded 2026-08-11
 
 Authoritative record of the §10 blocking decisions. Ratified by product owner before WS-I start.
 
 | # | Decision | **Ratified choice** | Notes / implications |
 |---|----------|---------------------|----------------------|
-| Q1 | Write convergence for `process_conversation` | **Hard cutover** | Canonical-cohort extraction writes go to the canonical store **only** — no legacy write/fallback for canonical users. (Override of the dual-write default.) |
-| Q2 | Interim split-brain tolerance | **None — disallowed** | A canonical-cohort user must read AND write the canonical store. Consequence: WS-I must also route that cohort's **reads** to canonical (cannot leave reads on legacy), else the user loses freshly written memories. |
+| Q1 | Write convergence for `process_conversation` | **Universal canonical write** | Every authenticated account writes new intake through canonical apply. There is no legacy writer, dual-write, or UID enrollment path. |
+| Q2 | Historical compatibility | **One authority, two physical formats** | `memory_items` owns memory policy. Historical `users/{uid}/memories` rows are read-only adapter input, never a fallback authority. Canonical overrides/tombstones suppress historical rows before exposure. |
 | Q3 | Terminal route trigger for pending Short-term | **Every bounded pending set** | Each enabled maintenance pass deterministically selects a server-bounded eligible set and routes every selected item exactly once through consolidation. Overflow remains immediately eligible on the next Scheduler run, with no 24-hour watermark delay. `promote` performs atomic Long-term admission; there is no separate batch/daily or fast-track promotion pass. |
-| Q4 | Backfill dedup (both stores) | **Hash-based idempotency key** | Deterministic id derived from source so re-runs never duplicate. (WS-C.) |
+| Q4 | Historical data availability | **No general backfill** | Existing rows remain physically readable. Mutation lazily materializes only the addressed row with stable identity and deterministic idempotency; reading causes no write, LLM call, embedding, or graph admission. |
 | Q5 | Provider projection ID strategy | **User-scoped stable ID** | Typesense and Pinecone use one `memproj:` hash of `(uid, memory_id)` while metadata retains `memory_id` for canonical hydration. (WS-J/WS-G.) |
 | Q6 | API field name for layer axis | **`layer`** | Desktop aliases `tier` during WS-G. |
 | Q7 | Reprocess semantics | **Full retract after successful extraction** | Extraction failure preserves prior state. A successful result replaces the source across all stores and vectors; an empty result therefore performs a full retract. |
 | Q8 | Conversation-delete cascade | **Server-default `cascade=true` + fix clients** | Belt-and-suspenders; desktop currently omits the flag. (WS-J/WS-K.) |
 
-**WS-I scope consequence of Q1+Q2:** WS-I is NOT a dual-write add-on. For the canonical cohort it must
-make the `CanonicalMemoryBackend` real for **both write and read**, route `process_conversation`
-extraction to canonical-only, and route the cohort's read path (at least `/v3` GET) to canonical — so a
-canonical user is fully self-consistent. The canonical cohort stays code-owned
-in `backend/config/canonical_memory_cohort.py` and intentionally small; only
-explicitly reviewed users and isolated fixtures are affected. Runtime rollout
-flags do not grant entitlement. Legacy-cohort behavior must remain
-byte-unchanged.
+**Scope consequence of Q1+Q2:** universal convergence is not a dual-write add-on
+and not a mass migration. `MemoryService` applies one policy for all accounts
+and all origins. New writes are canonical-only; historical rows are merged at
+read time and can be changed only by deterministic per-item materialization.
+Runtime controls remain global incident/cost/readiness switches and integrity
+fences; they never grant product entitlement or select a different account
+system. The implementation and removal ledger is
+[`docs/epics/universal_memory_task_convergence.md`](../epics/universal_memory_task_convergence.md).
 
-### Backfill & reversibility directive (locked 2026-06-23)
+### Historical compatibility and reversibility directive (supersedes the 2026-06-23 backfill directive)
 
-- **Backfill is NON-DESTRUCTIVE.** Legacy `memories` / `short_term` rows are **retained** for a migrated
-  user, not moved or deleted. WS-C copies legacy → canonical (`layer=long_term`) idempotently
-  (hash key, Q4); the legacy data stays intact as a fallback.
-- **Reversibility:** because legacy data is preserved, flipping a user `canonical → legacy` is a pure
-  routing change with the original data fully available — no restore step needed.
-- **Clean cut-over / decommission (WS-H) is GATED:** legacy stores are deleted ONLY once **all** users
-  are fully migrated and verified. Until then, legacy is the durable fallback. No agent may run WS-H
-  (legacy store deletion) without explicit owner sign-off at full-migration time.
-- **Consequence for Q1 cutover:** "cutover" governs the *write/read routing* for a canonical user
-  (their NEW writes go canonical-only), not destruction of their pre-existing legacy data.
-- Historical backfill that materializes retained legacy data as Long-term is a
-  migration operation, not new intake or a reusable promotion bypass.
+- **Historical storage is non-destructive.** Existing `memories` and retired
+  `short_term` documents remain physically retained and are not prerequisites
+  for universal product availability.
+- **Reading is pure.** The historical adapter never copies, embeds, promotes,
+  graphs, or otherwise mutates a row during list, fetch, search, export, chat,
+  MCP, or tool access.
+- **Mutation is lazy and bounded.** Editing or deleting an old row first creates
+  its deterministic canonical successor/override or tombstone, then performs
+  idempotent physical cleanup. A cleanup failure cannot resurrect the row.
+- **Rollback floor:** after universal canonical writes begin, rollback must keep
+  a reader that understands both physical formats. Legacy-only routing would
+  hide new data and is forbidden.
+- **Physical deletion remains separately gated.** This convergence does not
+  authorize deleting either store. Production evidence and explicit owner
+  approval are required before physical retirement.
 
 ---
 
@@ -434,7 +439,7 @@ Status legend: ✅ handled in code today · ⚠️ gated / needs sign-off · �
 | Trigger | legacy `memories` | canonical `memory_items` | `memory_evidence` | `memory_operations` | Pinecone ns2 (legacy `{uid}-{id}`) | Pinecone ns2 (canonical `memproj:<hash(uid,memory_id)>`) | Pinecone ns2 (retired `memvec:…`) | `review_queue` | Neo4j KG | WS-M keyword index |
 |---------|-------------------|--------------------------|-------------------|---------------------|-------------------------------------|------------------------------------------|-------------------------------|--------------|----------|-------------------|
 | **Conversation delete, `cascade=false`** (current server default) | — (no cascade) | — | — | — | — | — | — | — | — | — |
-| **Conversation delete, `cascade=true`** | ✅ `ripple_source_deletion` / tombstone evidence | ✅ atomic complete-source replacement (canonical cohort only) | ✅ scrubbed tombstone in replacement | ✅ replacement ledger operation | ✅ `delete_memory_vector` for retracted legacy ids | ✅ user-scoped purge outbox | — no new writes | ✅ bounded indexed purge + authoritative read fence | ✅ citation prune, retried by projection delivery | ✅ delete outbox |
+| **Conversation delete, `cascade=true`** | ✅ historical suppression + bounded cleanup | ✅ atomic complete-source replacement (universal) | ✅ scrubbed tombstone in replacement | ✅ replacement ledger operation | ✅ `delete_memory_vector` for retracted legacy ids | ✅ user-scoped purge outbox | — no new writes | ✅ bounded indexed purge + authoritative read fence | ✅ citation prune, retried by projection delivery | ✅ delete outbox |
 | **Account delete** | ✅ Firestore recursive wipe + `delete_memory_vectors_batch` | ✅ Firestore recursive wipe | ✅ Firestore recursive wipe | ✅ Firestore recursive wipe | ✅ `_purge_derived_user_data` | ✅ UID-authoritative provider purge even with no Firestore items | — no new writes | ✅ subcollection wipe | ✅ `knowledge_nodes` / `knowledge_edges` wiped | ✅ UID purge |
 | **Reprocess / sync-merge (Q7 full retract)** | ✅ legacy path in `_extract_memories_inner` | ✅ atomic complete-source replacement | ✅ scrubbed tombstone in replacement | ✅ replacement ledger operation | ✅ legacy delete in reprocess inner | ✅ user-scoped purge outbox | — no new writes | ✅ bounded indexed purge | ✅ citation prune | ✅ delete outbox |
 | **Supersede / tombstone (single memory)** | ✅ `invalidate_memory` / ripple | ✅ complete non-tombstoned canonical lineage | ✅ scrub embedded evidence; preserve shared standalone evidence only for survivors | ✅ atomic deletion ledger operation | ✅ router delete | ✅ user-scoped purge outbox | — no new writes | ✅ atomic current-review redaction + bounded cleanup | ✅ citation prune | ✅ delete outbox |
@@ -501,4 +506,4 @@ Devices are **capture surfaces only** — provenance metadata, not memory author
 
 **Registry:** `users/{uid}/client_devices/{client_device_id}` — `platform`, `device_class`, `label`, `first_seen_at`, `last_seen_at`, `app_version`. Upsert throttled like `record_user_platform()`.
 
-**Provenance path:** Conversation (`client_device_id`, `client_platform`) → `Evidence.client_device_id` / `MemoryEvidence.client_device_id` (not in `artifact_ref` or `evidence_id` hash inputs) → optional denormalized `capture_device_ids` / `primary_capture_device` on `MemoryItem` → retrieval filter `device_scope=current|all|explicit` (canonical memory users only; see `X-Omi-Memory-Device-Scope-Supported` response header).
+**Provenance path:** Conversation (`client_device_id`, `client_platform`) → `Evidence.client_device_id` / `MemoryEvidence.client_device_id` (not in `artifact_ref` or `evidence_id` hash inputs) → optional denormalized `capture_device_ids` / `primary_capture_device` on `MemoryItem` → universal retrieval filter `device_scope=current|all|explicit` (see `X-Omi-Memory-Device-Scope-Supported` response header).

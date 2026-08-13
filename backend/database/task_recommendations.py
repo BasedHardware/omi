@@ -8,7 +8,6 @@ from typing import Any, Optional, cast
 
 from google.cloud import firestore
 
-from config.canonical_memory_cohort import is_canonical_memory_user
 from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
@@ -93,8 +92,6 @@ def _validate_generation(
     uid: str,
     account_generation: int,
 ) -> None:
-    if not is_canonical_memory_user(uid):
-        raise RecommendationGenerationMismatchError('canonical task intelligence is not enabled')
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)

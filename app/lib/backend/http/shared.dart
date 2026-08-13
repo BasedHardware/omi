@@ -240,6 +240,9 @@ Future<void> _drainStreamedResponse(http.StreamedResponse response) async {
   }
 }
 
+@visibleForTesting
+Future<void> drainStreamedResponseForTesting(http.StreamedResponse response) => _drainStreamedResponse(response);
+
 http.StreamedResponse _authUnavailableStreamedResponse() =>
     http.StreamedResponse(const Stream<List<int>>.empty(), 401, reasonPhrase: 'Authentication unavailable');
 

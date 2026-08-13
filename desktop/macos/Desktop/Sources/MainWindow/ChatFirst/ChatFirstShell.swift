@@ -2,7 +2,7 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
-/// Cohort-only main-window shell. It shares the existing data owners with the
+/// Universal main-window shell. It shares the existing data owners with the
 /// legacy shell but owns no second chat state, task state, or navigation index.
 struct ChatFirstShell: View {
   @ObservedObject var navigation: ChatFirstShellNavigation
@@ -338,7 +338,7 @@ struct ChatFirstShell: View {
   }
 
   /// Existing Dashboard callbacks still speak in legacy sidebar items. Keep
-  /// that compatibility at this one boundary while the cohort shell itself is
+  /// that compatibility at this one boundary while the Chat-first shell itself is
   /// entirely route-typed.
   private var legacySelectionBinding: Binding<Int> {
     Binding(

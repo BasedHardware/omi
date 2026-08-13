@@ -2,6 +2,52 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
+enum ChatBubbleMetadataControlMetrics {
+  static let leadingInset = OmiSpacing.xxs
+  static let topInset = leadingInset
+  static let targetSize: CGFloat = 24
+}
+
+enum ChatBubbleMetadataHoverRegion {
+  case row
+  case controls
+}
+
+/// Hover ownership for the message and its metadata controls. AppKit can emit
+/// the row exit before SwiftUI delivers the controls entry; the release token
+/// bridges that event ordering without leaving the controls permanently shown.
+struct ChatBubbleMetadataHoverState {
+  private(set) var isRowHovering = false
+  private(set) var isControlsHovering = false
+  private(set) var holdsPointerTransition = false
+  private var releaseGeneration = 0
+
+  var keepsMetadataVisible: Bool {
+    isRowHovering || isControlsHovering || holdsPointerTransition
+  }
+
+  mutating func update(_ region: ChatBubbleMetadataHoverRegion, hovering: Bool) -> Int? {
+    switch region {
+    case .row: isRowHovering = hovering
+    case .controls: isControlsHovering = hovering
+    }
+
+    releaseGeneration += 1
+    if hovering {
+      holdsPointerTransition = true
+      return nil
+    }
+    guard !isRowHovering, !isControlsHovering else { return nil }
+    holdsPointerTransition = true
+    return releaseGeneration
+  }
+
+  mutating func completeRelease(_ generation: Int) {
+    guard generation == releaseGeneration, !isRowHovering, !isControlsHovering else { return }
+    holdsPointerTransition = false
+  }
+}
+
 // MARK: - Chat Bubble
 
 struct ChatBubble: View {
@@ -20,24 +66,13 @@ struct ChatBubble: View {
   /// Nil for all existing Chat surfaces. Rich blocks are transcript data, but
   /// only the capability-gated main shell is allowed to turn them into controls.
   var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
-  /// Controllable seam for the metadata band's reveal state. Hover is not
-  /// drivable from a test process (it is never the active application), and the
-  /// invariant worth pinning — a revealed band adds no layout height — is only
-  /// observable with the band actually revealed. Nil everywhere in production.
   var metadataRevealOverrideForTesting: Bool? = nil
-
-  @State private var isRowHovering = false
-  /// The band draws outside the row's bounds, so it needs its own hover to stay
-  /// up while the pointer is on the controls.
-  @State private var isMetadataBandHovering = false
+  @State private var metadataHoverState = ChatBubbleMetadataHoverState()
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
   @State private var showInfoPopover = false
   @State private var lastSubmittedRating: Int?
-  // Shared across every metadata control: true while any of them holds
-  // keyboard focus, so Tab / Full Keyboard Access never lands on an
-  // invisible button.
   @FocusState private var isMetadataControlFocused: Bool
 
   init(
@@ -189,7 +224,7 @@ struct ChatBubble: View {
       }
     }
     .contentShape(Rectangle())
-    .onHover { isRowHovering = $0 }
+    .onHover { updateMetadataHover(.row, hovering: $0) }
   }
 
   @ViewBuilder
@@ -254,23 +289,7 @@ struct ChatBubble: View {
         if let backgroundAgentSummary {
           BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
         } else if !message.text.isEmpty {
-          if message.sender == .ai, shouldTruncate {
-            // Keep the expansion affordance on the same baseline as the
-            // visible truncation ellipsis. The text gets the remaining width,
-            // so the control cannot fall onto a detached row.
-            HStack(alignment: .lastTextBaseline, spacing: OmiSpacing.xs) {
-              messageTextBubble(displayText)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(0)
-              showMoreButton
-            }
-            .frame(
-              maxWidth: .infinity,
-              alignment: .leading
-            )
-          } else {
-            messageTextBubble(displayText)
-          }
+          messageTextBubble(displayText)
         }
 
         if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {
@@ -282,10 +301,7 @@ struct ChatBubble: View {
                 .foregroundColor(Ink.accent)
             }
             .buttonStyle(.plain)
-          } else if message.sender == .user, shouldTruncate {
-            // Keep the pre-existing user-bubble layout. Only assistant replies
-            // need the inline treatment; moving this control beside a user
-            // bubble would pull its trailing edge left by the button width.
+          } else if shouldTruncate {
             showMoreButton
           }
         }
@@ -332,7 +348,9 @@ struct ChatBubble: View {
   @ViewBuilder
   private func messageTextBubble(_ text: String) -> some View {
     if presentation == .proactivePush {
-      ChatProactivePushRow(text: text)
+      ChatProactivePushRow(
+        text: text,
+        kind: ChatContinuityInvariants.proactiveNotificationKind(message) ?? .general)
     } else {
       OmiMarkdown(text: text, sender: message.sender)
         .chatMessageBlock(filled: presentation.isFilled)
@@ -479,11 +497,8 @@ struct ChatBubble: View {
   private func messageMetadataRow(includeRatingButtons: Bool, includeCopyButton: Bool) -> some View {
     let isVisible =
       metadataRevealOverrideForTesting
-      ?? ChatBubbleMetadataReveal.isVisible(
-        hovering: isRowHovering || isMetadataBandHovering,
-        controlFocused: isMetadataControlFocused,
-        transientFeedback: showRatingFeedback || showCopied || showInfoPopover
-      )
+      ?? (metadataHoverState.keepsMetadataVisible || isMetadataControlFocused || showRatingFeedback
+        || showCopied || showInfoPopover)
     // **One cluster under the message.** Controls far left and timestamp far right
     // of one line is how two halves of a row end up reading as page furniture.
     HStack(alignment: .center, spacing: OmiSpacing.sm) {
@@ -500,35 +515,22 @@ struct ChatBubble: View {
       Spacer(minLength: 0)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    // The zero-height frame proposes zero height; take the band's own instead of
-    // letting the proposal squash it.
-    .fixedSize(horizontal: false, vertical: true)
-    // Hover has to survive the pointer reaching the controls. The band draws
-    // outside the row's bounds, so the row's own `onHover` reports a leave the
-    // moment the pointer moves down onto the buttons. Inside `allowsHitTesting`,
-    // so a hidden band cannot reveal itself — this only keeps a revealed one up.
+    // Keep the strip inside the row's real layout bounds. Drawing it below a
+    // zero-height frame left visible pixels with no AppKit hit-test region.
+    .padding(.top, ChatBubbleMetadataControlMetrics.topInset)
+    .padding(.leading, ChatBubbleMetadataControlMetrics.leadingInset)
     .contentShape(Rectangle())
-    .onHover { isMetadataBandHovering = $0 }
-    // **Costs nothing at rest, and nothing when revealed either.** It was already
-    // invisible at rest, but an `opacity(0)` row still reserves its height, and
-    // ~20 pt on every assistant turn was most of the dead space between two
-    // one-line messages. So the band is *always* zero-height in layout and draws
-    // out of that frame into the 16 pt gap the transcript keeps after an
-    // assistant row (`ChatTranscriptLayout.regularRowSpacing`).
-    //
-    // Sizing it on reveal instead made document height a function of where the
-    // pointer was: a hovered row was ~16 pt taller, so every row below it shifted
-    // down — under the cursor, mid-scroll, since scrolling happens with the
-    // pointer over the transcript. Painting outside the frame was always the
-    // intent; only the layout height was wrong.
-    .frame(height: 0, alignment: .top)
-    // Outside the zero-height frame, or the stack's 4 pt outlives the row it spaced.
-    .padding(.top, -OmiSpacing.xxs)
+    .onHover { updateMetadataHover(.controls, hovering: $0) }
     .opacity(isVisible ? 1 : 0)
     .allowsHitTesting(isVisible)
-    .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
-    .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataBandHovering)
-    .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataControlFocused)
+    .omiAnimation(.easeInOut(duration: 0.15), value: isVisible)
+  }
+
+  private func updateMetadataHover(_ region: ChatBubbleMetadataHoverRegion, hovering: Bool) {
+    guard let release = metadataHoverState.update(region, hovering: hovering) else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+      metadataHoverState.completeRelease(release)
+    }
   }
 
   @ViewBuilder
@@ -545,6 +547,11 @@ struct ChatBubble: View {
         Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(message.rating == 1 ? Ink.primary : Ink.secondary)
+          .frame(
+            width: ChatBubbleMetadataControlMetrics.targetSize,
+            height: ChatBubbleMetadataControlMetrics.targetSize
+          )
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .focused($isMetadataControlFocused)
@@ -561,6 +568,11 @@ struct ChatBubble: View {
         Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(message.rating == -1 ? Ink.errorRed : Ink.secondary)
+          .frame(
+            width: ChatBubbleMetadataControlMetrics.targetSize,
+            height: ChatBubbleMetadataControlMetrics.targetSize
+          )
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .focused($isMetadataControlFocused)
@@ -604,6 +616,11 @@ struct ChatBubble: View {
       Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(showCopied ? Ink.listeningGreen : Ink.secondary)
+        .frame(
+          width: ChatBubbleMetadataControlMetrics.targetSize,
+          height: ChatBubbleMetadataControlMetrics.targetSize
+        )
+        .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .focused($isMetadataControlFocused)
@@ -619,6 +636,11 @@ struct ChatBubble: View {
       Image(systemName: "info.circle")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(showInfoPopover ? Ink.primary : Ink.secondary)
+        .frame(
+          width: ChatBubbleMetadataControlMetrics.targetSize,
+          height: ChatBubbleMetadataControlMetrics.targetSize
+        )
+        .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .focused($isMetadataControlFocused)

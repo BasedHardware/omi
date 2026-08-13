@@ -2,6 +2,7 @@ from copy import deepcopy
 import json
 
 import pytest
+import utils.task_intelligence.contracts as contracts
 
 from utils.task_intelligence.contracts import (
     REQUIRED_CONTRACT_DOMAINS,
@@ -169,6 +170,19 @@ def test_writer_scanner_ignores_non_utf8_dependency_trees(tmp_path, dependency_p
     assert discover_backend_writer_anchors(repository_root=tmp_path) == {
         ('backend/services/new_writer.py', 'action_items_db.create_action_item')
     }
+
+
+def test_writer_scanner_fails_closed_on_backend_tree_errors(tmp_path, monkeypatch):
+    backend_root = tmp_path / 'backend'
+    backend_root.mkdir()
+
+    def failing_walk(_root, *, onerror):
+        onerror(OSError('permission denied', str(backend_root / 'services')))
+        return iter(())
+
+    monkeypatch.setattr(contracts.os, 'walk', failing_walk)
+    with pytest.raises(ValueError, match='cannot inspect backend source tree'):
+        contracts.discover_backend_writer_anchors(repository_root=tmp_path)
 
 
 def test_source_manifest_rejects_stale_writer_anchor(discovered_writer_anchors):

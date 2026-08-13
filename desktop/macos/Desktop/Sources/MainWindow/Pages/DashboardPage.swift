@@ -223,7 +223,7 @@ struct DashboardPage: View {
   /// Present only for the capability-gated main-window Home chat. Shared
   /// Dashboard callers leave this nil and keep journaled rich blocks inert.
   var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
-  /// The cohort shell reuses dashboard content under More, but Chat itself
+  /// The Chat-first shell reuses dashboard content under More, but Chat itself
   /// has one primary home. Legacy callers leave this nil and retain their
   /// inline Home chat exactly as before.
   var onOpenPrimaryChat: (() -> Void)? = nil
@@ -902,7 +902,7 @@ struct DashboardPage: View {
   private func rollingSuggestionIcon(_ kind: HomeKnowsRowKind) -> String {
     switch kind {
     case .task: return "circle"
-    case .insight: return "lightbulb"
+    case .insight: return ProactiveNotificationBadge.insightSystemImage
     case .question: return "bubble.left"
     }
   }
@@ -2419,7 +2419,7 @@ private struct HomeKnowsRowView: View {
   private var leadingIcon: String {
     switch row.kind {
     case .task: return "circle"
-    case .insight: return "lightbulb"
+    case .insight: return ProactiveNotificationBadge.insightSystemImage
     case .question: return "bubble.left"
     }
   }

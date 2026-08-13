@@ -1593,6 +1593,7 @@ async function main(): Promise<void> {
         const harness = new piMonoClasses!.PiMonoAdapter({
           omiApiBaseUrl: process.env.OMI_API_BASE_URL,
           authToken: piMonoAuthToken,
+          onDisposed: () => piMonoAdapters.delete(harness),
         });
         piMonoAdapters.add(harness);
         return new piMonoClasses!.PiMonoRuntimeAdapter(harness);

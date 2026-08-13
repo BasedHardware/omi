@@ -472,6 +472,8 @@ class ListenReceiver:
             except ValueError:
                 self.host.state.close_code = 1008
                 self.host.state.active = False
+        elif kind == 'start_onboarding' and self.host.onboarding_handler:
+            await self.host.onboarding_handler.start()
         elif kind == 'skip_question' and self.host.onboarding_handler and not self.host.onboarding_handler.completed:
             await self.host.onboarding_handler.skip_current_question()
         elif kind == 'suggested_transcript' and self.host.use_custom_stt:

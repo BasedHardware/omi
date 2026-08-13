@@ -1,6 +1,6 @@
 import Foundation
 
-/// Closed, content-free analytics schema for the cohort-only Chat-first
+/// Closed, content-free analytics schema for the universal Chat-first
 /// experience. The associated values are all finite enums or bounded numeric
 /// buckets: callers cannot put titles, entity IDs, question answers, URLs,
 /// prompts, transcripts, or raw errors into a payload.
