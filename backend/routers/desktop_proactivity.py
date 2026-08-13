@@ -18,7 +18,7 @@ from models.users import PlanType, Subscription
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.desktop_llm_stub import llm_stub_enabled
-from utils.llm.gateway_client import get_llm_gateway_base_url, llm_gateway_headers
+from utils.llm.gateway_client import llm_gateway_headers
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import (
     DESKTOP_ACCESS_TIER_ARCHITECT,

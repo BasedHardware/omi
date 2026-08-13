@@ -201,6 +201,10 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// requested target has actually appeared.
   @Published private(set) var visibleRoute: ChatFirstRoute?
   @Published private(set) var pendingFocus: ChatFirstPendingFocus?
+  /// A conversation fetched by ID for a Chat-first conversation link. Unlike
+  /// the paginated list, this transient value is the exact server record the
+  /// user validated and asked to open.
+  @Published private(set) var pendingConversation: ServerConversation?
   /// A related-entity link can intentionally land in a different primary
   /// destination (for example, a Goal's task list). This is transient like the
   /// focus itself and is never restored across launches.
@@ -235,6 +239,7 @@ final class ChatFirstShellNavigation: ObservableObject {
       isSidebarCollapsed = false
     }
     pendingFocus = nil
+    pendingConversation = nil
     pendingFocusDestination = nil
     visibleRoute = nil
     lastAcknowledgedFocusKind = nil
@@ -247,6 +252,9 @@ final class ChatFirstShellNavigation: ObservableObject {
     origin: ChatFirstAnalyticsEvent.RouteOrigin = .sidebar
   ) {
     guard destination.isPrimaryDestination else { return }
+    // A direct tab selection supersedes any exact conversation deep-link that
+    // has not yet been consumed by the Conversations host.
+    pendingConversation = nil
     // Selecting the already-mounted tab is a no-op. Clearing visibleRoute here
     // used to leave the automation state permanently "not visible" because
     // SwiftUI correctly did not remount the unchanged destination.
@@ -271,6 +279,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   }
 
   func selectMore(_ page: ChatFirstMorePage) {
+    pendingConversation = nil
     if route == .more(page) {
       invalidateGoalLinkResolutions()
       clearFocus()
@@ -295,6 +304,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// navigation; no legacy page can receive a pending focus.
   func open(focus: ChatFirstPendingFocus, destination: ChatFirstRoute) {
     guard destination.isPrimaryDestination else { return }
+    pendingConversation = nil
     invalidateGoalLinkResolutions()
     route = destination
     visibleRoute = nil
@@ -304,6 +314,23 @@ final class ChatFirstShellNavigation: ObservableObject {
     isFocusedEntityAcknowledged = false
     persistNavigation()
     analytics(.routeEntered(route: destination.analyticsRoute, origin: .chatDeeplink))
+  }
+
+  /// Opens a conversation whose detail was already validated by ID. Keeping
+  /// the fetched record on the navigation owner lets the Conversations page
+  /// present it even when the paginated list does not currently contain it.
+  func open(conversation: ServerConversation) {
+    guard !conversation.id.isEmpty else { return }
+    invalidateGoalLinkResolutions()
+    route = .conversations
+    visibleRoute = nil
+    pendingFocus = nil
+    pendingFocusDestination = nil
+    focusedEntityID = nil
+    isFocusedEntityAcknowledged = false
+    pendingConversation = conversation
+    persistNavigation()
+    analytics(.routeEntered(route: .conversations, origin: .chatDeeplink))
   }
 
   /// A Goal link validates asynchronously before it opens a typed focus. The

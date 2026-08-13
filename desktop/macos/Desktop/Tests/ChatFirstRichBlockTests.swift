@@ -3,6 +3,58 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatFirstRichBlockTests: XCTestCase {
+  private func conversation(id: String) -> ServerConversation {
+    ServerConversation(
+      id: id,
+      createdAt: Date(timeIntervalSince1970: 1_000),
+      updatedAt: Date(timeIntervalSince1970: 1_001),
+      startedAt: Date(timeIntervalSince1970: 1_000),
+      finishedAt: Date(timeIntervalSince1970: 1_060),
+      structured: Structured(
+        title: "Meeting notes",
+        overview: "Overview",
+        emoji: "",
+        category: "other",
+        actionItems: [],
+        events: []
+      ),
+      transcriptSegments: [],
+      transcriptSegmentsIncluded: false,
+      geolocation: nil,
+      photos: [],
+      appsResults: [],
+      source: .desktop,
+      language: "en",
+      status: .completed,
+      discarded: false,
+      deleted: false,
+      isLocked: false,
+      starred: false,
+      folderId: nil,
+      inputDeviceName: nil,
+      deferred: false
+    )
+  }
+
+  func testConversationLinkCarriesExactFetchedRecordAndRejectsUnavailableResponses() {
+    let fetched = conversation(id: "meeting-42")
+    XCTAssertEqual(
+      ChatFirstConversationLinkPolicy.validatedConversation(fetched, requestedID: "meeting-42"),
+      fetched
+    )
+    XCTAssertNil(
+      ChatFirstConversationLinkPolicy.validatedConversation(nil, requestedID: "meeting-42"),
+      "A failed detail fetch must render the unavailable state rather than fall back to the list"
+    )
+    XCTAssertNil(
+      ChatFirstConversationLinkPolicy.validatedConversation(
+        conversation(id: "different-meeting"),
+        requestedID: "meeting-42"
+      ),
+      "A mismatched detail response must render the unavailable state"
+    )
+  }
+
   func testBlockWireRejectsTheEntireToolPayloadWhenAnyBlockIsMalformed() {
     let converted = ChatFirstBlockWire.backendBlocks(
       from: [

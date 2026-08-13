@@ -140,6 +140,11 @@ describe("kernel conversation journal", () => {
       conversationId: "conversation-1",
       summary: "Weekly planning",
     }]);
+    expect(result).toMatchObject({
+      accepted: true,
+      duplicate: false,
+      receipt: { intentId: "intent-meeting" },
+    });
     fixture.store.close();
   });
 

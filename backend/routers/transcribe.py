@@ -91,8 +91,9 @@ async def _stream_handler(
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
-    conversation_role: str = 'ambient',
     client_device_context: Optional[ClientDeviceContext] = None,
+    *,
+    conversation_role: str = 'ambient',
 ) -> None:
     """Compatibility facade for the accepted-socket listen session."""
     await _run_listen_session_with_deletion_fence(

@@ -80,6 +80,7 @@ actor ConversationFinalizationService {
       guard try await resolveExhaustedCloudReconciliation(session: latestSession, sessionId: sessionId) else {
         throw TranscriptionStorageError.invalidState("Exhausted cloud session has no local fallback")
       }
+      await postMeetingCompletionIfReady(session: latestSession, reason: .retry)
     } catch {
       await markRetryableFailure(sessionId: sessionId, error: error)
     }
@@ -111,11 +112,12 @@ actor ConversationFinalizationService {
         }
         try await finalizeCloudSession(session: latestSession, allowForceProcess: allowCloudForceProcess)
       }
-      if session.finalizationReason == .meetingEnded || reason == .meetingEnded {
-        await MainActor.run {
-          NotificationCenter.default.post(name: .desktopMeetingConversationDidComplete, object: nil)
-        }
-      }
+      // Meeting provenance is persisted on the recording session, while the
+      // finalization reason only describes why this particular attempt ended.
+      // A max-duration split must not announce a meeting fragment as ready;
+      // explicit stop and detector-end completions may wake Chat after the
+      // backend/local reconciliation has reached completed.
+      await postMeetingCompletionIfReady(session: session, reason: reason)
     } catch {
       await markRetryableFailure(sessionId: sessionId, error: error)
     }
@@ -184,7 +186,7 @@ actor ConversationFinalizationService {
       finished_at: bundle.session.finishedAt.map { iso.string(from: $0) },
       language: bundle.session.language,
       client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId),
-      conversation_role: bundle.session.finalizationReason == .meetingEnded ? "meeting" : "ambient"
+      conversation_role: bundle.session.conversationRole.rawValue
     )
     let response = try await apiClient.createConversationFromSegments(request)
     let status = LocalConversationStatus(rawValue: response.status) ?? .processing
@@ -508,6 +510,7 @@ actor ConversationFinalizationService {
           recovered
         {
           log("ConversationFinalization: Recovered exhausted session \(sessionId) from local data after finalize error")
+          await postMeetingCompletionIfReady(session: session, reason: .retry)
           return
         }
         let segmentCount = try? await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
@@ -540,6 +543,37 @@ actor ConversationFinalizationService {
   static func localClientConversationId(session: TranscriptionSessionRecord, sessionId: Int64) -> String {
     let startedAtMs = Int64((session.startedAt.timeIntervalSince1970 * 1000).rounded())
     return session.clientConversationId ?? "macos-local-\(sessionId)-\(startedAtMs)"
+  }
+
+  /// Meeting completion is a post-sync signal. Persisted max-duration
+  /// fragments remain silent even when a later crash-recovery attempt uses a
+  /// generic `.retry` reason.
+  static func shouldNotifyMeetingCompletion(
+    session: TranscriptionSessionRecord,
+    reason: TranscriptionFinalizationReason
+  ) -> Bool {
+    guard session.conversationRole == .meeting else { return false }
+    let effectiveReason = session.finalizationReason ?? reason
+    return effectiveReason == .meetingEnded || effectiveReason == .userStop
+  }
+
+  private func postMeetingCompletionIfReady(
+    session: TranscriptionSessionRecord,
+    reason: TranscriptionFinalizationReason
+  ) async {
+    guard Self.shouldNotifyMeetingCompletion(session: session, reason: reason), let sessionId = session.id else {
+      return
+    }
+    do {
+      guard let completed = try await TranscriptionStorage.shared.getSession(id: sessionId),
+        completed.status == .completed, completed.backendSynced, completed.backendId?.isEmpty == false
+      else { return }
+      await MainActor.run {
+        NotificationCenter.default.post(name: .desktopMeetingConversationDidComplete, object: nil)
+      }
+    } catch {
+      logError("ConversationFinalization: Failed to verify meeting completion \(sessionId)", error: error)
+    }
   }
 
   /// The default Apple Silicon path creates its backend conversation through

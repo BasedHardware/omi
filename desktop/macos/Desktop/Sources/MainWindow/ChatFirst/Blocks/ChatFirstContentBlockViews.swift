@@ -439,13 +439,19 @@ struct ConversationLinkView: View {
     Task { @MainActor in
       defer { isOpening = false }
       do {
-        _ = try await APIClient.shared.getConversation(id: conversationID)
-        ConversationDetailAutomationState.shared.requestOpen(
-          conversationId: conversationID, showTranscript: false)
+        let conversation = try await APIClient.shared.getConversation(id: conversationID)
+        guard
+          let conversation = ChatFirstConversationLinkPolicy.validatedConversation(
+            conversation,
+            requestedID: conversationID
+          )
+        else {
+          throw URLError(.cannotParseResponse)
+        }
+        navigation.open(conversation: conversation)
         AnalyticsManager.shared.chatFirst(
           .richBlock(kind: .conversationLink, outcome: .acted, action: .open)
         )
-        navigation.selectPrimary(.conversations, origin: .chatDeeplink)
       } catch {
         isUnavailable = true
         AnalyticsManager.shared.chatFirst(
@@ -453,6 +459,20 @@ struct ConversationLinkView: View {
         )
       }
     }
+  }
+}
+
+/// The detail fetch is authoritative for a conversation link. Keep a small
+/// pure policy around the ID check so malformed or mismatched responses take
+/// the same unavailable path as a failed request instead of opening a nearby
+/// paginated row.
+enum ChatFirstConversationLinkPolicy {
+  static func validatedConversation(
+    _ conversation: ServerConversation?,
+    requestedID: String
+  ) -> ServerConversation? {
+    guard let conversation, conversation.id == requestedID else { return nil }
+    return conversation
   }
 }
 

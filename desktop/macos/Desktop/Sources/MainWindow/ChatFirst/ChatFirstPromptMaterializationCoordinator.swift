@@ -29,6 +29,7 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
   private var lastAttemptAt: Date?
   private var requestTask: Task<Void, Never>?
   private var pendingCompletionBypass = false
+  private var pendingCompletionWindowForeground = false
   private var requestGeneration = 0
   private let now: () -> Date
 
@@ -63,6 +64,7 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
     requestTask?.cancel()
     requestTask = nil
     pendingCompletionBypass = false
+    pendingCompletionWindowForeground = false
   }
 
   /// `ChatFirstShell` alone forwards app foreground events. This is never
@@ -76,12 +78,13 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
   /// This exact completion signal bypasses only the foreground debounce; all
   /// route, owner, first-page, and in-flight gates remain authoritative.
   @discardableResult
-  func meetingConversationDidComplete() -> Bool {
+  func meetingConversationDidComplete(windowForeground: Bool) -> Bool {
     if requestTask != nil {
       pendingCompletionBypass = true
+      pendingCompletionWindowForeground = pendingCompletionWindowForeground || windowForeground
       return true
     }
-    return requestMaterialization(windowForeground: true, bypassMinimumInterval: true)
+    return requestMaterialization(windowForeground: windowForeground, bypassMinimumInterval: true)
   }
 
   @discardableResult
@@ -112,8 +115,13 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
       if self.requestGeneration == generation {
         self.requestTask = nil
         if self.pendingCompletionBypass {
+          let windowForeground = self.pendingCompletionWindowForeground
           self.pendingCompletionBypass = false
-          _ = self.requestMaterialization(windowForeground: true, bypassMinimumInterval: true)
+          self.pendingCompletionWindowForeground = false
+          _ = self.requestMaterialization(
+            windowForeground: windowForeground,
+            bypassMinimumInterval: true
+          )
         }
       }
     }

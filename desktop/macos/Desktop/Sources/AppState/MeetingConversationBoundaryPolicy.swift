@@ -1,10 +1,7 @@
 import Foundation
 
 enum MeetingConversationBoundaryPolicy {
-  enum Role: String, Codable, Equatable, Sendable {
-    case ambient
-    case meeting
-  }
+  typealias Role = TranscriptionConversationRole
 
   struct Transition: Equatable, Sendable {
     let nextRole: Role

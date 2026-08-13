@@ -1559,6 +1559,11 @@ private struct PageContentView: View {
 /// so tapping a row navigates to the detail view.
 struct ConversationsPageHost: View {
   let appState: AppState
+  /// Optional exact record supplied by a Chat-first conversation deep-link.
+  /// The normal Conversations page still owns list loading and row selection;
+  /// this value only seeds selection when a link fetched a record that is not
+  /// present in the current page.
+  var initialConversation: ServerConversation? = nil
   @State private var selectedConversation: ServerConversation? = nil
   @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
 
@@ -1582,6 +1587,14 @@ struct ConversationsPageHost: View {
       // account's conversation after an in-place account switch.
       .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
         selectedConversation = nil
+      }
+      .onAppear {
+        if let initialConversation {
+          selectedConversation = initialConversation
+        }
+      }
+      .onChange(of: initialConversation?.id) { _, _ in
+        selectedConversation = initialConversation
       }
   }
 }

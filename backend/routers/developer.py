@@ -67,7 +67,7 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
-from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival
+from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1552,7 +1552,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
-                persist_desktop_meeting_arrival(uid, existing_conversation)
+                persist_desktop_meeting_arrival_best_effort(uid, existing_conversation)
                 return _conversation_response_from_data(existing_conversation)
 
     resolved_client_device_id = client_device_id or request.client_device_id
@@ -1590,7 +1590,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
-                persist_desktop_meeting_arrival(uid, existing_conversation)
+                persist_desktop_meeting_arrival_best_effort(uid, existing_conversation)
                 return _conversation_response_from_data(existing_conversation)
             raise HTTPException(status_code=409, detail="Conversation creation already in progress")
     else:
@@ -1628,7 +1628,8 @@ def _create_conversation_from_segments(
         )
         lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
 
-    persist_desktop_meeting_arrival(uid, conversation)
+    conversation.external_data = {**(conversation.external_data or {}), 'conversation_role': request.conversation_role}
+    persist_desktop_meeting_arrival_best_effort(uid, conversation)
 
     return ConversationResponse(
         id=conversation.id,

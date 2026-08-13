@@ -182,6 +182,7 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
         return bool(
             conversation
             and conversation.get('source') == 'desktop'
+            and (conversation.get('external_data') or {}).get('conversation_role') == 'meeting'
             and not conversation.get('discarded', False)
             and not conversation.get('is_locked', False)
             and conversation.get('status') == 'completed'

@@ -296,6 +296,52 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     XCTAssertEqual(session.finalizationReason, .meetingEnded)
   }
 
+  func testMeetingCompletionNotificationUsesPersistedReasonAndIgnoresRotationFragments() {
+    let stoppedMeeting = TranscriptionSessionRecord(
+      source: "desktop",
+      conversationRole: .meeting,
+      finalizationReason: .userStop
+    )
+    XCTAssertTrue(
+      ConversationFinalizationService.shouldNotifyMeetingCompletion(
+        session: stoppedMeeting,
+        reason: .retry
+      ))
+
+    let endedMeeting = TranscriptionSessionRecord(
+      source: "desktop",
+      conversationRole: .meeting,
+      finalizationReason: .meetingEnded
+    )
+    XCTAssertTrue(
+      ConversationFinalizationService.shouldNotifyMeetingCompletion(
+        session: endedMeeting,
+        reason: .retry
+      ))
+
+    let maxDurationMeeting = TranscriptionSessionRecord(
+      source: "desktop",
+      conversationRole: .meeting,
+      finalizationReason: .maxDurationRotation
+    )
+    XCTAssertFalse(
+      ConversationFinalizationService.shouldNotifyMeetingCompletion(
+        session: maxDurationMeeting,
+        reason: .retry
+      ))
+
+    let continuedMeeting = TranscriptionSessionRecord(
+      source: "desktop",
+      conversationRole: .meeting,
+      finalizationReason: .finishAndContinue
+    )
+    XCTAssertFalse(
+      ConversationFinalizationService.shouldNotifyMeetingCompletion(
+        session: continuedMeeting,
+        reason: .finishAndContinue
+      ))
+  }
+
   func testSessionsNeedingFinalizationIncludesRetryableWorkOnly() async throws {
     let recordingId = try await TranscriptionStorage.shared.startSession(source: "desktop")
 
@@ -457,6 +503,7 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     let sessionId = try await TranscriptionStorage.shared.startSession(
       source: "desktop",
       clientConversationId: "client-fallback-id",
+      conversationRole: .meeting,
       finalizationStrategy: .cloudReconcile
     )
     try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: "stale-backend-id")
@@ -493,8 +540,51 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     let body = try XCTUnwrap(postRequests.first?.body)
     let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertEqual(json["client_conversation_id"] as? String, "client-fallback-id")
+    XCTAssertEqual(json["conversation_role"] as? String, "meeting")
     let segments = try XCTUnwrap(json["transcript_segments"] as? [[String: Any]])
     XCTAssertEqual(segments.first?["text"] as? String, "saved transcript for recovery")
+  }
+
+  func testLocalMeetingMaxDurationUploadPreservesMeetingRole() async throws {
+    FinalizationRecoveryURLStub.reset()
+    setenv("OMI_PYTHON_API_URL", "https://finalization-recovery.test/", 1)
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [FinalizationRecoveryURLStub.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+    await ConversationFinalizationService.shared.setAPIClientForTesting(client)
+    addTeardownBlock {
+      await ConversationFinalizationService.shared.setAPIClientForTesting(nil)
+    }
+    defer {
+      unsetenv("OMI_PYTHON_API_URL")
+      FinalizationRecoveryURLStub.reset()
+    }
+
+    let sessionId = try await TranscriptionStorage.shared.startSession(
+      source: "desktop",
+      clientConversationId: "meeting-max-duration",
+      conversationRole: .meeting,
+      finalizationStrategy: .localSegments
+    )
+    try await TranscriptionStorage.shared.appendSegment(
+      sessionId: sessionId,
+      speaker: 0,
+      text: "meeting fragment",
+      startTime: 0,
+      endTime: 1
+    )
+    try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
+
+    await ConversationFinalizationService.shared.finalizeSession(
+      id: sessionId,
+      reason: .maxDurationRotation
+    )
+
+    let postRequests = FinalizationRecoveryURLStub.requests.filter { $0.method == "POST" }
+    let body = try XCTUnwrap(postRequests.first?.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(json["conversation_role"] as? String, "meeting")
   }
 
   func testRetryingMeetingFinalizationRecoversExactIdAndWakesChat() async throws {
@@ -516,6 +606,7 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     let sessionId = try await TranscriptionStorage.shared.startSession(
       source: "desktop",
       clientConversationId: "client-recording-id",
+      conversationRole: .meeting,
       finalizationStrategy: .cloudReconcile
     )
     try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: "stale-backend-id")

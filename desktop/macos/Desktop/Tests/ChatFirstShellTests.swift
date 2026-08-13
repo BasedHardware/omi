@@ -12,6 +12,39 @@ final class ChatFirstShellTests: XCTestCase {
     )
   }
 
+  private func conversation(id: String) -> ServerConversation {
+    ServerConversation(
+      id: id,
+      createdAt: Date(timeIntervalSince1970: 1_000),
+      updatedAt: Date(timeIntervalSince1970: 1_001),
+      startedAt: Date(timeIntervalSince1970: 1_000),
+      finishedAt: Date(timeIntervalSince1970: 1_060),
+      structured: Structured(
+        title: "Meeting notes",
+        overview: "Overview",
+        emoji: "",
+        category: "other",
+        actionItems: [],
+        events: []
+      ),
+      transcriptSegments: [],
+      transcriptSegmentsIncluded: false,
+      geolocation: nil,
+      photos: [],
+      appsResults: [],
+      source: .desktop,
+      language: "en",
+      status: .completed,
+      discarded: false,
+      deleted: false,
+      isLocked: false,
+      starred: false,
+      folderId: nil,
+      inputDeviceName: nil,
+      deferred: false
+    )
+  }
+
   func testSuccessfulSampleSelectsChatFirstAndCannotLiveSwap() throws {
     var sample = ChatFirstShellCapabilitySample()
     sample.resolve(
@@ -89,6 +122,20 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertNil(restored.pendingFocus)
     XCTAssertNil(restored.focusedEntityID)
     XCTAssertFalse(restored.isFocusedEntityAcknowledged)
+  }
+
+  func testConversationDeepLinkCarriesFetchedRecordOutsidePaginatedList() throws {
+    let suiteName = "ChatFirstShellTests.conversation-deeplink.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    let fetched = conversation(id: "older-meeting-42")
+    navigation.open(conversation: fetched)
+
+    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.pendingConversation, fetched)
+    XCTAssertNil(navigation.pendingFocus)
   }
 
   func testBackNavigationReturnsToChatFromPrimaryAndSettingsRoutes() throws {

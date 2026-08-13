@@ -450,6 +450,7 @@ class AppState: ObservableObject {
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
   var silentMicRecoveryAttempts = 0
   var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
+  var meetingDetectorMode: AssistantSettings.SystemAudioCaptureMode?
   var meetingBoundaryInProgress = false
   var pendingMeetingState: Bool?
   @Published var isAwaitingMeeting = false

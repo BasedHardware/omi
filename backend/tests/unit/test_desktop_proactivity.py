@@ -218,7 +218,6 @@ async def test_gateway_failure_releases_reserved_quota(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "_release_quota", release)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
-    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_base_url", lambda: "http://gateway")
     monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
 
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
@@ -296,7 +295,6 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "_consume_quota", allow)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
-    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_base_url", lambda: "http://gateway")
     monkeypatch.setattr(
         desktop_proactivity,
         "llm_gateway_headers",

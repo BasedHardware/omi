@@ -356,6 +356,18 @@ def persist_desktop_meeting_arrival(uid: str, conversation) -> None:
     )
 
 
+def persist_desktop_meeting_arrival_best_effort(uid: str, conversation) -> None:
+    """Failure-isolate the repair adapter from conversation creation/retry."""
+    try:
+        persist_desktop_meeting_arrival(uid, conversation)
+    except Exception as exc:
+        logger.warning(
+            'desktop_meeting_arrival_adapter_failed uid=%s error=%s',
+            sanitize_pii(uid),
+            type(exc).__name__,
+        )
+
+
 def persist_daily_opener_intent(
     uid: str,
     *,
