@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1683
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1736
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds local transcript duplicate suppression and persistence flushes before stop or rotation so source-aware deduplication cannot leave stale rows. +9 fences both sides of the awaited local capture rebuild so a concurrent stop cannot resurrect transcription after teardown. +24 preserves the active meeting role across sleep, STT fallback, max-duration rotation, and deferred session ownership, replaying boundary edges only after the new session is ready. +20 carries the silent-mic healed route and close-state guards through the same restart boundary. +39 centralizes the user-owned Audio Recording Off/Always/Only Meetings policy while retaining detector-driven boundaries and meeting-end finalization."
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Merge of two independent hardening lines: (1) the microphone authorization gate at the capture choke point with the honest permission alert and the removed terminal 'Microphone Isn't Capturing Audio' modal (a notDetermined/revoked TCC entry otherwise arms a zero-sample stream and the watchdog loops a misleading hardware alert every ~90s); (2) main's local transcript duplicate suppression, persistence flushes before stop/rotation, fences around the awaited local capture rebuild, meeting-role preservation across sleep/fallback/rotation, the silent-mic healed route carried through the restart boundary, and the centralized Audio Recording Off/Always/Only Meetings policy."
   },
   "threshold": 1500
 }

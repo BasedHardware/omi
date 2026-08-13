@@ -6,13 +6,21 @@ import SwiftUI
 @MainActor
 extension AppState {
   func requestMicrophonePermission() {
+    let status = AudioCaptureService.authorizationStatus()
+    log("Requesting microphone permission, current status: \(status.rawValue)")
+
+    // Already denied/restricted: requestAccess would return false without ever showing a
+    // prompt, so the user who just asked to record would get silence. Tell them the real
+    // problem and open the pane that fixes it instead.
+    if MicrophoneCaptureAuthorizationPolicy.action(for: status) == .surfacePermissionAlert {
+      hasMicrophonePermission = false
+      surfaceMicrophonePermissionAlert()
+      return
+    }
+
     let shellWasSuspended = ShellSummon.suspendForPermissionPrompt()
     // Activate app to ensure permission dialog appears
     NSApp.activate()
-
-    log(
-      "Requesting microphone permission, current status: \(AudioCaptureService.authorizationStatus().rawValue)"
-    )
 
     Task {
       let granted = await AudioCaptureService.requestPermission()
