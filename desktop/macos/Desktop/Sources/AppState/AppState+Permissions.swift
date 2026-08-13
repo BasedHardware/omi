@@ -19,10 +19,14 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
   }
 
   typealias SheetPresenter = (NSAlert, NSWindow, @escaping () -> Void) -> Void
+  /// Whether `window` can host a sheet right now. Defaults to "has no sheet
+  /// attached" — AppKit raises if a second sheet is attached to one window.
+  typealias SheetHostChecker = (NSWindow) -> Bool
 
   private let shellWindowProvider: () -> NSWindow?
   private let sheetPresenter: SheetPresenter
   private let revealMainWindow: () -> Void
+  private let canHostSheet: SheetHostChecker
   private var pendingAlerts: [AlertRequest] = []
   private var activeAlert: AlertRequest?
   private var isPresentingAlert = false
@@ -30,8 +34,8 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
 
   init(
     shellWindowProvider: @escaping () -> NSWindow? = {
-      guard let window = ShellSummon.shellWindow(), window.isVisible, !window.isMiniaturized else { return nil }
-      return window
+      AppKitSheetAlertPresenter.presentableShellWindow(
+        ShellSummon.shellWindow(), isActive: NSApp.isActive)
     },
     sheetPresenter: @escaping SheetPresenter = { alert, window, completion in
       alert.beginSheetModal(for: window) { _ in completion() }
@@ -43,11 +47,13 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
         NSApp.activate(ignoringOtherApps: true)
         ShellSummon.summon()
       }
-    }
+    },
+    canHostSheet: @escaping SheetHostChecker = { $0.attachedSheet == nil }
   ) {
     self.shellWindowProvider = shellWindowProvider
     self.sheetPresenter = sheetPresenter
     self.revealMainWindow = revealMainWindow
+    self.canHostSheet = canHostSheet
     NotificationCenter.default.addObserver(
       self,
       selector: #selector(presentPendingAlertIfPossible),
@@ -57,6 +63,11 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
       self,
       selector: #selector(presentPendingAlertIfPossible),
       name: NSWindow.didBecomeKeyNotification,
+      object: nil)
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(presentPendingAlertIfPossible),
+      name: NSWindow.didEndSheetNotification,
       object: nil)
   }
 
@@ -77,6 +88,12 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
       revealMainWindowIfNeeded()
       return
     }
+    guard canHostSheet(window) else {
+      // The shell already owns a sheet (a SwiftUI sheet, for example). AppKit
+      // cannot attach a second sheet to one window, so keep the request queued
+      // and retry when `NSWindow.didEndSheetNotification` fires.
+      return
+    }
 
     pendingAlerts.removeFirst()
     isPresentingAlert = true
@@ -93,6 +110,17 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
         self?.presentPendingAlertIfPossible()
       }
     }
+  }
+
+  /// The shell window an alert sheet may attach to, or `nil` when it must be
+  /// summoned first. Mirrors `ShellSummon.toggleAction`: a visible but inactive
+  /// shell is usually ordered in behind whatever the user is working in, so
+  /// attaching a sheet to it would leave the warning invisible behind the
+  /// foreground application. Requiring the app to be active forces the reveal
+  /// path (`openMainAppWindow` / `ShellSummon.summon`) before presenting.
+  static func presentableShellWindow(_ window: NSWindow?, isActive: Bool) -> NSWindow? {
+    guard isActive, let window, window.isVisible, !window.isMiniaturized else { return nil }
+    return window
   }
 
   private func revealMainWindowIfNeeded() {
