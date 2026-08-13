@@ -26,6 +26,11 @@ import {
 import { createPostgresMemoryShadowResultRepository } from
   "./memory-experiment-repository";
 import type { PostgresTransactionObservability } from "./transaction";
+import {
+  assertModelPipelineExclusivity,
+  type ModelPipelineExclusivity,
+  type ModelPipelineResource,
+} from "../../apps/service/workers/model-pipeline-exclusivity";
 
 const RUNTIME_PORT: unique symbol = Symbol("postgres-listen-attribution-belief-one-shot-runtime");
 const INPUT_REF = /^labinput1_[a-f0-9]{64}$/;
@@ -38,6 +43,11 @@ export interface PostgresListenAttributionBeliefOneShotOptions {
     strategy: Readonly<RegisteredMemoryStrategy>,
     evaluationRole: "baseline" | "candidate",
   ) => Promise<AttributionCalibratorPort | null>;
+  readonly model_pipeline_exclusivity: ModelPipelineExclusivity;
+  readonly resolve_model_pipeline_resource: (
+    strategy: Readonly<RegisteredMemoryStrategy>,
+    evaluationRole: "baseline" | "candidate",
+  ) => Promise<Readonly<ModelPipelineResource> | null>;
   readonly observability?: PostgresTransactionObservability;
 }
 
@@ -79,7 +89,7 @@ const exactRecord = (value: unknown, keys: readonly string[], code: string): Rec
   for (const key of expected) {
     const descriptor = descriptors[key];
     if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) fail(code);
-    output[key] = descriptor.value;
+    output[key] = descriptor!.value;
   }
   return output;
 };
@@ -87,19 +97,25 @@ const exactRecord = (value: unknown, keys: readonly string[], code: string): Rec
 const options = (value: unknown): Readonly<{
   pool: PostgresTransactionPool;
   resolve_calibrator: PostgresListenAttributionBeliefOneShotOptions["resolve_calibrator"];
+  model_pipeline_exclusivity: ModelPipelineExclusivity;
+  resolve_model_pipeline_resource: PostgresListenAttributionBeliefOneShotOptions["resolve_model_pipeline_resource"];
   observability?: PostgresTransactionObservability;
 }> => {
   if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
     || Object.getPrototypeOf(value) !== Object.prototype) fail("invalid_options");
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const row = exactRecord(value, [
-    "pool", "resolve_calibrator", ...(descriptors["observability"] ? ["observability"] : []),
+    "pool", "resolve_calibrator", "model_pipeline_exclusivity",
+    "resolve_model_pipeline_resource", ...(descriptors["observability"] ? ["observability"] : []),
   ], "invalid_options");
   const pool = row["pool"] as PostgresTransactionPool;
   const withTransaction = pool?.withTransaction;
   const resolver = row["resolve_calibrator"];
+  const resourceResolver = row["resolve_model_pipeline_resource"];
   if (typeof withTransaction !== "function" || isProxy(withTransaction)
-    || typeof resolver !== "function" || isProxy(resolver)) fail("invalid_options");
+    || typeof resolver !== "function" || isProxy(resolver)
+    || typeof resourceResolver !== "function" || isProxy(resourceResolver)) fail("invalid_options");
+  const exclusivity = assertModelPipelineExclusivity(row["model_pipeline_exclusivity"]);
   const result = {
     pool: Object.freeze({
       withTransaction: <Result>(
@@ -111,6 +127,9 @@ const options = (value: unknown): Readonly<{
     }) as PostgresTransactionPool,
     resolve_calibrator: (resolver as PostgresListenAttributionBeliefOneShotOptions["resolve_calibrator"])
       .bind(value),
+    model_pipeline_exclusivity: exclusivity,
+    resolve_model_pipeline_resource: (resourceResolver as
+      PostgresListenAttributionBeliefOneShotOptions["resolve_model_pipeline_resource"]).bind(value),
     ...(row["observability"] === undefined
       ? {} : { observability: row["observability"] as PostgresTransactionObservability }),
   };
@@ -161,11 +180,30 @@ export const createPostgresListenAttributionBeliefOneShotRuntime = (
   const source = defineListenAttributionBeliefEvaluationSource(
     createPostgresListenAttributionBeliefInputRepository(repositoryOptions),
   );
+  const producer = defineAttributionBeliefShadowProducer({
+    resolve_calibrator: configured.resolve_calibrator,
+  });
   const coordinator = defineMemoryOfflineReplayCoordinator({
     result_repository: createPostgresMemoryShadowResultRepository(repositoryOptions),
-    produce: defineAttributionBeliefShadowProducer({
-      resolve_calibrator: configured.resolve_calibrator,
-    }),
+    produce: async (request) => {
+      let resource: Readonly<ModelPipelineResource> | null;
+      try {
+        resource = await configured.resolve_model_pipeline_resource(
+          request.strategy, request.evaluation_role,
+        );
+      } catch {
+        return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" as const });
+      }
+      if (resource === null) {
+        return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" as const });
+      }
+      const outcome = await configured.model_pipeline_exclusivity.runExclusive(resource, () => producer(request));
+      if (outcome.kind === "completed") return outcome.value;
+      return Object.freeze({
+        kind: "failed" as const,
+        error_code: outcome.kind === "busy" ? "model_rate_limited" as const : "dependency_unavailable" as const,
+      });
+    },
   });
   return Object.freeze({
     [RUNTIME_PORT]: true as const,

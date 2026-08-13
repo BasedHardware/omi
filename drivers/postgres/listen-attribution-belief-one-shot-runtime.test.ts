@@ -1,11 +1,24 @@
 import { describe, expect, test } from "bun:test";
 
 import type { PostgresTransactionPool } from "./connection";
+import {
+  defineModelPipelineExclusivity,
+  MODEL_PIPELINE_RESOURCE_VERSION,
+} from "../../apps/service/workers/model-pipeline-exclusivity";
 import { createPostgresListenAttributionBeliefOneShotRuntime } from
   "./listen-attribution-belief-one-shot-runtime";
 
 const unusedPool = (): PostgresTransactionPool => Object.freeze({
   withTransaction: async () => { throw new Error("postgres_must_not_open"); },
+});
+
+const pipelineOptions = () => ({
+  model_pipeline_exclusivity: defineModelPipelineExclusivity(async (_resource, callback) =>
+    Object.freeze({ kind: "completed" as const, value: await callback() })),
+  resolve_model_pipeline_resource: async () => Object.freeze({
+    version: MODEL_PIPELINE_RESOURCE_VERSION,
+    resource_digest: "a".repeat(64),
+  }),
 });
 
 describe("PostgreSQL Listen attribution belief one-shot runtime", () => {
@@ -17,6 +30,7 @@ describe("PostgreSQL Listen attribution belief one-shot runtime", () => {
         resolverCalls += 1;
         throw new Error("calibrator_must_not_resolve_at_construction");
       },
+      ...pipelineOptions(),
     });
     expect(Object.keys(runtime)).toEqual(["run"]);
     expect(typeof runtime.run).toBe("function");
@@ -31,6 +45,14 @@ describe("PostgreSQL Listen attribution belief one-shot runtime", () => {
         enumerable: true,
         get() { getterCalls += 1; return async () => null; },
       },
+      model_pipeline_exclusivity: {
+        enumerable: true,
+        value: pipelineOptions().model_pipeline_exclusivity,
+      },
+      resolve_model_pipeline_resource: {
+        enumerable: true,
+        value: pipelineOptions().resolve_model_pipeline_resource,
+      },
     });
     expect(() => createPostgresListenAttributionBeliefOneShotRuntime(hostile as never))
       .toThrow("invalid_options");
@@ -41,6 +63,7 @@ describe("PostgreSQL Listen attribution belief one-shot runtime", () => {
     let getterCalls = 0;
     const runtime = createPostgresListenAttributionBeliefOneShotRuntime({
       pool: unusedPool(), resolve_calibrator: async () => null,
+      ...pipelineOptions(),
     });
     const hostile = Object.defineProperties({}, {
       input_ref: { enumerable: true, get() { getterCalls += 1; return "hidden"; } },

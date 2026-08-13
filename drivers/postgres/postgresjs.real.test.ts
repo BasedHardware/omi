@@ -1101,6 +1101,11 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       let calibratorCalls = 0;
       const beliefRuntime = createPostgresListenAttributionBeliefOneShotRuntime({
         pool: appRolePool,
+        model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+        resolve_model_pipeline_resource: async () => Object.freeze({
+          version: MODEL_PIPELINE_RESOURCE_VERSION,
+          resource_digest: "d".repeat(64),
+        }),
         resolve_calibrator: async (_strategy, evaluationRole) => ({
           calibrate: async (calibrationRequest: AttributionCalibrationRequest) => {
             calibratorCalls += 1;
@@ -4885,6 +4890,11 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const queryCandidateRefs: string[] = [];
     const queryRuntime = createPostgresMemoryQueryEvaluationOneShotRuntime({
       pool: appRolePool, codec_root_secret: new Uint8Array(32).fill(8),
+      model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+      resolve_model_pipeline_resource: async () => Object.freeze({
+        version: MODEL_PIPELINE_RESOURCE_VERSION,
+        resource_digest: "e".repeat(64),
+      }),
       produce: async (request) => {
         queryModelCalls += 1;
         expect(request.candidates).toHaveLength(1);
@@ -4975,6 +4985,11 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     }
     const restartedQueryRuntime = createPostgresMemoryQueryEvaluationOneShotRuntime({
       pool: appRolePool, codec_root_secret: new Uint8Array(32).fill(8),
+      model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
+      resolve_model_pipeline_resource: async () => Object.freeze({
+        version: MODEL_PIPELINE_RESOURCE_VERSION,
+        resource_digest: "e".repeat(64),
+      }),
       produce: async () => { throw new Error("replay_must_not_call_model"); },
     });
     const replayedQueryRun = await restartedQueryRuntime.run(context, queryRunRequest);

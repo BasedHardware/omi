@@ -3,9 +3,22 @@ import { describe, expect, test } from "bun:test";
 import { createPostgresMemoryQueryEvaluationOneShotRuntime } from
   "./memory-query-evaluation-one-shot-runtime";
 import type { PostgresTransactionPool } from "./connection";
+import {
+  defineModelPipelineExclusivity,
+  MODEL_PIPELINE_RESOURCE_VERSION,
+} from "../../apps/service/workers/model-pipeline-exclusivity";
 
 const unusedPool: PostgresTransactionPool = Object.freeze({
   withTransaction: async () => { throw new Error("constructor_must_not_open_postgres"); },
+});
+
+const pipelineOptions = () => ({
+  model_pipeline_exclusivity: defineModelPipelineExclusivity(async (_resource, callback) =>
+    Object.freeze({ kind: "completed" as const, value: await callback() })),
+  resolve_model_pipeline_resource: async () => Object.freeze({
+    version: MODEL_PIPELINE_RESOURCE_VERSION,
+    resource_digest: "b".repeat(64),
+  }),
 });
 
 describe("PostgreSQL query-evaluation one-shot runtime", () => {
@@ -14,6 +27,7 @@ describe("PostgreSQL query-evaluation one-shot runtime", () => {
       pool: unusedPool,
       codec_root_secret: new Uint8Array(32).fill(7),
       produce: async () => { throw new Error("model_must_not_run_at_construction"); },
+      ...pipelineOptions(),
     });
     expect(Object.keys(runtime)).toEqual(["stageInput", "run"]);
     expect(typeof runtime.stageInput).toBe("function");
@@ -25,6 +39,7 @@ describe("PostgreSQL query-evaluation one-shot runtime", () => {
       pool: unusedPool,
       codec_root_secret: new Uint8Array(31),
       produce: async () => { throw new Error("unused"); },
+      ...pipelineOptions(),
     })).toThrow("invalid_config");
   });
 
@@ -34,6 +49,7 @@ describe("PostgreSQL query-evaluation one-shot runtime", () => {
       pool: unusedPool,
       codec_root_secret: new Uint8Array(32).fill(7),
       produce: async () => { throw new Error("unused"); },
+      ...pipelineOptions(),
     });
     const body = Object.defineProperties({}, {
       input_ref: { enumerable: true, get() { getterCalls += 1; return "hidden"; } },

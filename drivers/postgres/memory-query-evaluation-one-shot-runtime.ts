@@ -27,12 +27,18 @@ import {
   PostgresRepositoryError,
   type PostgresTransactionObservability,
 } from "./transaction";
+import {
+  assertModelPipelineExclusivity,
+  type ModelPipelineExclusivity,
+  type ModelPipelineResource,
+} from "../../apps/service/workers/model-pipeline-exclusivity";
 
 const RUNTIME_PORT: unique symbol = Symbol("postgres-memory-query-evaluation-one-shot-runtime");
 const INPUT_REF = /^mqir1_[a-f0-9]{64}$/;
 const TIMEZONE = /^[\x21-\x7e]{1,128}$/;
 const MAX_QUERY_CODE_POINTS = 4_096;
 type QueryCoordinator = ReturnType<typeof composeMemoryQueryEvaluation>;
+type QueryModelRequest = Parameters<MemoryQueryEvaluationCompositionConfig["produce"]>[0];
 type PairedQueryGroundingRequest = Parameters<QueryCoordinator["run"]>[1];
 type PairedQueryGroundingOutcome = Awaited<ReturnType<QueryCoordinator["run"]>>;
 
@@ -50,6 +56,10 @@ export interface PostgresMemoryQueryEvaluationOneShotRuntimeOptions {
   readonly pool: PostgresTransactionPool;
   readonly codec_root_secret: Uint8Array;
   readonly produce: MemoryQueryEvaluationCompositionConfig["produce"];
+  readonly model_pipeline_exclusivity: ModelPipelineExclusivity;
+  readonly resolve_model_pipeline_resource: (
+    request: QueryModelRequest,
+  ) => Promise<Readonly<ModelPipelineResource> | null>;
   readonly observability?: PostgresTransactionObservability;
 }
 
@@ -134,6 +144,11 @@ const sourceFailure = (error: unknown): PostgresMemoryQueryEvaluationInputOutcom
 export const createPostgresMemoryQueryEvaluationOneShotRuntime = (
   options: PostgresMemoryQueryEvaluationOneShotRuntimeOptions,
 ): PostgresMemoryQueryEvaluationOneShotRuntime => {
+  const modelPipelineExclusivity = assertModelPipelineExclusivity(options.model_pipeline_exclusivity);
+  if (typeof options.resolve_model_pipeline_resource !== "function"
+    || isProxy(options.resolve_model_pipeline_resource)) {
+    throw new TypeError("postgres query evaluation runtime invalid_model_pipeline_resource_resolver");
+  }
   const repositoryOptions = {
     pool: options.pool,
     ...(options.observability ? { observability: options.observability } : {}),
@@ -145,12 +160,31 @@ export const createPostgresMemoryQueryEvaluationOneShotRuntime = (
     codec_root_secret: options.codec_root_secret,
     result_repository: createPostgresMemoryShadowResultRepository(repositoryOptions),
     grounding_repository: createPostgresMemoryReadGroundingRepository(repositoryOptions),
-    produce: options.produce,
+    produce: async (request) => {
+      let resource: Readonly<ModelPipelineResource> | null;
+      try {
+        resource = await options.resolve_model_pipeline_resource(request);
+      } catch {
+        return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" as const });
+      }
+      if (resource === null) {
+        return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" as const });
+      }
+      const outcome = await modelPipelineExclusivity.runExclusive(resource, () => options.produce(request));
+      if (outcome.kind === "completed") return outcome.value;
+      return Object.freeze({
+        kind: "failed" as const,
+        error_code: outcome.kind === "busy" ? "model_rate_limited" as const : "dependency_unavailable" as const,
+      });
+    },
   });
 
   return Object.freeze({
     [RUNTIME_PORT]: true as const,
-    async stageInput(context, bodyValue) {
+    async stageInput(
+      context: AuthorizedLedgerWriteContext,
+      bodyValue: PostgresMemoryQueryEvaluationInputBody,
+    ) {
       const body = inputBody(bodyValue);
       let graph;
       try {
@@ -166,6 +200,9 @@ export const createPostgresMemoryQueryEvaluationOneShotRuntime = (
       });
       return inputs.stage(context, input);
     },
-    run: (context, request) => coordinator.run(context, request),
+    run: (
+      context: AuthorizedLedgerWriteContext,
+      request: PairedQueryGroundingRequest,
+    ) => coordinator.run(context, request),
   });
 };
