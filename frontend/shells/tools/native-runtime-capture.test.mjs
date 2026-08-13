@@ -90,6 +90,7 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   const source = readFileSync(producer, "utf8");
   const iosHook = readFileSync(path.join(root, "shells/ios/app/ios/Runner/OmiUiWebView.swift"), "utf8");
   const appDelegate = readFileSync(path.join(root, "shells/ios/app/ios/Runner/AppDelegate.swift"), "utf8");
+  const iosTest = readFileSync(path.join(root, "shells/ios/app/ios/RunnerUITests/NativeRuntimeEvidenceUITests.swift"), "utf8");
   const macHost = readFileSync(path.join(root, "shells/macos/shell/Sources/OmiShell/main.swift"), "utf8");
   assert.match(source, /dev-run-macos\.sh/);
   assert.match(source, /OMI_PROBE_JS/);
@@ -110,15 +111,20 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   assert.doesNotMatch(source, /core_browser_preview/);
   assert.match(iosHook, /OMI_POLISH_RUNTIME_PROBE/);
   assert.match(appDelegate, /OmiRuntimeProbeHandler\.installIfRequested/);
+  assert.match(appDelegate, /OmiRuntimeProbeHandler\.retain\(runtimeProbeHandler, for: webView\)/);
   assert.match(iosHook, /omiRuntimeProbe/);
+  assert.match(iosHook, /runtimeProbeHandler\?\.attach\(to: webView\)/);
   assert.match(iosHook, /omi\.native-runtime-marker\/v1/);
   assert.match(iosHook, /computed_style/);
   assert.match(iosHook, /attempts < 80/);
+  assert.match(iosHook, /webView \?\? message\.webView/);
+  assert.match(iosHook, /accessibilityValue = marker/);
   assert.match(iosHook, /polishState !== wantedState/);
   assert.match(iosHook, /requestedQa === "memories-platform" \? "memories" : requestedQa/);
   assert.match(source, /document\.documentElement\.dataset\.polishState/);
   assert.doesNotMatch(source, /value:root\.dataset\.surfaceState/);
   assert.doesNotMatch(iosHook, /OMI_API_TOKEN/);
+  assert.match(iosTest, /webView\.value as\? String/);
 });
 
 test("macOS scratch app name binds arbitrary matrix run IDs without weakening launcher grammar", () => {
