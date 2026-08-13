@@ -1,0 +1,290 @@
+//
+//  ActivityStream.swift — the list itself: one day, top to bottom.
+//
+//  It draws no chrome — no query field, no chips, no frame, no count line — because the surface
+//  above owns all four. **What it owns is the reading order:** one merged reverse-chronological
+//  stream grouped by day, with the conversation dominant and the frames it produced indented
+//  beneath it, and an hour rail beside it running the same direction the list does.
+//
+//  A day can be **folded shut** from its own header. Folding is presentation and never a filter:
+//  the rows stay composed, stay counted in `ActivityStore.matchCount`, and come back in the same
+//  place. The one thing it moves is the hour rail — which tracks the topmost visible *row* and
+//  therefore cannot see a folded day at all.
+//
+//  Brand: `Ink` semantics only, two rungs (glass) (INV-UI-1).
+//
+
+import Combine
+import SwiftUI
+
+// MARK: - Viewport
+
+/// Which row is under the top of the list.
+///
+/// Deliberately a reference type held in `@State` rather than a `@StateObject`: the stream needs to
+/// *own* it without *observing* it. Scrolling changes this several times a second, and a subscribed
+/// parent would re-evaluate the whole list every time. Only the rail observes it, so only the rail
+/// redraws.
+@MainActor
+final class ActivityViewport: ObservableObject {
+    @Published private(set) var dayID: Date?
+    @Published private(set) var hour: Int?
+
+    func report(dayID: Date, hour: Int) {
+        // Assign only on a real change: an identical publish is a redraw of the rail for nothing.
+        if self.dayID != dayID { self.dayID = dayID }
+        if self.hour != hour { self.hour = hour }
+    }
+}
+
+/// What one row tells the viewport about itself. The row nearest the top of the list wins.
+private struct ActivityRowAnchor: Equatable {
+    let dayID: Date
+    let hour: Int
+    /// The row's bottom edge in the list's coordinate space. A row whose bottom is above the
+    /// reading line has scrolled behind the sticky header; among the rest, the smallest bottom is
+    /// the topmost visible row.
+    let bottom: CGFloat
+}
+
+private struct ActivityTopRowKey: PreferenceKey {
+    static let defaultValue: ActivityRowAnchor? = nil
+
+    static func reduce(value: inout ActivityRowAnchor?, nextValue: () -> ActivityRowAnchor?) {
+        guard let next = nextValue(), next.bottom > ActivityLayout.readingLine else { return }
+        guard let current = value else {
+            value = next
+            return
+        }
+        if next.bottom < current.bottom { value = next }
+    }
+}
+
+enum ActivityLayout {
+    /// The line the list is read from: just under the sticky day header. A row whose bottom is
+    /// above this is behind the header and is not what anybody is looking at.
+    static let readingLine: CGFloat = ActivityMetrics.dayHeaderHeight + 4
+    static let coordinateSpace = "context.activity"
+    /// Between the lane's edge and the rows in it.
+    static let lanePadding: CGFloat = 8
+}
+
+// MARK: - Stream
+
+struct ActivityStream: View {
+    @ObservedObject var store: ActivityStore
+    /// Hands a frame to whatever owns the timeline. Defaulted so a preview can draw the list
+    /// without a route to a window.
+    var onOpenMoment: (ActivityMoment) -> Void = { _ in }
+    /// Hands a conversation to whatever owns transcripts.
+    var onOpenConversation: (ActivityConversation) -> Void = { _ in }
+
+    @StateObject private var viewport = ActivityViewport()
+    /// Which days are folded shut. Lives with the view rather than with the store because it is a
+    /// reading position, not data: it is worth exactly as long as this list is on screen.
+    @State private var collapse = ActivityDayCollapse()
+
+    /// Whether there is a day for the rail to be about.
+    ///
+    /// A rail beside an empty list has no day to count, and its honest-looking "—" over "counting
+    /// screen moments" then never resolves — on a Mac that has captured nothing it would sit there
+    /// claiming to be counting for the rest of the session. While the first read is still running
+    /// that claim is true, so the rail stays; once the read is done and there is still nothing, the
+    /// list's own empty state is the whole answer and the rail is drawing a clock for no day.
+    private var describesADay: Bool { !store.days.isEmpty || store.isPreparing }
+
+    var body: some View {
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                if proxy.size.width >= ActivityHourRail.breakpoint, describesADay {
+                    ActivityRailColumn(store: store, viewport: viewport, collapse: collapse)
+                    Rectangle().fill(Ink.separator).frame(width: 1)
+                }
+                Group {
+                    if store.days.isEmpty {
+                        emptyState
+                    } else {
+                        stream
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task { store.start() }
+    }
+
+    // MARK: The list
+
+    private var stream: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                ForEach(store.days) { day in
+                    Section {
+                        // Folding is presentation, never a filter: the rows are still composed,
+                        // still counted, and still in the same chronological place when they come
+                        // back.
+                        if !collapse.contains(day.id) {
+                            ForEach(day.rows) { row in
+                                ActivityRowView(
+                                    row: row,
+                                    showsIndent: store.kind == .everything,
+                                    loader: store.loader,
+                                    onOpenMoment: onOpenMoment,
+                                    onOpenConversation: onOpenConversation
+                                )
+                                .background(anchor(for: row, in: day))
+                            }
+                        }
+                    } header: {
+                        ActivityDayHeader(
+                            day: day,
+                            isCollapsed: collapse.contains(day.id),
+                            onToggle: { toggleCollapse(day) }
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, ActivityLayout.lanePadding)
+            .padding(.bottom, ActivityMetrics.rowGap)
+        }
+        .coordinateSpace(name: ActivityLayout.coordinateSpace)
+        .onPreferenceChange(ActivityTopRowKey.self) { anchor in
+            guard let anchor else { return }
+            Task { @MainActor in viewport.report(dayID: anchor.dayID, hour: anchor.hour) }
+        }
+    }
+
+    /// A layout-neutral reporter behind each row. A `GeometryReader` in a `background` never affects
+    /// layout, and inside a `LazyVStack` only the rows that exist report — a dozen or so, not a
+    /// thousand.
+    private func anchor(for row: ActivityRow, in day: ActivityDay) -> some View {
+        GeometryReader { proxy in
+            Color.clear.preference(
+                key: ActivityTopRowKey.self,
+                value: ActivityRowAnchor(
+                    dayID: day.id,
+                    hour: Calendar.current.component(.hour, from: row.anchor),
+                    bottom: proxy.frame(in: .named(ActivityLayout.coordinateSpace)).maxY
+                )
+            )
+        }
+    }
+
+    /// Folds one day shut, or opens it again. Animated through the gate rather than with a raw
+    /// `withAnimation`, so Reduce Motion gets the instant version instead of hundreds of rows
+    /// sliding away.
+    private func toggleCollapse(_ day: ActivityDay) {
+        InkReduceMotion.perform(.easeOut(duration: InkMotion.stepTransition)) {
+            collapse.toggle(day.id)
+        }
+    }
+
+    // MARK: Empty
+
+    /// Never an illustration and never a shrug — and never a claim the store is not entitled to
+    /// make. See `ActivityEmptyCopy`.
+    private var emptyState: some View {
+        VStack(alignment: .center, spacing: 6) {
+            Text(copy.headline)
+                .inkStyle(.rowCopy, color: Ink.primary)
+                .multilineTextAlignment(.center)
+            if let detail = copy.detail {
+                Text(detail)
+                    .inkStyle(.statusLabel, color: Ink.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .padding(24)
+        .accessibilityIdentifier("activity-empty")
+    }
+
+    private var copy: ActivityEmptyCopy {
+        ActivityEmptyCopy.resolve(
+            isPreparing: store.isPreparing,
+            readFailure: store.readFailure,
+            query: store.currentQuery,
+            kind: store.kind)
+    }
+}
+
+// MARK: - What an empty stream is allowed to say
+
+/// The two lines an empty stream shows, resolved from state rather than assembled in a `body`.
+///
+/// The rule worth stating: **"nothing was captured" is a claim about the machine, and it may only
+/// be made once something has actually been read.** A read that is still running, or one that
+/// threw, is not an empty answer — and saying so is the difference between a surface you can trust
+/// and one that quietly under-reports the day.
+struct ActivityEmptyCopy: Equatable, Sendable {
+    let headline: String
+    /// `nil` while the first day is still being read — there is nothing useful to add to "reading".
+    let detail: String?
+
+    static func resolve(
+        isPreparing: Bool, readFailure: String?, query: String, kind: ActivityKind
+    ) -> ActivityEmptyCopy {
+        if let readFailure {
+            return ActivityEmptyCopy(headline: "Couldn't read this Mac's capture.", detail: readFailure)
+        }
+        guard !isPreparing else {
+            return ActivityEmptyCopy(headline: "Reading your day…", detail: nil)
+        }
+        guard query.isEmpty else {
+            return ActivityEmptyCopy(
+                headline: "Nothing captured matches “\(query)”.",
+                detail: "Try a different word, or widen the time window.")
+        }
+        return ActivityEmptyCopy(
+            headline: "Nothing captured in this window yet.", detail: emptyKindDetail(kind))
+    }
+
+    private static func emptyKindDetail(_ kind: ActivityKind) -> String {
+        switch kind {
+        case .everything: return "Conversations and screen moments appear here as they happen."
+        case .conversations: return "Conversations appear here once this Mac has heard one."
+        case .screen: return "Screen moments appear here while screen capture is on."
+        }
+    }
+}
+
+// MARK: - Rail column
+
+/// The rail, in its own view so a scroll redraws twenty-four bars rather than the whole list.
+private struct ActivityRailColumn: View {
+    @ObservedObject var store: ActivityStore
+    @ObservedObject var viewport: ActivityViewport
+    let collapse: ActivityDayCollapse
+
+    /// The day the rail describes.
+    ///
+    /// Normally the one the list reported, which comes from the topmost visible *row*. **A folded
+    /// day has no rows**, so it can never be reported again — but it can still be the last thing
+    /// reported before it was folded, and a rail describing a day whose rows are all hidden is a
+    /// rail pointing at nothing. So a reported day that has since folded is dropped in favour of
+    /// the first day still open, and only when every day is folded does it fall back to the newest.
+    private var dayID: Date? {
+        if let reported = viewport.dayID, !collapse.contains(reported) { return reported }
+        return store.days.first { !collapse.contains($0.id) }?.id ?? store.days.first?.id
+    }
+
+    private var day: ActivityDay? { store.days.first { $0.id == dayID } }
+
+    /// The hour marker belongs to the day the list actually reported. Carrying it onto a day chosen
+    /// by the fallback above would light up an hour on a rail for a day nobody is reading.
+    private var currentHour: Int? {
+        guard let dayID, dayID == viewport.dayID else { return nil }
+        return viewport.hour
+    }
+
+    var body: some View {
+        ActivityHourRail(
+            density: dayID.map(store.density(for:)) ?? Array(repeating: 0, count: 24),
+            currentHour: currentHour,
+            momentCount: dayID.flatMap(store.momentCount(for:)),
+            dayTitle: day?.title ?? "",
+            conversationCount: day?.conversationCount ?? 0
+        )
+    }
+}
