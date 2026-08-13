@@ -135,8 +135,9 @@ const leased = (
   "worker:one", 101, 20,
 );
 
-const model = (seen: string[]) => new DeterministicFakeModel((request: ModelInvokeRequest) => {
+const model = (seen: string[], signals?: AbortSignal[]) => new DeterministicFakeModel((request: ModelInvokeRequest) => {
   seen.push(request.strategy);
+  if (request.signal) signals?.push(request.signal);
   if (request.strategy === "grounded-extraction") return {
     claims: [{
       relation: "uses",
@@ -166,6 +167,8 @@ describe("formation durable-work adapter", () => {
     const input = snapshot();
     const job = leased(input);
     const seen: string[] = [];
+    const signals: AbortSignal[] = [];
+    const lossController = new AbortController();
     const errors: string[] = [];
     const adapter = defineFormationWorkAdapter({
       load_input: async (authorized, loadedJob) => {
@@ -173,12 +176,14 @@ describe("formation durable-work adapter", () => {
         expect(loadedJob.job_id).toBe(job.job_id);
         return { kind: "found", snapshot: input };
       },
-      resolve_model: async () => model(seen),
+      resolve_model: async () => model(seen, signals),
       load_current_parent: async () => ({ kind: "found", parent_commit: null }),
       classify_model_error: (error) => { errors.push(String(error)); return "model_response_invalid"; },
     });
-    const produced = await adapter.produce(context(), job, strategy);
+    const produced = await adapter.produce(context(), job, strategy, lossController.signal);
     expect(errors).toEqual([]);
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every((signal) => signal === lossController.signal)).toBeTrue();
     expect(produced.kind).toBe("produced");
     if (produced.kind !== "produced") throw new Error("expected produced result");
     const plan = normalizeDurableMemoryGraphPlan(produced.normalized_result) as unknown as {

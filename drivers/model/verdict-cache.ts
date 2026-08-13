@@ -194,6 +194,11 @@ export class CachingModelPort implements ModelPort {
   ) {}
 
   async invoke(request: ModelInvokeRequest): Promise<unknown> {
+    if (request.signal !== undefined) {
+      if (request.signal.aborted) throw request.signal.reason;
+      this.stats.uncacheable += 1;
+      return this.inner.invoke(request);
+    }
     if (this.scope) {
       const identity = validScope(this.scope) ? this.inner.initialPromptIdentity?.(request) : undefined;
       // Scoped mode is fail-closed. It never falls through to the legacy
@@ -299,8 +304,8 @@ export class CachingModelPort implements ModelPort {
     return this.inner.initialPromptIdentity?.(request);
   }
 
-  render(request: { strategy: string; version: string; input: unknown }) { return this.inner.render(request); }
-  compose(request: { strategy: string; version: string; input: unknown }) { return this.inner.compose(request); }
+  render(request: ModelInvokeRequest) { return this.inner.render(request); }
+  compose(request: ModelInvokeRequest) { return this.inner.compose(request); }
 }
 
 /** `OMI_VERDICT_CACHE` holds the cache db path; unset disables caching entirely. */

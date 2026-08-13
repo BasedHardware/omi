@@ -74,7 +74,7 @@ export interface CalibrateAttributionBeliefInput {
 }
 
 export interface AttributionCalibratorPort {
-  calibrate(request: AttributionCalibrationRequest): Promise<unknown>;
+  calibrate(request: AttributionCalibrationRequest, lossSignal?: AbortSignal): Promise<unknown>;
 }
 
 export type AttributionCalibrationErrorCode =
@@ -284,13 +284,14 @@ export const attributionCalibrationRequestDigest = (
 export const calibrateAttributionBelief = async (
   input: CalibrateAttributionBeliefInput,
   calibrator: AttributionCalibratorPort,
+  lossSignal?: AbortSignal,
 ): Promise<CalibratedAttributionBelief> => {
   const normalizedInput = normalizeInput(input);
   const provisional = provisionalFor(normalizedInput);
   const request = requestFor(provisional);
   let raw: unknown;
   try {
-    raw = await calibrator.calibrate(request);
+    raw = await calibrator.calibrate(request, lossSignal);
   } catch {
     return fail("attribution_calibration_failed");
   }

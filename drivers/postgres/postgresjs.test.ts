@@ -118,6 +118,45 @@ describe("Postgres.js transaction adapter", () => {
     expect(calls).toEqual(["release:false", "release:true"]);
   });
 
+  test("a size-one lease close aborts the held callback and quarantines the connection", async () => {
+    const calls: string[] = [];
+    let generation = 0;
+    let notifyLoss: (() => void) | undefined;
+    const reserved = {
+      unsafe: async (text: string) => {
+        calls.push(text);
+        return text.includes("try_advisory") ? [{ acquired: true }] : [{ unlocked: true }];
+      },
+      release: () => { calls.push("release"); },
+    } as unknown as ReservedSql<Record<string, never>>;
+    const pool = bindPostgresJsTransactionPool({
+      reserve: async () => reserved,
+      end: async () => undefined,
+    } as unknown as Sql<Record<string, never>>, {
+      leaseGeneration: () => generation,
+      subscribeLeaseLoss: (listener) => {
+        notifyLoss = listener;
+        return () => { notifyLoss = undefined; };
+      },
+    });
+    let entered!: () => void;
+    const enteredPromise = new Promise<void>((resolve) => { entered = resolve; });
+    const held = pool.tryWithSessionAdvisoryLock([4, 5], async (signal) => {
+      entered();
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+      return "unreachable";
+    });
+    await enteredPromise;
+    generation += 1;
+    notifyLoss!();
+    await expect(held).rejects.toThrow("postgres_connection_lease_lost");
+    expect(calls).toEqual([
+      "select pg_try_advisory_lock($1::integer, $2::integer) as acquired",
+    ]);
+  });
+
   test("supports an explicit serializable read-only lease", async () => {
     const calls: string[] = [];
     const reserved = {

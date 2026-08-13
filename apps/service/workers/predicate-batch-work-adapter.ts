@@ -18,7 +18,7 @@ import type { CanonicalJson, GraphRevision } from "../../../core/ledger";
 import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
 import { PredicateSchema, type Predicate } from "../../../core/schema";
 import { validateStrict } from "../../../core/schema/json";
-import type { ModelPort } from "../../../drivers/model/port";
+import { bindModelPortAbortSignal, type ModelPort } from "../../../drivers/model/port";
 import {
   assertAuthorizedLedgerWriteContext,
   type AuthorizedLedgerWriteContext,
@@ -95,6 +95,7 @@ export interface PredicateBatchWorkAdapter {
     context: AuthorizedLedgerWriteContext,
     job: Readonly<DurableMemoryWorkJob>,
     strategy: Readonly<RegisteredMemoryStrategy>,
+    lossSignal?: AbortSignal,
   ): Promise<DurableMemoryWorkProduceOutcome>;
   materialize(
     context: AuthorizedLedgerWriteContext,
@@ -231,6 +232,7 @@ export const definePredicateBatchWorkAdapter = (
       contextValue: AuthorizedLedgerWriteContext,
       jobValue: Readonly<DurableMemoryWorkJob>,
       strategyValue: Readonly<RegisteredMemoryStrategy>,
+      lossSignal?: AbortSignal,
     ) {
       let context: AuthorizedLedgerWriteContext;
       let job: Readonly<DurableMemoryWorkJob>;
@@ -266,6 +268,7 @@ export const definePredicateBatchWorkAdapter = (
       try {
         model = await dependencies.resolve_model(context, job, strategy);
         if (model === null) return failed("dependency_unavailable");
+        if (lossSignal !== undefined) model = bindModelPortAbortSignal(model, lossSignal);
       } catch {
         return failed("dependency_unavailable");
       }

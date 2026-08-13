@@ -34,6 +34,7 @@ export interface AttributionBeliefShadowProducerDependencies {
 
 export type AttributionBeliefShadowProducer = (
   request: OfflineMemoryReplayProducerRequest,
+  lossSignal?: AbortSignal,
 ) => Promise<OfflineMemoryEvaluationProduceOutcome>;
 
 const DIGEST = /^[a-f0-9]{64}$/;
@@ -190,7 +191,7 @@ export const defineAttributionBeliefShadowProducer = (
   dependenciesValue: AttributionBeliefShadowProducerDependencies,
 ): AttributionBeliefShadowProducer => {
   const resolveCalibrator = exactDependencies(dependenciesValue);
-  return async (requestValue): Promise<OfflineMemoryEvaluationProduceOutcome> => {
+  return async (requestValue, lossSignal): Promise<OfflineMemoryEvaluationProduceOutcome> => {
     let request: ReturnType<typeof parseRequest>;
     let input: CalibrateAttributionBeliefInput;
     try {
@@ -215,7 +216,7 @@ export const defineAttributionBeliefShadowProducer = (
     }
 
     try {
-      const calibrated = await calibrateAttributionBelief(input, calibrator);
+      const calibrated = await calibrateAttributionBelief(input, calibrator, lossSignal);
       return Object.freeze({
         kind: "produced" as const,
         result_contract_version: ATTRIBUTION_BELIEF_SHADOW_RESULT_VERSION,

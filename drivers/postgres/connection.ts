@@ -61,7 +61,7 @@ export type PostgresSessionAdvisoryLockOutcome<Result> =
 export interface PostgresSessionAdvisoryLockPool {
   tryWithSessionAdvisoryLock<Result>(
     key: readonly [number, number],
-    callback: () => Promise<Result>,
+    callback: (lossSignal: AbortSignal) => Promise<Result>,
   ): Promise<PostgresSessionAdvisoryLockOutcome<Result>>;
 }
 

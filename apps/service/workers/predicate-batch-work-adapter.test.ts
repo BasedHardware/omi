@@ -162,12 +162,15 @@ const staged = (
 
 test("one exact predicate question produces one assertion plan and rematerializes only its parent", async () => {
   let modelCalls = 0;
+  let modelSignal: AbortSignal | undefined;
+  const lossController = new AbortController();
   const input = snapshot();
   const job = leasedJob(input);
   const adapter = definePredicateBatchWorkAdapter({
     load_input: async () => ({ kind: "found", snapshot: input }),
     resolve_model: async () => new DeterministicFakeModel((request) => {
       modelCalls += 1;
+      modelSignal = request.signal;
       expect(request.strategy).toBe("predicate-alignment");
       expect(request.version).toBe(strategy.coordinates.prompt_version);
       return { assertions: [{
@@ -178,10 +181,11 @@ test("one exact predicate question produces one assertion plan and rematerialize
     }),
     load_current_parent: async () => ({ kind: "found", parent_commit: null }),
   });
-  const produced = await adapter.produce(context, job, strategy);
+  const produced = await adapter.produce(context, job, strategy, lossController.signal);
   expect(produced).toMatchObject({ kind: "produced", result_contract_version: DURABLE_MEMORY_GRAPH_PLAN_VERSION });
   if (produced.kind !== "produced") throw new Error("expected produced");
   expect(modelCalls).toBe(1);
+  expect(modelSignal).toBe(lossController.signal);
   const stored = staged(job, produced);
   const first = await adapter.materialize(context, job, stored, strategy);
   expect(first).toMatchObject({ kind: "ready", result_kind: "successful" });

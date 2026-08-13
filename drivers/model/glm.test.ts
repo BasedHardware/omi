@@ -125,6 +125,34 @@ test("provider response bodies never enter retry logs or telemetry", async () =>
   expect(JSON.stringify(events)).not.toContain(sentinel);
 });
 
+test("an external lease-loss signal cancels the provider call without retry", async () => {
+  let calls = 0;
+  const providerState: { signal: AbortSignal | null } = { signal: null };
+  const fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    calls += 1;
+    providerState.signal = init?.signal ?? null;
+    return await new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      if (!signal) return reject(new Error("missing provider signal"));
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+  }) as typeof globalThis.fetch;
+  const model = new GlmModel({
+    apiKey: "fixture-key", baseUrl: "https://fixture.invalid/v1", model: "fixture-glm", fetch,
+  });
+  const controller = new AbortController();
+  const invocation = model.invoke({
+    strategy: "grounded-extraction", version: "v1", input: { prompt: "x" },
+    signal: controller.signal,
+  });
+  while (providerState.signal === null) await Promise.resolve();
+  const reason = new Error("lease lost");
+  controller.abort(reason);
+  await expect(invocation).rejects.toBe(reason);
+  expect(providerState.signal.aborted).toBeTrue();
+  expect(calls).toBe(1);
+});
+
 test("GLM placement abstentions parse without becoming placement approvals, and unknown strategies still reject", async () => {
   const provisional = claim();
   const evidence = evidenceFor(provisional);

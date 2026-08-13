@@ -36,7 +36,7 @@ const unusedPool: PostgresTransactionPool = Object.freeze({
   withTransaction: async () => { throw new Error("constructor_must_not_open_postgres"); },
 });
 const exclusivity = defineModelPipelineExclusivity(async (_resource, callback) =>
-  Object.freeze({ kind: "completed" as const, value: await callback() }));
+  Object.freeze({ kind: "completed" as const, value: await callback(new AbortController().signal) }));
 const pipeline = {
   model_pipeline_exclusivity: exclusivity,
   resolve_model_pipeline_resource: async () => Object.freeze({

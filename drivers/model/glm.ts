@@ -4,7 +4,7 @@ import type { UnitBoundaryJudgment } from "../../core/extract/provisional";
 import type { MentionDetectionRequest, MentionDetectionResponse } from "../../core/resolve/mention-detection";
 import type { EntityProposal, EntityResolutionRequest } from "../../core/resolve/entities";
 import type { ScopeRoleProposal, ScopeRoleRequest } from "../../core/scope/placement";
-import type { CachedModelResultValidation, ModelInitialPromptIdentity, ModelInvocationSuccess, ModelInvokeRequest, ModelPort, ModelPromptCoordinates } from "./port";
+import type { CachedModelResultValidation, ModelComposeRequest, ModelInitialPromptIdentity, ModelInvocationSuccess, ModelInvokeRequest, ModelPort, ModelPromptCoordinates, ModelRenderRequest } from "./port";
 import { emitModelTelemetrySafely, type ModelTelemetryErrorCode, type ModelTelemetrySink } from "./telemetry";
 
 const entityStrategy = "local-handle-durable-entity";
@@ -787,12 +787,21 @@ export class GlmModel implements ModelPort {
   }
 
   /** One chat call per edge; the three port methods differ only in which registry row they dispatch. */
-  private async completeWithMetadata(strategy: GlmStrategy, input: unknown, version?: string): Promise<ModelInvocationSuccess> {
+  private async completeWithMetadata(
+    strategy: GlmStrategy,
+    input: unknown,
+    version?: string,
+    leaseSignal?: AbortSignal,
+  ): Promise<ModelInvocationSuccess> {
     const edge = EDGES[strategy];
     // Version drift must be loud: a caller naming a contract this driver does
     // not implement used to be silently answered by whatever is implemented.
     if (version !== undefined && edge.versions !== null && !edge.versions.has(version)) throw new Error(`GLM ${strategy} version mismatch: caller requested "${version}" but this driver implements "${[...edge.versions].join('", "')}"`);
     if (!this.apiKey) throw new Error("GLM API key missing: set GLM_API_KEY, ZAI_API_KEY, or OMI_BENCH_OPENAI_API_KEY");
+    if (leaseSignal !== undefined && !(leaseSignal instanceof AbortSignal)) {
+      throw new TypeError("GLM invalid abort signal");
+    }
+    if (leaseSignal?.aborted) throw leaseSignal.reason;
     const attempts = 3;
     let lastError: unknown;
     for (let attempt = 1; ; attempt += 1) {
@@ -801,18 +810,20 @@ export class GlmModel implements ModelPort {
       const content = edge.prompt(input, version) + (attempt > 1 ? repairHint(lastError) : "");
       const digest = promptDigest(content);
       try {
+        const timeoutSignal = AbortSignal.timeout(timeoutMsFor(strategy));
         const response = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
           method: "POST",
           headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
           body: JSON.stringify({ model: this.model, temperature: 0, thinking: { type: "disabled" }, response_format: { type: "json_object" }, messages: [{ role: "user", content }] }),
           // Dream strategies use a shorter timeout (OMI_GLM_DREAM_TIMEOUT_MS, default 90s);
           // extract/compose keep OMI_GLM_TIMEOUT_MS (default 300s).
-          signal: AbortSignal.timeout(timeoutMsFor(strategy)),
+          signal: leaseSignal ? AbortSignal.any([leaseSignal, timeoutSignal]) : timeoutSignal,
         });
         if (!response.ok) throw new Error(`GLM chat completion failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
         const payload = await response.json();
         usage = providerUsage(payload);
         const result = edge.parse(readContent(payload), input, version);
+        if (leaseSignal?.aborted) throw leaseSignal.reason;
         emitModelTelemetrySafely(this.telemetrySink, {
           version: "model-operational-telemetry-v1", stage: "provider_attempt", outcome: "success", error_code: null,
           prompt_digest: digest, coordinates: this.coordinatesFor(strategy, version), attempt,
@@ -831,13 +842,26 @@ export class GlmModel implements ModelPort {
         if (attempt >= attempts || !retryableGlmError(error)) throw error;
         const backoffMs = 500 * 2 ** (attempt - 1);
         console.error(`model_retry strategy=${strategy} attempt=${attempt} max_attempts=${attempts} backoff_ms=${backoffMs} error_code=${telemetryErrorCode(error)}`);
-        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        await new Promise<void>((resolve, reject) => {
+          const finish = (): void => {
+            leaseSignal?.removeEventListener("abort", abort);
+            resolve();
+          };
+          const timer = setTimeout(finish, backoffMs);
+          const abort = (): void => {
+            clearTimeout(timer);
+            leaseSignal?.removeEventListener("abort", abort);
+            reject(leaseSignal?.reason);
+          };
+          leaseSignal?.addEventListener("abort", abort, { once: true });
+          if (leaseSignal?.aborted) abort();
+        });
       }
     }
   }
 
-  private async complete(strategy: GlmStrategy, input: unknown, version?: string): Promise<unknown> {
-    return (await this.completeWithMetadata(strategy, input, version)).result;
+  private async complete(strategy: GlmStrategy, input: unknown, version?: string, signal?: AbortSignal): Promise<unknown> {
+    return (await this.completeWithMetadata(strategy, input, version, signal)).result;
   }
 
   // Compose and render are deliberately refused here: their responses have
@@ -845,12 +869,12 @@ export class GlmModel implements ModelPort {
   // receiving `unknown` would have to re-assert one of them by hand.
   async invoke(request: ModelInvokeRequest): Promise<unknown> {
     if (!Object.hasOwn(EDGES, request.strategy) || request.strategy === composeStrategy || request.strategy === renderStrategy) throw new Error(`GlmModel does not support strategy: ${request.strategy}`);
-    return this.complete(request.strategy as GlmStrategy, request.input, request.version);
+    return this.complete(request.strategy as GlmStrategy, request.input, request.version, request.signal);
   }
 
   async invokeWithMetadata(request: ModelInvokeRequest): Promise<ModelInvocationSuccess> {
     if (!Object.hasOwn(EDGES, request.strategy) || request.strategy === composeStrategy || request.strategy === renderStrategy) throw new Error(`GlmModel does not support strategy: ${request.strategy}`);
-    return this.completeWithMetadata(request.strategy as GlmStrategy, request.input, request.version);
+    return this.completeWithMetadata(request.strategy as GlmStrategy, request.input, request.version, request.signal);
   }
 
   /** Re-run decoded QA cache values through this adapter's exact parser. */
@@ -872,13 +896,13 @@ export class GlmModel implements ModelPort {
 
   /** The retrieval tree names its own render strategy per run for cache identity; this method IS the edge,
    * so the request's strategy and version (a per-run model_version) pass through untouched. */
-  async render(request: { strategy: string; version: string; input: unknown }): Promise<{ summary_text: string; citations: readonly string[] }> {
-    return await this.complete(renderStrategy, request.input, request.version) as { summary_text: string; citations: readonly string[] };
+  async render(request: ModelRenderRequest): Promise<{ summary_text: string; citations: readonly string[] }> {
+    return await this.complete(renderStrategy, request.input, request.version, request.signal) as { summary_text: string; citations: readonly string[] };
   }
 
-  async compose(request: { strategy: string; version: string; input: unknown }): Promise<{ answer_text: string; citations: readonly string[]; assertions: readonly { text: string; citations: readonly string[] }[] }> {
+  async compose(request: ModelComposeRequest): Promise<{ answer_text: string; citations: readonly string[]; assertions: readonly { text: string; citations: readonly string[] }[] }> {
     if (request.strategy !== composeStrategy) throw new Error(`GlmModel compose does not support strategy: ${request.strategy}`);
-    return await this.complete(composeStrategy, request.input, request.version) as { answer_text: string; citations: readonly string[]; assertions: readonly { text: string; citations: readonly string[] }[] };
+    return await this.complete(composeStrategy, request.input, request.version, request.signal) as { answer_text: string; citations: readonly string[]; assertions: readonly { text: string; citations: readonly string[] }[] };
   }
 
   /**

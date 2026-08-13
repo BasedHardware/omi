@@ -33,7 +33,7 @@ import {
   type DurableMemoryWorkInputManifestEntry,
 } from "../stores/durable-memory-work-repository";
 import type { StagedDurableMemoryWorkResult } from "../stores/durable-memory-work-result-repository";
-import type { ModelPort } from "../../../drivers/model/port";
+import { bindModelPortAbortSignal, type ModelPort } from "../../../drivers/model/port";
 import {
   planSessionStmToLtmTransition,
   sessionStmLtmPlanningInputRevisions,
@@ -106,6 +106,7 @@ export interface FormationWorkAdapter {
     context: AuthorizedLedgerWriteContext,
     job: Readonly<DurableMemoryWorkJob>,
     strategy: Readonly<RegisteredMemoryStrategy>,
+    lossSignal?: AbortSignal,
   ): Promise<DurableMemoryWorkProduceOutcome>;
   materialize(
     context: AuthorizedLedgerWriteContext,
@@ -343,6 +344,7 @@ export const defineFormationWorkAdapter = (
     contextValue: AuthorizedLedgerWriteContext,
     jobValue: Readonly<DurableMemoryWorkJob>,
     strategyValue: Readonly<RegisteredMemoryStrategy>,
+    lossSignal?: AbortSignal,
   ) {
     let context: AuthorizedLedgerWriteContext;
     let job: Readonly<DurableMemoryWorkJob>;
@@ -379,6 +381,7 @@ export const defineFormationWorkAdapter = (
     try {
       model = await dependencies.resolve_model(context, job, strategy);
       if (model === null) return failed("dependency_unavailable");
+      if (lossSignal !== undefined) model = bindModelPortAbortSignal(model, lossSignal);
     } catch {
       return failed("dependency_unavailable");
     }

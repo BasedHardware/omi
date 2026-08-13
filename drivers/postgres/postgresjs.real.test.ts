@@ -1206,6 +1206,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         policy: beliefPolicy, strategies: beliefStrategies,
       });
       let calibratorCalls = 0;
+      const beliefLossSignals: AbortSignal[] = [];
       const beliefRuntime = createPostgresListenAttributionBeliefOneShotRuntime({
         pool: appRolePool,
         model_pipeline_exclusivity: createPostgresModelPipelineExclusivity(modelLockPool),
@@ -1214,8 +1215,13 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           resource_digest: "d".repeat(64),
         }),
         resolve_calibrator: async (_strategy, evaluationRole) => ({
-          calibrate: async (calibrationRequest: AttributionCalibrationRequest) => {
+          calibrate: async (
+            calibrationRequest: AttributionCalibrationRequest,
+            lossSignal?: AbortSignal,
+          ) => {
             calibratorCalls += 1;
+            if (!(lossSignal instanceof AbortSignal)) throw new Error("missing belief loss signal");
+            beliefLossSignals.push(lossSignal);
             const preferred = calibrationRequest.hypotheses.length === 1 ? 1_000_000
               : evaluationRole === "baseline" ? 600_000 : 750_000;
             const remaining = 1_000_000 - preferred;
@@ -1250,6 +1256,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       if (beliefEvaluation.kind !== "completed") throw new Error("listen_belief_evaluation_stopped");
       expect(beliefEvaluation.pairs).toHaveLength(2);
       expect(calibratorCalls).toBe(4);
+      expect(beliefLossSignals).toHaveLength(4);
       const beliefEvaluationReplay = await beliefRuntime.run(shadowContext, beliefReplayRequest);
       expect(beliefEvaluationReplay).toMatchObject({
         kind: "completed", model_calls: 0, reused_results: 4,
@@ -1519,6 +1526,60 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       await contenderPool.close();
     }
   });
+
+  test("model pipeline loss aborts a pending provider before same-resource reacquisition", async () => {
+    const contenderPool = createPostgresJsTransactionPool({
+      connectionString: explicitTestUrl!, maxConnections: 1,
+    });
+    try {
+      const holder = createPostgresModelPipelineExclusivity(modelLockPool);
+      const contender = createPostgresModelPipelineExclusivity(contenderPool);
+      const resource = Object.freeze({
+        version: MODEL_PIPELINE_RESOURCE_VERSION,
+        resource_digest: "7".repeat(64),
+      });
+      let providerStarted!: () => void;
+      const providerStartedPromise = new Promise<void>((resolve) => { providerStarted = resolve; });
+      let providerAborted!: () => void;
+      const providerAbortedPromise = new Promise<void>((resolve) => { providerAborted = resolve; });
+      const held = holder.runExclusive(resource, async (lossSignal) => {
+        providerStarted();
+        return await new Promise<string>((_resolve, reject) => {
+          lossSignal.addEventListener("abort", () => {
+            providerAborted();
+            reject(lossSignal.reason);
+          }, { once: true });
+        });
+      });
+      await providerStartedPromise;
+      const locks = await ownerSql.unsafe<{ pid: number }[]>(`
+        SELECT pid
+        FROM pg_catalog.pg_locks
+        WHERE locktype = 'advisory'
+          AND granted
+          AND classid::bigint = $1
+          AND objid::bigint = $2
+      `, [0x77777777, 0x77777777]);
+      expect(locks).toHaveLength(1);
+      const holderPid = locks[0]?.pid;
+      if (holderPid === undefined) throw new Error("missing model pipeline holder pid");
+      await expect(contender.runExclusive(resource, async () => "overlap"))
+        .resolves.toEqual({ kind: "busy" });
+      const terminated = await ownerSql.unsafe<{ terminated: boolean }[]>(
+        "SELECT pg_terminate_backend($1) AS terminated", [holderPid],
+      );
+      expect(terminated[0]?.terminated).toBe(true);
+      await expect(Promise.race([
+        providerAbortedPromise.then(() => "aborted"),
+        Bun.sleep(5_000).then(() => "timeout"),
+      ])).resolves.toBe("aborted");
+      await expect(held).resolves.toEqual({ kind: "unavailable" });
+      await expect(contender.runExclusive(resource, async () => "reacquired"))
+        .resolves.toEqual({ kind: "completed", value: "reacquired" });
+    } finally {
+      await contenderPool.close();
+    }
+  }, 30_000);
 
   test("backend termination rolls back the first write and the size-one pool reconnects", async () => {
     const killedAccount = `account:terminated:${randomUUID()}`;
@@ -5021,6 +5082,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const graphRepository = createPostgresAuthoritativeGraphSnapshotRepository({ pool: appRolePool });
     const graphSnapshot = await graphRepository.load(context);
     let queryModelCalls = 0;
+    const queryLossSignals: AbortSignal[] = [];
     const queryCandidateRefs: string[] = [];
     const queryRuntime = createPostgresMemoryQueryEvaluationOneShotRuntime({
       pool: appRolePool, codec_root_secret: new Uint8Array(32).fill(8),
@@ -5029,8 +5091,10 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         version: MODEL_PIPELINE_RESOURCE_VERSION,
         resource_digest: "e".repeat(64),
       }),
-      produce: async (request) => {
+      produce: async (request, lossSignal) => {
         queryModelCalls += 1;
+        if (!(lossSignal instanceof AbortSignal)) throw new Error("missing query loss signal");
+        queryLossSignals.push(lossSignal);
         expect(request.candidates).toHaveLength(1);
         expect(request.candidates[0]?.text).toBe("Alice");
         const cited = request.candidates[0]!.trace_ref;
@@ -5100,6 +5164,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     });
     expect(firstQueryRun.pair_receipts).toHaveLength(1);
     expect(queryModelCalls).toBe(2);
+    expect(queryLossSignals).toHaveLength(2);
     expect(new Set(queryCandidateRefs).size).toBe(1);
     const [queryCandidateRef] = queryCandidateRefs;
     const persistedGroundings = await ownerSql.unsafe<{

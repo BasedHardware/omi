@@ -275,7 +275,7 @@ describe("production-neutral durable memory work runner", () => {
       },
       produce_exclusive: async (_context, _job, _strategy, produce) => {
         exclusivityCalls += 1;
-        return produce();
+        return produce(new AbortController().signal);
       },
       materialize: async () => ({
         kind: "ready", result_kind: "successful_empty", authoritative_append: null,

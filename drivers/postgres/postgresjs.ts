@@ -28,6 +28,7 @@ export interface CloseablePostgresTransactionPool extends PostgresTransactionPoo
 interface PostgresJsBindingOptions {
   /** Qualified only for a size-one pool, where every close belongs to this lease. */
   readonly leaseGeneration?: () => number;
+  readonly subscribeLeaseLoss?: (listener: () => void) => () => void;
 }
 
 interface CancellableQuery<Rows> extends PromiseLike<Rows> {
@@ -119,7 +120,7 @@ export const bindPostgresJsTransactionPool = (
 ): CloseablePostgresTransactionPool => Object.freeze({
   async tryWithSessionAdvisoryLock<Result>(
     key: readonly [number, number],
-    callback: () => Promise<Result>,
+    callback: (lossSignal: AbortSignal) => Promise<Result>,
   ) {
     if (!Array.isArray(key) || key.length !== 2
       || key.some((part) => !Number.isSafeInteger(part) || part < -2147483648 || part > 2147483647)
@@ -128,6 +129,11 @@ export const bindPostgresJsTransactionPool = (
     }
     const reserved = await sql.reserve();
     const leaseGeneration = binding.leaseGeneration?.();
+    const lossController = new AbortController();
+    const notifyLeaseLoss = (): void => {
+      if (!lossController.signal.aborted) lossController.abort(new PostgresJsLeaseLostError());
+    };
+    const unsubscribeLeaseLoss = binding.subscribeLeaseLoss?.(notifyLeaseLoss);
     const assertLeaseHealthy = (): void => {
       if (leaseGeneration !== undefined && binding.leaseGeneration?.() !== leaseGeneration) {
         throw new PostgresJsLeaseLostError();
@@ -145,13 +151,14 @@ export const bindPostgresJsTransactionPool = (
       assertLeaseHealthy();
       acquired = rows.length === 1 && rows[0]?.acquired === true;
       if (!acquired) return Object.freeze({ acquired: false as const });
-      const value = await callback();
+      const value = await callback(lossController.signal);
       assertLeaseHealthy();
       return Object.freeze({ acquired: true as const, value });
     } catch (error) {
       leaseDestroyed = destroysConnectionLease(error);
       throw error;
     } finally {
+      unsubscribeLeaseLoss?.();
       if (acquired && !leaseDestroyed) {
         try {
           const rows = await reserved.unsafe<{ unlocked: boolean }[]>(
@@ -248,15 +255,25 @@ export const createPostgresJsTransactionPool = (
   }
   const maxConnections = boundedInteger(options.maxConnections, 10, 1, 100);
   let leaseGeneration = 0;
+  const leaseLossListeners = new Set<() => void>();
   const sql = postgres(options.connectionString, {
     max: maxConnections,
     idle_timeout: boundedInteger(options.idleTimeoutSeconds, 20, 1, 600),
     connect_timeout: boundedInteger(options.connectTimeoutSeconds, 10, 1, 60),
     prepare: true,
-    onclose: () => { leaseGeneration += 1; },
+    onclose: () => {
+      leaseGeneration += 1;
+      for (const listener of [...leaseLossListeners]) listener();
+    },
   });
   return bindPostgresJsTransactionPool(
     sql,
-    maxConnections === 1 ? { leaseGeneration: () => leaseGeneration } : {},
+    maxConnections === 1 ? {
+      leaseGeneration: () => leaseGeneration,
+      subscribeLeaseLoss: (listener) => {
+        leaseLossListeners.add(listener);
+        return () => leaseLossListeners.delete(listener);
+      },
+    } : {},
   );
 };

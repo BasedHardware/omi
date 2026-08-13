@@ -36,7 +36,12 @@ export interface ModelInvokeRequest {
   readonly strategy: string;
   readonly version: string;
   readonly input: unknown;
+  /** Cancels provider work when the external resource lease is lost. */
+  readonly signal?: AbortSignal;
 }
+
+export interface ModelRenderRequest extends ModelInvokeRequest {}
+export interface ModelComposeRequest extends ModelInvokeRequest {}
 
 /** Imperative edge contract. Core packages never import this module. */
 export interface ModelPort {
@@ -47,24 +52,46 @@ export interface ModelPort {
   invokeWithMetadata?(request: ModelInvokeRequest): Promise<ModelInvocationSuccess>;
   /** Adapter-owned revalidation of a decoded QA cache value. */
   validateCachedResult?(request: ModelInvokeRequest, candidate: unknown): CachedModelResultValidation;
-  render(request: { strategy: string; version: string; input: unknown }): Promise<{ summary_text: string; citations: readonly string[] }>;
-  compose(request: { strategy: string; version: string; input: unknown }): Promise<{ answer_text: string; citations: readonly string[]; assertions: readonly { text: string; citations: readonly string[] }[] }>;
+  render(request: ModelRenderRequest): Promise<{ summary_text: string; citations: readonly string[] }>;
+  compose(request: ModelComposeRequest): Promise<{ answer_text: string; citations: readonly string[]; assertions: readonly { text: string; citations: readonly string[] }[] }>;
 }
+
+/** Bind one external resource-lease lifetime without changing core call sites. */
+export const bindModelPortAbortSignal = (model: ModelPort, signal: AbortSignal): ModelPort => {
+  if (!(signal instanceof AbortSignal)) throw new TypeError("invalid_model_abort_signal");
+  const bind = <Request extends ModelInvokeRequest>(request: Request): Request =>
+    Object.freeze({ ...request, signal }) as Request;
+  return Object.freeze({
+    invoke: (request: ModelInvokeRequest) => model.invoke(bind(request)),
+    render: (request: ModelRenderRequest) => model.render(bind(request)),
+    compose: (request: ModelComposeRequest) => model.compose(bind(request)),
+    ...(model.initialPromptIdentity ? {
+      initialPromptIdentity: (request: ModelInvokeRequest) => model.initialPromptIdentity!(bind(request)),
+    } : {}),
+    ...(model.invokeWithMetadata ? {
+      invokeWithMetadata: (request: ModelInvokeRequest) => model.invokeWithMetadata!(bind(request)),
+    } : {}),
+    ...(model.validateCachedResult ? {
+      validateCachedResult: (request: ModelInvokeRequest, candidate: unknown) =>
+        model.validateCachedResult!(bind(request), candidate),
+    } : {}),
+  });
+};
 
 /** Test-only deterministic adapter; it makes no network or real-model call. */
 export class DeterministicFakeModel implements ModelPort {
-  constructor(private readonly response: unknown | ((request: { strategy: string; version: string; input: unknown }) => unknown)) {}
-  async invoke(request: { strategy: string; version: string; input: unknown }): Promise<unknown> {
+  constructor(private readonly response: unknown | ((request: ModelInvokeRequest) => unknown)) {}
+  async invoke(request: ModelInvokeRequest): Promise<unknown> {
     const response = typeof this.response === "function" ? this.response(request) : this.response;
     return structuredClone(response);
   }
-  async render(request: { strategy: string; version: string; input: unknown }): Promise<{ summary_text: string; citations: readonly string[] }> {
+  async render(request: ModelRenderRequest): Promise<{ summary_text: string; citations: readonly string[] }> {
     const response = typeof this.response === "function" ? this.response(request) : this.response;
     if (typeof response === "string") return { summary_text: response, citations: [] };
     const value = response as { summary_text?: unknown; citations?: unknown };
     return { summary_text: typeof value.summary_text === "string" ? value.summary_text : "", citations: Array.isArray(value.citations) ? value.citations.filter((item): item is string => typeof item === "string") : [] };
   }
-  async compose(request: { strategy: string; version: string; input: unknown }): Promise<{ answer_text: string; citations: readonly string[]; assertions: readonly { text: string; citations: readonly string[] }[] }> {
+  async compose(request: ModelComposeRequest): Promise<{ answer_text: string; citations: readonly string[]; assertions: readonly { text: string; citations: readonly string[] }[] }> {
     const response = typeof this.response === "function" ? this.response(request) : this.response;
     if (typeof response === "string") return { answer_text: response, citations: [], assertions: [] };
     const value = response as { answer_text?: unknown; citations?: unknown; assertions?: unknown };

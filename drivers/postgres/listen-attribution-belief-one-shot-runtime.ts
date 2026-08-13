@@ -197,7 +197,10 @@ export const createPostgresListenAttributionBeliefOneShotRuntime = (
       if (resource === null) {
         return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" as const });
       }
-      const outcome = await configured.model_pipeline_exclusivity.runExclusive(resource, () => producer(request));
+      const outcome = await configured.model_pipeline_exclusivity.runExclusive(
+        resource,
+        (lossSignal) => producer(request, lossSignal),
+      );
       if (outcome.kind === "completed") return outcome.value;
       return Object.freeze({
         kind: "failed" as const,

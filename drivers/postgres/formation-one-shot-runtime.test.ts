@@ -43,7 +43,7 @@ const unusedPool: PostgresTransactionPool = Object.freeze({
   },
 });
 const exclusivity = defineModelPipelineExclusivity(async (_resource, callback) =>
-  Object.freeze({ kind: "completed" as const, value: await callback() }));
+  Object.freeze({ kind: "completed" as const, value: await callback(new AbortController().signal) }));
 const pipeline = {
   model_pipeline_exclusivity: exclusivity,
   resolve_model_pipeline_resource: async () => Object.freeze({

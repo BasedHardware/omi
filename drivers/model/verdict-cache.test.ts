@@ -84,6 +84,26 @@ test("a throw is never cached, so transient failures stay retryable", async () =
   expect(cache.stats.hits).toBe(0);
 });
 
+test("a lease-bound request bypasses cache reads, writes, and in-flight sharing", async () => {
+  const store = new CapturingStore();
+  const seenSignals: AbortSignal[] = [];
+  const inner = counting((call) => ({ call }));
+  const originalInvoke = inner.invoke.bind(inner);
+  inner.invoke = async (candidate) => {
+    if (candidate.signal) seenSignals.push(candidate.signal);
+    return originalInvoke(candidate);
+  };
+  const cache = new CachingModelPort(inner, store, "fixture", cacheScope());
+  const first = new AbortController();
+  const second = new AbortController();
+  await expect(cache.invoke({ ...request, signal: first.signal })).resolves.toEqual({ call: 1 });
+  await expect(cache.invoke({ ...request, signal: second.signal })).resolves.toEqual({ call: 2 });
+  expect(seenSignals).toEqual([first.signal, second.signal]);
+  expect(store.gets).toBe(0);
+  expect(store.sets).toBe(0);
+  expect(cache.stats).toEqual({ hits: 0, misses: 0, writes: 0, uncacheable: 2 });
+});
+
 test("a malformed legacy cache value is a miss, never a model-path failure", async () => {
   const store = new CapturingStore();
   store.entries.set(verdictKey("fixture", request.strategy, request.version, request.input), "{not json}");

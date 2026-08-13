@@ -9,7 +9,7 @@ test("PostgreSQL model exclusivity derives a stable signed advisory coordinate",
   const pool: PostgresSessionAdvisoryLockPool = {
     async tryWithSessionAdvisoryLock(key, callback) {
       seen.push(key);
-      return Object.freeze({ acquired: true as const, value: await callback() });
+      return Object.freeze({ acquired: true as const, value: await callback(new AbortController().signal) });
     },
   };
   const port = createPostgresModelPipelineExclusivity(pool);

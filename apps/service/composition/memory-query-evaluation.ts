@@ -31,7 +31,10 @@ export interface MemoryQueryEvaluationCompositionConfig {
   readonly codec_root_secret: Uint8Array;
   readonly result_repository: MemoryShadowResultRepository;
   readonly grounding_repository: MemoryReadGroundingRepository;
-  readonly produce: (request: AuthorizedQueryModelRequest) => Promise<AuthorizedQueryModelOutcome>;
+  readonly produce: (
+    request: AuthorizedQueryModelRequest,
+    lossSignal?: AbortSignal,
+  ) => Promise<AuthorizedQueryModelOutcome>;
 }
 
 const fail = (code: string): never => { throw new TypeError(`memory query evaluation composition ${code}`); };

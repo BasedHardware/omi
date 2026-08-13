@@ -20,7 +20,7 @@ export interface ModelPipelineExclusivity {
   readonly [RESOURCE_PORT]: true;
   runExclusive<Result>(
     resource: Readonly<ModelPipelineResource>,
-    callback: () => Promise<Result>,
+    callback: (lossSignal: AbortSignal) => Promise<Result>,
   ): Promise<ModelPipelineExclusiveOutcome<Result>>;
 }
 
@@ -86,22 +86,25 @@ export const modelPipelineResourceFor = (
 export const defineModelPipelineExclusivity = (
   implementation: <Result>(
     resource: Readonly<ModelPipelineResource>,
-    callback: () => Promise<Result>,
+    callback: (lossSignal: AbortSignal) => Promise<Result>,
   ) => Promise<ModelPipelineExclusiveOutcome<Result>>,
 ): ModelPipelineExclusivity => {
   if (typeof implementation !== "function" || isProxy(implementation)) fail("invalid_implementation");
   return Object.freeze({
     [RESOURCE_PORT]: true as const,
-    async runExclusive<Result>(resourceValue: Readonly<ModelPipelineResource>, callback: () => Promise<Result>) {
+    async runExclusive<Result>(resourceValue: Readonly<ModelPipelineResource>, callback: (lossSignal: AbortSignal) => Promise<Result>) {
       const resource = parseModelPipelineResource(resourceValue);
       if (typeof callback !== "function" || isProxy(callback)) fail("invalid_callback");
       let open = true;
       let callbackCalls = 0;
       const pending = new Set<Promise<Result>>();
-      const guardedCallback = (): Promise<Result> => {
+      const guardedCallback = (lossSignal: AbortSignal): Promise<Result> => {
         if (!open || callbackCalls !== 0) return Promise.reject(new TypeError("model pipeline exclusivity callback_closed"));
+        if (!(lossSignal instanceof AbortSignal)) {
+          return Promise.reject(new TypeError("model pipeline exclusivity invalid_loss_signal"));
+        }
         callbackCalls += 1;
-        const invocation = Promise.resolve().then(callback);
+        const invocation = Promise.resolve().then(() => callback(lossSignal));
         pending.add(invocation);
         void invocation.finally(() => pending.delete(invocation)).catch(() => undefined);
         return invocation;
@@ -117,7 +120,7 @@ export const defineModelPipelineExclusivity = (
         || Object.getPrototypeOf(outcome) !== Object.prototype) fail("invalid_outcome");
       const kind = Object.getOwnPropertyDescriptor(outcome, "kind")?.value;
       if (kind === "busy" || kind === "unavailable") {
-        if (callbackCalls !== 0) fail("invalid_outcome");
+        if (kind === "busy" ? callbackCalls !== 0 : callbackCalls > 1) fail("invalid_outcome");
         exactRecord(outcome, ["kind"]);
         return Object.freeze({ kind }) as ModelPipelineExclusiveOutcome<Result>;
       }
