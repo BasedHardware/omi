@@ -13,7 +13,7 @@ const asn = /^ASN:0x[0-9a-f]+-0x[0-9a-f]+:$/i;
 
 function probeForeground() {
   return new Promise((resolve, reject) => {
-    execFile("/usr/bin/lsappinfo", ["front"], { encoding: "utf8", timeout: 5_000 }, (error, stdout) => {
+    execFile("/usr/bin/lsappinfo", ["front"], { encoding: "utf8", timeout: 250 }, (error, stdout) => {
       if (error) return reject(new Error("foreground probe failed"));
       const value = stdout.trim();
       if (!asn.test(value)) return reject(new Error("foreground probe returned an invalid application identity"));
@@ -44,6 +44,9 @@ export async function guardedRun(spec) {
   let terminal = null;
   let monitorFault = null;
   let monitoring = false;
+  let sampleCount = 0;
+  let previousSampleAt = Date.now();
+  let maxSampleGapMilliseconds = 0;
   const child = spawn(spec.command, spec.args, { cwd: spec.cwd, env: spec.env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
   child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
@@ -60,6 +63,10 @@ export async function guardedRun(spec) {
   const sample = async () => {
     if (monitoring || monitorFault) return;
     monitoring = true;
+    const sampleAt = Date.now();
+    maxSampleGapMilliseconds = Math.max(maxSampleGapMilliseconds, sampleAt - previousSampleAt);
+    previousSampleAt = sampleAt;
+    sampleCount += 1;
     try {
       const observed = await probeForeground();
       if (observed !== expected) {
@@ -76,10 +83,27 @@ export async function guardedRun(spec) {
     monitorFault = "guarded command timed out";
     stopChild();
   }, spec.timeoutSeconds * 1_000);
-  const exit = await new Promise((resolve) => {
-    child.once("error", (error) => resolve({ code: null, signal: null, error: error.message }));
-    child.once("exit", (code, signal) => resolve({ code, signal, error: null }));
-  });
+  let resolveClose;
+  const closed = new Promise((resolve) => { resolveClose = resolve; });
+  child.once("error", (error) => resolveClose({ code: null, signal: null, error: error.message }));
+  child.once("close", (code, signal) => resolveClose({ code, signal, error: null }));
+  const interrupt = (signal) => {
+    monitorFault ||= `guard interrupted by ${signal}`;
+    stopChild();
+  };
+  const interruptSigint = () => interrupt("SIGINT");
+  const interruptSigterm = () => interrupt("SIGTERM");
+  process.once("SIGINT", interruptSigint);
+  process.once("SIGTERM", interruptSigterm);
+  const exit = await Promise.race([closed, new Promise((resolve) => {
+    setTimeout(() => {
+      monitorFault ||= "guarded command did not close after termination";
+      stopChild();
+      resolve({ code: null, signal: "SIGKILL", error: "guarded command close deadline exceeded" });
+    }, (spec.timeoutSeconds * 1_000) + 2_500).unref();
+  })]);
+  process.removeListener("SIGINT", interruptSigint);
+  process.removeListener("SIGTERM", interruptSigterm);
   clearInterval(interval); clearTimeout(timeout);
   while (monitoring) await new Promise((resolve) => setTimeout(resolve, 5));
   await sample();
@@ -89,8 +113,11 @@ export async function guardedRun(spec) {
     signal: exit.signal,
     error: exit.error,
     monitor_error: monitorFault,
-    interval_milliseconds: 20,
-    policy: "bounded-20ms-macos-foreground-change-detection-no-activation-request",
+    target_interval_milliseconds: 20,
+    probe_timeout_milliseconds: 250,
+    sample_count: sampleCount,
+    max_sample_gap_milliseconds: maxSampleGapMilliseconds,
+    policy: "sampled-macos-foreground-custody-20ms-target-250ms-probe-timeout-no-activation-request",
     started_at: started.toISOString(),
     finished_at: new Date().toISOString(),
   };

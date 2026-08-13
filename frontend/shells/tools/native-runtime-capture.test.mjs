@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -32,6 +33,16 @@ function manifest(overrides = {}) {
 
 function marker(m, events = [{ type: "lifecycle", name: "state", value: m.state, passed: true }]) {
   return { schema: "omi.native-runtime-marker/v1", domain: m.domain, theme: m.theme, accessibility: m.accessibility, events };
+}
+
+function writePreparation(file, m, artifactPath, artifactBytes) {
+  writeFileSync(file, `${JSON.stringify({
+    schema: "omi.polish.runtime-preparation/v1",
+    domain: m.domain, shell: m.shell, state: m.state, theme: m.theme, width: m.width, accessibility: m.accessibility,
+    run_id: m.run_id, source_shas: m.source_shas, capture_class: m.capture_class, source_tier: m.source_tier,
+    command: { argv: ["fixture"], cwd: ".", cwd_root: "core", exit_code: 0 },
+    artifact: { root: "core", path: path.relative(root, artifactPath), sha256: createHash("sha256").update(artifactBytes).digest("hex") },
+  })}\n`);
 }
 
 test("runtime manifest is immutable and cannot be relabelled as browser or unsupported lifecycle", () => {
@@ -150,13 +161,16 @@ test("canonical runtime replay emits gate-shaped input set, receipt, and coverag
     const outDir = path.join(scratch, "gate");
     const artifact = { schema: "omi.polish.runtime/v1", domain: m.domain, shell: m.shell, state: m.state, theme: m.theme, width: m.width, accessibility: m.accessibility, run_id: m.run_id, source_shas: m.source_shas, capture_class: m.capture_class, source_tier: m.source_tier, events: [{ type: "lifecycle", name: "state", value: m.state, passed: true }] };
     writeFileSync(manifestPath, `${JSON.stringify(m)}\n`);
-    writeFileSync(inputPath, `${JSON.stringify(artifact)}\n`);
+    const artifactBytes = Buffer.from(`${JSON.stringify(artifact)}\n`);
+    writeFileSync(inputPath, artifactBytes);
+    writePreparation(path.join(scratch, "runtime-preparation-receipt.json"), m, inputPath, artifactBytes);
     const result = gateReplay(m, manifestPath, inputPath, outputPath, outDir);
     assert.equal(readFileSync(outputPath, "utf8"), readFileSync(inputPath, "utf8"));
     const receipt = JSON.parse(readFileSync(result.receiptPath, "utf8"));
     assert.equal(receipt.capture_class, "native_fixture");
     assert.equal(receipt.cwd_root, "core");
     assert.equal(receipt.artifact_created[`core:${path.relative(root, outputPath)}`], true);
+    assert.ok(receipt.input_set.entries.some((entry) => entry.key.endsWith("runtime-preparation-receipt.json")));
     assert.match(receipt.argv.join(" "), /--emit-gate-records false/);
     const coverage = JSON.parse(readFileSync(result.coveragePath, "utf8"));
     assert.equal(coverage.coverage[0].kind, "runtime_trace");
@@ -165,6 +179,10 @@ test("canonical runtime replay emits gate-shaped input set, receipt, and coverag
     const replay = spawnSync(process.execPath, receipt.argv.slice(1), { cwd: root, encoding: "utf8" });
     assert.equal(replay.status, 0, replay.stderr);
     assert.equal(existsSync(outputPath), true);
+    const preparationPath = path.join(scratch, "runtime-preparation-receipt.json");
+    const preparation = JSON.parse(readFileSync(preparationPath, "utf8"));
+    writeFileSync(preparationPath, `${JSON.stringify({ ...preparation, artifact: { ...preparation.artifact, sha256: "0".repeat(64) } })}\n`);
+    assert.throws(() => gateReplay(m, manifestPath, inputPath, path.join(scratch, "tampered.json"), outDir), /does not match/);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -178,7 +196,9 @@ test("recorded replay command is runnable without a host platform checkout", () 
     const inputPath = path.join(scratch, "runtime.json");
     const outputPath = path.join(scratch, "replayed.json");
     const artifact = { schema: "omi.polish.runtime/v1", domain: m.domain, shell: m.shell, state: m.state, theme: m.theme, width: m.width, accessibility: m.accessibility, run_id: m.run_id, source_shas: m.source_shas, capture_class: m.capture_class, source_tier: m.source_tier, events: [{ type: "lifecycle", name: "state", value: m.state, passed: true }] };
-    writeFileSync(manifestPath, `${JSON.stringify(m)}\n`); writeFileSync(inputPath, `${JSON.stringify(artifact)}\n`);
+    const artifactBytes = Buffer.from(`${JSON.stringify(artifact)}\n`);
+    writeFileSync(manifestPath, `${JSON.stringify(m)}\n`); writeFileSync(inputPath, artifactBytes);
+    writePreparation(path.join(scratch, "runtime-preparation-receipt.json"), m, inputPath, artifactBytes);
     const run = spawnSync(process.execPath, [producer, "--manifest", manifestPath, "--replay-input", inputPath, "--replay-output", outputPath, "--output-dir", path.join(scratch, "gate"), "--emit-gate-records", "false"], { cwd: root, encoding: "utf8" });
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stdout, /NATIVE_RUNTIME_REPLAY/);

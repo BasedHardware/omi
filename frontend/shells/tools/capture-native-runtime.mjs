@@ -137,6 +137,11 @@ function metadata(manifest) {
   };
 }
 
+function validateForegroundCustody(custody) {
+  if (!custody || custody.schema !== "omi.macos-foreground-guard/v1" || custody.status !== 0 || custody.error !== null || custody.monitor_error !== null) throw new Error("runtime preparation lacks successful foreground custody");
+  if (custody.policy !== "sampled-macos-foreground-custody-20ms-target-250ms-probe-timeout-no-activation-request" || custody.target_interval_milliseconds !== 20 || custody.probe_timeout_milliseconds !== 250 || !Number.isInteger(custody.sample_count) || custody.sample_count < 1 || !Number.isFinite(custody.max_sample_gap_milliseconds) || custody.max_sample_gap_milliseconds < 0) throw new Error("runtime preparation foreground custody policy is malformed");
+}
+
 export function validateEvent(event) {
   if (!event || typeof event !== "object" || Object.keys(event).sort().join(",") !== "name,passed,type,value") throw new Error("runtime event keys are not exact");
   if (!eventTypes.has(event.type) || typeof event.name !== "string" || !namePattern.test(event.name) || typeof event.value !== "string" || !valuePattern.test(event.value) || event.passed !== true) throw new Error("runtime event is malformed or unpassed");
@@ -268,12 +273,22 @@ export function gateReplay(manifest, manifestPath, inputPath, outputPath, output
   const input = relativeCore(inputPath, "--replay-input"); const output = relativeCore(outputPath, "--replay-output"); const manifestFile = relativeCore(manifestPath, "--manifest");
   if (input.resolved === output.resolved) throw new Error("replay input and output must differ");
   const inputBytes = readFileSync(input.resolved); const artifact = JSON.parse(inputBytes.toString("utf8")); validateRuntimeArtifact(artifact, manifest);
+  const preparationPath = path.join(path.dirname(input.resolved), "runtime-preparation-receipt.json");
+  if (!existsSync(preparationPath)) throw new Error("runtime replay requires its preparation receipt");
+  const preparation = readJson(preparationPath, "runtime preparation receipt");
+  if (preparation.schema !== "omi.polish.runtime-preparation/v1" || preparation.run_id !== manifest.run_id || JSON.stringify(preparation.source_shas) !== JSON.stringify(manifest.source_shas) || preparation.capture_class !== manifest.capture_class || preparation.source_tier !== manifest.source_tier || preparation.artifact?.sha256 !== sha256(inputBytes)) throw new Error("runtime preparation receipt does not match replay artifact");
+  if (manifest.shell === "ios") validateForegroundCustody(preparation.foreground_custody);
   const artifactBytes = Buffer.from(stable(artifact));
   if (sha256(artifactBytes) !== sha256(inputBytes)) throw new Error("replay input must use canonical JSON formatting");
   mkdirSync(path.dirname(output.resolved), { recursive: true });
   writeFileSync(output.resolved, artifactBytes, { mode: 0o600, flag: "wx" });
   const producerFile = relativeCore(path.resolve(fileURLToPath(import.meta.url)), "producer script");
-  const entries = [inputEntry(manifestFile.resolved, manifestFile.relative), inputEntry(producerFile.resolved, producerFile.relative), inputEntry(input.resolved, input.relative)];
+  const preparationFile = relativeCore(preparationPath, "preparation receipt");
+  const entries = [inputEntry(manifestFile.resolved, manifestFile.relative), inputEntry(producerFile.resolved, producerFile.relative), inputEntry(input.resolved, input.relative), inputEntry(preparationFile.resolved, preparationFile.relative)];
+  if (manifest.shell === "ios") {
+    const guardFile = relativeCore(foregroundGuard, "foreground guard");
+    entries.push(inputEntry(guardFile.resolved, guardFile.relative));
+  }
   const inputSet = makeInputSet(entries);
   const outputHash = sha256(artifactBytes);
   const command = `node ${path.relative(coreRoot, producerFile.resolved)} --manifest ${manifestFile.relative} --replay-input ${input.relative} --replay-output ${output.relative} --emit-gate-records false`;
@@ -347,7 +362,7 @@ function runIos(manifest, outputDir) {
   const markerFile = path.join(exportDir, attachments[0].exportedFileName);
   if (!existsSync(markerFile) || !statSync(markerFile).isFile()) throw new Error("iOS runtime host marker bytes are missing");
   const marker = validateHostMarker(readJson(markerFile, "iOS runtime marker"), manifest);
-  return { marker, started, finished, argv: ["xcodebuild", ...args], stdout: `${bundle.stdout || ""}\n${flutter.stdout || ""}\n${result.stdout || ""}`, stderr: `${bundle.stderr || ""}\n${flutter.stderr || ""}\n${result.stderr || ""}`, query, buildCommands: { surfaces: [nodeBin, path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], flutter: [flutterBin, ...flutterArgs] } };
+  return { marker, started, finished, argv: [process.execPath, foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--", "xcodebuild", ...args], stdout: `${bundle.stdout || ""}\n${flutter.stdout || ""}\n${result.stdout || ""}`, stderr: `${bundle.stderr || ""}\n${flutter.stderr || ""}\n${result.stderr || ""}`, query, foregroundCustody: custody, buildCommands: { surfaces: [nodeBin, path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], flutter: [flutterBin, ...flutterArgs] } };
 }
 
 function main() {
@@ -379,7 +394,7 @@ function main() {
   try { capture = manifest.shell === "macos" ? runMac(manifest, outputDir) : runIos(manifest, outputDir); } catch (error) { fail(error instanceof Error ? error.message : String(error)); return; }
   const artifact = { schema: "omi.polish.runtime/v1", ...metadata(manifest), events: capture.marker.events };
   const artifactPath = path.join(outputDir, "runtime.json"); const artifactBytes = Buffer.from(stable(artifact)); writeFileSync(artifactPath, artifactBytes, { mode: 0o600 });
-  const receipt = { schema: "omi.polish.runtime-preparation/v1", ...metadata(manifest), command: { argv: capture.argv, cwd: path.relative(coreRoot, coreRoot), cwd_root: "core", exit_code: 0, started_at: capture.started.toISOString(), finished_at: capture.finished.toISOString(), timeout_seconds: 300, stdout_sha256: sha256(Buffer.from(capture.stdout)), stderr_sha256: sha256(Buffer.from(capture.stderr)) }, ...(capture.query ? { surface_query: capture.query, build_commands: capture.buildCommands } : {}), artifact: { root: "core", path: path.relative(coreRoot, artifactPath), sha256: sha256(artifactBytes) } };
+  const receipt = { schema: "omi.polish.runtime-preparation/v1", ...metadata(manifest), command: { argv: capture.argv, cwd: path.relative(coreRoot, coreRoot), cwd_root: "core", exit_code: 0, started_at: capture.started.toISOString(), finished_at: capture.finished.toISOString(), timeout_seconds: 300, stdout_sha256: sha256(Buffer.from(capture.stdout)), stderr_sha256: sha256(Buffer.from(capture.stderr)) }, ...(capture.query ? { surface_query: capture.query, build_commands: capture.buildCommands } : {}), ...(capture.foregroundCustody ? { foreground_custody: capture.foregroundCustody } : {}), artifact: { root: "core", path: path.relative(coreRoot, artifactPath), sha256: sha256(artifactBytes) } };
   writeFileSync(path.join(outputDir, "runtime-preparation-receipt.json"), stable(receipt), { mode: 0o600 });
   console.log(`NATIVE_RUNTIME_EVIDENCE: path=${path.relative(coreRoot, artifactPath)} sha256=${sha256(artifactBytes)} run_id=${manifest.run_id}`);
 }

@@ -130,18 +130,39 @@ test("prepared matrix AX replay emits gate-shaped input-set and batch receipt", 
   const document = { schema: "omi.polish.ax/v1", domain: manifest.domain, shell: manifest.shell, state: manifest.state, theme: manifest.theme, width: manifest.width, accessibility: manifest.accessibility, run_id: manifest.run_id, source_shas: manifest.source_shas, capture_class: manifest.capture_class, source_tier: manifest.source_tier, nodes: matrixMarker().nodes };
   try {
     writeFileSync(manifestPath, JSON.stringify(manifest));
-    writeFileSync(inputPath, JSON.stringify(document) + "\n");
+    const inputBytes = Buffer.from(JSON.stringify(document) + "\n");
+    writeFileSync(inputPath, inputBytes);
+    writeFileSync(path.join(rootScratch, "native-preparation-receipt.json"), JSON.stringify({
+      schema: "omi.polish.native-ios-preparation/v1",
+      run_id: manifest.run_id,
+      source_shas: manifest.source_shas,
+      capture_class: manifest.capture_class,
+      source_tier: manifest.source_tier,
+      artifact_hashes: { ax: createHash("sha256").update(inputBytes).digest("hex") },
+      foreground_custody: {
+        schema: "omi.macos-foreground-guard/v1", status: 0, signal: null, error: null, monitor_error: null,
+        target_interval_milliseconds: 20, probe_timeout_milliseconds: 250, sample_count: 2,
+        max_sample_gap_milliseconds: 20,
+        policy: "sampled-macos-foreground-custody-20ms-target-250ms-probe-timeout-no-activation-request",
+      },
+    }));
     const result = gateReplayForTest(manifest, manifestPath, inputPath, outputPath, rootScratch);
     assert.equal(result.receipt.cwd_root, "core");
     const coreRootForTest = path.resolve(here, "../../..");
     assert.equal(result.receipt.batch_members.m0.evidence.path, path.relative(coreRootForTest, outputPath));
     assert.ok(result.receipt.input_set.id.startsWith("input-v1-"));
+    assert.ok(result.receipt.input_set.entries.some((entry) => entry.key.endsWith("native-preparation-receipt.json")));
+    assert.ok(result.receipt.input_set.entries.some((entry) => entry.key.endsWith("macos-foreground-guard.mjs")));
     assert.equal(result.receipt.artifact_created[`core:${path.relative(coreRootForTest, outputPath)}`], true);
     assert.match(readFileSync(result.coveragePath, "utf8"), /batch_member/);
     rmSync(outputPath, { force: true });
     const replay = spawnSync(result.receipt.argv[0], result.receipt.argv.slice(1), { cwd: coreRootForTest, encoding: "utf8" });
     assert.equal(replay.status, 0, replay.stderr);
     assert.equal(createHash("sha256").update(replay.stdout).digest("hex"), result.receipt.stdout_sha256);
+    const preparationPath = path.join(rootScratch, "native-preparation-receipt.json");
+    const preparation = JSON.parse(readFileSync(preparationPath, "utf8"));
+    writeFileSync(preparationPath, JSON.stringify({ ...preparation, foreground_custody: { ...preparation.foreground_custody, monitor_error: "changed" } }));
+    assert.throws(() => gateReplayForTest(manifest, manifestPath, inputPath, path.join(rootScratch, "tampered.json"), rootScratch), /foreground custody/);
   } finally {
     rmSync(rootScratch, { recursive: true, force: true });
   }

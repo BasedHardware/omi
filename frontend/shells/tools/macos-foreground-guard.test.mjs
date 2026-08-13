@@ -17,7 +17,11 @@ test("foreground guard runs a background CLI command without changing focus", ()
     const receipt = JSON.parse(readFileSync(result, "utf8"));
     assert.equal(receipt.status, 0);
     assert.equal(receipt.monitor_error, null);
-    assert.equal(receipt.interval_milliseconds, 20);
+    assert.equal(receipt.target_interval_milliseconds, 20);
+    assert.equal(receipt.probe_timeout_milliseconds, 250);
+    assert.ok(receipt.sample_count >= 1);
+    assert.ok(receipt.max_sample_gap_milliseconds >= 0);
+    assert.match(receipt.policy, /^sampled-macos-foreground-custody-/);
     assert.equal(readFileSync(stdout, "utf8"), "guarded");
     assert.equal(readFileSync(stderr, "utf8"), "");
   } finally { rmSync(scratch, { recursive: true, force: true }); }
@@ -31,5 +35,19 @@ test("foreground guard fails closed on timeout and writes a terminal result", ()
     assert.notEqual(run.status, 0);
     const receipt = JSON.parse(readFileSync(result, "utf8"));
     assert.equal(receipt.monitor_error, "guarded command timed out");
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test("foreground guard kills a resistant command group within its terminal deadline", () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), "omi-focus-group-"));
+  try {
+    const result = path.join(scratch, "result.json"); const stdout = path.join(scratch, "stdout"); const stderr = path.join(scratch, "stderr"); const pidFile = path.join(scratch, "descendant.pid");
+    const started = Date.now();
+    const script = `trap '' TERM; /bin/sh -c 'trap "" TERM; sleep 30' & echo $! > '${pidFile}'; wait`;
+    const run = spawnSync(process.execPath, [helper, "--result", result, "--stdout", stdout, "--stderr", stderr, "--timeout", "1", "--", "/bin/sh", "-c", script], { encoding: "utf8", timeout: 5_000 });
+    assert.notEqual(run.status, 0);
+    assert.ok(Date.now() - started < 4_500);
+    const descendant = Number(readFileSync(pidFile, "utf8").trim());
+    assert.throws(() => process.kill(descendant, 0));
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 });
