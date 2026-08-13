@@ -490,10 +490,21 @@ import XCTest
       ))
     XCTAssertTrue(source.contains("private func openMainChatFromIdleNotch()"))
     XCTAssertTrue(source.contains("NotchIdleTapRoute.perform("))
-    XCTAssertTrue(source.contains("(NSApp.delegate as? AppDelegate)?.openMainAppChat()"))
+    XCTAssertTrue(source.contains("AppDelegate.summonWindowTarget()?.openMainAppChat()"))
+    XCTAssertFalse(source.contains("(NSApp.delegate as? AppDelegate)?.openMainAppChat()"))
     XCTAssertFalse(source.contains("gearshape.fill"))
     XCTAssertFalse(source.contains("openFloatingBarSettings()"))
     XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
+  }
+
+  func testChatFirstCanRoutePrimaryFloatingTextEntryToTheMainApp() {
+    FloatingPrimaryTextInputRouting.configure(routesToMainApp: false)
+    defer { FloatingPrimaryTextInputRouting.configure(routesToMainApp: false) }
+
+    XCTAssertFalse(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: false))
+    FloatingPrimaryTextInputRouting.configure(routesToMainApp: true)
+    XCTAssertTrue(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: false))
+    XCTAssertFalse(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: true))
   }
 
   func testNotchChatSizingPreservesSurfaceWidthAndGlowList() throws {
@@ -1542,7 +1553,8 @@ import XCTest
 
     // Both the Omi Chat header and subagent header should enter one shared
     // window transition. Back from a subagent goes to the row list on every
-    // display mode when pills exist; otherwise main-input/main-response.
+    // display mode when pills exist. Without a remaining row, chat-first hands typed entry to the
+    // main app while legacy can still restore its main-input/main-response surface.
     XCTAssertTrue(viewSource.contains("          onBackToAgentRows: {\n            showAgentListFromConversation()"))
     XCTAssertTrue(
       viewSource.contains(
@@ -1554,6 +1566,7 @@ import XCTest
     )
     XCTAssertTrue(windowSource.contains("private func showAgentRowsFromConversation()"))
     XCTAssertTrue(windowSource.contains("private func showMainConversationFromAgent()"))
+    XCTAssertTrue(windowSource.contains("routePrimaryTextInputToMainAppAfterAgentExit()"))
     XCTAssertTrue(windowSource.contains("state.hideConversationSurface()"))
     XCTAssertTrue(windowSource.contains("openNotchHoverMenuUntilExit()"))
     XCTAssertTrue(windowSource.contains("resizeForMainInputAfterAgentExit()"))

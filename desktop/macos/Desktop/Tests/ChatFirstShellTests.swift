@@ -44,6 +44,25 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertEqual(projection.controlGeneration, 9)
   }
 
+  func testOnlyLegacyShellUsesThePostOnboardingFloatingPopup() {
+    var enabled = ChatFirstShellCapabilitySample()
+    enabled.resolve(
+      control: enabledControl(),
+      requestedOwnerID: "owner-a",
+      ownerIsStillCurrent: true
+    )
+
+    XCTAssertFalse(
+      DesktopShellPresentationPolicy.usesLegacyPostOnboardingPopup(false, enabled.variant),
+      "chat-first starter prompts belong to the main chat")
+    XCTAssertTrue(
+      DesktopShellPresentationPolicy.usesLegacyPostOnboardingPopup(false, .legacy),
+      "the server-selected legacy shell retains its floating prompt")
+    XCTAssertTrue(
+      DesktopShellPresentationPolicy.usesLegacyPostOnboardingPopup(true, enabled.variant),
+      "the explicit legacy preference remains authoritative")
+  }
+
   func testMissingStaleAndOwnerChangedSamplesFailClosed() {
     var missing = ChatFirstShellCapabilitySample()
     missing.resolve(control: nil, requestedOwnerID: "owner-a", ownerIsStillCurrent: true)
