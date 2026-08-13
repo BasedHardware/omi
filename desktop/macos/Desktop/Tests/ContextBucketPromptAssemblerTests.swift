@@ -119,7 +119,7 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
         ContextDirectorTaskContext(
           description: "Far task", dueAt: now.addingTimeInterval(72 * 60 * 60))
       ],
-      frame: CapturedFrame(jpegData: Data(), appName: "Notes", captureTime: now))
+      frame: CapturedFrame(jpegData: Data(), appName: "Notes", frameNumber: 10, captureTime: now))
 
     XCTAssertTrue(
       prompt.contains("Reference only: already exists; do not resurface or create it yet."))
