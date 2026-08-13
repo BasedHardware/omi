@@ -636,9 +636,9 @@ struct ChatBubble: View {
     .help("Copy message")
   }
 
-  /// Response Context popover — observed turn evidence (tools, tokens, admitted
-  /// kernel sources). Only fresh responses carry metadata; it is in-memory only
-  /// and not persisted across restarts.
+  /// Response Context popover — observed turn evidence (tools, screenshot,
+  /// admitted kernel sources). Only fresh responses carry metadata; it is
+  /// in-memory only and not persisted across restarts.
   @ViewBuilder
   private var infoButton: some View {
     Button(action: { showInfoPopover.toggle() }) {

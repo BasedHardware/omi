@@ -736,10 +736,6 @@ struct MessageMetadataPopover: View {
         if let sql = metadata.sqlSummary {
           metadataRow(label: "SQL", value: sql)
         }
-        metadataRow(label: "Tokens", value: metadata.tokenSummary)
-        if let cost = metadata.costSummary {
-          metadataRow(label: "Cost", value: cost)
-        }
         metadataRow(label: "Screenshot", value: metadata.screenshotSummary)
 
         if !metadata.sourceOutcomes.isEmpty {
@@ -757,14 +753,11 @@ struct MessageMetadataPopover: View {
         if !metadata.pathSummary.isEmpty {
           metadataRow(label: "Path", value: metadata.pathSummary)
         }
-        if metadata.kernelGeneration > 0 {
-          metadataRow(label: "Kernel gen", value: "\(metadata.kernelGeneration)")
-        }
       }
       .padding()
-      .frame(width: 450)
+      .frame(width: 420)
     }
-    .frame(width: 450, height: 500)
+    .frame(width: 420, height: 420)
   }
 
   private func metadataRow(label: String, value: String) -> some View {

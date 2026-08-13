@@ -17,11 +17,6 @@ final class MessageMetadataTests: XCTestCase {
         allowedToolNames: ["get_daily_recap", "execute_sql", "get_conversations"]
       ),
       profile: try makeProfile(adapterId: "pi-mono", credentialScope: "managed_cloud"),
-      inputTokens: 1200,
-      outputTokens: 80,
-      cacheReadTokens: 400,
-      cacheWriteTokens: 20,
-      costUsd: 0.0123,
       imageByteCount: nil,
       toolNames: ["get_daily_recap", "get_conversations", "execute_sql", "execute_sql"],
       sqlRowsReturned: 0,
@@ -37,10 +32,6 @@ final class MessageMetadataTests: XCTestCase {
     XCTAssertEqual(metadata.pathSummary, "pi-mono · managed")
     XCTAssertEqual(metadata.sqlSummary, "1 query · 0 rows")
     XCTAssertEqual(metadata.screenshotSummary, "None")
-    XCTAssertEqual(metadata.costSummary, "$0.0123")
-    XCTAssertTrue(metadata.tokenSummary.contains("1,200 in"))
-    XCTAssertTrue(metadata.tokenSummary.contains("80 out"))
-    XCTAssertEqual(metadata.kernelGeneration, 11)
     XCTAssertEqual(metadata.toolNames, ["get_daily_recap", "get_conversations", "execute_sql", "execute_sql"])
   }
 
@@ -48,11 +39,6 @@ final class MessageMetadataTests: XCTestCase {
     let metadata = try MessageMetadata.fromCompletedTurn(
       snapshot: makeSnapshot(sources: [], retainedTurnCount: 0, totalTurnCount: 0, allowedToolNames: []),
       profile: try makeProfile(adapterId: "pi-mono", credentialScope: "local_user"),
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      costUsd: 0,
       imageByteCount: 2048,
       toolNames: [],
       sqlRowsReturned: 0,
@@ -67,14 +53,17 @@ final class MessageMetadataTests: XCTestCase {
   }
 
   func testResponseContextPopoverDoesNotClaimAServedModelOrPromptBody() throws {
-    // omi-test-quality: source-inspection -- static contract: Response Context must not restore Model, Full System Prompt, or XML prompt-count parsers.
+    // omi-test-quality: source-inspection -- static contract: Response Context must not restore Model, Full System Prompt, XML prompt-count parsers, or untrusted token/cost usage.
     let popover = try String(contentsOfFile: popoverSourcePath(), encoding: .utf8)
     XCTAssertFalse(popover.contains("Full System Prompt"))
     XCTAssertFalse(popover.contains("Context in Prompt"))
     XCTAssertFalse(popover.contains("metadata.model"))
     XCTAssertFalse(popover.contains("memoriesCount"))
+    XCTAssertFalse(popover.contains("metadata.tokenSummary"))
+    XCTAssertFalse(popover.contains("metadata.costSummary"))
+    XCTAssertFalse(popover.contains("Kernel gen"))
     XCTAssertTrue(popover.contains("Context admitted"))
-    XCTAssertTrue(popover.contains("metadata.tokenSummary"))
+    XCTAssertTrue(popover.contains("metadata.historySummary"))
 
     // omi-test-quality: source-inspection -- static contract: completion must stamp kernel snapshot evidence, not a kernel-hash systemPrompt.
     let provider = try String(contentsOfFile: chatProviderSourcePath(), encoding: .utf8)

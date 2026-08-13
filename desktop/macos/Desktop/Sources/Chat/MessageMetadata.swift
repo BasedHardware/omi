@@ -2,9 +2,11 @@ import Foundation
 
 /// Local-only evidence for one completed assistant turn.
 ///
-/// This is what Response Context can honestly show: tools and tokens observed
-/// on this turn, plus the kernel snapshot admitted at send time. It does not
-/// carry a served model id — the client never receives one.
+/// Response Context only shows facts this client observed: tools and SQL on
+/// the turn, whether a screenshot was attached, and the kernel snapshot
+/// admitted at send. Token, cache, and cost numbers are not displayed —
+/// the managed chat path defaults missing usage to zero and may estimate
+/// tokens from prompt length.
 struct MessageMetadata: Equatable {
   struct SourceOutcome: Equatable, Identifiable {
     var id: String { source }
@@ -12,11 +14,6 @@ struct MessageMetadata: Equatable {
     let outcome: String
   }
 
-  var inputTokens: Int?
-  var outputTokens: Int?
-  var cacheReadTokens: Int?
-  var cacheWriteTokens: Int?
-  var costUsd: Double?
   var hasScreenshot: Bool
   var screenshotSizeBytes: Int?
   var toolNames: [String]
@@ -29,14 +26,8 @@ struct MessageMetadata: Equatable {
   var offeredToolCount: Int
   var adapterId: String
   var credentialScopeLabel: String
-  var kernelGeneration: Int
 
   init(
-    inputTokens: Int? = nil,
-    outputTokens: Int? = nil,
-    cacheReadTokens: Int? = nil,
-    cacheWriteTokens: Int? = nil,
-    costUsd: Double? = nil,
     hasScreenshot: Bool = false,
     screenshotSizeBytes: Int? = nil,
     toolNames: [String] = [],
@@ -48,14 +39,8 @@ struct MessageMetadata: Equatable {
     omittedTurnCount: Int = 0,
     offeredToolCount: Int = 0,
     adapterId: String = "",
-    credentialScopeLabel: String = "",
-    kernelGeneration: Int = 0
+    credentialScopeLabel: String = ""
   ) {
-    self.inputTokens = inputTokens
-    self.outputTokens = outputTokens
-    self.cacheReadTokens = cacheReadTokens
-    self.cacheWriteTokens = cacheWriteTokens
-    self.costUsd = costUsd
     self.hasScreenshot = hasScreenshot
     self.screenshotSizeBytes = screenshotSizeBytes
     self.toolNames = toolNames
@@ -68,17 +53,11 @@ struct MessageMetadata: Equatable {
     self.offeredToolCount = offeredToolCount
     self.adapterId = adapterId
     self.credentialScopeLabel = credentialScopeLabel
-    self.kernelGeneration = kernelGeneration
   }
 
   static func fromCompletedTurn(
     snapshot: AgentContextSnapshot,
     profile: AgentExecutionProfile,
-    inputTokens: Int,
-    outputTokens: Int,
-    cacheReadTokens: Int,
-    cacheWriteTokens: Int,
-    costUsd: Double,
     imageByteCount: Int?,
     toolNames: [String],
     sqlRowsReturned: Int,
@@ -86,11 +65,6 @@ struct MessageMetadata: Equatable {
   ) -> MessageMetadata {
     let allowedToolNames = snapshot.capabilities["allowedToolNames"] as? [String] ?? []
     return MessageMetadata(
-      inputTokens: inputTokens,
-      outputTokens: outputTokens,
-      cacheReadTokens: cacheReadTokens,
-      cacheWriteTokens: cacheWriteTokens,
-      costUsd: costUsd,
       hasScreenshot: imageByteCount != nil,
       screenshotSizeBytes: imageByteCount,
       toolNames: toolNames,
@@ -102,22 +76,8 @@ struct MessageMetadata: Equatable {
       omittedTurnCount: snapshot.contextPlan.omittedTurnCount,
       offeredToolCount: allowedToolNames.count,
       adapterId: profile.adapterId,
-      credentialScopeLabel: Self.credentialLabel(profile.credentialScope),
-      kernelGeneration: snapshot.snapshotGeneration
+      credentialScopeLabel: Self.credentialLabel(profile.credentialScope)
     )
-  }
-
-  var tokenSummary: String {
-    let input = Self.grouped(inputTokens ?? 0)
-    let output = Self.grouped(outputTokens ?? 0)
-    let cacheRead = Self.grouped(cacheReadTokens ?? 0)
-    let cacheWrite = Self.grouped(cacheWriteTokens ?? 0)
-    return "\(input) in · \(output) out · \(cacheRead) cache read · \(cacheWrite) cache write"
-  }
-
-  var costSummary: String? {
-    guard let costUsd else { return nil }
-    return String(format: "$%.4f", costUsd)
   }
 
   var screenshotSummary: String {
@@ -165,14 +125,5 @@ struct MessageMetadata: Equatable {
     case .managedCloud: return "managed"
     case .localUser: return "BYOK"
     }
-  }
-
-  private static func grouped(_ value: Int) -> String {
-    let formatter = NumberFormatter()
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.numberStyle = .decimal
-    formatter.groupingSeparator = ","
-    formatter.usesGroupingSeparator = true
-    return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
   }
 }

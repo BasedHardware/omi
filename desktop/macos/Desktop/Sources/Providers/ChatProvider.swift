@@ -4997,11 +4997,6 @@ class ChatProvider: ObservableObject {
         messages[index].metadata = MessageMetadata.fromCompletedTurn(
           snapshot: kernelContext.snapshot,
           profile: kernelContext.session.profile,
-          inputTokens: queryResult.inputTokens,
-          outputTokens: queryResult.outputTokens,
-          cacheReadTokens: queryResult.cacheReadTokens,
-          cacheWriteTokens: queryResult.cacheWriteTokens,
-          costUsd: queryResult.costUsd,
           imageByteCount: effectiveImageData?.count,
           toolNames: toolTiming.toolNames,
           sqlRowsReturned: metricsSnapshot.sqlRowsReturned,
