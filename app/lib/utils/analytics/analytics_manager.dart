@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -30,6 +31,8 @@ class AnalyticsManager {
   static bool _flushInProgress = false;
   static Timer? _retryTimer;
   static int _droppedEvents = 0;
+  static Map<String, Object> _globalEventProperties = {'app_platform': _mobilePlatformName};
+  static bool _analyticsReady = false;
 
   /// Inject the analytics adapter at boot. Must be called before [init].
   /// Calling without ever configuring leaves every method as a no-op, which
@@ -52,7 +55,11 @@ class AnalyticsManager {
         PlatformService.isAnalyticsSupported,
         adapter.init,
       ).timeout(timeout);
+      await _loadGlobalEventProperties();
       await _loadPersonPropertyCache();
+      _analyticsReady = true;
+      _retryTimer?.cancel();
+      _retryTimer = null;
       _scheduleFlush();
     } catch (_) {}
   }
@@ -81,6 +88,8 @@ class AnalyticsManager {
     _retryTimer?.cancel();
     _retryTimer = null;
     _droppedEvents = 0;
+    _globalEventProperties = {'app_platform': _mobilePlatformName};
+    _analyticsReady = false;
   }
 
   factory AnalyticsManager() {
@@ -323,7 +332,7 @@ class AnalyticsManager {
     _flushInProgress = true;
     try {
       final adapter = _adapter;
-      if (adapter == null || !adapter.isInitialized) {
+      if (adapter == null || !adapter.isInitialized || !_analyticsReady) {
         retryLater = _queuedEvents.isNotEmpty;
         retryDelay = _retryDelays.last;
         return;
@@ -333,7 +342,7 @@ class AnalyticsManager {
       while (_queuedEvents.isNotEmpty && delivered < _flushBatchSize) {
         final event = _queuedEvents.removeAt(0);
         try {
-          adapter.track(eventName: event.eventName, properties: event.properties);
+          adapter.track(eventName: event.eventName, properties: {...event.properties, ..._globalEventProperties});
           delivered++;
         } catch (_) {
           final retriedEvent = event.nextAttempt();
@@ -1958,6 +1967,23 @@ class AnalyticsManager {
       return out;
     }
     return value.toString();
+  }
+
+  static String get _mobilePlatformName {
+    if (PlatformService.isIOS) return 'ios';
+    if (PlatformService.isAndroid) return 'android';
+    return 'unknown';
+  }
+
+  static Future<void> _loadGlobalEventProperties() async {
+    var version = 'unknown';
+    var build = 'unknown';
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      if (packageInfo.version.isNotEmpty) version = packageInfo.version;
+      if (packageInfo.buildNumber.isNotEmpty) build = packageInfo.buildNumber;
+    } catch (_) {}
+    _globalEventProperties = {'app_platform': _mobilePlatformName, 'app_version': version, 'app_build': build};
   }
 }
 
