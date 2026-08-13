@@ -78,25 +78,28 @@ private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendabl
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
   override func startLoading() {
-    if let url = request.url {
-      Self.record(
-        FinalizationRecoveryRequest(
-          url: url,
-          method: request.httpMethod ?? "GET",
-          body: Self.bodyData(from: request)
-        ))
-    }
+    guard let url = request.url else { return }
+    Self.record(
+      FinalizationRecoveryRequest(
+        url: url,
+        method: request.httpMethod ?? "GET",
+        body: Self.bodyData(from: request)
+      ))
 
-    let path = request.url?.path ?? ""
+    let path = url.path
     if path == "/v1/conversations/from-segments" {
-      let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+      guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) else {
+        return
+      }
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
       client?.urlProtocol(
         self,
         didLoad: Data(#"{"id":"local-fallback-conversation","status":"processing","discarded":false}"#.utf8)
       )
     } else if path == "/v1/conversations/local-fallback-conversation" {
-      let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+      guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) else {
+        return
+      }
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
       client?.urlProtocol(
         self,
@@ -126,7 +129,9 @@ private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendabl
         )
       )
     } else if path == "/v1/conversations/client-recording-id/finalize" {
-      let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+      guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) else {
+        return
+      }
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
       client?.urlProtocol(
         self,
@@ -158,11 +163,15 @@ private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendabl
         )
       )
     } else if path.hasSuffix("/finalization"), let body = Self.nextFinalizationStatusBody() {
-      let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+      guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) else {
+        return
+      }
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
       client?.urlProtocol(self, didLoad: body)
     } else {
-      let response = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+      guard let response = HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil) else {
+        return
+      }
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
       client?.urlProtocol(self, didLoad: Data(#"{"detail":"not found"}"#.utf8))
     }

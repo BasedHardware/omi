@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1594
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1603
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds local transcript duplicate suppression and persistence flushes before stop or rotation so source-aware deduplication cannot leave stale rows."
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds local transcript duplicate suppression and persistence flushes before stop or rotation so source-aware deduplication cannot leave stale rows. +9 fences both sides of the awaited local capture rebuild so a concurrent stop cannot resurrect transcription after teardown."
   },
   "threshold": 1500
 }
