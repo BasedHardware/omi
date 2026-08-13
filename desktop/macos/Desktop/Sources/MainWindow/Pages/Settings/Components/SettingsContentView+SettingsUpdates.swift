@@ -9,7 +9,7 @@ private final class NotificationSettingsSyncQueue {
 
   private var tail: Task<Void, Never>?
 
-  func enqueue(enabled: Bool?, frequency: Int?, revision: Int) {
+  func enqueue(enabled: Bool, frequency: Int, revision: Int) {
     let previous = tail
     tail = Task {
       await previous?.value
@@ -66,10 +66,13 @@ extension SettingsContentView {
       UserDefaults.standard.set(frequency, forKey: NotificationService.frequencyDefaultsKey)
     }
     let syncRevision = NotificationService.beginNotificationSettingsSync()
-    // Preserve request order. A fast slider drag can otherwise let an older PATCH
-    // arrive after the newest value and win the backend's last-write-wins update.
+    // Preserve request order and always send the complete locally desired state.
+    // If an earlier partial mutation fails, a later successful mutation must also
+    // repair that field before it is allowed to clear the pending-sync journal.
     NotificationSettingsSyncQueue.shared.enqueue(
-      enabled: enabled, frequency: frequency, revision: syncRevision)
+      enabled: NotificationService.areNotificationsEnabled(),
+      frequency: NotificationService.currentFrequencyLevel(),
+      revision: syncRevision)
   }
 
   func updateLanguage(_ language: String) {

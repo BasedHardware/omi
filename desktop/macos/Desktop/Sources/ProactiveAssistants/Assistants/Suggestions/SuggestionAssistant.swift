@@ -626,12 +626,45 @@ actor SuggestionAssistant: ProactiveAssistant {
     frame: CapturedFrame,
     sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
   ) async -> [String: String] {
+    // The probe bypasses only timing gates for intentional QA. It retains every
+    // privacy, user-choice, and spend boundary before the screenshot reaches a model.
+    let assistantEnabled = await isEnabled
+    let gateState = await MainActor.run {
+      (
+        SuggestionAssistantSettings.shared.isAppExcluded(frame.appName),
+        FloatingControlBarManager.shared.isSnoozed,
+        NotificationService.isWithinActivePeriod(now: Date()),
+        NotificationService.areNotificationsEnabled(),
+        NotificationService.currentFrequencyLevel()
+      )
+    }
+    let now = Date()
+    let decision = SuggestionGatePolicy.decide(
+      isEnabled: assistantEnabled,
+      isAppExcluded: gateState.0,
+      isSnoozed: gateState.1,
+      isWithinActivePeriod: gateState.2,
+      now: now,
+      lastEvaluationAt: nil,
+      cooldown: 0,
+      dwell: Self.requiredDwell,
+      requiredDwell: Self.requiredDwell,
+      evaluationsToday: dailyBudget.countToday(now: now),
+      dailyBudget: Self.dailyEvaluationBudget)
+    guard gateState.3, gateState.4 > 0, decision.allowsEvaluation else {
+      if !gateState.3 { return ["outcome": "skipped_notifications_disabled"] }
+      if gateState.4 == 0 { return ["outcome": "skipped_frequency_off"] }
+      return ["outcome": SuggestionAssistantTelemetry.GateOutcome(decision).rawValue]
+    }
+
     let grounding = await assembleGrounding(for: frame)
     commitmentsInFlight = grounding.openCommitments
 
     guard !grounding.isEmpty else {
       return ["outcome": "no_grounding", "commitments": "0"]
     }
+
+    dailyBudget.recordEvaluation(now: now)
 
     let result: SuggestionResult?
     do {

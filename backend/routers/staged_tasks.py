@@ -101,18 +101,17 @@ def _is_staged_compatibility_candidate(candidate: CandidateRecord) -> bool:
 
 def _all_staged_compatibility_candidates(uid: str, *, account_generation: int) -> list[CandidateRecord]:
     records: list[CandidateRecord] = []
-    offset = 0
+    cursor = None
     while True:
-        page, raw_page_size = candidates_db.list_candidates_compatibility_page(
+        page, raw_page_size, cursor = candidates_db.list_candidates_compatibility_page(
             uid,
             account_generation=account_generation,
             limit=_CANDIDATE_PAGE_SIZE,
-            offset=offset,
+            cursor=cursor,
         )
         records.extend(candidate for candidate in page if _is_staged_compatibility_candidate(candidate))
         if raw_page_size < _CANDIDATE_PAGE_SIZE:
             return records
-        offset += raw_page_size
 
 
 def _active_historical_rows(uid: str) -> list[dict]:

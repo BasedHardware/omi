@@ -27,7 +27,7 @@ class _Probe(BaseModel):
 def _fake_candidates_db(stream):
     fake_db = MagicMock()
     q = fake_db.collection.return_value.document.return_value.collection.return_value
-    for method in ("where", "order_by", "offset", "limit"):
+    for method in ("where", "order_by", "start_after", "limit"):
         getattr(q, method).return_value = q
     q.stream.return_value = stream
     return fake_db
@@ -90,12 +90,36 @@ def test_compatibility_page_reports_raw_count_when_malformed_row_is_skipped(monk
     monkeypatch.setattr(candidates_db.CandidateRecord, 'model_validate', staticmethod(fake_validate))
 
     with patch.object(candidates_db, 'db', _fake_candidates_db([good, bad])):
-        records, raw_page_size = candidates_db.list_candidates_compatibility_page(
+        records, raw_page_size, next_cursor = candidates_db.list_candidates_compatibility_page(
             'u1',
             account_generation=7,
             limit=500,
-            offset=0,
         )
 
     assert records == [{'ok': True}]
     assert raw_page_size == 2
+    assert next_cursor is bad
+
+
+def test_compatibility_page_uses_snapshot_cursor_without_firestore_offset(monkeypatch):
+    cursor = MagicMock(name='cursor')
+    following = MagicMock(name='following')
+    following.id = 'following'
+    following.to_dict.return_value = {'ok': True}
+    fake_db = _fake_candidates_db([following])
+    query = fake_db.collection.return_value.document.return_value.collection.return_value
+    monkeypatch.setattr(candidates_db.CandidateRecord, 'model_validate', staticmethod(lambda data: data))
+
+    with patch.object(candidates_db, 'db', fake_db):
+        records, raw_page_size, next_cursor = candidates_db.list_candidates_compatibility_page(
+            'u1',
+            account_generation=7,
+            limit=500,
+            cursor=cursor,
+        )
+
+    query.start_after.assert_called_once_with(cursor)
+    query.offset.assert_not_called()
+    assert records == [{'ok': True}]
+    assert raw_page_size == 1
+    assert next_cursor is following

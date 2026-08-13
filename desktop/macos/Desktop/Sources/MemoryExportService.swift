@@ -1286,7 +1286,10 @@ actor MemoryExportService {
     do {
       let remoteMemories: [ServerMemory] = try await Self.fetchAllCursorPages(pageSize: pageSize) {
         pageLimit, cursor in
-        try await APIClient.shared.getMemoriesPage(limit: pageLimit, cursor: cursor)
+        try await APIClient.shared.getMemoriesPage(
+          limit: pageLimit,
+          cursor: cursor,
+          includeArchive: true)
       }
       if !remoteMemories.isEmpty {
         return remoteMemories
@@ -1342,7 +1345,8 @@ actor MemoryExportService {
       // Fail closed on a repeated continuation token so a buggy backend cannot
       // pin export in an infinite loop.
       if !seenCursors.insert(nextCursor).inserted {
-        return result
+        throw MemoryExportError.requestFailed(
+          "Memory export stopped because the server repeated a continuation token.")
       }
       cursor = nextCursor
     }

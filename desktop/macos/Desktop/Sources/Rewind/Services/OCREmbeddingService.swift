@@ -24,6 +24,7 @@ actor OCREmbeddingService {
 
   private var pendingItems: [PendingItem] = []
   private var flushTask: Task<Void, Never>?
+  private var flushTaskGeneration: UInt64 = 0
 
   /// Monotonic owner generation. `reset()` bumps it at the account-transition
   /// boundary; an in-flight `flushPendingEmbeddings()` captures the value it
@@ -49,8 +50,10 @@ actor OCREmbeddingService {
   /// so the owner-reset re-entrancy window can be driven deterministically.
   typealias BatchEmbedder = @Sendable (_ texts: [String], _ taskType: String?) async throws -> [[Float]]
   typealias EmbeddingWriter = @Sendable (_ screenshotId: Int64, _ embedding: Data) async throws -> Void
+  typealias FlushSleeper = @Sendable (_ nanoseconds: UInt64) async throws -> Void
   private let batchEmbedder: BatchEmbedder
   private let embeddingWriter: EmbeddingWriter
+  private let flushSleeper: FlushSleeper
 
   private init() {
     self.batchEmbedder = { texts, taskType in
@@ -59,13 +62,24 @@ actor OCREmbeddingService {
     self.embeddingWriter = { screenshotId, embedding in
       try await RewindDatabase.shared.updateScreenshotEmbedding(id: screenshotId, embedding: embedding)
     }
+    self.flushSleeper = { nanoseconds in
+      try await Task.sleep(nanoseconds: nanoseconds)
+    }
   }
 
-  /// Test-only initializer that injects the flush path's embedder and writer so
-  /// the owner-reset re-entrancy fence can be exercised without live services.
-  init(batchEmbedderForTesting: @escaping BatchEmbedder, embeddingWriterForTesting: @escaping EmbeddingWriter) {
+  /// Test-only initializer that injects the flush path's embedder, writer, and
+  /// optional sleeper so owner and timer races can be driven deterministically.
+  init(
+    batchEmbedderForTesting: @escaping BatchEmbedder,
+    embeddingWriterForTesting: @escaping EmbeddingWriter,
+    flushSleeperForTesting: FlushSleeper? = nil
+  ) {
     self.batchEmbedder = batchEmbedderForTesting
     self.embeddingWriter = embeddingWriterForTesting
+    self.flushSleeper =
+      flushSleeperForTesting ?? { nanoseconds in
+        try await Task.sleep(nanoseconds: nanoseconds)
+      }
   }
 
   /// Number of screenshots queued for the next batch flush (test introspection).
@@ -77,8 +91,7 @@ actor OCREmbeddingService {
   /// previous owner's embeddings into the next owner's database.
   func reset() {
     ownerGeneration &+= 1
-    flushTask?.cancel()
-    flushTask = nil
+    cancelScheduledFlush()
     pendingItems = []
     recentHashes = []
   }
@@ -139,19 +152,62 @@ actor OCREmbeddingService {
 
   /// Start a timer to flush pending embeddings after the flush interval
   private func startFlushTimerIfNeeded() {
-    guard flushTask == nil else { return }
-    flushTask = Task {
-      try? await Task.sleep(nanoseconds: flushIntervalNanos)
+    guard flushTask == nil, !pendingItems.isEmpty else { return }
+
+    flushTaskGeneration &+= 1
+    let generation = flushTaskGeneration
+    let sleeper = flushSleeper
+    let interval = flushIntervalNanos
+    flushTask = Task { [weak self] in
+      do {
+        try await sleeper(interval)
+      } catch {
+        return
+      }
       guard !Task.isCancelled else { return }
-      await self.flushPendingEmbeddings()
+      await self?.runScheduledFlush(generation: generation)
     }
   }
 
-  /// Flush all pending screenshots: deduplicate, batch-embed, store results
-  func flushPendingEmbeddings() async {
+  /// Cancel a scheduled or in-flight timer-owned flush. Bumping the generation
+  /// prevents an old timer from clearing or replacing a newer timer after an
+  /// actor re-entrancy hop.
+  private func cancelScheduledFlush() {
+    flushTaskGeneration &+= 1
     flushTask?.cancel()
     flushTask = nil
+  }
 
+  /// A timer-owned flush must keep its task registered while embedding so an
+  /// external reset or explicit flush can still cancel it. It must not call the
+  /// public entry point, because that would cancel the currently running task.
+  private func runScheduledFlush(generation: UInt64) async {
+    guard generation == flushTaskGeneration else { return }
+
+    await performFlushPendingEmbeddings()
+
+    guard generation == flushTaskGeneration else {
+      // An external cancellation can race with the embed await. If the
+      // cancelled embed re-queued its batch, make sure a replacement timer owns
+      // it; reset() has already emptied the queue, so this is a no-op there.
+      startFlushTimerIfNeeded()
+      return
+    }
+
+    flushTask = nil
+    startFlushTimerIfNeeded()
+  }
+
+  /// Explicitly flush all pending screenshots, cancelling any timer that owns
+  /// the same queue first.
+  func flushPendingEmbeddings() async {
+    cancelScheduledFlush()
+    await performFlushPendingEmbeddings()
+    startFlushTimerIfNeeded()
+  }
+
+  /// Flush all pending screenshots: deduplicate, batch-embed, store results.
+  private func performFlushPendingEmbeddings() async {
     guard !pendingItems.isEmpty,
       let ownerSnapshot = RewindCaptureOwnerSnapshot.capture(),
       ownerSnapshot.isCurrent()
@@ -245,7 +301,6 @@ actor OCREmbeddingService {
           return
         }
         pendingItems.append(contentsOf: chunk)
-        startFlushTimerIfNeeded()
       }
     }
 

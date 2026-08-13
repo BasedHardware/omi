@@ -399,6 +399,25 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertEqual(requestedCursors.map { $0 ?? "<nil>" }, ["<nil>", "cursor-a"])
   }
 
+  func testExportCursorPaginationRejectsRepeatedContinuationToken() async throws {
+    let page = APIClient.MemoryListPage(
+      memories: [Self.sampleMemory(id: "m1")],
+      nextCursor: "cursor-a",
+      canonicalLifecycleExposed: true,
+      deviceScopeSupported: true,
+      defaultMemoryDeleteSupported: true)
+
+    do {
+      _ = try await MemoryExportService.fetchAllCursorPages(pageSize: 2) { _, _ in page }
+      XCTFail("A repeated continuation token must not produce a partial successful export")
+    } catch let error as MemoryExportError {
+      guard case .requestFailed(let message) = error else {
+        return XCTFail("Unexpected export error: \(error)")
+      }
+      XCTAssertTrue(message.contains("repeated a continuation token"))
+    }
+  }
+
   private static func sampleMemory(id: String) -> ServerMemory {
     ServerMemory(
       id: id,

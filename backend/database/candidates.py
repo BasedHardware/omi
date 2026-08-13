@@ -14,7 +14,7 @@ import database.action_items as action_items_db
 from database._client import db
 from database.firestore_index_registry import CANDIDATES_COMPATIBILITY_QUERY
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
-from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskStatus
+from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import (
     CandidateAction,
     CandidateCompatibilityMetadata,
@@ -38,6 +38,23 @@ PENDING_CANDIDATE_SEMANTIC_VERSION = 'task-create.v1'
 WORKSTREAM_CANDIDATE_SEMANTIC_VERSION = 'workstream-create.v1'
 MAX_CANDIDATE_EVIDENCE_REFS = 20
 PENDING_CANDIDATE_REUSE_WINDOW = timedelta(days=14)
+TASK_PRIORITY_RANK = {
+    TaskPriority.low: 0,
+    TaskPriority.medium: 1,
+    TaskPriority.high: 2,
+}
+
+
+def _max_optional_confidence(*values: Optional[float]) -> Optional[float]:
+    return max((value for value in values if value is not None), default=None)
+
+
+def _strongest_task_priority(*values: Optional[TaskPriority]) -> Optional[TaskPriority]:
+    return max(
+        (value for value in values if value is not None),
+        key=TASK_PRIORITY_RANK.__getitem__,
+        default=None,
+    )
 
 
 class CandidateStoreError(RuntimeError):
@@ -295,6 +312,17 @@ def _merge_candidate_annotations(existing: CandidateRecord, proposal: CandidateC
                 if (value := getattr(proposal.compatibility, field)) is not None
             }
         )
+    task_change = existing.task_change
+    proposal_task_change = proposal.task_change
+    if isinstance(task_change, TaskCreatePayload) and isinstance(proposal_task_change, TaskCreatePayload):
+        task_change = task_change.model_copy(
+            update={
+                'due_confidence': _max_optional_confidence(
+                    task_change.due_confidence, proposal_task_change.due_confidence
+                ),
+                'priority': _strongest_task_priority(task_change.priority, proposal_task_change.priority),
+            }
+        )
     payload = existing.model_dump(mode='python')
     payload.update(
         {
@@ -302,6 +330,7 @@ def _merge_candidate_annotations(existing: CandidateRecord, proposal: CandidateC
             'ownership_confidence': max(existing.ownership_confidence, proposal.ownership_confidence),
             'evidence_refs': evidence,
             'compatibility': compatibility,
+            'task_change': task_change,
         }
     )
     return CandidateRecord.model_validate(payload)
@@ -376,6 +405,19 @@ def _stored_confidence(value: Any) -> float:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return float(value)
     return 0.0
+
+
+def _stored_optional_confidence(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def _stored_task_priority(value: Any) -> Optional[TaskPriority]:
+    try:
+        return TaskPriority(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def create_candidate(
@@ -513,9 +555,27 @@ def create_candidate(
                         if merged.compatibility is not None
                         else None
                     ),
+                    'task_change': (
+                        merged.task_change.model_dump(mode='python', exclude_none=True)
+                        if merged.task_change is not None
+                        else None
+                    ),
                 },
             )
             if reusable_active_accept and claimed_task_ref is not None and claimed_task is not None:
+                task_annotation_patch: dict[str, Any] = {}
+                if isinstance(merged.task_change, TaskCreatePayload):
+                    due_confidence = _max_optional_confidence(
+                        _stored_optional_confidence(claimed_task.get('due_confidence')),
+                        merged.task_change.due_confidence,
+                    )
+                    if due_confidence is not None:
+                        task_annotation_patch['due_confidence'] = due_confidence
+                    priority = _strongest_task_priority(
+                        _stored_task_priority(claimed_task.get('priority')), merged.task_change.priority
+                    )
+                    if priority is not None:
+                        task_annotation_patch['priority'] = priority.value
                 write_transaction.update(
                     claimed_task_ref,
                     {
@@ -527,6 +587,7 @@ def create_candidate(
                         ),
                         'provenance': _merge_task_provenance(claimed_task, merged.evidence_refs),
                         'updated_at': now_value,
+                        **task_annotation_patch,
                     },
                 )
             write_transaction.set(alias_ref, alias_payload)
@@ -634,13 +695,16 @@ def list_candidates_compatibility_page(
     *,
     account_generation: int,
     limit: int = 500,
-    offset: int = 0,
-) -> tuple[list[CandidateRecord], int]:
-    """Return valid records plus the raw page size for exhaustive adapters.
+    cursor: Any | None = None,
+) -> tuple[list[CandidateRecord], int, Any | None]:
+    """Return valid records, raw page size, and a snapshot cursor.
 
     ``parse_snapshots`` deliberately skips malformed rows. Compatibility
     callers need the unparsed count as their pagination authority so one bad
     document cannot make a non-final page look exhausted and hide later data.
+    The cursor is the last raw snapshot for the same reason. Using it with
+    ``start_after`` keeps exhaustive compatibility scans linear in billed
+    document reads; Firestore offsets re-read every skipped prefix.
     """
 
     collection = db.collection('users').document(uid).collection(CANDIDATES_COLLECTION)
@@ -652,10 +716,11 @@ def list_candidates_compatibility_page(
         'created_at',
         direction=firestore.Query.DESCENDING,
     )
-    if offset:
-        query = query.offset(offset)
+    if cursor is not None:
+        query = query.start_after(cursor)
     snapshots = list(query.limit(limit).stream())
-    return parse_snapshots(CandidateRecord, snapshots), len(snapshots)
+    next_cursor = snapshots[-1] if snapshots else None
+    return parse_snapshots(CandidateRecord, snapshots), len(snapshots), next_cursor
 
 
 def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datetime) -> dict[str, Any]:

@@ -1012,7 +1012,12 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "probe_suggestion_nudge",
       summary: "Run the real suggestion grounding/evaluation/delivery path on the latest frame",
-      params: ["app", "window_title"]
+      params: ["app", "window_title"],
+      safety: "network_or_model",
+      sideEffects: [
+        "may call model/backend services",
+        "may deliver a user-visible suggestion during the configured active period",
+      ]
     ) { params in
       let app = params["app"].flatMap { $0.isEmpty ? nil : $0 }
       let title = params["window_title"].flatMap { $0.isEmpty ? nil : $0 }

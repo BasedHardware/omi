@@ -209,7 +209,7 @@ def test_clear_rejects_candidate_and_each_historical_row_before_cleanup(monkeypa
     monkeypatch.setattr(
         router.candidates_db,
         'list_candidates_compatibility_page',
-        lambda uid, **kwargs: ([candidate], 1) if kwargs.get('offset', 0) == 0 else ([], 0),
+        lambda uid, **kwargs: ([candidate], 1, candidate) if kwargs.get('cursor') is None else ([], 0, None),
     )
     monkeypatch.setattr(router.staged_tasks_db, 'get_active_staged_tasks_for_compatibility', lambda uid: rows)
     events = []

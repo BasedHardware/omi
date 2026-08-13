@@ -43,6 +43,19 @@ final class UserNotificationCallbackBridgeTests: XCTestCase {
   }
 
   @MainActor
+  func testNotificationSettingsAccessorsPreserveCompleteDesiredStateAcrossPartialMutations() throws {
+    let suiteName = "UserNotificationCallbackBridgeTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    defaults.set(false, forKey: NotificationService.masterEnabledDefaultsKey)
+    defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
+
+    XCTAssertFalse(NotificationService.areNotificationsEnabled(defaults: defaults))
+    XCTAssertEqual(NotificationService.currentFrequencyLevel(defaults: defaults), 5)
+  }
+
+  @MainActor
   func testNotificationHydrationPreservesNewerOrPreviouslyPendingLocalState() {
     XCTAssertFalse(
       NotificationService.shouldPreserveLocalNotificationSettings(

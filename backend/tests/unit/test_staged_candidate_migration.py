@@ -49,7 +49,9 @@ def _stub_candidates(monkeypatch, records: list[CandidateRecord]) -> None:
     monkeypatch.setattr(
         staged_router.candidates_db,
         'list_candidates_compatibility_page',
-        lambda uid, **kwargs: (records, len(records)) if kwargs.get('offset', 0) == 0 else ([], 0),
+        lambda uid, **kwargs: (
+            (records, len(records), records[-1] if records else None) if kwargs.get('cursor') is None else ([], 0, None)
+        ),
     )
 
 
@@ -188,14 +190,15 @@ def test_get_order_and_pagination_are_deterministic(monkeypatch):
 
 def test_candidate_projection_pages_past_5000_to_find_pending_data(monkeypatch):
     pending = _candidate('candidate-after-5000', row_id='compat-after-5000', description='Still visible')
-    offsets = []
+    cursors = []
 
-    def page(uid, *, account_generation, limit, offset):
-        offsets.append(offset)
-        if offset < 5000:
-            return [], 500
-        if offset == 5000:
-            return [pending], 1
+    def page(uid, *, account_generation, limit, cursor):
+        cursors.append(cursor)
+        page_number = 0 if cursor is None else cursor + 1
+        if page_number < 10:
+            return [], 500, page_number
+        if page_number == 10:
+            return [pending], 1, page_number
         raise AssertionError('pagination continued after exhaustion')
 
     monkeypatch.setattr(staged_router.candidates_db, 'list_candidates_compatibility_page', page)
@@ -204,7 +207,7 @@ def test_candidate_projection_pages_past_5000_to_find_pending_data(monkeypatch):
     response = staged_router.get_staged_tasks(limit=100, offset=0, uid='user-1')
 
     assert [item['id'] for item in response['items']] == ['candidate-after-5000']
-    assert offsets == list(range(0, 5500, 500))
+    assert cursors == [None, *range(10)]
 
 
 def test_terminal_candidate_after_5000_still_suppresses_historical_duplicate(monkeypatch):
@@ -215,10 +218,11 @@ def test_terminal_candidate_after_5000_still_suppresses_historical_duplicate(mon
         status=CandidateStatus.rejected,
     )
 
-    def page(uid, *, account_generation, limit, offset):
-        if offset < 5000:
-            return [], 500
-        return ([terminal], 1) if offset == 5000 else ([], 0)
+    def page(uid, *, account_generation, limit, cursor):
+        page_number = 0 if cursor is None else cursor + 1
+        if page_number < 10:
+            return [], 500, page_number
+        return ([terminal], 1, page_number) if page_number == 10 else ([], 0, None)
 
     monkeypatch.setattr(staged_router.candidates_db, 'list_candidates_compatibility_page', page)
     monkeypatch.setattr(

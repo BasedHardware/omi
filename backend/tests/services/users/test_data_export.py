@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from io import StringIO
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -234,13 +235,48 @@ def test_iter_user_data_export_does_not_emit_partial_memories_on_iteration_failu
     memory_service = MagicMock(iter_export_memories=_failing_iter)
     monkeypatch.setattr(data_export, "MemoryService", MagicMock(return_value=memory_service))
 
-    chunks = []
     with pytest.raises(RuntimeError, match="memory page unavailable"):
-        for chunk in data_export.iter_user_data_export("uid1"):
-            chunks.append(chunk)
+        data_export.iter_user_data_export("uid1")
 
-    body = "".join(chunks)
-    assert '"memories"' not in body
+    data_export.get_user_profile.assert_not_called()
+
+
+def test_iter_user_data_export_closes_completed_memory_spool(monkeypatch):
+    spool = StringIO("[]")
+    monkeypatch.setattr(data_export, "_spool_export_memories_json", MagicMock(return_value=spool))
+    monkeypatch.setattr(
+        data_export,
+        "_iter_user_data_export_from_spool",
+        MagicMock(return_value=iter(["export-body"])),
+    )
+
+    stream = data_export.iter_user_data_export("uid1")
+
+    assert not spool.closed
+    assert "".join(stream) == "export-body"
+    assert spool.closed
+
+
+def test_memory_spool_is_streamed_in_bounded_chunks(monkeypatch):
+    large_content = "x" * (140 * 1024)
+    memory = MagicMock(model_dump=MagicMock(return_value={"id": "large", "content": large_content}))
+    monkeypatch.setattr(
+        data_export,
+        "MemoryService",
+        MagicMock(return_value=MagicMock(iter_export_memories=MagicMock(return_value=iter([memory])))),
+    )
+
+    spool = data_export._spool_export_memories_json("uid1")
+    try:
+        chunks = []
+        while chunk := spool.read(64 * 1024):
+            chunks.append(chunk)
+    finally:
+        spool.close()
+
+    assert len(chunks) >= 3
+    assert max(map(len, chunks)) <= 64 * 1024
+    assert json.loads("".join(chunks)) == [{"id": "large", "content": large_content}]
 
 
 def test_iter_user_data_export_paginates_complete_collections(monkeypatch):

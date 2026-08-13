@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 from datetime import datetime
-from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence, cast
+from typing import IO, Any, Callable, Iterable, Iterator, Mapping, Sequence, cast
 
 from database import chat as chat_db
 from database import conversations as conversations_db
@@ -76,7 +76,7 @@ def _yield_json_array(items: Iterable[Mapping[str, Any]]) -> Iterator[str]:
     yield '\n  ]'
 
 
-def _spool_export_memories_json(uid: str) -> str:
+def _spool_export_memories_json(uid: str) -> IO[str]:
     """Materialize the memories JSON array before any bytes reach the client.
 
     Spools to a bounded in-memory buffer with automatic disk spillover so large
@@ -84,7 +84,8 @@ def _spool_export_memories_json(uid: str) -> str:
     """
     # 8 MiB before spilling to disk keeps typical exports in memory while
     # bounding resident size for very large accounts.
-    with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8") as spool:
+    spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8")
+    try:
         spool.write("[\n")
         first = True
         for memory in MemoryService().iter_export_memories(uid, include_archive=True):
@@ -94,7 +95,10 @@ def _spool_export_memories_json(uid: str) -> str:
             spool.write("    " + json.dumps(memory.model_dump(mode="json"), default=_json_default, indent=4))
         spool.write("\n  ]")
         spool.seek(0)
-        return spool.read()
+        return spool
+    except BaseException:
+        spool.close()
+        raise
 
 
 def _iter_user_subcollection(uid: str, collection_name: str) -> Iterator[Mapping[str, Any]]:
@@ -129,11 +133,7 @@ def _iter_user_nested_subcollection(
             yield row
 
 
-def iter_user_data_export(uid: str) -> Iterator[str]:
-    # Build the remote/authority-sensitive section before the first response
-    # byte. A canonical memory read failure can then become the real HTTP error
-    # instead of a 200 response containing truncated JSON.
-    memories_json = _spool_export_memories_json(uid)
+def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iterator[str]:
     yield "{\n"
 
     profile = cast(JsonRecord | None, get_user_profile(uid))
@@ -150,7 +150,10 @@ def iter_user_data_export(uid: str) -> Iterator[str]:
         yield "    " + json.dumps(conv, default=_json_default, indent=4)
     yield "\n  ],\n"
 
-    yield '  "memories": ' + memories_json + ',\n'
+    yield '  "memories": '
+    while chunk := memories_spool.read(64 * 1024):
+        yield chunk
+    yield ',\n'
 
     people = cast(Sequence[Mapping[str, Any]], get_people(uid))
     yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ",\n"
@@ -193,3 +196,20 @@ def iter_user_data_export(uid: str) -> Iterator[str]:
     yield "\n  ]\n"
 
     yield "}\n"
+
+
+def _iter_user_data_export_and_close_spool(uid: str, memories_spool: IO[str]) -> Iterator[str]:
+    try:
+        yield from _iter_user_data_export_from_spool(uid, memories_spool)
+    finally:
+        memories_spool.close()
+
+
+def iter_user_data_export(uid: str) -> Iterator[str]:
+    # Build the remote/authority-sensitive section before the first response
+    # byte. A canonical memory read failure can then become the real HTTP error
+    # instead of a 200 response containing truncated JSON. This function must
+    # remain a regular function: making it a generator defers this preflight
+    # until after StreamingResponse has committed its status and headers.
+    memories_spool = _spool_export_memories_json(uid)
+    return _iter_user_data_export_and_close_spool(uid, memories_spool)

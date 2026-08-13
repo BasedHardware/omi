@@ -2,17 +2,17 @@
   "files": {
     "desktop/macos/Desktop/Sources/AuthService.swift": 2844,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4588,
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4593,
     "desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift": 1516,
-    "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1577,
+    "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1581,
     "desktop/macos/Desktop/Sources/OmiApp.swift": 1590
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls. +32 keeps the durable accepted-deletion cleanup journal and owner-bound VM/sync drain inside the fenced sign-out commit so cleanup resumes after restart and credentials or owner visibility cannot change first (SCA-280).",
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": "Connector form automation remains in the owning desktop integration boundary so explicit user actions can complete the provider flow without duplicating browser/session state.",
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Notification active-period read/write actions join the existing QA-only notification probes in the single automation action registry so the saved device-local gate can be exercised deterministically without bypassing production persistence.",
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Notification active-period read/write actions join the existing QA-only notification probes in the single automation action registry so the saved device-local gate can be exercised deterministically without bypassing production persistence; +5 declares the suggestion probe's real model and visible-notification side effects.",
     "desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift": "Adds the bounded shared-capture silent-microphone terminal incident so a persistent zero-sample CoreAudio route is queryable without recording sensitive content. +1 registers account-cutover retained-control fallback telemetry in the existing bounded diagnostic area.",
-    "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Keeps export lifecycle, archive/read-state preservation, pagination status, and production OAuth/grant authority on one desktop export boundary so large canonical exports cannot report completion before the final page is durably written.",
+    "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Keeps export lifecycle, archive/read-state preservation, pagination status, and production OAuth/grant authority on one desktop export boundary so large canonical exports cannot report completion before the final page is durably written; +4 rejects repeated cursors and explicitly includes archive-tier memories.",
     "desktop/macos/Desktop/Sources/OmiApp.swift": "UserDefaults.didChangeNotification observer must document and implement the queue:nil + explicit-main-hop contract (synchronous main-queue delivery deadlocked the signed-out launch, #11396)."
   },
   "threshold": 1500
