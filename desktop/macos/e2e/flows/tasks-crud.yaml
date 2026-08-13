@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/Services/LocalMutationAuthorization.swift
   - desktop/macos/Desktop/Sources/Stores/APIClient+Tasks.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/TaskActionItem.swift
 preconditions:
   - automation_bridge_ready
 

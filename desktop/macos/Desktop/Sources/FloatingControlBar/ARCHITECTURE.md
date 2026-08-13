@@ -38,10 +38,11 @@ restated.
   its own renders over the desktop. Grounding at the call site that knows the
   presentation is what keeps a new card from being born invisible; grounding a
   card as well stacks a second scrim.
-- **The panel is sized once to the maximum hover-menu extent and never animates
-  its frame** — every visible size change is a SwiftUI content morph. The window
-  keeps `hasShadow = false` and the glass draws no ambient shadow of its own,
-  because there is no clear margin inside the panel for one to fall into.
+- **The panel matches the current rendered surface.** SwiftUI owns the hover
+  morph; AppKit snaps once to the entering or settled size so it does not resize
+  per animation frame or leave a transparent maximum-size window intercepting
+  unrelated controls. The window keeps `hasShadow = false` and the glass draws
+  no ambient shadow of its own.
 
 Guards: `Tests/FloatingGlassChromeTests.swift`.
 

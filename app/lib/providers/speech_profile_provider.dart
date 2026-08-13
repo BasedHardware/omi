@@ -172,20 +172,22 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   Future<void> _initiateWebsocket({required BleAudioCodec codec, int? sampleRate, bool force = false}) async {
-    String language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
     _socket = await ServiceManager.instance().socket.speechProfile(
-          codec: codec,
-          sampleRate: rate,
-          language: language,
-          force: force,
-        );
+      codec: codec,
+      sampleRate: rate,
+      language: language,
+      force: force,
+    );
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
     _socket?.subscribe(this, this);
+    await _socket?.requestFirstOnboardingQuestion();
   }
 
   /// Start phone microphone streaming (alternative to BLE device streaming).

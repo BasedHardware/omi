@@ -66,6 +66,22 @@ final class DistributionDebounceTests: XCTestCase {
       ))
   }
 
+  func testNoContextChangeForMessagingNewMessageCountDifference() {
+    XCTAssertFalse(
+      ContextDetection.didContextChange(
+        fromApp: "Slack", fromWindowTitle: "Launch – 4 new messages",
+        toApp: "Slack", toWindowTitle: "Launch – 3 new messages"
+      ))
+  }
+
+  func testNumericDocumentTitlesRemainDistinctDuringDetection() {
+    XCTAssertTrue(
+      ContextDetection.didContextChange(
+        fromApp: "Safari", fromWindowTitle: "Issue (123)",
+        toApp: "Safari", toWindowTitle: "Issue (456)"
+      ))
+  }
+
   func testContextChangeForRealTitleChange() {
     // Real title changes should be detected even with noise
     XCTAssertTrue(

@@ -166,6 +166,64 @@ private actor GateHoldProbe {
   }
 }
 
+private final class GateGrantCancellationRaceProbe: @unchecked Sendable {
+  private let lock = NSLock()
+  private let resumeGrantedWaiter = DispatchSemaphore(value: 0)
+  private var waiterRegistered = false
+  private var grantPaused = false
+  private var registrationWaiter: CheckedContinuation<Void, Never>?
+  private var grantWaiter: CheckedContinuation<Void, Never>?
+
+  func signalWaiterRegistered() {
+    lock.lock()
+    waiterRegistered = true
+    let waiter = registrationWaiter
+    registrationWaiter = nil
+    lock.unlock()
+    waiter?.resume()
+  }
+
+  func waitUntilWaiterRegistered() async {
+    await withCheckedContinuation { continuation in
+      lock.lock()
+      if waiterRegistered {
+        lock.unlock()
+        continuation.resume()
+        return
+      }
+      registrationWaiter = continuation
+      lock.unlock()
+    }
+  }
+
+  func pauseGrantedHandoff() {
+    lock.lock()
+    grantPaused = true
+    let waiter = grantWaiter
+    grantWaiter = nil
+    lock.unlock()
+    waiter?.resume()
+    resumeGrantedWaiter.wait()
+  }
+
+  func waitUntilGrantPaused() async {
+    await withCheckedContinuation { continuation in
+      lock.lock()
+      if grantPaused {
+        lock.unlock()
+        continuation.resume()
+        return
+      }
+      grantWaiter = continuation
+      lock.unlock()
+    }
+  }
+
+  func resumeGrantedHandoff() {
+    resumeGrantedWaiter.signal()
+  }
+}
+
 private actor ContextProjectionTaskBox {
   private var task: Task<Void, Never>?
 
@@ -1628,6 +1686,38 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let order = await enteredOrder.snapshot()
     XCTAssertEqual(order, ["first", "third"])
     _ = await second.result
+  }
+
+  func testContextAdmissionGateCancellationAfterGrantResumesWaiterOnce() async throws {
+    let raceProbe = GateGrantCancellationRaceProbe()
+    let gate = AgentContextAdmissionGate(
+      onWaiterRegistered: { raceProbe.signalWaiterRegistered() },
+      beforeResumingGrantedWaiter: { raceProbe.pauseGrantedHandoff() }
+    )
+    let holdProbe = GateHoldProbe()
+
+    let first = Task {
+      try await gate.withExclusiveAccess {
+        await holdProbe.signalEntered()
+        await holdProbe.waitUntilReleased()
+      }
+    }
+    await holdProbe.waitUntilEntered()
+
+    let second = Task {
+      _ = try? await gate.withExclusiveAccess {}
+    }
+    await raceProbe.waitUntilWaiterRegistered()
+
+    await holdProbe.release()
+    await raceProbe.waitUntilGrantPaused()
+    second.cancel()
+    raceProbe.resumeGrantedHandoff()
+
+    try await first.value
+    _ = await second.result
+    let third: String = try await gate.withExclusiveAccess { "third" }
+    XCTAssertEqual(third, "third")
   }
 
   func testContextAdmissionSecondMismatchFailsWithoutAnotherRefreshOrRetry() async {
