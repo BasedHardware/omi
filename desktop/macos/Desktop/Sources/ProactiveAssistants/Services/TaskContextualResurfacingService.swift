@@ -430,6 +430,30 @@ enum TaskInterruptionGateReason: String, Codable, Equatable {
   case dailyBudget = "daily_budget"
   case minimumSpacing = "minimum_spacing"
   case staleOwner = "stale_owner"
+  /// Decodes the retired time-gate trace without restoring time-based delivery behavior.
+  /// New writes use this namespaced value instead of the removed `quiet_hours` wire value.
+  case legacyQuietHours = "legacy_quiet_hours"
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    let rawValue = try container.decode(String.self)
+    if rawValue == "quiet_hours" {
+      self = .legacyQuietHours
+      return
+    }
+    guard let reason = Self(rawValue: rawValue) else {
+      throw DecodingError.dataCorruptedError(
+        in: container,
+        debugDescription: "Unknown task interruption gate reason: \(rawValue)"
+      )
+    }
+    self = reason
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    try container.encode(rawValue)
+  }
 }
 
 struct TaskInterruptionGateTrace: Codable, Equatable {

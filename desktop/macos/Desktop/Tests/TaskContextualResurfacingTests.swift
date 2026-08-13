@@ -145,6 +145,42 @@ final class TaskInterruptionLedgerOwnerIsolationTests: XCTestCase {
     defaults.set("owner-a", forKey: "auth_userId")
     XCTAssertEqual(persistence.load().sentAt.count, 1)
   }
+
+  func testLegacyQuietHoursTraceDecodesWithoutResettingLedger() throws {
+    let suite = "TaskInterruptionLedgerOwnerIsolationTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let persistence = TaskInterruptionLedgerDefaults(defaults: defaults, ownerID: "owner-a")
+    let payload: [String: Any] = [
+      "sentAt": [42.0],
+      "dedupeExpirations": ["dedupe-key": 4_200.0],
+      "lastTrace": [
+        "schemaVersion": 1,
+        "decisionID": "decision",
+        "recommendationID": "recommendation",
+        "interventionID": "intervention",
+        "dedupeHash": "sha256:legacy",
+        "cohort": "dogfood",
+        "reason": "quiet_hours",
+        "evaluatedAt": 123.0,
+      ],
+    ]
+    defaults.set(
+      try JSONSerialization.data(withJSONObject: payload),
+      forKey: "proactiveTaskInterruptionLedger.v1.owner-a"
+    )
+
+    let loaded = persistence.load()
+    XCTAssertEqual(loaded.sentAt, [Date(timeIntervalSinceReferenceDate: 42)])
+    XCTAssertEqual(loaded.dedupeExpirations["dedupe-key"], Date(timeIntervalSinceReferenceDate: 4_200))
+    XCTAssertEqual(loaded.lastTrace?.reason, .legacyQuietHours)
+
+    persistence.save(loaded)
+    let saved = try XCTUnwrap(defaults.data(forKey: "proactiveTaskInterruptionLedger.v1.owner-a"))
+    let savedJSON = try XCTUnwrap(String(data: saved, encoding: .utf8))
+    XCTAssertFalse(savedJSON.contains("\"quiet_hours\""))
+    XCTAssertTrue(savedJSON.contains("\"legacy_quiet_hours\""))
+  }
 }
 
 final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient, @unchecked Sendable {
@@ -784,16 +820,13 @@ final class TaskContextualResurfacingTests: XCTestCase {
     await transitionContextTestOwner(to: "notification-always-on-owner")
     let snapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
     let service = NotificationService(registerWithSystemNotificationCenter: false)
-    let priorMasterEnabled = UserDefaults.standard.object(
-      forKey: NotificationService.masterEnabledDefaultsKey)
     let priorFrequency = UserDefaults.standard.object(
       forKey: NotificationService.frequencyDefaultsKey)
     defer {
-      Self.restoreDefault(priorMasterEnabled, key: NotificationService.masterEnabledDefaultsKey)
       Self.restoreDefault(priorFrequency, key: NotificationService.frequencyDefaultsKey)
     }
-    UserDefaults.standard.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
-    UserDefaults.standard.set(5, forKey: NotificationService.frequencyDefaultsKey)
+    // Level 3 exercises the real cooldown path; Maximum would return before any timestamp check.
+    UserDefaults.standard.set(3, forKey: NotificationService.frequencyDefaultsKey)
 
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))

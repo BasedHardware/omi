@@ -3415,6 +3415,7 @@ final class DesktopAutomationActionRegistry {
       let hasPermission = appState?.hasNotificationPermission ?? false
       let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
       return [
+        "schema": "enabled,frequency,frequency_label,has_permission,banners_disabled",
         "enabled": settings.enabled ? "true" : "false",
         "frequency": "\(settings.frequency)",
         "frequency_label": settings.frequencyDescription,
