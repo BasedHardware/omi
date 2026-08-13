@@ -94,7 +94,7 @@ final class OCREmbeddingServiceFlushTimerTests: XCTestCase {
 
     var service: OCREmbeddingService? = makeService(
       sleeper: sleeper, embedder: embedder, writes: writes)
-    weak let weakService = service
+    weak var weakService = service
     await service?.embedScreenshot(
       id: 303,
       ocrText: String(repeating: "service lifetime timer text ", count: 2),
