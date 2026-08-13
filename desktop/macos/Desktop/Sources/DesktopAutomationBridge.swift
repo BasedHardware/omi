@@ -933,8 +933,7 @@ final class DesktopAutomationActionRegistry {
       summary: "Configure the non-production contextual task interruption gate",
       params: [
         "enabled", "shipped_cohorts_enabled", "daily_limit", "minimum_spacing_seconds",
-        "quiet_start_minute", "quiet_end_minute", "notifications_enabled", "frequency",
-        "task_notifications_enabled",
+        "notifications_enabled", "frequency", "task_notifications_enabled",
       ]
     ) { params in
       var configuration = ProactiveTaskInterruptionSettings.load()
@@ -945,12 +944,6 @@ final class DesktopAutomationActionRegistry {
       configuration.minimumSpacing = TimeInterval(
         max(
           0, intParam(params["minimum_spacing_seconds"], default: Int(configuration.minimumSpacing))))
-      configuration.quietHoursStartMinute = min(
-        max(
-          0, intParam(params["quiet_start_minute"], default: configuration.quietHoursStartMinute)), 1439)
-      configuration.quietHoursEndMinute = min(
-        max(
-          0, intParam(params["quiet_end_minute"], default: configuration.quietHoursEndMinute)), 1439)
       ProactiveTaskInterruptionSettings.save(configuration)
       if params["notifications_enabled"] != nil {
         UserDefaults.standard.set(
@@ -1014,7 +1007,7 @@ final class DesktopAutomationActionRegistry {
       safety: "network_or_model",
       sideEffects: [
         "may call model/backend services",
-        "may deliver a user-visible suggestion during the configured active period",
+        "may deliver a user-visible suggestion when notification controls allow",
       ]
     ) { params in
       let app = params["app"].flatMap { $0.isEmpty ? nil : $0 }
@@ -3421,34 +3414,13 @@ final class DesktopAutomationActionRegistry {
       let appState = await MainActor.run { AppState.current }
       let hasPermission = appState?.hasNotificationPermission ?? false
       let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
-      let activePeriod = await MainActor.run { NotificationService.currentActivePeriod() }
       return [
+        "schema": "enabled,frequency,frequency_label,has_permission,banners_disabled",
         "enabled": settings.enabled ? "true" : "false",
         "frequency": "\(settings.frequency)",
         "frequency_label": settings.frequencyDescription,
         "has_permission": hasPermission ? "true" : "false",
         "banners_disabled": bannersDisabled ? "true" : "false",
-        "active_start_minute": "\(activePeriod.startMinute)",
-        "active_end_minute": "\(activePeriod.endMinute)",
-      ]
-    }
-
-    register(
-      name: "set_notification_active_period",
-      summary: "Set the device-local proactive notification active period",
-      params: ["start_minute", "end_minute"]
-    ) { params in
-      let current = await MainActor.run { NotificationService.currentActivePeriod() }
-      let startMinute = intParam(params["start_minute"], default: current.startMinute)
-      let endMinute = intParam(params["end_minute"], default: current.endMinute)
-      let saved = await MainActor.run { () -> NotificationActivePeriod in
-        NotificationService.updateActivePeriod(startMinute: startMinute, endMinute: endMinute)
-        return NotificationService.currentActivePeriod()
-      }
-      return [
-        "saved": "true",
-        "active_start_minute": "\(saved.startMinute)",
-        "active_end_minute": "\(saved.endMinute)",
       ]
     }
 

@@ -67,11 +67,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// `true` when the key is absent (first run before the Settings page hydrates).
   static let masterEnabledDefaultsKey = "notifications_enabled"
 
-  /// Device-local active period for proactive interruptions, stored as minutes since midnight.
-  /// The setting follows the Mac's local clock and defaults to 08:00–22:00.
-  static let activePeriodStartDefaultsKey = "notification_active_period_start_minute"
-  static let activePeriodEndDefaultsKey = "notification_active_period_end_minute"
-
   /// Default level used when the key has never been written (e.g. first run before
   /// the Settings page has hydrated from the backend). Mirrors the backend default.
   /// Proactive notifications are OFF by default — users opt in via the Settings slider.
@@ -408,17 +403,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
-    // Device-local active period gates every proactive path (not only the director).
-    if respectFrequency && !Self.isWithinActivePeriod(now: Date()) {
-      log("NotificationService: suppressing \(assistantId) notification outside active period")
-      recordInsightDeliveryOutcome(
-        insightDeliveryID,
-        outcome: .suppressed,
-        reason: .frequencyThrottled
-      )
-      return
-    }
-
     // Proactive notifications honor the user's frequency setting. Functional
     // notifications (Crisp support replies, screen-recording permission prompts,
     // onboarding test) pass `respectFrequency: false` to bypass the gate.
@@ -696,15 +680,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     now: Date
   ) -> Bool {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
-    let components = Calendar.current.dateComponents([.hour, .minute], from: now)
     let level = Self.currentFrequencyLevel()
     let gate = ContextDeliveryGateInput(
       masterEnabled: Self.areNotificationsEnabled(),
       frequencyLevel: level,
       snoozed: FloatingControlBarManager.shared.isSnoozed,
       paywalled: AppState.isPaywalledEffective,
-      minuteOfDay: (components.hour ?? 0) * 60 + (components.minute ?? 0),
-      activePeriod: Self.currentActivePeriod(),
       cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: level)
     )
     guard ContextDeliveryBudget.freeGate(input: gate) == .allowed else { return false }
@@ -982,41 +963,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     pendingAtLoadStart || pendingNow || currentRevision != revisionAtLoadStart
   }
 
-  static func currentActivePeriod(defaults: UserDefaults = .standard) -> NotificationActivePeriod {
-    let fallback = NotificationActivePeriod.defaultValue
-    let start =
-      defaults.object(forKey: activePeriodStartDefaultsKey) == nil
-      ? fallback.startMinute : defaults.integer(forKey: activePeriodStartDefaultsKey)
-    let end =
-      defaults.object(forKey: activePeriodEndDefaultsKey) == nil
-      ? fallback.endMinute : defaults.integer(forKey: activePeriodEndDefaultsKey)
-    return NotificationActivePeriod(startMinute: start, endMinute: end)
-  }
-
-  static func updateActivePeriod(startMinute: Int, endMinute: Int) {
-    let period = NotificationActivePeriod(startMinute: startMinute, endMinute: endMinute)
-    UserDefaults.standard.set(period.startMinute, forKey: activePeriodStartDefaultsKey)
-    UserDefaults.standard.set(period.endMinute, forKey: activePeriodEndDefaultsKey)
-
-    // Contextual task interruptions predate the shared notification setting and persist the
-    // inverse quiet period. Keep that legacy policy projection aligned with the user-facing
-    // active period until its versioned configuration is retired.
-    var taskConfiguration = ProactiveTaskInterruptionSettings.load()
-    taskConfiguration.quietHoursStartMinute = period.endMinute
-    taskConfiguration.quietHoursEndMinute = period.startMinute
-    ProactiveTaskInterruptionSettings.save(taskConfiguration)
-  }
-
-  static func isWithinActivePeriod(
-    now: Date = Date(),
-    calendar: Calendar = .current,
-    defaults: UserDefaults = .standard
-  ) -> Bool {
-    let components = calendar.dateComponents([.hour, .minute], from: now)
-    let minuteOfDay = (components.hour ?? 0) * 60 + (components.minute ?? 0)
-    return currentActivePeriod(defaults: defaults).contains(minuteOfDay: minuteOfDay)
-  }
-
   /// Minimum interval between proactive notifications for a given level.
   /// `nil` means no throttle (Maximum); `.infinity` means drop everything (Off).
   private static func minInterval(forLevel level: Int) -> TimeInterval? {
@@ -1153,7 +1099,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   ) -> Bool {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
     prepareOwnerScopedState(for: authorizationSnapshot)
-    guard Self.isWithinActivePeriod(now: now) else { return false }
     let level = Self.currentFrequencyLevel()
     guard let interval = Self.minInterval(forLevel: level) else {
       return true  // Maximum
