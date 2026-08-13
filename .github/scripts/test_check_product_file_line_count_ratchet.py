@@ -1,225 +1,216 @@
 #!/usr/bin/env python3
-"""Behavioral regression tests for the oversized product-file line ratchet."""
+"""Behavioral tests for the base-derived oversized product-file ratchet."""
 
 from __future__ import annotations
 
 import importlib.util
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location(
-    "product_file_line_count_ratchet", SCRIPT_DIR / "check_product_file_line_count_ratchet.py"
+    "product_file_line_count_ratchet",
+    SCRIPT_DIR / "check_product_file_line_count_ratchet.py",
 )
 assert SPEC and SPEC.loader
 RATCHET = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = RATCHET
 SPEC.loader.exec_module(RATCHET)
-
-
-def baseline(files: dict[str, int], justifications: dict[str, str] | None = None) -> dict:
-    return {
-        "threshold": RATCHET.THRESHOLD,
-        "files": files,
-        "raise_justifications": justifications or {},
-    }
 
 
 class ProductFileLineCountRatchetTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        self.git("init", "-q")
+        self.git("config", "user.email", "ratchet-test@example.invalid")
+        self.git("config", "user.name", "Ratchet Test")
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    def git(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-c", "core.hooksPath=/dev/null", *args],
+            cwd=self.root,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=RATCHET.clean_git_env(),
+        )
 
     def write_source(self, relative: str, lines: int) -> None:
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("line\n" * lines, encoding="utf-8")
 
-    def git(self, *args: str) -> None:
-        # Drop inherited git environment so subprocesses target this test's
-        # temporary repository instead of the enclosing hook's GIT_DIR. This
-        # matters when the suite runs under a pre-push/pre-receive context,
-        # where git exports GIT_DIR/GIT_WORK_TREE for the parent repository.
-        subprocess.run(
-            ["git", *args],
-            cwd=self.root,
-            check=True,
-            capture_output=True,
-            text=True,
-            env=RATCHET._clean_git_env(),
+    def commit_base(self) -> str:
+        self.git("add", ".")
+        self.git("commit", "-qm", "base")
+        return self.git("rev-parse", "HEAD").stdout.strip()
+
+    def evaluate(self, base: str, changed: set[str], body: str = "") -> list[str]:
+        exceptions, parse_failures = RATCHET.parse_exceptions(body)
+        return parse_failures + RATCHET.evaluate_changes(self.root, base, changed, exceptions)
+
+    def test_rejects_oversized_growth_with_exact_suggestion(self) -> None:
+        relative = "backend/routers/large.py"
+        self.write_source(relative, 1500)
+        base = self.commit_base()
+        self.write_source(relative, 1501)
+
+        failures = self.evaluate(base, {relative})
+
+        self.assertEqual(len(failures), 1)
+        self.assertIn("grew from 1500 to 1501", failures[0])
+        self.assertIn(f"Line-Count-Exception: {relative} | 1500 -> 1501", failures[0])
+
+    def test_exact_exception_approves_growth_without_repository_metadata(self) -> None:
+        relative = "desktop/macos/Desktop/Sources/MainWindow/Large.swift"
+        self.write_source(relative, 1600)
+        base = self.commit_base()
+        self.write_source(relative, 1625)
+        body = f"Line-Count-Exception: {relative} | 1600 -> 1625 | Citation layout remains at its owner."
+
+        self.assertEqual(self.evaluate(base, {relative}, body), [])
+        self.assertFalse((self.root / ".github").exists())
+
+    def test_threshold_crossing_requires_exception(self) -> None:
+        relative = "desktop/macos/Desktop/Sources/NewCoordinator.swift"
+        self.write_source(relative, 1499)
+        base = self.commit_base()
+        self.write_source(relative, 1500)
+
+        failures = self.evaluate(base, {relative})
+
+        self.assertEqual(len(failures), 1)
+        self.assertIn("1499 to 1500", failures[0])
+
+    def test_new_oversized_file_uses_zero_as_base(self) -> None:
+        placeholder = "backend/routers/existing.py"
+        self.write_source(placeholder, 1)
+        base = self.commit_base()
+        relative = "backend/routers/new_large.py"
+        self.write_source(relative, 1500)
+        body = f"Line-Count-Exception: {relative} | 0 -> 1500 | New generated-free router boundary."
+
+        self.assertEqual(self.evaluate(base, {relative}, body), [])
+
+    def test_reduction_and_split_ratchet_down_automatically(self) -> None:
+        reduced = "backend/routers/reduced.py"
+        split = "desktop/macos/Desktop/Sources/Split.swift"
+        self.write_source(reduced, 1800)
+        self.write_source(split, 1700)
+        base = self.commit_base()
+        self.write_source(reduced, 1600)
+        self.write_source(split, 1499)
+
+        self.assertEqual(self.evaluate(base, {reduced, split}), [])
+
+    def test_synthetic_merge_honors_a_concurrent_target_branch_reduction(self) -> None:
+        relative = "backend/routers/concurrent.py"
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(f"base-{index}\n" for index in range(1600)), encoding="utf-8")
+        common = self.commit_base()
+
+        self.git("checkout", "-qb", "candidate")
+        with path.open("a", encoding="utf-8") as source:
+            source.write("".join(f"candidate-{index}\n" for index in range(10)))
+        self.git("add", relative)
+        self.git("commit", "-qm", "candidate growth")
+        head = self.git("rev-parse", "HEAD").stdout.strip()
+
+        self.git("checkout", "-qb", "target", common)
+        path.write_text("".join(f"base-{index}\n" for index in range(100, 1600)), encoding="utf-8")
+        self.git("add", relative)
+        self.git("commit", "-qm", "target reduction")
+        base = self.git("rev-parse", "HEAD").stdout.strip()
+
+        candidate_tree = RATCHET.synthetic_merge_tree(self.root, base, head)
+        failures = RATCHET.evaluate_changes(
+            self.root,
+            base,
+            {relative},
+            {},
+            candidate_ref=candidate_tree,
         )
 
-    def test_rejects_growth_of_an_oversized_file(self) -> None:
-        relative = "backend/routers/large.py"
-        self.write_source(relative, 1501)
-
-        failures, downward = RATCHET.check_changed_sources(self.root, baseline({relative: 1500}), {relative})
-
-        self.assertEqual(downward, {})
+        self.assertEqual(RATCHET.source_count_at_ref(self.root, base, relative), 1500)
+        self.assertEqual(RATCHET.source_count_at_ref(self.root, candidate_tree, relative), 1510)
         self.assertEqual(len(failures), 1)
-        self.assertIn("grew from baseline 1500 to 1501", failures[0])
-        self.assertIn("backend-routers.json", failures[0])
+        self.assertIn("grew from 1500 to 1510", failures[0])
 
-    def test_rejects_a_smaller_file_that_crosses_the_threshold(self) -> None:
-        relative = "desktop/macos/Desktop/Sources/NewCoordinator.swift"
-        self.write_source(relative, RATCHET.THRESHOLD)
+    def test_rejects_malformed_duplicate_mismatched_and_unused_exceptions(self) -> None:
+        growing = "backend/routers/growing.py"
+        unchanged = "backend/routers/unchanged.py"
+        self.write_source(growing, 1500)
+        self.write_source(unchanged, 1600)
+        base = self.commit_base()
+        self.write_source(growing, 1510)
+        body = "\n".join(
+            [
+                "Line-Count-Exception: malformed",
+                f"Line-Count-Exception: {growing} | 1499 -> 1510 | Wrong base count is rejected.",
+                f"Line-Count-Exception: {growing} | 1500 -> 1510 | Duplicate declaration is rejected.",
+                f"Line-Count-Exception: {unchanged} | 1600 -> 1601 | Copied stale approval is rejected.",
+            ]
+        )
 
-        failures, downward = RATCHET.check_changed_sources(self.root, baseline({}), {relative})
+        failures = self.evaluate(base, {growing}, body)
 
-        self.assertEqual(downward, {})
-        self.assertEqual(len(failures), 1)
-        self.assertIn("has no baseline entry", failures[0])
-        self.assertIn("desktop-swift-root.json", failures[0])
-
-    def test_update_mode_automatically_removes_baseline_after_a_split(self) -> None:
-        relative = "desktop/macos/Desktop/Sources/OldCoordinator.swift"
-        self.write_source(relative, 1499)
-        original = baseline({relative: 1800}, {relative: "Historic exception."})
-
-        updated, failures = RATCHET.update_downward(self.root, original, {relative})
-
-        self.assertEqual(failures, [])
-        self.assertNotIn(relative, updated["files"])
-        self.assertNotIn(relative, updated["raise_justifications"])
-        self.assertEqual(RATCHET.check_changed_sources(self.root, updated, {relative}), ([], {}))
-
-    def test_explicit_raise_requires_changed_source_and_one_line_justification(self) -> None:
-        relative = "backend/routers/large.py"
-        self.write_source(relative, 1501)
-        previous = baseline({relative: 1500})
-        raised = baseline({relative: 1501})
-
-        failures = RATCHET.baseline_transition_errors(self.root, previous, raised, {relative})
-
-        self.assertEqual(failures, [f"{relative}: a baseline raise requires a one-line raise_justifications entry"])
-        justified = baseline({relative: 1501}, {relative: "#9999 temporary migration boundary."})
-        self.assertEqual(RATCHET.baseline_transition_errors(self.root, previous, justified, {relative}), [])
+        self.assertTrue(any("malformed" in failure for failure in failures))
+        self.assertTrue(any("duplicate" in failure for failure in failures))
+        self.assertTrue(any("diff is 1500 -> 1510" in failure for failure in failures))
+        self.assertTrue(any("unchanged source" in failure for failure in failures))
 
     def test_excludes_tests_generated_and_vendored_paths(self) -> None:
         excluded = [
             "backend/tests/test_big.py",
             "backend/routers/generated.gen.py",
+            "backend/routers/../escaped.py",
             "desktop/macos/Desktop/Generated/Big.swift",
+            "desktop/macos/Desktop/.build/checkouts/Vendor.swift",
         ]
 
         for relative in excluded:
-            self.write_source(relative, 2000)
             self.assertFalse(RATCHET.is_product_source(relative), relative)
-        self.assertEqual(RATCHET.changed_product_sources(set(excluded)), [])
 
-    def test_sharding_round_trips_and_rejects_misplaced_entries(self) -> None:
-        router = "backend/routers/large.py"
-        floating_control_bar = "desktop/macos/Desktop/Sources/FloatingControlBar/Large.swift"
-        aggregate = baseline(
-            {router: 1600, floating_control_bar: 1700},
-            {router: "Router migration boundary."},
-        )
-
-        shards = RATCHET.shard_baseline(aggregate)
-
-        self.assertEqual(RATCHET.aggregate_baseline_shards(shards), aggregate)
-        self.assertEqual(
-            set(shards),
-            {
-                RATCHET.baseline_shard_relative(router),
-                RATCHET.baseline_shard_relative(floating_control_bar),
-            },
-        )
-        with self.assertRaisesRegex(ValueError, "belongs in"):
-            RATCHET.validate_baseline(baseline({router: 1600}), RATCHET.baseline_shard_relative(floating_control_bar))
-        with self.assertRaisesRegex(ValueError, "duplicate baseline entry"):
-            RATCHET.aggregate_baseline_shards(
-                {
-                    RATCHET.LEGACY_BASELINE_RELATIVE: baseline({router: 1600}),
-                    RATCHET.baseline_shard_relative(router): baseline({router: 1600}),
-                }
+    def test_parser_rejects_short_reason_and_unsupported_path(self) -> None:
+        _, failures = RATCHET.parse_exceptions(
+            "\n".join(
+                [
+                    "Line-Count-Exception: README.md | 0 -> 1500 | Long enough reason.",
+                    "Line-Count-Exception: backend/routers/large.py | 1500 -> 1501 | short",
+                ]
             )
-
-
-    def test_accepts_a_retired_shard_from_the_merge_base(self) -> None:
-        retired_shard = f"{RATCHET.BASELINE_DIRECTORY_RELATIVE}/desktop-rust.json"
-        retired_source = "desktop/macos/Retired/Large.rs"
-        retired_baseline = baseline({retired_source: 1600})
-
-        self.assertIsNone(RATCHET._expected_shard(retired_shard))
-        self.assertEqual(
-            RATCHET.aggregate_baseline_shards({retired_shard: retired_baseline}),
-            retired_baseline,
         )
 
-    def test_downward_update_writes_only_the_owning_shard(self) -> None:
-        router = "backend/routers/large.py"
-        desktop_root = "desktop/macos/Desktop/Sources/Large.swift"
-        self.write_source(router, 1550)
-        self.write_source(desktop_root, 1600)
-        aggregate = baseline({router: 1600, desktop_root: 1600})
-        shards = RATCHET.shard_baseline(aggregate)
-        RATCHET.write_baseline_shards(self.root, shards, set(shards))
-        untouched_path = self.root / RATCHET.baseline_shard_relative(desktop_root)
-        untouched_before = untouched_path.read_bytes()
+        self.assertEqual(len(failures), 2)
 
-        updated, touched, failures = RATCHET.update_downward_shards(self.root, shards, {router})
+    def test_repository_has_no_mutable_baseline_ledger(self) -> None:
+        ledger = SCRIPT_DIR / "product_file_line_count_ratchet_baseline"
+        self.assertEqual(list(ledger.glob("*.json")), [])
 
-        self.assertEqual(failures, [])
-        self.assertEqual(touched, {RATCHET.baseline_shard_relative(router)})
-        RATCHET.write_baseline_shards(self.root, updated, touched)
-        self.assertEqual(untouched_path.read_bytes(), untouched_before)
-        self.assertEqual(
-            RATCHET.load_baseline(self.root)["files"][router],
-            1550,
-        )
+    def test_git_subprocess_environment_drops_hook_redirects(self) -> None:
+        original = RATCHET.os.environ.copy()
+        try:
+            RATCHET.os.environ["GIT_DIR"] = "/wrong/repository"
+            RATCHET.os.environ["GIT_WORK_TREE"] = "/wrong/worktree"
+            RATCHET.os.environ["GIT_COMMON_DIR"] = "/wrong/common-directory"
+            RATCHET.os.environ["GIT_INDEX_FILE"] = "/wrong/index"
+            cleaned = RATCHET.clean_git_env()
+        finally:
+            RATCHET.os.environ.clear()
+            RATCHET.os.environ.update(original)
 
-    def test_baseline_at_ref_supports_legacy_then_sharded_migration(self) -> None:
-        router = "backend/routers/large.py"
-        desktop_root = "desktop/macos/Desktop/Sources/Large.swift"
-        legacy = baseline({router: 1600, desktop_root: 1600}, {router: "Historic migration."})
-        legacy_path = self.root / RATCHET.LEGACY_BASELINE_RELATIVE
-        legacy_path.parent.mkdir(parents=True, exist_ok=True)
-        legacy_path.write_text(RATCHET.serialize_baseline(legacy), encoding="utf-8")
-        self.git("init", "-q")
-        self.git("config", "user.email", "ratchet-test@example.invalid")
-        self.git("config", "user.name", "Ratchet Test")
-        self.git("add", ".")
-        self.git("commit", "-qm", "legacy baseline")
-        legacy_ref = RATCHET.baseline_at_ref(self.root, "HEAD")
-
-        legacy_path.unlink()
-        shards = RATCHET.shard_baseline(legacy)
-        RATCHET.write_baseline_shards(self.root, shards, set(shards))
-        self.git("add", "-A")
-        self.git("commit", "-qm", "sharded baseline")
-        sharded_ref = RATCHET.baseline_at_ref(self.root, "HEAD")
-
-        self.assertEqual(legacy_ref, legacy)
-        self.assertEqual(sharded_ref, legacy)
-
-    def test_baseline_git_reads_decode_utf8_explicitly(self) -> None:
-        router = "backend/routers/large.py"
-        expected = baseline({router: 1600}, {router: "Unicode guard: \u96ea"})
-        shard_relative = RATCHET.baseline_shard_relative(router)
-        completed = subprocess.CompletedProcess
-
-        with patch.object(
-            RATCHET.subprocess,
-            "run",
-            side_effect=[
-                completed([], 0, stdout=f"{shard_relative}\n", stderr=""),
-                completed([], 0, stdout=RATCHET.serialize_baseline(expected), stderr=""),
-                completed([], 0, stdout="", stderr=""),
-                completed([], 0, stdout=RATCHET.serialize_baseline(expected), stderr=""),
-            ],
-        ) as run:
-            self.assertEqual(RATCHET.baseline_at_ref(self.root, "sharded"), expected)
-            self.assertEqual(RATCHET.baseline_at_ref(self.root, "legacy"), expected)
-
-        self.assertEqual(len(run.call_args_list), 4)
-        for call in run.call_args_list:
-            self.assertEqual(call.kwargs.get("encoding"), "utf-8")
+        self.assertNotIn("GIT_DIR", cleaned)
+        self.assertNotIn("GIT_WORK_TREE", cleaned)
+        self.assertNotIn("GIT_COMMON_DIR", cleaned)
+        self.assertNotIn("GIT_INDEX_FILE", cleaned)
 
 
 if __name__ == "__main__":

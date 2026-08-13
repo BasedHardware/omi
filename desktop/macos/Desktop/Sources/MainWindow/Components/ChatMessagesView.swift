@@ -333,6 +333,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   let onLoadMore: () async -> Void
   let onRate: (String, Int?) -> Void
   var onCitationTap: ((Citation) -> Void)? = nil
+  var onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil
   var sessionsLoadError: String? = nil
   var onRetry: (() -> Void)? = nil
   /// Token that increments each time the local user sends a message.
@@ -908,6 +909,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           onCitationTap: { citation in
             onCitationTap?(citation)
           },
+          onOpenInlineCitation: onOpenInlineCitation,
           isDuplicate: duplicateMessageIDs.contains(message.id),
           onCancelTurn: onCancelTurn,
           onOpenAgent: onOpenAgent,

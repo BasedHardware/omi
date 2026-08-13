@@ -339,6 +339,9 @@ enum ChatContentBlock: Identifiable {
   case captureLink(id: String, conversationId: String, momentTimestampMs: Int?, summary: String)
   case conversationLink(id: String, conversationId: String, summary: String)
   case memoryLink(id: String, memoryId: String, summary: String)
+  /// Answer-level provenance. Unlike a rich link card, this is rendered at the matching inline
+  /// numeric marker and is otherwise invisible in the transcript.
+  case citation(id: String, reference: ChatCitationReference)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -371,6 +374,7 @@ enum ChatContentBlock: Identifiable {
     case .captureLink(let id, _, _, _): return id
     case .conversationLink(let id, _, _): return id
     case .memoryLink(let id, _, _): return id
+    case .citation(let id, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
@@ -829,6 +833,8 @@ extension ChatContentBlock {
       .conversationLink(_, _, let summary), .memoryLink(_, _, let summary):
       let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? nil : trimmed
+    case .citation:
+      return nil
     case .agentSpawn(_, _, _, _, let title, let objective, _):
       let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
@@ -1740,6 +1746,7 @@ class ChatProvider: ObservableObject {
   private struct KernelQueryContext {
     let session: AgentSurfaceSession
     let snapshot: AgentContextSnapshot
+    let promptCitationReferences: [ChatCitationReference]
   }
 
   static func responseLanguageInstruction(languageCodes: [String]) -> String? {
@@ -1804,6 +1811,7 @@ class ChatProvider: ObservableObject {
     notificationContext: String?,
     screenPayload: [String: Any]?,
     includeScreenSource: Bool = true,
+    includePromptCitations: Bool = true,
     requestedModelProfile: String? = nil,
     pinnedSession: AgentSurfaceSession? = nil
   ) async throws -> KernelQueryContext {
@@ -1822,12 +1830,17 @@ class ChatProvider: ObservableObject {
       surfaceKind: surface.surfaceKind
     )
     let workspacePath = session.profile.workingDirectory
-    let memoryText = formatMemoriesSection()
     // Canonical goals are retrieved through the capability-scoped tool. An
     // enabled Chat-first session must not quietly inject legacy GoalStorage
     // rows into the model context.
-    let goalText = isChatFirstEnabled(for: surface) ? "" : formatGoalSection()
-    let taskText = formatTasksSection()
+    let includesLegacyGoals = !isChatFirstEnabled(for: surface)
+    let promptCitationLedger =
+      includePromptCitations
+      ? makePromptCitationLedger(includesLegacyGoals: includesLegacyGoals)
+      : ChatPromptCitationLedger(sources: [])
+    let memoryText = formatMemoriesSection(citations: promptCitationLedger)
+    let goalText = includesLegacyGoals ? formatGoalSection(citations: promptCitationLedger) : ""
+    let taskText = formatTasksSection(citations: promptCitationLedger)
     let identityText = formatAIProfileSection()
     var surfacePayload: [String: Any] = [
       "presentation": systemPromptStyle == .floating ? "floating" : "main",
@@ -1841,6 +1854,7 @@ class ChatProvider: ObservableObject {
       AssistantSettings.shared.hasExplicitVoiceLanguages
         ? Self.responseLanguageInstruction(languageCodes: AssistantSettings.shared.voiceLanguages)
         : nil,
+      promptCitationLedger.responseInstruction,
     ]
     .compactMap { $0 }
     .filter { !$0.isEmpty }
@@ -1917,7 +1931,10 @@ class ChatProvider: ObservableObject {
       sessionId: session.sessionId,
       surfaceKind: surface.surfaceKind
     )
-    return KernelQueryContext(session: session, snapshot: snapshot)
+    return KernelQueryContext(
+      session: session,
+      snapshot: snapshot,
+      promptCitationReferences: promptCitationLedger.references)
   }
 
   /// Publishes realtime inputs through the same typed kernel source path used
@@ -1933,7 +1950,8 @@ class ChatProvider: ObservableObject {
         systemPromptSuffix: nil,
         notificationContext: nil,
         screenPayload: nil,
-        includeScreenSource: false
+        includeScreenSource: false,
+        includePromptCitations: false
       )
       return KernelTurnProjection.voiceContextSnapshot(
         from: context.snapshot,
@@ -2470,18 +2488,52 @@ class ChatProvider: ObservableObject {
   }
 
   /// Formats cached memories into a string for the prompt
-  private func formatMemoriesSection() -> String {
+  private func formatMemoriesSection(citations: ChatPromptCitationLedger) -> String {
     guard !cachedMemories.isEmpty else { return "" }
 
     let userName = AuthService.shared.displayName.isEmpty ? "the user" : AuthService.shared.givenName
 
     var lines: [String] = ["<user_facts>", "Facts about \(userName):"]
     for memory in cachedMemories.prefix(30) {  // Limit to 30 most relevant
-      lines.append("- [memory] \(memory.content)")
+      let marker = citations.marker(kind: .memory, sourceID: memory.id).map { " \($0)" } ?? ""
+      lines.append("- [memory] \(memory.content)\(marker)")
     }
     lines.append("</user_facts>")
 
     return lines.joined(separator: "\n")
+  }
+
+  private func makePromptCitationLedger(includesLegacyGoals: Bool) -> ChatPromptCitationLedger {
+    let formatter = ISO8601DateFormatter()
+    var sources = cachedMemories.prefix(30).map {
+      ChatPromptCitationSource(
+        kind: .memory,
+        sourceID: $0.id,
+        title: $0.headline ?? "Memory",
+        preview: $0.content,
+        createdAt: formatter.string(from: $0.createdAt))
+    }
+    if includesLegacyGoals {
+      sources.append(
+        contentsOf: cachedGoals.filter(\.isActive).map {
+          ChatPromptCitationSource(
+            kind: .goal,
+            sourceID: $0.id,
+            title: $0.title,
+            preview: $0.description ?? $0.title,
+            createdAt: formatter.string(from: $0.createdAt))
+        })
+    }
+    sources.append(
+      contentsOf: cachedTasks.map {
+        ChatPromptCitationSource(
+          kind: .task,
+          sourceID: $0.id,
+          title: $0.description,
+          preview: $0.contextSummary ?? $0.description,
+          createdAt: formatter.string(from: $0.createdAt))
+      })
+    return ChatPromptCitationLedger(sources: sources)
   }
 
   // MARK: - Load Goals
@@ -2510,7 +2562,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// Formats goals into a prompt section
-  private func formatGoalSection() -> String {
+  private func formatGoalSection(citations: ChatPromptCitationLedger) -> String {
     let activeGoals = cachedGoals.filter { $0.isActive }
     guard !activeGoals.isEmpty else { return "" }
 
@@ -2524,6 +2576,9 @@ class ChatProvider: ObservableObject {
         line += " (progress: \(Int(goal.currentValue))/\(Int(goal.targetValue))"
         if let unit = goal.unit, !unit.isEmpty { line += " \(unit)" }
         line += ")"
+      }
+      if let marker = citations.marker(kind: .goal, sourceID: goal.id) {
+        line += " \(marker)"
       }
       lines.append(line)
     }
@@ -2551,7 +2606,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// Formats cached tasks into a prompt section
-  private func formatTasksSection() -> String {
+  private func formatTasksSection(citations: ChatPromptCitationLedger) -> String {
     guard !cachedTasks.isEmpty else { return "" }
 
     var lines: [String] = ["\n<user_tasks>", "Current tasks:"]
@@ -2568,6 +2623,9 @@ class ChatProvider: ObservableObject {
       }
       if let category = task.category {
         line += " [category: \(category)]"
+      }
+      if let marker = citations.marker(kind: .task, sourceID: task.id) {
+        line += " \(marker)"
       }
       lines.append(line)
     }
@@ -2742,9 +2800,13 @@ class ChatProvider: ObservableObject {
     utcFormatter.timeZone = TimeZone(identifier: "UTC")
     prompt = prompt.replacingOccurrences(of: "{current_datetime_utc}", with: utcFormatter.string(from: Date()))
 
-    prompt = prompt.replacingOccurrences(of: "{memories_section}", with: formatMemoriesSection())
-    prompt = prompt.replacingOccurrences(of: "{goal_section}", with: formatGoalSection())
-    prompt = prompt.replacingOccurrences(of: "{tasks_section}", with: formatTasksSection())
+    let citationLedger = makePromptCitationLedger(includesLegacyGoals: true)
+    prompt = prompt.replacingOccurrences(
+      of: "{memories_section}", with: formatMemoriesSection(citations: citationLedger))
+    prompt = prompt.replacingOccurrences(
+      of: "{goal_section}", with: formatGoalSection(citations: citationLedger))
+    prompt = prompt.replacingOccurrences(
+      of: "{tasks_section}", with: formatTasksSection(citations: citationLedger))
     prompt = prompt.replacingOccurrences(of: "{ai_profile_section}", with: formatAIProfileSection())
     prompt = prompt.replacingOccurrences(of: "{database_schema}", with: cachedDatabaseSchema)
 
@@ -3516,7 +3578,9 @@ class ChatProvider: ObservableObject {
   private func finishJournalTarget(
     generation: Int,
     queryResult: AgentClient.QueryResult,
-    disposition: KernelJournalTerminalDisposition
+    disposition: KernelJournalTerminalDisposition,
+    acceptedMessage: ChatMessage? = nil,
+    acceptedContent: String? = nil
   ) async -> Bool {
     guard let target = journalTerminalTargets.claim(generation: generation) else {
       return false
@@ -3529,7 +3593,10 @@ class ChatProvider: ObservableObject {
       target.onFinalized?(false)
       return false
     }
-    let message = messages.first(where: { $0.id == target.assistantMessageId })
+    // Capture the accepted projection before terminalization. Pending tool-result journal refreshes
+    // can otherwise replace the in-memory row between final rendering and this async commit.
+    let message =
+      acceptedMessage ?? messages.first(where: { $0.id == target.assistantMessageId })
     let resultResources =
       queryResult.artifacts.map(ChatResource.artifact)
       + queryResult.completionDeltaArtifacts.map(ChatResource.artifact)
@@ -3541,7 +3608,7 @@ class ChatProvider: ObservableObject {
         producingRunId: queryResult.runId,
         producingAttemptId: queryResult.attemptId,
         disposition: disposition,
-        acceptedContent: queryResult.text,
+        acceptedContent: acceptedContent ?? queryResult.text,
         acceptedResources: resultResources,
         ownerID: target.ownerID
       ) != nil
@@ -4580,6 +4647,7 @@ class ChatProvider: ObservableObject {
         systemPromptSuffix: systemPromptSuffix,
         notificationContext: notificationContext,
         screenPayload: screenPayload,
+        includePromptCitations: turnOwner != .floatingVoice,
         requestedModelProfile: model,
         pinnedSession: pinnedSession
       )
@@ -4734,6 +4802,23 @@ class ChatProvider: ObservableObject {
             )
           }
           self.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+          let durableReferences = ChatCitationProvenanceRegistry.references(
+            fromAnnotatedToolOutput: output)
+          if !durableReferences.isEmpty,
+            let messageIndex = self.messages.firstIndex(where: { $0.id == aiMessageId })
+          {
+            let existing = Set(
+              self.messages[messageIndex].contentBlocks.compactMap { block -> Int? in
+                guard case .citation(_, let reference) = block else { return nil }
+                return reference.ordinal
+              })
+            self.messages[messageIndex].contentBlocks.append(
+              contentsOf: durableReferences.filter { !existing.contains($0.ordinal) }.map { reference in
+                .citation(
+                  id: "citation-tool-\(reference.ordinal)-\(UUID().uuidString)",
+                  reference: reference)
+              })
+          }
           responseMetrics.recordToolResult(name: name, result: output)
           let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
           self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
@@ -4883,6 +4968,9 @@ class ChatProvider: ObservableObject {
         )
       else {
         // A stopped/timed-out bridge may still deliver a late success.
+        _ = await ChatCitationProvenanceRegistry.shared.consume(
+          runID: queryResult.runId,
+          attemptID: queryResult.attemptId)
         // Never let it resurrect the old bubble, overwrite a newer
         // turn's bridge ownership, or persist a response the user did
         // not accept. Remove only this turn's buffered segments.
@@ -4973,6 +5061,11 @@ class ChatProvider: ObservableObject {
 
       // Determine the final text to display and save
       let messageText: String
+      let toolCitationSnapshot = await ChatCitationProvenanceRegistry.shared.consumeSnapshot(
+        runID: queryResult.runId,
+        attemptID: queryResult.attemptId)
+      let terminalCitationReferences =
+        kernelContext.promptCitationReferences + toolCitationSnapshot.references
       let metricsSnapshot = responseMetrics.snapshot()
       if screenContextEligibleForTurn, !metricsSnapshot.screenContext.screenToolRequested {
         ScreenContextToolTelemetry.trackInvariant(
@@ -4983,9 +5076,40 @@ class ChatProvider: ObservableObject {
       }
       if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
         // Message still in memory — update it in-place
-        messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
+        let durableToolReferences = messages[index].contentBlocks.compactMap {
+          block -> ChatCitationReference? in
+          guard case .citation(_, let reference) = block else { return nil }
+          return reference
+        }
+        let allTerminalCitationReferences =
+          terminalCitationReferences
+          + durableToolReferences.filter { reference in
+            !terminalCitationReferences.contains(where: {
+              $0.ordinal == reference.ordinal && $0.kind == reference.kind
+                && $0.sourceID == reference.sourceID
+            })
+          }
+        let resolvedMessageText = ChatCitationMarkup.appendingSelectedSources(
+          to: messages[index].text.isEmpty ? queryResult.text : messages[index].text,
+          selectedReferences: toolCitationSnapshot.selectedReferences,
+          requestedSources: ChatCitationMarkup.explicitlyRequestsSources(effectivePrompt),
+          retrievedReferences: allTerminalCitationReferences)
+        messageText = resolvedMessageText
         messages[index].text = messageText
         messages[index].isStreaming = false
+        let citedOrdinals = Set(ChatCitationMarkup.ordinals(in: messageText))
+        let citedReferences = allTerminalCitationReferences.filter {
+          citedOrdinals.contains($0.ordinal)
+        }
+        let alreadyPersistedCitationOrdinals = Set(durableToolReferences.map(\.ordinal))
+        messages[index].contentBlocks.append(
+          contentsOf: citedReferences.filter {
+            !alreadyPersistedCitationOrdinals.contains($0.ordinal)
+          }.map { reference in
+            .citation(
+              id: "citation-\(reference.ordinal)-\(UUID().uuidString)",
+              reference: reference)
+          })
         // Merge the parent agent's own artifacts with any produced by
         // sub-agents that completed since the last coordinator check, so
         // a finished sub-agent's file surfaces as a card on this response.
@@ -5053,6 +5177,7 @@ class ChatProvider: ObservableObject {
         runtimeRunId: queryResult.runId,
         runtimeAttemptId: queryResult.attemptId
       )
+      let acceptedMessageSnapshot = messages.first(where: { $0.id == aiMessageId })
       _ = await ChatVisibleTurnCompletion.finish(
         lifecycle: turnLifecycle,
         telemetryAttempt: telemetryAttempt,
@@ -5065,7 +5190,9 @@ class ChatProvider: ObservableObject {
           return await self.finishJournalTarget(
             generation: sendGen,
             queryResult: queryResult,
-            disposition: .accept
+            disposition: .accept,
+            acceptedMessage: acceptedMessageSnapshot,
+            acceptedContent: messageText
           )
         }
       )
@@ -5135,6 +5262,11 @@ class ChatProvider: ObservableObject {
     } catch {
       if activeBridgeSendGeneration == sendGen {
         activeBridgeSendGeneration = nil
+      }
+      if let correlatedTerminalResult {
+        _ = await ChatCitationProvenanceRegistry.shared.consume(
+          runID: correlatedTerminalResult.runId,
+          attemptID: correlatedTerminalResult.attemptId)
       }
       // QueryTracer: error path — close spans and write the (partial) trace
       // so failed/timed-out queries still show up in benchmarks.
