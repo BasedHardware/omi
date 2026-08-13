@@ -506,14 +506,6 @@ class _StreamRecordingFirestore:
         return SimpleNamespace(document=lambda _uid: _StreamRecordingUserRef(self._recorder))
 
 
-def _required_index_signature(collection_group, filters, orders):
-    """The composite index Firestore requires for one equality-plus-ordering chain."""
-    fields = [(field_path, 'ASCENDING') for field_path, operator in filters if operator == '==']
-    fields.extend(orders)
-    fields.append(('__name__', orders[-1][1]))
-    return (collection_group, 'COLLECTION', tuple(fields))
-
-
 def _declared_index_signatures():
     return {
         (
@@ -547,7 +539,7 @@ def test_due_date_filtered_action_item_reads_have_a_declared_composite_index(mon
     assert compound, 'due-date filtered reads no longer build an equality + ordering chain'
     declared = _declared_index_signatures()
     for filters, orders in compound:
-        assert _required_index_signature('action_items', filters, orders) in declared
+        assert _equality_plus_order_signature('action_items', filters, orders) in declared
 
 
 def test_query_source_paths_are_posix_canonical_on_every_host_platform():
