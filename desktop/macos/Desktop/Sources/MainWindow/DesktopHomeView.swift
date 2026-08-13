@@ -1312,7 +1312,8 @@ struct DesktopHomeView: View {
             ? SidebarNavItem.dashboard.rawValue
             : previousIndexBeforeSettings
         }
-      }
+      },
+      appState: appState
     )
   }
 
