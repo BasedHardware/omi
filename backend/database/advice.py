@@ -103,18 +103,19 @@ def delete_advice(uid: str, advice_id: str) -> bool:
 
 def mark_all_advice_read(uid: str) -> int:
     col = _user_col(uid, 'advice')
-    query = col.where(filter=FieldFilter('is_read', '==', False))
-    batch = db.batch()
     total = 0
-    batch_count = 0
-    for doc in query.stream():
-        batch.update(col.document(doc.id), {'is_read': True, 'updated_at': datetime.now(timezone.utc)})
-        total += 1
-        batch_count += 1
-        if batch_count >= BATCH_LIMIT:
-            batch.commit()
-            batch = db.batch()
-            batch_count = 0
-    if batch_count > 0:
+    # Page the unread set instead of materializing the whole backlog before the first commit
+    # (unbounded memory for a large account). Each committed page flips its docs to is_read=True, so
+    # the same bounded is_read==False query self-drains: no cursor needed, the mutation advances it.
+    while True:
+        page = list(col.where(filter=FieldFilter('is_read', '==', False)).limit(BATCH_LIMIT).stream())
+        if not page:
+            break
+        batch = db.batch()
+        for doc in page:
+            batch.update(col.document(doc.id), {'is_read': True, 'updated_at': datetime.now(timezone.utc)})
         batch.commit()
+        total += len(page)
+        if len(page) < BATCH_LIMIT:
+            break
     return total

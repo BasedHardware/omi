@@ -2,8 +2,9 @@
 first commit (unbounded memory for a large backlog).
 
 Each committed page flips its docs to is_read=True, leaving the is_read==False set, so re-running the
-same bounded query drains the backlog a page at a time. Exercised through the real _store() seam via
-FakeDocumentStore.
+same bounded query drains the backlog a page at a time. Exercised through the ADR-0044 facade seam
+(install_fake_db_client, store=): db...limit().stream() lands on store.query(), so a recording fake
+counts the pages.
 """
 
 import os
@@ -14,7 +15,7 @@ os.environ.setdefault(
 )
 
 import database.advice as advice  # noqa: E402
-from tests.store_fakes import FakeDocumentStore  # noqa: E402
+from tests.store_fakes import FakeDocumentStore, install_fake_db_client  # noqa: E402
 
 _UID = 'u'
 
@@ -38,7 +39,7 @@ def test_marks_all_unread_and_pages_in_bounded_chunks(monkeypatch):
     monkeypatch.setattr(advice, 'BATCH_LIMIT', 2)  # force multiple pages over 5 docs
     store = _RecordingStore()
     _seed_unread(store, 5)
-    monkeypatch.setattr(advice, '_store', lambda: store)
+    install_fake_db_client(monkeypatch, store=store)
 
     total = advice.mark_all_advice_read(_UID)
 
@@ -50,7 +51,7 @@ def test_marks_all_unread_and_pages_in_bounded_chunks(monkeypatch):
 
 def test_empty_unread_set_makes_a_single_bounded_query(monkeypatch):
     store = _RecordingStore()
-    monkeypatch.setattr(advice, '_store', lambda: store)
+    install_fake_db_client(monkeypatch, store=store)
 
     assert advice.mark_all_advice_read(_UID) == 0
     assert store.query_calls == 1
@@ -60,7 +61,7 @@ def test_exact_multiple_of_page_size_terminates(monkeypatch):
     monkeypatch.setattr(advice, 'BATCH_LIMIT', 2)
     store = _RecordingStore()
     _seed_unread(store, 4)  # exactly two full pages, then an empty probe
-    monkeypatch.setattr(advice, '_store', lambda: store)
+    install_fake_db_client(monkeypatch, store=store)
 
     assert advice.mark_all_advice_read(_UID) == 4
     # pages of 2, 2 (both full), then one empty query returns [] and stops: 3 queries.
