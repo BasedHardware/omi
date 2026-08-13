@@ -151,6 +151,8 @@ def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
     result = envelope.get("result", envelope)
     detail = result.get("detail", result)
     decision = detail.get("decision")
+    if decision not in {"suggest", "insight", "task_candidate", "resurface", "silence"}:
+        raise RuntimeError(f"{case['id']}: probe returned invalid decision")
     polarity = "silence" if decision == "silence" else "notify"
     expected = case["expectedAction"]
     response_text = "\n".join(

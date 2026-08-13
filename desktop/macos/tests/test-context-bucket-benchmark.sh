@@ -85,6 +85,16 @@ assert leaking["forbidden_output_matched"] is True
 assert leaking["forbidden_terms_matched"] == ["synthetic MESSAGE"]
 assert leaking["matched"] is False
 
+envelope["result"]["detail"]["decision"] = "unexpected"
+with patch.object(benchmark.request, "urlopen", return_value=Response()):
+    try:
+        benchmark.invoke_case(case, 47910)
+    except RuntimeError as exc:
+        assert str(exc) == "synthetic-text-output: probe returned invalid decision"
+    else:
+        raise AssertionError("unknown director decisions must fail closed")
+envelope["result"]["detail"]["decision"] = "suggest"
+
 with patch.object(
     benchmark.request,
     "urlopen",
