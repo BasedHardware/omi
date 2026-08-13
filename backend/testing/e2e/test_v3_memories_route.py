@@ -37,7 +37,7 @@ def test_cursor_cannot_select_the_retired_cutover_projection(client, auth_header
     response = client.get("/v3/memories?cursor=retired-token", headers=auth_headers)
 
     assert response.status_code == 400
-    assert response.json() == {"detail": "Memory cursor pagination is unavailable; use limit and offset"}
+    assert response.json() == {"detail": "invalid_or_stale_cursor:malformed_cursor"}
 
 
 def test_device_scoped_request_without_identity_fails_closed(client, auth_headers):

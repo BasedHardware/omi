@@ -1639,6 +1639,10 @@ class MemoryService:
         bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_PAGE_SIZE))
         device_scope = device_scope_request.device_scope if device_scope_request is not None else "all"
         client_device_id = device_scope_request.client_device_id if device_scope_request is not None else None
+        if cursor:
+            cursor_parts = cursor.split('.')
+            if len(cursor_parts) != 3 or cursor_parts[0] != 'uml':
+                raise HTTPException(status_code=400, detail="invalid_or_stale_cursor:malformed_cursor")
         try:
             secret = cursor_secret()
         except UniversalListCursorError as exc:
