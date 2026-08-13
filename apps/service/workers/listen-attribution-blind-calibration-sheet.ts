@@ -675,7 +675,61 @@ export const expandListenAttributionBlindLabels = (
     hidden_key_digest: hidden.hidden_key_digest,
     labels,
   });
-  return Object.freeze({ ...core, labels_digest: sha256CanonicalContent(core) });
+  return parseListenAttributionBlindLabels(Object.freeze({
+    ...core, labels_digest: sha256CanonicalContent(core),
+  }));
+};
+
+export const parseListenAttributionBlindLabels = (
+  value: unknown,
+): Readonly<ListenAttributionBlindLabels> => {
+  const root = exactRecord(value, [
+    "version", "grading_protocol_version", "grader_session_ref", "cohort_digest",
+    "blind_sheet_digest", "hidden_key_digest", "labels", "labels_digest",
+  ], "invalid_labels");
+  if (root["version"] !== LABELS_VERSION || root["grading_protocol_version"] !== PROTOCOL_VERSION) {
+    fail("invalid_labels");
+  }
+  const labels = Object.freeze(exactArray(root["labels"], 1, MAX_UNITS, "invalid_labels")
+    .map((entry) => {
+      const row = exactRecord(entry, [
+        "row_ref", "input_ref", "observation_ref", "result_refs", "label",
+      ], "invalid_label");
+      if (row["label"] !== "owner" && row["label"] !== "non_owner" && row["label"] !== "unclear") {
+        fail("invalid_label");
+      }
+      const resultRefs = Object.freeze(exactArray(row["result_refs"], 2, MAX_RESULTS, "invalid_label")
+        .map((resultRef) => ref(resultRef, RESULT_REF, "invalid_label")));
+      unique(resultRefs, "invalid_label");
+      if (resultRefs.some((resultRef, index) => index > 0 && compare(resultRefs[index - 1]!, resultRef) >= 0)) {
+        fail("invalid_label");
+      }
+      return Object.freeze({
+        row_ref: ref(row["row_ref"], ROW_REF, "invalid_label"),
+        input_ref: ref(row["input_ref"], INPUT_REF, "invalid_label"),
+        observation_ref: ref(row["observation_ref"], OBSERVATION_REF, "invalid_label"),
+        result_refs: resultRefs,
+        label: row["label"] as ListenAttributionTruthLabel,
+      });
+    }));
+  unique(labels.map((label) => label.row_ref), "invalid_labels");
+  unique(labels.map((label) => label.input_ref), "invalid_labels");
+  unique(labels.flatMap((label) => label.result_refs), "invalid_labels");
+  if (labels.some((label, index) => index > 0 && compare(labels[index - 1]!.row_ref, label.row_ref) >= 0)) {
+    fail("invalid_labels");
+  }
+  const core = Object.freeze({
+    version: LABELS_VERSION,
+    grading_protocol_version: PROTOCOL_VERSION,
+    grader_session_ref: ref(root["grader_session_ref"], GRADER_REF, "invalid_labels"),
+    cohort_digest: ref(root["cohort_digest"], DIGEST, "invalid_labels"),
+    blind_sheet_digest: ref(root["blind_sheet_digest"], DIGEST, "invalid_labels"),
+    hidden_key_digest: ref(root["hidden_key_digest"], DIGEST, "invalid_labels"),
+    labels,
+  });
+  const labelsDigest = ref(root["labels_digest"], DIGEST, "invalid_labels");
+  if (labelsDigest !== sha256CanonicalContent(core)) fail("invalid_labels_digest");
+  return Object.freeze({ ...core, labels_digest: labelsDigest });
 };
 
 export const LISTEN_ATTRIBUTION_BLIND_SHEET_VERSION = SHEET_VERSION;

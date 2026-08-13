@@ -46,9 +46,13 @@ import { buildMemoryEvaluationExport } from "./memory-evaluation-export";
 import { buildMemoryEvaluationCohort } from "./memory-evaluation-statistics";
 import { defineMemoryOfflineReplayCoordinator } from "./memory-offline-replay-coordinator";
 import {
+  analyzeListenAttributionCalibration,
+} from "./listen-attribution-calibration-statistics";
+import {
   buildListenAttributionBlindArtifacts,
   expandListenAttributionBlindLabels,
   parseListenAttributionBlindKey,
+  parseListenAttributionBlindLabels,
   parseListenAttributionBlindSheet,
 } from "./listen-attribution-blind-calibration-sheet";
 
@@ -261,6 +265,7 @@ describe("Listen attribution blind calibration sheet", () => {
     expect(labels.labels).toHaveLength(2);
     expect(labels.labels.map((label) => label.label).sort()).toEqual(["owner", "unclear"]);
     expect(labels.labels.every((label) => label.result_refs.length === 4)).toBe(true);
+    expect(parseListenAttributionBlindLabels(JSON.parse(JSON.stringify(labels)))).toEqual(labels);
     expect(() => expandListenAttributionBlindLabels(
       artifacts.sheet, artifacts.hidden_key, `meg1_${hex("c")}`, grades.slice(1),
     )).toThrow("invalid_human_grades");
@@ -268,6 +273,86 @@ describe("Listen attribution blind calibration sheet", () => {
       artifacts.sheet, artifacts.hidden_key, `meg1_${hex("c")}`,
       [{ row_ref: grades[0]!.row_ref, label: "owner" }, { row_ref: grades[0]!.row_ref, label: "non_owner" }],
     )).toThrow();
+  });
+
+  test("computes exact paired Brier and reliability statistics without choosing a threshold", async () => {
+    const value = await fixture();
+    const artifacts = buildListenAttributionBlindArtifacts(
+      context(), value.cohort, value.results, value.contexts, new Uint8Array(32).fill(4),
+    );
+    const labels = expandListenAttributionBlindLabels(
+      artifacts.sheet, artifacts.hidden_key, `meg1_${hex("c")}`,
+      artifacts.sheet.rows.map((row, index) => ({
+        row_ref: row.row_ref, label: index === 0 ? "owner" as const : "non_owner" as const,
+      })),
+    );
+    const report = analyzeListenAttributionCalibration(
+      context(), value.cohort, artifacts.sheet, artifacts.hidden_key, labels, value.results,
+    );
+    const reordered = analyzeListenAttributionCalibration(
+      context(), value.cohort, artifacts.sheet, artifacts.hidden_key, labels, [...value.results].reverse(),
+    );
+    expect(report).toEqual(reordered);
+    expect(report.observation_count).toBe(2);
+    expect(report.by_repeat).toHaveLength(2);
+    for (const repeat of report.by_repeat) {
+      expect(repeat.statistics).toMatchObject({
+        labelled_observation_count: 2, owner_count: 1, non_owner_count: 1, unclear_count: 0,
+        candidate_minus_baseline_brier_numerator: "-160000000000",
+        paired_brier_denominator: "2000000000000",
+      });
+      expect(repeat.statistics.baseline).toMatchObject({
+        included_count: 2, brier_numerator: "680000000000", brier_denominator: "2000000000000",
+      });
+      expect(repeat.statistics.candidate).toMatchObject({
+        included_count: 2, brier_numerator: "520000000000", brier_denominator: "2000000000000",
+      });
+      expect(repeat.statistics.baseline.reliability_bins[8]).toMatchObject({
+        count: 2, predicted_owner_micros_sum: "1600000", owner_truth_count: 1,
+      });
+      expect(repeat.statistics.candidate.reliability_bins[6]).toMatchObject({
+        count: 2, predicted_owner_micros_sum: "1200000", owner_truth_count: 1,
+      });
+    }
+    expect(report.aggregate).toMatchObject({
+      labelled_observation_count: 4, owner_count: 2, non_owner_count: 2, unclear_count: 0,
+      candidate_minus_baseline_brier_numerator: "-320000000000",
+      paired_brier_denominator: "4000000000000",
+    });
+    const serialized = JSON.stringify(report);
+    for (const forbidden of [
+      "First transcript", "Second transcript", owner, "msr1_", "strategy:",
+      "threshold", "winner", "direct_expression", "qualified_expression",
+    ]) expect(serialized).not.toContain(forbidden);
+  });
+
+  test("reports unclear coverage without scoring it and rejects artifact drift", async () => {
+    const value = await fixture();
+    const artifacts = buildListenAttributionBlindArtifacts(
+      context(), value.cohort, value.results, value.contexts, new Uint8Array(32).fill(4),
+    );
+    const labels = expandListenAttributionBlindLabels(
+      artifacts.sheet, artifacts.hidden_key, `meg1_${hex("c")}`,
+      artifacts.sheet.rows.map((row, index) => ({
+        row_ref: row.row_ref, label: index === 0 ? "owner" as const : "unclear" as const,
+      })),
+    );
+    const report = analyzeListenAttributionCalibration(
+      context(), value.cohort, artifacts.sheet, artifacts.hidden_key, labels, value.results,
+    );
+    expect(report.aggregate).toMatchObject({
+      labelled_observation_count: 4, owner_count: 2, non_owner_count: 0, unclear_count: 2,
+    });
+    expect(report.aggregate.baseline.included_count).toBe(2);
+    expect(report.aggregate.candidate.included_count).toBe(2);
+    expect(() => analyzeListenAttributionCalibration(
+      context(), value.cohort, artifacts.sheet, artifacts.hidden_key,
+      { ...labels, hidden_key_digest: hex("f") }, value.results,
+    )).toThrow();
+    expect(() => analyzeListenAttributionCalibration(
+      context(), value.cohort, artifacts.sheet, artifacts.hidden_key, labels, value.results.slice(1),
+    )).toThrow("invalid_results");
+    expect(() => parseListenAttributionBlindLabels(new Proxy(labels, {}))).toThrow("invalid_labels");
   });
 
   test("fails closed on authority, result, context, digest, and hostile drift", async () => {
