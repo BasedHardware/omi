@@ -159,10 +159,14 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
     def test_closed_pr_bookkeeping_cannot_publish_the_required_release_check(self):
         """A merged close run must not supersede exact-SHA release evidence."""
         gate = self.jobs["desktop-swift"]
+        release_compile = self.jobs["desktop-swift-release-compile"]
 
         self.assertIn("github.event.action == 'closed'", gate)
         self.assertIn("Desktop Swift PR Closure", gate)
         self.assertIn("Desktop Swift Build & Tests", gate)
+        self.assertIn("github.event.action == 'closed'", release_compile)
+        self.assertIn("Desktop Swift PR Closure Release Compile", release_compile)
+        self.assertIn("Desktop Swift Release Compile", release_compile)
 
     def test_notification_boundary_runs_targeted_release_regression(self):
         job = self.jobs["desktop-swift-verify"]

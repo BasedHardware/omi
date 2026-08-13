@@ -274,7 +274,10 @@ jobs:
           fi
 
   desktop-swift-release-compile:
-    name: Desktop Swift Release Compile
+    # A merged pull_request.closed run is associated with the merge SHA. Keep
+    # its bookkeeping check distinct so it cannot supersede the successful
+    # push-run evidence consumed by desktop release planning.
+    name: ${{ github.event.action == 'closed' && 'Desktop Swift PR Closure Release Compile' || 'Desktop Swift Release Compile' }}
     needs: changes
     if: needs.changes.outputs.should_release_compile == 'true'
     runs-on: macos-15
