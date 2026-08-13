@@ -380,13 +380,20 @@ actor ContextProactivityEngine {
         return
       }
     } catch {
-      await terminalize(
-        deliveryID: deliveryID,
-        decisionType: "silence",
-        provenanceJSON: "{\"failure\":\"network_or_parse\"}",
-        state: "failed")
-      // Network and model failures are intentionally silent.
+      await recordDirectorFailure(deliveryID: deliveryID, error: error)
+      // Network and model failures stay user-silent; provenance carries the class.
     }
+  }
+
+  func recordDirectorFailure(deliveryID: String, error: Error) async {
+    let classification = ProactiveLaneFailureClassification.classify(error)
+    log(
+      "Context director \(ModelQoS.Proactivity.reasoningOperation) failed: \(classification.logDescription)")
+    await terminalize(
+      deliveryID: deliveryID,
+      decisionType: "silence",
+      provenanceJSON: classification.provenanceJSON,
+      state: "failed")
   }
 
   nonisolated static func presentationSurfaceAvailable(
