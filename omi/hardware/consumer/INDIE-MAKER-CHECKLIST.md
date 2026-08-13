@@ -29,7 +29,7 @@
 | Firmware Source | ✅ Complete (existing) | — |
 | License (MIT) | ✅ Complete (existing) | — |
 
-**Post-audit:** 14 factual errors found and fixed. 5 rounds of Codex review + fixes applied. Key corrections: diplexer IL values, T5848≠T5838 (PDM vs I2S), overcharge protection threshold direction, JLCPCB 4L impedance minimum, stencil aperture dimensions, J-Link licensing, nrfutil commands.
+**Post-audit:** 14+ factual errors found and fixed. 6 rounds of Codex review + fixes applied. Key corrections: diplexer IL values, T5848≠T5838 (PDM vs I2S), overcharge protection threshold direction, JLCPCB 4L impedance minimum, stencil aperture dimensions, J-Link licensing, nrfutil commands, RF window strategy documented (PC+ABS wrapper + laser engraving), DSBGA/BGA pitch values verified from KiCad (U13=0.35mm, U15=0.4mm, U6/U11=0.4mm — all were listed as 0.5mm), FPC bend radius corrected (0.37mm total vs 0.29mm laminate), battery 20Wh per-cell limit, HDI service requirement.
 
 ---
 
@@ -87,3 +87,11 @@ Each task went through multiple Codex review rounds until scoring ≥8/10. Key c
 | **Audit** | FPC PI core 50µm → 203.2µm (4× off), copper ½oz → 1oz, BTB pitch 0.25→0.35mm | Wrong FPC fabrication |
 | **Audit** | Blind via count 159→176, min drill 0.15→0.102mm, charger thickness 1.6→1.0mm | Wrong fab specs |
 | **Audit** | RF switch truth table verified from KiCad net assignments (RF1=BLE, RF2=WiFi) | Resolved ambiguity |
+| R6 | RF window strategy undocumented → added PC+ABS wrapper + laser engraving mechanism | Indie maker couldn't assess RF risk |
+| R6 | DSBGA pitch values all listed as 0.5mm → U13=0.35mm, U15=0.4mm, U6/U11=0.4mm (KiCad verified) | Wrong stencil aperture calculations |
+| R6 | FPC total thickness 0.29mm → 0.37mm (must include coverlay per IPC-2223C) | Wrong bend radius (1.8→2.2mm) |
+| R6 | Battery 100Wh limit → 20Wh per-cell limit for PI965 Section II | Wrong shipping classification |
+| R6 | JLCPCB standard service lacks blind/buried vias → must select HDI service | Ordering error |
+| R6 | FM8625H switching time <100ns → 2-20µs (budget SPDT, not premium) | Misleading coexistence timing |
+| R6 | nrfutil install via pip → standalone download (pip installs deprecated v6) | Wrong toolchain |
+| R6 | 3M 467 stiffener adhesive "thermally cured" → pressure-laminated (PSA) | Wrong process instruction |
