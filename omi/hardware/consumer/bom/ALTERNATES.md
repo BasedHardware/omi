@@ -158,7 +158,7 @@ These parts have no pin-compatible alternate. Plan inventory accordingly.
 
 | MPN | Manufacturer | Status | Notes |
 |-----|-------------|--------|-------|
-| W25Q16JWSSIQ (Winbond) | Winbond | ⚠️ **Unverified** | 16Mbit USON-8 (3×2mm). Verify LCSC availability and SFDP/QE compatibility. |
+| W25Q16JWUXIQ (Winbond) | Winbond | ⚠️ **Unverified** | 16Mbit USON-8 (3×2mm). **Use -UXIQ suffix (USON-8), NOT -SSIQ (SOIC-8 — wrong package).** Verify LCSC availability and SFDP/QE compatibility. |
 | GD25Q16CEIGR (GigaDevice) | GigaDevice | ⚠️ **Unverified** | 16Mbit USON-8. Verify package is 3×2mm (not 4×4mm WSON). |
 
 **If OOS:** Source Puya P25Q16SH from Puya Semi direct. LCSC has `-SSH` variant (SOIC-8) — **wrong package**, do not use.
