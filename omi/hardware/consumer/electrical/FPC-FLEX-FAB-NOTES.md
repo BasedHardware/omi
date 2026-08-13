@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Omi FPC (Flexible Printed Circuit) connects the mainboard to the charging contact ring. It is a simple 2-layer flex with minimal components.
+The Omi FPC (Flexible Printed Circuit) connects the mainboard to the charger board via the BTB connector. It carries **9 signals**: SWD debug (SWDCLK, SWDIO), UART (TXD, RXD), power (VIN+, VDD_3V3, bat+), reset (~RESET), and GND. It is a 2-layer flex with 2 components (~29.3 × 12.5mm per gerber).
 
 ## FPC Specifications
 
@@ -12,8 +12,8 @@ The Omi FPC (Flexible Printed Circuit) connects the mainboard to the charging co
 | **Material** | Polyimide (Kapton or equivalent) | Standard flex base material |
 | **Total thickness** | ~0.3mm (see stackup below) | Including coverlay; confirm with fab |
 | **Copper type** | **RA (rolled annealed) preferred** | RA copper has superior bend fatigue life vs. ED (electrodeposited) copper. ED is acceptable for non-bend zones only. |
-| **Copper weight** | ½ oz (18µm) or 1 oz (35µm) | ½ oz preferred for flexibility, especially through bend zone |
-| **Surface finish** | ENIG | Required for BTB connector soldering |
+| **Copper weight** | **1 oz (35µm)** | Per KiCad PCB design (both layers). ½ oz is NOT in the design files. |
+| **Surface finish** | Specify ENIG when ordering | KiCad design: unspecified. ENIG needed for BTB connector soldering. |
 | **Cover layer** | **Polyimide coverlay** (not solder mask) | Coverlay provides better flex life than liquid solder mask |
 | **Board version** | v1.1 | Per gerber files |
 
@@ -22,14 +22,13 @@ The Omi FPC (Flexible Printed Circuit) connects the mainboard to the charging co
 | Layer | Material | Thickness | Notes |
 |-------|----------|-----------|-------|
 | Top coverlay | PI 25µm + adhesive 25µm | ~50µm | Laser-cut openings for pads |
-| Top copper | Cu (RA preferred) | 18µm (½ oz) | Signal layer |
-| PI core | Polyimide | 50µm | Base dielectric |
-| Adhesive | Acrylic or epoxy | 25µm | Bonds copper to PI core |
-| Bottom copper | Cu (RA preferred) | 18µm (½ oz) | Ground/signal layer |
+| Top copper | Cu (RA preferred) | 35µm (1 oz) | Signal layer (per KiCad design) |
+| PI core | Polyimide | **203.2µm (8 mil)** | Base dielectric (per KiCad stackup) |
+| Bottom copper | Cu (RA preferred) | 35µm (1 oz) | Ground/signal layer (per KiCad design) |
 | Bottom coverlay | PI 25µm + adhesive 25µm | ~50µm | Laser-cut openings for pads |
-| **Total (flex only)** | | **~0.26mm** | Stiffener adds 0.2–0.3mm in stiffened zones |
+| **Total (flex only)** | | **~0.29mm** | Matches KiCad 0.2932mm. Stiffener adds 0.3mm in stiffened zones. |
 
-**Note:** Bend radius calculations apply to the **flex-only thickness (~0.26mm)**, not the stiffened zones. Stiffened areas must not overlap with or extend into the bend zone.
+**Note:** Bend radius calculations apply to the **flex-only thickness (~0.29mm)**, not the stiffened zones. Stiffened areas must not overlap with or extend into the bend zone.
 
 ## Components
 
@@ -38,7 +37,7 @@ Only 2 SMD components on the FPC:
 | Ref | MPN | Description | Side | Notes |
 |-----|-----|-------------|------|-------|
 | J1 (FPC) | Custom charging contact ring | D9.9×H1.0mm, sourced by drawing/SKU | Top | Custom part — no standard MPN. **Not the same as mainboard J1.** |
-| J3 (FPC) | ST-BTB-K3570606M | BTB male connector, 6+4P, 0.25mm pitch | Bottom | Mates with the BTB female connector on the mainboard (mainboard ref may differ — verify against mainboard schematic) |
+| J3 (FPC) | ST-BTB-K3570606M | BTB male connector, 6+4P, **0.35mm pitch** (per KiCad PCB footprint pad spacing) | Bottom | Mates with the BTB female connector on the mainboard (mainboard ref may differ — verify against mainboard schematic). BOM description says "0.25" but KiCad footprint `BTB6_0d35` confirms 0.35mm. |
 
 ## Stiffener
 
@@ -51,7 +50,7 @@ The FPC gerber zip includes a file `OMI-FPC-Enhance.gbr`. This is the **stiffene
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | **Material** | FR4 or polyimide | FR4 is cheaper; polyimide is more flex-compatible |
-| **Thickness** | 0.2–0.3mm | Typical for FPC stiffeners |
+| **Thickness** | **0.3mm** | Per KiCad annotation: "Total Thickness = 0.3mm" |
 | **Location** | **Defined by `OMI-FPC-Enhance.gbr`** — stiffener zones under BTB connector (J3) and charging ring (J1) areas | Fab must use the Enhance layer as stiffener outline; do not guess placement |
 | **Adhesive** | 3M 467 or equivalent PSA (pressure-sensitive adhesive) | Standard FPC stiffener bonding |
 | **Setback from bend zone** | ≥1.0mm from bend transition edge | Stiffener edge must NOT extend into or overlap the bend zone — abrupt stiffness transition causes stress concentration and cracking |
@@ -87,11 +86,11 @@ These are **minimum design targets** — confirm with your fab for the actual st
 
 | Condition | Minimum Bend Radius | Notes |
 |-----------|---------------------|-------|
-| **Static bend (installed)** | ≥6× flex thickness = **~1.6mm** | Bend held permanently in the assembled device. Based on ~0.26mm flex-only thickness. |
-| **Dynamic bend (repeated)** | ≥12× flex thickness = **~3.2mm** | If FPC is flexed during operation or service |
-| **Assembly bend** | ≥3× flex thickness = **~0.8mm** | One-time bend during device assembly. Aggressive — verify with fab for 1oz copper. |
+| **Static bend (installed)** | ≥6× flex thickness = **~1.8mm** | Bend held permanently in the assembled device. Based on ~0.29mm flex-only thickness. |
+| **Dynamic bend (repeated)** | ≥12× flex thickness = **~3.5mm** | If FPC is flexed during operation or service |
+| **Assembly bend** | ≥3× flex thickness = **~0.9mm** | One-time bend during device assembly. Aggressive — verify with fab for 1oz copper. |
 
-**⚠ These values assume ½ oz RA copper.** If the fab substitutes 1 oz or ED copper, increase bend radii by 50% or request fab confirmation.
+**⚠ These values are for 1 oz RA copper (per KiCad design).** If the fab substitutes ED copper, increase bend radii by 50% or request fab confirmation. 1 oz copper is stiffer than ½ oz — verify bend fatigue life with fab for the installed bend radius.
 
 ### Bend Location
 - The FPC must bend to route from the mainboard BTB connector to the charging contact ring
@@ -115,10 +114,10 @@ These are **minimum design targets** — confirm with your fab for the actual st
 | Base material | Polyimide (flex) |
 | Layers | 2 |
 | Board thickness | 0.3mm |
-| Copper weight | ½ oz (or 1 oz if ½ oz unavailable) |
+| Copper weight | **1 oz** (per KiCad design) |
 | Coverlay color | Yellow (standard polyimide) |
 | Surface finish | ENIG |
-| Stiffener | Yes — FR4, 0.2mm, per `Enhance` gerber layer |
+| Stiffener | Yes — FR4, 0.3mm, per `Enhance` gerber layer (KiCad annotation: "Total Thickness = 0.3mm, ±0.03mm") |
 | Min trace/space | Standard (4/4 mil or better) |
 | Via covering | Covered with coverlay |
 

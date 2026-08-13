@@ -29,7 +29,7 @@ The Omi mainboard uses advanced packages that **require professional PCBA assemb
 | Fiducial openings | Yes — match PCB fiducials | Required for stencil-to-PCB alignment. |
 | **SPI validation** | **Required** | Solder paste inspection for height/volume/alignment acceptance before placement. |
 
-> **Why 0.075mm?** At 0.35mm pitch, the WLCSP pad aperture is approximately 200–230µm. On a 100µm foil, the area ratio is ~0.50–0.58 (below IPC ≥0.66 guideline for reliable paste release). A 75µm foil brings the area ratio to ~0.67–0.77. If the CM has demonstrated repeatable yield at 100µm with electropolish and SPI, that is acceptable — otherwise specify 75µm.
+> **Why 0.075mm?** At 0.35mm pitch, the WLCSP pad apertures are **160µm (U1) and 200µm (U2)** per KiCad PCB. On a 100µm foil, the area ratio for U1 is 0.160/(4×0.100) = **0.40** (far below IPC ≥0.66 guideline). A 75µm foil improves this to 0.160/(4×0.075) = **0.53** — still marginal, requiring electropolish + nano-coat. For U2 at 200µm: 75µm foil gives 0.200/(4×0.075) = **0.67** (passing). The U1 pad size makes 75µm foil and electropolish essential, not optional.
 
 > **Placement tolerance:** WLCSP at 0.35mm pitch requires ±25µm placement accuracy. Confirm CM uses vision alignment with local fiducials and low placement force (~1N) for WLCSP packages.
 
@@ -57,7 +57,7 @@ FPC flex board has only 2 SMD connectors (J1, J3). Stencil may not be needed if 
 | Flux | No-clean, halogen-free |
 | Shelf life | Check expiration; paste must be refrigerated (2–10°C) |
 
-> **Why Type 5 preferred?** At 0.35mm pitch with ~200µm apertures, the 5-ball rule (aperture ≥ 5 × largest particle) gives: 200µm / 5 = 40µm max particle. Type 4 max particle is 38µm (marginal). Type 5 max particle is 25µm (comfortable margin). If any aperture drops below ~190µm, Type 4 becomes unreliable.
+> **Why Type 5 preferred?** The 5-ball rule (aperture ≥ 5 × largest particle) at U1's 160µm pad gives: 160µm / 5 = **32µm max particle**. Type 4 max particle is 38µm (**fails**). Type 5 max particle is 25µm (**passes**). U2's 200µm pads: 200/5 = 40µm — Type 4 marginal (38µm), Type 5 comfortable. **Type 5 paste is required for U1, not merely preferred.**
 
 ## Reflow Profile
 
@@ -84,19 +84,27 @@ FPC flex board has only 2 SMD connectors (J1, J3). Stencil may not be needed if 
    - Check CSNP4GCR01-DPW (U7, NAND flash, LGA-8) — likely MSL-3; verify and handle accordingly
    - Check all other DSBGA parts (U4, U6, U11, U13, U15) for their MSL ratings
 
-3. **Dual-side assembly required** — Mainboard has 24 bottom-side components. Assembly sequence:
+3. **Dual-side assembly required** — Mainboard has 24 bottom-side components **including 5 ICs**. Assembly sequence:
    - **Pass 1:** Print paste on bottom, place bottom components, reflow
    - **Pass 2:** Print paste on top, place top components, reflow
    - Bottom components are held by surface tension during second reflow
-   - **Bottom-side retention check:** All 24 bottom components are small passives and SOT/SOD packages (see list below). No heavy connectors or tall parts on bottom. Component weight is well within surface tension holding force.
+   - **⚠ Bottom-side includes U7 (NAND flash, LGA-8, 8×6mm) and U5 (IMU, LGA-14, 2.5×3mm)** — verify these are within the CM's bottom-side reflow capability. Large bottom-side LGA packages may need adhesive or process validation.
+   - **U14 (GLF73910, WLCSP-4, 0.97×0.97mm)** is on the bottom — requires X-ray inspection on this side too.
    - Verify all bottom-side parts are rated for minimum 2× reflow cycles per their datasheets
 
-4. **Bottom-side components (24 parts):**
+4. **Bottom-side components (24 parts, verified from KiCad PCB):**
    ```
-   C14, C34, C36, C42, C48, C52, D3, D4, Q7, R4, R5, R6, R9, R10, R11,
-   R24, R25, R26, R27, R34, R35, R36, R47, R48
+   Passives (0201):  C14, C34, C36, C42, C48, C52, R4, R5, R6, R9, R10, R11, R24, R26, R27
+   NTC (0402):       R28
+   Diodes (SOD-523): D3, D4
+   MOSFET (SOT-523): Q7
+   ICs:              U5  (LSM6DS3TR-C, IMU, LGA-14, 2.5×3mm)
+                     U7  (CSNP4GCR01-DPW, NAND flash, LGA-8, 8×6mm)
+                     U9  (74LVC1G00, logic, SC70-5)
+                     U12 (P25Q16SH, SPI flash, USON-8, 3×2mm)
+                     U14 (GLF73910-BD01, battery protection, WLCSP-4, 0.97×0.97mm)
    ```
-   All are 0201 passives, SOD-523 diodes, or SOT-523 MOSFET — no adhesive needed.
+   **⚠ This is NOT a trivial bottom side.** The 5 ICs (especially U7 at 8×6mm) add assembly complexity. Discuss bottom-side capability with CM before ordering.
 
 5. **PCB land pattern:** WLCSP pads should be NSMD (Non-Solder Mask Defined) for best alignment. Verify solder mask registration is adequate. If via-in-pad is used under WLCSP, vias must be filled and capped (plated over) to prevent solder wicking.
 

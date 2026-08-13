@@ -16,7 +16,7 @@
 | **Wire gauge** | 32 AWG | 30–34 AWG acceptable |
 | **Connector** | **Bare tinned wires (no connector)** | Soldered directly to PCB pads |
 | **Protection circuit** | Built-in (over-charge, over-discharge, short circuit) | Required — BQ25101 handles charging only, not cell protection |
-| **Charging IC** | BQ25101YFPR (on mainboard) | Max charge rate ~100mA |
+| **Charging IC** | BQ25101YFPR (on mainboard) | ISET = R8 = 1KΩ → max charge rate ~250mA (BQ25101 max) |
 | **Max charge voltage** | 4.2V | Set by BQ25101 |
 | **Discharge cutoff** | 2.75V (typical for protected cells) | GLF73910-BD01 provides additional board-level protection |
 
@@ -94,7 +94,7 @@ Any LiPo cell meeting these criteria will work:
 | **Max pulse discharge** | ≥500mA for 100ms | Boot-up inrush, WiFi TX bursts at max power with concurrent BLE |
 | **Internal resistance** | ≤500mΩ | High IR causes voltage sag during TX bursts — may trigger brown-out reset |
 | **Protection board trip current** | ≥800mA | Must not trip during WiFi 5GHz TX peaks (260mA radio + system overhead) |
-| **Charging current** | ~100mA (set by BQ25101 ISET resistor) | 0.67C for 150mAh cell — cell must be rated for ≥100mA charge current |
+| **Charging current** | ~250mA (ISET = R8 = 1KΩ; BQ25101 max output) | 1.67C for 150mAh cell — cell must be rated for ≥250mA charge current |
 | **NTC thermistor** | Not required on battery | BQ25101 TS pin is configured on-board (R28, 10K NTC near cell) |
 
 **⚠ WiFi current is higher than typical BLE wearables.** Nordic's nRF7002 product spec lists 191mA (2.4GHz) and 260mA (5GHz) TX current before system overhead. Verify the cell's protection PCB does not trip during WiFi operation. If the cell's protection trips below 300mA, it is unsuitable.

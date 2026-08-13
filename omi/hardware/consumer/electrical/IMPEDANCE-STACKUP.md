@@ -86,11 +86,13 @@ When ordering PCBs from JLCPCB, select the closest standard stackup:
 
 | Feature | Value | Notes |
 |---------|-------|-------|
-| Minimum trace/space | 3/3 mil (75/75µm) | Required for WLCSP breakout |
-| Minimum via drill | 0.15mm (6 mil) | For via-in-pad under WLCSP |
+| Minimum trace/space | 3/3 mil (76.2/76.2µm) | Required for WLCSP breakout |
+| Minimum via drill | **0.102mm (4 mil)** — laser-drilled microvias | Blind vias L1–L2 and L3–L4 |
 | Via-in-pad | **Yes** — resin-filled + copper-capped (IPC-4761 Type VII) | Required under WLCSP footprints |
-| Blind vias (L1–L2, L3–L4) | **Yes** — 159 total; laser-drilled microvias | Required for WLCSP breakout on outer layers |
-| Buried vias (L2–L3) | **Yes** — 55 total; mechanically drilled | Inner-layer routing |
+| Blind vias L1–L2 | **159** (0.102mm drill, laser) | WLCSP breakout, outer-layer routing |
+| Blind vias L3–L4 | **17** (0.102mm drill, laser) | Bottom-side breakout |
+| Buried vias L2–L3 | **55** (0.152mm drill, mechanical) | Inner-layer routing |
+| Through-hole vias L1–L4 | **183** (0.152mm drill) | Signal and power vias |
 | Annular ring | ≥0.1mm | Standard |
 | Sequential lamination | **Required** | Blind + buried vias require at least 3 lamination cycles |
 
@@ -101,7 +103,7 @@ When ordering PCBs from JLCPCB, select the closest standard stackup:
 | Parameter | Value |
 |-----------|-------|
 | Layers | 2 |
-| Thickness | Standard (1.6mm or as specified) |
+| Thickness | ~1.0mm (KiCad design: 0.9mm core + copper + mask) |
 | Copper | 1 oz outer |
 | Material | FR4 |
 | Surface finish | HASL or ENIG |
@@ -114,8 +116,8 @@ When ordering PCBs from JLCPCB, select the closest standard stackup:
 | Layers | 2 |
 | Thickness | 0.3mm |
 | Material | Polyimide |
-| Copper | ½ oz (18µm) or 1 oz (35µm) |
-| Surface finish | ENIG |
+| Copper | 1 oz (35µm) both layers |
+| Surface finish | Specify ENIG when ordering (KiCad design: unspecified) |
 | Cover layer | Polyimide coverlay (not solder mask) |
 
 See `FPC-FLEX-FAB-NOTES.md` for flex-specific fabrication details.
