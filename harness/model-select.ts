@@ -2,6 +2,7 @@ import { CodexModel } from "../drivers/model/codex";
 import { GlmModel } from "../drivers/model/glm";
 import { DeterministicFakeModel, type ModelPort } from "../drivers/model/port";
 import { CachingModelPort, SqliteVerdictStore, verdictCachePath } from "../drivers/model/verdict-cache";
+import type { ModelTelemetrySink } from "../drivers/model/telemetry";
 import {
   offlineModelPipelineResourceDigest,
   withOfflineModelPipelineExclusivity,
@@ -12,6 +13,8 @@ export interface ModelSelection { model: ModelPort; live: boolean; }
 export interface ModelProfile {
   readonly model_id: string;
   readonly base_url?: string;
+  readonly provider_version: string;
+  readonly adapter_version: string;
   readonly api_key_env: readonly string[];
   readonly prompt_env_defaults?: Readonly<Record<string, string>>;
 }
@@ -19,12 +22,16 @@ export interface ModelProfile {
 export const MODEL_PROFILES: Readonly<Record<string, ModelProfile>> = Object.freeze({
   glm: Object.freeze({
     model_id: "glm-4.7",
+    provider_version: "openai-compatible-glm-v1",
+    adapter_version: "glm-openai-compatible-adapter-v1",
     api_key_env: Object.freeze(["GLM_API_KEY", "ZAI_API_KEY", "OMI_BENCH_OPENAI_API_KEY"]),
     prompt_env_defaults: Object.freeze({ OMI_BOUNDARY_VERSION: "v5" }),
   }),
   "deepseek-flash": Object.freeze({
     model_id: "deepseek-v4-flash",
     base_url: "https://opencode.ai/zen/go/v1",
+    provider_version: "opencode-go-openai-compatible-v1",
+    adapter_version: "openai-compatible-json-adapter-v1",
     api_key_env: Object.freeze(["OPENCODE_GO_API_KEY"]),
     prompt_env_defaults: Object.freeze({ OMI_BOUNDARY_VERSION: "v5" }),
   }),
@@ -64,7 +71,10 @@ export const modelProfileCacheNamespace = (options: readonly string[]): string =
 export const profileApiKey = (profile: ModelProfile): string | undefined =>
   profile.api_key_env.map((name) => process.env[name]).find((value) => !!value);
 
-export const modelForProfile = (name: string): GlmModel => {
+export const modelForProfile = (
+  name: string,
+  options: { readonly telemetrySink?: ModelTelemetrySink; readonly maxCompletionTokens?: number } = {},
+): GlmModel => {
   const profile = MODEL_PROFILES[name];
   if (!profile) {
     throw new Error(`unknown model profile: ${name} (known: ${Object.keys(MODEL_PROFILES).join(", ")})`);
@@ -78,6 +88,12 @@ export const modelForProfile = (name: string): GlmModel => {
     apiKey,
     ...(profile.base_url ? { baseUrl: profile.base_url } : {}),
     model: resolvedModelId(name, profile),
+    providerVersion: profile.provider_version,
+    adapterVersion: profile.adapter_version,
+    ...(options.telemetrySink ? { telemetrySink: options.telemetrySink } : {}),
+    ...(options.maxCompletionTokens === undefined ? {} : {
+      maxCompletionTokens: options.maxCompletionTokens,
+    }),
   });
 };
 

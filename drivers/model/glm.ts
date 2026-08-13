@@ -1,5 +1,6 @@
 import type { ReferentProfile } from "../../core/consolidate/identity";
 import type { PredicateAlignmentRequest } from "../../core/consolidate/relations";
+import type { AttributionCalibrationRequest } from "../../core/consolidate/attribution-calibration";
 import type { UnitBoundaryJudgment } from "../../core/extract/provisional";
 import type { MentionDetectionRequest, MentionDetectionResponse } from "../../core/resolve/mention-detection";
 import type { EntityProposal, EntityResolutionRequest } from "../../core/resolve/entities";
@@ -17,10 +18,11 @@ const identityVerifyStrategy = "identity-verification";
 const namingCheckStrategy = "identity-naming-check";
 const selfReferenceStrategy = "speaker-self-reference";
 const predicateStrategy = "predicate-alignment";
+const attributionCalibrationStrategy = "attribution-calibration";
 const composeStrategy = "citation-grounded-compose";
 const entailmentStrategy = "span-entailment";
 const renderStrategy = "retrieval-node-summary";
-type GlmStrategy = typeof entityStrategy | typeof mentionStrategy | typeof scopeStrategy | typeof boundaryStrategy | typeof groundedStrategy | typeof identityStrategy | typeof identityVerifyStrategy | typeof namingCheckStrategy | typeof selfReferenceStrategy | typeof predicateStrategy | typeof composeStrategy | typeof entailmentStrategy | typeof renderStrategy;
+type GlmStrategy = typeof entityStrategy | typeof mentionStrategy | typeof scopeStrategy | typeof boundaryStrategy | typeof groundedStrategy | typeof identityStrategy | typeof identityVerifyStrategy | typeof namingCheckStrategy | typeof selfReferenceStrategy | typeof predicateStrategy | typeof attributionCalibrationStrategy | typeof composeStrategy | typeof entailmentStrategy | typeof renderStrategy;
 
 const GLM_ADAPTER_VERSION = "glm-openai-compatible-adapter-v1";
 const GLM_RETRY_VERSION = "glm-three-attempt-repair-v1";
@@ -49,7 +51,7 @@ const telemetryErrorCode = (error: unknown): ModelTelemetryErrorCode => {
 /** Dream-path strategies: fail faster than extract — hung identity was burning 5min×retries per chunk. */
 const DREAM_TIMEOUT_STRATEGIES: ReadonlySet<string> = new Set([
   identityStrategy, identityVerifyStrategy, namingCheckStrategy, selfReferenceStrategy,
-  predicateStrategy, boundaryStrategy, scopeStrategy,
+  predicateStrategy, attributionCalibrationStrategy, boundaryStrategy, scopeStrategy,
 ]);
 const timeoutMsFor = (strategy: string): number => {
   const dream = Number(process.env.OMI_GLM_DREAM_TIMEOUT_MS ?? 90_000);
@@ -556,6 +558,85 @@ const parsePredicateAlignment = (content: string, input: PredicateAlignmentReque
   }) };
 };
 
+const calibrationHypotheses = (input: AttributionCalibrationRequest) =>
+  labelled(input.hypotheses, "h");
+
+/** The calibrator sees qualitative support/counterevidence grouped by one
+ * independence coordinate. Durable ids, owner bytes, evidence ids, and target
+ * refs stay behind short labels; the response is translated back only after
+ * strict structural validation. */
+const promptForAttributionCalibration = (input: AttributionCalibrationRequest): string => {
+  const hypotheses = calibrationHypotheses(input);
+  const byId = new Map(hypotheses.view.map((entry) => [entry.item.hypothesis_id, entry.id]));
+  return JSON.stringify({
+    task: "Assign a conservative probability distribution over attribution hypotheses from qualitative support and counterevidence.",
+    belief_kind: input.belief_kind,
+    hypotheses: hypotheses.view.map((entry) => ({ id: entry.id, kind: entry.item.kind })),
+    evidence_groups: input.evidence_groups.map((group, index) => ({
+      id: `g${index + 1}`,
+      factors: group.factors.map((factor) => ({
+        hypothesis: byId.get(factor.hypothesis_id),
+        direction: factor.direction,
+      })),
+    })),
+    output_contract: {
+      probabilities: hypotheses.view.map((entry) => ({
+        hypothesis: entry.id,
+        probability_micros: "integer from 0 through 1000000",
+      })),
+    },
+    rules: [
+      "Return JSON only, with exactly the output_contract shape and no Markdown or prose.",
+      "Return every hypothesis exactly once, in the order shown.",
+      "probability_micros values are non-negative integers whose exact sum is 1000000.",
+      "A support factor favors its named hypothesis; a counter factor disfavors it.",
+      "Evidence groups are independent units. Factors inside one group are dependent observations and must not be counted as independent repetitions.",
+      "Opaque coordinates and list order carry no evidentiary weight. The factor contract supplies no hidden strength score.",
+      "Keep meaningful probability on unknown when the qualitative evidence does not resolve the attribution.",
+    ],
+  }, null, 2);
+};
+
+/** Exact character count of the first-attempt calibration prompt. */
+export const attributionCalibrationPromptCost = (input: AttributionCalibrationRequest): number =>
+  promptForAttributionCalibration(input).length;
+
+const parseAttributionCalibration = (
+  content: string,
+  input: AttributionCalibrationRequest,
+): unknown => {
+  const root = parseJsonObject(content, "attribution-calibration");
+  assertKeys(root, ["probabilities"], [], "attribution-calibration");
+  if (!Array.isArray(root.probabilities)
+    || root.probabilities.length !== input.hypotheses.length) {
+    throw new Error(`GLM attribution-calibration must return exactly ${input.hypotheses.length} probabilities`);
+  }
+  const hypotheses = calibrationHypotheses(input);
+  let total = 0;
+  const probabilities = root.probabilities.map((raw, index) => {
+    const item = object(raw, `attribution-calibration probability ${index}`);
+    assertKeys(item, ["hypothesis", "probability_micros"], [], "attribution-calibration probability");
+    const expected = hypotheses.view[index];
+    if (item.hypothesis !== expected?.id) {
+      throw new Error("GLM attribution-calibration hypotheses must match the offered order");
+    }
+    const probability = item.probability_micros;
+    if (!Number.isSafeInteger(probability)
+      || (probability as number) < 0 || (probability as number) > 1_000_000) {
+      throw new Error("GLM attribution-calibration probability_micros must be a bounded integer");
+    }
+    total += probability as number;
+    return {
+      hypothesis_id: expected.item.hypothesis_id,
+      probability_micros: probability as number,
+    };
+  });
+  if (total !== 1_000_000) {
+    throw new Error("GLM attribution-calibration probabilities must sum to 1000000");
+  }
+  return { probabilities };
+};
+
 /**
  * Short restatement of `groundedExtractionInvariantPrefix`'s security property for
  * the reader-facing edges: the excerpts here are the same dictated speech, and the
@@ -727,6 +808,7 @@ export const EDGES = {
   [namingCheckStrategy]: { versions: new Set(["dream-naming-check-v1"]), prompt: (input) => promptForNamingCheck(input as { label?: string | null; surfaces?: readonly string[] }), parse: (content) => parseNamingCheck(content) },
   [selfReferenceStrategy]: { versions: new Set(["dream-self-reference-v1"]), prompt: (input) => promptForSelfReference(input as { speaker?: string | null; phrases?: readonly string[] }), parse: (content, input) => parseSelfReference(content, input as { phrases?: readonly string[] }) },
   [predicateStrategy]: { versions: new Set(["dream-predicate-v1"]), prompt: (input) => promptForPredicateAlignment(input as PredicateAlignmentRequest), parse: (content, input) => parsePredicateAlignment(content, input as PredicateAlignmentRequest) },
+  [attributionCalibrationStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForAttributionCalibration(input as AttributionCalibrationRequest), parse: (content, input) => parseAttributionCalibration(content, input as AttributionCalibrationRequest) },
   [composeStrategy]: { versions: null, prompt: (input) => promptForCompose(input as ComposeInput), parse: (content, input) => parseComposeResponse(content, input as ComposeInput) },
   [entailmentStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForEntailment(input as EntailmentInput), parse: (content) => parseEntailmentResponse(content) },
   [renderStrategy]: { versions: null, prompt: (input) => promptForRender(input as RenderInput), parse: (content, input) => parseRenderResponse(content, input as RenderInput) },
@@ -739,26 +821,39 @@ export class GlmModel implements ModelPort {
   private readonly model: string;
   private readonly fetchFn: typeof fetch;
   private readonly telemetrySink: ModelTelemetrySink | undefined;
+  private readonly providerVersion: string;
+  private readonly adapterVersion: string;
+  private readonly maxCompletionTokens: number | undefined;
 
-  constructor(options: { baseUrl?: string; apiKey?: string; model?: string; fetch?: typeof fetch; telemetrySink?: ModelTelemetrySink } = {}) {
+  constructor(options: { baseUrl?: string; apiKey?: string; model?: string; fetch?: typeof fetch; telemetrySink?: ModelTelemetrySink; providerVersion?: string; adapterVersion?: string; maxCompletionTokens?: number } = {}) {
     this.baseUrl = (options.baseUrl ?? process.env.OMI_BENCH_OPENAI_BASE_URL ?? "https://api.z.ai/api/paas/v4").replace(/\/$/, "");
     this.apiKey = options.apiKey ?? process.env.GLM_API_KEY ?? process.env.ZAI_API_KEY ?? process.env.OMI_BENCH_OPENAI_API_KEY;
     this.model = options.model ?? process.env.OMI_BENCH_OPENAI_MODEL ?? "glm-4.7";
     this.fetchFn = options.fetch ?? fetch;
     this.telemetrySink = options.telemetrySink;
+    this.providerVersion = options.providerVersion ?? "openai-compatible-glm-v1";
+    this.adapterVersion = options.adapterVersion ?? GLM_ADAPTER_VERSION;
+    if (options.maxCompletionTokens !== undefined
+      && (!Number.isSafeInteger(options.maxCompletionTokens)
+        || options.maxCompletionTokens <= 0 || options.maxCompletionTokens > 16_384)) {
+      throw new TypeError("GLM invalid max completion tokens");
+    }
+    this.maxCompletionTokens = options.maxCompletionTokens;
   }
 
   private coordinatesFor(strategy: GlmStrategy, version?: string): ModelPromptCoordinates {
     const promptVersion = version ?? "caller-version-unspecified";
     return {
-      provider_version: "openai-compatible-glm-v1",
+      provider_version: this.providerVersion,
       model_version: this.model,
-      adapter_version: GLM_ADAPTER_VERSION,
+      adapter_version: this.adapterVersion,
       strategy_version: strategy,
       prompt_version: promptVersion,
       parser_schema_version: `${strategy}:${promptVersion}:parser-v1`,
       policy_version: "model-edge-policy-v1",
-      retry_version: GLM_RETRY_VERSION,
+      retry_version: strategy === attributionCalibrationStrategy
+        ? "attribution-single-attempt-v1"
+        : GLM_RETRY_VERSION,
       sampling_tool_version: GLM_SAMPLING_TOOL_VERSION,
       cache_format_version: QA_CACHE_FORMAT_VERSION,
     };
@@ -802,7 +897,9 @@ export class GlmModel implements ModelPort {
       throw new TypeError("GLM invalid abort signal");
     }
     if (leaseSignal?.aborted) throw leaseSignal.reason;
-    const attempts = 3;
+    // The frozen cross-model calibration pass must stop on its first malformed
+    // answer rather than retrying until one happens to fit the contract.
+    const attempts = strategy === attributionCalibrationStrategy ? 1 : 3;
     let lastError: unknown;
     for (let attempt = 1; ; attempt += 1) {
       const started = performance.now();
@@ -814,7 +911,7 @@ export class GlmModel implements ModelPort {
         const response = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
           method: "POST",
           headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
-          body: JSON.stringify({ model: this.model, temperature: 0, thinking: { type: "disabled" }, response_format: { type: "json_object" }, messages: [{ role: "user", content }] }),
+          body: JSON.stringify({ model: this.model, temperature: 0, thinking: { type: "disabled" }, response_format: { type: "json_object" }, ...(this.maxCompletionTokens === undefined ? {} : { max_tokens: this.maxCompletionTokens }), messages: [{ role: "user", content }] }),
           // Dream strategies use a shorter timeout (OMI_GLM_DREAM_TIMEOUT_MS, default 90s);
           // extract/compose keep OMI_GLM_TIMEOUT_MS (default 300s).
           signal: leaseSignal ? AbortSignal.any([leaseSignal, timeoutSignal]) : timeoutSignal,

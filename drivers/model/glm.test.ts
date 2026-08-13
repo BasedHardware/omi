@@ -7,7 +7,7 @@ import { SqliteLedger } from "../sqlite";
 import { DeterministicFakeModel } from "./port";
 import { commitSessionStmToLtmTransition } from "./stm-ltm-transition";
 import { boundaryVersion, buildUnitBoundaryRequest } from "./unit-boundary-edge";
-import { EDGES, GlmModel, predicateAlignmentPromptCost } from "./glm";
+import { attributionCalibrationPromptCost, EDGES, GlmModel, predicateAlignmentPromptCost } from "./glm";
 import type { ModelOperationalTelemetryEvent } from "./telemetry";
 
 const claim = (id = "p-1", surface = "Alice"): ProvisionalClaim => ({
@@ -75,6 +75,57 @@ test("GLM placement parsers reject malformed model output instead of repairing i
   await expect(modelFor(bad('{"bindings":{"subject":"null"},"scope_ref":"project:atlas","confidently_placed":false}')).invoke({ strategy: "scope-role-binding", version: "v2", input: scopeRequest })).resolves.toEqual({ bindings: { subject: null }, scope: { locality: "durable", scope_ref: "project:atlas" } });
   await expect(modelFor(bad('{not json}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: boundaryRequest })).rejects.toThrow("was not JSON");
   await expect(modelFor(bad('{"decision":"abstain","risk_markers":[""]}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: boundaryRequest })).rejects.toThrow("risk_markers must be an array of non-empty strings");
+});
+
+test("OpenAI-compatible attribution calibration is text-free, exact, bounded, and single-attempt", async () => {
+  const request = {
+    version: "attribution-calibration-request-v1" as const,
+    owner_scope_digest: "a".repeat(64), belief_kind: "source_identity" as const,
+    about_ref: `about1_${"b".repeat(64)}`, observation_ref: `obsref1_${"c".repeat(64)}`,
+    observation_content_digest: "d".repeat(64), graph_frontier: "e".repeat(64),
+    hypotheses: [
+      { hypothesis_id: `athyp1_${"1".repeat(64)}`, kind: "owner" as const, target_ref: null },
+      { hypothesis_id: `athyp1_${"2".repeat(64)}`, kind: "unknown" as const, target_ref: null },
+    ],
+    evidence_groups: [{ independence_group_ref: `atind1_${"3".repeat(64)}`, factors: [{
+      factor_ref: `atfactor1_${"4".repeat(64)}`, evidence_ref: `atevidence1_${"5".repeat(64)}`,
+      independence_group_ref: `atind1_${"3".repeat(64)}`,
+      hypothesis_id: `athyp1_${"1".repeat(64)}`, direction: "support" as const,
+      factor_contract_digest: "6".repeat(64),
+    }] }],
+    attribution_contract_digest: "7".repeat(64), aggregation_contract_digest: "8".repeat(64),
+    calibration_contract_digest: "9".repeat(64),
+  };
+  const valid = '{"probabilities":[{"hypothesis":"h1","probability_micros":700000},{"hypothesis":"h2","probability_micros":300000}]}';
+  const provider = fixtureProvider(valid);
+  const events: ModelOperationalTelemetryEvent[] = [];
+  const model = new GlmModel({
+    apiKey: "fixture", baseUrl: "https://fixture.invalid/v1", model: "fixture-deepseek",
+    fetch: provider.fetch, providerVersion: "fixture-provider-v1",
+    adapterVersion: "fixture-adapter-v1", maxCompletionTokens: 256,
+    telemetrySink: (event) => { events.push(event); },
+  });
+  await expect(model.invoke({ strategy: "attribution-calibration", version: "v1", input: request }))
+    .resolves.toEqual({ probabilities: [
+      { hypothesis_id: request.hypotheses[0]!.hypothesis_id, probability_micros: 700000 },
+      { hypothesis_id: request.hypotheses[1]!.hypothesis_id, probability_micros: 300000 },
+    ] });
+  const body = provider.calls[0] as { max_tokens: number; messages: { content: string }[] };
+  expect(body.max_tokens).toBe(256);
+  expect(body.messages[0]!.content.length).toBe(attributionCalibrationPromptCost(request));
+  for (const forbidden of [request.owner_scope_digest, request.about_ref, request.observation_ref,
+    request.hypotheses[0]!.hypothesis_id, request.evidence_groups[0]!.independence_group_ref]) {
+    expect(body.messages[0]!.content).not.toContain(forbidden);
+  }
+  expect(events[0]!.coordinates).toMatchObject({
+    provider_version: "fixture-provider-v1", adapter_version: "fixture-adapter-v1",
+  });
+
+  const malformed = fixtureProvider("{}", valid, valid);
+  await expect(new GlmModel({ apiKey: "fixture", fetch: malformed.fetch })
+    .invoke({ strategy: "attribution-calibration", version: "v1", input: request }))
+    .rejects.toThrow("missing required field: probabilities");
+  expect(malformed.calls).toHaveLength(1);
 });
 
 test("GLM retries a malformed boundary judgment and accepts a later valid response", async () => {
@@ -423,7 +474,7 @@ test("the edge registry is the single adding-an-edge surface and stays in sync w
   // `EDGES satisfies Record<GlmStrategy, GlmEdge>` enforces the union<->registry
   // sync at compile time; this pins the runtime shape and the invoke surface.
   expect(Object.keys(EDGES).sort()).toEqual([
-    "citation-grounded-compose", "grounded-extraction", "identity-adjudication", "identity-naming-check",
+    "attribution-calibration", "citation-grounded-compose", "grounded-extraction", "identity-adjudication", "identity-naming-check",
     "identity-verification", "local-handle-durable-entity", "mention-local-handle", "predicate-alignment",
     "retrieval-node-summary", "scope-role-binding", "span-entailment", "speaker-self-reference", "stm-ltm-unit-boundary",
   ]);

@@ -278,8 +278,14 @@ const provisionalFor = (input: CalibrateAttributionBeliefInput): AttributionBeli
 export const attributionCalibrationRequestDigest = (
   input: CalibrateAttributionBeliefInput,
 ): string => sha256CanonicalRedacted(
-  requestFor(provisionalFor(normalizeInput(input))) as unknown as CanonicalJson,
+  materializeAttributionCalibrationRequest(input) as unknown as CanonicalJson,
 );
+
+/** Strict, frozen, content-safe model input for offline structural evaluation
+ * and adapter-owned prompt budgeting. */
+export const materializeAttributionCalibrationRequest = (
+  input: CalibrateAttributionBeliefInput,
+): AttributionCalibrationRequest => requestFor(provisionalFor(normalizeInput(input)));
 
 export const calibrateAttributionBelief = async (
   input: CalibrateAttributionBeliefInput,

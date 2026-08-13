@@ -31,6 +31,8 @@ describe("offline model profile registry", () => {
     expect(MODEL_PROFILES["deepseek-flash"]).toEqual({
       model_id: "deepseek-v4-flash",
       base_url: "https://opencode.ai/zen/go/v1",
+      provider_version: "opencode-go-openai-compatible-v1",
+      adapter_version: "openai-compatible-json-adapter-v1",
       api_key_env: ["OPENCODE_GO_API_KEY"],
       prompt_env_defaults: { OMI_BOUNDARY_VERSION: "v5" },
     });
