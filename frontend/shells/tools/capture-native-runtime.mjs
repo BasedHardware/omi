@@ -149,7 +149,8 @@ function validateForegroundCustody(custody) {
 
 function validateGuardedPreparation(preparation, manifest, inputPath, inputBytes) {
   const command = preparation?.command;
-  if (!command || !Array.isArray(command.argv) || command.argv.length < 12 || command.exit_code !== 0 || command.signal !== undefined && command.signal !== null || command.cwd_root !== "core" || !["", "."].includes(command.cwd) || command.timeout_seconds !== 310 || !/^[0-9a-f]{64}$/.test(command.stdout_sha256 || "") || !/^[0-9a-f]{64}$/.test(command.stderr_sha256 || "")) throw new Error("runtime preparation command is not a successful guarded launcher");
+  const expectedCwd = manifest.shell === "macos" ? "." : "shells/ios/app";
+  if (!command || !Array.isArray(command.argv) || command.argv.length < 12 || command.exit_code !== 0 || command.signal !== undefined && command.signal !== null || command.cwd_root !== "core" || command.cwd !== expectedCwd || command.timeout_seconds !== 310 || !/^[0-9a-f]{64}$/.test(command.stdout_sha256 || "") || !/^[0-9a-f]{64}$/.test(command.stderr_sha256 || "")) throw new Error("runtime preparation command is not a successful guarded launcher");
   const outputDir = path.dirname(inputPath);
   const exactGuardPrefix = [
     process.execPath, foregroundGuard,
@@ -320,6 +321,7 @@ function runMac(manifest, outputDir) {
     probe: runtimeProbeScript(manifest),
     foregroundCustody: custody,
     commandTimeoutSeconds: 310,
+    commandCwd: ".",
   };
 }
 
@@ -436,7 +438,7 @@ function runIos(manifest, outputDir) {
   const markerFile = path.join(exportDir, attachments[0].exportedFileName);
   if (!existsSync(markerFile) || !statSync(markerFile).isFile()) throw new Error("iOS runtime host marker bytes are missing");
   const marker = validateHostMarker(readJson(markerFile, "iOS runtime marker"), manifest);
-  return { marker, started, finished, argv: [process.execPath, foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","), "--", "xcodebuild", ...args], stdout: result.stdout || "", stderr: result.stderr || "", commandTimeoutSeconds: 310, query, foregroundCustody: custody, buildCommands: { surfaces: [nodeBin, path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], surfaces_stdout_sha256: sha256(Buffer.from(bundle.stdout || "")), surfaces_stderr_sha256: sha256(Buffer.from(bundle.stderr || "")), flutter: [flutterBin, ...flutterArgs], flutter_stdout_sha256: sha256(Buffer.from(flutter.stdout || "")), flutter_stderr_sha256: sha256(Buffer.from(flutter.stderr || "")) } };
+  return { marker, started, finished, argv: [process.execPath, foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","), "--", "xcodebuild", ...args], stdout: result.stdout || "", stderr: result.stderr || "", commandTimeoutSeconds: 310, commandCwd: "shells/ios/app", query, foregroundCustody: custody, buildCommands: { surfaces: [nodeBin, path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], surfaces_stdout_sha256: sha256(Buffer.from(bundle.stdout || "")), surfaces_stderr_sha256: sha256(Buffer.from(bundle.stderr || "")), flutter: [flutterBin, ...flutterArgs], flutter_stdout_sha256: sha256(Buffer.from(flutter.stdout || "")), flutter_stderr_sha256: sha256(Buffer.from(flutter.stderr || "")) } };
 }
 
 function main() {
@@ -468,7 +470,7 @@ function main() {
   try { capture = manifest.shell === "macos" ? runMac(manifest, outputDir) : runIos(manifest, outputDir); } catch (error) { fail(error instanceof Error ? error.message : String(error)); return; }
   const artifact = { schema: "omi.polish.runtime/v1", ...metadata(manifest), events: capture.marker.events };
   const artifactPath = path.join(outputDir, "runtime.json"); const artifactBytes = Buffer.from(stable(artifact)); writeFileSync(artifactPath, artifactBytes, { mode: 0o600 });
-  const receipt = { schema: "omi.polish.runtime-preparation/v1", ...metadata(manifest), command: { argv: capture.argv, cwd: path.relative(coreRoot, coreRoot), cwd_root: "core", exit_code: 0, started_at: capture.started.toISOString(), finished_at: capture.finished.toISOString(), timeout_seconds: capture.commandTimeoutSeconds || 300, stdout_sha256: sha256(Buffer.from(capture.stdout)), stderr_sha256: sha256(Buffer.from(capture.stderr)) }, ...(capture.query ? { surface_query: capture.query, build_commands: capture.buildCommands } : {}), ...(capture.foregroundCustody ? { foreground_custody: capture.foregroundCustody } : {}), artifact: { root: "core", path: path.relative(coreRoot, artifactPath), sha256: sha256(artifactBytes) } };
+  const receipt = { schema: "omi.polish.runtime-preparation/v1", ...metadata(manifest), command: { argv: capture.argv, cwd: capture.commandCwd, cwd_root: "core", exit_code: 0, started_at: capture.started.toISOString(), finished_at: capture.finished.toISOString(), timeout_seconds: capture.commandTimeoutSeconds || 300, stdout_sha256: sha256(Buffer.from(capture.stdout)), stderr_sha256: sha256(Buffer.from(capture.stderr)) }, ...(capture.query ? { surface_query: capture.query, build_commands: capture.buildCommands } : {}), ...(capture.foregroundCustody ? { foreground_custody: capture.foregroundCustody } : {}), artifact: { root: "core", path: path.relative(coreRoot, artifactPath), sha256: sha256(artifactBytes) } };
   writeFileSync(path.join(outputDir, "runtime-preparation-receipt.json"), stable(receipt), { mode: 0o600 });
   console.log(`NATIVE_RUNTIME_EVIDENCE: path=${path.relative(coreRoot, artifactPath)} sha256=${sha256(artifactBytes)} run_id=${manifest.run_id}`);
 }

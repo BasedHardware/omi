@@ -48,7 +48,7 @@ function writePreparation(file, m, artifactPath, artifactBytes) {
     run_id: m.run_id, source_shas: m.source_shas, capture_class: m.capture_class, source_tier: m.source_tier,
     command: {
       argv: [process.execPath, guard, "--result", path.join(outputDir, "foreground-guard.json"), "--stdout", path.join(outputDir, m.shell === "macos" ? "foreground-guard.stdout.log" : "xcodebuild.stdout"), "--stderr", path.join(outputDir, m.shell === "macos" ? "foreground-guard.stderr.log" : "xcodebuild.stderr"), "--timeout", "300", "--forbid-bundle-ids", "com.apple.iphonesimulator,me.omi.proto.omiWebviewProto,me.omi.shell.core-tasks.prototype", "--", ...guarded],
-      cwd: ".", cwd_root: "core", exit_code: 0, timeout_seconds: 310,
+      cwd: m.shell === "macos" ? "." : "shells/ios/app", cwd_root: "core", exit_code: 0, timeout_seconds: 310,
       stdout_sha256: "0".repeat(64), stderr_sha256: "0".repeat(64),
     },
     foreground_custody: {
