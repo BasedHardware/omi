@@ -241,4 +241,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0039-gcs-deletion-receipts.sql",
     sha256: "7c9feb910acfff29b9e83d987647d9e8bf32de7cb692d4b48ba805f7411b475a",
   }),
+  Object.freeze({
+    version: 40,
+    name: "firestore-legacy-generation-deletion-receipts",
+    fileName: "0040-firestore-legacy-generation-deletion-receipts.sql",
+    sha256: "f906945c8af6bd76133cafe1c7ed4ecd413b49a3d61350cf6a59746723b18387",
+  }),
 ]);

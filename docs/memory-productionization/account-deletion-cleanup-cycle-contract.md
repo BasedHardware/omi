@@ -3,9 +3,9 @@
 Status: implemented service orchestration; persistence adapters remain inert.
 
 One cleanup cycle runs under a single adapter-owned deletion fence. It scans
-all twelve v3 surfaces, verifies the complete source inventory, applies the
+all thirteen v4 surfaces, verifies the complete source inventory, applies the
 deletion-dominance planner, disposes only surfaces the plan reports remaining,
-then scans and verifies all twelve surfaces again before returning `complete`.
+then scans and verifies all thirteen surfaces again before returning `complete`.
 Disposal follows closed dependency groups: externally derived/indexed and
 product surfaces precede durable work and authoritative memory; account access
 is last. `durable_work` and `staged_results` are one atomic group because their

@@ -331,6 +331,22 @@ describe("lifecycle dominance and terminal cleanup", () => {
     expect(plan.obligations).toContain("retain_terminal_control_tombstone");
   });
 
+  test("legacy-generation data is independent of the stranded-new-generation export flag", () => {
+    const plan = planDeletionDominance(terminalInput({
+      terminal_export_receipt: exportReceipt({ stranded_data_present: false }),
+      inventory: inventory({ legacy_generation_data: 2 }),
+    }));
+    expect(plan).toMatchObject({
+      mode: "deleted_cleanup_ready",
+      cleanup: {
+        state: "ready",
+        blockers: [],
+        remaining_total: 2,
+        remaining_surfaces: ["legacy_generation_data"],
+      },
+    });
+  });
+
   test("zero remaining surfaces is terminally complete but still retains the tombstone", () => {
     const plan = planDeletionDominance(terminalInput());
     expect(plan).toMatchObject({

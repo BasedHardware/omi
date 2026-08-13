@@ -101,6 +101,9 @@ exact `(account_id, deletion_epoch)` transition. It carries the terminal
 control revision, transition time, generation, stranded-data indicator,
 contract version, and content digest. A later adapter may mark cleanup eligible
 only after it proves that exact record is durable in the retention-locked sink.
+The stranded-data indicator refers only to post-cutover new-generation residue.
+`legacy_generation_data` has its own complete held-fence inventory receipt and
+is never inferred from, or suppressed by, that indicator.
 
 The planner enumerates closed cleanup surfaces instead of executing them:
 
@@ -112,6 +115,7 @@ The planner enumerates closed cleanup surfaces instead of executing them:
 - product projections and payloads;
 - search documents, vector embeddings, and rebuildable groups/indexes;
 - migration mappings and item-copy state, subject to the approved disposition;
+- the complete account-owned legacy product generation;
 - stranded new-generation product data; and
 - external objects recorded by a complete per-account inventory.
 

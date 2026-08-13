@@ -52,7 +52,8 @@ pinned Bun and Node runtimes.
 
 This is not the complete `AccountDeletionCleanupPort`. A later composite must acquire and
 revalidate the full eligibility fence and coordinate the remaining surfaces, including
-external objects, search/vector stores, and stranded legacy data. This unit does not
+external objects, search/vector stores, the legacy generation, and stranded
+new-generation data. This unit does not
 choose cleanup scheduling, credentials, approval, retention duration, recovery window,
 RPO/RTO, or operator policy. It is not wired to a route, scheduler, deployment, or product
 default, and production activation remains false.

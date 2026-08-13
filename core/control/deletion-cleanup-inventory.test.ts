@@ -65,8 +65,9 @@ describe("complete-source inventory", () => {
     expect(forward.report).toEqual(reversed.report);
     expect(forward.verified_inventory).toEqual(reversed.verified_inventory);
     expect(forward.report).toMatchObject({
-      supplied_source_count: 12,
-      required_source_count: 12,
+      version: "deletion-cleanup-inventory-v4",
+      supplied_source_count: 13,
+      required_source_count: 13,
       missing_surfaces: [],
       unfenced_surfaces: [],
       blockers: [],
@@ -112,7 +113,7 @@ describe("complete-source inventory", () => {
     };
     const result = verifyDeletionCleanupInventory(input(released));
     expect(result.report).toMatchObject({
-      supplied_source_count: 12,
+      supplied_source_count: 13,
       missing_surfaces: [],
       unfenced_surfaces: ["experiment_results", "external_objects"],
       blockers: ["source_fence_not_held"],
@@ -133,6 +134,14 @@ describe("receipt identity and closure", () => {
     expectErrorCode(() => verifyDeletionCleanupInventory(input(unknown)), "invalid_source_receipt");
     expectErrorCode(() => verifyDeletionCleanupInventory(input([...receipts(), receipts()[0]!])),
       "invalid_source_receipts");
+
+    const stale = receipts();
+    stale[0] = {
+      ...stale[0]!,
+      version: "deletion-inventory-source-receipt-v3" as never,
+      inventory_contract_version: "deletion-cleanup-inventory-v3" as never,
+    };
+    expectErrorCode(() => verifyDeletionCleanupInventory(input(stale)), "invalid_source_receipt");
 
     for (const changed of [
       { account_id: "acct-other" },

@@ -63,7 +63,7 @@ const ownership = Object.freeze([
   ] as const),
   Object.freeze([
     "durable_work", "staged_results", "experiment_results", "authoritative_memory",
-    "migration_state", "stranded_product_data",
+    "migration_state", "legacy_generation_data", "stranded_product_data",
   ] as const),
   Object.freeze(["account_access"] as const),
 ]);

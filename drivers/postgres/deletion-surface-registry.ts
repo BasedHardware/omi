@@ -1,7 +1,7 @@
 import type { DeletionCleanupSurface } from "../../core/control/deletion-cleanup-inventory";
 
 /**
- * Closed PostgreSQL table ownership for deletion inventory v3. Tables absent
+ * Closed PostgreSQL table ownership for deletion inventory v4. Tables absent
  * from this registry are a schema-review failure, not an implicit no-op.
  * External/legacy surfaces intentionally have no PostgreSQL tables here.
  */
@@ -74,6 +74,7 @@ export const POSTGRES_RETAINED_DELETION_SAFETY_TABLES = Object.freeze([
   "account_control_heads",
   "account_terminal_deletion_exports",
   "account_deletion_surface_receipts",
+  "account_firestore_legacy_generation_deletion_receipts",
   "account_gcs_deletion_receipts",
   "account_typesense_deletion_receipts",
   "account_pinecone_deletion_receipts",

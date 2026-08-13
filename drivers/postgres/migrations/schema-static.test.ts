@@ -48,6 +48,7 @@ const expectedTables = [
   "account_control_heads",
   "account_control_revisions",
   "account_deletion_surface_receipts",
+  "account_firestore_legacy_generation_deletion_receipts",
   "account_gcs_deletion_receipts",
   "account_pinecone_deletion_receipts",
   "account_typesense_deletion_receipts",
@@ -297,6 +298,33 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(sql).not.toContain("TO omi_platform_application;");
     expect(sql).not.toMatch(
       /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|TRUNCATE|ALL)[^;]*account_gcs_deletion_receipts/s,
+    );
+    expect(sql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
+  });
+
+  test("retains Firestore legacy-generation receipts without document coordinates or application access", () => {
+    const sql = migrationSql.find((migration) => migration.version === 40)?.sql;
+    expect(sql).toBeDefined();
+    expect(sql).toContain(
+      "CREATE TABLE omi_memory.account_firestore_legacy_generation_deletion_receipts",
+    );
+    expect(sql).toContain("('legacy_user_tree', 'users')");
+    expect(sql).not.toContain("('legacy_memories', 'memories')");
+    expect(sql).toContain("owner_mapping_digest text NOT NULL");
+    expect(sql).toContain("project_id text NOT NULL");
+    expect(sql).toContain("database_id text NOT NULL");
+    expect(sql).not.toMatch(/document_path|update_time|firebase_uid|content json|metadata json/);
+    expect(sql).toContain("SECURITY DEFINER\nSET search_path = pg_catalog, omi_memory");
+    expect(sql).toContain(
+      "GRANT EXECUTE ON FUNCTION omi_memory.load_firestore_legacy_generation_deletion_receipt(",
+    );
+    expect(sql).toContain(
+      "GRANT EXECUTE ON FUNCTION omi_memory.record_firestore_legacy_generation_deletion_receipt(",
+    );
+    expect(sql?.match(/TO omi_platform_cleanup;/g)).toHaveLength(2);
+    expect(sql).not.toContain("TO omi_platform_application;");
+    expect(sql).not.toMatch(
+      /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|TRUNCATE|ALL)[^;]*account_firestore_legacy_generation_deletion_receipts/s,
     );
     expect(sql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
   });

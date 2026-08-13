@@ -3,8 +3,8 @@ import { isProxy } from "node:util/types";
 
 import { isWellFormedAccountId } from "./account-control";
 
-export const DELETION_INVENTORY_CONTRACT_VERSION = "deletion-cleanup-inventory-v3" as const;
-export const DELETION_INVENTORY_SOURCE_RECEIPT_VERSION = "deletion-inventory-source-receipt-v3" as const;
+export const DELETION_INVENTORY_CONTRACT_VERSION = "deletion-cleanup-inventory-v4" as const;
+export const DELETION_INVENTORY_SOURCE_RECEIPT_VERSION = "deletion-inventory-source-receipt-v4" as const;
 
 export const DELETION_CLEANUP_SURFACES = Object.freeze([
   "durable_work",
@@ -17,6 +17,7 @@ export const DELETION_CLEANUP_SURFACES = Object.freeze([
   "vector_embeddings",
   "rebuildable_groups_indexes",
   "migration_state",
+  "legacy_generation_data",
   "stranded_product_data",
   "external_objects",
 ] as const);
@@ -38,6 +39,7 @@ export const DELETION_DISPOSAL_GROUPS = Object.freeze([
   Object.freeze(["experiment_results"]),
   Object.freeze(["authoritative_memory"]),
   Object.freeze(["migration_state"]),
+  Object.freeze(["legacy_generation_data"]),
   Object.freeze(["stranded_product_data"]),
   Object.freeze(["account_access"]),
 ] as const satisfies readonly (readonly DeletionCleanupSurface[])[]);
