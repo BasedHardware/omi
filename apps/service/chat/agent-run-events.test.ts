@@ -155,6 +155,16 @@ describe("versioned agent run events", () => {
 
   test("current-minus-one is accepted while unknown versions fail closed", () => {
     const first = runAgentRunScenario({ terminal: scenario.terminal });
+    expect(first.tierReport).toEqual({
+      schemaVersion: 1,
+      tier: "pure-contract",
+      adapter: "unreported",
+      deterministic: false,
+      providerEvidence: "none",
+      outcome: "passed",
+      claimsRealAgentSuccess: false,
+      fakeSuccessClaimsForbidden: true,
+    });
     const event = first.events[0]!;
     expect(event.schemaVersion).toBe(CURRENT_AGENT_RUN_EVENT_SCHEMA_VERSION);
     const previous = first.events.map((item) => parseAgentRunEvent({ ...item, schemaVersion: 0 }));
