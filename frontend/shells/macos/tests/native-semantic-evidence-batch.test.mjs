@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { foregroundApplicationFromResults, lockedGuiBlock } from "../probes/native-semantic-evidence-batch.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const core = resolve(root, "../..");
@@ -82,12 +83,16 @@ test("semantic batch emits exact AX coverage and immutable prepared inputs", () 
     const replayed = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--prepared-input-set", preparedPath, "--replay-proof"], { encoding: "utf8" });
     assert.equal(replayed.status, 0, `${replayed.stdout}${replayed.stderr}`); assert.deepEqual(readFileSync(join(out, "batch-result.json")), firstResultBytes); assert.deepEqual(readFileSync(join(out, "captures/macos/semantic-ax_snapshot.json")), firstEvidenceBytes); assert.deepEqual(readFileSync(join(out, "captures/macos/semantic-ax_snapshot.json.sidecar.json")), firstSidecarBytes);
     const runtime = join(out, "runtime/semantic-ax_snapshot");
-    assert.equal(readFileSync(join(runtime, "launch-count"), "utf8"), "1", "each replay launches the prepared app exactly once");
+    assert.equal(readFileSync(join(runtime, "launch-count"), "utf8"), "2", "one --replay-proof capture launches the prepared app twice");
     assert.notEqual(Number(readFileSync(join(runtime, "launcher-pid"), "utf8")), 999999, "the manifest PID is never used as a target");
     const launchEnv = JSON.parse(readFileSync(join(runtime, "launch-env.json"), "utf8"));
     assert.deepEqual(launchEnv, { semantic: "1", headed: null, query: "polish=1&qa=memories&state=ready&platform=desktop&theme=light&width=regular&accessibility=voiceover&locale=en-US", api: null, token: null });
     const sidecar = readFileSync(join(out, "captures/macos/semantic-ax_snapshot.json.sidecar.json"), "utf8");
     assert.doesNotMatch(sidecar, /"pid"\s*:/); assert.doesNotMatch(firstResultBytes.toString("utf8"), /"pid"\s*:/);
+    writeFileSync(join(out, "batch-result.json"), JSON.stringify({ ...result, replay_proof: false }));
+    const unproved = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--assemble-receipt", "--result-path", join(out, "batch-result.json")], { encoding: "utf8" });
+    assert.equal(unproved.status, 2); assert.match(unproved.stderr, /lacks a completed replay proof/);
+    writeFileSync(join(out, "batch-result.json"), firstResultBytes);
     const assembled = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--assemble-receipt", "--result-path", join(out, "batch-result.json")], { encoding: "utf8" });
     assert.equal(assembled.status, 0, assembled.stderr); const receiptPath = assembled.stdout.match(/file=(.+\.receipt\.json)/)?.[1]; assert.ok(receiptPath);
     const receiptBytes = readFileSync(join(core, receiptPath), "utf8"); const receipt = JSON.parse(receiptBytes); assert.match(receipt.batch_id, /^batch-v1-[0-9a-f]{64}$/); assert.equal(receipt.coverage[0].command_receipt.capture_class, "native_fixture"); assert.doesNotMatch(receiptBytes, /"pid"\s*:/);
@@ -95,6 +100,16 @@ test("semantic batch emits exact AX coverage and immutable prepared inputs", () 
     rmSync(scratch, { recursive: true, force: true });
     rmSync(join(root, ".build", `semantic-batch-test-${process.pid}`), { recursive: true, force: true });
   }
+});
+
+test("foreground classification fails closed and identifies a locked loginwindow", () => {
+  const front = { status: 0, stdout: "ASN:0x0-0x1001:\n" };
+  assert.deepEqual(foregroundApplicationFromResults(front, { status: 0, stdout: '"LSDisplayName"="loginwindow"\n' }), { identity: "ASN:0x0-0x1001:", name: "loginwindow" });
+  const blocked = lockedGuiBlock({ identity: "ASN:0x0-0x1001:", name: "loginwindow" }, { core: coreSha, platform: platformSha }, manifest().coordinates);
+  assert.equal(blocked.status, "blocked_gui_locked");
+  assert.equal(lockedGuiBlock({ identity: "ASN:0x0-0x1234:", name: "Codex" }, { core: coreSha, platform: platformSha }, manifest().coordinates), null);
+  assert.throws(() => foregroundApplicationFromResults({ status: 1, stdout: "" }, { status: 0, stdout: "" }), /identity is unavailable/);
+  assert.throws(() => foregroundApplicationFromResults(front, { status: 1, stdout: "" }), /metadata is unavailable/);
 });
 
 test("prepared semantic ranges are immutable and cannot be widened on replay", () => {
