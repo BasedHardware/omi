@@ -574,6 +574,13 @@ test("one manifest-scoped prepared app can capture a later coordinate determinis
     assert.equal(result.schema, "omi.polish.native-fixture-batch-result/v1");
     assert.equal(result.batch_id, undefined);
     assert.equal(Object.keys(result.members).length, 1);
+    assert.equal(result.foreground_custody.schema, "omi.polish.foreground-custody/v1");
+    assert.equal(result.foreground_custody.policy, nativeFocusPolicyForTest());
+    assert.equal(result.foreground_custody.target_interval_ms, 20);
+    assert.equal(result.foreground_custody.probe_timeout_ms, 250);
+    assert.equal(result.foreground_custody.sample_count > 0, true);
+    assert.equal(result.foreground_custody.max_sample_gap_ms >= 0, true);
+    assert.equal(result.foreground_custody.violation, null);
     const image = path.join(outRoot, "captures/macos/assembly-fake-dark.png");
     assert.equal(readFileSync(image).length, fixturePng(960, 671).length);
     const firstRange = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "0", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60"], { encoding: "utf8" });
