@@ -1,5 +1,15 @@
 import type { ChatGenerationAttachmentDescriptor } from "./attachment-content";
 import type { ChatGenerationContextPacket } from "./generation-context";
+import {
+  startGatewayReadOnlyToolLoop,
+  validateGatewayReadOnlyToolLoop,
+  type GatewayReadOnlyToolLoopOptions,
+} from "./gateway-tool-loop";
+
+export type {
+  GatewayReadOnlyToolLoopOptions,
+  GatewayReadOnlyToolSchema,
+} from "./gateway-tool-loop";
 
 export interface ChatGenerationSourceInput {
   readonly generationId: string;
@@ -176,6 +186,8 @@ export interface GatewayChatGenerationSourceOptions {
   readonly serviceCaller?: string;
   readonly usageFeature?: string;
   readonly fetch?: typeof fetch;
+  /** Optional bounded safe read-only tool composition; omitted by default. */
+  readonly readOnlyToolLoop?: GatewayReadOnlyToolLoopOptions;
 }
 
 const SAFE_GATEWAY_LANE = /^omi:auto:[a-z0-9][a-z0-9-]{0,95}$/u;
@@ -269,6 +281,8 @@ export const createGatewayChatGenerationSource = (
   const laneId = options.laneId;
   const serviceToken = options.serviceToken.trim();
   const fetchImpl = options.fetch ?? fetch;
+  const readOnlyToolLoop = options.readOnlyToolLoop;
+  if (readOnlyToolLoop !== undefined) validateGatewayReadOnlyToolLoop(readOnlyToolLoop);
   const source: ChatGenerationSource = Object.freeze({
     start(input): ChatGenerationSourceRun {
       const controller = new AbortController();
@@ -287,6 +301,29 @@ export const createGatewayChatGenerationSource = (
       if (input.attachments.length > 0) {
         queueMicrotask(() => fail(gatewayFailure("generation_provider_failed")));
         return Object.freeze({ cancel(): void { cancelled = true; } });
+      }
+      if (readOnlyToolLoop !== undefined) {
+        const toolRun = startGatewayReadOnlyToolLoop({
+          endpoint,
+          laneId,
+          serviceToken,
+          serviceCaller,
+          usageFeature,
+          fetch: fetchImpl,
+          baseMessages: gatewayMessages(input),
+          loop: readOnlyToolLoop,
+          input,
+          fail,
+          complete,
+          isCancelled: () => cancelled,
+        });
+        return Object.freeze({
+          cancel(): void {
+            if (cancelled || terminal) return;
+            cancelled = true;
+            toolRun.cancel();
+          },
+        });
       }
       void (async (): Promise<void> => {
         let response: Response;
