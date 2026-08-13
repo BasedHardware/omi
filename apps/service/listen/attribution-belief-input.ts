@@ -1,7 +1,10 @@
 import { isProxy } from "node:util/types";
 
 import {
+  AttributionBeliefContractError,
+  PROBABILITY_MICROS_TOTAL,
   attributionEvidenceFactorRef,
+  buildAttributionBeliefRevision,
   type AttributionEvidenceDirection,
   type AttributionEvidenceFactor,
 } from "../../../core/consolidate/attribution-belief";
@@ -42,6 +45,125 @@ export interface ListenAttributionBeliefInput {
 
 const fail = (code: string): never => {
   throw new TypeError(`listen attribution belief input ${code}`);
+};
+
+const exactRecord = (
+  value: unknown,
+  keys: readonly string[],
+  code: string,
+): Record<string, unknown> => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
+    || Object.getPrototypeOf(value) !== Object.prototype) fail(code);
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const actual = Reflect.ownKeys(descriptors);
+  const expected = [...keys].sort();
+  if (actual.some((key) => typeof key !== "string") || actual.length !== expected.length
+    || (actual as string[]).sort().some((key, index) => key !== expected[index])) fail(code);
+  for (const key of expected) {
+    const descriptor = descriptors[key];
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) fail(code);
+  }
+  return value as Record<string, unknown>;
+};
+
+const exactArray = (value: unknown, maximum: number, code: string): readonly unknown[] => {
+  if (!Array.isArray(value) || isProxy(value) || Object.getPrototypeOf(value) !== Array.prototype
+    || value.length === 0 || value.length > maximum) fail(code);
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (Reflect.ownKeys(descriptors).length !== value.length + 1) fail(code);
+  const output: unknown[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = descriptors[String(index)];
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) fail(code);
+    output.push(descriptor.value);
+  }
+  return output;
+};
+
+const matched = (value: unknown, pattern: RegExp, code: string): string => {
+  if (typeof value !== "string" || !pattern.test(value)) fail(code);
+  return value;
+};
+
+const DIGEST = /^[a-f0-9]{64}$/;
+const ABOUT = /^about1_[a-f0-9]{64}$/;
+const OBSERVATION = /^obsref1_[a-f0-9]{64}$/;
+const TARGET = /^attrtarget1_[a-f0-9]{64}$/;
+
+/** Strict persistence parser for the text-free modality output. */
+export const parseListenAttributionBeliefInput = (
+  value: unknown,
+): Readonly<ListenAttributionBeliefInput> => {
+  const code = "invalid_belief_input";
+  const row = exactRecord(value, [
+    "version", "owner_account_id", "belief_kind", "about_ref", "observation_ref",
+    "observation_content_digest", "graph_frontier", "hypothesis_candidates",
+    "evidence_factors", "attribution_contract_digest", "aggregation_contract_digest",
+    "created_at_event_time", "previous_revision",
+  ], code);
+  if (row["version"] !== ATTRIBUTION_BELIEF_SHADOW_INPUT_VERSION
+    || row["belief_kind"] !== "source_identity" || row["previous_revision"] !== null
+    || typeof row["owner_account_id"] !== "string"
+    || !/^[\x21-\x7e]{1,256}$/.test(row["owner_account_id"])
+    || !Number.isSafeInteger(row["created_at_event_time"])
+    || (row["created_at_event_time"] as number) < 0) fail(code);
+  const owner = row["owner_account_id"];
+  const aboutRef = matched(row["about_ref"], ABOUT, code);
+  const candidates = exactArray(row["hypothesis_candidates"], 1_024, code).map((entry) => {
+    const candidate = exactRecord(entry, ["kind", "target_ref"], code);
+    if (candidate["kind"] !== "owner" && candidate["kind"] !== "source_local"
+      && candidate["kind"] !== "unknown") fail(code);
+    const target = candidate["target_ref"] === null ? null
+      : matched(candidate["target_ref"], TARGET, code);
+    if ((candidate["kind"] === "source_local") !== (target !== null)) fail(code);
+    return Object.freeze({
+      kind: candidate["kind"] as "owner" | "source_local" | "unknown",
+      target_ref: target,
+    });
+  });
+  if (candidates.length !== 3 || candidates[0]?.kind !== "owner"
+    || candidates[1]?.kind !== "source_local" || candidates[2]?.kind !== "unknown") fail(code);
+  const factors = exactArray(
+    row["evidence_factors"], 10_000, code,
+  ) as ReadonlyArray<AttributionEvidenceFactor>;
+  try {
+    buildAttributionBeliefRevision({
+      owner_account_id: owner,
+      belief_kind: "source_identity",
+      about_ref: aboutRef,
+      observation_ref: matched(row["observation_ref"], OBSERVATION, code),
+      observation_content_digest: matched(row["observation_content_digest"], DIGEST, code),
+      graph_frontier: matched(row["graph_frontier"], DIGEST, code),
+      hypotheses: candidates.map((candidate) => ({
+        ...candidate,
+        probability_micros: candidate.kind === "unknown" ? PROBABILITY_MICROS_TOTAL : 0,
+      })),
+      evidence_factors: factors,
+      attribution_contract_digest: matched(row["attribution_contract_digest"], DIGEST, code),
+      aggregation_contract_digest: matched(row["aggregation_contract_digest"], DIGEST, code),
+      calibration_contract_digest: "0".repeat(64),
+      created_at_event_time: row["created_at_event_time"] as number,
+      previous_revision: null,
+    });
+  } catch (error) {
+    if (error instanceof AttributionBeliefContractError) fail(code);
+    throw error;
+  }
+  return Object.freeze({
+    version: ATTRIBUTION_BELIEF_SHADOW_INPUT_VERSION,
+    owner_account_id: owner,
+    belief_kind: "source_identity",
+    about_ref: aboutRef,
+    observation_ref: row["observation_ref"] as string,
+    observation_content_digest: row["observation_content_digest"] as string,
+    graph_frontier: row["graph_frontier"] as string,
+    hypothesis_candidates: Object.freeze(candidates),
+    evidence_factors: Object.freeze([...factors].map((item) => Object.freeze({ ...item }))),
+    attribution_contract_digest: row["attribution_contract_digest"] as string,
+    aggregation_contract_digest: row["aggregation_contract_digest"] as string,
+    created_at_event_time: row["created_at_event_time"] as number,
+    previous_revision: null,
+  });
 };
 
 const ownValue = (value: unknown, key: string): unknown => {

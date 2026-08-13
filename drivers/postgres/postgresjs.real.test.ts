@@ -150,6 +150,14 @@ import {
   LISTEN_CAPTURE_OPEN_VERSION,
   LISTEN_CAPTURE_RESUME_VERSION,
 } from "../../apps/service/stores/listen-finalization-repository";
+import { materializeListenFormationSnapshot } from
+  "../../apps/service/listen/formation-ingestion";
+import { defineListenAttributionBeliefInputStager } from
+  "../../apps/service/listen/attribution-belief-input-source";
+import {
+  createPostgresAcceptedFormationBeliefSource,
+  createPostgresListenAttributionBeliefInputRepository,
+} from "./listen-attribution-belief-input";
 import {
   createPostgresMemoryQueryEvaluationGraphSource,
   createPostgresMemoryQueryEvaluationInputRepository,
@@ -528,7 +536,9 @@ const durableWorkAcceptanceRequest = (
   acceptedAtEventTime: number,
   leaseDurationSeconds = 30,
   retryDelaySeconds = 10,
+  snapshotValue?: Readonly<FormationInputSnapshot>,
 ): DurableMemoryWorkAcceptanceRequest => {
+  const snapshot = snapshotValue ?? durableWorkFormationSnapshot(accountId, suffix);
   const strategy = registerMemoryStrategy({
     version: MEMORY_STRATEGY_VERSION,
     strategy_id: "strategy:qualification:formation:authority",
@@ -548,16 +558,17 @@ const durableWorkAcceptanceRequest = (
     authority_strategy_id: strategy.strategy_id, shadow_candidates: [],
   }, [strategy]);
   const assignment = createMemoryStrategyAssigner(new Uint8Array(32).fill(11)).assign({
-    owner_account_id: accountId, unit_ref: `session:${suffix}`, policy, strategies: [strategy],
+    owner_account_id: accountId, unit_ref: snapshot.session_id, policy, strategies: [strategy],
   });
   const inputs: readonly DurableMemoryWorkInputManifestEntry[] = formationWorkInputManifest(
-    durableWorkFormationSnapshot(accountId, suffix),
+    snapshot,
   );
   const accepted: AcceptedDurableMemoryWork = {
-    version: DURABLE_MEMORY_WORK_VERSION, job_id: `job:formation:${suffix}`,
+    version: DURABLE_MEMORY_WORK_VERSION, job_id: snapshot.work_id,
     owner_account_id: accountId, account_epoch: 12,
     lifecycle_state: "active", deletion_epoch: null, work_kind: "formation",
-    input_frontier: "0", input_digest: durableMemoryWorkInputManifestDigest(inputs),
+    input_frontier: snapshot.input_frontier,
+    input_digest: durableMemoryWorkInputManifestDigest(inputs),
     execution_contract_digest: assignment.authority.execution_contract_digest,
     accepted_at_event_time: acceptedAtEventTime, max_attempts: 2,
   };
@@ -959,6 +970,104 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       expect(loaded.payload.finalization.segments).toHaveLength(2);
       expect(loaded.payload.finalization.segments.map((segment) => segment.is_user))
         .toEqual([true, false]);
+
+      const beliefSnapshot = materializeListenFormationSnapshot({
+        finalization: loaded.payload.finalization,
+        graph_snapshot: {
+          owner_account_id: accountId, graph_generation: 0,
+          claims: [], entities: [], predicates: [], identity_authorizations: [], adjacency: [],
+        },
+        source_language: "en", account_timezone: "UTC",
+        reference_clock_query_at: "2026-08-13T00:01:01.000Z",
+        policy_version: "policy:listen:qualification:v1",
+        predicate_alias_generation: "predicate:0",
+        authorization_generation: "authorization:0", stm_generation: "stm:0",
+      });
+      const beliefAcceptance = durableWorkAcceptanceRequest(
+        accountId, `${suffix}:listen-belief`, now, 30, 10, beliefSnapshot,
+      );
+      const beliefPending = acceptDurableMemoryWork(beliefAcceptance.accepted_work);
+      const beliefStageBody = { pending_job: beliefPending, snapshot: beliefSnapshot };
+      const formationInputRepository = createPostgresFormationWorkInputRepository({ pool: appRolePool });
+      await expect(formationInputRepository.stage(acceptContext, {
+        ...beliefStageBody,
+        request_digest: formationWorkInputStageRequestDigest(beliefStageBody),
+      })).resolves.toMatchObject({ kind: "staged", input: { job_id: beliefSnapshot.work_id } });
+      await expect(createPostgresDurableMemoryWorkAcceptanceRepository({ pool: appRolePool })
+        .accept(acceptContext, beliefAcceptance)).resolves.toMatchObject({
+        kind: "accepted", job: { job_id: beliefSnapshot.work_id },
+      });
+
+      const shadowGrantId = `grant:listen-belief:${suffix}`;
+      const shadowGrantHash = "f".repeat(64);
+      await ownerSql.begin(async (transaction) => {
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version, lifecycle, enabled, scopes,
+             record_schema_version, record_json, content_hash)
+          VALUES ($1, $2, $3, 4, 'memories.experiments.shadow', $4, 1, 'active', true,
+                  '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+        [accountId, applicationId, credentialId, shadowGrantId, shadowGrantHash]);
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version)
+          VALUES ($1, $2, $3, 4, 'memories.experiments.shadow', $4, 1)`,
+        [accountId, applicationId, credentialId, shadowGrantId]);
+      });
+      const shadowAuthorityRow: AuthorityStateRow = {
+        ...authorityRow, capability: "memories.experiments.shadow",
+        grant_id: shadowGrantId, grant_content_hash: shadowGrantHash,
+      };
+      const shadowContext = createAuthorizedLedgerWriteContextIssuer().issue({
+        context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
+        account_id: accountId, application_id: applicationId, credential_id: credentialId,
+        credential_generation: 4, capability: "memories.experiments.shadow",
+        grant_id: shadowGrantId, grant_version: 1, account_epoch: 12,
+        destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
+        authentication_strength: "firebase-id-token", issued_at_epoch_seconds: now - 60,
+        expires_at_epoch_seconds: now + 3_600,
+        authorization_state_digest: authorizationStateDigest(shadowAuthorityRow),
+      }, now);
+      const beliefSource = createPostgresAcceptedFormationBeliefSource({ pool: appRolePool });
+      const beliefRepository = createPostgresListenAttributionBeliefInputRepository({
+        pool: appRolePool,
+      });
+      const beliefStager = defineListenAttributionBeliefInputStager({
+        source: beliefSource, repository: beliefRepository,
+      });
+      const beliefStage = await beliefStager.stageAcceptedFormation(
+        shadowContext, beliefSnapshot.work_id,
+      );
+      expect(beliefStage).toMatchObject({ kind: "staged", set: { inputs: [{}, {}] } });
+      if (beliefStage.kind !== "staged") throw new Error("listen_belief_not_staged");
+      await expect(beliefStager.stageAcceptedFormation(shadowContext, beliefSnapshot.work_id))
+        .resolves.toMatchObject({ kind: "replayed", set: { set_digest: beliefStage.set.set_digest } });
+      const beliefRows = await ownerSql.unsafe<{ count: number; contains_text: boolean }[]>(`SELECT
+        count(*)::int AS count,
+        bool_or(input_json::text LIKE '%quiet workspace%') AS contains_text
+        FROM omi_memory.memory_listen_attribution_belief_inputs
+        WHERE account_id = $1 AND formation_work_id = $2`,
+      [accountId, beliefSnapshot.work_id]);
+      expect([...beliefRows]).toEqual([{ count: 2, contains_text: false }]);
+
+      await ownerSql.begin(async (transaction) => {
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version, lifecycle, enabled, scopes,
+             record_schema_version, record_json, content_hash)
+          VALUES ($1, $2, $3, 4, 'memories.experiments.shadow', $4, 2, 'revoked', false,
+                  '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+        [accountId, applicationId, credentialId, shadowGrantId, "0".repeat(64)]);
+        await transaction.unsafe(`UPDATE omi_memory.application_grant_heads
+          SET grant_version = 2
+          WHERE account_id = $1 AND application_id = $2 AND credential_id = $3
+            AND credential_generation = 4 AND capability = 'memories.experiments.shadow'`,
+        [accountId, applicationId, credentialId]);
+      });
+      await expect(beliefSource.load(shadowContext, beliefSnapshot.work_id)).resolves.toEqual({
+        kind: "authorization_denied", reason: "grant_inactive",
+      });
+
       await expect(delivery.claimNext(acceptContext)).resolves.toEqual({ kind: "none_available" });
       await new Promise((resolve) => setTimeout(resolve, 1_100));
       const reclaimed = await delivery.claimNext(acceptContext);
@@ -997,6 +1106,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         "listen_capture_segments", "listen_formation_finalizations",
         "listen_conversation_finalization_intents", "listen_formation_outbox",
         "listen_formation_delivery_revisions", "listen_formation_delivery_heads",
+        "memory_listen_attribution_belief_inputs",
       ]) {
         await expect(ownerSql.begin(async (transaction) => {
           await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
@@ -1085,6 +1195,12 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       await ownerSql.begin(async (transaction) => {
         for (const table of [
           "listen_formation_delivery_heads", "listen_formation_delivery_revisions",
+          "memory_listen_attribution_belief_inputs", "memory_formation_work_inputs",
+          "memory_work_heads", "memory_work_state_revisions", "memory_work_input_manifest",
+          "memory_work_acceptances", "memory_work_execution_policies",
+          "memory_strategy_shadow_assignments", "memory_strategy_assignment_bundles",
+          "memory_strategy_policy_shadows", "memory_strategy_assignment_policies",
+          "memory_strategy_definitions",
           "listen_formation_outbox", "listen_conversation_finalization_intents",
           "listen_formation_finalizations", "listen_capture_segments",
           "listen_capture_session_state_revisions", "listen_capture_sessions",

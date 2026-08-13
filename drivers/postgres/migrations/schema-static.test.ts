@@ -101,6 +101,7 @@ const expectedTables = [
   "memory_identity_revisions",
   "memory_identity_support",
   "memory_legacy_proposition_mappings",
+  "memory_listen_attribution_belief_inputs",
   "memory_mention_revisions",
   "memory_migration_item_tombstones",
   "memory_product_group_members",
@@ -286,6 +287,34 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(listenSql).toContain("v_segment_count >= 4096");
     expect(listenSql).toContain("v_text_bytes + octet_length(p_text_content) > 1000000");
     expect(listenSql).toContain("v_locked_session.conversation_id <> p_conversation_id");
+  });
+
+  test("keeps Listen belief inputs text-free, total, and shadow-only", () => {
+    const runtime = migrationSql.find((migration) => migration.version === 32)?.sql;
+    expect(runtime).toBeDefined();
+    const input = tables.find((table) => table.name === "memory_listen_attribution_belief_inputs")!;
+    expect(input.body).toContain("stored-listen-attribution-belief-input-v1");
+    expect(input.body).toContain("input_count BETWEEN 1 AND 2");
+    expect(input.body).toContain("input_ordinal >= 0 AND input_ordinal < input_count");
+    expect(input.body).toContain("memory_formation_work_inputs (account_id, job_id)");
+    expect(input.body).not.toMatch(/transcript|excerpt|speaker_rendering|entity_binding|subject_tier/i);
+    expect(runtime).toContain("DEFERRABLE INITIALLY DEFERRED");
+    expect(runtime).toContain("memory_work_acceptances AS a");
+    expect(runtime).toContain("IS DISTINCT FROM 'memories.experiments.shadow'");
+    expect(runtime).toContain("nullif(current_setting('omi.principal_id', true), '') IS NULL");
+    expect(runtime).toContain(
+      "REVOKE ALL ON omi_memory.memory_listen_attribution_belief_inputs FROM PUBLIC;",
+    );
+    expect(runtime).not.toMatch(
+      /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|TRUNCATE)[^;]*memory_listen_attribution_belief_inputs/s,
+    );
+    for (const operation of [
+      "read_accepted_formation_work_input_for_shadow",
+      "insert_listen_attribution_belief_input",
+      "read_listen_attribution_belief_input_set",
+    ]) {
+      expect(runtime).toContain(`GRANT EXECUTE ON FUNCTION omi_memory.${operation}(`);
+    }
   });
 
   test("keeps the PostgreSQL restore target inert, monotone, and separately authorized", () => {

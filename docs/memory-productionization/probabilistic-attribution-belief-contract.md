@@ -1,8 +1,9 @@
 # Probabilistic multimodal attribution belief contract
 
 Status: ratified architecture; pure belief kernel, injected calibration seam,
-and isolated shadow producer implemented; authoritative persistence, modality
-adapters, calibration, and activation pending
+isolated shadow producer, first Listen modality adapter, and text-free
+PostgreSQL shadow-input source implemented; authoritative belief persistence,
+calibration, additional modalities, and activation pending
 
 Decision: David, 2026-08-12 America/New_York
 
@@ -115,6 +116,13 @@ adapter. It turns finalized Listen `is_user` observations into owner,
 source-local, and unknown hypotheses with dependency-grouped support and
 counter-evidence. The noisy bit remains evidence only; no transcript text,
 typed owner authority, probability, threshold, or product behavior is emitted.
+
+`apps/service/listen/attribution-belief-input-source.ts` and the sealed
+PostgreSQL adapter persist that exact text-free observation set only after its
+formation input is durably accepted. The store is account/epoch/snapshot bound,
+complete, immutable, replayable, and available only through the existing
+`memories.experiments.shadow` authorization boundary. It remains outside graph,
+answer, and identity authority.
 
 ## Acceptance boundary
 

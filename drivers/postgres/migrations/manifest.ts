@@ -193,4 +193,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0031-listen-formation-outbox-delivery.sql",
     sha256: "e60559cbb6c7f9b3881e4d1a0d05daa4233474f57a4715937b6e2a9d275ff86f",
   }),
+  Object.freeze({
+    version: 32,
+    name: "listen-attribution-belief-inputs",
+    fileName: "0032-listen-attribution-belief-inputs.sql",
+    sha256: "c75fd81bf00cefac72c9e652f3c5e0e470f2418ba5a62243a535d44c851f3d78",
+  }),
 ]);
