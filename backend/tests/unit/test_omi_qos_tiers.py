@@ -986,9 +986,9 @@ class TestBYOKEmbeddingsProxy:
         mod._openai_cache.clear()
 
         proxy = mod._OpenAIEmbeddingsProxy(
-            model='text-embedding-3-large',
+            model_factory=lambda: 'text-embedding-3-large',
             default=default,
-            ctor_kwargs={},
+            ctor_kwargs_factory=lambda: {},
         )
 
         assert proxy.embed_documents(['hello']) == [[0.1, 0.2]]
