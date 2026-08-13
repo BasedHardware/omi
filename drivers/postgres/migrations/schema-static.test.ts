@@ -401,6 +401,40 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(gateSql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\.postgres_restore_admission_/);
   });
 
+  test("closes unbound internal worker authority after restore registration", () => {
+    const gateSql = migrationSql.find((migration) =>
+      migration.fileName === "0034-internal-worker-restore-gate.sql")?.sql;
+    expect(gateSql).toBeDefined();
+    if (gateSql === undefined) throw new Error("missing_internal_worker_restore_gate_migration");
+    expect(gateSql).toContain(
+      "CREATE FUNCTION omi_memory.lock_terminal_unfenced_authority_state(",
+    );
+    expect(gateSql).toContain(
+      "CREATE OR REPLACE FUNCTION omi_memory.lock_unfenced_authority_state(",
+    );
+    expect(gateSql).toContain(
+      "PERFORM pg_advisory_xact_lock(hashtextextended(requested_account_id, 731027))",
+    );
+    expect(gateSql).toContain(
+      "LOCK TABLE omi_memory.postgres_restore_admission_heads IN SHARE MODE",
+    );
+    expect(gateSql).toContain(
+      "FROM omi_memory.postgres_restore_admission_heads\n  ) THEN",
+    );
+    expect(gateSql).toContain(
+      "CREATE OR REPLACE FUNCTION omi_memory.lock_released_unfenced_authority_state(",
+    );
+    expect(gateSql.match(/FROM omi_memory\.lock_terminal_unfenced_authority_state\(/g))
+      .toHaveLength(2);
+    expect(gateSql).toContain(
+      "REVOKE EXECUTE ON FUNCTION omi_memory.lock_terminal_unfenced_authority_state(",
+    );
+    expect(gateSql).toContain(
+      "REVOKE EXECUTE ON FUNCTION omi_memory.lock_authority_state(",
+    );
+    expect(gateSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*postgres_restore_admission_/s);
+  });
+
   test("orders every cross-surface foreign key child before its parent", () => {
     const tableSurface = new Map(Object.entries(POSTGRES_DELETION_SURFACE_TABLES)
       .flatMap(([surface, names]) => names.map((name) => [name, surface] as const)));

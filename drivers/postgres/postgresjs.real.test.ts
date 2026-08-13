@@ -3,7 +3,10 @@ import { Database } from "bun:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import postgres, { type Sql } from "postgres";
 
-import { createAuthorizedLedgerWriteContextIssuer } from "../../apps/service/auth/authorized-context-internal";
+import {
+  createAuthorizedLedgerWriteContextIssuer,
+  type AuthorizedLedgerWriteContextInput,
+} from "../../apps/service/auth/authorized-context-internal";
 import { createServedCounter } from "../../apps/service/observability/served-count";
 import {
   InvalidMcpCursorError,
@@ -188,6 +191,23 @@ import { DeterministicFakeModel, type ModelInvokeRequest } from "../model/port";
 const explicitTestUrl = process.env["OMI_TEST_POSTGRES_URL"];
 const realTest = explicitTestUrl ? describe : describe.skip;
 const QUALIFICATION_DATABASE_GENERATION_DIGEST = "d".repeat(64);
+const QUALIFICATION_RESTORE_RELEASE = Object.freeze({
+  database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
+  restore_release_revision: 1,
+  restore_release_content_hash: "9".repeat(64),
+});
+
+const issueQualificationContext = (
+  input: Omit<AuthorizedLedgerWriteContextInput, "authorization_state_digest">,
+  authority: AuthorityStateRow,
+  nowEpochSeconds: number,
+) => createAuthorizedLedgerWriteContextIssuer().issueRestored({
+  ...input,
+  authorization_state_digest: authorizationStateDigest(
+    authority,
+    QUALIFICATION_RESTORE_RELEASE,
+  ),
+}, QUALIFICATION_RESTORE_RELEASE, nowEpochSeconds);
 
 const productRequest = <Body extends ProductProjectionWriteBody>(
   body: Body,
@@ -704,6 +724,57 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     );
     expect(second.appliedVersions).toEqual([]);
     expect(second.skippedVersions).toEqual(POSTGRES_MIGRATIONS.map((entry) => entry.version));
+    await ownerSql.unsafe("DELETE FROM omi_memory.postgres_restore_admission_heads");
+    await ownerSql.unsafe("DELETE FROM omi_memory.postgres_restore_admission_revisions");
+    const legacySuffix = randomUUID();
+    const legacyAccountId = `account:restore-gate-probe:${legacySuffix}`;
+    const legacyPrincipalId = `principal:restore-gate-probe:${legacySuffix}`;
+    const legacyApplicationId = "app:restore-gate-probe";
+    const legacyCredentialId = `credential:restore-gate-probe:${legacySuffix}`;
+    const legacyGrantId = `grant:restore-gate-probe:${legacySuffix}`;
+    const legacyNow = Math.floor(Date.now() / 1_000);
+    await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe(
+        "INSERT INTO omi_memory.platform_accounts (account_id) VALUES ($1)", [legacyAccountId],
+      );
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_revisions
+          (account_id, control_revision, account_generation, account_epoch,
+           lifecycle_state, deletion_epoch, observed_at, record_schema_version,
+           record_json, content_hash)
+        VALUES ($1, 1, 'new', 1, 'active', NULL, transaction_timestamp(),
+                'control-v1', '{}'::jsonb, $2)`, [legacyAccountId, "a".repeat(64)]);
+      await transaction.unsafe(`INSERT INTO omi_memory.account_control_heads
+          (account_id, control_revision, activated_epoch, activation_control_revision)
+        VALUES ($1, 1, 1, 1)`, [legacyAccountId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_credential_revisions
+          (account_id, principal_id, application_id, credential_id,
+           credential_generation, credential_kind, lifecycle,
+           authentication_strength, expires_at, record_schema_version,
+           record_json, content_hash)
+        VALUES ($1, $2, $3, $4, 1, 'service', 'active', 'service-workload',
+                to_timestamp($5), 'credential-v1', '{}'::jsonb, $6)`, [
+        legacyAccountId, legacyPrincipalId, legacyApplicationId, legacyCredentialId,
+        legacyNow + 7_200, "b".repeat(64),
+      ]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_credential_heads
+          (account_id, application_id, credential_id, credential_generation)
+        VALUES ($1, $2, $3, 1)`, [legacyAccountId, legacyApplicationId, legacyCredentialId]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version, lifecycle, enabled, scopes,
+           record_schema_version, record_json, content_hash)
+        VALUES ($1, $2, $3, 1, 'memories.write', $4, 1, 'active', true,
+                '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`, [
+        legacyAccountId, legacyApplicationId, legacyCredentialId, legacyGrantId,
+        "c".repeat(64),
+      ]);
+      await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+          (account_id, application_id, credential_id, credential_generation,
+           capability, grant_id, grant_version)
+        VALUES ($1, $2, $3, 1, 'memories.write', $4, 1)`, [
+        legacyAccountId, legacyApplicationId, legacyCredentialId, legacyGrantId,
+      ]);
+    });
     await ownerSql.unsafe(`INSERT INTO omi_memory.postgres_restore_admission_revisions
         (database_generation_digest, release_revision, state, restore_id,
          restored_snapshot_digest, checkpoint_candidate_digest,
@@ -720,12 +791,51 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       "5".repeat(64), "6".repeat(64), "7".repeat(64), "8".repeat(64),
       "9".repeat(64),
     ]);
-    await ownerSql.unsafe(`INSERT INTO omi_memory.postgres_restore_admission_heads
+    let enteredLegacyAuthority!: () => void;
+    const legacyAuthorityEntered = new Promise<void>((resolve) => {
+      enteredLegacyAuthority = resolve;
+    });
+    let releaseLegacyAuthority!: () => void;
+    const legacyAuthorityRelease = new Promise<void>((resolve) => {
+      releaseLegacyAuthority = resolve;
+    });
+    const legacyAuthority = pool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read write" },
+      async (connection) => {
+        await connection.query({
+          name: "qualification.restore_gate_set_role",
+          text: "SET LOCAL ROLE omi_platform_application",
+          values: [],
+        });
+        const legacyRows = await connection.query<{ account_id: string }>({
+          name: "qualification.restore_gate_hold_unbound",
+          text: `SELECT * FROM omi_memory.lock_unfenced_authority_state(
+            $1, $2, $3, $4, 1, 'memories.write', $5
+          )`,
+          values: [legacyAccountId, legacyPrincipalId, legacyApplicationId,
+            legacyCredentialId, legacyGrantId],
+        });
+        expect(legacyRows).toHaveLength(1);
+        expect(legacyRows[0]?.account_id).toBe(legacyAccountId);
+        enteredLegacyAuthority();
+        await legacyAuthorityRelease;
+      },
+    );
+    await legacyAuthorityEntered;
+    let headInsertFinished = false;
+    const headInsert = ownerSql.unsafe(`INSERT INTO omi_memory.postgres_restore_admission_heads
         (database_generation_digest, release_revision)
       VALUES ($1, 1)
       ON CONFLICT (database_generation_digest) DO UPDATE
         SET release_revision = EXCLUDED.release_revision,
-            updated_at = transaction_timestamp()`, [QUALIFICATION_DATABASE_GENERATION_DIGEST]);
+            updated_at = transaction_timestamp()`, [QUALIFICATION_DATABASE_GENERATION_DIGEST])
+      .then(() => { headInsertFinished = true; });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(headInsertFinished).toBe(false);
+    releaseLegacyAuthority();
+    await legacyAuthority;
+    await headInsert;
+    expect(headInsertFinished).toBe(true);
   }, 120_000);
 
   test("Listen capture persists an atomic finalization boundary with exact replay and rollback", async () => {
@@ -841,7 +951,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         [accountId, applicationId, credentialId, grantId]);
       });
 
-      const context = createAuthorizedLedgerWriteContextIssuer().issue({
+      const context = issueQualificationContext({
         context_version: "authorized-ledger-write-context-v1",
         principal_id: principalId,
         account_id: accountId,
@@ -858,8 +968,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         authentication_strength: "firebase-id-token",
         issued_at_epoch_seconds: now - 60,
         expires_at_epoch_seconds: now + 3_600,
-        authorization_state_digest: authorizationStateDigest(authorityRow),
-      }, now);
+      }, authorityRow, now);
       const appRolePool: PostgresTransactionPool = Object.freeze({
         withTransaction: async <Result>(
           options: Parameters<PostgresTransactionPool["withTransaction"]>[0],
@@ -957,7 +1066,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         ...authorityRow, capability: "memories.work.accept", grant_id: acceptGrantId,
         grant_content_hash: acceptGrantHash,
       };
-      const acceptContext = createAuthorizedLedgerWriteContextIssuer().issue({
+      const acceptContext = issueQualificationContext({
         context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
         account_id: accountId, application_id: applicationId, credential_id: credentialId,
         credential_generation: 4, capability: "memories.work.accept",
@@ -965,8 +1074,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
         authentication_strength: "firebase-id-token", issued_at_epoch_seconds: now - 60,
         expires_at_epoch_seconds: now + 3_600,
-        authorization_state_digest: authorizationStateDigest(acceptAuthorityRow),
-      }, now);
+      }, acceptAuthorityRow, now);
       const delivery = createPostgresListenFormationOutboxRepository({
         pool: appRolePool, lease_duration_seconds: 1,
         retry_delay_seconds: 10, max_attempts: 3,
@@ -1035,7 +1143,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         ...authorityRow, capability: "memories.experiments.shadow",
         grant_id: shadowGrantId, grant_content_hash: shadowGrantHash,
       };
-      const shadowContext = createAuthorizedLedgerWriteContextIssuer().issue({
+      const shadowContext = issueQualificationContext({
         context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
         account_id: accountId, application_id: applicationId, credential_id: credentialId,
         credential_generation: 4, capability: "memories.experiments.shadow",
@@ -1043,8 +1151,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
         authentication_strength: "firebase-id-token", issued_at_epoch_seconds: now - 60,
         expires_at_epoch_seconds: now + 3_600,
-        authorization_state_digest: authorizationStateDigest(shadowAuthorityRow),
-      }, now);
+      }, shadowAuthorityRow, now);
       const beliefSource = createPostgresAcceptedFormationBeliefSource({ pool: appRolePool });
       const beliefRepository = createPostgresListenAttributionBeliefInputRepository({
         pool: appRolePool,
@@ -1183,8 +1290,12 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       });
 
       await expect(delivery.claimNext(acceptContext)).resolves.toEqual({ kind: "none_available" });
-      await new Promise((resolve) => setTimeout(resolve, 1_100));
-      const reclaimed = await delivery.claimNext(acceptContext);
+      const reclaimDeadline = Date.now() + 5_000;
+      let reclaimed = await delivery.claimNext(acceptContext);
+      while (reclaimed.kind === "none_available" && Date.now() < reclaimDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        reclaimed = await delivery.claimNext(acceptContext);
+      }
       expect(reclaimed.kind).toBe("claimed");
       if (reclaimed.kind !== "claimed") throw new Error("listen_delivery_not_reclaimed");
       expect(reclaimed.lease.lease_fence).toBe(claimed.lease.lease_fence + 1);
@@ -1595,15 +1706,14 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       control_content_hash: controlHash, credential_content_hash: credentialHash,
       grant_content_hash: grantHash, db_now_epoch_seconds: now,
     };
-    const context = createAuthorizedLedgerWriteContextIssuer().issue({
+    const context = issueQualificationContext({
       context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
       account_id: accountId, application_id: applicationId, credential_id: credentialId,
       credential_generation: 4, capability: "memories.work.accept", grant_id: grantId,
       grant_version: 9, account_epoch: 12, destination_activation_revision: 17,
       lifecycle_state: "active", deletion_epoch: null, authentication_strength: "service-workload",
       issued_at_epoch_seconds: now - 60, expires_at_epoch_seconds: now + 3_600,
-      authorization_state_digest: authorizationStateDigest(authorityRow),
-    }, now);
+    }, authorityRow, now);
     const executionAuthorityRow: AuthorityStateRow = {
       ...authorityRow,
       capability: "memories.work.execute",
@@ -1611,15 +1721,14 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       grant_version: 1,
       grant_content_hash: "e".repeat(64),
     };
-    const executionContext = createAuthorizedLedgerWriteContextIssuer().issue({
+    const executionContext = issueQualificationContext({
       context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
       account_id: accountId, application_id: applicationId, credential_id: credentialId,
       credential_generation: 4, capability: "memories.work.execute", grant_id: executeGrantId,
       grant_version: 1, account_epoch: 12, destination_activation_revision: 17,
       lifecycle_state: "active", deletion_epoch: null, authentication_strength: "service-workload",
       issued_at_epoch_seconds: now - 60, expires_at_epoch_seconds: now + 3_600,
-      authorization_state_digest: authorizationStateDigest(executionAuthorityRow),
-    }, now);
+    }, executionAuthorityRow, now);
     let lastWorkAcceptanceStatement = "none";
     let lastWorkAcceptanceProviderCode = "none";
     let lastWorkAcceptanceConstraint = "none";
@@ -2983,7 +3092,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       grant_content_hash: grantHash,
       db_now_epoch_seconds: now,
     };
-    const context = createAuthorizedLedgerWriteContextIssuer().issue({
+    const context = issueQualificationContext({
       context_version: "authorized-ledger-write-context-v1",
       principal_id: principalId,
       account_id: accountId,
@@ -3000,8 +3109,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       authentication_strength: "firebase-id-token",
       issued_at_epoch_seconds: now - 60,
       expires_at_epoch_seconds: now + 3_600,
-      authorization_state_digest: authorizationStateDigest(authorityRow),
-    }, now);
+    }, authorityRow, now);
 
     const accountB = `account:pg-kernel-b:${suffix}`;
     const principalB = `principal:pg-kernel-b:${suffix}`;
@@ -3048,7 +3156,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       ...authorityRow, account_id: accountB, principal_id: principalB,
       credential_id: credentialB, grant_id: grantB,
     };
-    const contextB = createAuthorizedLedgerWriteContextIssuer().issue({
+    const contextB = issueQualificationContext({
       context_version: "authorized-ledger-write-context-v1",
       principal_id: principalB, account_id: accountB, application_id: applicationId,
       credential_id: credentialB, credential_generation: 4, capability: "memories.write",
@@ -3056,8 +3164,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
       authentication_strength: "firebase-id-token", issued_at_epoch_seconds: now - 60,
       expires_at_epoch_seconds: now + 3_600,
-      authorization_state_digest: authorizationStateDigest(authorityRowB),
-    }, now);
+    }, authorityRowB, now);
 
     let lastRepositoryStatement = "none";
     let lastProviderCode = "none";
@@ -3137,6 +3244,36 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     };
 
     const first = append(`commit:${suffix}:one`, `append:${suffix}:same`, null);
+    const unboundContext = createAuthorizedLedgerWriteContextIssuer().issue({
+      context_version: "authorized-ledger-write-context-v1",
+      principal_id: principalId,
+      account_id: accountId,
+      application_id: applicationId,
+      credential_id: credentialId,
+      credential_generation: 4,
+      capability: "memories.write",
+      grant_id: grantId,
+      grant_version: 9,
+      account_epoch: 12,
+      destination_activation_revision: 17,
+      lifecycle_state: "active",
+      deletion_epoch: null,
+      authentication_strength: "firebase-id-token",
+      issued_at_epoch_seconds: now - 60,
+      expires_at_epoch_seconds: now + 3_600,
+      authorization_state_digest: authorizationStateDigest(authorityRow),
+    }, now);
+    await expect(repository.append(unboundContext, first)).resolves.toEqual({
+      kind: "authorization_denied",
+      reason: "authorization_state_denied",
+    });
+    expect(lastRepositoryStatement).toBe("authority.lock_and_revalidate");
+    const beforeBoundAppend = await ownerSql.unsafe<{ count: number }[]>(`
+      SELECT count(*)::int AS count
+      FROM omi_memory.memory_idempotency_receipts
+      WHERE account_id = $1
+    `, [accountId]);
+    expect([...beforeBoundAppend]).toEqual([{ count: 0 }]);
     try {
       expect(await repository.append(context, first)).toEqual({
         kind: "committed", commit_id: first.transition.derivation.commit.commit_id, sequence: 1,
@@ -4274,7 +4411,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       control_content_hash: controlHash, credential_content_hash: credentialHash,
       grant_content_hash: grantHash, db_now_epoch_seconds: now,
     });
-    const authorized = (row: AuthorityStateRow) => createAuthorizedLedgerWriteContextIssuer().issue({
+    const authorized = (row: AuthorityStateRow) => issueQualificationContext({
       context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
       account_id: accountId, application_id: applicationId, credential_id: credentialId,
       credential_generation: 4, capability: row.capability, grant_id: row.grant_id,
@@ -4282,8 +4419,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
       authentication_strength: "service-workload", issued_at_epoch_seconds: now - 60,
       expires_at_epoch_seconds: now + 3_600,
-      authorization_state_digest: authorizationStateDigest(row),
-    }, now);
+    }, row, now);
     const writeContext = authorized(authority("memories.write", writeGrantId, writeGrantHash));
     const projectContext = authorized(authority("memories.project", projectGrantId, projectGrantHash));
 
@@ -4763,7 +4899,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     });
     const shadowAuthority = authority("memories.experiments.shadow", grantId, grantHash);
     const writeAuthority = authority("memories.write", writeGrantId, writeGrantHash);
-    const context = createAuthorizedLedgerWriteContextIssuer().issue({
+    const context = issueQualificationContext({
       context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
       account_id: accountId, application_id: applicationId, credential_id: credentialId,
       credential_generation: 4, capability: "memories.experiments.shadow",
@@ -4771,9 +4907,8 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
       authentication_strength: "service-workload", issued_at_epoch_seconds: now - 60,
       expires_at_epoch_seconds: now + 3_600,
-      authorization_state_digest: authorizationStateDigest(shadowAuthority),
-    }, now);
-    const writeContext = createAuthorizedLedgerWriteContextIssuer().issue({
+    }, shadowAuthority, now);
+    const writeContext = issueQualificationContext({
       context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
       account_id: accountId, application_id: applicationId, credential_id: credentialId,
       credential_generation: 4, capability: "memories.write",
@@ -4781,8 +4916,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
       authentication_strength: "service-workload", issued_at_epoch_seconds: now - 60,
       expires_at_epoch_seconds: now + 3_600,
-      authorization_state_digest: authorizationStateDigest(writeAuthority),
-    }, now);
+    }, writeAuthority, now);
 
     let backendPid: number | undefined;
     const appRolePool: PostgresTransactionPool = Object.freeze({
