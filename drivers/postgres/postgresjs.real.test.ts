@@ -4,6 +4,12 @@ import { createHash, randomUUID } from "node:crypto";
 import postgres, { type Sql } from "postgres";
 
 import { createAuthorizedLedgerWriteContextIssuer } from "../../apps/service/auth/authorized-context-internal";
+import { createServedCounter } from "../../apps/service/observability/served-count";
+import {
+  InvalidMcpCursorError,
+  asOpaqueVisibleKeyset,
+  issueMcpCursor,
+} from "../../apps/mcp/cursor";
 import {
   emitDurableMemoryWorkBacklogTelemetry,
 } from "../../apps/service/observability/durable-memory-work-backlog";
@@ -91,7 +97,10 @@ import {
   birthProductProposition,
   buildProductProjectionRevision,
 } from "../../core/retrieve/product-projection";
-import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
+import {
+  isTrustedRecallCompletenessHonest,
+  parseSynthesizedPageJson,
+} from "@omi-core/ratified-contracts/projections/synthesized";
 import { produceQaRenders } from "../../apps/qa/renders";
 import type { IdentityAuthorization, IdentityConstraint, Predicate, ProvisionalClaim } from "../../core/schema";
 import {
@@ -115,6 +124,8 @@ import {
 } from "./firebase-authorized-graph-snapshot-runtime";
 import { createPostgresFirebaseAuthorizedMemoryReadRuntime } from
   "./firebase-authorized-memory-read-runtime";
+import { createPostgresFirebaseAuthorizedMemoryServiceApp } from
+  "./firebase-authorized-memory-service-app";
 import { createPostgresFirebaseAuthorizedMemoryExportRuntime } from
   "./firebase-authorized-memory-export-runtime";
 import { createPostgresFirebaseAuthorizedLedgerRuntime } from "./firebase-authorized-ledger-runtime";
@@ -2962,7 +2973,90 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const productPage = parseSynthesizedPageJson(productRead.canonical_json);
     expect(productPage).not.toBeNull();
     expect(productPage!.items.length).toBeGreaterThan(0);
+    expect(productPage!.items.every((item) => item.citations.length > 0)).toBe(true);
+    expect(isTrustedRecallCompletenessHonest(productPage!)).toBe(true);
     expect(productReadTraces).toBe(1);
+    const routeCounter = createServedCounter();
+    const memoryServiceApp = createPostgresFirebaseAuthorizedMemoryServiceApp({
+      mcp_handler: () => new Response("mcp-delegated", { status: 202 }),
+      memory_read: {
+        authorization: {
+          pool: appRolePool,
+          project_id: firebaseProjectId,
+          runtime_mode: "deployed",
+          id_token_adapter: {
+            verification_source: "firebase_production",
+            verifyIdToken: async () => firebaseClaims,
+          },
+          application_id: applicationId,
+          context_ttl_seconds: 60,
+          database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
+        },
+        product: {
+          account_timezone: "UTC",
+          codec_root_secret: new Uint8Array(32).fill(0x55),
+          produce_renders: produceQaRenders,
+          verify_cursor: () => { throw new InvalidMcpCursorError(); },
+          issue_cursor: () => { throw new Error("bounded qualification page must not issue a cursor"); },
+          trace_sink: () => undefined,
+          accepted_coverage_state: "bypassed",
+          stm_coverage_state: "bypassed",
+        },
+      },
+      now_epoch_seconds: () => now,
+      counter: routeCounter,
+    });
+    const routeResponse = await memoryServiceApp.request("/v1/memories?limit=100", {
+      headers: { authorization: "Bearer header.payload.signature" },
+    });
+    expect(routeResponse.status).toBe(200);
+    const routePage = parseSynthesizedPageJson(await routeResponse.text());
+    expect(routePage).not.toBeNull();
+    expect(routePage!.items.length).toBeGreaterThan(0);
+    expect(routePage!.items.every((item) => item.citations.length > 0)).toBe(true);
+    expect(isTrustedRecallCompletenessHonest(routePage!)).toBe(true);
+    expect(routeCounter.snapshot()).toMatchObject({
+      domainReadsServed: 1,
+      domainReadsDenied: 0,
+      domainReadsFailed: 0,
+    });
+    const mcpResponse = await memoryServiceApp.request("/mcp", { method: "POST" });
+    expect(mcpResponse.status).toBe(202);
+    expect(await mcpResponse.text()).toBe("mcp-delegated");
+
+    const digest = "7".repeat(64);
+    const invalidCursor = issueMcpCursor({
+      last_visible_key: asOpaqueVisibleKeyset(`vk1_${"8".repeat(64)}`),
+      bindings: {
+        owner_digest: digest,
+        app_digest: digest,
+        credential_key_digest: digest,
+        authorization_generation_digest: digest,
+        grant_generation_digest: digest,
+        account_generation_digest: digest,
+        graph_generation_digest: digest,
+        projection_generation_digest: digest,
+        projection_commit_digest: digest,
+        visibility_digest: digest,
+        filter_digest: digest,
+        query_digest: digest,
+        cursor_policy_digest: digest,
+        source_digest: digest,
+        read_mode_digest: digest,
+      },
+      issued_at_epoch_seconds: now,
+      ttl_seconds: 60,
+    }, {
+      active_key_id: "qualification",
+      keys: [{ key_id: "qualification", secret: new Uint8Array(32).fill(0x66) }],
+    });
+    const invalidCursorResponse = await memoryServiceApp.request(
+      `/v1/memories?cursor=${encodeURIComponent(invalidCursor)}`,
+      { headers: { authorization: "Bearer header.payload.signature" } },
+    );
+    expect(invalidCursorResponse.status).toBe(400);
+    expect(await invalidCursorResponse.text()).toBe('{"error":"bad_request"}');
+    expect(routeCounter.snapshot().domainReadsServed).toBe(1);
     const firebaseMemoryExport = createPostgresFirebaseAuthorizedMemoryExportRuntime({
       authorization: {
         pool: appRolePool,
@@ -3184,6 +3278,16 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       ]);
     });
     expect([...postRestoreLookup]).toEqual([{ count: 0 }]);
+    const restoredRouteResponse = await memoryServiceApp.request("/v1/memories?limit=100", {
+      headers: { authorization: "Bearer header.payload.signature" },
+    });
+    expect(restoredRouteResponse.status).toBe(403);
+    expect(await restoredRouteResponse.text()).toBe('{"error":"forbidden"}');
+    expect(routeCounter.snapshot()).toMatchObject({
+      domainReadsServed: 1,
+      domainReadsDenied: 2,
+      domainReadsFailed: 0,
+    });
     for (const bypass of [
       ["SELECT * FROM omi_memory.lookup_firebase_application_authorization($1, $2, $3, $4)",
         [firebaseProjectId, firebaseUid, applicationId, "memories.write"]],

@@ -43,7 +43,7 @@ describe("route-free PostgreSQL Firebase memory product runtime", () => {
     )).resolves.toEqual({ kind: "denied", outcome: "authentication" });
     expect(renders).toBe(0);
     expect(traces).toBe(0);
-    expect(Object.keys(runtime)).toEqual(["read"]);
+    expect(Object.keys(runtime)).toEqual(["authenticate", "read"]);
   });
 
   test("rejects extra composition options without invoking dependencies", () => {
@@ -53,4 +53,5 @@ describe("route-free PostgreSQL Firebase memory product runtime", () => {
       extra: true,
     } as never)).toThrow("invalid Firebase-authorized memory read runtime options");
   });
+
 });

@@ -41,16 +41,18 @@
 
 import { createBunMcpHttpHandler } from "../../apps/mcp/bun-http";
 import { createMcpProtocolHandler } from "../../apps/mcp/protocol";
-import { createServiceApp } from "../../apps/service/app";
+import { createMemoryServiceApp } from "../../apps/service/memory-service-app";
 import {
   createServedCounter,
   reset as resetServedCounter,
 } from "../../apps/service/observability/served-count";
-import { registerMemoryRoutes } from "../../apps/service/routes/memories";
+import {
+  createPreparedMemoryRouteReadPort,
+} from "../../apps/service/routes/memories";
 
 import { createClientReadCounter } from "./client-counter";
 import { createQaBackend, type QaFixturePlan } from "./compose";
-import { assertFixtureTimezone } from "./fixture-clock";
+import { assertFixtureTimezone, FIXTURE_ANCHOR_EPOCH_SECONDS } from "./fixture-clock";
 import { BACKEND_PROCESS_STAMP } from "./provenance";
 import { parseIntegrationPort } from "./port";
 
@@ -76,7 +78,14 @@ const counter = createServedCounter();
 const clientReads = createClientReadCounter();
 
 const mcpHandler = createBunMcpHttpHandler(createMcpProtocolHandler(backend.mcpPorts));
-const app = createServiceApp(mcpHandler);
+const app = createMemoryServiceApp(mcpHandler, {
+  readPort: createPreparedMemoryRouteReadPort({
+    resolvePrincipal: backend.resolvePrincipal,
+    prepareRead: backend.prepareRead,
+  }),
+  nowEpochSeconds: () => FIXTURE_ANCHOR_EPOCH_SECONDS,
+  counter,
+});
 /**
  * The settled client recall route: `GET /v1/memories?limit=&cursor=` with
  * `Authorization: Bearer <token>`. Registered — not re-implemented — so this
@@ -88,12 +97,6 @@ const app = createServiceApp(mcpHandler);
  * the same principal identity, so the two transports cannot drift into serving
  * different ids for the same memory.
  */
-registerMemoryRoutes(app, {
-  resolvePrincipal: backend.resolvePrincipal,
-  prepareRead: backend.prepareRead,
-  counter,
-});
-
 const RECALL_PATHS = new Set(["/v1/memories", "/v1/memories/recall"]);
 const MCP_PATH = "/mcp";
 

@@ -2,10 +2,12 @@
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
 import type { Hono } from "hono";
+import { isProxy } from "node:util/types";
 
 import {
   APP_CONTRACT_VERSION_HEADER,
   isWellFormedContractVersion,
+  parseSynthesizedPageJson,
   resolveDeclaredContractVersion,
 } from "@omi-core/ratified-contracts/projections/synthesized";
 
@@ -14,6 +16,13 @@ import type { DevPrincipal } from "../auth/dev-token";
 import type { PreparedMemoryRead } from "../composition/memory-read";
 import { readMemoryPage } from "../composition/memory-read";
 import type { ServedCounter } from "../observability/served-count";
+import {
+  assertMemoryRouteReadPort,
+  defineMemoryRouteReadPort,
+  snapshotMemoryRouteReadOutcome,
+  type MemoryRouteReadOutcome,
+  type MemoryRouteReadPort,
+} from "./memory-read-port";
 
 /**
  * The app-facing memory read routes.
@@ -49,12 +58,61 @@ const DEFAULT_PAGE_LIMIT = 25;
 const MAX_PAGE_LIMIT = 100;
 
 export interface MemoryRouteDependencies {
+  readonly readPort: MemoryRouteReadPort;
+  readonly nowEpochSeconds: () => number;
+  readonly counter: ServedCounter;
+}
+
+export interface PreparedMemoryRouteReadOptions {
   /** Resolves a bearer token to a principal, or null. Never throws for bad input. */
   readonly resolvePrincipal: (token: string) => DevPrincipal | null;
   /** Builds the prepared read for one principal and one snapshot. */
   readonly prepareRead: (principal: DevPrincipal) => Promise<PreparedMemoryRead>;
-  readonly counter: ServedCounter;
 }
+
+/** Local/QA compatibility adapter; production supplies a PostgreSQL-backed port. */
+export const createPreparedMemoryRouteReadPort = (
+  options: PreparedMemoryRouteReadOptions,
+): MemoryRouteReadPort => {
+  if (options === null || typeof options !== "object" || Array.isArray(options)
+    || isProxy(options) || Object.getPrototypeOf(options) !== Object.prototype) {
+    throw new TypeError("invalid prepared memory route read options");
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(options);
+  const ownKeys = Reflect.ownKeys(descriptors);
+  if (ownKeys.some((key) => typeof key !== "string")) {
+    throw new TypeError("invalid prepared memory route read options");
+  }
+  const keys = (ownKeys as string[]).sort();
+  if (keys.length !== 2 || keys[0] !== "prepareRead" || keys[1] !== "resolvePrincipal") {
+    throw new TypeError("invalid prepared memory route read options");
+  }
+  const resolvePrincipal = descriptors.resolvePrincipal?.value;
+  const prepareRead = descriptors.prepareRead?.value;
+  if (!descriptors.resolvePrincipal?.enumerable || !descriptors.prepareRead?.enumerable
+    || typeof resolvePrincipal !== "function" || isProxy(resolvePrincipal)
+    || typeof prepareRead !== "function" || isProxy(prepareRead)) {
+    throw new TypeError("invalid prepared memory route read options");
+  }
+  return defineMemoryRouteReadPort(
+    async (input) => resolvePrincipal(input.bearer_token) !== null,
+    async (input): Promise<MemoryRouteReadOutcome> => {
+    const principal = resolvePrincipal(input.bearer_token);
+    if (principal === null) return Object.freeze({ kind: "authentication_denied" });
+    try {
+      const prepared = await prepareRead(principal);
+      const result = await readMemoryPage(input.request, prepared);
+      return Object.freeze({ kind: "loaded", canonical_json: result.canonical_json });
+    } catch (error) {
+      if (error instanceof ApplicationReadDenied) {
+        return Object.freeze({ kind: "authorization_denied" });
+      }
+      if (isInvalidCursor(error)) return Object.freeze({ kind: "invalid_cursor" });
+      return Object.freeze({ kind: "unavailable" });
+    }
+    },
+  );
+};
 
 const fixedResponse = (body: string, status: number): Response =>
   new Response(body, { status, headers: JSON_HEADERS });
@@ -135,6 +193,41 @@ export const MEMORY_READ_PATH = "/v1/memories";
 export const MEMORY_READ_TRANSITIONAL_ALIAS_PATH = "/v1/memories/recall";
 
 export const registerMemoryRoutes = (app: Hono, deps: MemoryRouteDependencies): void => {
+  if (deps === null || typeof deps !== "object" || Array.isArray(deps) || isProxy(deps)
+    || Object.getPrototypeOf(deps) !== Object.prototype) {
+    throw new TypeError("invalid memory route dependencies");
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(deps);
+  const ownKeys = Reflect.ownKeys(descriptors);
+  if (ownKeys.some((key) => typeof key !== "string")) {
+    throw new TypeError("invalid memory route dependencies");
+  }
+  const keys = (ownKeys as string[]).sort();
+  if (keys.length !== 3 || keys[0] !== "counter" || keys[1] !== "nowEpochSeconds"
+    || keys[2] !== "readPort" || Object.values(descriptors).some((entry) =>
+      !entry.enumerable || !("value" in entry))) {
+    throw new TypeError("invalid memory route dependencies");
+  }
+  const readPort = assertMemoryRouteReadPort(descriptors.readPort!.value as MemoryRouteReadPort);
+  const authenticate = readPort.authenticate;
+  const read = readPort.read;
+  const nowEpochSeconds = descriptors.nowEpochSeconds!.value;
+  const counter = descriptors.counter!.value as ServedCounter;
+  if (typeof nowEpochSeconds !== "function" || isProxy(nowEpochSeconds)
+    || counter === null || typeof counter !== "object" || isProxy(counter)) {
+    throw new TypeError("memory route requires a clock");
+  }
+  const counterDescriptors = Object.getOwnPropertyDescriptors(counter);
+  const recordDomainReadValue = counterDescriptors.recordDomainRead?.value;
+  const recordDeclaredContractVersionValue = counterDescriptors.recordDeclaredContractVersion?.value;
+  if (typeof recordDomainReadValue !== "function" || isProxy(recordDomainReadValue)
+    || typeof recordDeclaredContractVersionValue !== "function"
+    || isProxy(recordDeclaredContractVersionValue)) {
+    throw new TypeError("memory route requires a served counter");
+  }
+  const recordDomainRead = recordDomainReadValue.bind(counter) as ServedCounter["recordDomainRead"];
+  const recordDeclaredContractVersion = recordDeclaredContractVersionValue.bind(counter) as
+    ServedCounter["recordDeclaredContractVersion"];
   // domain-pending(DIV-DOMCORE-001)
   const handler = async (context: {
     req: {
@@ -145,30 +238,20 @@ export const registerMemoryRoutes = (app: Hono, deps: MemoryRouteDependencies): 
   }): Promise<Response> => {
     const token = bearerToken(context.req.header("authorization"));
     if (token === null) {
-      deps.counter.recordDomainRead("denied");
+      recordDomainRead("denied");
       return fixedResponse(UNAUTHORIZED_BODY, 401);
     }
-    const principal = deps.resolvePrincipal(token);
-    if (principal === null) {
-      deps.counter.recordDomainRead("denied");
-      return fixedResponse(UNAUTHORIZED_BODY, 401);
-    }
-
-    // COORD-contract-evolution-policy.md §4: every app-facing request
-    // declares the contract version its client was built against; absent is
-    // treated as the floor. This is a READ only - it does not gate or alter
-    // the response. N/N-1 refusal (policy §5) is the auth-outcome-split
-    // bump's job, not this one's; see the CONTRACT-lane report for why.
     const declaredContractVersionHeader = context.req.header(APP_CONTRACT_VERSION_HEADER);
-    deps.counter.recordDeclaredContractVersion({
-      atFloor: typeof declaredContractVersionHeader !== "string"
-        || !isWellFormedContractVersion(declaredContractVersionHeader.trim()),
-    });
-    // Resolved but intentionally unused beyond the count above until a
-    // consumer (the auth-outcome-split bump) needs it - resolving here once,
-    // rather than leaving the header unread, is the whole point of this
-    // change and is what SEAM's composition is expected to gate on next.
-    void resolveDeclaredContractVersion(declaredContractVersionHeader);
+    const recordContractVersion = (): void => {
+      // Authentication still precedes request validation. Consequently an
+      // unauthenticated request cannot affect declared-version population
+      // statistics or learn whether its query was valid.
+      recordDeclaredContractVersion({
+        atFloor: typeof declaredContractVersionHeader !== "string"
+          || !isWellFormedContractVersion(declaredContractVersionHeader.trim()),
+      });
+      void resolveDeclaredContractVersion(declaredContractVersionHeader);
+    };
 
     const page = parsePageQuery(
       context.req.query("limit") ?? undefined,
@@ -176,32 +259,58 @@ export const registerMemoryRoutes = (app: Hono, deps: MemoryRouteDependencies): 
       hasDuplicateQueryParameters(context.req.url),
     );
     if (page === null) {
-      deps.counter.recordDomainRead("denied");
-      return fixedResponse(BAD_REQUEST_BODY, 400);
+      try {
+        const now = nowEpochSeconds();
+        if (!Number.isSafeInteger(now) || now < 0) throw new TypeError("invalid route clock");
+        if (await authenticate({ bearer_token: token, now_epoch_seconds: now }) !== true) {
+          recordDomainRead("denied");
+          return fixedResponse(UNAUTHORIZED_BODY, 401);
+        }
+        recordContractVersion();
+        recordDomainRead("denied");
+        return fixedResponse(BAD_REQUEST_BODY, 400);
+      } catch {
+        recordDomainRead("failed");
+        return fixedResponse(INTERNAL_BODY, 500);
+      }
     }
 
     try {
-      const prepared = await deps.prepareRead(principal);
-      const result = await readMemoryPage({ limit: page.limit, cursor: page.cursor }, prepared);
+      const now = nowEpochSeconds();
+      if (!Number.isSafeInteger(now) || now < 0) throw new TypeError("invalid route clock");
+      const outcome = snapshotMemoryRouteReadOutcome(await read({
+        bearer_token: token,
+        now_epoch_seconds: now,
+        request: Object.freeze({ limit: page.limit, cursor: page.cursor }),
+      }));
+      if (outcome === null) {
+        recordDomainRead("failed");
+        return fixedResponse(INTERNAL_BODY, 500);
+      }
+      if (outcome.kind === "authentication_denied") {
+        recordDomainRead("denied");
+        return fixedResponse(UNAUTHORIZED_BODY, 401);
+      }
+      recordContractVersion();
+      if (outcome.kind === "authorization_denied") {
+        recordDomainRead("denied");
+        return fixedResponse(FORBIDDEN_BODY, 403);
+      }
+      if (outcome.kind === "invalid_cursor") {
+        recordDomainRead("denied");
+        return fixedResponse(BAD_REQUEST_BODY, 400);
+      }
+      if (outcome.kind !== "loaded" || parseSynthesizedPageJson(outcome.canonical_json) === null) {
+        recordDomainRead("failed");
+        return fixedResponse(INTERNAL_BODY, 500);
+      }
       // Counted only here: after the domain response body actually exists.
       // Counting earlier is the wave-9 bug - a served count that moves when
       // nothing was served makes a stalled backend look healthy.
-      deps.counter.recordDomainRead("served");
-      return new Response(result.canonical_json, { status: 200, headers: JSON_HEADERS });
-    } catch (error) {
-      if (error instanceof ApplicationReadDenied) {
-        // One body for all nine denial reasons. The reason is deliberately
-        // dropped rather than logged: it describes grant state.
-        deps.counter.recordDomainRead("denied");
-        return fixedResponse(FORBIDDEN_BODY, 403);
-      }
-      // An invalid or replayed cursor is client-controlled and must not be
-      // distinguishable by reason either.
-      if (isInvalidCursor(error)) {
-        deps.counter.recordDomainRead("denied");
-        return fixedResponse(BAD_REQUEST_BODY, 400);
-      }
-      deps.counter.recordDomainRead("failed");
+      recordDomainRead("served");
+      return new Response(outcome.canonical_json, { status: 200, headers: JSON_HEADERS });
+    } catch {
+      recordDomainRead("failed");
       return fixedResponse(INTERNAL_BODY, 500);
     }
   };

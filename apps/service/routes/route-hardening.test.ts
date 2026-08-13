@@ -217,6 +217,15 @@ describe("route hardening: limit parameter abuse", () => {
     for (const result of captured) assertNoLeak(result.body);
   });
 
+  test("authentication still precedes query validation", async () => {
+    const result = await capture(service, new Request(memoriesUrl("?limit=0"), {
+      method: "GET",
+      headers: { authorization: "Bearer invalid-token" },
+    }));
+    expect(result.status).toBe(401);
+    expect(result.body).toBe(UNAUTHORIZED_BODY);
+  });
+
   test("limit omitted entirely uses the default and returns 200", async () => {
     // red-proof: require limit as mandatory so omitting it yields 400.
     const result = await getAuthorized(service, "");

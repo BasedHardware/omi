@@ -10,6 +10,8 @@ import type { AcceptedCoverageState, ContentSafeRecallTrace, StmCoverageState } 
 import type { RenderNode } from "../../core/retrieve/render";
 import type { ApplicationGrantProjectedTreeInputSnapshot } from
   "../../core/retrieve/authorization-boundary";
+import { isInvalidMcpCursorError } from "../../apps/mcp/cursor";
+import { createFirebaseIdentityVerifier } from "../../apps/service/auth/firebase-identity";
 import {
   readDirectAuthorizedMemoryPage,
 } from "../../apps/service/composition/memory-read";
@@ -53,11 +55,13 @@ export type FirebaseAuthorizedMemoryReadOutcome =
       outcome: "authentication" | "authorization" | "stale_epoch" | "unavailable";
     }>
   | Readonly<{ kind: "invalidated" }>
+  | Readonly<{ kind: "invalid_cursor" }>
   | Readonly<{ kind: "unavailable" }>
   | Readonly<{ kind: "loaded"; canonical_json: string }>;
 
 export interface PostgresFirebaseAuthorizedMemoryReadRuntime {
   readonly [RUNTIME_PORT]: true;
+  authenticate(idToken: string, nowEpochSeconds: number): Promise<boolean>;
   read(
     idToken: string,
     nowEpochSeconds: number,
@@ -128,13 +132,22 @@ export const createPostgresFirebaseAuthorizedMemoryReadRuntime = (
   const verifyCursor = callable(product.verify_cursor) as ApplicationReadPorts["verifyCursor"];
   const issueCursor = callable(product.issue_cursor) as ApplicationReadPorts["issueCursor"];
   const traceSink = callable(product.trace_sink) as FirebaseAuthorizedMemoryProductOptions["trace_sink"];
+  const authorization = options.authorization as unknown as PostgresFirebaseAuthorizedGraphSnapshotRuntimeOptions;
+  const identityVerifier = createFirebaseIdentityVerifier({
+    project_id: authorization.project_id,
+    runtime_mode: authorization.runtime_mode,
+    adapter: authorization.id_token_adapter,
+  });
   const graph = createPostgresFirebaseAuthorizedGraphSnapshotRuntime(
-    options.authorization as unknown as PostgresFirebaseAuthorizedGraphSnapshotRuntimeOptions,
+    authorization,
   );
   const stableSecret = new Uint8Array(secret);
 
   return Object.freeze({
     [RUNTIME_PORT]: true as const,
+    async authenticate(idToken: string, nowEpochSeconds: number) {
+      return await identityVerifier.resolve(idToken, nowEpochSeconds) !== null;
+    },
     async read(
       idToken: string,
       nowEpochSeconds: number,
@@ -167,6 +180,9 @@ export const createPostgresFirebaseAuthorizedMemoryReadRuntime = (
         return Object.freeze({ kind: "loaded" as const, canonical_json: page.canonical_json });
       } catch (error) {
         if (error instanceof ClosedGraphLoad) return error.outcome;
+        if (isInvalidMcpCursorError(error)) {
+          return Object.freeze({ kind: "invalid_cursor" as const });
+        }
         if (error instanceof ApplicationReadInvalidatedError) {
           return Object.freeze({ kind: "invalidated" as const });
         }

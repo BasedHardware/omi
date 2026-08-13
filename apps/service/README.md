@@ -287,7 +287,12 @@ If any non-loopback IPv4 address on the host can reach `/health`, `lanProbe.stat
 
 ## Known limitations
 
-- **No deployed Postgres adapter in this local binary.** The conversations application port is durable through SQLite locally; a production composition still owes its Postgres adapter and deployment credentials.
+- **The local binary deliberately remains SQLite QA.** The separately injected
+  `createPostgresFirebaseAuthorizedMemoryServiceApp` composition now binds the
+  authoritative PostgreSQL/Firebase memory reader to this same
+  `/v1/memories` route and Hono `/mcp` root, but it chooses no listener,
+  deployment credentials, MCP API-key adapter, or cohort. Conversations and the
+  other local domains remain SQLite-only here.
 - **No production Chat model adapter.** Local Chat generation uses the deterministic timed script; the production LLM remains a later source adapter.
 - **Provisional served-memory selection.** The composition serves temporal **leaf** nodes (one synthesized memory per local day). That aligns with a timeline UI and the seeded fixture layout, but it is a QA composition choice, not a ratified product rule (`composition/memory-read.ts` documents this).
 - **No field negotiation** for optional response fields such as citations or provenance — clients receive the full ratified wire shape.

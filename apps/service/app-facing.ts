@@ -86,6 +86,7 @@ import { CONVERSATIONS_PATH, registerConversationRoutes } from "./routes/convers
 import { registerCurrentSessionRoutes } from "./routes/current-session";
 import { FOLDERS_PATH, registerFolderRoutes } from "./routes/folders";
 import {
+  createPreparedMemoryRouteReadPort,
   MEMORY_READ_PATH,
   MEMORY_READ_TRANSITIONAL_ALIAS_PATH,
   registerMemoryRoutes,
@@ -728,7 +729,11 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     counter.recordNonDomainRequest();
     return new Response(JSON.stringify({ status: "ready" }), { status: 200, headers: JSON_HEADERS });
   });
-  registerMemoryRoutes(app, { resolvePrincipal, prepareRead, counter });
+  registerMemoryRoutes(app, {
+    readPort: createPreparedMemoryRouteReadPort({ resolvePrincipal, prepareRead }),
+    nowEpochSeconds: () => anchorEpochSeconds,
+    counter,
+  });
   registerConversationRoutes(app, {
     resolvePrincipal,
     store: conversations,
