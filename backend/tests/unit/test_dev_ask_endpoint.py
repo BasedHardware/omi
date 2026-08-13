@@ -17,6 +17,9 @@ from unittest.mock import patch
 
 import dependencies as deps
 import routers.developer as dev
+import pytest
+from fastapi import HTTPException
+from utils.conversations.search import ConversationSearchUnavailableError
 
 
 def _conv(cid="c1", title="Pricing sync", overview="We discussed pricing.", text="Raise prices 10%."):
@@ -112,6 +115,33 @@ def test_ask_endpoint_is_bound_to_the_dev_ask_rate_limited_dependency():
 
     assert uid == "u1"
     assert enforced["policy"] == "dev:ask"
+
+
+def test_ask_rejects_invalid_timezone():
+    with pytest.raises(ValueError, match="valid IANA timezone"):
+        dev.DeveloperAskRequest(question="when?", timezone="Not/A_Timezone")
+
+
+def test_ask_maps_search_outage_to_503():
+    with patch.object(dev, "search_conversations", side_effect=ConversationSearchUnavailableError("down")):
+        with pytest.raises(HTTPException) as exc_info:
+            dev.ask_conversations(dev.DeveloperAskRequest(question="when?"), uid="u1")
+
+    assert exc_info.value.status_code == 503
+
+
+def test_ask_merges_transcript_only_hits_before_rag():
+    with patch.object(dev, "search_conversations", return_value={"items": []}), patch.object(
+        dev, "resolve_mcp_conversation_search_ids", return_value=["c1"]
+    ), patch.object(dev.conversations_db, "get_conversations_by_id", return_value=[{"id": "c1"}]), patch.object(
+        dev, "deserialize_conversations", return_value=[_conv()]
+    ), patch.object(
+        dev, "qa_rag", return_value="answer"
+    ) as qa:
+        response = dev.ask_conversations(dev.DeveloperAskRequest(question="what was said?"), uid="u1")
+
+    assert response.sources[0].id == "c1"
+    qa.assert_called_once()
 
 
 def test_ask_lives_on_public_developer_api_not_app_client_firebase():

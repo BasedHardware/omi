@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from enum import Enum
 from typing import List, Literal, Optional
@@ -57,7 +58,12 @@ from utils.notifications import send_action_item_data_message, sync_action_item_
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.location import resolve_geolocation
-from utils.conversations.search import search_conversations
+from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
+from utils.conversations.mcp_transcript_search import (
+    merge_summary_and_transcript_ids,
+    resolve_mcp_conversation_search_ids,
+)
+import database.vector_db as vector_db
 from utils.conversations.factory import deserialize_conversations
 from utils.llm.chat import qa_rag
 from utils.executors import postprocess_executor
@@ -1215,6 +1221,18 @@ class DeveloperAskRequest(BaseModel):
     )
     timezone: str = Field(default="UTC", description="IANA timezone used to resolve relative dates in the answer")
 
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        value = value.strip()
+        if not value or len(value) > 64:
+            raise ValueError("timezone must be a valid IANA timezone")
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("timezone must be a valid IANA timezone") from exc
+        return value
+
 
 class DeveloperAskSource(BaseModel):
     id: str
@@ -1263,9 +1281,20 @@ def ask_conversations(request: DeveloperAskRequest, uid: str = Depends(get_uid_w
 
     # Exclude discarded conversations from retrieval (the search default includes
     # them), so a deleted/discarded conversation is never fed into the LLM.
-    results = search_conversations(uid, question, per_page=request.limit, include_discarded=False)
+    try:
+        results = search_conversations(uid, question, per_page=request.limit, include_discarded=False)
+    except ConversationSearchUnavailableError as exc:
+        raise HTTPException(status_code=503, detail="Search temporarily unavailable") from exc
     items = results.get("items", []) if isinstance(results, dict) else []
-    conversation_ids = [item["id"] for item in items if item.get("id")][: request.limit]
+    summary_ids = [item["id"] for item in items if item.get("id")]
+    transcript_ids = resolve_mcp_conversation_search_ids(
+        uid,
+        question,
+        limit=request.limit,
+        query_vectors=lambda *args, **kwargs: [],
+        search_transcript_chunks=vector_db.search_transcript_chunks,
+    )
+    conversation_ids = merge_summary_and_transcript_ids(transcript_ids, summary_ids, request.limit)
     if not conversation_ids:
         return DeveloperAskResponse(answer=_ASK_NO_CONTEXT, sources=[])
 
