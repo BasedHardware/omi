@@ -913,7 +913,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
           return "\(title). \(objective)"
         case .agentCompletion(_, _, _, _, let title, _, let output, _):
           return "\(title). \(output)"
-        case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+        case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
+          .citation:
           return nil
         case .toolCall, .thinking:
           return nil

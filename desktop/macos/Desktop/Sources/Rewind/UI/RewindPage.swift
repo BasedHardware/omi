@@ -156,6 +156,7 @@ struct RewindPage: View {
     .shellPageKeyboardTarget($isPageFocused)
     .task {
       await viewModel.loadInitialData()
+      await resolveCitationFocusIfNeeded()
     }
     .onAppear {
       isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
@@ -171,6 +172,9 @@ struct RewindPage: View {
       isMonitoring = state.isMonitoring
       screenAnalysisEnabled = state.captureEnabled
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .rewindCitationFocusRequested)) { _ in
+      Task { await resolveCitationFocusIfNeeded() }
     }
     .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
       // RewindPage itself owns the decoded NSImage and frame-load task. Clearing
@@ -307,6 +311,15 @@ struct RewindPage: View {
       }
       return .ignored
     }
+  }
+
+  @MainActor
+  private func resolveCitationFocusIfNeeded() async {
+    guard let id = RewindCitationFocusState.shared.consume(),
+      let screenshot = try? await RewindDatabase.shared.getScreenshot(id: id)
+    else { return }
+    await viewModel.focusCitationScreenshot(screenshot)
+    currentIndex = viewModel.screenshots.firstIndex(where: { $0.id == id }) ?? currentIndex
   }
 
   /// The AppKit track owns wheel/swipe input and forwards only gestures that begin on the timeline.

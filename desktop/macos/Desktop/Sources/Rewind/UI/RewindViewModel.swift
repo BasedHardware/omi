@@ -609,6 +609,12 @@ class RewindViewModel: ObservableObject {
     AnalyticsManager.shared.rewindScreenshotViewed(timestamp: screenshot.timestamp)
   }
 
+  func focusCitationScreenshot(_ screenshot: Screenshot) async {
+    selectedDate = Calendar.current.startOfDay(for: screenshot.timestamp)
+    await loadScreenshotsForDate(selectedDate)
+    selectScreenshot(screenshot)
+  }
+
   func selectNextScreenshot() {
     guard let current = selectedScreenshot,
       let currentIndex = screenshots.firstIndex(where: { $0.id == current.id }),

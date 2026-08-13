@@ -44,14 +44,31 @@ router = APIRouter()
 # --------------- response envelope ---------------
 
 
+class ToolSource(BaseModel):
+    kind: str = Field(max_length=32)
+    source_id: str = Field(max_length=512)
+    title: str = Field(default='', max_length=160)
+    preview: str = Field(default='', max_length=600)
+    created_at: Optional[str] = Field(default=None, max_length=80)
+    moment_timestamp_ms: Optional[int] = None
+    app_name: Optional[str] = Field(default=None, max_length=80)
+    url: Optional[str] = Field(default=None, max_length=2048)
+
+
 class ToolResponse(BaseModel):
     tool_name: str
     result_text: str
     is_error: bool = False
+    sources: list[ToolSource] = Field(default_factory=list)
 
 
-def _ok(tool_name: str, text: str) -> dict:
-    return {"tool_name": tool_name, "result_text": text, "is_error": text.startswith("Error")}
+def _ok(tool_name: str, text: str, sources: Optional[list[dict]] = None) -> dict:
+    return {
+        "tool_name": tool_name,
+        "result_text": text,
+        "is_error": text.startswith("Error"),
+        "sources": sources or [],
+    }
 
 
 # --------------- request models ---------------
@@ -110,6 +127,7 @@ def get_conversations(
     include_transcript: bool = Query(default=True),
     uid: str = Depends(get_current_user_uid),
 ):
+    sources: list[dict] = []
     result = get_conversations_text(
         uid=uid,
         start_date=start_date,
@@ -117,8 +135,9 @@ def get_conversations(
         limit=limit,
         offset=offset,
         include_transcript=include_transcript,
+        source_sink=sources,
     )
-    return _ok("get_conversations", result)
+    return _ok("get_conversations", result, sources)
 
 
 @router.post("/v1/tools/conversations/search", response_model=ToolResponse)
@@ -126,6 +145,7 @@ def search_conversations(
     body: SearchConversationsRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
 ):
+    sources: list[dict] = []
     result = search_conversations_text(
         uid=uid,
         query=body.query,
@@ -133,8 +153,9 @@ def search_conversations(
         end_date=body.end_date,
         limit=body.limit,
         include_transcript=body.include_transcript,
+        source_sink=sources,
     )
-    return _ok("search_conversations", result)
+    return _ok("search_conversations", result, sources)
 
 
 class SearchChunksRequest(BaseModel):
@@ -174,15 +195,20 @@ def get_memories(
     end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     uid: str = Depends(get_current_user_uid),
 ):
+    sources: list[dict] = []
     result = get_memories_text(
         uid=uid,
         limit=limit,
         offset=offset,
         start_date=start_date,
         end_date=end_date,
+        source_sink=sources,
     )
-    result = preserve_chat_memory_tool_result_boundary('get_memories_tool', result)
-    return _ok("get_memories", result)
+    bounded_result = preserve_chat_memory_tool_result_boundary('get_memories_tool', result)
+    if bounded_result != result:
+        sources = []
+    result = bounded_result
+    return _ok("get_memories", result, sources)
 
 
 @router.post("/v1/tools/memories/search", response_model=ToolResponse)
@@ -190,13 +216,18 @@ def search_memories(
     body: SearchMemoriesRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
 ):
+    sources: list[dict] = []
     result = search_memories_text(
         uid=uid,
         query=body.query,
         limit=body.limit,
+        source_sink=sources,
     )
-    result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)
-    return _ok("search_memories", result)
+    bounded_result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)
+    if bounded_result != result:
+        sources = []
+    result = bounded_result
+    return _ok("search_memories", result, sources)
 
 
 # --------------- action item endpoints ---------------
@@ -214,6 +245,7 @@ def get_action_items(
     due_end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     uid: str = Depends(get_current_user_uid),
 ):
+    sources: list[dict] = []
     result = get_action_items_text(
         uid=uid,
         limit=limit,
@@ -224,8 +256,9 @@ def get_action_items(
         end_date=end_date,
         due_start_date=due_start_date,
         due_end_date=due_end_date,
+        source_sink=sources,
     )
-    return _ok("get_action_items", result)
+    return _ok("get_action_items", result, sources)
 
 
 @router.post("/v1/tools/action-items", response_model=ToolResponse)

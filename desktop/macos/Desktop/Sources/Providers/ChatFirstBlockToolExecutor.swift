@@ -72,6 +72,23 @@ enum ChatFirstBlockToolExecutor {
         blocksJSON: journalBlocksJSON,
         authorizationSnapshot: authorizationSnapshot
       )
+      await ChatCitationProvenanceRegistry.shared.markSelected(
+        backendBlocks.compactMap { block -> (kind: ChatCitationReference.Kind, sourceID: String)? in
+          switch block["type"] as? String {
+          case "taskCard":
+            return (kind: .task, sourceID: block["task_id"] as? String ?? "")
+          case "goalLink":
+            return (kind: .goal, sourceID: block["goal_id"] as? String ?? "")
+          case "captureLink":
+            return (kind: .conversation, sourceID: block["conversation_id"] as? String ?? "")
+          case "memoryLink":
+            return (kind: .memory, sourceID: block["memory_id"] as? String ?? "")
+          default:
+            return nil
+          }
+        }.filter { !$0.sourceID.isEmpty },
+        runID: runID,
+        attemptID: attemptID)
       return #"{"ok":true,"rendered":#(journalBlocks.count)}"#
     } catch {
       guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)

@@ -851,6 +851,7 @@ extension ChatContentBlock {
     case .captureLink(let id, _, _, _): return "c:\(id)"
     case .conversationLink(let id, _, _): return "v:\(id)"
     case .memoryLink(let id, _, _): return "m:\(id)"
+    case .citation(let id, let reference): return "r:\(id):\(reference.ordinal)"
     case .agentSpawn(let id, let pillId, _, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
     case .agentCompletion(let id, let pillId, _, _, _, _, _, _): return "a:\(id):\(pillId?.uuidString ?? "")"
     }

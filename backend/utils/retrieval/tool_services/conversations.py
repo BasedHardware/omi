@@ -5,7 +5,7 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 
 import re
 from datetime import datetime, timezone
-from typing import List, Optional, Set
+from typing import Any, List, Optional, Set
 
 import database.conversations as conversations_db
 import database.notifications as notification_db
@@ -24,6 +24,14 @@ from utils.conversations.search import (
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_isoformat(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    isoformat = getattr(value, 'isoformat', None)
+    formatted = isoformat() if callable(isoformat) else value
+    return formatted if isinstance(formatted, str) else str(formatted)[:80]
 
 
 def parse_iso_date(date_str: str, param_name: str) -> datetime:
@@ -50,6 +58,7 @@ def get_conversations_text(
     max_transcript_segments: int = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
+    source_sink: Optional[List[dict[str, Any]]] = None,
 ) -> str:
     """Fetch conversations and format as LLM-ready text."""
     logger.info(f"get_conversations_text - uid: {uid}, limit: {limit}, offset: {offset}")
@@ -142,6 +151,20 @@ def get_conversations_text(
             logger.error(f"Error parsing conversation {conv_data.get('id')}: {e}")
             continue
 
+    if source_sink is not None:
+        for conversation in conversations[:128]:
+            source_sink.append(
+                {
+                    'kind': 'conversation',
+                    'source_id': conversation.id,
+                    'title': str(getattr(getattr(conversation, 'structured', None), 'title', None) or 'Conversation')[
+                        :160
+                    ],
+                    'preview': str(getattr(getattr(conversation, 'structured', None), 'overview', None) or '')[:600],
+                    'created_at': _safe_isoformat(getattr(conversation, 'created_at', None)),
+                }
+            )
+
     return conversations_to_string(
         conversations,
         use_transcript=include_transcript,
@@ -160,6 +183,7 @@ def search_conversations_text(
     max_transcript_segments: int = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
+    source_sink: Optional[List[dict[str, Any]]] = None,
 ) -> str:
     """Hybrid keyword + semantic vector search for conversations, formatted as LLM-ready text."""
     exact_conversation_id = parse_exact_conversation_reference(query)
@@ -260,6 +284,22 @@ def search_conversations_text(
             except Exception as e:
                 logger.error("Error parsing conversation search result: %s", type(e).__name__)
                 continue
+
+        if source_sink is not None:
+            for conversation in conversations[:128]:
+                source_sink.append(
+                    {
+                        'kind': 'conversation',
+                        'source_id': conversation.id,
+                        'title': str(
+                            getattr(getattr(conversation, 'structured', None), 'title', None) or 'Conversation'
+                        )[:160],
+                        'preview': str(getattr(getattr(conversation, 'structured', None), 'overview', None) or '')[
+                            :600
+                        ],
+                        'created_at': _safe_isoformat(getattr(conversation, 'created_at', None)),
+                    }
+                )
 
         match_kind = 'matching exactly' if exact_conversation_id else 'matching'
         result = f"Found {len(conversations)} conversations {match_kind} '{query}':\n\n"

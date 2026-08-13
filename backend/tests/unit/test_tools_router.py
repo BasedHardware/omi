@@ -380,6 +380,7 @@ memories_model_mod = _stub_module("models.memories")
 class FakeMemoryDB:
     def __init__(self, **kwargs):
         self.id = kwargs.get('id', 'test-mem-id')
+        self.memory_id = kwargs.get('memory_id', self.id)
         self.content = kwargs.get('content', 'test memory')
         self.category = FakeCategory.other
         self.created_at = kwargs.get('created_at', datetime.now(timezone.utc))
@@ -850,6 +851,17 @@ class TestRouterEnvelope:
         assert result["tool_name"] == "test_tool"
         assert result["result_text"] == "All good"
         assert result["is_error"] is False
+
+    def test_ok_preserves_typed_sources(self):
+        source = {
+            "kind": "memory",
+            "source_id": "memory-1",
+            "title": "Memory",
+            "preview": "A bounded preview",
+        }
+        response = router_mod.ToolResponse.model_validate(router_mod._ok("get_memories", "result", [source]))
+
+        assert response.sources == [router_mod.ToolSource(**source)]
 
     def test_ok_error(self):
         result = router_mod._ok("test_tool", "Error: something went wrong")

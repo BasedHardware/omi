@@ -21,6 +21,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _safe_isoformat(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    isoformat = getattr(value, 'isoformat', None)
+    formatted = isoformat() if callable(isoformat) else value
+    return formatted if isinstance(formatted, str) else str(formatted)[:80]
+
+
 def get_action_items_text(
     uid: str,
     limit: int = 50,
@@ -31,6 +39,7 @@ def get_action_items_text(
     end_date: Optional[str] = None,
     due_start_date: Optional[str] = None,
     due_end_date: Optional[str] = None,
+    source_sink: Optional[List[dict[str, Any]]] = None,
 ) -> str:
     """Fetch action items and format as LLM-ready text."""
     logger.info(f"get_action_items_text - uid: {uid}, limit: {limit}, offset: {offset}, completed: {completed}")
@@ -118,6 +127,17 @@ def get_action_items_text(
         display_tz, tz_label = timezone.utc, "UTC"
 
     result = f"User Action Items ({len(action_items)} total):\n\n"
+    if source_sink is not None:
+        for item in action_items[:128]:
+            source_sink.append(
+                {
+                    'kind': 'task',
+                    'source_id': str(item.get('id') or ''),
+                    'title': str(item.get('description') or 'Task')[:160],
+                    'preview': str(item.get('description') or '')[:600],
+                    'created_at': _safe_isoformat(item.get('created_at')),
+                }
+            )
     for i, item in enumerate(action_items, 1):
         status = "✅ Completed" if item.get('completed', False) else "⬜ Pending"
         result += f"{i}. [{status}] {item.get('description', 'No description')}\n"
