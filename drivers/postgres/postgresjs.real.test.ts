@@ -714,6 +714,9 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'omi_platform_restore') THEN
           CREATE ROLE omi_platform_restore NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'omi_platform_restore_operator') THEN
+          CREATE ROLE omi_platform_restore_operator NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+        END IF;
       END
       $role$
     `, [], { prepare: false });
@@ -880,6 +883,76 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         values: [],
       }),
     )).rejects.toMatchObject({ code: "42501" });
+  });
+
+  test("releases one exact restored generation through the single GCP-operator role", async () => {
+    const generationDigest = createHash("sha256").update(randomUUID()).digest("hex");
+    const checkpointContentHash = "a".repeat(64);
+    const candidateDigest = "b".repeat(64);
+    const evidenceDigest = "c".repeat(64);
+    const releaseContentHash = "d".repeat(64);
+    await ownerSql.unsafe(`INSERT INTO omi_memory.postgres_restore_admission_revisions
+        (database_generation_digest, release_revision, state, restore_id,
+         restored_snapshot_digest, checkpoint_candidate_digest,
+         checkpoint_evidence_digest, previous_release_revision, content_hash,
+         release_authority)
+      VALUES ($1, 1, 'checkpointed', $2, $3, $4, $5, NULL, $6, NULL)`, [
+      generationDigest, `restore:gcp-operator:${randomUUID()}`, "e".repeat(64),
+      candidateDigest, evidenceDigest, checkpointContentHash,
+    ]);
+    await ownerSql.unsafe(`INSERT INTO omi_memory.postgres_restore_admission_heads
+        (database_generation_digest, release_revision)
+      VALUES ($1, 1)`, [generationDigest]);
+
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      return transaction.unsafe(`SELECT * FROM omi_memory.release_postgres_restore_generation_v2(
+        $1, 1, $2, $3, $4, 2, $5
+      )`, [generationDigest, checkpointContentHash, candidateDigest, evidenceDigest, releaseContentHash]);
+    })).rejects.toMatchObject({ code: "42501" });
+
+    const release = await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_restore_operator");
+      return transaction.unsafe<{ result: string; release_revision: string; release_content_hash: string }[]>(
+        `SELECT * FROM omi_memory.release_postgres_restore_generation_v2(
+          $1, 1, $2, $3, $4, 2, $5
+        )`, [generationDigest, checkpointContentHash, candidateDigest, evidenceDigest, releaseContentHash],
+      );
+    });
+    expect(release).toEqual([{
+      result: "released", release_revision: "2", release_content_hash: releaseContentHash,
+    }]);
+    const replay = await ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_restore_operator");
+      return transaction.unsafe<{ result: string }[]>(
+        `SELECT * FROM omi_memory.release_postgres_restore_generation_v2(
+          $1, 1, $2, $3, $4, 2, $5
+        )`, [generationDigest, checkpointContentHash, candidateDigest, evidenceDigest, releaseContentHash],
+      );
+    });
+    expect(replay[0]?.result).toBe("replayed");
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_restore_operator");
+      return transaction.unsafe(`SELECT * FROM omi_memory.release_postgres_restore_generation_v2(
+        $1, 1, $2, $3, $4, 2, $5
+      )`, [generationDigest, checkpointContentHash, candidateDigest, evidenceDigest, "f".repeat(64)]);
+    })).rejects.toMatchObject({ code: "P3603" });
+
+    const persisted = await ownerSql.unsafe<{
+      release_authority: string;
+      first_approval_subject_digest: string | null;
+      second_approval_subject_digest: string | null;
+      manual_release_receipt_digest: string | null;
+    }[]>(`SELECT release_authority, first_approval_subject_digest,
+          second_approval_subject_digest, manual_release_receipt_digest
+        FROM omi_memory.postgres_restore_admission_revisions
+        WHERE database_generation_digest = $1 AND release_revision = 2`, [generationDigest]);
+    expect(persisted).toEqual([{
+      release_authority: "gcp_iam",
+      first_approval_subject_digest: null,
+      second_approval_subject_digest: null,
+      manual_release_receipt_digest: null,
+    }]);
   });
 
   test("Listen capture persists an atomic finalization boundary with exact replay and rollback", async () => {

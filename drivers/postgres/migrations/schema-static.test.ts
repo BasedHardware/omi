@@ -401,6 +401,28 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(gateSql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\.postgres_restore_admission_/);
   });
 
+  test("moves new restore release authority to one fixed GCP-IAM operator operation", () => {
+    const gateSql = migrationSql.find((migration) =>
+      migration.fileName === "0036-gcp-operator-restore-admission.sql")?.sql;
+    expect(gateSql).toBeDefined();
+    if (gateSql === undefined) throw new Error("missing_gcp_operator_restore_admission_migration");
+    expect(gateSql).toContain("ADD COLUMN release_authority text");
+    expect(gateSql).toContain("release_authority = 'gcp_iam'");
+    expect(gateSql).toContain("first_approval_subject_digest IS NULL");
+    expect(gateSql).toContain("second_approval_subject_digest IS NULL");
+    expect(gateSql).toContain("manual_release_receipt_digest IS NULL");
+    expect(gateSql).toContain(
+      "CREATE FUNCTION omi_memory.release_postgres_restore_generation_v2(",
+    );
+    expect(gateSql).toContain("FOR UPDATE OF head, revision");
+    expect(gateSql).toContain("GRANT USAGE ON SCHEMA omi_memory TO omi_platform_restore_operator;");
+    expect(gateSql).toContain("TO omi_platform_restore_operator;");
+    expect(gateSql).toContain("FROM omi_platform_application;");
+    expect(gateSql).toContain("FROM omi_platform_cleanup;");
+    expect(gateSql).toContain("FROM omi_platform_restore;");
+    expect(gateSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*postgres_restore_admission_/s);
+  });
+
   test("closes unbound internal worker authority after restore registration", () => {
     const gateSql = migrationSql.find((migration) =>
       migration.fileName === "0034-internal-worker-restore-gate.sql")?.sql;

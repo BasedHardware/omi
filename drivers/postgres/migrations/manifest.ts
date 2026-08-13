@@ -217,4 +217,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0035-production-runtime-readiness.sql",
     sha256: "0fa72a8def09da66d2f36be8c9e334877e83595d0150467794ae476e3123d89e",
   }),
+  Object.freeze({
+    version: 36,
+    name: "gcp-operator-restore-admission",
+    fileName: "0036-gcp-operator-restore-admission.sql",
+    sha256: "ab6b18bff5d8a28a7e38d2946b2a39ce5e0b67c3eaa596c6ed4bda3ce333250f",
+  }),
 ]);

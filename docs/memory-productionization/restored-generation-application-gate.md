@@ -8,9 +8,12 @@ deletion fence.
 ## Authority model
 
 - `postgres_restore_admission_revisions` is append-only global safety evidence.
-- A `released` revision structurally requires an exact checkpoint candidate and
-  consistency-evidence digest, two distinct approval subjects and receipts, and
-  one manual release receipt.
+- A `released` revision requires an exact checkpoint candidate and
+  consistency-evidence digest. Migration 36 implements David's amended
+  authority rule for new releases: one operator authenticated through the
+  reviewed GCP IAM/Cloud SQL role boundary, with no second approver, separate
+  application approval receipt, or second manual-release workflow. Historical
+  migration-29 release rows remain readable and immutable.
 - `postgres_restore_admission_heads` selects the current revision for one opaque
   database-generation digest.
 - The server configuration fixes the expected generation. Clients cannot choose
@@ -21,10 +24,12 @@ deletion fence.
 - Every canonical Firebase PostgreSQL transaction re-locks the exact generation,
   release revision, and content hash before replay or repository work.
 
-The migration intentionally provides no function or grant for creating release
-revisions or advancing heads. Operator receipt authentication, two-person
-approval composition, and the manual release action remain inactive until their
-dedicated operational adapter and runbook are approved and qualified.
+The only release mutation is the fixed
+`release_postgres_restore_generation_v2` operation granted to
+`omi_platform_restore_operator`. Application, cleanup, and ordinary restore
+roles cannot execute it or mutate the tables. Production role membership/login
+comes from reviewed GCP IAM; the database stores the release transition and
+checkpoint evidence while GCP supplies operator authentication and audit.
 
 ## Honest boundary
 
