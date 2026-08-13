@@ -9,17 +9,17 @@
 
 ## Status Summary
 
-| Category | Status | Codex Score (R5) |
+| Category | Status | Codex Score (R6) |
 |----------|--------|------------------|
 | Board-Specific BOMs | ✅ Complete — 4 files | 10/10 |
 | Pick-and-Place / CPL Files | ✅ Complete — 3 boards | 8/10 |
-| LCSC / Distributor Part Numbers | ✅ Complete — 48/63 found, sourcing guide | 7→pending |
-| SWD Debug Pad Map | ✅ Complete — SWD-DEBUG-ACCESS.md | 7→pending |
+| LCSC / Distributor Part Numbers | ✅ Complete — 48/63 found, sourcing guide | 7/10 |
+| SWD Debug Pad Map | ✅ Complete — SWD-DEBUG-ACCESS.md | 7/10 |
 | Stencil / Reflow / PCBA Notes | ✅ Verified — STENCIL-REFLOW-NOTES.md | 8/10 |
-| Battery Procurement Spec | ✅ Verified — BATTERY-SPEC.md | 7→pending |
-| RF / Antenna Notes | ✅ Verified — RF-ANTENNA-NOTES.md | 7→pending |
-| Impedance / Stackup Notes | ✅ Verified — IMPEDANCE-STACKUP.md | 7→pending |
-| FPC Flex Fab Notes | ✅ Verified — FPC-FLEX-FAB-NOTES.md | 7→pending |
+| Battery Procurement Spec | ✅ Verified — BATTERY-SPEC.md | 7/10 |
+| RF / Antenna Notes | ✅ Verified — RF-ANTENNA-NOTES.md | 7/10 |
+| Impedance / Stackup Notes | ✅ Verified — IMPEDANCE-STACKUP.md | 7/10 |
+| FPC Flex Fab Notes | ✅ Verified — FPC-FLEX-FAB-NOTES.md | 7/10 |
 | Alternate Parts List | ✅ Verified — ALTERNATES.md | 8/10 |
 | Electronics Build Guide | ✅ Complete — electronics.mdx improved | 8.2/10 |
 | PCB Gerbers | ✅ Complete (existing) | — |
@@ -29,7 +29,7 @@
 | Firmware Source | ✅ Complete (existing) | — |
 | License (MIT) | ✅ Complete (existing) | — |
 
-**Post-audit:** 14+ factual errors found and fixed. 6 rounds of Codex review + fixes applied. Key corrections: diplexer IL values, T5848≠T5838 (PDM vs I2S), overcharge protection threshold direction, JLCPCB 4L impedance minimum, stencil aperture dimensions, J-Link licensing, nrfutil commands, RF window strategy documented (PC+ABS wrapper + laser engraving), DSBGA/BGA pitch values verified from KiCad (U13=0.35mm, U15=0.4mm, U6/U11=0.4mm — all were listed as 0.5mm), FPC bend radius corrected (0.37mm total vs 0.29mm laminate), battery 20Wh per-cell limit, HDI service requirement.
+**Post-audit:** 20+ factual errors found and fixed across 6 rounds of Codex review. Key corrections: diplexer IL values, T5848≠T5838 (PDM vs I2S), overcharge protection threshold direction, JLCPCB 4L impedance minimum, stencil aperture dimensions, J-Link licensing, nrfutil commands, RF window strategy documented (PC+ABS wrapper + laser engraving surface current disruption), TPS628438 package 1.05×0.70mm (was 1.8×1.8mm), W25Q16JW→JV voltage family (1.8V vs 3.3V), PI965 Section II cargo-only for UN3480, max discharge ≥300mA, UN38.3 availability vs accompaniment, DSBGA/BGA pitch values, FPC bend radius, HDI service requirement.
 
 ---
 
@@ -95,3 +95,9 @@ Each task went through multiple Codex review rounds until scoring ≥8/10. Key c
 | R6 | FM8625H switching time <100ns → 2-20µs (budget SPDT, not premium) | Misleading coexistence timing |
 | R6 | nrfutil install via pip → standalone download (pip installs deprecated v6) | Wrong toolchain |
 | R6 | 3M 467 stiffener adhesive "thermally cured" → pressure-laminated (PSA) | Wrong process instruction |
+| R6b | TPS628438 package 1.8×1.8mm → 1.05×0.70mm (DigiKey/TI datasheet) | Wrong package dimensions |
+| R6b | W25Q16JWUXIQ → W25Q16JVUXIQ (JW=1.8V, JV=3.3V) — JW exceeds Vmax on 3.3V rail | Would destroy flash IC |
+| R6b | PI965 Section II allows passenger aircraft → false for UN3480 (cargo-only since 2020) | Shipping rejection |
+| R6b | Max continuous discharge ≥250mA → ≥300mA (5GHz TX + system can exceed 300mA) | Battery protection trips |
+| R6b | SWD "3 wires + ground" → 4 required connections (VTref, SWDIO, SWDCLK, GND) | Confusion on minimum wiring |
+| R6b | U13 pitch "finer than WLCSP" → same 0.35mm pitch as U1/U2 | Misleading difficulty assessment |
