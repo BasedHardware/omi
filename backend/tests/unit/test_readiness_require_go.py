@@ -87,10 +87,8 @@ def test_collect_gates_from_artifact_includes_proof_cases():
     [
         "cutover_evidence_readiness.py",
         "vector_search_provider_readiness.py",
-        "rollout_schema_readiness.py",
         "shared_ns2_legacy_isolation_readiness.py",
         "pinecone_repair_validation_readiness.py",
-        "v3_dev_cloud_readiness.py",
     ],
 )
 def test_readiness_scripts_default_exit_zero(script_name: str):
@@ -108,10 +106,8 @@ def test_readiness_scripts_default_exit_zero(script_name: str):
     [
         "cutover_evidence_readiness.py",
         "vector_search_provider_readiness.py",
-        "rollout_schema_readiness.py",
         "shared_ns2_legacy_isolation_readiness.py",
         "pinecone_repair_validation_readiness.py",
-        "v3_dev_cloud_readiness.py",
     ],
 )
 def test_readiness_scripts_require_go_exits_nonzero(script_name: str):

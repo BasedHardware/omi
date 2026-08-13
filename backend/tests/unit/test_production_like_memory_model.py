@@ -57,6 +57,20 @@ def _run(pipeline_input):
     return asyncio.run(CoreMemoryPipeline(model_client=ProductionLikeMemoryModelClient()).run(pipeline_input))
 
 
+def test_memory_llm_omits_unsupported_luna_temperature_by_default(monkeypatch):
+    class FakeLlm:
+        def bind(self, **_kwargs):
+            raise AssertionError("default memories route must not bind a Luna temperature")
+
+    llm = FakeLlm()
+    monkeypatch.setattr(production_like_model, "get_llm", lambda _feature: llm)
+    monkeypatch.setattr(production_like_model, "get_provider", lambda _feature: "openai")
+    monkeypatch.setattr(production_like_model, "get_model", lambda _feature: "gpt-5.6-luna")
+    monkeypatch.setattr(production_like_model, "_memory_llm_logged", False)
+
+    assert production_like_model._memory_llm() is llm
+
+
 def test_prodlike_health_memories_route_to_review(monkeypatch):
     _patch_extractor(monkeypatch, "User's father has cancer and is receiving treatment.")
 

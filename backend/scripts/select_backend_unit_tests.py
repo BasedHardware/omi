@@ -156,6 +156,7 @@ AREA_TESTS = (
             'tests/unit/test_users_*.py',
             'tests/unit/test_delete_account_*.py',
             'tests/unit/test_claim_deletion_*.py',
+            'tests/unit/test_agent_vm_account_cleanup.py',
         ),
     ),
     (

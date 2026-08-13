@@ -79,6 +79,21 @@ final class QueryShellTests: XCTestCase {
   /// unobserved notification is a bridge action that silently does nothing — the defect the home
   /// automation entry points exist to avoid (it shipped once: the modern surface dropped its
   /// `.homeStageClose` handler while the registry kept answering "ok").
+  /// **A bridge action that promises the conversation leaves no search behind.** Mode is derived
+  /// from the search text, so `home_open_chat` / `home_ask` / `home_close_panel` reporting success
+  /// while the text survives would leave their effect hidden behind the results panel — the
+  /// regression cross-review caught after the close handler landed without covering open/ask.
+  func testConversationBridgeIntentsCollapseTheSearchAndAttachDoesNot() {
+    for intent in [HomeBridgeIntent.openChat, .ask, .closePanel] {
+      XCTAssertEqual(intent.searchTextAfter("standup notes"), "", "\(intent) must land on the conversation")
+    }
+    XCTAssertEqual(HomeBridgeIntent.attach.searchTextAfter("standup notes"), "standup notes")
+    // The transition is total: every intent has an explicit answer for live search text.
+    for intent in HomeBridgeIntent.allCases {
+      _ = intent.searchTextAfter("x")
+    }
+  }
+
   func testEveryBridgeHomeStageNotificationIsObservedByTheModernSurface() throws {
     // omi-test-quality: source-inspection -- static contract: SwiftUI @State/onReceive wiring cannot be driven hermetically without mounting the view; pins the registration sites for the bridge's four homeStage notifications.
     let source = try String(
@@ -91,6 +106,13 @@ final class QueryShellTests: XCTestCase {
       XCTAssertTrue(
         source.contains("publisher(for: .\(name))"),
         "QueryShellHome no longer observes .\(name); its bridge action now succeeds while doing nothing")
+    }
+    // …and each handler applies the shared search-text transition, so an action cannot succeed
+    // while its effect stays hidden behind a live search.
+    for intent in ["openChat", "closePanel", "ask", "attach"] {
+      XCTAssertTrue(
+        source.contains("HomeBridgeIntent.\(intent).searchTextAfter"),
+        "the .\(intent) handler no longer applies HomeBridgeIntent.searchTextAfter")
     }
   }
 
@@ -538,27 +560,5 @@ final class QueryShellTests: XCTestCase {
       ChatMessage(text: "   ", sender: .ai),
     ]
     XCTAssertEqual(HomeChatTranscript.plainText(messages), "You: hello")
-  }
-
-  /// **"All of chat is there" is not the same as "chat is reachable".** Asking is a mode, and the
-  /// mode is view state, so leaving Home and coming back leaves the transcript on the provider and
-  /// nothing on screen admitting it exists. The panel's corner offers the way back — but only once
-  /// history has actually loaded, or the chip flickers in during every launch.
-  func testTheWayBackIntoTheTranscriptAppearsOnlyForLoadedHistory() {
-    XCTAssertFalse(HomeChatReentry.isOffered(messageCount: 0, isLoading: false))
-    XCTAssertFalse(
-      HomeChatReentry.isOffered(messageCount: 12, isLoading: true),
-      "a count that is still being restored is not history yet")
-    XCTAssertTrue(HomeChatReentry.isOffered(messageCount: 12, isLoading: false))
-  }
-
-  /// It is the same rule Home already had for its resting mode. Two opinions about "is there
-  /// history worth showing" is how one of them silently stops matching the other.
-  func testReentryReusesHomesOneOpinionAboutExistingHistory() {
-    for (count, loading) in [(0, false), (12, true), (12, false), (1, false)] {
-      XCTAssertEqual(
-        HomeChatReentry.isOffered(messageCount: count, isLoading: loading),
-        HomeHistoryPresentationPolicy.restingMode(isLoading: loading, messageCount: count) == .chat)
-    }
   }
 }

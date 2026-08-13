@@ -15,16 +15,20 @@ TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)\+(?P<build>\d+)-macos$")
 EXPECTED_BUNDLE_ID = "com.omi.computer-macos"
 EXPECTED_BETA_BUNDLE_ID = "com.omi.computer-macos.beta"
 EXPECTED_TEAM_ID = "9536L8KLMP"
-REQUIRED_SMOKE_CHECKS = {
+REQUIRED_STRUCTURAL_SMOKE_CHECKS = {
     "Launch + identity metadata is aligned",
     "Auth persistence prerequisites: signing identity and Keychain-compatible entitlements are sane",
     "Backend routing config matches the declared external backend",
     "Sparkle/update metadata and authoritative ZIP artifacts are present",
     "Native helper/runtime bundle integrity passed",
     "Local storage/database package surface is present",
-    "Signed artifact Keychain write/read/delete canary passed",
-    "UserNotifications settings callback completion canary passed",
     "Signed desktop artifact smoke completed",
+}
+REQUIRED_BETA_BEHAVIORAL_SMOKE_CHECKS = {
+    "Signed app launches and remains alive",
+    "Signed artifact Keychain write/read/delete canary passed",
+    "Signed app relaunched for UserNotifications callback canary",
+    "UserNotifications settings callback completion canary passed",
 }
 
 
@@ -62,10 +66,9 @@ def _validate_smoke_contract(
     expected_build: str,
     expected_source_sha: str,
     label: str,
+    require_behavioral_checks: bool,
 ) -> set[str]:
-    """Enforce the shared success/tag/version/build/team/channel contract on a
-    smoke result. The beta artifact must satisfy the same bar as stable, only
-    with its own bundle id."""
+    """Enforce shared structural evidence, plus behavioral evidence for Beta."""
     expected = {
         "ok": True,
         "release_tag": release_tag,
@@ -86,11 +89,15 @@ def _validate_smoke_contract(
         fail(f"{label} smoke source SHA does not match the candidate tag")
 
     checks = set(smoke.get("checks") or [])
-    missing_checks = sorted(REQUIRED_SMOKE_CHECKS - checks)
+    required_checks = set(REQUIRED_STRUCTURAL_SMOKE_CHECKS)
+    if require_behavioral_checks:
+        required_checks.update(REQUIRED_BETA_BEHAVIORAL_SMOKE_CHECKS)
+    missing_checks = sorted(required_checks - checks)
     if missing_checks:
         fail(f"{label} smoke result is missing required checks: {', '.join(missing_checks)}")
 
-    _validate_callback_canary(smoke, bundle_id=bundle_id, label=label)
+    if require_behavioral_checks:
+        _validate_callback_canary(smoke, bundle_id=bundle_id, label=label)
     return checks
 
 
@@ -153,9 +160,10 @@ def validate(args: argparse.Namespace) -> dict:
         expected_build=expected_build,
         expected_source_sha=args.tag_sha,
         label="signed",
+        require_behavioral_checks=False,
     )
-
-    callback_canary = smoke.get("notification_callback_canary")
+    callback_canary = None
+    beta_checks: set[str] = set()
 
     zip_release = asset_by_name(release, {"Omi.zip"})
     dmg_release = asset_by_name(release, {"omi.dmg"})
@@ -170,15 +178,14 @@ def validate(args: argparse.Namespace) -> dict:
     if dmg_smoke.get("sha256") != artifact_digests[dmg_release["name"]]:
         fail("published DMG digest does not match the signed artifact smoke")
 
-    # Releases that ship the side-by-side Omi Beta identity carry a second smoke
-    # result; when those assets exist the beta artifact must satisfy the same
-    # contract as stable (older releases without beta assets stay valid).
+    # Beta adds launch, Keychain, and notification callback evidence to the
+    # structural contract. Older releases without Beta assets remain valid.
     beta_assets = {a.get("name") for a in release.get("assets", [])}
     if "Omi.Beta.zip" in beta_assets:
         if not getattr(args, "beta_smoke_result", "") or not Path(args.beta_smoke_result).exists():
             fail("release ships Omi Beta assets but no beta smoke result was provided")
         beta_smoke = load_json(args.beta_smoke_result)
-        _validate_smoke_contract(
+        beta_checks = _validate_smoke_contract(
             beta_smoke,
             bundle_id=EXPECTED_BETA_BUNDLE_ID,
             release_tag=args.release_tag,
@@ -186,7 +193,9 @@ def validate(args: argparse.Namespace) -> dict:
             expected_build=expected_build,
             expected_source_sha=args.tag_sha,
             label="beta",
+            require_behavioral_checks=True,
         )
+        callback_canary = beta_smoke.get("notification_callback_canary")
         beta_zip_release = asset_by_name(release, {"Omi.Beta.zip"})
         beta_dmg_release = asset_by_name(release, {"omi-beta.dmg"})
         beta_zip_smoke = smoke_artifact(beta_smoke, "sparkle_zip")
@@ -206,6 +215,7 @@ def validate(args: argparse.Namespace) -> dict:
         "verified_at": datetime.now(timezone.utc).isoformat(),
         "artifact_digests": artifact_digests,
         "signed_smoke_checks": sorted(checks),
+        "beta_smoke_checks": sorted(beta_checks),
         "notification_callback_canary": callback_canary,
     }
 

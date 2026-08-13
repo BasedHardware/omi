@@ -3,7 +3,7 @@ import type {
   AdapterAttemptContext,
   RuntimeAdapter,
 } from "../src/adapters/interface.js";
-import { AdapterWorkerPool } from "../src/runtime/worker-pool.js";
+import { AdapterWorkerPool, AdapterWorkerRecycledError } from "../src/runtime/worker-pool.js";
 
 function pinnedAdapter(): RuntimeAdapter {
   return {
@@ -396,5 +396,91 @@ describe("AdapterWorkerPool pinned workers", () => {
     const reused = pool.acquire(binding2);
     expect(reused?.workerId).toBe("worker-2");
     expect(pool.size).toBe(2);
+  });
+
+  it("poisons and removes a failed process-local worker before draining same-binding waiters", async () => {
+    let stopCount = 0;
+    let factoryCount = 0;
+    const pool = new AdapterWorkerPool(() => {
+      factoryCount += 1;
+      return { ...pinnedAdapter(), stop: async () => { stopCount += 1; } };
+    }, 1);
+    const binding = {
+      bindingId: "binding-poisoned",
+      sessionId: "session-1",
+      adapterId: "pi-mono",
+      adapterNativeSessionId: "native-1",
+      resumeFidelity: "none" as const,
+      cwd: "/tmp",
+    };
+    let release!: () => void;
+    const active = pool.runExclusiveQueued(binding, "attempt-failing", async () => {
+      await new Promise<void>((resolve) => { release = resolve; });
+      throw new Error("adapter wedged");
+    }, { recycleWorkerOnError: true });
+    const queued = pool.runExclusiveQueued(binding, "attempt-queued", async () => {
+      throw new Error("queued work must not reach the poisoned worker");
+    });
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    release();
+    await expect(active).rejects.toMatchObject({
+      name: "AdapterWorkerRecycledError",
+      bindingId: "binding-poisoned",
+      stopSucceeded: true,
+    } satisfies Partial<AdapterWorkerRecycledError>);
+    await expect(queued).rejects.toMatchObject({ name: "StaleAdapterBindingError" });
+    expect(stopCount).toBe(1);
+    expect(pool.size).toBe(0);
+
+    expect(pool.acquire(undefined)?.workerId).toBe("worker-2");
+    expect(factoryCount).toBe(2);
+  });
+
+  it("still removes a poisoned worker when recovery bookkeeping and stop fail", async () => {
+    let stopCount = 0;
+    let reportedOutcome: { stopSucceeded: boolean; bindingInvalidationSucceeded: boolean } | undefined;
+    const pool = new AdapterWorkerPool(() => ({
+      ...pinnedAdapter(),
+      stop: async () => {
+        stopCount += 1;
+        throw new Error("stop failed");
+      },
+    }), 1);
+
+    await expect(pool.runExclusiveQueued(undefined, "attempt-failing", async () => {
+      throw new Error("adapter wedged");
+    }, {
+      recycleWorkerOnError: true,
+      onWorkerBindingInvalidated: () => { throw new Error("persistence failed"); },
+      onWorkerRecycled: (_bindingId, outcome) => { reportedOutcome = outcome; },
+    })).rejects.toMatchObject({
+      name: "AdapterWorkerRecycledError",
+      stopSucceeded: false,
+      bindingInvalidationSucceeded: false,
+    });
+    expect(stopCount).toBe(1);
+    expect(reportedOutcome).toEqual({
+      stopSucceeded: false,
+      bindingInvalidationSucceeded: false,
+    });
+    expect(pool.size).toBe(0);
+  });
+
+  it("does not recycle errors rejected by the dispatch predicate", async () => {
+    let stopCount = 0;
+    const pool = new AdapterWorkerPool(() => ({
+      ...pinnedAdapter(),
+      stop: async () => { stopCount += 1; },
+    }), 1);
+
+    await expect(pool.runExclusiveQueued(undefined, "attempt-cancelled", async () => {
+      throw new Error("cancelled_before_adapter_dispatch");
+    }, {
+      recycleWorkerOnError: true,
+      shouldRecycleWorkerOnError: () => false,
+    })).rejects.toThrow("cancelled_before_adapter_dispatch");
+    expect(stopCount).toBe(0);
+    expect(pool.size).toBe(1);
   });
 });

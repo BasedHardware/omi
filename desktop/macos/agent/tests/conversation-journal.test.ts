@@ -92,7 +92,7 @@ describe("kernel conversation journal", () => {
 
     recordTerminalQuestion(fixture, "tail-question", [
       { optionId: "later", label: "Later", preparedAnswer: "Ask me later.", defer: true },
-    ]);
+    ], 102);
     const suppressed = materializeChatFirstIntent(fixture.store, {
       ownerId: fixture.ownerId,
       conversationId: fixture.conversationId,
@@ -101,7 +101,7 @@ describe("kernel conversation journal", () => {
       continuityKey: "intent-capture",
       source: "capture_arrival",
       blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }],
-      nowMs: 102,
+      nowMs: 103,
     });
     expect(suppressed).toMatchObject({ accepted: false, suppressedByTailQuestion: true, turn: null, receipt: null });
 
@@ -413,6 +413,43 @@ describe("kernel conversation journal", () => {
       content: "I will turn that into a goal.",
       nowMs: 32,
     });
+
+    // Backend acknowledgements are journal revisions, not new conversation
+    // turns. Reproduce the live race by acknowledging the newly appended step
+    // three card first and the older step-two response last. The older response
+    // now has the highest revision sequence, but the step-three card remains
+    // the canonical user-visible tail and must stay actionable.
+    const stepThreeQuestion = currentJournalTurns(fixture).find((turn) => (
+      turn.contentBlocks.some((block) => (
+        block.type === "questionCard" && block.questionId === "cold-start:7:step:3"
+      ))
+    ));
+    expect(stepThreeQuestion).toBeDefined();
+    const claims = drainBackendTurnOutbox(fixture.store, { nowMs: 33 });
+    const stepThreeClaim = claims.find((claim) => claim.turnId === stepThreeQuestion!.turnId);
+    const olderResponseClaim = claims.find((claim) => claim.turnId === second.assistantTurn!.turnId);
+    expect(stepThreeClaim).toBeDefined();
+    expect(olderResponseClaim).toBeDefined();
+    for (const [claim, remoteId, nowMs] of [
+      [stepThreeClaim!, "remote-step-three-question", 34],
+      [olderResponseClaim!, "remote-step-two-response", 35],
+    ] as const) {
+      ackBackendTurnOutbox(fixture.store, {
+        ownerId: fixture.ownerId,
+        turnId: claim.turnId,
+        remoteId,
+        attemptCount: claim.attemptCount,
+        deliveryGeneration: claim.deliveryGeneration,
+        conversationGeneration: claim.conversationGeneration,
+        payloadHash: claim.payloadHash,
+        nowMs,
+      });
+    }
+    expect(fixture.store.getRow(
+      `SELECT turn_id FROM conversation_turns
+       WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
+      [fixture.conversationId],
+    ).turn_id).toBe(second.assistantTurn!.turnId);
 
     const third = recordQuestionInteractionReply(fixture.store, {
       ownerId: fixture.ownerId,
@@ -3713,6 +3750,64 @@ describe("kernel conversation journal", () => {
     expect(delivery.payloadHash).toMatch(/^sha256:[a-f0-9]{64}$/);
     fixture.store.close();
   });
+
+  it("ties equal created_at_ms conversation tails by turn_seq rather than turn_id", () => {
+    const fixture = newSurface("main_chat", "chat", "tail-tie-break");
+    // Lexicographically larger older turn_id would win without a turn_seq tie-break.
+    recordTerminalQuestion(
+      fixture,
+      "turn_zzzz_older",
+      [
+        { optionId: "older:a", label: "Older A", preparedAnswer: "Older A" },
+        { optionId: "older:b", label: "Older B", preparedAnswer: "Older B" },
+      ],
+      100,
+    );
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn_aaaa_newer",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "Later answer without a question.",
+      contentBlocks: [
+        {
+          type: "text",
+          id: "later:text",
+          text: "Later answer without a question.",
+        },
+      ],
+      createdAtMs: 100,
+    });
+
+    expect(fixture.store.getRow(
+      `SELECT turn_id FROM conversation_turns
+       WHERE conversation_id = ?
+       ORDER BY created_at_ms DESC, turn_seq DESC, turn_id DESC LIMIT 1`,
+      [fixture.conversationId],
+    ).turn_id).toBe("turn_aaaa_newer");
+
+    // If the older unanswered question remained the tail (lexicographic turn_id),
+    // materialization would be suppressed.
+    const materialization = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-after-tie",
+      continuityKey: "intent-after-tie",
+      source: "daily_opener",
+      blocks: [{ type: "taskCard", task_id: "task-after-tie" }],
+      nowMs: 110,
+    });
+    expect(materialization).toMatchObject({
+      accepted: true,
+      suppressedByTailQuestion: false,
+      suppressedByStreamingTail: false,
+    });
+    fixture.store.close();
+  });
 });
 
 interface SurfaceFixture {
@@ -3774,6 +3869,7 @@ function recordTerminalQuestion(
   fixture: SurfaceFixture,
   turnId: string,
   options: Array<{ optionId: string; label: string; preparedAnswer: string; defer?: boolean }>,
+  createdAtMs = 50,
 ): void {
   recordJournalTurn(fixture.store, {
     ownerId: fixture.ownerId,
@@ -3792,7 +3888,7 @@ function recordTerminalQuestion(
       subject: { kind: "goal", id: "goal-1" },
       options,
     }],
-    createdAtMs: 50,
+    createdAtMs,
   });
 }
 

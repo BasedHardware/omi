@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Ask AI failing to answer any question on accounts with a long chat history"
+}

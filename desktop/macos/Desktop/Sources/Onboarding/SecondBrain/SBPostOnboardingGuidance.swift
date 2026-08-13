@@ -173,14 +173,14 @@ enum SBPostOnboardingGuidance {
     talkShortcutTokens: [String],
     setup: SBSetupSnapshot
   ) -> [SBOrientationCue] {
-    // Describe the signed-in shell's native click-away dismissal, then name the persistent way back.
-    // The menu bar icon is named rather than left to the chord cue below because the chord is
-    // conditional and the icon is always there.
+    // Describe how this window actually behaves — it stays where you leave it — then name the
+    // persistent way back. The menu bar icon is named rather than left to the chord cue below because
+    // the chord is conditional and the icon is always there.
     var cues: [SBOrientationCue] = [
       SBOrientationCue(
         id: "menubar",
         symbol: "menubar.arrow.up.rectangle",
-        title: "Click the desktop or another app to put me away. My menu bar icon brings me back.",
+        title: "I stay open while you work — switch back any time. My menu bar icon brings me back too.",
         keys: [])
     ]
 

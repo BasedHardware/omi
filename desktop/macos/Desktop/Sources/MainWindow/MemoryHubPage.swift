@@ -42,7 +42,7 @@ struct MemoryHubPage: View {
     MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
   }
 
-  /// Canonical-cohort users get the atlas on the Brain Map destination; users
+  /// The universal assertion-backed graph gets the atlas on the Brain Map destination; users
   /// who have not entered the canonical lifecycle keep the legacy graph.
   private var brainMapPresentationMode: MemoryGraphPresentationMode {
     MemoryGraphPresentationMode.resolve(
@@ -104,8 +104,8 @@ struct MemoryHubPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // The lifecycle capability is established by the first authoritative
         // memory response. Without this, opening straight into a persisted
-        // Brain Map destination would resolve the legacy graph for a canonical
-        // user purely because the Memories destination was never visited.
+        // Brain Map destination would resolve the compatibility graph before
+        // the server capability was known purely because Memories was never visited.
         .task { await memoriesViewModel.loadMemoriesIfNeeded() }
     }
   }
@@ -127,7 +127,7 @@ struct MemoryHubPage: View {
     case .legacyBrainMap:
       MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
     case .undetermined:
-      // Neither surface may mount before the cohort is known. The legacy graph
+      // Neither surface may mount before the server capability is known. The compatibility graph
       // in particular latches the shared view model's in-flight guard and runs
       // an empty-graph rebuild bootstrap, so a one-frame appearance left the
       // atlas permanently blank and fired a destructive rebuild.
@@ -135,14 +135,14 @@ struct MemoryHubPage: View {
         Color.clear  // The shell's glass is the ground.
         ProgressView().tint(Ink.secondary)
       }
-      .accessibilityIdentifier("brain_map_resolving_cohort")
+      .accessibilityIdentifier("brain_map_resolving_capability")
     }
   }
 
   /// An update island around the Canvas-heavy Brain Map.
   ///
   /// `MemoryHubPage` has to observe `MemoriesViewModel` long enough to resolve
-  /// the canonical cohort, but its normal list refreshes must not rebuild the
+  /// the server lifecycle capability, but its normal list refreshes must not rebuild the
   /// map's SwiftUI graph. Reference identity is intentional: evidence reads
   /// and open actions use the current model at invocation time, while the map
   /// itself observes `MemoryGraphViewModel` for the only state that changes its
