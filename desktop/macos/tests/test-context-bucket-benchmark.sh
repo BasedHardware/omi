@@ -21,6 +21,7 @@ spec.loader.exec_module(benchmark)
 case = {
     "id": "synthetic-text-output",
     "expectedAction": "notify",
+    "forbiddenOutputTerms": ["forbidden phrase"],
     "synthetic": {
         "bucket": {"id": "bucket-1", "version": 1, "notifyWorthiness": 1, "entries": []},
         "frames": [
@@ -72,6 +73,17 @@ assert "title" not in terse and "message" not in terse and "reasoning" not in te
 assert detailed["title"] == "Synthetic title"
 assert detailed["message"] == "Synthetic message"
 assert detailed["reasoning"] == "Synthetic reasoning"
+assert detailed["polarity_matched"] is True
+assert detailed["forbidden_output_matched"] is False
+assert detailed["forbidden_terms_matched"] == []
+
+leaking_case = {**case, "forbiddenOutputTerms": ["synthetic MESSAGE"]}
+with patch.object(benchmark.request, "urlopen", return_value=Response()):
+    leaking = benchmark.invoke_case(leaking_case, 47910)
+assert leaking["polarity_matched"] is True
+assert leaking["forbidden_output_matched"] is True
+assert leaking["forbidden_terms_matched"] == ["synthetic MESSAGE"]
+assert leaking["matched"] is False
 
 with patch.object(
     benchmark.request,
