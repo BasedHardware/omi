@@ -70,3 +70,49 @@ test("defines one executable content role, measure, truncation, and date-granula
     assert.deepEqual(Object.keys(theme.typography), Object.keys(TYPOGRAPHY_CONTENT_POLICY));
   }
 });
+
+function parseColor(value) {
+  if (value.startsWith("#")) {
+    return [1, 3, 5].map((start) => Number.parseInt(value.slice(start, start + 2), 16) / 255).concat(1);
+  }
+  const match = value.match(/^rgba?\(([^)]+)\)$/);
+  assert.ok(match, `unsupported test color ${value}`);
+  const channels = match[1].split(",").map((part) => Number(part.trim()));
+  return channels.slice(0, 3).map((channel) => channel / 255).concat(channels[3] ?? 1);
+}
+
+function composite(foreground, background) {
+  return foreground.slice(0, 3).map((channel, index) => channel * foreground[3] + background[index] * (1 - foreground[3]));
+}
+
+function luminance(color) {
+  return color.slice(0, 3)
+    .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+    .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+}
+
+function contrastRatio(foreground, background) {
+  const lighter = Math.max(luminance(foreground), luminance(background));
+  const darker = Math.min(luminance(foreground), luminance(background));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+test("semantic text and control colors carry a machine-measured WCAG AA receipt", () => {
+  for (const [name, theme] of Object.entries(SEMANTIC_TOKENS)) {
+    const canvas = parseColor(theme.colors.surface.canvas);
+    for (const surfaceName of ["canvas", "raised", "elevated"]) {
+      const rawSurface = parseColor(theme.colors.surface[surfaceName]);
+      const surface = surfaceName === "canvas" ? rawSurface.slice(0, 3) : composite(rawSurface, canvas);
+      for (const contentName of ["primary", "secondary", "tertiary"]) {
+        const content = composite(parseColor(theme.colors.content[contentName]), surface.concat(1));
+        assert.ok(contrastRatio(content, surface) >= 4.5, `${name}.${contentName} meets AA on ${surfaceName}`);
+      }
+      for (const semanticName of ["accent", "danger", "success", "warning"]) {
+        const semantic = composite(parseColor(theme.colors[semanticName]), surface.concat(1));
+        assert.ok(contrastRatio(semantic, surface) >= 4.5, `${name}.${semanticName} meets AA when used as text on ${surfaceName}`);
+      }
+      const focus = composite(parseColor(theme.colors.focus), surface.concat(1));
+      assert.ok(contrastRatio(focus, surface) >= 3, `${name}.focus remains a visible non-text boundary on ${surfaceName}`);
+    }
+  }
+});
