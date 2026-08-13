@@ -29,6 +29,7 @@ DIRECTOR_CASES = {
     "identity-workstream-split",
     "freshness-new-identifier",
     "privacy-injected-bucket-text",
+    "privacy-eligible-injection-with-valid-deadline",
     "privacy-sensitive-frame-not-evidence",
     "commitment-explicit-due-date",
     "commitment-ambiguous-mention",
