@@ -8,7 +8,7 @@
  * by OmiUiWebView only when OMI_POLISH_RUNTIME_PROBE=1.  No browser preview or
  * hand-authored lifecycle/style value is accepted.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
   lstatSync,
@@ -109,18 +109,43 @@ function insideCore(file, label) {
   if (!resolved.startsWith(`${coreRoot}${path.sep}`)) throw new Error(`${label} must be inside the core worktree`);
   return resolved;
 }
-function treeUsage(root, limitBytes, limitFiles) {
+export function prepareRuntimeOutputDir(file) {
+  if (!path.isAbsolute(file)) throw new Error("--output-dir must be absolute");
+  const buildPath = path.join(realpathSync(coreRoot), ".build");
+  if (existsSync(buildPath) && lstatSync(buildPath).isSymbolicLink()) throw new Error("core/.build must not be a symlink");
+  mkdirSync(buildPath, { recursive: true });
+  const buildRoot = realpathSync(buildPath);
+  const requested = path.resolve(file);
+  const relative = path.relative(buildRoot, requested);
+  if (!relative || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("--output-dir must be a child of the real core/.build directory");
+  }
+  let cursor = buildRoot;
+  for (const segment of relative.split(path.sep)) {
+    cursor = path.join(cursor, segment);
+    if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
+      throw new Error("--output-dir must not contain symlink components");
+    }
+  }
+  mkdirSync(requested, { recursive: true });
+  if (realpathSync(requested) !== requested) throw new Error("--output-dir authority is not canonical");
+  return requested;
+}
+function treeUsage(root, limitBytes, limitEntries) {
   let bytes = 0;
   let files = 0;
+  let entries = 0;
   const visit = (directory) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      entries += 1;
+      if (entries > limitEntries) throw new Error("surfaces dist exceeds the bounded native-fixture budget");
       const target = path.join(directory, entry.name);
       if (entry.isSymbolicLink()) throw new Error("surfaces dist must not contain symlinks");
       if (entry.isDirectory()) visit(target);
       else if (entry.isFile()) {
         const size = statSync(target).size;
         bytes += size; files += 1;
-        if (bytes > limitBytes || files > limitFiles) throw new Error("surfaces dist exceeds the bounded native-fixture budget");
+        if (bytes > limitBytes) throw new Error("surfaces dist exceeds the bounded native-fixture budget");
       } else throw new Error("surfaces dist contains a non-regular entry");
     }
   };
@@ -128,7 +153,7 @@ function treeUsage(root, limitBytes, limitFiles) {
   return { bytes, files };
 }
 
-export function validateSurfacesDist(dist, limitBytes = 64 * 1024 * 1024, limitFiles = 4096) {
+export function validateSurfacesDist(dist, limitBytes = 64 * 1024 * 1024, limitEntries = 4096) {
   const resolved = realpathSync(dist);
   if (!resolved.startsWith(`${realpathSync(coreRoot)}${path.sep}`) || !statSync(resolved).isDirectory()) {
     throw new Error("surfaces dist must be a real core-owned directory");
@@ -136,7 +161,7 @@ export function validateSurfacesDist(dist, limitBytes = 64 * 1024 * 1024, limitF
   if (!existsSync(path.join(resolved, "index.html")) || !statSync(path.join(resolved, "index.html")).isFile()) {
     throw new Error("surfaces dist must contain index.html");
   }
-  treeUsage(resolved, limitBytes, limitFiles);
+  treeUsage(resolved, limitBytes, limitEntries);
   return resolved;
 }
 function gitHead(root) {
@@ -310,26 +335,14 @@ export function cleanupIosIntermediates(outputDir) {
 }
 
 export function assertIosOutputDirCustody(outputDir) {
-  const resolvedRoot = realpathSync(coreRoot);
-  const requested = path.resolve(outputDir);
-  const relative = path.relative(resolvedRoot, requested);
-  if (!relative || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw new Error("iOS runtime output must be a child of the real core worktree");
-  }
-  let cursor = resolvedRoot;
-  for (const segment of relative.split(path.sep)) {
-    cursor = path.join(cursor, segment);
-    if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
-      throw new Error("iOS runtime output must not contain symlink components");
-    }
-  }
-  if (realpathSync(requested) !== requested) throw new Error("iOS runtime output authority is not canonical");
+  if (prepareRuntimeOutputDir(outputDir) !== path.resolve(outputDir)) throw new Error("iOS runtime output authority is not canonical");
 }
 
 export function withIosCaptureLock(callback) {
   const lockDir = path.join(coreRoot, ".build/ios-native-runtime-capture.lock");
   const ownerPath = path.join(lockDir, "owner.json");
   mkdirSync(path.dirname(lockDir), { recursive: true });
+  const token = randomUUID();
   const acquire = () => {
     try { mkdirSync(lockDir); }
     catch (error) {
@@ -345,11 +358,15 @@ export function withIosCaptureLock(callback) {
       rmSync(lockDir, { recursive: true, force: true });
       mkdirSync(lockDir);
     }
-    writeFileSync(ownerPath, stable({ schema: "omi.polish.ios-runtime-lock/v1", pid: process.pid }), { mode: 0o600 });
+    writeFileSync(ownerPath, stable({ schema: "omi.polish.ios-runtime-lock/v1", pid: process.pid, token }), { mode: 0o600, flag: "wx" });
   };
   acquire();
   try { return callback(); }
-  finally { rmSync(lockDir, { recursive: true, force: true }); }
+  finally {
+    const owner = readJson(ownerPath, "iOS runtime capture lock");
+    if (owner.pid !== process.pid || owner.token !== token) throw new Error("iOS runtime capture lock ownership changed before cleanup");
+    rmSync(lockDir, { recursive: true, force: true });
+  }
 }
 
 export function requireIosDiskHeadroom(outputDir, minimumFreeBytes = iosMinimumFreeBytes) {
@@ -364,13 +381,9 @@ export function requireIosDiskHeadroom(outputDir, minimumFreeBytes = iosMinimumF
 function runMac(manifest, outputDir) {
   const launcher = path.join(macRoot, "scripts/dev-run-macos.sh");
   const screenshot = path.join(outputDir, "probe.png");
-  mkdirSync(outputDir, { recursive: true });
+  prepareRuntimeOutputDir(outputDir);
   const env = allowedEnvironment();
-  const surfacesDist = validateSurfacesDist(path.resolve(env.OMI_SURFACES_DIST || path.join(coreRoot, "packages/surfaces/dist")));
-  env.OMI_SURFACES_DIST = surfacesDist;
   const scratch = path.join(outputDir, "home");
-  mkdirSync(scratch, { recursive: true });
-  env.HOME = scratch; env.PUB_CACHE = path.join(scratch, ".pub-cache"); env.XDG_CACHE_HOME = path.join(scratch, ".cache");
   // The launcher deliberately accepts only short scratch bundle names. Matrix
   // run IDs contain underscores and coordinate prose, so bind them through a
   // deterministic digest instead of weakening that native-shell boundary.
@@ -396,6 +409,10 @@ function runMac(manifest, outputDir) {
     "--", "/bin/bash", launcher, ...args,
   ];
   try {
+    const surfacesDist = validateSurfacesDist(path.resolve(env.OMI_SURFACES_DIST || path.join(coreRoot, "packages/surfaces/dist")));
+    env.OMI_SURFACES_DIST = surfacesDist;
+    mkdirSync(scratch, { recursive: true });
+    env.HOME = scratch; env.PUB_CACHE = path.join(scratch, ".pub-cache"); env.XDG_CACHE_HOME = path.join(scratch, ".cache");
     const started = new Date();
     const guarded = spawnSync(process.execPath, guardArgs, { cwd: coreRoot, env, encoding: "utf8", timeout: 310_000, maxBuffer: 64 * 1024 * 1024 });
     const finished = new Date();
@@ -499,23 +516,23 @@ function runIos(manifest, outputDir) {
   const testOnly = "RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence";
   const resultBundle = path.join(outputDir, "Runner.xcresult");
   const env = allowedEnvironment();
-  mkdirSync(outputDir, { recursive: true });
-  cleanupIosIntermediates(outputDir);
-  requireIosDiskHeadroom(outputDir);
-  const scratch = path.join(outputDir, "home"); mkdirSync(scratch, { recursive: true }); env.HOME = scratch; env.PUB_CACHE = path.join(scratch, ".pub-cache"); env.XDG_CACHE_HOME = path.join(scratch, ".cache");
-  const surfacesDist = process.env.SURFACES_DIST || process.env.OMI_SURFACES_DIST;
-  const resolvedSurfacesDist = validateSurfacesDist(surfacesDist ? path.resolve(surfacesDist) : "");
-  env.SURFACES_DIST = resolvedSurfacesDist;
-  const nodeBin = env.NODE_BIN || process.execPath;
-  const flutterBin = env.FLUTTER_BIN || path.join(process.env.HOME || "/Users/dazheng", ".local/share/mise/installs/flutter/3.44.5/bin/flutter");
-  const inventory = spawnSync("xcrun", ["simctl", "list", "devices", "-j"], { cwd: coreRoot, env, encoding: "utf8", timeout: 30_000 });
-  if (inventory.status !== 0) throw new Error("iOS simulator inventory is unavailable");
-  let inventoryDocument;
-  try { inventoryDocument = JSON.parse(inventory.stdout); } catch { throw new Error("iOS simulator inventory is malformed"); }
-  const boundDevice = Object.values(inventoryDocument.devices || {}).flat().find((candidate) => candidate.udid === device);
-  if (!boundDevice || boundDevice.state !== "Booted" || boundDevice.name !== manifest.device.model) throw new Error("manifest iOS simulator is not the exact booted device");
-  const query = manifest.surface_query;
+  prepareRuntimeOutputDir(outputDir);
   try {
+    cleanupIosIntermediates(outputDir);
+    requireIosDiskHeadroom(outputDir);
+    const scratch = path.join(outputDir, "home"); mkdirSync(scratch, { recursive: true }); env.HOME = scratch; env.PUB_CACHE = path.join(scratch, ".pub-cache"); env.XDG_CACHE_HOME = path.join(scratch, ".cache");
+    const surfacesDist = process.env.SURFACES_DIST || process.env.OMI_SURFACES_DIST;
+    const resolvedSurfacesDist = validateSurfacesDist(surfacesDist ? path.resolve(surfacesDist) : "");
+    env.SURFACES_DIST = resolvedSurfacesDist;
+    const nodeBin = env.NODE_BIN || process.execPath;
+    const flutterBin = env.FLUTTER_BIN || path.join(process.env.HOME || "/Users/dazheng", ".local/share/mise/installs/flutter/3.44.5/bin/flutter");
+    const inventory = spawnSync("xcrun", ["simctl", "list", "devices", "-j"], { cwd: coreRoot, env, encoding: "utf8", timeout: 30_000 });
+    if (inventory.status !== 0) throw new Error("iOS simulator inventory is unavailable");
+    let inventoryDocument;
+    try { inventoryDocument = JSON.parse(inventory.stdout); } catch { throw new Error("iOS simulator inventory is malformed"); }
+    const boundDevice = Object.values(inventoryDocument.devices || {}).flat().find((candidate) => candidate.udid === device);
+    if (!boundDevice || boundDevice.state !== "Booted" || boundDevice.name !== manifest.device.model) throw new Error("manifest iOS simulator is not the exact booted device");
+    const query = manifest.surface_query;
     const bundle = spawnSync(nodeBin, [path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], { cwd: coreRoot, env, encoding: "utf8", timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
     if (bundle.status !== 0) throw new Error(`iOS surfaces bundle preparation failed (${bundle.status ?? "signal"})`);
     const flutterArgs = ["build", "ios", "--simulator", "--debug", "--dart-define=SURFACE_MODE=scheme", "--dart-define=SCHEME_BUNDLE=surfaces", `--dart-define=SURFACE_QUERY=${query}`];
@@ -567,8 +584,7 @@ function main() {
   if (!args.replay_input && platformRoot) {
     try { if (gitHead(path.resolve(platformRoot)) !== manifest.source_shas.platform) throw new Error(`manifest platform SHA ${manifest.source_shas.platform} does not match current platform HEAD`); } catch (error) { fail(error.message); return; }
   }
-  const outputDir = args.output_dir ? insideCore(args.output_dir, "--output-dir") : path.join(coreRoot, ".build/polish-native-runtime", manifest.run_id);
-  mkdirSync(outputDir, { recursive: true });
+  const outputDir = prepareRuntimeOutputDir(args.output_dir ? args.output_dir : path.join(coreRoot, ".build/polish-native-runtime", manifest.run_id));
   if (args.replay_input || args.replay_output) {
     if (!args.replay_input || !args.replay_output) { fail("--replay-input and --replay-output must be provided together"); return; }
     try { gateReplay(manifest, manifestPath, path.resolve(args.replay_input), path.resolve(args.replay_output), outputDir, args.emit_gate_records !== "false"); } catch (error) { fail(error.message); }
