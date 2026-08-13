@@ -1,5 +1,6 @@
 import { isProxy } from "node:util/types";
 
+import { isWellFormedAccountId } from "../../core/control/account-control";
 import {
   ApplicationReadInvalidatedError,
   type ApplicationReadPorts,
@@ -65,6 +66,13 @@ export interface PostgresFirebaseAuthorizedMemoryReadRuntime {
   read(
     idToken: string,
     nowEpochSeconds: number,
+    request: ApplicationSynthesizedPageRequest,
+  ): Promise<FirebaseAuthorizedMemoryReadOutcome>;
+  /** Internal consumer read that additionally binds the credential to an admitted owner. */
+  readForAccount(
+    idToken: string,
+    nowEpochSeconds: number,
+    expectedAccountId: string,
     request: ApplicationSynthesizedPageRequest,
   ): Promise<FirebaseAuthorizedMemoryReadOutcome>;
 }
@@ -143,6 +151,59 @@ export const createPostgresFirebaseAuthorizedMemoryReadRuntime = (
   );
   const stableSecret = new Uint8Array(secret);
 
+  const readPage = async (
+    idToken: string,
+    nowEpochSeconds: number,
+    expectedAccountId: string | null,
+    request: ApplicationSynthesizedPageRequest,
+  ): Promise<FirebaseAuthorizedMemoryReadOutcome> => {
+    if (expectedAccountId !== null && !isWellFormedAccountId(expectedAccountId)) {
+      return Object.freeze({ kind: "denied" as const, outcome: "authorization" as const });
+    }
+    const loadAuthorized = async () => {
+      const loaded = await graph.load(idToken, nowEpochSeconds);
+      if (loaded.kind === "denied") {
+        throw new ClosedGraphLoad(Object.freeze({
+          kind: "denied" as const,
+          outcome: loaded.outcome,
+        }));
+      }
+      if (loaded.kind === "unavailable") {
+        throw new ClosedGraphLoad(Object.freeze({ kind: "unavailable" as const }));
+      }
+      if (expectedAccountId !== null
+        && loaded.snapshot.owner_account_id !== expectedAccountId) {
+        throw new ClosedGraphLoad(Object.freeze({
+          kind: "denied" as const,
+          outcome: "authorization" as const,
+        }));
+      }
+      return projectFirebaseAuthorizedGraphSnapshotLoad(loaded, timezone as string);
+    };
+    try {
+      const page = await readDirectAuthorizedMemoryPage(request, {
+        loadAuthorized,
+        produceRenders,
+        codecRootSecret: stableSecret,
+        verifyCursor,
+        issueCursor,
+        traceSink,
+        acceptedCoverageState: product.accepted_coverage_state as AcceptedCoverageState,
+        stmCoverageState: product.stm_coverage_state as StmCoverageState,
+      });
+      return Object.freeze({ kind: "loaded" as const, canonical_json: page.canonical_json });
+    } catch (error) {
+      if (error instanceof ClosedGraphLoad) return error.outcome;
+      if (isInvalidMcpCursorError(error)) {
+        return Object.freeze({ kind: "invalid_cursor" as const });
+      }
+      if (error instanceof ApplicationReadInvalidatedError) {
+        return Object.freeze({ kind: "invalidated" as const });
+      }
+      return Object.freeze({ kind: "unavailable" as const });
+    }
+  };
+
   return Object.freeze({
     [RUNTIME_PORT]: true as const,
     async authenticate(idToken: string, nowEpochSeconds: number) {
@@ -153,41 +214,15 @@ export const createPostgresFirebaseAuthorizedMemoryReadRuntime = (
       nowEpochSeconds: number,
       request: ApplicationSynthesizedPageRequest,
     ) {
-      const loadAuthorized = async () => {
-        const loaded = await graph.load(idToken, nowEpochSeconds);
-        if (loaded.kind === "denied") {
-          throw new ClosedGraphLoad(Object.freeze({
-            kind: "denied" as const,
-            outcome: loaded.outcome,
-          }));
-        }
-        if (loaded.kind === "unavailable") {
-          throw new ClosedGraphLoad(Object.freeze({ kind: "unavailable" as const }));
-        }
-        return projectFirebaseAuthorizedGraphSnapshotLoad(loaded, timezone as string);
-      };
-      try {
-        const page = await readDirectAuthorizedMemoryPage(request, {
-          loadAuthorized,
-          produceRenders,
-          codecRootSecret: stableSecret,
-          verifyCursor,
-          issueCursor,
-          traceSink,
-          acceptedCoverageState: product.accepted_coverage_state as AcceptedCoverageState,
-          stmCoverageState: product.stm_coverage_state as StmCoverageState,
-        });
-        return Object.freeze({ kind: "loaded" as const, canonical_json: page.canonical_json });
-      } catch (error) {
-        if (error instanceof ClosedGraphLoad) return error.outcome;
-        if (isInvalidMcpCursorError(error)) {
-          return Object.freeze({ kind: "invalid_cursor" as const });
-        }
-        if (error instanceof ApplicationReadInvalidatedError) {
-          return Object.freeze({ kind: "invalidated" as const });
-        }
-        return Object.freeze({ kind: "unavailable" as const });
-      }
+      return readPage(idToken, nowEpochSeconds, null, request);
+    },
+    async readForAccount(
+      idToken: string,
+      nowEpochSeconds: number,
+      expectedAccountId: string,
+      request: ApplicationSynthesizedPageRequest,
+    ) {
+      return readPage(idToken, nowEpochSeconds, expectedAccountId, request);
     },
   });
 };

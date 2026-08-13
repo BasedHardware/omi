@@ -7,7 +7,11 @@
 
 import { createHash } from "node:crypto";
 
-import type { ChatGenerationContextSource } from "./generation-context";
+import {
+  snapshotChatGenerationMemoryContext,
+  unavailableChatGenerationMemoryContext,
+  type ChatGenerationContextSource,
+} from "./generation-context";
 import type { ChatAttachmentContentPort } from "./attachment-content";
 import type { ChatGenerationSource, ChatGenerationSourceRun } from "./generation-source";
 import type { ChatGenerationEvent } from "../stores/chat-generation-events-store";
@@ -19,6 +23,8 @@ export interface AdmittedChatGeneration {
   readonly accountId: string;
   readonly stored: StoredChatMessage;
   readonly acceptedEvent: ChatGenerationEvent;
+  /** Ephemeral request credential used only by the injected context source. */
+  readonly bearerToken: string;
 }
 
 export interface ChatGenerationSupervisor {
@@ -240,8 +246,21 @@ export const createChatGenerationSupervisor = (
         active.delete(key);
         throw error;
       }
+      // Context failure must not turn an otherwise useful Chat answer into a
+      // false memory absence or a generic generation failure. The credential
+      // is passed directly to this promise and is never retained in active or
+      // durable generation state.
+      const contextLoad = Promise.resolve()
+        .then(() => deps.context.load({
+          accountId: input.accountId,
+          admitted: input.stored,
+          bearerToken: input.bearerToken,
+        }))
+        .then((value) => snapshotChatGenerationMemoryContext(value)
+          ?? unavailableChatGenerationMemoryContext())
+        .catch(() => unavailableChatGenerationMemoryContext());
       void Promise.all([
-        deps.context.load({ accountId: input.accountId, admitted: input.stored }),
+        contextLoad,
         Promise.resolve(deps.attachments.loadForGeneration({
           accountId: input.accountId,
           messageId: input.stored.message.id,

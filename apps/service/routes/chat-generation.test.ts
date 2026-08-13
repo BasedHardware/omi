@@ -22,6 +22,8 @@ import {
 } from "../chat/generation-supervisor";
 import {
   createEmptyChatGenerationContextSource,
+  unavailableChatGenerationMemoryContext,
+  type ChatGenerationMemoryContext,
   type ChatGenerationContextSource,
 } from "../chat/generation-context";
 import {
@@ -501,9 +503,9 @@ describe("ratified chat generation wire red proofs", () => {
   });
 
   test("cancellation before context or provider start retains no assistant content", async () => {
-    let releaseContext: ((value: readonly string[]) => void) | null = null;
+    let releaseContext: ((value: ChatGenerationMemoryContext) => void) | null = null;
     const context: ChatGenerationContextSource = Object.freeze({
-      load: (): Promise<readonly string[]> => new Promise((resolve) => {
+      load: (): Promise<ChatGenerationMemoryContext> => new Promise((resolve) => {
         releaseContext = resolve;
       }),
     });
@@ -534,7 +536,7 @@ describe("ratified chat generation wire red proofs", () => {
     );
     expect(cancelled.status).toBe(202);
     if (releaseContext === null) throw new TypeError("generation context did not start loading");
-    releaseContext(Object.freeze([]));
+    releaseContext(unavailableChatGenerationMemoryContext());
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const response = await generationEvents(local, admission.generation.id);
@@ -549,6 +551,50 @@ describe("ratified chat generation wire red proofs", () => {
     expect(stores.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)?.map(
       (event) => event.frame.kind,
     )).toEqual(["accepted", "snapshot", "cancelled"]);
+    db.close();
+  });
+
+  test("memory-context failure degrades explicitly and does not make Chat unavailable", async () => {
+    let observedCredential: string | null = null;
+    const context: ChatGenerationContextSource = Object.freeze({
+      async load(input) {
+        observedCredential = input.bearerToken;
+        throw new Error("raw memory provider secret");
+      },
+    });
+    let sourceContext: unknown = null;
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        sourceContext = input.context;
+        queueMicrotask(() => {
+          input.onDelta("Useful without memory.");
+          input.onComplete();
+        });
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const stores = createInMemoryLocalServiceStores();
+    const db = new Database(":memory:");
+    const local = createLocalDevService({
+      db,
+      stores,
+      ownerAccountId: ACCOUNT,
+      memoryCount: 0,
+      accountTimezone: "UTC",
+      devSecretLabel: "chat-memory-context-failure-proof",
+      generationSource: source,
+      generationContext: context,
+    });
+    const admitted = await readAdmission(await post(local, create("context-failure")));
+    expect(await waitForTerminalLifecycle(stores.chatEvents, admitted.generation.id, 100))
+      .toBe("terminal");
+    expect(observedCredential).toBe(local.devToken);
+    expect(sourceContext).toEqual({
+      version: "chat-generation-memory-context-v1",
+      state: "unavailable",
+    });
+    expect(JSON.stringify(sourceContext)).not.toContain(local.devToken);
+    expect((await history(local)).at(-1)?.text).toBe("Useful without memory.");
     db.close();
   });
 
@@ -1129,8 +1175,18 @@ describe("ratified chat generation wire red proofs", () => {
       });
       const first = supervisor(firstStores, source((input) => { firstCallbacks = input; }));
       const second = supervisor(secondStores, source((input) => { secondCallbacks = input; }));
-      first.onAdmitted({ accountId: ACCOUNT, stored: admitted.stored, acceptedEvent: admitted.acceptedEvent });
-      second.onAdmitted({ accountId: ACCOUNT, stored: admitted.stored, acceptedEvent: admitted.acceptedEvent });
+      first.onAdmitted({
+        accountId: ACCOUNT,
+        stored: admitted.stored,
+        acceptedEvent: admitted.acceptedEvent,
+        bearerToken: "header.payload.signature",
+      });
+      second.onAdmitted({
+        accountId: ACCOUNT,
+        stored: admitted.stored,
+        acceptedEvent: admitted.acceptedEvent,
+        bearerToken: "header.payload.signature",
+      });
       await new Promise((resolve) => setTimeout(resolve, 0));
       if (firstCallbacks === null || secondCallbacks === null) throw new TypeError("sources did not start");
       firstCallbacks.onDelta("winner");

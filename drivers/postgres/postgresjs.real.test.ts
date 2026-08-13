@@ -124,6 +124,8 @@ import {
 } from "./firebase-authorized-graph-snapshot-runtime";
 import { createPostgresFirebaseAuthorizedMemoryReadRuntime } from
   "./firebase-authorized-memory-read-runtime";
+import { createPostgresFirebaseChatGenerationContextSource } from
+  "./firebase-chat-generation-context-source";
 import { createPostgresFirebaseAuthorizedMemoryServiceApp } from
   "./firebase-authorized-memory-service-app";
 import { createPostgresFirebaseAuthorizedMemoryExportRuntime } from
@@ -2976,6 +2978,32 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     expect(productPage!.items.every((item) => item.citations.length > 0)).toBe(true);
     expect(isTrustedRecallCompletenessHonest(productPage!)).toBe(true);
     expect(productReadTraces).toBe(1);
+    const chatMemoryContext = createPostgresFirebaseChatGenerationContextSource({
+      memory: firebaseProductRead,
+      now_epoch_seconds: () => now,
+    });
+    const chatContext = await chatMemoryContext.load({
+      accountId,
+      bearerToken: "header.payload.signature",
+      admitted: { message: {}, generationId: "generation:qualification" } as never,
+    });
+    expect(chatContext.state).toBe("loaded");
+    if (chatContext.state !== "loaded") throw new Error("expected Chat memory context");
+    const chatContextPage = parseSynthesizedPageJson(chatContext.canonical_page_json);
+    expect(chatContextPage).not.toBeNull();
+    expect(chatContextPage!.items.length).toBeGreaterThan(0);
+    expect(chatContextPage!.items.every((item) => item.citations.length > 0)).toBe(true);
+    expect(isTrustedRecallCompletenessHonest(chatContextPage!)).toBe(true);
+    expect(JSON.stringify(chatContext)).not.toContain("header.payload.signature");
+    await expect(chatMemoryContext.load({
+      accountId: `wrong-${accountId}`,
+      bearerToken: "header.payload.signature",
+      admitted: { message: {}, generationId: "generation:qualification" } as never,
+    })).resolves.toEqual({
+      version: "chat-generation-memory-context-v1",
+      state: "unavailable",
+    });
+    expect(productReadTraces).toBe(2);
     const routeCounter = createServedCounter();
     const memoryServiceApp = createPostgresFirebaseAuthorizedMemoryServiceApp({
       mcp_handler: () => new Response("mcp-delegated", { status: 202 }),

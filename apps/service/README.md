@@ -201,7 +201,13 @@ Generation quota is reserved once, in the same admission transaction as the cano
 
 On service construction, the supervisor scans durable non-terminal generations. A generation whose process disappeared without a cancellation request becomes `failed` with `generation_interrupted` and `retryable: true`; it is never resumed against a potentially non-deterministic provider and never remains `generating` indefinitely. A durable cancellation request discovered during recovery instead completes as `cancelled`, retaining its logged partial. Canonical assistant persistence and terminal event append share one SQLite transaction.
 
-The local adapter emits a deterministic scripted answer with real timer delays. Deployed LLM integration belongs behind `ChatGenerationSource`. Future memory/context consultation belongs behind `ChatGenerationContextSource`; the current adapter intentionally returns no context and does not implement memory behavior here.
+The local adapter emits a deterministic scripted answer with real timer delays.
+Deployed LLM integration belongs behind `ChatGenerationSource`. Memory/context
+consultation belongs behind `ChatGenerationContextSource`: the local adapter
+returns an explicit `unavailable` envelope, while the opt-in PostgreSQL/Firebase
+adapter reuses the canonical authorized memory page and preserves its citations,
+window and completeness. No provider prompt or default consumes those bytes yet;
+see `docs/memory-productionization/authorized-chat-memory-context-contract.md`.
 
 ## Environment variables
 

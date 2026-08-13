@@ -1,9 +1,11 @@
 import type { ChatGenerationAttachmentDescriptor } from "./attachment-content";
+import type { ChatGenerationMemoryContext } from "./generation-context";
 
 export interface ChatGenerationSourceInput {
   readonly generationId: string;
   readonly prompt: string;
-  readonly context: readonly string[];
+  /** Authorized memory context; providers must preserve its incompleteness semantics. */
+  readonly context: ChatGenerationMemoryContext;
   readonly attachments: readonly ChatGenerationAttachmentDescriptor[];
   readonly onDelta: (text: string) => void;
   readonly onComplete: () => void;

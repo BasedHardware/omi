@@ -606,6 +606,7 @@ export const registerChatMessagesRoutes = (
         accountId: principal.uid,
         stored: admission.stored,
         acceptedEvent,
+        bearerToken: authentication.token,
       });
       const projectedMessage = Object.freeze({
         ...admission.stored.message,

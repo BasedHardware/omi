@@ -41,9 +41,21 @@ describe("route-free PostgreSQL Firebase memory product runtime", () => {
       100,
       { limit: 25, cursor: null },
     )).resolves.toEqual({ kind: "denied", outcome: "authentication" });
+    await expect(runtime.readForAccount(
+      "invalid.token.value",
+      100,
+      "account:alice",
+      { limit: 25, cursor: null },
+    )).resolves.toEqual({ kind: "denied", outcome: "authentication" });
+    await expect(runtime.readForAccount(
+      "header.payload.signature",
+      100,
+      "bad account",
+      { limit: 25, cursor: null },
+    )).resolves.toEqual({ kind: "denied", outcome: "authorization" });
     expect(renders).toBe(0);
     expect(traces).toBe(0);
-    expect(Object.keys(runtime)).toEqual(["authenticate", "read"]);
+    expect(Object.keys(runtime)).toEqual(["authenticate", "read", "readForAccount"]);
   });
 
   test("rejects extra composition options without invoking dependencies", () => {
