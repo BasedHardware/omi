@@ -178,13 +178,13 @@ def _request_has_llm_byok_key() -> bool:
 
 
 def _request_has_all_byok_keys() -> bool:
-    """True if the *current request* carries headers for all 4 enrolled BYOK
-    providers.
+    """True if the *current request* carries headers for every enrolled BYOK
+    provider.
 
     Firestore BYOK state is the source of truth for fingerprint validation,
     but it can be temporarily stale — heartbeat just expired, activation
     POST hasn't landed yet, cross-region read replica lag, etc. A user who is
-    literally sending all 4 valid API keys on this request should never be
+    literally sending all valid API keys on this request should never be
     paywalled because of a Firestore sync gap. The actual fingerprint check
     in `utils.byok._check_byok_validity` runs separately and still rejects
     forged headers (mismatched SHA-256 against the enrolled fingerprints) —

@@ -1,9 +1,10 @@
 // Settings → Advanced → "Developer API Keys" subsection: bring-your-own-key
-// (BYOK). Provide all four provider keys and Omi runs entirely on them — the
-// "free forever" plan — with no Omi subscription charge. Ported from the macOS
-// DeveloperKeys section (SettingsContentView+DeveloperKeys.swift): same
-// all-or-nothing model, same copy, same up-front live validation before the
-// backend is ever flipped on.
+// (BYOK). Configure at least one LLM provider key (Deepgram is optional) and
+// Omi runs on your keys — the "free forever" plan — with no Omi subscription
+// charge. Ported from the macOS DeveloperKeys section
+// (SettingsContentView+DeveloperKeys.swift): same capability-scoped model,
+// same copy, same up-front live validation before the backend is ever flipped
+// on.
 //
 // Keys are encrypted at rest in the main process (ByokKeyStore, DPAPI). This UI
 // never persists or logs raw keys; enrollment sends only SHA-256 fingerprints.
