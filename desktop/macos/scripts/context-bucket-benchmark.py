@@ -9,6 +9,7 @@ keeps lifecycle-only cases explicitly separated.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
@@ -47,6 +48,8 @@ def map_case(case: dict) -> dict[str, str]:
     if not frames:
         raise ValueError(f"{case['id']}: director case requires a synthetic frame")
     frame = frames[-1]
+    evaluation_time = datetime.fromisoformat(frame["capturedAt"].replace("Z", "+00:00"))
+    task_cutoff = evaluation_time + timedelta(hours=48)
     facts = []
     for entry in entries:
         for fact in entry.get("facts", []):
@@ -62,6 +65,10 @@ def map_case(case: dict) -> dict[str, str]:
         {"description": task["description"], "due_at": task.get("dueAt")}
         for task in synthetic.get("tasks", [])
         if task.get("status") == "open"
+        and (
+            not task.get("dueAt")
+            or datetime.fromisoformat(task["dueAt"].replace("Z", "+00:00")) <= task_cutoff
+        )
     ]
     return {
         "bucket_id": bucket["id"],
