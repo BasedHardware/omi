@@ -28,6 +28,10 @@ export const CURRENT_AGENT_RUN_TRACE_SCHEMA_VERSION = 1 as const;
 export const AGENT_RUN_TRACE_BUILD_ID_MAX = 128;
 
 const SAFE_LABEL = /^[A-Za-z][A-Za-z0-9._:/+-]{0,127}$/u;
+// Durable source IDs follow the event ledger's SAFE_TOKEN contract and may
+// begin with a digit (for example, a UUID). They are remapped before export,
+// so they do not need to satisfy the generated-label prefix rule.
+const SAFE_SOURCE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
 const SAFE_DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/u;
 // Attachment references are intentionally opaque.  Even when a caller puts
@@ -106,6 +110,8 @@ const exactKeys = (value: Record<string, unknown>, expected: readonly string[]):
 };
 
 const isSafeLabel = (value: unknown): value is string => typeof value === "string" && SAFE_LABEL.test(value);
+const isSafeSourceToken = (value: unknown): value is string =>
+  typeof value === "string" && SAFE_SOURCE_TOKEN.test(value);
 const isSafeString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= 240 && !CONTROL_CHARACTERS.test(value);
 const isSafeInteger = (value: unknown): value is number =>
@@ -464,7 +470,7 @@ export const exportAgentRunTrace = (
   runId: string,
   input: { readonly buildId: string },
 ): AgentRunTraceExport => {
-  if (!isSafeLabel(runId) || !isSafeLabel(input.buildId) || input.buildId.length > AGENT_RUN_TRACE_BUILD_ID_MAX) fail("unsafe run/build id");
+  if (!isSafeSourceToken(runId) || !isSafeLabel(input.buildId) || input.buildId.length > AGENT_RUN_TRACE_BUILD_ID_MAX) fail("unsafe run/build id");
   const sourceEvents = store.list(runId);
   if (sourceEvents.length === 0) fail("run not found");
   const labels = labeler();

@@ -160,7 +160,7 @@ describe("agent-run redacted export and hermetic replay", () => {
 
     const productionIds = makeStore(
       "550e8400-e29b-41d4-a716-446655440000",
-      "run-production-uuid",
+      "8f5e2c15-e29b-41d4-a716-446655440000",
       "1d7f4b24-5c7e-4c46-9f32-7eb87f4d7c2a",
     );
     const productionSnapshot = productionIds.store.snapshot();
