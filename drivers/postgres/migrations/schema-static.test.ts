@@ -61,6 +61,8 @@ const expectedTables = [
   "listen_capture_session_state_revisions",
   "listen_capture_segments",
   "listen_conversation_finalization_intents",
+  "listen_formation_delivery_heads",
+  "listen_formation_delivery_revisions",
   "listen_formation_finalizations",
   "listen_formation_outbox",
   "memory_candidate_derivation_artifacts",

@@ -552,6 +552,7 @@ for (const file of files(root)) {
       && shown !== "drivers/postgres/memory-experiment-repository.ts"
       && shown !== "drivers/postgres/memory-query-evaluation-source.ts"
       && shown !== "drivers/postgres/listen-finalization-repository.ts"
+      && shown !== "drivers/postgres/listen-formation-outbox.ts"
       && authorizedPostgresConnectionCapability.test(code)) {
       failures.push(
         `${shown}: the authorized raw PostgreSQL connection capability is private to the sealed ledger adapters`,

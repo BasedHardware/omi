@@ -142,6 +142,7 @@ import {
   createPostgresMemoryShadowResultRepository,
 } from "./memory-experiment-repository";
 import { createPostgresListenFinalizationRepository } from "./listen-finalization-repository";
+import { createPostgresListenFormationOutboxRepository } from "./listen-formation-outbox";
 import {
   LISTEN_CAPTURE_APPEND_VERSION,
   LISTEN_CAPTURE_FINALIZE_VERSION,
@@ -908,6 +909,78 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         sessions: 1, states: 4, segments: 2, finalizations: 1, intents: 1, outbox: 1,
       }]);
 
+      const acceptGrantId = `grant:listen-formation:${suffix}`;
+      const acceptGrantHash = "d".repeat(64);
+      await ownerSql.begin(async (transaction) => {
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_revisions
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version, lifecycle, enabled, scopes,
+             record_schema_version, record_json, content_hash)
+          VALUES ($1, $2, $3, 4, 'memories.work.accept', $4, 1, 'active', true,
+                  '[]'::jsonb, 'grant-v1', '{}'::jsonb, $5)`,
+        [accountId, applicationId, credentialId, acceptGrantId, acceptGrantHash]);
+        await transaction.unsafe(`INSERT INTO omi_memory.application_grant_heads
+            (account_id, application_id, credential_id, credential_generation,
+             capability, grant_id, grant_version)
+          VALUES ($1, $2, $3, 4, 'memories.work.accept', $4, 1)`,
+        [accountId, applicationId, credentialId, acceptGrantId]);
+      });
+      const acceptAuthorityRow: AuthorityStateRow = {
+        ...authorityRow, capability: "memories.work.accept", grant_id: acceptGrantId,
+        grant_content_hash: acceptGrantHash,
+      };
+      const acceptContext = createAuthorizedLedgerWriteContextIssuer().issue({
+        context_version: "authorized-ledger-write-context-v1", principal_id: principalId,
+        account_id: accountId, application_id: applicationId, credential_id: credentialId,
+        credential_generation: 4, capability: "memories.work.accept",
+        grant_id: acceptGrantId, grant_version: 1, account_epoch: 12,
+        destination_activation_revision: 17, lifecycle_state: "active", deletion_epoch: null,
+        authentication_strength: "firebase-id-token", issued_at_epoch_seconds: now - 60,
+        expires_at_epoch_seconds: now + 3_600,
+        authorization_state_digest: authorizationStateDigest(acceptAuthorityRow),
+      }, now);
+      const delivery = createPostgresListenFormationOutboxRepository({
+        pool: appRolePool, lease_duration_seconds: 1,
+        retry_delay_seconds: 10, max_attempts: 3,
+      });
+      const claimed = await delivery.claimNext(acceptContext);
+      expect(claimed.kind).toBe("claimed");
+      if (claimed.kind !== "claimed") throw new Error("listen_delivery_not_claimed");
+      const loaded = await delivery.load(acceptContext, claimed.lease);
+      expect(loaded).toMatchObject({
+        kind: "found",
+        payload: {
+          owner_account_id: accountId, finalization_id: finalizationId,
+          formation_work_id: sealed.formation_work_id,
+          finalization: { transcript_digest: sealed.transcript_digest },
+        },
+      });
+      if (loaded.kind !== "found") throw new Error("listen_delivery_not_loaded");
+      expect(loaded.payload.finalization.segments).toHaveLength(2);
+      expect(loaded.payload.finalization.segments.map((segment) => segment.is_user))
+        .toEqual([true, false]);
+      await expect(delivery.claimNext(acceptContext)).resolves.toEqual({ kind: "none_available" });
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+      const reclaimed = await delivery.claimNext(acceptContext);
+      expect(reclaimed.kind).toBe("claimed");
+      if (reclaimed.kind !== "claimed") throw new Error("listen_delivery_not_reclaimed");
+      expect(reclaimed.lease.lease_fence).toBe(claimed.lease.lease_fence + 1);
+      await expect(delivery.recordFailure(acceptContext, claimed.lease, {
+        code: "dependency_unavailable",
+      })).resolves.toEqual({ kind: "stale_lease" });
+      const failureResult = await delivery.recordFailure(acceptContext, reclaimed.lease, {
+        code: "dependency_unavailable",
+      });
+      expect(failureResult).toEqual({ kind: "recorded" });
+      await expect(delivery.claimNext(acceptContext)).resolves.toEqual({ kind: "none_available" });
+      const deliveryRows = await ownerSql.unsafe<{ revisions: number; heads: number }[]>(`SELECT
+        (SELECT count(*)::int FROM omi_memory.listen_formation_delivery_revisions
+          WHERE account_id = $1 AND outbox_id = $2) AS revisions,
+        (SELECT count(*)::int FROM omi_memory.listen_formation_delivery_heads
+          WHERE account_id = $1 AND outbox_id = $2) AS heads`,
+      [accountId, reclaimed.lease.outbox_id]);
+      expect([...deliveryRows]).toEqual([{ revisions: 3, heads: 1 }]);
+
       const emptySessionId = `listen-empty:${suffix}`;
       await expect(repository.open(context, {
         ...openRequest, session_id: emptySessionId,
@@ -923,6 +996,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         "listen_capture_sessions", "listen_capture_session_state_revisions",
         "listen_capture_segments", "listen_formation_finalizations",
         "listen_conversation_finalization_intents", "listen_formation_outbox",
+        "listen_formation_delivery_revisions", "listen_formation_delivery_heads",
       ]) {
         await expect(ownerSql.begin(async (transaction) => {
           await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
@@ -1010,6 +1084,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     } finally {
       await ownerSql.begin(async (transaction) => {
         for (const table of [
+          "listen_formation_delivery_heads", "listen_formation_delivery_revisions",
           "listen_formation_outbox", "listen_conversation_finalization_intents",
           "listen_formation_finalizations", "listen_capture_segments",
           "listen_capture_session_state_revisions", "listen_capture_sessions",
