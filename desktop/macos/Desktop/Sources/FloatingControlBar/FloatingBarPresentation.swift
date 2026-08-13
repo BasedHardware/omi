@@ -2,6 +2,19 @@ import Foundation
 import OmiTheme
 import SwiftUI
 
+extension FloatingControlBarWindow {
+  func routePrimaryTextInputToMainAppAfterAgentExit() -> Bool {
+    guard
+      FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(
+        hasMainConversation: state.hasMainConversation)
+    else { return false }
+
+    closeAIConversation()
+    AppDelegate.summonWindowTarget()?.openMainAppChat()
+    return true
+  }
+}
+
 /// Whether a presentation request is allowed to change the user's durable
 /// Floating Bar preference. Onboarding may borrow the real bar for a demo, but
 /// must leave that preference exactly as it found it.

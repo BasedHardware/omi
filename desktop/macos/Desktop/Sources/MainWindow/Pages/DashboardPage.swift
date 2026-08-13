@@ -2213,16 +2213,16 @@ struct DashboardPage: View {
   }
 
   private var shouldShowSuggestionBanner: Bool {
-    !postOnboardingSuggestions.isEmpty && !PostOnboardingPromptSuggestions.isDismissed
+    !routesChatToPrimaryShell && !postOnboardingSuggestions.isEmpty
+      && !PostOnboardingPromptSuggestions.isDismissed
   }
 
   private func dismissSuggestionBanner() {
-    PostOnboardingPromptSuggestions.shouldShowPopup = false
-    PostOnboardingPromptSuggestions.isDismissed = true
+    PostOnboardingPromptSuggestions.consume()
   }
 
   private func handleSuggestedPrompt(_ suggestion: String) {
-    PostOnboardingPromptSuggestions.shouldShowPopup = false
+    PostOnboardingPromptSuggestions.consume()
     FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
   }
 

@@ -1037,7 +1037,7 @@ struct FloatingControlBarView: View {
       isVoicePresentationActive: state.isVoicePresentationActive,
       isShowingConversation: state.showingAIConversation,
       openMainChat: {
-        (NSApp.delegate as? AppDelegate)?.openMainAppChat()
+        AppDelegate.summonWindowTarget()?.openMainAppChat()
       }
     )
   }

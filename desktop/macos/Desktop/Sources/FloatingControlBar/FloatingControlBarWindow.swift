@@ -1493,7 +1493,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       closeAIConversation()
       return
     }
-
+    if routePrimaryTextInputToMainAppAfterAgentExit() { return }
     state.leaveAgentSurface()
     if state.conversationSurface == .mainInput {
       resizeForMainInputAfterAgentExit()

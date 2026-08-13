@@ -192,11 +192,11 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     model.skip()
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldArmPopup())
 
-    // What the popup's dismiss handler persists.
-    PostOnboardingPromptSuggestions.shouldShowPopup = false
-    PostOnboardingPromptSuggestions.isDismissed = true
+    PostOnboardingPromptSuggestions.consume()
 
     XCTAssertFalse(PostOnboardingPromptSuggestions.shouldArmPopup())
+    XCTAssertFalse(PostOnboardingPromptSuggestions.shouldShowPopup)
+    XCTAssertTrue(PostOnboardingPromptSuggestions.isDismissed)
   }
 
   /// The flag alone must never raise an empty popup — that is the shape the first half of this bug
