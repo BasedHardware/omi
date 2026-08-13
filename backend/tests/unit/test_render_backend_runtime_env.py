@@ -340,6 +340,4 @@ def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
     for env in ('dev', 'prod'):
         job = manifest[env]['cloud_run']['jobs']['memory-maintenance-job']
         job_flags = _MODULE['_render_flags'](job['flags'])
-        assert f'--remove-env-vars={retired}' in job_flags, (
-            f'memory-maintenance-job for {env} must strip {retired}'
-        )
+        assert f'--remove-env-vars={retired}' in job_flags, f'memory-maintenance-job for {env} must strip {retired}'
