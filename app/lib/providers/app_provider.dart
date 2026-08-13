@@ -15,18 +15,18 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 /// The shape of the apps-search request, named once so the test seam can refer to it.
-typedef AppsSearchRequest =
-    Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? filters})> Function({
-      String? query,
-      String? category,
-      double? minRating,
-      String? capability,
-      String? sort,
-      bool? myApps,
-      bool? installedApps,
-      int offset,
-      int limit,
-    });
+typedef AppsSearchRequest = Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? filters})>
+    Function({
+  String? query,
+  String? category,
+  double? minRating,
+  String? capability,
+  String? sort,
+  bool? myApps,
+  bool? installedApps,
+  int offset,
+  int limit,
+});
 
 class AppProvider extends BaseProvider {
   /// Test seam — overrides [retrieveAppsSearch] in [performServerSearch].
