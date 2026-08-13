@@ -1279,6 +1279,7 @@ class ConversationProvider extends ChangeNotifier {
     }, onError: (Object _, StackTrace __) {
       // Match the prior behavior on a failed request: release the local
       // tombstone, but do not rebase the server cursor.
+      if (generation != _sessionGeneration) return;
       _clearDeleteTombstone(conversationId);
       notifyListeners();
     }));

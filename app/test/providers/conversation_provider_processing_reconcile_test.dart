@@ -701,6 +701,28 @@ void main() {
     expect(provider.conversations.single, same(newConversation));
   });
 
+  test('delete failure from a prior session cannot mutate the new session', () async {
+    final delete = Completer<bool>();
+    final provider = ConversationProvider(isSignedIn: () => true);
+    provider.conversationDeleteFetcherOverride = (_) => delete.future;
+    addTearDown(provider.dispose);
+
+    final oldConversation = _conversation('c1', status: ConversationStatus.completed, title: 'Old account');
+    provider.memoriesToDelete[oldConversation.id] = oldConversation;
+    provider.deleteConversationOnServer(oldConversation.id);
+
+    provider.clearUserData();
+    final newConversation = _conversation('c1', status: ConversationStatus.completed, title: 'New account');
+    provider.memoriesToDelete[newConversation.id] = newConversation;
+    provider.conversations = [newConversation];
+
+    delete.completeError(StateError('old session delete failed'));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.memoriesToDelete[newConversation.id], same(newConversation));
+    expect(provider.conversations.single, same(newConversation));
+  });
+
   test('pending delete tombstone hides a row until DELETE settles', () async {
     final delete = Completer<bool>();
     final conversation = _conversation('page-10', status: ConversationStatus.completed);
