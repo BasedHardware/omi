@@ -19,6 +19,8 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
 # No ffmpeg/curl/unzip: ST→LT maintenance is Firestore/LLM/vector only.
+# Patch OS packages in this layer (#7136).
+RUN apt-get update && apt-get -y dist-upgrade && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/ .
