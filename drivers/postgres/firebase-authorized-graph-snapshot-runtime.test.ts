@@ -24,6 +24,7 @@ describe("PostgreSQL Firebase-authorized graph snapshot runtime", () => {
       },
       application_id: "app:memory",
       context_ttl_seconds: 60,
+      database_generation_digest: "d".repeat(64),
     });
     await expect(runtime.load("invalid.token.value", 100)).resolves.toEqual({
       kind: "denied", outcome: "authentication",
@@ -42,6 +43,7 @@ describe("PostgreSQL Firebase-authorized graph snapshot runtime", () => {
       },
       application_id: "app:memory",
       context_ttl_seconds: 60,
+      database_generation_digest: "d".repeat(64),
     };
     expect(() => createPostgresFirebaseAuthorizedGraphSnapshotRuntime({
       ...base, extra: true,

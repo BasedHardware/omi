@@ -20,6 +20,7 @@ export interface PostgresFirebaseAuthorizationRuntimeOptions {
   readonly id_token_adapter: FirebaseIdTokenVerificationAdapter;
   readonly application_id: string;
   readonly context_ttl_seconds: number;
+  readonly database_generation_digest: string;
 }
 
 interface PostgresFirebaseAuthorizationRuntimeBinding {
@@ -36,7 +37,7 @@ const exactOptions = (
   }
   const expected = [
     "pool", "project_id", "runtime_mode", "id_token_adapter", "application_id",
-    "context_ttl_seconds",
+    "context_ttl_seconds", "database_generation_digest",
   ].sort();
   const keys = Reflect.ownKeys(value);
   if (keys.some((key) => typeof key !== "string")) {
@@ -66,6 +67,9 @@ export const createPostgresFirebaseAuthorizationRuntime = (
     throw new TypeError("invalid PostgreSQL Firebase runtime capability");
   }
   const options = exactOptions(optionsValue);
+  if (!/^[a-f0-9]{64}$/.test(options.database_generation_digest)) {
+    throw new TypeError("invalid PostgreSQL Firebase database generation digest");
+  }
   const pool = options.pool;
   const withTransaction = pool?.withTransaction;
   if (typeof withTransaction !== "function" || isProxy(withTransaction)) {
@@ -90,7 +94,10 @@ export const createPostgresFirebaseAuthorizationRuntime = (
       project_id: options.project_id,
       runtime_mode: options.runtime_mode,
       id_token_adapter: options.id_token_adapter,
-      authorization_source: createPostgresFirebaseApplicationAuthorizationSource(fixedQuery),
+      authorization_source: createPostgresFirebaseApplicationAuthorizationSource(
+        fixedQuery,
+        options.database_generation_digest,
+      ),
       control_source: createPostgresApplicationAccountControlSource(fixedQuery),
       application_id: options.application_id,
       capability,

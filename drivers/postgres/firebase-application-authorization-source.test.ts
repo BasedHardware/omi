@@ -9,6 +9,14 @@ import {
 import type { SqlStatement } from "./connection";
 import { authorizationStateDigest, type AuthorityStateRow } from "./transaction";
 
+const DATABASE_GENERATION = "4".repeat(64);
+const RELEASE_CONTENT_HASH = "5".repeat(64);
+const RESTORE_RELEASE = Object.freeze({
+  database_generation_digest: DATABASE_GENERATION,
+  restore_release_revision: 3,
+  restore_release_content_hash: RELEASE_CONTENT_HASH,
+});
+
 const request = (overrides: Record<string, unknown> = {}) => ({
   firebase_project_id: "omi-fixture-project",
   firebase_uid: "firebase-user-alice",
@@ -45,6 +53,9 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   control_content_hash: "1".repeat(64),
   credential_content_hash: "2".repeat(64),
   grant_content_hash: "3".repeat(64),
+  database_generation_digest: DATABASE_GENERATION,
+  restore_release_revision: 3,
+  restore_release_content_hash: RELEASE_CONTENT_HASH,
   ...overrides,
 });
 
@@ -75,7 +86,7 @@ const expectedDigest = (): string => authorizationStateDigest({
   credential_content_hash: "2".repeat(64),
   grant_content_hash: "3".repeat(64),
   db_now_epoch_seconds: 0,
-} satisfies AuthorityStateRow);
+} satisfies AuthorityStateRow, RESTORE_RELEASE);
 
 const setup = (result: unknown = [row()]) => {
   const statements: SqlStatement[] = [];
@@ -87,7 +98,7 @@ const setup = (result: unknown = [row()]) => {
     },
   } satisfies FirebaseApplicationAuthorizationQueryPort;
   return {
-    source: createPostgresFirebaseApplicationAuthorizationSource(queryPort),
+    source: createPostgresFirebaseApplicationAuthorizationSource(queryPort, DATABASE_GENERATION),
     statements,
     queryPort,
   };
@@ -105,6 +116,7 @@ describe("PostgreSQL Firebase application authorization source", () => {
         "firebase-user-alice",
         "app:desktop",
         "memories.write",
+        DATABASE_GENERATION,
       ],
     }]);
     expect(Object.isFrozen(fixture.statements[0])).toBe(true);
@@ -130,6 +142,9 @@ describe("PostgreSQL Firebase application authorization source", () => {
       control_revision: 17,
       account_epoch: 12,
       destination_activation_revision: 17,
+      database_generation_digest: DATABASE_GENERATION,
+      restore_release_revision: 3,
+      restore_release_content_hash: RELEASE_CONTENT_HASH,
     });
     expect(Object.isFrozen(result)).toBe(true);
   });
@@ -261,7 +276,7 @@ describe("PostgreSQL Firebase application authorization source", () => {
         return [hostile];
       },
     };
-    const source = createPostgresFirebaseApplicationAuthorizationSource(queryPort);
+    const source = createPostgresFirebaseApplicationAuthorizationSource(queryPort, DATABASE_GENERATION);
     expect(await source.load(request())).toEqual({ status: "unavailable" });
     expect(getterCalls).toBe(0);
     expect(queryCalls).toBe(1);
@@ -307,8 +322,12 @@ describe("PostgreSQL Firebase application authorization source", () => {
       new QueryClass(),
       { query: async () => [], extra: true },
       new Proxy({ query: async () => [] }, {}),
-    ]) expect(() => createPostgresFirebaseApplicationAuthorizationSource(candidate as never))
-      .toThrow("invalid Firebase authorization query port");
+    ]) expect(() => createPostgresFirebaseApplicationAuthorizationSource(candidate as never, DATABASE_GENERATION))
+      .toThrow("invalid Firebase authorization query configuration");
+    expect(() => createPostgresFirebaseApplicationAuthorizationSource(
+      { query: async () => [] },
+      "not-a-digest",
+    )).toThrow("invalid Firebase authorization query configuration");
   });
 
   test("the adapter imports no routes, SDK, environment, model, secret, or context issuer", async () => {

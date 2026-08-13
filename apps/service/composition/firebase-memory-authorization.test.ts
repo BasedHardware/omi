@@ -41,6 +41,9 @@ const authorization = (overrides: Record<string, unknown> = {}) => ({
   control_revision: 17,
   account_epoch: 12,
   destination_activation_revision: 17,
+  database_generation_digest: "b".repeat(64),
+  restore_release_revision: 3,
+  restore_release_content_hash: "c".repeat(64),
   ...overrides,
 });
 

@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import {
   assertAuthorizedLedgerWriteContext,
   assertAuthorizedLedgerWriteContextCurrentAt,
+  authorizedRestoreReleaseBinding,
   type AuthorizedLedgerWriteContext,
+  type AuthorizedRestoreReleaseBinding,
 } from "../../apps/service/auth/authorized-context";
 import type {
   DatabaseOutcome,
@@ -85,8 +87,16 @@ SELECT *
 FROM omi_memory.lock_unfenced_authority_state($1, $2, $3, $4, $5, $6, $7)
 `;
 
+export const LOCK_RESTORED_AUTHORITY_STATE: SqlStatement["text"] = `
+SELECT *
+FROM omi_memory.lock_released_unfenced_authority_state($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+`;
+
 /** Exact digest minted from the persisted revisions that authorize the context. */
-export const authorizationStateDigest = (row: AuthorityStateRow): string =>
+export const authorizationStateDigest = (
+  row: AuthorityStateRow,
+  restoreRelease: AuthorizedRestoreReleaseBinding | null = null,
+): string =>
   createHash("sha256").update(JSON.stringify({
     account_id: row.account_id,
     principal_id: row.principal_id,
@@ -100,6 +110,7 @@ export const authorizationStateDigest = (row: AuthorityStateRow): string =>
     grant_id: row.grant_id,
     grant_version: row.grant_version,
     grant_content_hash: row.grant_content_hash,
+    restore_release: restoreRelease,
   })).digest("hex");
 
 const safeDatabaseInteger = (value: unknown, nullable = false): number | null => {
@@ -188,6 +199,7 @@ const normalizeAuthorityStateRow = (row: Record<string, unknown>): AuthorityStat
 const assertAuthorityState = (
   context: AuthorizedLedgerWriteContext,
   row: AuthorityStateRow,
+  restoreRelease: AuthorizedRestoreReleaseBinding | null,
 ): void => {
   try {
     assertAuthorizedLedgerWriteContextCurrentAt(context, row.db_now_epoch_seconds);
@@ -224,7 +236,7 @@ const assertAuthorityState = (
     || !row.grant_enabled) {
     throw new PostgresRepositoryError("grant_inactive");
   }
-  if (authorizationStateDigest(row) !== context.authorization_state_digest) {
+  if (authorizationStateDigest(row, restoreRelease) !== context.authorization_state_digest) {
     throw new PostgresRepositoryError("authorization_state_denied");
   }
 };
@@ -321,6 +333,7 @@ export const withAuthorizedSerializableConnectionTransaction = async <Result>(
   const started = safeNowMilliseconds(observability.nowMilliseconds ?? Date.now);
   try {
     const context = assertAuthorizedLedgerWriteContext(suppliedContext);
+    const restoreRelease = authorizedRestoreReleaseBinding(context);
     const result = await pool.withTransaction(
       { isolationLevel: "serializable", accessMode: "read write" },
       async (connection: CheckedOutPostgresConnection) => {
@@ -338,7 +351,7 @@ export const withAuthorizedSerializableConnectionTransaction = async <Result>(
         });
         const rows = await connection.query<AuthorityStateRow>({
           name: "authority.lock_and_revalidate",
-          text: LOCK_AUTHORITY_STATE,
+          text: restoreRelease === null ? LOCK_AUTHORITY_STATE : LOCK_RESTORED_AUTHORITY_STATE,
           values: [
             context.account_id,
             context.principal_id,
@@ -347,6 +360,11 @@ export const withAuthorizedSerializableConnectionTransaction = async <Result>(
             context.credential_generation,
             context.capability,
             context.grant_id,
+            ...(restoreRelease === null ? [] : [
+              restoreRelease.database_generation_digest,
+              restoreRelease.restore_release_revision,
+              restoreRelease.restore_release_content_hash,
+            ]),
           ],
         });
         const rawRow = rows[0];
@@ -354,7 +372,7 @@ export const withAuthorizedSerializableConnectionTransaction = async <Result>(
           throw new PostgresRepositoryError("authorization_state_denied");
         }
         const row = normalizeAuthorityStateRow(rawRow);
-        assertAuthorityState(context, row);
+        assertAuthorityState(context, row, restoreRelease);
         const transaction: AuthorizedPostgresConnectionTransaction = Object.freeze({
           authority: context,
           dbNowEpochSeconds: row.db_now_epoch_seconds,

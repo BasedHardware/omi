@@ -22,6 +22,7 @@ describe("route-free PostgreSQL Firebase memory export runtime", () => {
         },
         application_id: "app:memory",
         context_ttl_seconds: 60,
+        database_generation_digest: "d".repeat(64),
       },
       product: {
         account_timezone: "UTC",
@@ -54,6 +55,7 @@ describe("route-free PostgreSQL Firebase memory export runtime", () => {
         },
         application_id: "app:memory",
         context_ttl_seconds: 60,
+        database_generation_digest: "d".repeat(64),
       },
       product: {
         account_timezone: "UTC",

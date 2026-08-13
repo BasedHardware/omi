@@ -75,6 +75,9 @@ interface CurrentAuthorization {
   readonly control_revision: number;
   readonly account_epoch: number;
   readonly destination_activation_revision: number;
+  readonly database_generation_digest: string;
+  readonly restore_release_revision: number;
+  readonly restore_release_content_hash: string;
 }
 
 const denyAuthentication = Object.freeze({ authorized: false, outcome: "authentication" as const });
@@ -182,6 +185,9 @@ const CURRENT_KEYS = Object.freeze([
   "control_revision",
   "account_epoch",
   "destination_activation_revision",
+  "database_generation_digest",
+  "restore_release_revision",
+  "restore_release_content_hash",
 ] as const);
 
 const parseAuthorizationSource = (
@@ -221,7 +227,12 @@ const parseAuthorizationSource = (
     || !DIGEST.test(fields.authorization_state_digest!.value)
     || !counter(fields.control_revision!.value)
     || !counter(fields.account_epoch!.value)
-    || !counter(fields.destination_activation_revision!.value)) return "invalid";
+    || !counter(fields.destination_activation_revision!.value)
+    || typeof fields.database_generation_digest!.value !== "string"
+    || !DIGEST.test(fields.database_generation_digest!.value)
+    || !counter(fields.restore_release_revision!.value)
+    || typeof fields.restore_release_content_hash!.value !== "string"
+    || !DIGEST.test(fields.restore_release_content_hash!.value)) return "invalid";
 
   return Object.freeze({
     firebase_project_id: request.firebase_project_id,
@@ -243,6 +254,9 @@ const parseAuthorizationSource = (
     control_revision: fields.control_revision!.value as number,
     account_epoch: fields.account_epoch!.value as number,
     destination_activation_revision: fields.destination_activation_revision!.value as number,
+    database_generation_digest: fields.database_generation_digest!.value as string,
+    restore_release_revision: fields.restore_release_revision!.value as number,
+    restore_release_content_hash: fields.restore_release_content_hash!.value as string,
   });
 };
 
@@ -336,7 +350,7 @@ export const composeFirebaseApplicationAuthorization = (
       );
       if (expiresAt <= nowEpochSeconds) return denyAuthorization;
       try {
-        const context = issuer.issue({
+        const context = issuer.issueRestored({
           context_version: AUTHORIZED_LEDGER_CONTEXT_VERSION,
           principal_id: selected.principal_id,
           account_id: selected.account_id,
@@ -354,6 +368,10 @@ export const composeFirebaseApplicationAuthorization = (
           issued_at_epoch_seconds: nowEpochSeconds,
           expires_at_epoch_seconds: expiresAt,
           authorization_state_digest: selected.authorization_state_digest,
+        }, {
+          database_generation_digest: selected.database_generation_digest,
+          restore_release_revision: selected.restore_release_revision,
+          restore_release_content_hash: selected.restore_release_content_hash,
         }, nowEpochSeconds);
         return Object.freeze({ authorized: true, outcome: "authorized", context });
       } catch {

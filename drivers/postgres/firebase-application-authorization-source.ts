@@ -1,5 +1,7 @@
 import { isProxy } from "node:util/types";
 
+import type { AuthorizedRestoreReleaseBinding } from
+  "../../apps/service/auth/authorized-context";
 import type { SqlStatement } from "./connection";
 import { authorizationStateDigest, type AuthorityStateRow } from "./transaction";
 
@@ -11,7 +13,7 @@ const DIGEST = /^[a-f0-9]{64}$/;
 
 export const LOOKUP_FIREBASE_APPLICATION_AUTHORIZATION: SqlStatement["text"] = `
 SELECT *
-FROM omi_memory.lookup_unfenced_firebase_application_authorization($1, $2, $3, $4)
+FROM omi_memory.lookup_released_unfenced_firebase_application_authorization($1, $2, $3, $4, $5)
 `;
 
 export interface FirebaseApplicationAuthorizationQueryPort {
@@ -156,13 +158,20 @@ const ROW_KEYS = Object.freeze([
   "control_content_hash",
   "credential_content_hash",
   "grant_content_hash",
+  "database_generation_digest",
+  "restore_release_revision",
+  "restore_release_content_hash",
 ] as const);
 
 const AUTHORITY_LIFECYCLES = new Set(["active", "inactive", "revoked"]);
 const ACCOUNT_LIFECYCLES = new Set(["active", "deletion_pending", "deleted"]);
 const ACCOUNT_GENERATIONS = new Set(["legacy", "migrating", "new", "rolled_back_stranded"]);
 
-const parseCurrent = (value: unknown, request: RequestCoordinates): unknown | null => {
+const parseCurrent = (
+  value: unknown,
+  request: RequestCoordinates,
+  expectedDatabaseGenerationDigest: string,
+): unknown | null => {
   const fields = exactDescriptors(value, ROW_KEYS);
   if (fields === null) return null;
   const get = (key: (typeof ROW_KEYS)[number]): unknown => fields[key]!.value;
@@ -193,6 +202,9 @@ const parseCurrent = (value: unknown, request: RequestCoordinates): unknown | nu
   const controlHash = get("control_content_hash");
   const credentialHash = get("credential_content_hash");
   const grantHash = get("grant_content_hash");
+  const databaseGenerationDigest = get("database_generation_digest");
+  const restoreReleaseRevision = get("restore_release_revision");
+  const restoreReleaseContentHash = get("restore_release_content_hash");
   const credentialGenerationValue = counter(credentialGeneration);
   const credentialExpiryValue = nullableCounter(credentialExpiry);
   const grantVersionValue = counter(grantVersion);
@@ -202,6 +214,7 @@ const parseCurrent = (value: unknown, request: RequestCoordinates): unknown | nu
   const destinationActivationEpochValue = nullableCounter(destinationActivationEpoch);
   const conflictAtValue = nullableCounter(conflictAt);
   const deletionEpochValue = nullableCounter(deletionEpoch);
+  const restoreReleaseRevisionValue = counter(restoreReleaseRevision);
 
   if (projectId !== request.firebase_project_id
     || uid !== request.firebase_uid
@@ -231,7 +244,17 @@ const parseCurrent = (value: unknown, request: RequestCoordinates): unknown | nu
     || typeof accountGeneration !== "string" || !ACCOUNT_GENERATIONS.has(accountGeneration)
     || typeof controlHash !== "string" || !DIGEST.test(controlHash)
     || typeof credentialHash !== "string" || !DIGEST.test(credentialHash)
-    || typeof grantHash !== "string" || !DIGEST.test(grantHash)) return null;
+    || typeof grantHash !== "string" || !DIGEST.test(grantHash)
+    || databaseGenerationDigest !== expectedDatabaseGenerationDigest
+    || restoreReleaseRevisionValue === undefined
+    || typeof restoreReleaseContentHash !== "string"
+    || !DIGEST.test(restoreReleaseContentHash)) return null;
+
+  const restoreRelease: AuthorizedRestoreReleaseBinding = Object.freeze({
+    database_generation_digest: expectedDatabaseGenerationDigest,
+    restore_release_revision: restoreReleaseRevisionValue,
+    restore_release_content_hash: restoreReleaseContentHash,
+  });
 
   const digestRow: AuthorityStateRow = {
     account_id: accountId,
@@ -279,10 +302,13 @@ const parseCurrent = (value: unknown, request: RequestCoordinates): unknown | nu
     grant_version: grantVersionValue,
     grant_lifecycle: grantLifecycle,
     grant_enabled: grantEnabled,
-    authorization_state_digest: authorizationStateDigest(digestRow),
+    authorization_state_digest: authorizationStateDigest(digestRow, restoreRelease),
     control_revision: controlRevisionValue,
     account_epoch: accountEpochValue,
     destination_activation_revision: destinationActivationRevisionValue,
+    database_generation_digest: expectedDatabaseGenerationDigest,
+    restore_release_revision: restoreReleaseRevisionValue,
+    restore_release_content_hash: restoreReleaseContentHash,
   });
 };
 
@@ -293,9 +319,12 @@ const parseCurrent = (value: unknown, request: RequestCoordinates): unknown | nu
  */
 export const createPostgresFirebaseApplicationAuthorizationSource = (
   queryPort: FirebaseApplicationAuthorizationQueryPort,
+  databaseGenerationDigest: string,
 ): PostgresFirebaseApplicationAuthorizationSource => {
   const query = snapshotQuery(queryPort);
-  if (query === null) throw new TypeError("invalid Firebase authorization query port");
+  if (query === null || !DIGEST.test(databaseGenerationDigest)) {
+    throw new TypeError("invalid Firebase authorization query configuration");
+  }
 
   return Object.freeze({
     async load(requestValue: unknown): Promise<unknown> {
@@ -311,6 +340,7 @@ export const createPostgresFirebaseApplicationAuthorizationSource = (
             request.firebase_uid,
             request.application_id,
             request.capability,
+            databaseGenerationDigest,
           ]),
         });
         rawRows = await query.method.call(query.receiver, statement);
@@ -320,7 +350,7 @@ export const createPostgresFirebaseApplicationAuthorizationSource = (
       const rows = rowsArray(rawRows);
       if (rows === null || rows.length > 1) return unavailable;
       if (rows.length === 0) return absent;
-      return parseCurrent(rows[0], request) ?? unavailable;
+      return parseCurrent(rows[0], request, databaseGenerationDigest) ?? unavailable;
     },
   });
 };

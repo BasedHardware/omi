@@ -64,7 +64,14 @@ export interface AuthorizedLedgerWriteContextInput {
  */
 export type AuthorizedLedgerWriteContext = Readonly<AuthorizedLedgerWriteContextInput>;
 
+export interface AuthorizedRestoreReleaseBinding {
+  readonly database_generation_digest: string;
+  readonly restore_release_revision: number;
+  readonly restore_release_content_hash: string;
+}
+
 const issuedContexts = new WeakSet<object>();
+const restoreReleaseBindings = new WeakMap<object, Readonly<AuthorizedRestoreReleaseBinding>>();
 const AUTHORIZED_LEDGER_CONTEXT_ISSUER: unique symbol = Symbol("authorized-ledger-context-issuer");
 
 /**
@@ -76,6 +83,11 @@ const AUTHORIZED_LEDGER_CONTEXT_ISSUER: unique symbol = Symbol("authorized-ledge
 export interface AuthorizedLedgerWriteContextIssuer {
   readonly [AUTHORIZED_LEDGER_CONTEXT_ISSUER]: true;
   issue(input: AuthorizedLedgerWriteContextInput, nowEpochSeconds: number): AuthorizedLedgerWriteContext;
+  issueRestored(
+    input: AuthorizedLedgerWriteContextInput,
+    binding: AuthorizedRestoreReleaseBinding,
+    nowEpochSeconds: number,
+  ): AuthorizedLedgerWriteContext;
 }
 
 function fail(message: string): never {
@@ -115,6 +127,23 @@ const counter = (value: unknown, label: string): number => {
 const time = (value: unknown, label: string): number => counter(value, label);
 
 const requireNow = (value: unknown): number => time(value, "validation time");
+
+const restoreReleaseBinding = (value: unknown): Readonly<AuthorizedRestoreReleaseBinding> => {
+  const fields = exactDataRecord(value, [
+    "database_generation_digest", "restore_release_revision", "restore_release_content_hash",
+  ]);
+  const generation = fields["database_generation_digest"];
+  const contentHash = fields["restore_release_content_hash"];
+  if (typeof generation !== "string" || !DIGEST.test(generation)
+    || typeof contentHash !== "string" || !DIGEST.test(contentHash)) {
+    fail("restore release binding requires SHA-256 digests");
+  }
+  return Object.freeze({
+    database_generation_digest: generation,
+    restore_release_revision: counter(fields["restore_release_revision"], "restore_release_revision"),
+    restore_release_content_hash: contentHash,
+  });
+};
 
 /**
  * The only minting operation.  Auth composition supplies a caller-provided
@@ -170,6 +199,16 @@ export const createAuthorizedLedgerWriteContextIssuer = (): AuthorizedLedgerWrit
     issue(input: AuthorizedLedgerWriteContextInput, nowEpochSeconds: number): AuthorizedLedgerWriteContext {
       return mintAuthorizedLedgerWriteContext(input, nowEpochSeconds);
     },
+    issueRestored(
+      input: AuthorizedLedgerWriteContextInput,
+      binding: AuthorizedRestoreReleaseBinding,
+      nowEpochSeconds: number,
+    ): AuthorizedLedgerWriteContext {
+      const normalizedBinding = restoreReleaseBinding(binding);
+      const context = mintAuthorizedLedgerWriteContext(input, nowEpochSeconds);
+      restoreReleaseBindings.set(context, normalizedBinding);
+      return context;
+    },
   });
 
 /** Runtime brand check for repository adapters and sealed service ports. */
@@ -195,6 +234,14 @@ export const assertAuthorizedLedgerWriteContextCurrentAt = (
     return fail("is expired at the authoritative validation time");
   }
   return context;
+};
+
+/** Hidden restore-generation authority carried only by a genuinely issued context. */
+export const authorizedRestoreReleaseBinding = (
+  value: unknown,
+): Readonly<AuthorizedRestoreReleaseBinding> | null => {
+  const context = assertAuthorizedLedgerWriteContext(value);
+  return restoreReleaseBindings.get(context) ?? null;
 };
 
 export const AUTHORIZED_LEDGER_CONTEXT_VERSION = CONTEXT_VERSION;

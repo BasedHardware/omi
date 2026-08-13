@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { assertAuthorizedLedgerWriteContext } from "./authorized-context";
+import {
+  assertAuthorizedLedgerWriteContext,
+  authorizedRestoreReleaseBinding,
+} from "./authorized-context";
 import {
   composeFirebaseApplicationAuthorization,
   type FirebaseApplicationAuthorizationConfig,
@@ -41,6 +44,9 @@ const authorizationRow = (overrides: Record<string, unknown> = {}) => ({
   control_revision: 17,
   account_epoch: 12,
   destination_activation_revision: 17,
+  database_generation_digest: "b".repeat(64),
+  restore_release_revision: 3,
+  restore_release_content_hash: "c".repeat(64),
   ...overrides,
 });
 
@@ -135,6 +141,11 @@ describe("single Firebase application-authorization composition", () => {
     expect(result.outcome).toBe("authorized");
     expect(Object.isFrozen(result)).toBe(true);
     expect(assertAuthorizedLedgerWriteContext(result.context)).toBe(result.context);
+    expect(authorizedRestoreReleaseBinding(result.context)).toEqual({
+      database_generation_digest: "b".repeat(64),
+      restore_release_revision: 3,
+      restore_release_content_hash: "c".repeat(64),
+    });
     expect(result.context).toEqual({
       context_version: "authorized-ledger-write-context-v1",
       principal_id: "principal:alice",
@@ -204,6 +215,9 @@ describe("single Firebase application-authorization composition", () => {
       authorizationRow({ authorization_state_digest: "not-a-digest" }),
       authorizationRow({ credential_generation: -1 }),
       authorizationRow({ grant_version: Number.MAX_SAFE_INTEGER + 1 }),
+      authorizationRow({ database_generation_digest: "bad" }),
+      authorizationRow({ restore_release_revision: -1 }),
+      authorizationRow({ restore_release_content_hash: "bad" }),
     ];
     for (const authorizationResult of candidates) {
       const fixture = setup({ authorizationResult });

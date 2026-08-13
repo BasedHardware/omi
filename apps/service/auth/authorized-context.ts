@@ -8,8 +8,10 @@
 export {
   assertAuthorizedLedgerWriteContext,
   assertAuthorizedLedgerWriteContextCurrentAt,
+  authorizedRestoreReleaseBinding,
   AUTHORIZED_LEDGER_CONTEXT_VERSION,
 } from "./authorized-context-internal";
 export type {
   AuthorizedLedgerWriteContext,
+  AuthorizedRestoreReleaseBinding,
 } from "./authorized-context-internal";

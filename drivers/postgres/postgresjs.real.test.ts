@@ -143,6 +143,7 @@ import { DeterministicFakeModel, type ModelInvokeRequest } from "../model/port";
 
 const explicitTestUrl = process.env["OMI_TEST_POSTGRES_URL"];
 const realTest = explicitTestUrl ? describe : describe.skip;
+const QUALIFICATION_DATABASE_GENERATION_DIGEST = "d".repeat(64);
 
 const productRequest = <Body extends ProductProjectionWriteBody>(
   body: Body,
@@ -653,6 +654,28 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     );
     expect(second.appliedVersions).toEqual([]);
     expect(second.skippedVersions).toEqual(POSTGRES_MIGRATIONS.map((entry) => entry.version));
+    await ownerSql.unsafe(`INSERT INTO omi_memory.postgres_restore_admission_revisions
+        (database_generation_digest, release_revision, state, restore_id,
+         restored_snapshot_digest, checkpoint_candidate_digest,
+         checkpoint_evidence_digest, first_approval_subject_digest,
+         first_approval_receipt_digest, second_approval_subject_digest,
+         second_approval_receipt_digest, manual_release_receipt_digest,
+         previous_release_revision, content_hash)
+      VALUES ($1, 1, 'released', 'restore:qualification-generation', $2, $3, $4,
+              $5, $6, $7, $8, $9, NULL, $10)
+      ON CONFLICT (database_generation_digest, release_revision) DO NOTHING
+    `, [
+      QUALIFICATION_DATABASE_GENERATION_DIGEST,
+      "1".repeat(64), "2".repeat(64), "3".repeat(64), "4".repeat(64),
+      "5".repeat(64), "6".repeat(64), "7".repeat(64), "8".repeat(64),
+      "9".repeat(64),
+    ]);
+    await ownerSql.unsafe(`INSERT INTO omi_memory.postgres_restore_admission_heads
+        (database_generation_digest, release_revision)
+      VALUES ($1, 1)
+      ON CONFLICT (database_generation_digest) DO UPDATE
+        SET release_revision = EXCLUDED.release_revision,
+            updated_at = transaction_timestamp()`, [QUALIFICATION_DATABASE_GENERATION_DIGEST]);
   }, 120_000);
 
   test("one reserved connection owns the transaction and SET LOCAL clears after rollback", async () => {
@@ -2776,6 +2799,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       },
       application_id: applicationId,
       context_ttl_seconds: 60,
+      database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
     });
     const firebaseAppend = append(
       `commit:${suffix}:firebase`,
@@ -2791,6 +2815,75 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           sequence: 6,
         },
       });
+    const wrongGenerationRuntime = createPostgresFirebaseAuthorizedLedgerRuntime({
+      pool: appRolePool,
+      project_id: firebaseProjectId,
+      runtime_mode: "deployed",
+      id_token_adapter: {
+        verification_source: "firebase_production",
+        verifyIdToken: async () => firebaseClaims,
+      },
+      application_id: applicationId,
+      context_ttl_seconds: 60,
+      database_generation_digest: "e".repeat(64),
+    });
+    await expect(wrongGenerationRuntime.append("header.payload.signature", now, firebaseAppend))
+      .resolves.toEqual({ kind: "denied", outcome: "authorization" });
+
+    await ownerSql.unsafe(`INSERT INTO omi_memory.postgres_restore_admission_revisions
+        (database_generation_digest, release_revision, state, restore_id,
+         restored_snapshot_digest, checkpoint_candidate_digest,
+         checkpoint_evidence_digest, first_approval_subject_digest,
+         first_approval_receipt_digest, second_approval_subject_digest,
+         second_approval_receipt_digest, manual_release_receipt_digest,
+         previous_release_revision, content_hash)
+      VALUES ($1, 2, 'released', 'restore:qualification-generation-2', $2, $3, $4,
+              $5, $6, $7, $8, $9, 1, $10)
+      ON CONFLICT (database_generation_digest, release_revision) DO NOTHING`, [
+      QUALIFICATION_DATABASE_GENERATION_DIGEST,
+      "a".repeat(64), "b".repeat(64), "c".repeat(64), "1".repeat(64),
+      "2".repeat(64), "3".repeat(64), "4".repeat(64), "5".repeat(64),
+      "6".repeat(64),
+    ]);
+    let releaseRaceTransactions = 0;
+    const releaseRacePool: PostgresTransactionPool = Object.freeze({
+      withTransaction: async <Result>(options, callback) => {
+        releaseRaceTransactions += 1;
+        if (releaseRaceTransactions === 3) {
+          await ownerSql.unsafe(`UPDATE omi_memory.postgres_restore_admission_heads
+            SET release_revision = 2, updated_at = transaction_timestamp()
+            WHERE database_generation_digest = $1`, [QUALIFICATION_DATABASE_GENERATION_DIGEST]);
+        }
+        return appRolePool.withTransaction(options, callback);
+      },
+    });
+    const releaseRaceRuntime = createPostgresFirebaseAuthorizedLedgerRuntime({
+      pool: releaseRacePool,
+      project_id: firebaseProjectId,
+      runtime_mode: "deployed",
+      id_token_adapter: {
+        verification_source: "firebase_production",
+        verifyIdToken: async () => firebaseClaims,
+      },
+      application_id: applicationId,
+      context_ttl_seconds: 60,
+      database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
+    });
+    const releaseRaceAppend = append(
+      `commit:${suffix}:release-race`,
+      `append:${suffix}:release-race`,
+      firebaseAppend.transition.derivation.commit.commit_id,
+    );
+    await expect(releaseRaceRuntime.append(
+      "header.payload.signature", now, releaseRaceAppend,
+    )).resolves.toEqual({
+      kind: "completed",
+      outcome: { kind: "authorization_denied", reason: "authorization_state_denied" },
+    });
+    expect(releaseRaceTransactions).toBe(3);
+    await ownerSql.unsafe(`UPDATE omi_memory.postgres_restore_admission_heads
+      SET release_revision = 1, updated_at = transaction_timestamp()
+      WHERE database_generation_digest = $1`, [QUALIFICATION_DATABASE_GENERATION_DIGEST]);
     // The preceding canonical claim was intentionally purged by the liveness
     // gate. Add a second, policy-eligible canonical claim so the direct product
     // read proves positive grounded output rather than only a valid empty page.
@@ -2818,6 +2911,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       },
       application_id: applicationId,
       context_ttl_seconds: 60,
+      database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
     });
     const authorizedGraph = await firebaseReadRuntime.load(
       "header.payload.signature",
@@ -2845,6 +2939,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         },
         application_id: applicationId,
         context_ttl_seconds: 60,
+        database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
       },
       product: {
         account_timezone: "UTC",
@@ -2879,6 +2974,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         },
         application_id: applicationId,
         context_ttl_seconds: 60,
+        database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
       },
       product: {
         account_timezone: "UTC",
@@ -2972,6 +3068,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       },
       application_id: applicationId,
       context_ttl_seconds: 60,
+      database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
     });
     const revokedAppend = append(
       `commit:${suffix}:firebase-revoked`,
@@ -3036,6 +3133,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       },
       application_id: applicationId,
       context_ttl_seconds: 60,
+      database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
     });
     await expect(revokedReadRuntime.load(
       "header.payload.signature",
@@ -3078,8 +3176,12 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const postRestoreLookup = await ownerSql.begin(async (transaction) => {
       await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
       return transaction.unsafe<{ count: number }[]>(`SELECT count(*)::int AS count
-        FROM omi_memory.lookup_unfenced_firebase_application_authorization($1, $2, $3, $4)`,
-      [firebaseProjectId, firebaseUid, applicationId, "memories.write"]);
+        FROM omi_memory.lookup_released_unfenced_firebase_application_authorization(
+          $1, $2, $3, $4, $5
+        )`, [
+        firebaseProjectId, firebaseUid, applicationId, "memories.write",
+        QUALIFICATION_DATABASE_GENERATION_DIGEST,
+      ]);
     });
     expect([...postRestoreLookup]).toEqual([{ count: 0 }]);
     for (const bypass of [
@@ -3211,6 +3313,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       },
       application_id: applicationId,
       context_ttl_seconds: 60,
+      database_generation_digest: QUALIFICATION_DATABASE_GENERATION_DIGEST,
     });
 
     for (const selected of deniedCases) {

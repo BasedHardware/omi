@@ -20,6 +20,7 @@ describe("PostgreSQL Firebase-authorized ledger runtime", () => {
       },
       application_id: "app:memory",
       context_ttl_seconds: 60,
+      database_generation_digest: "d".repeat(64),
     });
     await expect(runtime.append("invalid.token.value", 100, {} as never)).resolves.toEqual({
       kind: "denied", outcome: "authentication",
@@ -38,6 +39,7 @@ describe("PostgreSQL Firebase-authorized ledger runtime", () => {
       },
       application_id: "app:memory",
       context_ttl_seconds: 60,
+      database_generation_digest: "d".repeat(64),
     };
     expect(() => createPostgresFirebaseAuthorizedLedgerRuntime({ ...base, extra: true } as never))
       .toThrow("invalid PostgreSQL Firebase runtime options");
@@ -83,6 +85,7 @@ describe("PostgreSQL Firebase-authorized ledger runtime", () => {
       },
       application_id: "app:memory",
       context_ttl_seconds: 60,
+      database_generation_digest: "d".repeat(64),
     });
     mutablePool.withTransaction = async () => {
       replacementCalls += 1;

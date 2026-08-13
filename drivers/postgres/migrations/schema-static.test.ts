@@ -135,6 +135,8 @@ const expectedTables = [
   "memory_strategy_shadow_assignments",
   "platform_accounts",
   "postgres_restore_replay_checkpoint_candidates",
+  "postgres_restore_admission_revisions",
+  "postgres_restore_admission_heads",
   "platform_schema_migrations",
 ] as const;
 
@@ -163,7 +165,11 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(disposalRows.map((row) => row.name))
       .not.toContain("account_terminal_deletion_exports");
     expect(POSTGRES_RETAINED_RESTORE_SAFETY_TABLES)
-      .toEqual(["postgres_restore_replay_checkpoint_candidates"]);
+      .toEqual([
+        "postgres_restore_replay_checkpoint_candidates",
+        "postgres_restore_admission_revisions",
+        "postgres_restore_admission_heads",
+      ]);
   });
 
   test("keeps checkpoint candidates append-only, exact, and unable to release traffic", () => {
@@ -274,6 +280,31 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(gateSql).toContain("TO omi_platform_application;");
     expect(gateSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*account_restored_terminal_fences/s);
     expect(gateSql).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
+  });
+
+  test("requires an exact released database generation for canonical Firebase traffic", () => {
+    const gateSql = migrationSql.find((migration) =>
+      migration.fileName === "0029-restored-generation-application-gate.sql")?.sql;
+    expect(gateSql).toBeDefined();
+    expect(gateSql).toContain("CREATE TABLE omi_memory.postgres_restore_admission_revisions");
+    expect(gateSql).toContain("CREATE TABLE omi_memory.postgres_restore_admission_heads");
+    expect(gateSql).toContain("state text NOT NULL CHECK (state IN ('pending', 'checkpointed', 'released'))");
+    expect(gateSql).toContain("first_approval_subject_digest <> second_approval_subject_digest");
+    expect(gateSql).toContain("first_approval_receipt_digest <> second_approval_receipt_digest");
+    expect(gateSql).toContain("manual_release_receipt_digest IS NOT NULL");
+    expect(gateSql).toContain(
+      "CREATE FUNCTION omi_memory.lookup_released_unfenced_firebase_application_authorization(",
+    );
+    expect(gateSql).toContain(
+      "CREATE FUNCTION omi_memory.lock_released_unfenced_authority_state(",
+    );
+    expect(gateSql).toContain("FOR SHARE OF head, release");
+    expect(gateSql).toContain(
+      "REVOKE EXECUTE ON FUNCTION omi_memory.lookup_unfenced_firebase_application_authorization(",
+    );
+    expect(gateSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*postgres_restore_admission_/s);
+    expect(gateSql).not.toContain("TO omi_platform_restore");
+    expect(gateSql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\.postgres_restore_admission_/);
   });
 
   test("orders every cross-surface foreign key child before its parent", () => {

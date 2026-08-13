@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import {
   assertAuthorizedLedgerWriteContext,
   assertAuthorizedLedgerWriteContextCurrentAt,
+  authorizedRestoreReleaseBinding,
 } from "./authorized-context";
 import { createAuthorizedLedgerWriteContextIssuer } from "./authorized-context-internal";
 
@@ -43,4 +44,26 @@ test("authorized ledger context rejects accessors, stale expiry, and account/lif
   expect(() => issuer.issue({ ...input(), lifecycle_state: "deleted" } as never, 150)).toThrow("active");
   expect(() => issuer.issue({ ...input(), account_id: `account:${"x".repeat(128)}` }, 150)).toThrow("account_id");
   expect(() => assertAuthorizedLedgerWriteContextCurrentAt(issuer.issue(input(), 150), 200)).toThrow("expired at the authoritative");
+});
+
+test("restored release authority is hidden, exact, and cannot be copied with visible context fields", () => {
+  const issuer = createAuthorizedLedgerWriteContextIssuer();
+  const context = issuer.issueRestored(input(), {
+    database_generation_digest: "b".repeat(64),
+    restore_release_revision: 3,
+    restore_release_content_hash: "c".repeat(64),
+  }, 150);
+  expect(authorizedRestoreReleaseBinding(context)).toEqual({
+    database_generation_digest: "b".repeat(64),
+    restore_release_revision: 3,
+    restore_release_content_hash: "c".repeat(64),
+  });
+  expect(Object.keys(context)).not.toContain("database_generation_digest");
+  expect(() => authorizedRestoreReleaseBinding({ ...context })).toThrow("not issued");
+  expect(authorizedRestoreReleaseBinding(issuer.issue(input(), 150))).toBeNull();
+  expect(() => issuer.issueRestored(input(), {
+    database_generation_digest: "bad",
+    restore_release_revision: 3,
+    restore_release_content_hash: "c".repeat(64),
+  }, 150)).toThrow("SHA-256");
 });

@@ -66,6 +66,37 @@ const context = (row = authorityRow()) => createAuthorizedLedgerWriteContextIssu
   authorization_state_digest: authorizationStateDigest(row),
 }, 150);
 
+const restoredContext = (row = authorityRow()) => {
+  const release = Object.freeze({
+    database_generation_digest: "4".repeat(64),
+    restore_release_revision: 3,
+    restore_release_content_hash: "5".repeat(64),
+  });
+  return createAuthorizedLedgerWriteContextIssuer().issueRestored({
+    ...contextInput(authorizationStateDigest(row, release)),
+  }, release, 150);
+};
+
+const contextInput = (digest: string) => ({
+  context_version: "authorized-ledger-write-context-v1" as const,
+  principal_id: "principal:alice",
+  account_id: "account:alice",
+  application_id: "app:desktop",
+  credential_id: "credential:one",
+  credential_generation: 4,
+  capability: "memories.write",
+  grant_id: "grant:one",
+  grant_version: 9,
+  account_epoch: 12,
+  destination_activation_revision: 17,
+  lifecycle_state: "active" as const,
+  deletion_epoch: null,
+  authentication_strength: "firebase-id-token",
+  issued_at_epoch_seconds: 100,
+  expires_at_epoch_seconds: 200,
+  authorization_state_digest: digest,
+});
+
 class FakeConnection implements CheckedOutPostgresConnection {
   readonly connectionIdentity = Object.freeze({ client: "only-client" });
   readonly statements: SqlStatement[] = [];
@@ -142,6 +173,23 @@ test("exposes only frozen revalidated metadata from one checked-out serializable
     "omi_memory.lock_unfenced_authority_state($1, $2, $3, $4, $5, $6, $7)",
   );
   expect(connection.localAccount).toBeNull();
+});
+
+test("a restored Firebase context rechecks the exact released database generation", async () => {
+  const row = authorityRow();
+  const connection = new FakeConnection(row);
+  await withAuthorizedSerializableTransaction(
+    new FakePool(connection),
+    restoredContext(row),
+    async () => "done",
+  );
+  expect(connection.statements[1]?.values).toEqual([
+    "account:alice", "principal:alice", "app:desktop", "credential:one", 4,
+    "memories.write", "grant:one", "4".repeat(64), 3, "5".repeat(64),
+  ]);
+  expect(connection.statements[1]?.text).toContain(
+    "omi_memory.lock_released_unfenced_authority_state($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+  );
 });
 
 test("classifies stale context and authorization rows before repository work", async () => {
