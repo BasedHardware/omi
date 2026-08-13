@@ -1685,9 +1685,9 @@ async def verify_twitter_ownership_tweet(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Get provider info from Firebase
-    user_info = auth.get_user(uid)
-    provider_data = [p.provider_id for p in user_info.provider_data]
+    # Neutral auth port: get_user returns a UserProfile whose ``providers`` are already provider-id
+    # strings (was a Firebase UserRecord with ``.provider_data`` objects).
+    provider_data = auth.get_user(uid).providers
 
     # Verify handle
     if handle.startswith('@'):
@@ -1737,8 +1737,8 @@ async def migrate_app_owner(
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
     try:
-        source_claims = await run_blocking(
-            critical_executor, auth.auth.verify_id_token, source_token, check_revoked=True
+        source_principal = await run_blocking(
+            critical_executor, auth.get_auth_provider().verify_token, source_token, check_revoked=True
         )
         source_user = await run_blocking(critical_executor, auth.get_user, old_id)
     except Exception:
@@ -1746,10 +1746,12 @@ async def migrate_app_owner(
         # are deliberately indistinguishable to callers. Neither may mutate state.
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
-    source_uid = source_claims.get('uid')
-    firebase_claims = source_claims.get('firebase')
-    source_provider = firebase_claims.get('sign_in_provider') if isinstance(firebase_claims, dict) else None
-    if source_uid != old_id or source_provider != 'anonymous' or source_user.disabled or source_user.provider_data:
+    # Neutral auth port: verify_token yields a Principal (``provider`` = the sign-in provider) and
+    # get_user a UserProfile (``providers`` = linked provider-id strings). Anonymous + no linked
+    # providers + matching uid is the only eligible source, exactly as with the raw Firebase shapes.
+    source_uid = source_principal.uid
+    source_provider = source_principal.provider
+    if source_uid != old_id or source_provider != 'anonymous' or source_user.disabled or source_user.providers:
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
     try:
