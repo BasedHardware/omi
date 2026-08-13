@@ -402,7 +402,7 @@ function loadPrepared(file, manifestPath, manifest, offset, limit) {
   // capture command's effective input set below.
   return { descriptor, probePath, fixture, input: inputSet(manifestPath, probePath, [...fixture.files, file]) };
 }
-export function canonicalBatchId(inputSetId, command, members, authority) { return `batch-v1-${sha256(canonical({ authority, command, input_set_id: inputSetId, members }))}`; }
+export function canonicalBatchId(inputSetId, command, members, authority, replayAttestation = null) { return `batch-v1-${sha256(canonical({ authority, command, input_set_id: inputSetId, members, replay_attestation: replayAttestation }))}`; }
 async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
   const { offset, limit } = captureRange(args, manifest);
   const prepared = loadPrepared(preparedPath, manifestPath, manifest, offset, limit);
@@ -430,7 +430,7 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
     return;
   }
   const command = commandText(manifestPath, outRoot, preparedPath, offset, limit, Boolean(args.replay_proof), readinessTimeoutMs);
-  const records = {}; const captureRoot = path.join(outRoot, "captures", "macos"); mkdirSync(captureRoot, { recursive: true });
+  const records = {}; const replayMembers = {}; const captureRoot = path.join(outRoot, "captures", "macos"); mkdirSync(captureRoot, { recursive: true });
   const stdoutLine = `NATIVE_SEMANTIC_BATCH_COMPLETE members=${limit}\n`;
   const observe = async (coordinate) => {
     const foregroundMonitor = coordinate.kind === "ax_snapshot"
@@ -464,12 +464,16 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
     if (args.replay_proof) {
       const replay = await observe(coordinate);
       if (canonical(primary.evidence) !== canonical(replay.evidence) || canonical(primary.sidecar) !== canonical(replay.sidecar)) fail(`${coordinate.run_id}: replay proof bytes differ`);
+      replayMembers[`m${String(index).padStart(4, "0")}`] = {
+        evidence_sha256: sha256(canonical(primary.evidence)),
+        sidecar_sha256: sha256(canonical(primary.sidecar)),
+      };
     }
     const evidencePath = path.join(captureRoot, `${coordinate.run_id}.json`); const sidecarPath = `${evidencePath}.sidecar.json`; writeAtomic(evidencePath, primary.evidence); writeAtomic(sidecarPath, primary.sidecar);
     records[`m${String(index).padStart(4, "0")}`] = { coordinate: [coordinate.kind, coordinate.domain, coordinate.shell, coordinate.state, coordinate.theme, coordinate.width, coordinate.accessibility], run_id: coordinate.run_id, evidence: { root: "core", path: authorityRelative(evidencePath), sha256: hashFile(evidencePath) }, sidecar: { root: "core", path: authorityRelative(sidecarPath), sha256: hashFile(sidecarPath) } };
   }
   const resultPath = path.join(outRoot, "batch-result.json");
-  writeAtomic(resultPath, { schema: "omi.polish.native-semantic-batch-result/v1", source_shas: manifest.source_shas, manifest_path: `core:${authorityRelative(manifestPath)}`, manifest_sha256: hashFile(manifestPath), command, argv: ["node", "shells/macos/probes/native-semantic-evidence-batch.mjs", "--manifest", authorityRelative(manifestPath), "--out-root", authorityRelative(outRoot), "--offset", String(offset), "--limit", String(limit), "--prepared-input-set", authorityRelative(preparedPath), "--readiness-timeout-ms", String(readinessTimeoutMs), ...(args.replay_proof ? ["--replay-proof"] : [])], input_set: prepared.input, members: records, coordinate_count: Object.keys(records).length, stdout_sha256: sha256(stdoutLine), stderr_sha256: sha256(""), authority: prepared.descriptor.authority, replay_proof: Boolean(args.replay_proof) });
+  writeAtomic(resultPath, { schema: "omi.polish.native-semantic-batch-result/v1", source_shas: manifest.source_shas, manifest_path: `core:${authorityRelative(manifestPath)}`, manifest_sha256: hashFile(manifestPath), command, argv: ["node", "shells/macos/probes/native-semantic-evidence-batch.mjs", "--manifest", authorityRelative(manifestPath), "--out-root", authorityRelative(outRoot), "--offset", String(offset), "--limit", String(limit), "--prepared-input-set", authorityRelative(preparedPath), "--readiness-timeout-ms", String(readinessTimeoutMs), ...(args.replay_proof ? ["--replay-proof"] : [])], input_set: prepared.input, members: records, coordinate_count: Object.keys(records).length, stdout_sha256: sha256(stdoutLine), stderr_sha256: sha256(""), authority: prepared.descriptor.authority, replay_proof: Boolean(args.replay_proof), replay_attestation: args.replay_proof ? { attempts: 2, members: replayMembers } : null });
   process.stdout.write(stdoutLine);
 }
 function assemble(args, manifestPath, manifest, outRoot) {
@@ -478,7 +482,14 @@ function assemble(args, manifestPath, manifest, outRoot) {
   if (canonical(result.authority) !== canonical(expectedSemanticAuthority())) fail("batch result authority does not match the prepared fixture/focus authority");
   if (!Array.isArray(result.input_set.entries) || !sha64.test(result.input_set.tree_sha256 || "") || result.input_set.id !== `input-v1-${result.input_set.tree_sha256}` || sha256(canonical(result.input_set.entries)) !== result.input_set.tree_sha256 || result.coordinate_count !== Object.keys(result.members).length) fail("batch result input set or member count is malformed");
   if (result.replay_proof !== true || !result.argv.includes("--replay-proof")) fail("batch result lacks a completed replay proof");
-  const members = result.members; const batchId = canonicalBatchId(result.input_set.id, result.command, members, result.authority); const artifactHashes = {}; const before = {}; const created = {}; const seenRuns = new Set();
+  const expectedPrefix = ["node", "shells/macos/probes/native-semantic-evidence-batch.mjs", "--manifest", authorityRelative(manifestPath), "--out-root", authorityRelative(outRoot), "--offset"];
+  if (result.argv.length !== 15 || canonical(result.argv.slice(0, expectedPrefix.length)) !== canonical(expectedPrefix) || result.argv[8] !== "--limit" || result.argv[10] !== "--prepared-input-set" || result.argv[12] !== "--readiness-timeout-ms" || result.argv[14] !== "--replay-proof" || result.command !== result.argv.map((value) => `'${String(value).replaceAll("'", "'\\''")}'`).join(" ")) fail("batch result command is not the exact replay-proof capture invocation");
+  const offset = Number(result.argv[7]); const limit = Number(result.argv[9]); const readinessTimeout = Number(result.argv[13]);
+  if (!Number.isInteger(offset) || !Number.isInteger(limit) || offset < 0 || limit < 1 || offset + limit > manifest.coordinates.length || limit !== result.coordinate_count || !Number.isInteger(readinessTimeout) || readinessTimeout < 100 || readinessTimeout > 30_000) fail("batch result command range is malformed");
+  coreFile(result.argv[11], "batch result prepared input set");
+  const members = result.members;
+  if (!result.replay_attestation || result.replay_attestation.attempts !== 2 || canonical(Object.keys(result.replay_attestation.members || {})) !== canonical(Object.keys(members))) fail("batch result replay attestation is malformed");
+  const batchId = canonicalBatchId(result.input_set.id, result.command, members, result.authority, result.replay_attestation); const artifactHashes = {}; const before = {}; const created = {}; const seenRuns = new Set();
   for (const [memberId, member] of Object.entries(members)) {
     if (!/^m\d{4}$/.test(memberId) || !Array.isArray(member.coordinate) || member.coordinate.length !== 7 || typeof member.run_id !== "string" || member.evidence?.root !== "core" || member.sidecar?.root !== "core") fail("batch result member is malformed");
     if (seenRuns.has(member.run_id)) fail("batch result contains duplicate run_id"); seenRuns.add(member.run_id);
@@ -488,6 +499,10 @@ function assemble(args, manifestPath, manifest, outRoot) {
       if (typeof artifact.path !== "string" || !sha64.test(artifact.sha256 || "")) fail(`batch result ${label} artifact is malformed`);
       const file = coreFile(artifact.path, `batch result ${label}`); if (hashFile(file) !== artifact.sha256) fail(`batch result ${label} hash is stale`);
     }
+    const attestation = result.replay_attestation.members[memberId];
+    const semanticEvidenceHash = sha256(canonical(JSON.parse(readFileSync(coreFile(member.evidence.path, "batch result evidence"), "utf8"))));
+    const semanticSidecarHash = sha256(canonical(JSON.parse(readFileSync(coreFile(member.sidecar.path, "batch result sidecar"), "utf8"))));
+    if (!attestation || attestation.evidence_sha256 !== semanticEvidenceHash || attestation.sidecar_sha256 !== semanticSidecarHash) fail("batch result replay attestation does not match captured member bytes");
   }
   const bind = (artifact, isCreated = true) => { const key = `${artifact.root}:${artifact.path}`; artifactHashes[key] = artifact.sha256; before[key] = null; created[key] = isCreated; };
   bind({ root: "core", path: authorityRelative(resultPath), sha256: hashFile(resultPath) }); for (const member of Object.values(members)) { bind(member.evidence); bind(member.sidecar); }

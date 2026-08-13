@@ -92,6 +92,12 @@ test("semantic batch emits exact AX coverage and immutable prepared inputs", () 
     writeFileSync(join(out, "batch-result.json"), JSON.stringify({ ...result, replay_proof: false }));
     const unproved = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--assemble-receipt", "--result-path", join(out, "batch-result.json")], { encoding: "utf8" });
     assert.equal(unproved.status, 2); assert.match(unproved.stderr, /lacks a completed replay proof/);
+    writeFileSync(join(out, "batch-result.json"), JSON.stringify({ ...result, replay_proof: true, replay_attestation: null }));
+    const forgedProof = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--assemble-receipt", "--result-path", join(out, "batch-result.json")], { encoding: "utf8" });
+    assert.equal(forgedProof.status, 2); assert.match(forgedProof.stderr, /replay attestation/);
+    writeFileSync(join(out, "batch-result.json"), JSON.stringify({ ...result, command: `${result.command} 'ignored'` }));
+    const forgedCommand = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--assemble-receipt", "--result-path", join(out, "batch-result.json")], { encoding: "utf8" });
+    assert.equal(forgedCommand.status, 2); assert.match(forgedCommand.stderr, /exact replay-proof capture invocation/);
     writeFileSync(join(out, "batch-result.json"), firstResultBytes);
     for (const tamperedAuthority of [
       { ...result.authority, fixture: false },
