@@ -257,6 +257,13 @@ def test_direct_provider_fallback_fails_closed_outside_dev(monkeypatch):
     assert unavailable.value.detail == "Proactive model gateway is not configured"
 
 
+def test_development_release_channel_allows_direct_recovery_without_env_stage(monkeypatch):
+    monkeypatch.delenv("OMI_ENV_STAGE", raising=False)
+    monkeypatch.setenv("OMI_DESKTOP_BACKEND_RELEASE_CHANNEL", "development")
+
+    assert desktop_proactivity._dev_direct_provider_allowed() is True
+
+
 def test_configured_gateway_remains_authoritative(monkeypatch):
     monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://172.16.63.232/")
     monkeypatch.setattr(

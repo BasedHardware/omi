@@ -62,6 +62,14 @@ class _ProviderRequest:
     fallback_class: str
 
 
+def _dev_direct_provider_allowed() -> bool:
+    stage = resolve_stage_from_env()
+    if stage in {EnvStage.DEV.value, EnvStage.LOCAL.value}:
+        return True
+    release_channel = os.getenv("OMI_DESKTOP_BACKEND_RELEASE_CHANNEL", "").strip().lower()
+    return release_channel in {"development", "local"}
+
+
 def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str, request_id: str) -> _ProviderRequest:
     payload = _gateway_payload(request)
     gateway_url = os.getenv("OMI_LLM_GATEWAY_URL", "").strip()
@@ -76,8 +84,7 @@ def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str,
             fallback_class="none",
         )
 
-    stage = resolve_stage_from_env()
-    if stage not in {EnvStage.DEV.value, EnvStage.LOCAL.value}:
+    if not _dev_direct_provider_allowed():
         raise HTTPException(status_code=503, detail="Proactive model gateway is not configured")
     api_key = get_openai_api_key()
     if not api_key:
