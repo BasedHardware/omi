@@ -144,14 +144,29 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
                 self.assertIn(f"timeout-minutes: {timeout_minutes}", self.jobs[job_id])
 
     def test_closed_prs_release_the_same_pr_concurrency_group_without_allocating_a_runner(self):
-        """A close event supersedes its PR run before any macOS job can start."""
+        """Closures allocate no Mac; only abandoned PRs cancel obsolete work."""
         workflow = _workflow_text()
         changes = self.jobs["changes"]
 
         self.assertRegex(workflow, r"types:\s*\[[^]]*closed[^]]*\]")
         self.assertIn("github.event.pull_request.number || github.sha", workflow)
-        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
+        self.assertIn(
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'closed' || !github.event.pull_request.merged) }}",
+            workflow,
+        )
         self.assertIn("github.event.action != 'closed'", changes)
+
+    def test_closed_pr_bookkeeping_cannot_publish_the_required_release_check(self):
+        """A merged close run must not supersede exact-SHA release evidence."""
+        gate = self.jobs["desktop-swift"]
+        release_compile = self.jobs["desktop-swift-release-compile"]
+
+        self.assertIn("github.event.action == 'closed'", gate)
+        self.assertIn("Desktop Swift PR Closure", gate)
+        self.assertIn("Desktop Swift Build & Tests", gate)
+        self.assertIn("github.event.action == 'closed'", release_compile)
+        self.assertIn("Desktop Swift PR Closure Release Compile", release_compile)
+        self.assertIn("Desktop Swift Release Compile", release_compile)
 
     def test_notification_boundary_runs_targeted_release_regression(self):
         job = self.jobs["desktop-swift-verify"]
@@ -173,7 +188,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """The required check name must fail closed on its selected lanes."""
         gate = self.jobs["desktop-swift"]
 
-        self.assertIn("name: Desktop Swift Build & Tests", gate)
+        self.assertIn("'Desktop Swift Build & Tests'", gate)
         self.assertIn("desktop-swift-verify", gate)
         self.assertIn("always()", gate)
         self.assertIn("STATIC_REQUIRED", gate)
@@ -244,7 +259,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             concurrency,
         )
         self.assertIn(
-            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'closed' || !github.event.pull_request.merged) }}",
             concurrency,
         )
         self.assertNotIn("github.ref", concurrency)
