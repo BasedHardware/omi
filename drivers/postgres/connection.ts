@@ -28,7 +28,7 @@ export interface CheckedOutPostgresConnection {
 
 export interface SerializableTransactionOptions {
   readonly isolationLevel: "serializable";
-  readonly accessMode: "read write";
+  readonly accessMode: "read write" | "read only";
   /** Optional request cancellation; adapters must roll back before reuse. */
   readonly signal?: AbortSignal;
 }

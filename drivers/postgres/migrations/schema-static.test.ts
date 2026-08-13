@@ -7,6 +7,7 @@ import { POSTGRES_MIGRATIONS } from "./manifest";
 import {
   POSTGRES_DELETION_SURFACE_TABLES,
   POSTGRES_RETAINED_DELETION_SAFETY_TABLES,
+  POSTGRES_RETAINED_RESTORE_SAFETY_TABLES,
 } from "../deletion-surface-registry";
 
 const directory = new URL("./", import.meta.url);
@@ -133,6 +134,7 @@ const expectedTables = [
   "memory_strategy_shadow_results",
   "memory_strategy_shadow_assignments",
   "platform_accounts",
+  "postgres_restore_replay_checkpoint_candidates",
   "platform_schema_migrations",
 ] as const;
 
@@ -150,6 +152,7 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     const allClassified = [
       ...disposalRows.map((row) => row.name),
       ...POSTGRES_RETAINED_DELETION_SAFETY_TABLES,
+      ...POSTGRES_RETAINED_RESTORE_SAFETY_TABLES,
     ];
     expect(new Set(allClassified).size).toBe(allClassified.length);
     expect([...allClassified].sort()).toEqual([...expectedTables].sort());
@@ -159,6 +162,38 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
       .toContain("account_terminal_deletion_exports");
     expect(disposalRows.map((row) => row.name))
       .not.toContain("account_terminal_deletion_exports");
+    expect(POSTGRES_RETAINED_RESTORE_SAFETY_TABLES)
+      .toEqual(["postgres_restore_replay_checkpoint_candidates"]);
+  });
+
+  test("keeps checkpoint candidates append-only, exact, and unable to release traffic", () => {
+    const checkpointSql = migrationSql.find((migration) =>
+      migration.fileName === "0027-restore-replay-checkpoint-candidates.sql")?.sql;
+    expect(checkpointSql).toBeDefined();
+    expect(checkpointSql).toContain(
+      "CREATE TABLE omi_memory.postgres_restore_replay_checkpoint_candidates",
+    );
+    expect(checkpointSql).toContain("restored_generation_digest text NOT NULL");
+    for (const coordinate of [
+      "restored_generation_digest", "restored_snapshot_digest", "source_snapshot_digest",
+      "source_feed_generation_digest", "partition_topology_digest", "source_high_watermark",
+      "manifest_digest", "record_count", "terminal_source_receipt_binding_digest",
+      "application_set_digest", "terminal_feed_fence_receipt_digest", "checkpoint_digest",
+      "candidate_digest",
+    ]) expect(checkpointSql).toContain(coordinate);
+    expect(checkpointSql).toContain("restore_checkpoint_candidate_conflict");
+    expect(checkpointSql).toContain("SECURITY DEFINER\nSET search_path = pg_catalog, omi_memory");
+    expect(checkpointSql).toContain(
+      "GRANT EXECUTE ON FUNCTION omi_memory.record_postgres_restore_replay_checkpoint_candidate",
+    );
+    expect(checkpointSql).toContain(
+      "GRANT EXECUTE ON FUNCTION omi_memory.read_postgres_restore_replay_checkpoint_candidate(text, text)",
+    );
+    expect(checkpointSql).toContain("TO omi_platform_restore;");
+    expect(checkpointSql).not.toContain("TO omi_platform_application");
+    expect(checkpointSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*postgres_restore_replay_checkpoint_candidates/s);
+    expect(checkpointSql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
+    expect(checkpointSql).not.toMatch(/\b(?:release|activate|traffic)_state\b/i);
   });
 
   test("keeps the cleanup security-definer registry identical to the typed registry", () => {
@@ -247,7 +282,8 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
 
   test("makes every authority relationship structurally account-scoped", () => {
     for (const table of tables) {
-      if (table.name === "platform_schema_migrations") continue;
+      if (table.name === "platform_schema_migrations"
+        || POSTGRES_RETAINED_RESTORE_SAFETY_TABLES.includes(table.name as never)) continue;
       expect(table.body, table.name).toMatch(/\baccount_id\s+text\b/);
       if (table.name === "firebase_identity_bindings") {
         expect(table.body).toContain("PRIMARY KEY (firebase_project_id, firebase_uid)");

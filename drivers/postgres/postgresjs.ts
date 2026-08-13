@@ -119,7 +119,8 @@ export const bindPostgresJsTransactionPool = (
     options: SerializableTransactionOptions,
     callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
   ): Promise<Result> {
-    if (options.isolationLevel !== "serializable" || options.accessMode !== "read write") {
+    if (options.isolationLevel !== "serializable"
+      || (options.accessMode !== "read write" && options.accessMode !== "read only")) {
       throw new TypeError("invalid_postgres_transaction_options");
     }
     if (options.signal !== undefined && !(options.signal instanceof AbortSignal)) {
@@ -146,7 +147,9 @@ export const bindPostgresJsTransactionPool = (
       finally { if (activeQuery === query) activeQuery = null; }
     };
     try {
-      await run(reserved.unsafe("begin isolation level serializable read write"));
+      await run(reserved.unsafe(
+        `begin isolation level serializable ${options.accessMode}`,
+      ));
       try {
         const value = await callback(new PostgresJsCheckedOutConnection(
           identity,

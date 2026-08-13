@@ -70,6 +70,26 @@ describe("Postgres.js transaction adapter", () => {
     expect(calls.at(-1)).toBe("end");
   });
 
+  test("supports an explicit serializable read-only lease", async () => {
+    const calls: string[] = [];
+    const reserved = {
+      unsafe: async (text: string) => { calls.push(text); return []; },
+      release: () => { calls.push("release"); },
+    } as unknown as ReservedSql<Record<string, never>>;
+    const sql = {
+      reserve: async () => reserved,
+      end: async () => undefined,
+    } as unknown as Sql<Record<string, never>>;
+    const pool = bindPostgresJsTransactionPool(sql);
+    await expect(pool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read only" },
+      async () => "read",
+    )).resolves.toBe("read");
+    expect(calls).toEqual([
+      "begin isolation level serializable read only", "commit", "release",
+    ]);
+  });
+
   test("propagates transaction callback failure and rejects ambient construction", async () => {
     const calls: string[] = [];
     const reserved = {

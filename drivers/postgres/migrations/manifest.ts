@@ -163,4 +163,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0026-postgres-tombstone-restore-target.sql",
     sha256: "32244da6a077e6232c854858150b8c6c28084d684629611cb58b678875c3b02e",
   }),
+  Object.freeze({
+    version: 27,
+    name: "restore-replay-checkpoint-candidates",
+    fileName: "0027-restore-replay-checkpoint-candidates.sql",
+    sha256: "ad6a52c08d618cc0de1fd77919e2d392aa75bf5161ca1950c97a896b9bd7f403",
+  }),
 ]);

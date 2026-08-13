@@ -72,3 +72,8 @@ export const POSTGRES_RETAINED_DELETION_SAFETY_TABLES = Object.freeze([
   "account_restored_terminal_fences",
   "account_restore_terminal_application_receipts",
 ]);
+
+/** Database-generation evidence, deliberately global rather than account data. */
+export const POSTGRES_RETAINED_RESTORE_SAFETY_TABLES = Object.freeze([
+  "postgres_restore_replay_checkpoint_candidates",
+]);

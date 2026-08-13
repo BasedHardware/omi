@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import postgres, { type Sql } from "postgres";
 
 import { createAuthorizedLedgerWriteContextIssuer } from "../../apps/service/auth/authorized-context-internal";
@@ -122,6 +122,8 @@ import { createPostgresPredicateBatchWorkInputRepository } from "./predicate-bat
 import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
 import { createPostgresProductProjectionWriteRepository } from "./product-projection-repository";
 import { createPostgresTombstoneRestoreTarget } from "./tombstone-restore-target";
+import { createPostgresRestoreReplayCheckpointRepository } from
+  "./restore-replay-checkpoint-repository";
 import {
   createPostgresMemoryReadGroundingRepository,
   createPostgresMemoryShadowResultRepository,
@@ -4175,5 +4177,127 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         [accountId],
       );
     })).rejects.toMatchObject({ code: "42501" });
+  }, 120_000);
+
+  test("restore role records untrusted checkpoint candidates with exact replay and rollback", async () => {
+    const suffix = randomUUID();
+    const hashJson = (value: unknown) => createHash("sha256")
+      .update(JSON.stringify(value), "utf8").digest("hex");
+    const makeCandidate = (highWatermark: number, label = "candidate") => {
+      const checkpoint = {
+        version: "tombstone-replay-checkpoint-v1",
+        restore_id: `restore:${label}:${suffix}`,
+        restore_scope: "postgresql" as const,
+        restored_snapshot_digest: sha256CanonicalContent({ suffix, snapshot: "candidate" }),
+        restore_completed_at_epoch_seconds: 1_800_000_000,
+        source_snapshot_digest: sha256CanonicalContent({ suffix, source: "candidate" }),
+        source_high_watermark: highWatermark,
+        manifest_digest: sha256CanonicalContent({ suffix, manifest: highWatermark }),
+        terminal_source_receipt_binding_digest: sha256CanonicalContent({ suffix, sourceReceipt: highWatermark }),
+        application_set_digest: sha256CanonicalContent({ suffix, applications: highWatermark }),
+        traffic_fence_receipt_digest: sha256CanonicalContent({ suffix, fence: highWatermark }),
+      };
+      return Object.freeze({
+        version: "postgres-restore-replay-checkpoint-candidate-v1" as const,
+        restored_generation_digest: sha256CanonicalContent({ suffix, generation: true }),
+        restore_id: checkpoint.restore_id,
+        restore_scope: checkpoint.restore_scope,
+        restored_snapshot_digest: checkpoint.restored_snapshot_digest,
+        restore_completed_at_epoch_seconds: checkpoint.restore_completed_at_epoch_seconds,
+        source_snapshot_digest: checkpoint.source_snapshot_digest,
+        source_feed_generation_digest: sha256CanonicalContent({ suffix, feed: true }),
+        partition_topology_digest: sha256CanonicalContent({ suffix, topology: true }),
+        source_high_watermark: checkpoint.source_high_watermark,
+        manifest_digest: checkpoint.manifest_digest,
+        record_count: 1,
+        terminal_source_receipt_binding_digest: checkpoint.terminal_source_receipt_binding_digest,
+        application_set_digest: checkpoint.application_set_digest,
+        terminal_feed_fence_receipt_digest: checkpoint.traffic_fence_receipt_digest,
+        checkpoint_digest: hashJson(checkpoint),
+      });
+    };
+    const repository = createPostgresRestoreReplayCheckpointRepository(pool);
+    const candidate = makeCandidate(14);
+    const recorded = await repository.record(candidate);
+    expect(recorded).toMatchObject({
+      result: "recorded",
+      restored_generation_digest: candidate.restored_generation_digest,
+      restore_id: candidate.restore_id,
+    });
+    const replayed = await repository.record(candidate);
+    expect(replayed).toMatchObject({
+      result: "replayed",
+      candidate_digest: recorded.candidate_digest,
+      persistence_receipt_digest: recorded.persistence_receipt_digest,
+      recorded_at_epoch_micros: recorded.recorded_at_epoch_micros,
+    });
+    const loaded = await repository.load(candidate.restored_generation_digest, candidate.restore_id);
+    expect(loaded).toMatchObject({
+      kind: "loaded",
+      candidate: {
+        candidate_digest: recorded.candidate_digest,
+        persistence_receipt_digest: recorded.persistence_receipt_digest,
+        recorded_at_epoch_micros: recorded.recorded_at_epoch_micros,
+        source_feed_generation_digest: candidate.source_feed_generation_digest,
+        partition_topology_digest: candidate.partition_topology_digest,
+      },
+    });
+    await expect(repository.record(makeCandidate(15))).rejects
+      .toMatchObject({ code: "candidate_conflict" });
+
+    const stored = await ownerSql.unsafe<{ rows: number; watermark: string }[]>(`SELECT
+      count(*)::int AS rows, max(source_high_watermark)::text AS watermark
+      FROM omi_memory.postgres_restore_replay_checkpoint_candidates WHERE restore_id = $1`,
+    [candidate.restore_id]);
+    expect([...stored]).toEqual([{ rows: 1, watermark: "14" }]);
+
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(
+        "SELECT * FROM omi_memory.postgres_restore_replay_checkpoint_candidates WHERE restore_id = $1",
+        [candidate.restore_id],
+      );
+    })).rejects.toMatchObject({ code: "42501" });
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe(
+        "SELECT * FROM omi_memory.record_postgres_restore_replay_checkpoint_candidate($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+        [candidate.restored_generation_digest, candidate.restore_id,
+          candidate.restored_snapshot_digest, candidate.restore_completed_at_epoch_seconds,
+          candidate.source_snapshot_digest, candidate.source_feed_generation_digest,
+          candidate.partition_topology_digest, candidate.source_high_watermark,
+          candidate.manifest_digest, candidate.record_count,
+          candidate.terminal_source_receipt_binding_digest, candidate.application_set_digest,
+          candidate.terminal_feed_fence_receipt_digest, candidate.checkpoint_digest,
+          recorded.candidate_digest],
+      );
+    })).rejects.toMatchObject({ code: "42501" });
+
+    const rollbackCandidate = makeCandidate(16, "candidate-rollback");
+    await ownerSql.unsafe(`
+      CREATE OR REPLACE FUNCTION omi_memory.reject_restore_checkpoint_candidate()
+      RETURNS trigger LANGUAGE plpgsql AS $fn$
+      BEGIN RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'injected_restore_candidate_failure'; END
+      $fn$;
+      DROP TRIGGER IF EXISTS reject_restore_checkpoint_candidate
+        ON omi_memory.postgres_restore_replay_checkpoint_candidates;
+      CREATE TRIGGER reject_restore_checkpoint_candidate BEFORE INSERT
+        ON omi_memory.postgres_restore_replay_checkpoint_candidates
+        FOR EACH ROW EXECUTE FUNCTION omi_memory.reject_restore_checkpoint_candidate();
+    `, [], { prepare: false });
+    try {
+      await expect(repository.record(rollbackCandidate)).rejects
+        .toMatchObject({ code: "persistence_failed" });
+      const rollbackRows = await ownerSql.unsafe<{ rows: number }[]>(`SELECT count(*)::int AS rows
+        FROM omi_memory.postgres_restore_replay_checkpoint_candidates WHERE restore_id = $1`,
+      [rollbackCandidate.restore_id]);
+      expect([...rollbackRows]).toEqual([{ rows: 0 }]);
+    } finally {
+      await ownerSql.unsafe(`
+        DROP TRIGGER IF EXISTS reject_restore_checkpoint_candidate
+          ON omi_memory.postgres_restore_replay_checkpoint_candidates;
+        DROP FUNCTION IF EXISTS omi_memory.reject_restore_checkpoint_candidate();
+      `, [], { prepare: false });
+    }
   }, 120_000);
 });
