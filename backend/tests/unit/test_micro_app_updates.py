@@ -23,6 +23,7 @@ def _release(
     prerelease=False,
     asset_name="ContextForClaude-1.2.3.zip",
     asset_url="https://github.com/BasedHardware/omi/releases/download/context-for-claude-v1.2.3/ContextForClaude-1.2.3.zip",
+    asset_size=11840682,
     signature="signed-context-artifact",
     body="Fixed a capture issue.",
     published_at="2026-08-01T12:00:00Z",
@@ -38,12 +39,45 @@ def _release(
         "assets": [],
     }
     if asset_name is not None:
-        release["assets"] = [{"name": asset_name, "browser_download_url": asset_url}]
+        asset = {"name": asset_name, "browser_download_url": asset_url}
+        if asset_size is not None:
+            asset["size"] = asset_size
+        release["assets"] = [asset]
     if signature is not None:
         release["metadata"] = {"edSignature": signature}
     if metadata:
         release.setdefault("metadata", {}).update(metadata)
     return release
+
+
+def _published_release_body(
+    *,
+    notes="Context for Claude 1.0.1.",
+    product="context-for-claude",
+    build="1000001",
+    signature="FbpbuDdcbpjLuCJBCXD7k5FQ2oddgDg0XI5nzYwkzb3CQDdSq/3jPjmhOFYo97VPQwFyXK1Xx2mxYds6CvoHCA==",
+    artifact="ContextForClaude-1.0.1.zip",
+    installer="ContextForClaude-1.0.1.dmg",
+    changelog="Context for Claude 1.0.1",
+):
+    """The GitHub release body a real publication carries.
+
+    Byte-for-byte the block assembled by ``desktop/context-for-claude/scripts/release-micro-app.sh``
+    ("RELEASE_BODY"), because that string — not a ``metadata`` dict — is the only thing a published
+    release actually gives this module to parse.  The signature is a genuine ``sign_update`` output,
+    so the base64 alphabet (``+``, ``/``, ``==``) is exercised rather than assumed.
+    """
+    return (
+        f"{notes}\n\n"
+        "<!-- KEY_VALUE_START\n"
+        f"product: {product}\n"
+        f"build: {build}\n"
+        f"edSignature: {signature}\n"
+        f"artifact: {artifact}\n"
+        f"installer: {installer}\n"
+        f"changelog: {changelog}\n"
+        "KEY_VALUE_END -->"
+    )
 
 
 async def _get_feed(monkeypatch, releases, *, app_id="context-for-claude", channel="stable"):
@@ -175,3 +209,62 @@ async def test_provider_failure_is_not_cached_as_empty_feed(monkeypatch):
 
     assert response.status_code == 503
     assert "upstream details" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_a_real_published_release_body_yields_an_installable_item(monkeypatch):
+    """The publisher/feed contract, exercised through the body a real release carries.
+
+    Every other test here hands the signature over as a ``metadata`` dict, which no published release
+    ever does — the release script writes a ``KEY_VALUE_START`` comment block and this module parses
+    it.  Nothing bound those two halves together, and the failure is silent in the worst way: rename
+    ``build`` or ``edSignature`` on either side and ``_release_to_item`` returns ``None``, so the feed
+    stays a valid *empty* appcast and Sparkle reads "no update available".  No error, no 5xx, no log —
+    every client just stops updating.
+    """
+    release = _release(
+        tag="context-for-claude-v1.0.1",
+        name="Context for Claude 1.0.1",
+        asset_name="ContextForClaude-1.0.1.zip",
+        asset_url=(
+            "https://github.com/BasedHardware/omi/releases/download/"
+            "context-for-claude-v1.0.1/ContextForClaude-1.0.1.zip"
+        ),
+        signature=None,  # no injected metadata: the body is the only source
+        body=_published_release_body(),
+    )
+    release.pop("metadata", None)
+
+    response = await _get_feed(monkeypatch, [release])
+
+    assert response.status_code == 200
+    root = ET.fromstring(response.text)
+    item = root.find("channel/item")
+    assert item is not None, "a published release body must produce an item, not an empty feed"
+    assert item.findtext("sparkle:version", namespaces=_SPARKLE) == "1000001"
+    assert item.findtext("sparkle:shortVersionString", namespaces=_SPARKLE) == "1.0.1"
+    enclosure = item.find("enclosure")
+    assert enclosure is not None
+    assert enclosure.attrib[f"{{{micro_app_service.SPARKLE_NAMESPACE}}}edSignature"] == (
+        "FbpbuDdcbpjLuCJBCXD7k5FQ2oddgDg0XI5nzYwkzb3CQDdSq/3jPjmhOFYo97VPQwFyXK1Xx2mxYds6CvoHCA=="
+    )
+    assert enclosure.attrib["url"].endswith("/ContextForClaude-1.0.1.zip")
+
+
+@pytest.mark.asyncio
+async def test_enclosure_declares_the_artifact_length_when_github_reports_it(monkeypatch):
+    """Sparkle needs ``length`` to show real download progress and to diagnose a bad signature.
+
+    It is optional to Sparkle, so a wrong value is worse than none: the attribute is emitted only for
+    a positive integer size and omitted entirely otherwise, never sent as ``0``.
+    """
+    response = await _get_feed(monkeypatch, [_release(asset_size=11840682, metadata={"build": "42"})])
+    enclosure = ET.fromstring(response.text).find("channel/item/enclosure")
+    assert enclosure is not None
+    assert enclosure.attrib["length"] == "11840682"
+
+    for unusable in (None, 0, -1, "11840682", True):
+        response = await _get_feed(monkeypatch, [_release(asset_size=unusable, metadata={"build": "42"})])
+        enclosure = ET.fromstring(response.text).find("channel/item/enclosure")
+        assert enclosure is not None, f"size={unusable!r} must still yield an item"
+        assert "length" not in enclosure.attrib, f"size={unusable!r} must not be advertised as a length"
