@@ -139,9 +139,13 @@ struct SBOnboardingView: View {
               currentStepContainer(in: panelSize)
                 .id("widget")
             }
-            Color.clear.frame(height: 4).id("bottom")
+            // Keep the last control above the progress band while ScrollViewReader settles after a
+            // growing widget or a streamed message. A tiny sentinel spacer can leave an input or
+            // permission action visually underneath the dots even though the band is a VStack
+            // sibling, so reserve a full band's height plus a small breathing room here as well.
+            Color.clear.frame(height: OnboardingGlass.scrollContentBottomPadding).id("bottom")
           }
-          .padding(.horizontal, 28).padding(.top, 26).padding(.bottom, 10)
+          .padding(.horizontal, 28).padding(.top, 26)
         }
         // **The thread sits on the floor of the card, not its ceiling.** The panel is a fixed
         // 540 × 640 so it never jumps as the conversation grows, which means the first three steps
