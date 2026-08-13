@@ -184,13 +184,15 @@ async def finalize_persisted_conversation(
             try:
                 structured = getattr(conversation, 'structured', None)
                 summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                intent_kwargs = {
-                    'conversation_id': conversation_id,
-                    'summary': summary,
-                }
                 if is_desktop_meeting:
-                    intent_kwargs['is_desktop_meeting'] = True
-                persist_capture_arrival_intent(uid, **intent_kwargs)
+                    persist_capture_arrival_intent(
+                        uid,
+                        conversation_id=conversation_id,
+                        summary=summary,
+                        is_desktop_meeting=True,
+                    )
+                else:
+                    persist_capture_arrival_intent(uid, conversation_id=conversation_id, summary=summary)
             except Exception as error:
                 logger.warning(
                     'chat-first capture arrival intent failed after finalization uid=%s error=%s',

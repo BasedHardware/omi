@@ -338,8 +338,8 @@ def persist_desktop_meeting_arrival(uid: str, conversation) -> None:
     status = conversation.get('status') if isinstance(conversation, dict) else conversation.status
     discarded = conversation.get('discarded', False) if isinstance(conversation, dict) else conversation.discarded
     external_data = conversation.get('external_data') if isinstance(conversation, dict) else conversation.external_data
-    source = source.value if hasattr(source, 'value') else source
-    status = status.value if hasattr(status, 'value') else status
+    source = getattr(source, 'value', source)
+    status = getattr(status, 'value', status)
     if (external_data or {}).get('conversation_role') != 'meeting':
         return
     if source != 'desktop' or discarded or status != 'completed':
