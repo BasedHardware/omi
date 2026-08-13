@@ -375,8 +375,10 @@ async def proactive_completion(
 
     await _consume_quota(uid, request.operation)
     request_id = str(uuid4())
+    fallback_class = "unknown"
     try:
         provider_request = _proactive_provider_request(request, uid, request_id)
+        fallback_class = provider_request.fallback_class
         async with get_llm_gateway_semaphore():
             response = await get_llm_gateway_client().post(
                 provider_request.url,
@@ -394,14 +396,14 @@ async def proactive_completion(
             logger.warning(
                 "desktop_proactivity_provider_http_error operation=%s fallback_class=%s status=%s",
                 operation,
-                provider_request.fallback_class,
+                fallback_class,
                 exc.response.status_code,
             )
         else:
             logger.warning(
                 "desktop_proactivity_provider_error operation=%s fallback_class=%s error_type=%s",
                 operation,
-                provider_request.fallback_class,
+                fallback_class,
                 type(exc).__name__,
             )
         raise HTTPException(status_code=502, detail="Proactive model unavailable") from exc
