@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1607
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1662
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds local transcript duplicate suppression and persistence flushes before stop or rotation so source-aware deduplication cannot leave stale rows."
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Microphone authorization gate at the capture choke point plus the honest permission alert: without it a notDetermined/revoked TCC entry arms a zero-sample stream and the silent-mic watchdog loops a misleading hardware alert at the user every ~90s."
   },
   "threshold": 1500
 }
