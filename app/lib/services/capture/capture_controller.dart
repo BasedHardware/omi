@@ -368,6 +368,14 @@ class CaptureController extends ChangeNotifier
   /// on the device connection (e.g. Limitless re-sends enable-data-stream).
   bool _socketReconnectPending = false;
 
+  /// Identifies the transcription socket attempt currently running, or null
+  /// when none is. The keep-alive timer's callback is async, so a tick could
+  /// start the same attempt again before the previous one finished and open a
+  /// duplicate /v4/listen session (issue #11305). Only an identical repeat is
+  /// dropped: an attempt with different parameters is a new intent (starting
+  /// phone mic, a codec change), and a forced one replaces the socket outright.
+  String? _websocketInitInFlightKey;
+
   /// Returns unsynced WALs belonging to the current capture session.
   /// Empty when all frames have been streamed successfully (clean UI).
   List<Wal> get unsyncedSessionWals {
@@ -638,6 +646,58 @@ class CaptureController extends ChangeNotifier
     bool force = false,
     String? source,
   }) async {
+    final attemptKey = '$audioCodec|$sampleRate|$channels|$isPcm|$source';
+    if (!force && _websocketInitInFlightKey == attemptKey) {
+      Logger.debug('initiateWebsocket skipped - an identical connection attempt is already in flight');
+      return;
+    }
+    _websocketInitInFlightKey = attemptKey;
+    try {
+      await _connectTranscriptionSocket(
+        audioCodec: audioCodec,
+        sampleRate: sampleRate,
+        channels: channels,
+        isPcm: isPcm,
+        force: force,
+        source: source,
+      );
+    } finally {
+      // A later attempt owns the key once it starts; only clear our own.
+      if (_websocketInitInFlightKey == attemptKey) {
+        _websocketInitInFlightKey = null;
+      }
+    }
+  }
+
+  /// Opens the transcription socket. Overridden in tests to control the timing
+  /// of an attempt; production always goes through the socket service pool.
+  @visibleForTesting
+  Future<TranscriptSegmentSocketService?> openConversationSocket({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    required bool force,
+    String? source,
+    CustomSttConfig? customSttConfig,
+  }) {
+    return ServiceManager.instance().socket.conversation(
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          customSttConfig: customSttConfig,
+        );
+  }
+
+  Future<void> _connectTranscriptionSocket({
+    required BleAudioCodec audioCodec,
+    int? sampleRate,
+    int? channels,
+    bool? isPcm,
+    bool force = false,
+    String? source,
+  }) async {
     Logger.debug('initiateWebsocket in capture_provider');
 
     // Batch (offline) mode: never open the realtime transcription socket. The
@@ -670,14 +730,14 @@ class CaptureController extends ChangeNotifier
     }
 
     // Connect to the transcript socket
-    _socket = await ServiceManager.instance().socket.conversation(
-          codec: codec,
-          sampleRate: sampleRate,
-          language: language,
-          force: force,
-          source: source,
-          customSttConfig: effectiveConfig,
-        );
+    _socket = await openConversationSocket(
+      codec: codec,
+      sampleRate: sampleRate,
+      language: language,
+      force: force,
+      source: source,
+      customSttConfig: effectiveConfig,
+    );
     if (_socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
