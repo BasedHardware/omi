@@ -188,6 +188,13 @@ export interface GatewayChatGenerationSourceOptions {
   readonly fetch?: typeof fetch;
   /** Optional bounded safe read-only tool composition; omitted by default. */
   readonly readOnlyToolLoop?: GatewayReadOnlyToolLoopOptions;
+  /**
+   * Optional per-generation composition hook. This is intentionally lazy so
+   * the app-facing composition can bind the already-constructed authenticated
+   * read service without making tools part of the default-closed source.
+   */
+  readonly readOnlyToolLoopForInput?:
+    (input: ChatGenerationSourceInput) => GatewayReadOnlyToolLoopOptions | undefined;
 }
 
 const SAFE_GATEWAY_LANE = /^omi:auto:[a-z0-9][a-z0-9-]{0,95}$/u;
@@ -282,6 +289,9 @@ export const createGatewayChatGenerationSource = (
   const serviceToken = options.serviceToken.trim();
   const fetchImpl = options.fetch ?? fetch;
   const readOnlyToolLoop = options.readOnlyToolLoop;
+  if (readOnlyToolLoop !== undefined && options.readOnlyToolLoopForInput !== undefined) {
+    throw new TypeError("configure one read-only gateway tool composition");
+  }
   if (readOnlyToolLoop !== undefined) validateGatewayReadOnlyToolLoop(readOnlyToolLoop);
   const source: ChatGenerationSource = Object.freeze({
     start(input): ChatGenerationSourceRun {
@@ -302,7 +312,19 @@ export const createGatewayChatGenerationSource = (
         queueMicrotask(() => fail(gatewayFailure("generation_provider_failed")));
         return Object.freeze({ cancel(): void { cancelled = true; } });
       }
-      if (readOnlyToolLoop !== undefined) {
+      let resolvedReadOnlyToolLoop = readOnlyToolLoop;
+      if (options.readOnlyToolLoopForInput !== undefined) {
+        try {
+          resolvedReadOnlyToolLoop = options.readOnlyToolLoopForInput(input);
+          if (resolvedReadOnlyToolLoop !== undefined) {
+            validateGatewayReadOnlyToolLoop(resolvedReadOnlyToolLoop);
+          }
+        } catch {
+          queueMicrotask(() => fail(gatewayFailure("generation_provider_failed")));
+          return Object.freeze({ cancel(): void { cancelled = true; } });
+        }
+      }
+      if (resolvedReadOnlyToolLoop !== undefined) {
         const toolRun = startGatewayReadOnlyToolLoop({
           endpoint,
           laneId,
@@ -311,7 +333,7 @@ export const createGatewayChatGenerationSource = (
           usageFeature,
           fetch: fetchImpl,
           baseMessages: gatewayMessages(input),
-          loop: readOnlyToolLoop,
+          loop: resolvedReadOnlyToolLoop,
           input,
           fail,
           complete,

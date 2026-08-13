@@ -7,6 +7,7 @@ import {
   createGatewayChatGenerationSource,
   createGatewayRequiredChatGenerationSource,
 } from "../chat/generation-source";
+import { createGetActionItemsToolLoop } from "../chat/action-items-tool";
 import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
 import { isQaEvidenceRunId } from "../observability/producer-evidence";
 import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../qa/seed";
@@ -162,6 +163,32 @@ const main = (): void => {
   const db = openDatabase(config.databasePath);
   const stores = createSqliteLocalServiceStores(db);
 
+  let serviceForGatewayTools: ReturnType<typeof createLocalDevService> | null = null;
+  const generationSource = config.llmGateway === null
+    ? createGatewayRequiredChatGenerationSource()
+    : createGatewayChatGenerationSource({
+      gatewayUrl: config.llmGateway.url,
+      laneId: config.llmGateway.laneId,
+      serviceToken: config.llmGateway.token,
+      // Gateway tools are composed only for an explicitly configured gateway.
+      // The closure binds the already-built authenticated app, so the tool
+      // cannot bypass the canonical `/v1/tasks` authorization/read path.
+      readOnlyToolLoopForInput: (input) => {
+        const service = serviceForGatewayTools;
+        if (service === null) return undefined;
+        const ownerAccountId = service.seedIdentity().owner_account_id;
+        if (typeof ownerAccountId !== "string" || ownerAccountId !== input.context.ownerAccountId) {
+          throw new Error("gateway tool owner mismatch");
+        }
+        return createGetActionItemsToolLoop({
+          fetch: (request) => service.app.fetch(request),
+          bearerToken: service.devToken,
+          ownerAccountId,
+          nowEpochMilliseconds: () => Date.parse(QA_FIXTURE_TIME_ANCHOR_UTC),
+          agentRunEvents: service.writePath.agentRunEvents,
+        });
+      },
+    });
   let service: ReturnType<typeof createLocalDevService>;
   try {
     service = createLocalDevService({
@@ -173,14 +200,9 @@ const main = (): void => {
       accountTimezone: config.accountTimezone,
       devSecretLabel: config.devSecretLabel,
       listenDefaultUnmetered: true,
-      generationSource: config.llmGateway === null
-        ? createGatewayRequiredChatGenerationSource()
-        : createGatewayChatGenerationSource({
-          gatewayUrl: config.llmGateway.url,
-          laneId: config.llmGateway.laneId,
-          serviceToken: config.llmGateway.token,
-        }),
+      generationSource,
     });
+    serviceForGatewayTools = service;
   } catch (error) {
     return fail(`failed to seed QA data: ${error instanceof Error ? error.message : "unknown error"}`);
   }
