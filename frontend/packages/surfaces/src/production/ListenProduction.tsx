@@ -365,7 +365,7 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
           )}
         </section>
         {description.loud && (
-          <p className="visually-hidden" role="alert">{t(locale, description.titleKey)}</p>
+          <p className="visually-hidden" role="alert" aria-live="assertive">{t(locale, description.titleKey)}</p>
         )}
         <ProductionLiveAnnouncement message={listenAnnouncement} {...(announcementScheduler ? { scheduler: announcementScheduler } : {})} />
         {presentedCapture.kind === "capturing" && segments.length === 0 && (

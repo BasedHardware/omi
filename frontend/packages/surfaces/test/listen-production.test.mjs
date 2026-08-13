@@ -238,6 +238,81 @@ test("Listen announces only changed transcript text and exposes a verbosity cont
   }
 });
 
+test("Listen announces terminal and permanent errors assertively once without rereading transcript", async () => {
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  let capture = { kind: "idle" };
+  const listeners = new Set();
+  const callbacks = [];
+  const scheduler = {
+    setTimeout(callback) { callbacks.push(callback); return callback; },
+    clearTimeout() {},
+  };
+  const status = {
+    refresh: { phase: "ready", hasSavedData: true },
+    queue: { phase: "idle", pendingCount: 0 },
+  };
+  const transcript = [segment("stable", "This transcript was already announced", 0, 1)];
+  const store = {
+    status: () => status,
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    async refresh() {},
+    captureState: () => capture,
+    transcriptSegments: () => transcript,
+    entitlementState: () => null,
+    async start() {},
+    async stop() {},
+  };
+  const notify = async (nextCapture) => {
+    capture = nextCapture;
+    await Promise.all([...listeners].map((listener) => listener()));
+  };
+  const rendered = await renderComponent(ListenProduction, {
+    store,
+    announcementScheduler: scheduler,
+  });
+  try {
+    // Flush the one initial transcript announcement. It must not be scheduled again
+    // by any terminal transition below.
+    assert.equal(callbacks.length, 1);
+    await rendered.act(async () => callbacks.shift()());
+    const initialAnnouncement = rendered.container.querySelector('[data-live-region="true"]')?.textContent;
+    assert.ok(initialAnnouncement?.includes("This transcript was already announced"));
+    assert.equal(rendered.container.querySelector('[role="alert"]'), null);
+
+    await rendered.act(async () => notify({ kind: "stopped-at-ceiling", untranscribedSeconds: 1 }));
+    const terminalAlert = rendered.container.querySelector('[role="alert"]');
+    assert.ok(terminalAlert, "a terminal capture state has an assertive announcement");
+    assert.equal(terminalAlert?.getAttribute("aria-live"), "assertive");
+    assert.equal(terminalAlert?.textContent, EN_MESSAGES["listen.stateStoppedAtCeiling"]);
+    assert.equal(rendered.container.querySelectorAll('[role="alert"]').length, 1);
+    assert.equal(callbacks.length, 0, "terminal state does not schedule a duplicate transcript announcement");
+    assert.equal(
+      rendered.container.querySelector('[data-live-region="true"]')?.textContent,
+      initialAnnouncement,
+      "the polite transcript region is not reread for a terminal state",
+    );
+
+    // Re-notifying the same terminal state must not create a second alert or a
+    // second scheduler callback, even though the store emits another snapshot.
+    await rendered.act(async () => notify({ kind: "stopped-at-ceiling", untranscribedSeconds: 1 }));
+    assert.equal(rendered.container.querySelectorAll('[role="alert"]').length, 1);
+    assert.equal(rendered.container.querySelector('[role="alert"]')?.textContent, EN_MESSAGES["listen.stateStoppedAtCeiling"]);
+    assert.equal(callbacks.length, 0);
+
+    await rendered.act(async () => notify({ kind: "error", retryable: false, untranscribedSeconds: 1 }));
+    const errorAlert = rendered.container.querySelector('[role="alert"]');
+    assert.ok(errorAlert, "a permanent capture error has an assertive announcement");
+    assert.equal(errorAlert?.getAttribute("aria-live"), "assertive");
+    assert.equal(errorAlert?.textContent, EN_MESSAGES["listen.errorTitle"]);
+    assert.equal(rendered.container.querySelectorAll('[role="alert"]').length, 1);
+    assert.equal(callbacks.length, 0, "error transition does not reread an unchanged transcript");
+  } finally {
+    await rendered.cleanup();
+  }
+  // red-proof: remove the loud branch/aria-live contract or reset transcript refs
+  // on every store update; terminal/error alert or duplicate transcript assertions fail.
+});
+
 test("Listen idle is purposeful, private, and does not repeat an empty backlog", async () => {
   const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
   const rendered = await renderComponent(ListenProduction, { store: stateStore({ kind: "idle" }) });
