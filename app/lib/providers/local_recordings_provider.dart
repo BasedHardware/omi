@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
@@ -34,6 +35,23 @@ import 'package:omi/utils/waveform_utils.dart';
 /// Result of a user-triggered [LocalRecordingsProvider.upload], so the UI can
 /// react (fair-use message, generic error, or navigate away) instead of guessing.
 enum LocalUploadOutcome { started, fairUseLimited, backendBusy, failed, busy }
+
+String transcribeLaterRecordingSource(String fileName) {
+  if (fileName.startsWith('audio_${phoneBatchRecordingDevice}_')) return ConversationSource.phone.name;
+  if (fileName.startsWith('audio_${phoneBatchAutoRecordingDevice}_')) return ConversationSource.phone.name;
+  if (fileName.startsWith('audio_${limitlessBatchRecordingDevice}_')) return ConversationSource.limitless.name;
+  return ConversationSource.omi.name;
+}
+
+({bool success, String outcome}) transcribeLaterUploadAnalyticsOutcome(LocalUploadOutcome outcome) {
+  return switch (outcome) {
+    LocalUploadOutcome.started => (success: true, outcome: 'accepted'),
+    LocalUploadOutcome.fairUseLimited => (success: false, outcome: 'fair_use_limited'),
+    LocalUploadOutcome.backendBusy => (success: false, outcome: 'backend_busy'),
+    LocalUploadOutcome.failed => (success: false, outcome: 'upload_failed'),
+    LocalUploadOutcome.busy => (success: false, outcome: 'busy'),
+  };
+}
 
 class LocalRecordingsProvider extends ChangeNotifier {
   final AudioPlayerUtils _audio = AudioPlayerUtils.instance;
@@ -97,7 +115,13 @@ class LocalRecordingsProvider extends ChangeNotifier {
 
   void _onRecordingFinalized(String fileName) {
     refresh().then((_) {
-      PlatformManager.instance.analytics.transcribeLaterRecordingCaptured(durationSeconds: _secondsByFile[fileName]);
+      final recording = getById(fileName);
+      PlatformManager.instance.analytics.transcribeLaterRecordingCaptured(
+        durationSeconds: recording?.seconds ?? _secondsByFile[fileName],
+        source: transcribeLaterRecordingSource(fileName),
+        codec: recording?.codec.toString(),
+        fileSizeBytes: recording?.sizeBytes,
+      );
     });
   }
 
@@ -203,7 +227,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
   Future<LocalUploadOutcome> upload(LocalRecording rec) => _uploadFile(rec, auto: false);
 
   Future<LocalUploadOutcome> _uploadFile(LocalRecording rec, {required bool auto}) async {
-    if (_isUploading || rec.isBusy) return LocalUploadOutcome.busy;
+    if (_isUploading || rec.isBusy) {
+      if (!auto) _recordUploadOutcome(rec, LocalUploadOutcome.busy, auto: false);
+      return LocalUploadOutcome.busy;
+    }
     _isUploading = true;
     _uploadingName = rec.fileName;
     // Only the user's own retry clears the visible chip; an auto pass must not
@@ -244,16 +271,24 @@ class LocalRecordingsProvider extends ChangeNotifier {
     }
     // Record outcome (failed chip / backoff / analytics) before the final refresh
     // so `_stateFor` reflects any `_failedName` change in the same rebuild.
-    _recordUploadOutcome(rec.fileName, outcome, auto: auto);
+    _recordUploadOutcome(rec, outcome, auto: auto);
     await refresh();
     return outcome;
   }
 
-  void _recordUploadOutcome(String fileName, LocalUploadOutcome outcome, {required bool auto}) {
+  void _recordUploadOutcome(LocalRecording recording, LocalUploadOutcome outcome, {required bool auto}) {
+    final fileName = recording.fileName;
+    if (!auto) {
+      final analytic = transcribeLaterUploadAnalyticsOutcome(outcome);
+      PlatformManager.instance.analytics.transcribeLaterRecordingProcessed(
+        success: analytic.success,
+        outcome: analytic.outcome,
+        source: transcribeLaterRecordingSource(fileName),
+      );
+    }
     if (outcome == LocalUploadOutcome.started) {
       // Accepted (200 completed or 202 queued): clear any failure bookkeeping.
       _autoFailures.remove(fileName);
-      if (!auto) PlatformManager.instance.analytics.transcribeLaterRecordingProcessed();
       return;
     }
     // Rate-limited / backend-busy: transient push-back, not a per-file fault.
@@ -349,6 +384,11 @@ class LocalRecordingsProvider extends ChangeNotifier {
         case SyncJobFetchOutcome.transient:
           break;
         case SyncJobFetchOutcome.notFound:
+          PlatformManager.instance.analytics.transcriptionError(
+            source: transcribeLaterRecordingSource(name),
+            errorCode: 'batch_job_not_found',
+            retryable: true,
+          );
           _jobs.remove(name);
           changed = true;
           break;
@@ -361,6 +401,12 @@ class LocalRecordingsProvider extends ChangeNotifier {
           }
           if (s.status == 'completed') {
             await _deleteFileOnly(name);
+          } else {
+            PlatformManager.instance.analytics.transcriptionError(
+              source: transcribeLaterRecordingSource(name),
+              errorCode: s.isPartialFailure ? 'batch_job_partial_failure' : 'batch_job_failed',
+              retryable: true,
+            );
           }
           // completed or failed: stop tracking. On failure the file is kept
           // (only `completed` deletes it) so the recording becomes pending again.

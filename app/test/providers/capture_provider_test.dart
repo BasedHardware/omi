@@ -20,6 +20,8 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/enums.dart';
 
 /// Fake external actions that tracks people-refresh calls.
@@ -648,6 +650,87 @@ void main() {
     });
   });
 
+  group('terminal transcription analytics', () {
+    late _CaptureAnalyticsAdapter analytics;
+
+    setUp(() async {
+      AnalyticsManager.resetForTesting();
+      analytics = _CaptureAnalyticsAdapter();
+      AnalyticsManager.configure(analytics);
+      await AnalyticsManager.init();
+    });
+
+    tearDown(AnalyticsManager.resetForTesting);
+
+    test('records one bounded STT failure and excludes raw status text', () async {
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+      final failure = MessageServiceStatusEvent(
+        status: 'stt_failed',
+        statusText: 'private provider response that must not leave the device',
+        outcome: 'upstream_error',
+        provider: 'deepgram',
+        retryable: true,
+        reason: 'send_failed',
+      );
+
+      provider.onMessageEventReceived(failure);
+      provider.onMessageEventReceived(failure);
+      await AnalyticsManager.flushPending(force: true);
+
+      expect(analytics.events, hasLength(1));
+      expect(analytics.events.single.eventName, 'Transcription Error');
+      expect(analytics.events.single.properties, {
+        'source': 'omi',
+        'error_code': 'upstream_error',
+        'provider': 'deepgram',
+        'retryable': true,
+      });
+      expect(analytics.events.single.properties.values, isNot(contains(failure.statusText)));
+      provider.dispose();
+    });
+
+    test('records repeated socket callbacks once without exception content', () async {
+      final provider = CaptureProvider();
+      provider.updateRecordingState(RecordingState.record);
+
+      provider.onError(StateError('secret socket URL and provider response'));
+      provider.onError(StateError('a second raw error'));
+      await AnalyticsManager.flushPending(force: true);
+
+      expect(analytics.events, hasLength(1));
+      expect(analytics.events.single.eventName, 'Transcription Error');
+      expect(analytics.events.single.properties, {
+        'source': 'phone',
+        'error_code': 'socket_error',
+        'retryable': true,
+      });
+      provider.updateRecordingState(RecordingState.stop);
+      provider.dispose();
+    });
+
+    test('coerces unknown backend failure dimensions to the closed vocabulary', () async {
+      final provider = CaptureProvider();
+
+      provider.onMessageEventReceived(
+        MessageServiceStatusEvent(
+          status: 'stt_failed',
+          outcome: 'dynamic-provider-message',
+          provider: 'customer-supplied-provider-name',
+          retryable: false,
+        ),
+      );
+      await AnalyticsManager.flushPending(force: true);
+
+      expect(analytics.events.single.properties, {
+        'source': 'phone',
+        'error_code': 'stt_failed',
+        'retryable': false,
+      });
+      provider.dispose();
+    });
+  });
+
   // Regression coverage for issue #6499: before this change, a socket drop
   // during phone-mic recording (e.g. triggered by an iOS audio session
   // interruption from an incoming call) left recordingState stuck at `record`,
@@ -1166,4 +1249,37 @@ void main() {
       provider.dispose();
     });
   });
+}
+
+class _CaptureAnalyticsAdapter implements AnalyticsAdapter {
+  final List<({String eventName, Map<String, Object> properties})> events = [];
+
+  @override
+  bool get isInitialized => true;
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  void track({required String eventName, Map<String, Object>? properties}) {
+    events.add((eventName: eventName, properties: properties ?? const {}));
+  }
+
+  @override
+  void alias({required String newUserId}) {}
+
+  @override
+  void identify({required String userId, Map<String, Object>? userProperties}) {}
+
+  @override
+  void setInteractionContext({String? screenName, required String target}) {}
+
+  @override
+  void enable() {}
+
+  @override
+  void disable() {}
+
+  @override
+  void reset() {}
 }

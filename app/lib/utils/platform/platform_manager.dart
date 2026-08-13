@@ -7,6 +7,8 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/flavors.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
@@ -32,6 +34,14 @@ class PlatformManager {
   static Future<void> initializeServices() async {
     _instance._packageInfo = await PackageInfo.fromPlatform();
     _instance._deviceIdHash = await _instance._getDeviceIdHash();
+    AnalyticsManager.configureEventContext({
+      'platform': _instance.platform,
+      'app_version': _instance._packageInfo.version,
+      'app_build': _instance.appBuild,
+      'release_channel': Env.isTestFlight
+          ? 'testflight'
+          : (F.env == Environment.prod ? (Platform.isAndroid ? 'play_store' : 'app_store') : 'dev'),
+    });
     unawaited(AnalyticsManager.init());
     await IntercomManager.instance.initIntercom();
   }

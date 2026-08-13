@@ -26,6 +26,7 @@ class AnalyticsManager {
   static const int _maxDeliveryAttempts = 3;
   static const List<Duration> _retryDelays = [Duration(seconds: 1), Duration(seconds: 5), Duration(seconds: 30)];
   static final List<_QueuedAnalyticsEvent> _queuedEvents = [];
+  static Map<String, Object> _eventContext = const {};
   static bool _flushScheduled = false;
   static bool _flushInProgress = false;
   static Timer? _retryTimer;
@@ -38,6 +39,20 @@ class AnalyticsManager {
   static void configure(AnalyticsAdapter adapter) {
     assert(!_initStarted, 'AnalyticsManager.configure() must be called before init().');
     _adapter = adapter;
+  }
+
+  /// Attach low-cardinality release context to every event.
+  ///
+  /// The platform bootstrap owns these values so individual call sites cannot
+  /// accidentally omit or disagree on the platform/version dimensions used by
+  /// cross-client PostHog dashboards.
+  static void configureEventContext(Map<String, dynamic> context) {
+    final sanitized = <String, Object>{};
+    context.forEach((key, value) {
+      final coerced = _coerceProperty(value);
+      if (coerced != null) sanitized[key] = coerced;
+    });
+    _eventContext = Map.unmodifiable(sanitized);
   }
 
   static Future<void> init({Duration timeout = _initTimeout}) async {
@@ -76,6 +91,7 @@ class AnalyticsManager {
     _lastSentPersonProperty.clear();
     _personPropertyCacheLoaded = false;
     _queuedEvents.clear();
+    _eventContext = const {};
     _flushScheduled = false;
     _flushInProgress = false;
     _retryTimer?.cancel();
@@ -281,6 +297,9 @@ class AnalyticsManager {
             if (coerced != null) props[k] = coerced;
           });
         }
+        // Bootstrap-owned context wins over ad-hoc call-site values so charts
+        // never split on conflicting platform or release dimensions.
+        props.addAll(_eventContext);
         _evictStaleTimedEvents();
         final start = _pendingTimedEvents.remove(eventName);
         if (start != null) {
@@ -452,10 +471,33 @@ class AnalyticsManager {
   void transcribeLaterToggled({required bool enabled}) =>
       track('Transcribe Later Toggled', properties: {'enabled': enabled});
 
-  void transcribeLaterRecordingCaptured({int? durationSeconds}) =>
-      track('Transcribe Later Recording Captured', properties: {'duration_seconds': durationSeconds});
+  void transcribeLaterRecordingCaptured({
+    int? durationSeconds,
+    required String source,
+    String? codec,
+    int? fileSizeBytes,
+  }) =>
+      track('Transcribe Later Recording Captured', properties: {
+        'duration_seconds': durationSeconds,
+        'source': source,
+        'codec': codec,
+        'file_size_bytes': fileSizeBytes,
+      });
 
-  void transcribeLaterRecordingProcessed() => track('Transcribe Later Recording Processed');
+  void transcribeLaterRecordingProcessed({required bool success, required String outcome, required String source}) =>
+      track('Transcribe Later Recording Processed', properties: {
+        'success': success,
+        'outcome': outcome,
+        'source': source,
+      });
+
+  void transcriptionError({required String source, required String errorCode, String? provider, bool? retryable}) =>
+      track('Transcription Error', properties: {
+        'source': source,
+        'error_code': errorCode,
+        'provider': provider,
+        'retryable': retryable,
+      });
 
   // Phone Calls (VoIP)
   void phoneCallPageOpened() => track('Phone Call Page Opened');
@@ -540,7 +582,30 @@ class AnalyticsManager {
     });
   }
 
-  void deviceDisconnected() => track('Device Disconnected');
+  void deviceDisconnected({
+    required BtDevice device,
+    required Duration duration,
+    required String disconnectType,
+    String? reason,
+    int? hciReasonCode,
+    String? appState,
+    int? lastRssi,
+    String? rssiTrend,
+  }) {
+    final properties = <String, dynamic>{
+      'connection_duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
+      'disconnect_type': disconnectType,
+      'reason': _knownDeviceValue(reason ?? ''),
+      'device_vendor': device.type.analyticsVendor,
+      'model': _knownDeviceValue(device.modelNumber),
+      'firmware_revision': _knownDeviceValue(device.firmwareRevision),
+      'app_state': _knownDeviceValue(appState ?? ''),
+      'last_rssi': lastRssi == null || lastRssi == 0 ? null : lastRssi,
+      'rssi_trend': _knownDeviceValue(rssiTrend ?? ''),
+    };
+    if (hciReasonCode != null && hciReasonCode >= 0) properties['hci_reason_code'] = hciReasonCode;
+    track('Device Disconnected', properties: properties);
+  }
 
   void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
     final properties = <String, Object>{
