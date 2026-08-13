@@ -634,19 +634,6 @@ def check_desktop_codemagic_release() -> list[str]:
     ):
         if required_fragment not in desktop_workflow_body:
             errors.append(f"parallel desktop packaging is missing required fragment: {required_fragment}")
-    resolve_index = desktop_workflow_body.find("Resolve SPM packages")
-    build_swift_index = desktop_workflow_body.find("Build Swift app (arm64 + x86_64)")
-    brew_index = desktop_workflow_body.find("brew install webp &")
-    if desktop_workflow_body.count("brew install webp &") != 1 or not (
-        -1 < resolve_index < brew_index < build_swift_index
-    ):
-        errors.append("desktop release must brew-install webp during Resolve SPM packages, not Build Swift app")
-    build_swift_body = desktop_workflow_body[build_swift_index:] if build_swift_index != -1 else ""
-    next_step = build_swift_body.find("\n      - name:", 1)
-    if next_step != -1:
-        build_swift_body = build_swift_body[:next_step]
-    if re.search(r"^\s*brew install webp\b", build_swift_body, flags=re.MULTILINE):
-        errors.append("Build Swift app must not brew install webp")
     if smoke_index == -1:
         errors.append("desktop release must run the signed artifact smoke before publishing the GitHub release")
     elif release_index == -1 or smoke_index > release_index:

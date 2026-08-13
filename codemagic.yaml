@@ -2169,14 +2169,15 @@ workflows:
               sleep 15
             fi
           done
-          wait "$brew_pid"
-          brew_status=$?
-          if [[ "$brew_status" -ne 0 ]]; then
-            echo "ERROR: brew install webp failed"
-            exit 1
-          fi
           if [[ "$resolve_ok" -ne 1 ]]; then
             echo "ERROR: Package resolution failed after 3 attempts"
+            if ! wait "$brew_pid"; then
+              echo "ERROR: brew install webp also failed"
+            fi
+            exit 1
+          fi
+          if ! wait "$brew_pid"; then
+            echo "ERROR: brew install webp failed"
             exit 1
           fi
 
