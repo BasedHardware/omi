@@ -143,23 +143,48 @@ function metadata(manifest) {
 }
 
 function validateForegroundCustody(custody) {
-  if (!custody || custody.schema !== "omi.macos-foreground-guard/v1" || custody.status !== 0 || custody.error !== null || custody.monitor_error !== null) throw new Error("runtime preparation lacks successful foreground custody");
+  if (!custody || custody.schema !== "omi.macos-foreground-guard/v1" || custody.status !== 0 || custody.signal !== null || custody.error !== null || custody.monitor_error !== null) throw new Error("runtime preparation lacks successful foreground custody");
   if (custody.policy !== "sampled-macos-forbidden-fixture-foreground-detection-20ms-target-250ms-probe-timeout-no-activation-request" || JSON.stringify(custody.forbidden_bundle_ids) !== JSON.stringify([...forbiddenForegroundBundleIds].sort()) || custody.target_interval_milliseconds !== 20 || custody.probe_timeout_milliseconds !== 250 || !Number.isInteger(custody.sample_count) || custody.sample_count < 1 || !Number.isFinite(custody.max_sample_gap_milliseconds) || custody.max_sample_gap_milliseconds < 0) throw new Error("runtime preparation foreground custody policy is malformed");
 }
 
 function validateGuardedPreparation(preparation, manifest, inputPath, inputBytes) {
   const command = preparation?.command;
   if (!command || !Array.isArray(command.argv) || command.argv.length < 12 || command.exit_code !== 0 || command.signal !== undefined && command.signal !== null || command.cwd_root !== "core" || !["", "."].includes(command.cwd) || command.timeout_seconds !== 310 || !/^[0-9a-f]{64}$/.test(command.stdout_sha256 || "") || !/^[0-9a-f]{64}$/.test(command.stderr_sha256 || "")) throw new Error("runtime preparation command is not a successful guarded launcher");
-  const guardIndex = command.argv.findIndex((value) => typeof value === "string" && value.endsWith("/shells/tools/macos-foreground-guard.mjs"));
-  const separator = command.argv.indexOf("--");
-  const forbidIndex = command.argv.indexOf("--forbid-bundle-ids");
-  if (guardIndex !== 1 || separator < 0 || forbidIndex < 0 || command.argv[forbidIndex + 1] !== forbiddenForegroundBundleIds.join(",") || !command.argv.includes("--result") || !command.argv.includes("--stdout") || !command.argv.includes("--stderr") || !command.argv.includes("--timeout") || command.argv[command.argv.indexOf("--timeout") + 1] !== "300") throw new Error("runtime preparation command is not the exact foreground-guard invocation");
-  const guardedCommand = command.argv[separator + 1];
-  const guardedArgs = command.argv.slice(separator + 2);
+  const outputDir = path.dirname(inputPath);
+  const exactGuardPrefix = [
+    process.execPath, foregroundGuard,
+    "--result", path.join(outputDir, "foreground-guard.json"),
+    "--stdout", manifest.shell === "macos" ? path.join(outputDir, "foreground-guard.stdout.log") : path.join(outputDir, "xcodebuild.stdout"),
+    "--stderr", manifest.shell === "macos" ? path.join(outputDir, "foreground-guard.stderr.log") : path.join(outputDir, "xcodebuild.stderr"),
+    "--timeout", "300",
+    "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","),
+    "--",
+  ];
+  if (JSON.stringify(command.argv.slice(0, exactGuardPrefix.length)) !== JSON.stringify(exactGuardPrefix)) throw new Error("runtime preparation command is not the exact foreground-guard invocation");
+  const guardedCommand = command.argv[exactGuardPrefix.length];
+  const guardedArgs = command.argv.slice(exactGuardPrefix.length + 1);
   if (manifest.shell === "macos") {
-    if (guardedCommand !== "/bin/bash" || !guardedArgs[0]?.endsWith("/shells/macos/scripts/dev-run-macos.sh") || !guardedArgs.includes("--fixture") || !guardedArgs.includes(runtimeFixtureName(manifest.domain)) || !guardedArgs.includes("--run-id") || !guardedArgs.includes(manifest.run_id)) throw new Error("macOS runtime preparation did not guard the exact fixture launcher");
-  } else if (guardedCommand !== "xcodebuild" || !guardedArgs.includes("-only-testing:RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence")) {
-    throw new Error("iOS runtime preparation did not guard the exact native runtime test");
+    const expected = [
+      path.join(macRoot, "scripts/dev-run-macos.sh"),
+      "--fixture", runtimeFixtureName(manifest.domain),
+      "--state", manifest.state,
+      "--theme", manifest.theme,
+      "--accessibility", manifest.accessibility,
+      "--run-id", manifest.run_id,
+      "--capture-out", path.join(outputDir, "probe.png"),
+      "--viewport-width", String(manifest.viewport.width),
+      "--viewport-height", String(manifest.viewport.height),
+    ];
+    if (guardedCommand !== "/bin/bash" || JSON.stringify(guardedArgs) !== JSON.stringify(expected)) throw new Error("macOS runtime preparation did not guard the exact fixture launcher");
+  } else {
+    const expectedPrefix = [
+      "test", "-project", path.join(iosRoot, "app/ios/Runner.xcodeproj"),
+      "-scheme", "Runner", "-destination", `platform=iOS Simulator,id=${manifest.device.udid}`,
+      "-only-testing", "RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence",
+      "-parallel-testing-enabled", "NO", "-derivedDataPath", path.join(outputDir, "DerivedData"),
+      "-resultBundlePath", path.join(outputDir, "Runner.xcresult"), "CODE_SIGNING_ALLOWED=NO",
+    ];
+    if (guardedCommand !== "xcodebuild" || JSON.stringify(guardedArgs.slice(0, expectedPrefix.length)) !== JSON.stringify(expectedPrefix) || guardedArgs.length !== expectedPrefix.length + 1 || !/^FLUTTER_ROOT=\/.+/.test(guardedArgs.at(-1))) throw new Error("iOS runtime preparation did not guard the exact native runtime test");
   }
   const expectedPath = path.relative(coreRoot, inputPath);
   if (preparation.artifact?.root !== "core" || preparation.artifact?.path !== expectedPath || preparation.artifact?.sha256 !== sha256(inputBytes)) throw new Error("runtime preparation artifact authority does not match replay input");
