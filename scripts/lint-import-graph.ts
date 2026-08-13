@@ -462,6 +462,7 @@ const sourceImpactCodecModule = "apps/service/codecs/opaque-refs.ts";
 const durableWorkRunnerImporters = new Set([
   "apps/service/workers/durable-memory-work-runner.test.ts",
   "apps/service/workers/formation-work-service.ts",
+  "apps/service/workers/derived-group-dream-work-service.ts",
   "apps/service/workers/consolidation-work-service.ts",
 ]);
 const queryEvaluationInternalImporters = new Set([

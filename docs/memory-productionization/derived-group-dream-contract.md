@@ -22,11 +22,13 @@ the rejected SQLite `drivers/sqlite/dream.ts` promotion path.
 `apps/service/workers/derived-group-dream-contract.ts` names the
 `derived_group_dream` work kind and input manifest. PostgreSQL sealed input
 persistence and generic durable-work acceptance admit the kind with an exact
-input snapshot plus manifest. The slot is **not** admitted to
-`CONSOLIDATION_WORK_KINDS`, any lease loop, scheduler, route, or model default.
+input snapshot plus manifest. An inert work adapter loads that staged snapshot
+under a leased job and runs the pure planner only. The slot is **not** admitted
+to `CONSOLIDATION_WORK_KINDS`, any lease loop, scheduler, route, model default,
+or success commit.
 
 ## Deliberate production gap
 
-No overnight scheduler, model pipeline, promotion adapter, worker adapter, or
-query route is activated. Query recall remains dark until honest grouped
-beliefs exist.
+No overnight scheduler, model pipeline, promotion adapter, success commit,
+worker activation, or query route is activated. Query recall remains dark until
+honest grouped beliefs exist.

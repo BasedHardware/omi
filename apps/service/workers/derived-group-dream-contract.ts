@@ -14,6 +14,10 @@ export const DERIVED_GROUP_DREAM_INPUT_SNAPSHOT_VERSION =
  */
 export const DERIVED_GROUP_DREAM_DURABLE_WORK_KIND = DERIVED_GROUP_DREAM_WORK_KIND;
 
+/** Normalized durable-result contract for planned derived-group dream outcomes. */
+export const DERIVED_GROUP_DREAM_RESULT_CONTRACT_VERSION =
+  "derived-group-dream-result:v1" as const;
+
 export const derivedGroupDreamInputManifest = (input: Readonly<{
   owner_account_id: string;
   job_id: string;

@@ -331,7 +331,8 @@ export const parseStagedDurableMemoryWorkResult = (
   }
   const workKind = input["work_kind"];
   if (workKind !== "formation" && workKind !== "promotion"
-    && workKind !== "identity_cluster" && workKind !== "predicate_batch") {
+    && workKind !== "identity_cluster" && workKind !== "predicate_batch"
+    && workKind !== "derived_group_dream") {
     fail("invalid_staged_result");
   }
   const producedAttempt = positive(input["produced_attempt"], "invalid_staged_result");
