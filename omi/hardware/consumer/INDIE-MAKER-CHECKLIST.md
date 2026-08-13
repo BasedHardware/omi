@@ -1,103 +1,114 @@
-# Omi Consumer — Indie Maker Readiness Checklist
+# Omi Consumer — Indie Maker Readiness
 
-**Objective:** Make it possible for an indie maker to build their own Omi consumer device using only what's in this repo + standard suppliers.
+**Can an indie maker build their own Omi device?** Yes — with the right path.
 
 **Last updated:** 2026-08-13
-**Reviewed by:** Codex (multi-round review) + source-of-truth audit against KiCad PCB/schematics/gerbers + factory BOM
+**Reviewed by:** Codex (6 rounds) + source-of-truth audit against KiCad PCB/schematics/gerbers + factory BOM
 
 ---
 
-## Status Summary
+## Honest Assessment
 
-| Category | Status | Codex Score (R6) |
-|----------|--------|------------------|
-| Board-Specific BOMs | ✅ Complete — 4 files | 10/10 |
-| Pick-and-Place / CPL Files | ✅ Complete — 3 boards | 8/10 |
-| LCSC / Distributor Part Numbers | ✅ Complete — 48/63 found, sourcing guide | 7/10 |
-| SWD Debug Pad Map | ✅ Complete — SWD-DEBUG-ACCESS.md | 7/10 |
-| Stencil / Reflow / PCBA Notes | ✅ Verified — STENCIL-REFLOW-NOTES.md | 8/10 |
-| Battery Procurement Spec | ✅ Verified — BATTERY-SPEC.md | 7/10 |
-| RF / Antenna Notes | ✅ Verified — RF-ANTENNA-NOTES.md | 7/10 |
-| Impedance / Stackup Notes | ✅ Verified — IMPEDANCE-STACKUP.md | 7/10 |
-| FPC Flex Fab Notes | ✅ Verified — FPC-FLEX-FAB-NOTES.md | 7/10 |
-| Alternate Parts List | ✅ Verified — ALTERNATES.md | 8/10 |
-| Electronics Build Guide | ✅ Complete — electronics.mdx improved | 8.2/10 |
-| PCB Gerbers | ✅ Complete (existing) | — |
-| KiCad Source | ✅ Complete (existing, KiCad 9) | — |
-| Schematics (PDF) | ✅ Complete (existing) | — |
-| Mechanical STEP Files | ✅ Complete (existing) | — |
-| Firmware Source | ✅ Complete (existing) | — |
-| License (MIT) | ✅ Complete (existing) | — |
+The Omi consumer is **not a weekend project**. It uses WLCSP packages at 0.35mm ball pitch, a 4-layer HDI PCB with blind/buried vias, and a CNC aluminium enclosure. The electronics cannot be hand-soldered.
 
-**Post-audit:** 20+ factual errors found and fixed across 6 rounds of Codex review. Key corrections: diplexer IL values, T5848≠T5838 (PDM vs I2S), overcharge protection threshold direction, JLCPCB 4L impedance minimum, stencil aperture dimensions, J-Link licensing, nrfutil commands, RF window strategy documented (PC+ABS wrapper + laser engraving surface current disruption), TPS628438 package 1.05×0.70mm (was 1.8×1.8mm), W25Q16JW→JV voltage family (1.8V vs 3.3V), PI965 Section II cargo-only for UN3480, max discharge ≥300mA, UN38.3 availability vs accompaniment, DSBGA/BGA pitch values, FPC bend radius, HDI service requirement.
+But you don't need to build it from scratch. The Omi factory already produces these boards — ordering pre-assembled subassemblies makes indie building realistic.
+
+| Build Path | Feasibility | Who It's For |
+|-----------|-------------|--------------|
+| **Kit Build** (recommended) | ⭐⭐⭐⭐⭐ 9/10 | Anyone with basic soldering skills |
+| **DIY from Scratch** | ⭐⭐⭐ 6/10 | Hardware engineers with PCBA sourcing experience |
+| **Design Fork** | ⭐⭐ 4/10 | Engineers with RF/HDI PCB experience |
+
+**Start here → [BUILD-GUIDE.md](BUILD-GUIDE.md)** — detailed instructions for all three paths.
+
+**Kit assembly → [KIT-ASSEMBLY.md](KIT-ASSEMBLY.md)** — step-by-step guide for Kit buyers.
 
 ---
 
-## Files Created / Modified
+## What's in the Repo
 
-### New Files
+Everything needed to manufacture the Omi consumer device is open-source (MIT license):
 
-| File | Description |
-|------|-------------|
-| `bom/mainboard-bom.csv` | Board-specific BOM with LCSC columns (43 parts found) |
-| `bom/charger-bom.csv` | Charger board BOM with LCSC columns (5 parts found) |
-| `bom/fpc-bom.csv` | FPC BOM with LCSC columns |
-| `bom/mechanical-bom.csv` | Mechanical parts BOM |
-| `bom/mainboard-cpl.csv` | Pick-and-place file (JLCPCB format) |
-| `bom/charger-cpl.csv` | Pick-and-place file |
-| `bom/fpc-cpl.csv` | Pick-and-place file |
-| `bom/LCSC-SOURCING.md` | LCSC/JLCPCB sourcing guide (48/63 found) |
-| `bom/BATTERY-SPEC.md` | Battery procurement spec with compliance requirements |
-| `bom/ALTERNATES.md` | Alternate parts with Approved/Candidate/Rejected tiers |
-| `bom/CPL-README.md` | CPL format and rotation documentation |
-| `electrical/SWD-DEBUG-ACCESS.md` | SWD debug wiring, test point map, troubleshooting |
-| `electrical/STENCIL-REFLOW-NOTES.md` | WLCSP stencil, paste, reflow, X-ray specs |
-| `electrical/RF-ANTENNA-NOTES.md` | RF architecture, switch control, DO NOT SUBSTITUTE list |
-| `electrical/IMPEDANCE-STACKUP.md` | 4-layer stackup, impedance targets, HDI requirements |
-| `electrical/FPC-FLEX-FAB-NOTES.md` | FPC fabrication, stiffener, coverlay, bend specs |
+### For Kit Builders
 
-### Modified Files
+| What You Need | File | Status |
+|--------------|------|--------|
+| Assembly steps | [KIT-ASSEMBLY.md](KIT-ASSEMBLY.md) | ✅ Complete |
+| Firmware flashing | [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md) | ✅ Complete |
+| Battery safety | [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | ✅ Complete |
+| Build path selection | [BUILD-GUIDE.md](BUILD-GUIDE.md) | ✅ Complete |
 
-| File | Changes |
-|------|---------|
-| `docs/doc/hardware/consumer/electronics.mdx` | KiCad 9 note, WLCSP pitch fix (0.35mm), mic port fix (bottom-port), NAND capacity fix (4Gbit/512MB), HDI warning, X-ray language, manufacturing doc links |
-| `bom/README.md` | Updated with board-specific BOM + CPL file references |
+### For DIY Builders (Engineers)
+
+| What You Need | File | Status |
+|--------------|------|--------|
+| Component sourcing | [LCSC-SOURCING.md](bom/LCSC-SOURCING.md) | ✅ 48/63 parts on LCSC |
+| Pick-and-place data | [CPL-README.md](bom/CPL-README.md) | ✅ 3 boards, rotation corrections |
+| Stencil & reflow specs | [STENCIL-REFLOW-NOTES.md](electrical/STENCIL-REFLOW-NOTES.md) | ✅ WLCSP, dual-side, X-ray |
+| PCB stackup & impedance | [IMPEDANCE-STACKUP.md](electrical/IMPEDANCE-STACKUP.md) | ✅ 4-layer HDI, impedance targets |
+| FPC fabrication | [FPC-FLEX-FAB-NOTES.md](electrical/FPC-FLEX-FAB-NOTES.md) | ✅ Bend radius, stiffener, quality |
+| RF & antenna | [RF-ANTENNA-NOTES.md](electrical/RF-ANTENNA-NOTES.md) | ✅ RF paths, switch control, enclosure strategy |
+| Alternate parts | [ALTERNATES.md](bom/ALTERNATES.md) | ✅ Approved/candidate/rejected tiers |
+| PCB Gerbers | `electrical/*/gerbers/` | ✅ Mainboard, charger, FPC |
+| KiCad source | `electrical/*/altium/*.zip` | ✅ KiCad 9 format |
+| Schematics (PDF) | `electrical/*/schematic.pdf` | ✅ All 3 boards |
+| Mechanical STEP | `mechanical/` | ✅ Full device + charger assembly |
+| Firmware source | `../../firmware/` | ✅ Zephyr RTOS / nRF Connect SDK |
+
+### What's NOT in the Repo (Must Obtain Separately)
+
+| Item | Where | Notes |
+|------|-------|-------|
+| J-Link debug probe | [SEGGER](https://www.segger.com/products/debug-probes/j-link/) | ~$20 for EDU Mini |
+| Battery (150mAh LiPo coin cell) | Battery supplier | See [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) — dangerous goods shipping |
+| CNC enclosure | Machining service | AL6061-T6, STEP files in `mechanical/` |
+| Consigned components (24 parts) | DigiKey, Mouser, etc. | See [LCSC-SOURCING.md](bom/LCSC-SOURCING.md) |
+
+---
+
+## Quality Audit Summary
+
+These docs went through 6 rounds of Codex review + a source-of-truth audit against the actual KiCad PCB/schematic files and factory BOM. Major corrections found and fixed:
+
+**Critical (would have caused build failure):**
+- W25Q16JW → W25Q16JV — JW is 1.8V family, would be destroyed on the 3.3V rail
+- Reversed battery wiring — no reverse-polarity protection; destroys the BQ25101
+- DSBGA/BGA pitch values all listed as 0.5mm — actual pitches are 0.35mm (U13), 0.4mm (U6, U11, U15)
+
+**Important (wrong specs or processes):**
+- FPC bend radius 1.8mm → 2.2mm (IPC-2223C requires total thickness including coverlay)
+- FM8625H switching time <100ns → 2–20µs (budget SPDT, not premium)
+- PI965 Section II: standalone lithium-ion cells are cargo-only (not passenger aircraft)
+- JLCPCB standard service lacks blind/buried vias — must select HDI service
+- nrfutil: pip install installs deprecated v6 — use standalone download
+
+**20+ additional corrections** across 6 rounds — see [Codex Review History](#codex-review-history) below for the full list.
 
 ---
 
 ## Codex Review History
 
-Each task went through multiple Codex review rounds until scoring ≥8/10. Key corrections caught by Codex:
-
 | Round | Issue Caught | Impact |
 |-------|-------------|--------|
-| R1 | WLCSP pitch was 0.4mm → corrected to 0.35mm | Wrong stencil apertures |
-| R1 | MSL-3 claim for nRF5340/nRF7002 → corrected to MSL-1 | Unnecessary bake cycle |
-| R1 | Diplexer architecture diagram was wrong → corrected RF switch + shared 2.4GHz path | Misleading RF debug |
-| R1 | FPC trace routing "parallel to bend" → corrected to "perpendicular to bend axis" | Cracked flex traces |
-| R1 | J-Link pin 19 listed as GND → corrected to "DO NOT CONNECT" (5V supply) | Potential board damage |
-| R2 | Battery shipping PI965 Section II → corrected to Section IB (cargo-only) | Shipping rejection |
-| R2 | WiFi TX current 100mA → corrected to 191-260mA per Nordic PS | Undersized battery protection |
-| R3 | SI1308EDL listed as P-ch → actually N-ch per Vishay datasheet | Wrong polarity MOSFET |
+| R1 | WLCSP pitch was 0.4mm → 0.35mm | Wrong stencil apertures |
+| R1 | MSL-3 → MSL-1 for nRF5340/nRF7002 | Unnecessary bake cycle |
+| R1 | Diplexer architecture diagram wrong → corrected RF switch + shared 2.4GHz path | Misleading RF debug |
+| R1 | FPC trace routing "parallel to bend" → "perpendicular to bend axis" | Cracked flex traces |
+| R1 | J-Link pin 19 listed as GND → "DO NOT CONNECT" (5V supply) | Potential board damage |
+| R2 | PI965 Section II → Section IB (cargo-only) | Shipping rejection |
+| R2 | WiFi TX current 100mA → 191–260mA per Nordic PS | Undersized battery protection |
+| R3 | SI1308EDL listed as P-ch → actually N-ch | Wrong polarity MOSFET |
 | R3 | FC-12M crystal package wrong → 2.05×1.2mm not 1.6×1.0mm | Wrong footprint |
-| R3 | Mic listed as top-port → corrected to bottom-port per TDK data | Blocked audio path |
-| R3 | NAND flash listed as 8GB → corrected to 4Gbit (512MB) per BOM | Misleading spec |
-| **Audit** | Bottom-side component list completely wrong (5 ICs missing, 6 wrong refs) | CM gets wrong assembly difficulty |
-| **Audit** | BQ25101 charge current ~100mA → ~135mA (K_ISET=135 AΩ, R8=1KΩ) | Wrong battery spec |
-| **Audit** | FPC PI core 50µm → 203.2µm (4× off), copper ½oz → 1oz, BTB pitch 0.25→0.35mm | Wrong FPC fabrication |
-| **Audit** | Blind via count 159→176, min drill 0.15→0.102mm, charger thickness 1.6→1.0mm | Wrong fab specs |
-| **Audit** | RF switch truth table verified from KiCad net assignments (RF1=BLE, RF2=WiFi) | Resolved ambiguity |
-| R6 | RF window strategy undocumented → added PC+ABS wrapper + laser engraving mechanism | Indie maker couldn't assess RF risk |
-| R6 | DSBGA pitch values all listed as 0.5mm → U13=0.35mm, U15=0.4mm, U6/U11=0.4mm (KiCad verified) | Wrong stencil aperture calculations |
-| R6 | FPC total thickness 0.29mm → 0.37mm (must include coverlay per IPC-2223C) | Wrong bend radius (1.8→2.2mm) |
-| R6 | Battery 100Wh limit → 20Wh per-cell limit for PI965 Section II | Wrong shipping classification |
-| R6 | JLCPCB standard service lacks blind/buried vias → must select HDI service | Ordering error |
-| R6 | FM8625H switching time <100ns → 2-20µs (budget SPDT, not premium) | Misleading coexistence timing |
-| R6 | nrfutil install via pip → standalone download (pip installs deprecated v6) | Wrong toolchain |
-| R6 | 3M 467 stiffener adhesive "thermally cured" → pressure-laminated (PSA) | Wrong process instruction |
-| R6b | TPS628438 package 1.8×1.8mm → 1.05×0.70mm (DigiKey/TI datasheet) | Wrong package dimensions |
-| R6b | W25Q16JWUXIQ → W25Q16JVUXIQ (JW=1.8V, JV=3.3V) — JW exceeds Vmax on 3.3V rail | Would destroy flash IC |
-| R6b | PI965 Section II allows passenger aircraft → false for UN3480 (cargo-only since 2020) | Shipping rejection |
-| R6b | Max continuous discharge ≥250mA → ≥300mA (5GHz TX + system can exceed 300mA) | Battery protection trips |
-| R6b | SWD "3 wires + ground" → 4 required connections (VTref, SWDIO, SWDCLK, GND) | Confusion on minimum wiring |
-| R6b | U13 pitch "finer than WLCSP" → same 0.35mm pitch as U1/U2 | Misleading difficulty assessment |
+| R3 | Mic listed as top-port → corrected to bottom-port | Blocked audio path |
+| R3 | NAND flash listed as 8GB → 4Gbit (512MB) | Misleading spec |
+| Audit | Bottom-side component list completely wrong (5 ICs missing, 6 wrong refs) | CM gets wrong assembly |
+| Audit | BQ25101 charge current ~100mA → ~135mA | Wrong battery spec |
+| Audit | FPC PI core 50µm → 203.2µm (4× off) | Wrong FPC fabrication |
+| R6 | RF window strategy undocumented → added | Indie maker couldn't assess RF risk |
+| R6 | DSBGA pitch values all 0.5mm → 0.35/0.4mm | Wrong stencil apertures |
+| R6 | FPC total thickness 0.29mm → 0.37mm | Wrong bend radius |
+| R6 | FM8625H switching time <100ns → 2–20µs | Misleading coexistence timing |
+| R6b | TPS628438 package 1.8×1.8mm → 1.05×0.70mm | Wrong package dimensions |
+| R6b | W25Q16JW → W25Q16JV (1.8V → 3.3V family) | Would destroy flash IC |
+| R6b | PI965 Section II cargo-only for UN3480 | Shipping rejection |
+| R6b | Max discharge ≥250mA → ≥300mA | Battery protection trips |

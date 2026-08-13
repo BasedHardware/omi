@@ -50,12 +50,36 @@ Licensed under MIT (see [LICENSE](LICENSE)).
 
 The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Built on Zephyr RTOS with nRF Connect SDK.
 
-## Getting Started
+## Build Your Own
 
-1. **Build one**: Use the Gerber files to order PCBs, the BOM to source components, and the STEP files to manufacture the enclosure.
-2. **Modify the design**: Open Altium source files to customize the electronics, or edit STEP files to redesign the enclosure.
-3. **Flash firmware**: Follow the [firmware guide](https://docs.omi.me/doc/developer/firmware/Compile_firmware).
-4. **Documentation**: Visit [docs.omi.me](https://docs.omi.me/doc/hardware/consumer) for detailed guides.
+**Start here → [BUILD-GUIDE.md](BUILD-GUIDE.md)** — pick the right build path for your experience.
+
+| Path | Who It's For | Time | Difficulty |
+|------|-------------|------|------------|
+| **[Kit Build](BUILD-GUIDE.md#path-1-kit-build-recommended)** (recommended) | Anyone with basic soldering | 1 evening | ⭐⭐ |
+| **[DIY from Scratch](BUILD-GUIDE.md#path-2-diy-from-scratch)** | Hardware engineers | 5–6 weeks | ⭐⭐⭐⭐ |
+| **[Design Fork](BUILD-GUIDE.md#path-3-design-fork)** | Engineers modifying the design | 8+ weeks | ⭐⭐⭐⭐⭐ |
+
+### Quick Links
+
+- **Kit assembly guide:** [KIT-ASSEMBLY.md](KIT-ASSEMBLY.md)
+- **Firmware flashing:** [SWD-DEBUG-ACCESS.md](electrical/SWD-DEBUG-ACCESS.md)
+- **Readiness checklist:** [INDIE-MAKER-CHECKLIST.md](INDIE-MAKER-CHECKLIST.md)
+- **Firmware source:** [omi/firmware/](../../firmware/)
+- **Online docs:** [docs.omi.me](https://docs.omi.me/doc/hardware/consumer)
+
+### Engineering Reference (for DIY / Design Fork)
+
+| Doc | What It Covers |
+|-----|---------------|
+| [LCSC-SOURCING.md](bom/LCSC-SOURCING.md) | Part availability, JLCPCB ordering, cost breakdown |
+| [CPL-README.md](bom/CPL-README.md) | Pick-and-place format, rotation, WLCSP pin-1 |
+| [STENCIL-REFLOW-NOTES.md](electrical/STENCIL-REFLOW-NOTES.md) | Stencil specs, paste, reflow, X-ray |
+| [IMPEDANCE-STACKUP.md](electrical/IMPEDANCE-STACKUP.md) | 4-layer stackup, impedance, HDI |
+| [FPC-FLEX-FAB-NOTES.md](electrical/FPC-FLEX-FAB-NOTES.md) | FPC fabrication, bend radius, quality |
+| [RF-ANTENNA-NOTES.md](electrical/RF-ANTENNA-NOTES.md) | RF architecture, switch control, enclosure strategy |
+| [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | Battery selection, safety, shipping |
+| [ALTERNATES.md](bom/ALTERNATES.md) | Substitute parts (approved / candidate / rejected) |
 
 ## File Checksums (SHA-256)
 
