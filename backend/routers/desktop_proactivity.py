@@ -90,6 +90,10 @@ def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str,
     if not api_key:
         raise HTTPException(status_code=503, detail="Proactive model provider is not configured")
     payload["model"] = _DIRECT_MODELS[request.operation.value]
+    # OpenAI reasoning models otherwise default to spending the entire completion
+    # budget on hidden reasoning. Extraction then returns an empty message with
+    # finish_reason=length instead of the required strict JSON payload.
+    payload["reasoning_effort"] = "minimal"
     # These are gateway cache extensions, not OpenAI request fields.
     payload["messages"] = request.messages
     payload.pop("prompt_cache_key", None)
