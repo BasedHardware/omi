@@ -36,7 +36,12 @@ enum BucketFactDisposition: String {
 enum BucketFactValidator {
   struct ExistingFactIdentity: Equatable, Sendable {
     let statement: String
-    let identifiers: [String]
+    let canonicalIdentifierSetKey: String?
+
+    init(statement: String, identifiers: [String]) {
+      self.statement = statement
+      canonicalIdentifierSetKey = BucketFactValidator.canonicalIdentifierSetKey(identifiers)
+    }
   }
 
   static func resolvableEvidenceRefs(_ refs: [String], allowed: Set<String>) -> [String] {
@@ -69,7 +74,7 @@ enum BucketFactValidator {
     guard let identityKey = canonicalIdentifierSetKey(identifiers) else { return false }
     return existingFacts.contains { existing in
       existing.statement != statement
-        && canonicalIdentifierSetKey(existing.identifiers) == identityKey
+        && existing.canonicalIdentifierSetKey == identityKey
     }
   }
 
