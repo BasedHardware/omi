@@ -50,6 +50,10 @@ final class GlassHostView: NSView {
     self.webView = webView
     self.composition = composition
     super.init(frame: frame)
+    // This view is a composition host, not an interactive accessibility leaf.
+    // Let AppKit descend into its subviews so WKWebView can vend its native
+    // WebArea/DOM accessibility tree without us fabricating a role here.
+    setAccessibilityElement(false)
     wantsLayer = true
     layer?.backgroundColor = NSColor.clear.cgColor
     addSubview(topGlass)

@@ -28,6 +28,9 @@ test("native host keeps the route-shaped Ink composition", async () => {
 test("transparent gaps remain draggable instead of becoming an invisible web canvas", async () => {
   const source = await read("shell/Sources/OmiShell/GlassHost.swift");
   const main = await read("shell/Sources/OmiShell/main.swift");
+  assert.match(source, /setAccessibilityElement\(false\)/);
+  assert.doesNotMatch(source, /setAccessibilityRole\(/);
+  assert.doesNotMatch(main, /setAccessibility(?:Element|Role)\(/);
   assert.match(source, /override func hitTest\(_ point: NSPoint\)/);
   assert.match(source, /guard interactiveIslands\.contains/);
   assert.match(source, /private let webContentMask = CAShapeLayer\(\)/);
