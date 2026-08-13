@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.object_store_fakes import FakeObjectStore
 import json
 from pathlib import Path
 
@@ -64,40 +65,22 @@ def test_active_release_rejects_an_invalid_rollout_phase(monkeypatch):
 
 
 def test_active_release_download_is_pinned_to_the_resolved_generation(monkeypatch):
-    calls: list[object] = []
+    # _read_gcs_uri now reads through the neutral object-store port's consistent-read
+    # (get_bytes_current), which owns the generation-pinning that was previously the raw GCS
+    # reload + if_generation_match dance; assert it resolves the uri to the current object bytes.
+    fetched: list = []
 
-    class FakeBlob:
-        generation = None
+    class _RecordingObjectStore(FakeObjectStore):
+        def get_bytes_current(self, bucket, key):
+            fetched.append((bucket, key))
+            return super().get_bytes_current(bucket, key)
 
-        def reload(self):
-            calls.append("reload")
-            self.generation = 1234
-
-        def download_as_bytes(self, **kwargs):
-            calls.append(kwargs)
-            return b"current"
-
-    blob = FakeBlob()
-
-    class FakeBucket:
-        def blob(self, name):
-            calls.append(("blob", name))
-            return blob
-
-    class FakeClient:
-        def bucket(self, name):
-            calls.append(("bucket", name))
-            return FakeBucket()
-
-    monkeypatch.setattr(reconciler.storage, "Client", FakeClient)
+    store = _RecordingObjectStore()
+    store.put("release-bucket", "agent-vm/releases/active.json", b"current")
+    monkeypatch.setattr(reconciler, "get_object_store", lambda: store)
 
     assert reconciler._read_gcs_uri("gs://release-bucket/agent-vm/releases/active.json") == b"current"
-    assert calls == [
-        ("bucket", "release-bucket"),
-        ("blob", "agent-vm/releases/active.json"),
-        "reload",
-        {"if_generation_match": 1234},
-    ]
+    assert fetched == [("release-bucket", "agent-vm/releases/active.json")]
 
 
 def test_legacy_instance_is_drift_and_current_instance_is_not():
