@@ -1,0 +1,67 @@
+import Foundation
+
+/// When a finished assistant reply can persist a thumbs rating to the backend.
+///
+/// The live tail shows rating actions as soon as there is copyable text
+/// (`ChatBubbleMetadataBand.actions`). The backend row is keyed by the kernel
+/// turn id and only exists after journal sync (`isSynced`). A PATCH before that
+/// 404s and used to revert the optimistic local rating.
+enum ChatMessageRatingPersistence: Equatable {
+  /// Backend row exists; PATCH immediately.
+  case persistNow
+  /// Journal sync is still in flight; queue the PATCH.
+  case waitForSync
+  /// The journal failed, so a backend row will never appear. Keep the local rating.
+  case localOnly
+
+  static func of(_ message: ChatMessage) -> Self {
+    if message.journalStatus == .failed { return .localOnly }
+    return message.isSynced ? .persistNow : .waitForSync
+  }
+}
+
+/// Last-write-wins queue of ratings that must wait for journal sync.
+struct ChatMessageRatingQueue: Equatable {
+  private var pending: [String: Int?] = [:]
+
+  var isEmpty: Bool { pending.isEmpty }
+
+  mutating func enqueue(messageId: String, rating: Int?) {
+    pending.updateValue(rating, forKey: messageId)
+  }
+
+  mutating func cancel(messageId: String) {
+    pending.removeValue(forKey: messageId)
+  }
+
+  mutating func removeAll() {
+    pending.removeAll()
+  }
+
+  func contains(_ messageId: String) -> Bool {
+    pending[messageId] != nil
+  }
+
+  /// Drain ratings whose messages can persist now. Failed-journal and missing
+  /// rows are dropped without a persist payload so a 404 cannot revert them.
+  mutating func drain(using messages: [ChatMessage]) -> [(messageId: String, rating: Int?)] {
+    var persist: [(messageId: String, rating: Int?)] = []
+    for messageId in Array(pending.keys) {
+      guard let rating = pending[messageId] else { continue }
+      guard let message = messages.first(where: { $0.id == messageId }) else {
+        pending.removeValue(forKey: messageId)
+        continue
+      }
+      switch ChatMessageRatingPersistence.of(message) {
+      case .persistNow:
+        pending.removeValue(forKey: messageId)
+        persist.append((messageId, rating))
+      case .localOnly:
+        pending.removeValue(forKey: messageId)
+      case .waitForSync:
+        break
+      }
+    }
+    return persist
+  }
+}

@@ -249,6 +249,8 @@ struct BackgroundAgentSummary: Equatable {
 /// Footer actions for an assistant row. A finished reply is rateable as soon as
 /// it has copyable text; waiting for `isSynced` hid thumbs on the live tail
 /// because completion clears streaming before the journal remote id lands.
+/// Persistence of that rating is `ChatMessageRatingPersistence` — show the
+/// buttons now, PATCH after sync.
 enum ChatBubbleMetadataBand: Equatable {
   case hidden
   case timestampOnly
