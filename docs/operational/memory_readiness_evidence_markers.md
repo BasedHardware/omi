@@ -1,21 +1,14 @@
 # Memory production readiness evidence markers
 
-Operational evidence markers for memory rollout readiness tests and cutover gates. This file records **what must remain true** before production cutover — not iteration history.
+Historical operational evidence markers retained for provider, app-key, and load-proof tests. Per-UID memory rollout and cutover are retired; current deploy and rollback evidence belongs in `docs/runbooks/universal-memory-operations.md`.
 
 Full Oracle milestone reviews and implementation journals live in the benchmark repo under `docs/research-logs/pipeline-memory/`.
 
-**Status:** production rollout remains **BLOCKED / NO-GO**; `production_rollout_approved=false`.
+**Status:** universal-memory deployment evidence has not been collected; `production_rollout_approved=false`. This marker does not authorize deployment.
 
 Readiness scripts default to read-only inventory mode (exit `0`, JSON on stdout). For CI or gate checks that must fail closed, pass `--require-go` so the script exits non-zero unless every evaluated gate status is `GO`. This does not change reported gate statuses or claim production approval.
 
 ---
-
-## Rollout schema (P1-1)
-
-- `rollout_schema_readiness.py`
-- `schema_version=1`
-- canonical nested `grants.<consumer>.default_memory`
-- `production_rollout_approved=false`
 
 ## MCP API key scope (P0-1/P0-6)
 

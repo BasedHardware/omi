@@ -113,6 +113,11 @@ struct ModelQoS {
     static var embedding: String { "gemini-embedding-001" }
   }
 
+  struct Proactivity {
+    static let extractionOperation = "proactive_extraction"
+    static let reasoningOperation = "proactive_reasoning"
+  }
+
   // MARK: - Tier Info (for UI / debugging)
 
   static var tierDescription: String {

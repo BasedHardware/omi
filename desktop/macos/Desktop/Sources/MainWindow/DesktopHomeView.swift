@@ -42,7 +42,7 @@ struct DesktopHomeView: View {
 
   @EnvironmentObject private var appState: AppState
   @StateObject private var viewModelContainer = ViewModelContainer()
-  /// The cohort shell owns typed navigation at the root, never through legacy
+  /// The Chat-first shell owns typed navigation at the root, never through legacy
   /// sidebar indices. It persists only route/collapse state, not enrollment.
   @StateObject private var chatFirstNavigation = ChatFirstShellNavigation()
   @ObservedObject private var authState = AuthState.shared
@@ -1098,7 +1098,7 @@ struct DesktopHomeView: View {
 
   /// Existing menu, keyboard, and automation callers retain their legacy
   /// names. This is the sole root adapter between those callers and typed
-  /// cohort navigation.
+  /// Chat-first navigation.
   private func navigateToLegacyDestination(_ item: SidebarNavItem) {
     if usesChatFirstShell {
       chatFirstNavigation.selectLegacyDestination(item)

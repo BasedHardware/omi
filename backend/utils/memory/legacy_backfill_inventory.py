@@ -16,7 +16,7 @@ from utils.memory.legacy_backfill import (
     is_legacy_backfill_admissible,
     row_content,
 )
-from utils.memory.legacy_backfill_bulk_support import LegacyBackfillInventoryReport
+from utils.memory.legacy_backfill_support import LegacyBackfillInventoryReport
 
 
 def inventory_legacy_user(

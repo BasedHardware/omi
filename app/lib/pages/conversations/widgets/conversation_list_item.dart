@@ -85,15 +85,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
     }
 
     return RepaintBoundary(
-      child: Selector<
-          ConversationProvider,
-          ({
-            int visualSignature,
-            bool isSelectionMode,
-            bool isSelected,
-            bool isMerging,
-            bool isEligible,
-          })>(
+      child: Selector<ConversationProvider,
+          ({int visualSignature, bool isSelectionMode, bool isSelected, bool isMerging, bool isEligible})>(
         selector: (context, provider) => (
           // ServerConversation is mutable. Select the visible primitive fields
           // instead of object identity so star/title/status updates are not lost.
@@ -300,7 +293,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                       final actions = [
                                         TextButton(
                                           onPressed: () => Navigator.of(ctx).pop(false),
-                                          child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
+                                          child: Text(
+                                            context.l10n.cancel,
+                                            style: const TextStyle(color: Colors.white),
+                                          ),
                                         ),
                                         TextButton(
                                           onPressed: () {
@@ -309,7 +305,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                             }
                                             Navigator.of(ctx).pop(true);
                                           },
-                                          child: Text(context.l10n.confirm, style: const TextStyle(color: Colors.red)),
+                                          child: Text(
+                                            context.l10n.confirm,
+                                            style: const TextStyle(color: Colors.red),
+                                          ),
                                         ),
                                       ];
                                       if (PlatformService.isApple) {

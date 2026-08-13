@@ -364,6 +364,7 @@ class AppState: ObservableObject {
 
   // Permission states for onboarding
   @Published var hasNotificationPermission = false
+  @Published var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
   @Published var notificationAlertStyle: UNAlertStyle = .none  // .none, .banner, or .alert
   @Published var hasScreenRecordingPermission = false
   /// TCC state captured once at process launch. A grant that arrives while the
@@ -377,14 +378,18 @@ class AppState: ObservableObject {
   var lastNotificationAlertStyle: String?
   var lastNotificationSoundEnabled: Bool?
   var lastNotificationBadgeEnabled: Bool?
+  var notificationPermissionRefreshGeneration = 0
   @Published var isScreenCaptureKitBroken = false  // Capture engine issue; not the source of permission truth
   @Published var isScreenRecordingStale = false  // Deprecated: no longer inferred from capture failures
   var screenRecordingGrantAttempts = 0  // Track how many times user clicked Grant without success
   @Published var hasAutomationPermission = false
-  @Published var automationPermissionError: OSStatus = 0  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound)
-  var isCheckingAutomationPermission = false  // Prevent concurrent checks (retry path has a 1s sleep)
+  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound).
+  @Published var automationPermissionError: OSStatus = 0
+  // Prevent concurrent checks (retry path has a 1s sleep).
+  var isCheckingAutomationPermission = false
   @Published var hasAccessibilityPermission = false
-  @Published var isAccessibilityBroken = false  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs)
+  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs).
+  @Published var isAccessibilityBroken = false
   @Published var hasFullDiskAccess = false
 
   /// Usage-limit popup state. Set by `triggerUsageLimitPopup(reason:)` when the

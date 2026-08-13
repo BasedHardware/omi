@@ -29,8 +29,9 @@ struct SettingsSearchItem: Identifiable {
         "speaker",
       ], section: .general, icon: "speaker.wave.2", settingId: "general.systemaudio"),
     SettingsSearchItem(
-      name: "Notifications", subtitle: "Proactive alerts and status",
-      keywords: ["alerts", "notify"], section: .general, icon: "gearshape",
+      name: "Notifications", subtitle: "macOS permission and banner status",
+      keywords: ["alerts", "notify", "banners", "system settings", "permission"], section: .general,
+      icon: "gearshape",
       settingId: "general.notifications"),
     SettingsSearchItem(
       name: "Ask omi", subtitle: "Show or hide the floating chat bar",
@@ -114,6 +115,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["frequency", "how often", "interval"], section: .notifications, icon: "bell",
       settingId: "notifications.frequency"),
     SettingsSearchItem(
+      name: "Notification Active Period", subtitle: "Choose when proactive notifications may appear",
+      keywords: ["active period", "quiet hours", "schedule", "24 hour", "time"],
+      section: .notifications, icon: "bell",
+      settingId: "notifications.activeperiod"),
+    SettingsSearchItem(
       name: "Task Notifications",
       subtitle: "Allow interruptions when a task needs attention",
       keywords: ["task", "action item", "notify task", "interruption", "proactive"],
@@ -133,7 +139,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["daily", "summary", "digest", "end of day"], section: .notifications, icon: "bell",
       settingId: "notifications.dailysummary"),
     SettingsSearchItem(
-      name: "Summary Time", subtitle: "When to send your daily summary",
+      name: "Summary Time", subtitle: "When to send your daily summary (hour only)",
       keywords: ["time", "schedule", "when", "hour"], section: .notifications, icon: "bell",
       settingId: "notifications.summarytime"),
 

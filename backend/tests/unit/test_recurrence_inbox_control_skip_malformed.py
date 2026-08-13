@@ -11,12 +11,6 @@ from unittest.mock import patch
 import database.recurrence_inbox as recurrence_inbox_db
 import database.read_boundary as read_boundary
 from database.recurrence_inbox import _validate_generation, RecurrenceGenerationMismatchError
-from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
-
-
-@pytest.fixture(autouse=True)
-def canonical_user(monkeypatch):
-    set_canonical_cohort(monkeypatch, 'u1')
 
 
 class _FakeSnapshot:

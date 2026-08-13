@@ -181,10 +181,6 @@ _canonical_activation_stub = ModuleType('utils.memory.canonical_activation')
 setattr(_canonical_activation_stub, 'canonical_write_enabled', MagicMock(return_value=False))
 _register_module('utils.memory.canonical_activation', _canonical_activation_stub)
 
-_surface_routing_stub = ModuleType('utils.memory.surface_routing')
-setattr(_surface_routing_stub, 'pin_memory_system', MagicMock())
-_register_module('utils.memory.surface_routing', _surface_routing_stub)
-
 _apps_stub = ModuleType('utils.apps')
 setattr(_apps_stub, 'get_available_app_by_id_with_reviews', MagicMock())
 setattr(_apps_stub, 'get_is_user_paid_app', MagicMock(return_value=False))

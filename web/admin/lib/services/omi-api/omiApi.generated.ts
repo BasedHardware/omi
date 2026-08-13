@@ -820,6 +820,12 @@ export interface CancelSubscriptionRequest {
 
 export type CandidateAction = "create" | "update" | "complete" | "cancel" | "supersede";
 
+export interface CandidateCompatibilityMetadata {
+  category?: string | null;
+  metadata?: string | null;
+  relevance_score?: number | null;
+}
+
 export type CandidateCreate = TaskCandidate | WorkstreamCreateCandidate;
 
 export interface CandidateListResponse {
@@ -2425,7 +2431,9 @@ export interface MemoryDB {
   id: string;
   invalid_at?: string | null;
   is_baseline?: boolean;
+  is_dismissed?: boolean;
   is_locked?: boolean;
+  is_read?: boolean;
   kg_extracted?: boolean;
   layer: string | null;
   manually_added?: boolean;
@@ -2460,6 +2468,11 @@ export interface MemoryLinkSpec {
 
 export interface MemoryMutationResponse {
   status: string;
+}
+
+export interface MemoryReadStatusRequest {
+  is_dismissed?: boolean | null;
+  is_read?: boolean | null;
 }
 
 export interface MemoryReviewItemResponse {
@@ -3411,6 +3424,7 @@ export interface TaskAssistantSettings {
 
 export interface TaskCancelCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -3443,6 +3457,7 @@ export interface TaskChangePayload {
 
 export interface TaskCompleteCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -3456,6 +3471,7 @@ export interface TaskCompleteCandidate {
 
 export interface TaskCreateCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -3543,6 +3559,7 @@ export type TaskStatus = "active" | "completed" | "cancelled" | "superseded";
 
 export interface TaskSupersedeCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -3556,6 +3573,7 @@ export interface TaskSupersedeCandidate {
 
 export interface TaskUpdateCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -3955,6 +3973,7 @@ export interface Workstream {
 
 export interface WorkstreamCreateCandidate {
   capture_confidence: number;
+  compatibility?: CandidateCompatibilityMetadata | null;
   evidence_refs: Array<EvidenceRef>;
   goal_id?: string | null;
   ownership_confidence: number;
@@ -4168,6 +4187,7 @@ export interface OmiApiSchemas {
   "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
   "CancelSubscriptionRequest": CancelSubscriptionRequest;
   "CandidateAction": CandidateAction;
+  "CandidateCompatibilityMetadata": CandidateCompatibilityMetadata;
   "CandidateCreate": CandidateCreate;
   "CandidateListResponse": CandidateListResponse;
   "CandidateMigrationReport": CandidateMigrationReport;
@@ -4387,6 +4407,7 @@ export interface OmiApiSchemas {
   "MemoryLayer": MemoryLayer;
   "MemoryLinkSpec": MemoryLinkSpec;
   "MemoryMutationResponse": MemoryMutationResponse;
+  "MemoryReadStatusRequest": MemoryReadStatusRequest;
   "MemoryReviewItemResponse": MemoryReviewItemResponse;
   "MemorySummaryRatingResponse": MemorySummaryRatingResponse;
   "MemoryValueRequest": MemoryValueRequest;
@@ -8551,6 +8572,17 @@ export interface OmiApiPaths {
       operationId: "update_memory_baseline_v3_memories__memory_id__baseline_patch";
       responses: {
         "200": MemoryMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories/{memory_id}/read": {
+    patch: {
+      operationId: "update_memory_read_status_v3_memories__memory_id__read_patch";
+      responses: {
+        "200": MemoryDB;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -16131,7 +16163,7 @@ export async function transcribe_voice_message_v2_voice_message_transcribe_post(
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_memories_v3_memories_get(query: { limit?: number, offset?: number, cursor?: string | null, device_scope?: string, client_device_id?: string | null }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, authorization?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<MemoryDB>> {
+export async function get_memories_v3_memories_get(query: { limit?: number, offset?: number, cursor?: string | null, include_archive?: boolean, device_scope?: string, client_device_id?: string | null }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, authorization?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<MemoryDB>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories`;
   const _params = query ? Object.entries(query)
@@ -16365,6 +16397,27 @@ export async function update_memory_baseline_v3_memories__memory_id__baseline_pa
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function update_memory_read_status_v3_memories__memory_id__read_patch(path: { memory_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MemoryReadStatusRequest, init?: OmiApiClientInit): Promise<MemoryDB> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v3/memories/${path.memory_id}/read`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function review_memory_v3_memories__memory_id__review_post(path: { memory_id: string }, query: { value: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/${path.memory_id}/review`;
@@ -16512,4 +16565,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 399 client methods generated.
+// Total: 400 client methods generated.

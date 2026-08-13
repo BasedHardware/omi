@@ -1,4 +1,4 @@
-"""Sync canonical-cohort memory items to Pinecone using user-scoped provider ids."""
+"""Sync universal canonical memory items to Pinecone using user-scoped provider ids."""
 
 from __future__ import annotations
 
