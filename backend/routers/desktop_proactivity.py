@@ -94,6 +94,7 @@ def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str,
     payload["messages"] = request.messages
     payload.pop("prompt_cache_key", None)
     payload.pop("prompt_cache_options", None)
+    payload.pop("metadata", None)
     record_fallback(
         component="llm_gateway",
         from_mode="gateway",
