@@ -503,10 +503,6 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
   const records = {}; const replayMembers = {}; const captureRoot = path.join(outRoot, "captures", "macos"); mkdirSync(captureRoot, { recursive: true });
   const stdoutLine = `NATIVE_SEMANTIC_BATCH_COMPLETE members=${limit}\n`;
   const observe = async (coordinate) => {
-    const foregroundMonitor = coordinate.kind === "ax_snapshot"
-      ? startForbiddenForegroundMonitor(prepared.fixture.bundleId, outRoot, coordinate.run_id)
-      : null;
-    let child = null;
     const readinessPath = path.join(outRoot, "runtime", coordinate.run_id, "semantic-readiness.json");
     mkdirSync(path.dirname(readinessPath), { recursive: true });
     const readiness = {
@@ -517,7 +513,16 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
       attempts: [],
       started_at: new Date().toISOString(),
     };
+    let foregroundMonitor = null;
+    let child = null;
+    let observation = null;
+    let primaryError = null;
+    let cleanupError = null;
+    let readinessWriteError = null;
     try {
+      foregroundMonitor = coordinate.kind === "ax_snapshot"
+        ? startForbiddenForegroundMonitor(prepared.fixture.bundleId, outRoot, coordinate.run_id)
+        : null;
       child = await launchFixture(prepared, coordinate, outRoot, readinessTimeoutMs);
       assertFixtureNotForeground(prepared.fixture.bundleId, coordinate, "fixture launch");
       const probeArgs = ["--pid", String(child.pid), "--bundle-id", coordinate.target.bundle_id, "--expected-bundle-id", coordinate.target.bundle_id, "--expected-process-name", coordinate.target.process_name, "--run-id", coordinate.run_id, "--source-core-sha", coordinate.source_shas.core, "--source-platform-sha", coordinate.source_shas.platform, "--coordinate", coordinateKey(coordinate), "--kind", coordinate.kind, "--landmark", coordinate.landmark, "--require-matrix", "--json"];
@@ -550,21 +555,38 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
         readiness.status = "ready";
       }
       const evidence = evidenceDocument(coordinate, probe);
-      return { evidence, sidecar: sidecarDocument(coordinate, probe, evidence) };
+      observation = { evidence, sidecar: sidecarDocument(coordinate, probe, evidence) };
     } catch (error) {
+      primaryError = error;
       readiness.status = "failed";
       readiness.error = String(error?.message || error).slice(0, 256);
-      throw error;
     } finally {
       readiness.finished_at = new Date().toISOString();
-      writeAtomic(readinessPath, readiness);
       try {
         if (child) await terminateExactChild(child);
+      } catch (error) {
+        cleanupError ||= error;
+      }
+      try {
         assertFixtureNotForeground(prepared.fixture.bundleId, coordinate, "semantic cleanup");
-      } finally {
+      } catch (error) {
+        cleanupError ||= error;
+      }
+      try {
         stopForbiddenForegroundMonitor(foregroundMonitor);
+      } catch (error) {
+        cleanupError ||= error;
+      }
+      try {
+        writeAtomic(readinessPath, readiness);
+      } catch (error) {
+        readinessWriteError = error;
       }
     }
+    if (primaryError) throw primaryError;
+    if (cleanupError) throw cleanupError;
+    if (readinessWriteError) throw readinessWriteError;
+    return observation;
   };
   for (const [index, coordinate] of selectedCoordinates.entries()) {
     rmSync(path.join(outRoot, "runtime", coordinate.run_id), { recursive: true, force: true });
