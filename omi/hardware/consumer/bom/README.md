@@ -122,7 +122,7 @@ These files complete the indie-maker build package — each addresses a specific
 | [`BATTERY-SPEC.md`](BATTERY-SPEC.md) | Battery procurement, shipping (UN3480/PI965), protection circuit | Task 6 |
 | [`ALTERNATE-PARTS.md`](ALTERNATE-PARTS.md) | Approved/candidate/rejected second-source parts | Task 10 |
 | [`COMPONENT-PLACEMENT.md`](COMPONENT-PLACEMENT.md) | Pick-and-place file format, rotation offsets | Task 2 |
-| [`../electrical/SWD-FLASHING.md`](../electrical/SWD-FLASHING.md) | J-Link wiring, pogo-pin SWD access | Task 4 |
+| [`../electrical/SWD-FLASHING-GUIDE.md`](../electrical/SWD-FLASHING-GUIDE.md) | J-Link wiring, pogo-pin SWD access | Task 4 |
 | [`../electrical/STENCIL-REFLOW-NOTES.md`](../electrical/STENCIL-REFLOW-NOTES.md) | Stencil design, reflow profile, WLCSP handling | Task 5 |
 | [`../electrical/RF-ANTENNA-NOTES.md`](../electrical/RF-ANTENNA-NOTES.md) | RF path, antenna, diplexer, matching network | Task 7 |
 | [`../electrical/IMPEDANCE-STACKUP.md`](../electrical/IMPEDANCE-STACKUP.md) | 4-layer HDI stackup, impedance targets, fab notes | Task 8 |

@@ -1,6 +1,6 @@
 # Build Your Own Omi — Omi Consumer
 
-↑ **[README](README.md)** | **[Kit Assembly](KIT-ASSEMBLY.md)** | **[Build Readiness](BUILD-READINESS.md)**
+↑ **[README](README.md)** | **[Kit Assembly Guide](KIT-ASSEMBLY-GUIDE.md)** | **[Build Readiness](BUILD-READINESS.md)**
 
 **This guide helps you pick the right build path based on your experience.**
 
@@ -47,7 +47,7 @@ The Omi factory already produces these boards at scale. Ordering pre-assembled s
 
 ### Build Steps (Kit)
 
-**See [KIT-ASSEMBLY.md](KIT-ASSEMBLY.md) for the detailed guide.** Summary:
+**See [KIT-ASSEMBLY-GUIDE.md](KIT-ASSEMBLY-GUIDE.md) for the detailed guide.** Summary:
 
 1. **Solder motor** — solder vibration motor wires (board unpowered)
 2. **Connect FPC** — mate BTB connector from FPC to mainboard
@@ -112,7 +112,7 @@ Pricing depends on quantity. Expect ~$80–120/unit at 10+ units.
 7. Order battery — [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) (dangerous goods shipping, allow 2–4 weeks)
 8. Order CNC enclosure from a machining service
 9. Receive boards → inspect → X-ray verify WLCSP joints
-10. Flash firmware via J-Link SWD — [SWD-FLASHING.md](electrical/SWD-FLASHING.md)
+10. Flash firmware via J-Link SWD — [SWD-FLASHING-GUIDE.md](electrical/SWD-FLASHING-GUIDE.md)
 11. Solder battery, connect FPC, assemble into enclosure
 12. Test (BLE, Wi-Fi, mic, IMU, charging)
 
@@ -127,7 +127,7 @@ Pricing depends on quantity. Expect ~$80–120/unit at 10+ units.
 | [FPC-FAB-NOTES.md](electrical/FPC-FAB-NOTES.md) | Flex fab engineer | FPC fabrication, stiffener, bend radius, quality checks |
 | [RF-ANTENNA-NOTES.md](electrical/RF-ANTENNA-NOTES.md) | RF engineer | RF architecture, switch control, enclosure RF strategy |
 | [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | Everyone | Battery selection, safety, shipping compliance |
-| [SWD-FLASHING.md](electrical/SWD-FLASHING.md) | Everyone | Debug probe wiring, test points, firmware flashing |
+| [SWD-FLASHING-GUIDE.md](electrical/SWD-FLASHING-GUIDE.md) | Everyone | Debug probe wiring, test points, firmware flashing |
 | [ALTERNATE-PARTS.md](bom/ALTERNATE-PARTS.md) | Sourcing engineer | Substitute parts (approved, candidate, rejected) |
 
 ---
@@ -152,7 +152,7 @@ Get firmware hex files from:
 - **Pre-built releases:** [github.com/BasedHardware/omi/releases](https://github.com/BasedHardware/omi/releases) — download `net_core.hex` and `app_core.hex` matching your hardware revision (v1.2)
 - **Build from source:** Follow the [firmware build guide](https://docs.omi.me/doc/developer/firmware/Compile_firmware) — requires nRF Connect SDK
 
-See [SWD-FLASHING.md](electrical/SWD-FLASHING.md) for complete instructions. Quick summary:
+See [SWD-FLASHING-GUIDE.md](electrical/SWD-FLASHING-GUIDE.md) for complete instructions. Quick summary:
 
 ```bash
 # Download nrfutil from nordicsemi.com, then:

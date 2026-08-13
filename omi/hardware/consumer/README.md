@@ -62,8 +62,8 @@ The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Bui
 
 ### Quick Links
 
-- **Kit assembly guide:** [KIT-ASSEMBLY.md](KIT-ASSEMBLY.md)
-- **SWD flashing:** [SWD-FLASHING.md](electrical/SWD-FLASHING.md)
+- **Kit assembly guide:** [KIT-ASSEMBLY-GUIDE.md](KIT-ASSEMBLY-GUIDE.md)
+- **SWD flashing:** [SWD-FLASHING-GUIDE.md](electrical/SWD-FLASHING-GUIDE.md)
 - **Build readiness:** [BUILD-READINESS.md](BUILD-READINESS.md)
 - **Firmware source:** [omi/firmware/](../../firmware/)
 - **Online docs:** [docs.omi.me](https://docs.omi.me/doc/hardware/consumer)
@@ -79,7 +79,7 @@ The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Bui
 | [FPC-FAB-NOTES.md](electrical/FPC-FAB-NOTES.md) | FPC fabrication, bend radius, quality |
 | [RF-ANTENNA-NOTES.md](electrical/RF-ANTENNA-NOTES.md) | RF architecture, switch control, enclosure strategy |
 | [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | Battery selection, safety, shipping |
-| [SWD-FLASHING.md](electrical/SWD-FLASHING.md) | Debug probe wiring, test points, firmware flashing |
+| [SWD-FLASHING-GUIDE.md](electrical/SWD-FLASHING-GUIDE.md) | Debug probe wiring, test points, firmware flashing |
 | [ALTERNATE-PARTS.md](bom/ALTERNATE-PARTS.md) | Substitute parts (approved / candidate / rejected) |
 
 ## Directory Structure
@@ -88,7 +88,7 @@ The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Bui
 consumer/
 ├── README.md                  ← you are here
 ├── BUILD-GUIDE.md             ← start here: pick your build path
-├── KIT-ASSEMBLY.md            ← step-by-step for Kit buyers
+├── KIT-ASSEMBLY-GUIDE.md            ← step-by-step for Kit buyers
 ├── BUILD-READINESS.md   ← readiness overview & feasibility
 ├── LICENSE
 │
@@ -99,7 +99,7 @@ consumer/
 │   │   └── schematic.pdf
 │   ├── charger-board/         ← charging dock PCB (v1.0)
 │   ├── fpc-board/             ← flex PCB (v1.0)
-│   ├── SWD-FLASHING.md    ← firmware flashing guide
+│   ├── SWD-FLASHING-GUIDE.md    ← firmware flashing guide
 │   ├── STENCIL-REFLOW-NOTES.md
 │   ├── IMPEDANCE-STACKUP.md
 │   ├── RF-ANTENNA-NOTES.md

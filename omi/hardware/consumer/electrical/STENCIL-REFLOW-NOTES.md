@@ -225,7 +225,7 @@ Request a DFM (Design for Manufacturability) review from the CM before build. **
 
 After visual/X-ray inspection, verify basic functionality:
 1. **Power-on:** Apply 3.7V to VBAT — current draw should be 1–5mA (sleep, no firmware running) or 10–20mA (active BLE advertising). Measure at stable battery voltage (3.7V ±0.1V). Current >50mA with no firmware indicates a short — disconnect immediately.
-2. **SWD connection:** Connect J-Link — nRF5340 should respond (see `SWD-FLASHING.md`)
+2. **SWD connection:** Connect J-Link — nRF5340 should respond (see `SWD-FLASHING-GUIDE.md`)
 3. **BLE advertising:** After firmware flash, device should appear in nRF Connect app scan
 4. **IMU response:** Read LSM6DS3TR-C WHO_AM_I register (0x0F) via SWD — should return 0x69
 5. **Flash access:** Read JEDEC ID from NAND (U7) and SPI flash (U12) — should match datasheets

@@ -1,6 +1,6 @@
 # Build Readiness — Omi Consumer
 
-↑ **[Build Guide](BUILD-GUIDE.md)** | **[Kit Assembly](KIT-ASSEMBLY.md)** | **[README](README.md)**
+↑ **[Build Guide](BUILD-GUIDE.md)** | **[Kit Assembly Guide](KIT-ASSEMBLY-GUIDE.md)** | **[README](README.md)**
 
 **Can an indie maker build their own Omi device?** Yes — with the right path.
 
@@ -23,7 +23,7 @@ But you don't need to build it from scratch. The Omi factory already produces th
 
 **Start here → [BUILD-GUIDE.md](BUILD-GUIDE.md)** — detailed instructions for all three paths.
 
-**Kit assembly → [KIT-ASSEMBLY.md](KIT-ASSEMBLY.md)** — step-by-step guide for Kit buyers.
+**Kit assembly → [KIT-ASSEMBLY-GUIDE.md](KIT-ASSEMBLY-GUIDE.md)** — step-by-step guide for Kit buyers.
 
 ---
 
@@ -35,8 +35,8 @@ Design files and manufacturing references for the Omi Consumer device are open-s
 
 | What You Need | File | Status |
 |--------------|------|--------|
-| Assembly steps | [KIT-ASSEMBLY.md](KIT-ASSEMBLY.md) | ✅ Documented |
-| Firmware flashing | [SWD-FLASHING.md](electrical/SWD-FLASHING.md) | ✅ Documented |
+| Assembly steps | [KIT-ASSEMBLY-GUIDE.md](KIT-ASSEMBLY-GUIDE.md) | ✅ Documented |
+| Firmware flashing | [SWD-FLASHING-GUIDE.md](electrical/SWD-FLASHING-GUIDE.md) | ✅ Documented |
 | Battery safety | [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | ✅ Documented |
 | Build path selection | [BUILD-GUIDE.md](BUILD-GUIDE.md) | ✅ Documented |
 
