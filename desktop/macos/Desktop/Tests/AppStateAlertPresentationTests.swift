@@ -102,6 +102,67 @@ final class AppStateAlertPresentationTests: XCTestCase {
       recorder.presentations,
       [.init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window)])
   }
+
+  func testPresentableShellWindowRequiresTheAppToBeActive() {
+    let window = NSWindow()
+    XCTAssertNil(AppKitSheetAlertPresenter.presentableShellWindow(window, isActive: false))
+    XCTAssertNil(AppKitSheetAlertPresenter.presentableShellWindow(nil, isActive: true))
+  }
+
+  func testSheetPresenterDefersWhileTheShellAlreadyOwnsASheet() async {
+    let windowSource = WindowSource()
+    let recorder = SheetPresentationRecorder()
+    let window = NSWindow()
+    var hostCanAccept = false
+    let presenter = AppKitSheetAlertPresenter(
+      shellWindowProvider: { windowSource.window },
+      sheetPresenter: recorder.present,
+      revealMainWindow: { windowSource.window = window },
+      canHostSheet: { _ in hostCanAccept })
+
+    presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
+    presenter.present(title: "Couldn't Start Transcription", message: "Retry or switch input devices.")
+
+    XCTAssertTrue(recorder.presentations.isEmpty)
+
+    // The requests are not dropped while the shell owns a sheet; once the
+    // sheet ends (the host check passes again) the queued alerts drain in order.
+    hostCanAccept = true
+    NotificationCenter.default.post(name: NSWindow.didEndSheetNotification, object: window)
+    await Task.yield()
+    await Task.yield()
+
+    XCTAssertEqual(
+      recorder.presentations,
+      [
+        .init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window),
+        .init(title: "Couldn't Start Transcription", message: "Retry or switch input devices.", window: window),
+      ])
+  }
+
+  func testSheetPresenterDefersWhileTheShellOwnsASheetThenRevealsWhenNoneRemains() {
+    let windowSource = WindowSource()
+    let recorder = SheetPresentationRecorder()
+    var revealCount = 0
+    let presenter = AppKitSheetAlertPresenter(
+      shellWindowProvider: { windowSource.window },
+      sheetPresenter: recorder.present,
+      revealMainWindow: { revealCount += 1 },
+      canHostSheet: { $0.attachedSheet == nil })
+
+    presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
+
+    XCTAssertTrue(recorder.presentations.isEmpty)
+    XCTAssertEqual(revealCount, 1)
+
+    let window = NSWindow()
+    windowSource.window = window
+    NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+
+    XCTAssertEqual(
+      recorder.presentations,
+      [.init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window)])
+  }
 }
 
 @MainActor
