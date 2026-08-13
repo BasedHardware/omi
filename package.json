@@ -12,6 +12,7 @@
     "test": "bun test",
     "test:node": "bun test",
     "test:postgres": "bun run scripts/postgres-test.ts test",
+    "test:postgres:preserve": "bun run scripts/postgres-test.ts test --preserve",
     "test:postgres:setup": "bun run scripts/postgres-test.ts setup",
     "test:postgres:status": "bun run scripts/postgres-test.ts status",
     "test:postgres:teardown": "bun run scripts/postgres-test.ts teardown",

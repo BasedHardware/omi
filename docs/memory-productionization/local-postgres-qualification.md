@@ -28,7 +28,7 @@ From the platform repository root:
 ```sh
 bun run test:postgres:setup
 bun run test:postgres:status
-bun run test:postgres
+bun run test:postgres:preserve
 bun run test:postgres:teardown
 ```
 
@@ -38,12 +38,24 @@ binds PostgreSQL to an OS-assigned `127.0.0.1` port, verifies the pinned amd64 i
 PostgreSQL 18 data path, labels, mount, and loopback binding, and prints no credential or
 connection URL.
 
-`test` reapplies checksummed migrations, exercises the real Postgres.js transaction
-adapter, and runs the same client corpus in pinned Bun 1.3.14 and Node 24.19.0 amd64
-containers. It refuses ambient `DATABASE_URL` and `PG*` selectors.
+`test:postgres:preserve` reapplies checksummed migrations, exercises the real Postgres.js
+transaction adapter, and runs the same client corpus in pinned Bun 1.3.14 and Node
+24.19.0 amd64 containers. It refuses ambient `DATABASE_URL` and `PG*` selectors.
 
 `teardown` removes only the owned container, stops the managed profile only when this
 workflow started it, and preserves the labelled volume. A later setup reuses that data.
+
+For the normal hermetic one-shot gate, run:
+
+```sh
+bun run test:postgres
+```
+
+That command always destroys its exactly labelled synthetic container, volume, state,
+and generated credentials after the gate, including when the test or runtime-parity
+step fails. This is the default so repeated qualification runs cannot accumulate an
+unbounded PostgreSQL data volume. Use the explicit `setup` / `test:postgres:preserve` /
+`teardown` sequence only when persistent local state is useful for debugging.
 
 ## Destructive reset
 

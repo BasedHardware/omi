@@ -11,6 +11,7 @@ import {
   postgresContainerRunArguments,
   postgresTestConnectionString,
   postgresTestPaths,
+  postgresTestRetention,
   withPostgresTestPort,
   withPostgresTestRuntime,
   ambientPostgresSelectors,
@@ -56,5 +57,11 @@ describe("hermetic PostgreSQL lifecycle plan", () => {
     expect(connection).not.toContain(String(process.env["DATABASE_URL"]));
     expect(ambientPostgresSelectors({ DATABASE_URL: "secret", PGHOST: "prod", PGSERVICE: "live", PATH: "/bin" }))
       .toEqual(["DATABASE_URL", "PGHOST", "PGSERVICE"]);
+  });
+
+  test("destroys one-shot test storage by default and preserves only by explicit opt-in", () => {
+    expect(postgresTestRetention(undefined)).toBe("destroy");
+    expect(postgresTestRetention("--preserve")).toBe("preserve");
+    expect(() => postgresTestRetention("--keep")).toThrow("postgres_test_invalid_test_option");
   });
 });

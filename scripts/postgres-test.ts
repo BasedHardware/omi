@@ -12,7 +12,8 @@ import {
   createPostgresTestState, dockerCommand, parsePostgresTestState,
   ambientPostgresSelectors,
   postgresContainerRunArguments, postgresTestConnectionString, postgresTestPaths,
-  withPostgresTestPort, withPostgresTestRuntime, type PostgresTestState,
+  postgresTestRetention, withPostgresTestPort, withPostgresTestRuntime,
+  type PostgresTestState,
 } from "./postgres-test-lifecycle";
 import {
   ensureOwnedVolume, inspectOwnedContainer, inspectOwnedVolume,
@@ -367,7 +368,7 @@ const runRuntimeParity = (state: PostgresTestState): void => {
   runParityContainer(state, corpus, clientEnvironmentFile, "node", POSTGRES_TEST_NODE_IMAGE);
 };
 
-const testPostgres = async (): Promise<void> => {
+const testPostgres = async (preserve: boolean): Promise<void> => {
   const prepared = await setup();
   const childEnvironment = currentEnvironment();
   childEnvironment["OMI_TEST_POSTGRES_URL"] = postgresTestConnectionString(prepared.state, passwordFrom(prepared.state));
@@ -379,7 +380,11 @@ const testPostgres = async (): Promise<void> => {
     if (result.exitCode !== 0) process.exitCode = result.exitCode;
     if (result.exitCode === 0) runRuntimeParity(prepared.state);
   } finally {
-    if (prepared.started) teardown();
+    if (preserve) {
+      if (prepared.started) teardown();
+    } else {
+      destroy("--yes");
+    }
   }
 };
 
@@ -389,10 +394,12 @@ const main = async (): Promise<void> => {
   switch (action) {
     case "setup": await setup(); break;
     case "status": status(); break;
-    case "test": await testPostgres(); break;
+    case "test":
+      await testPostgres(postgresTestRetention(confirmation) === "preserve");
+      break;
     case "teardown": teardown(); break;
     case "destroy": destroy(confirmation); break;
-    default: return closedError("usage_setup_status_test_teardown_destroy");
+    default: return closedError("usage_setup_status_test_test_preserve_teardown_destroy");
   }
 };
 

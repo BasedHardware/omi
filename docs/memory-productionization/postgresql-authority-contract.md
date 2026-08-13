@@ -288,8 +288,9 @@ pool, lock, isolation, cancellation, backend-termination, or migration gates.
 
 The hermetic entrypoint is `bun run test:postgres`. It starts a loopback-only database
 of the ratified major from a digest-pinned image, uses randomized synthetic credentials
-and an exactly labelled persistent volume, refuses ambient PostgreSQL selectors, and
-removes only its own resources. The developer setup, status, non-destructive teardown,
+and an exactly labelled disposable volume, refuses ambient PostgreSQL selectors, and
+destroys only its own resources after success or failure. Explicit persistent debugging
+uses `test:postgres:preserve`. The developer setup, status, non-destructive teardown,
 restart, and destructive reset workflow is documented in
 `local-postgres-qualification.md`.
 

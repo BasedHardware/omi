@@ -34,6 +34,14 @@ export interface PostgresTestPaths {
   readonly runsRoot: string;
 }
 
+export type PostgresTestRetention = "destroy" | "preserve";
+
+export const postgresTestRetention = (option: string | undefined): PostgresTestRetention => {
+  if (option === undefined) return "destroy";
+  if (option === "--preserve") return "preserve";
+  throw new TypeError("postgres_test_invalid_test_option");
+};
+
 export const ambientPostgresSelectors = (
   environment: Readonly<Record<string, string | undefined>>,
 ): readonly string[] => Object.freeze(Object.keys(environment)
