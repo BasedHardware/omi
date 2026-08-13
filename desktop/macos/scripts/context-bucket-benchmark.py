@@ -9,6 +9,7 @@ keeps lifecycle-only cases explicitly separated.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
@@ -58,10 +59,24 @@ def map_case(case: dict) -> dict[str, str]:
                 f"fact:{fact['id']} {fact['statement']} "
                 f"[evidence: {evidence}; refs: {json.dumps(refs, separators=(',', ':'))}]"
             )
+    evaluation_time = datetime.fromisoformat(frame["capturedAt"].replace("Z", "+00:00"))
+    task_cutoff = evaluation_time + timedelta(hours=48)
+    tasks = sorted(
+        [task for task in synthetic.get("tasks", []) if task.get("status") == "open"],
+        key=lambda task: (
+            bool(
+                task.get("dueAt")
+                and datetime.fromisoformat(task["dueAt"].replace("Z", "+00:00")) > task_cutoff
+            ),
+            datetime.fromisoformat(task["dueAt"].replace("Z", "+00:00"))
+            if task.get("dueAt")
+            else datetime.max.replace(tzinfo=evaluation_time.tzinfo),
+            task.get("id", ""),
+        ),
+    )[:20]
     tasks = [
         {"description": task["description"], "due_at": task.get("dueAt")}
-        for task in synthetic.get("tasks", [])
-        if task.get("status") == "open"
+        for task in tasks
     ]
     return {
         "bucket_id": bucket["id"],
