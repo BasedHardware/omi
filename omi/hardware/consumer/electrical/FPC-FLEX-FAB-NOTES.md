@@ -18,6 +18,7 @@ The Omi FPC (Flexible Printed Circuit) connects the mainboard to the charger boa
 | **Surface finish** | ENIG recommended | KiCad design: unspecified. ENIG recommended for BTB connector (0.35mm pitch) soldering reliability. J1 charging contact ring may benefit from hard-gold plating (>10µ") if subject to repeated mating — specify separately if needed. |
 | **Cover layer** | **Polyimide coverlay** (not solder mask) | Coverlay provides better flex life than liquid solder mask |
 | **Board version** | v1.1 | Per factory BOM (gerber zip filename says v1.0 — BOM is authoritative) |
+| **IPC class** | IPC-6013 Class 2 | Standard commercial flex; Class 3 for medical/aerospace only |
 
 ### FPC Stackup Breakdown
 
@@ -86,7 +87,11 @@ For the Omi FPC, which bends during assembly and may flex slightly in use, cover
 
 ## Minimum Bend Radius
 
-These are **minimum design targets** — confirm with your fab for the actual stackup and copper type. Larger radii are always preferred.
+These are **minimum design targets** per IPC-2223C (Sectional Design Standard for Flexible Printed Boards). Confirm with your fab for the actual stackup and copper type. Larger radii are always preferred.
+
+**⚠ Semi-flex warning:** At ~0.29mm with 1oz copper on both sides, this FPC is relatively stiff. It behaves more like a semi-flex than a thin flex. The bend radii below account for this — do not assume thin-flex rules apply.
+
+**Grain direction:** Specify RA copper with the grain direction **perpendicular to the bend axis**. RA copper's grain structure gives superior bend life when bent across the grain. If the fab cannot control grain orientation, increase bend radii by 25%.
 
 | Condition | Minimum Bend Radius | Notes |
 |-----------|---------------------|-------|
@@ -141,7 +146,7 @@ These are **minimum design targets** — confirm with your fab for the actual st
 | Annular ring | ≥0.1mm | Standard; verify fab can hold for any vias present |
 | Coverlay expansion | Allow 50–75µm for thermal expansion during lamination | Coverlay openings may shift — pad openings should be oversized by this margin |
 | Paste reduction for J3 | 10–15% paste reduction on 0.35mm pitch BTB pads | Prevents bridging during reflow |
-| Panelization | V-score or tab-route acceptable | FPC is small (~29×13mm) — panel multiple units |
+| Panelization | **Routed/laser-cut with breakaway tabs** (NOT V-score — V-score cracks flex) | FPC is small (~29×13mm) — panel multiple units |
 | Fiducials | Add at least 2 global fiducials if not already in gerber | Required for machine-placed J3 connector |
 
 ### Assembly Notes

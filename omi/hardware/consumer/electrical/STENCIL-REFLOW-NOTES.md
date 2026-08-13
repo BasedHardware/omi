@@ -78,13 +78,13 @@ FPC flex board has only 2 SMD connectors (J1, J3). Stencil may not be needed if 
 
 ### Critical Notes
 
-1. **Maximum peak temperature: 260°C absolute.** Nordic lists both nRF5340 WLCSP-95 and nRF7002 WLCSP-81 as rated for 260°C max reflow. Target 240°C ±5°C at the joint to maintain margin.
+1. **Maximum peak temperature: 260°C absolute** (per Nordic nRF5340 Product Specification v2.1 §6.2, nRF7002 Product Specification v1.3 §5.2 — verify against your lot's datasheet revision). Target 240°C ±5°C at the joint to maintain margin. **These are targets for the CM to validate** — actual profile depends on oven, board mass, and panel size.
 
-2. **Moisture sensitivity: MSL-1.** Nordic classifies both nRF5340 WLCSP and nRF7002 WLCSP as **MSL-1** (unlimited floor life, no bake required). However, always verify from the actual package label on received reels — classification can vary by package revision or supplier relabeling.
+2. **Moisture sensitivity:** Nordic classifies nRF5340 WLCSP and nRF7002 WLCSP as **MSL-1** per their product specifications. **Always verify from the actual reel label** — classification can vary by revision or repackaging. Handle per **J-STD-033** (Handling, Packing, Shipping and Use of Moisture/Reflow Sensitive SMDs):
    - MSL-1: Unlimited floor life (no bake required)
-   - If reel label shows MSL-3 (unlikely for WLCSP but possible for repackaged stock): Bake at 125°C for 24 hours before reflow, or use within 168 hours of opening dry pack
-   - Check CSNP4GCR01-DPW (U7, NAND flash, LGA-8) — likely MSL-3; verify and handle accordingly
-   - Check all other DSBGA parts (U4, U6, U11, U13, U15) for their MSL ratings
+   - If reel label shows MSL-3: Bake per J-STD-033 Table 4-1 (typically 125°C/24h) or use within floor life of dry pack opening
+   - CSNP4GCR01-DPW (U7, NAND flash, LGA-8) — likely MSL-3; verify reel label and handle accordingly
+   - Check all DSBGA parts (U4, U6, U11, U13, U15) reel labels for their MSL ratings
 
 3. **Dual-side assembly required** — Mainboard has 24 bottom-side components **including 5 ICs**. Assembly sequence:
    - **Pass 1:** Print paste on bottom, place bottom components, reflow

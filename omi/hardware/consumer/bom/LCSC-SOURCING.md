@@ -87,8 +87,8 @@ These parts have LCSC numbers but were out of stock at search time. For each, a 
 | Stencil (mainboard) | ~$15–25 | 0.075–0.10mm, electropolished |
 | X-ray inspection | ~$10–20 per board | Required for WLCSP QC |
 | Consigned parts shipping to JLCPCB | ~$30–50 | DHL/FedEx to Shenzhen |
-| Component cost (LCSC parts) | ~$25–40 per board | Dominated by nRF5340 (~$8) and nRF7002 (~$6) |
-| Component cost (consigned parts) | ~$30–50 per board | nRF7002 WLCSP, flash, mic, connectors |
+| Component cost (LCSC parts) | ~$25–40 per board | Dominated by nRF5340 (~$8 if LCSC restocks) |
+| Component cost (consigned parts) | ~$40–70 per board | nRF5340, nRF7002, flash, mic, connectors (most expensive parts are consigned) |
 | **Total per board (prototype)** | **~$150–250** | Decreases significantly at >50 units |
 
 ### Consignment Process
@@ -131,6 +131,19 @@ For the upload: filter out non-component rows (pcba-reference, assembly-header, 
 
 ## Data Source
 
-LCSC part numbers were searched via LCSC.com product search in August 2026. Stock status is a snapshot and changes frequently. **Always verify current stock and pricing before ordering.**
+LCSC part numbers were searched via LCSC.com product search on 2026-08-11. Stock status is a snapshot and changes frequently. **Always verify current stock and pricing before ordering.**
 
-LCSC part numbers are in each board's BOM CSV (`LCSC_PN`, `JLC_Status`, `Stock_Note` columns). For JLCPCB upload, rename `LCSC_PN` → `LCSC Part #` and filter to component rows only.
+LCSC part numbers are in each board's BOM CSV (`LCSC_PN`, `JLC_Status`, `Stock_Note` columns). For JLCPCB upload, rename `LCSC_PN` → `LCSC Part #` and filter to component rows only. **All 63 MPNs with their LCSC status are in the per-board BOM CSVs** — this doc covers only the hard-to-source and out-of-stock items.
+
+## Pre-Order Checklist
+
+Before placing a PCBA order:
+
+1. **Verify LCSC stock** for all 48 parts — stock changes daily; re-check within 48h of ordering
+2. **Source consigned parts** from authorized distributors — allow 1–2 weeks for DigiKey/Mouser shipping
+3. **Confirm JLCPCB assembly type** — Standard (not Economic) required for mainboard
+4. **Request JLCPCB DFM review** before paying — verify they accept 0.6mm 4-layer HDI with WLCSP
+5. **Order 20–30% extra** consigned parts for attrition (varies by package — JLCPCB shows per-line minimums)
+6. **Budget prototype overbuild** — order 5+ boards even if you need 1–2, for yield risk and rework impracticality on WLCSP
+7. **Verify RoHS compliance** — all LCSC parts are marked RoHS; confirm consigned parts meet same standard
+8. **Check JLCPCB consignment rules** — customs deposit may apply for international shipments; storage fees after 30 days

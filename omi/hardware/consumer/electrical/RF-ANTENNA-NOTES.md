@@ -32,7 +32,7 @@ nRF7002 (WiFi 5GHz) ────────────────────
 1. **BLE TX/RX (2.4GHz):** nRF5340 ANT pin (D1) → L3/L4 radio-side match (2.2nH, brings ANT pin to 50Ω) → RF_LE net → RF Switch U10 (one port) → Diplexer U3 low-band (2.4GHz) port → Antenna
 2. **WiFi 2.4GHz TX/RX:** nRF7002 2.4GHz pins → RF Switch U10 (other port) → Diplexer U3 low-band port → Antenna
 3. **WiFi 5GHz TX/RX:** nRF7002 5GHz pins → Diplexer U3 high-band (5GHz) port → Antenna
-4. **Coexistence:** BLE and WiFi 2.4GHz share the 2.4GHz low-band path through the RF switch. The switch (U10, controlled by RFSW_EN GPIO from nRF5340) selects which radio has antenna access. The coexistence interface (COEX_REQ, COEX_STATUS, COEX_GRANT) arbitrates access — it must prevent both simultaneous 2.4GHz transmit and protect BLE RX from WiFi TX desense/saturation.
+4. **Coexistence:** BLE and WiFi 2.4GHz share the 2.4GHz low-band path through the RF switch. The switch (U10) is controlled by `SW_CTRL0` from the nRF7002 coexistence subsystem (verified from KiCad PCB — see truth table below). The coexistence interface (COEX_REQ, COEX_STATUS, COEX_GRANT) arbitrates access — it must prevent simultaneous 2.4GHz transmit and protect BLE RX from WiFi TX desense/saturation.
 
 ### RF Switch Control (U10, FM8625H)
 
@@ -59,7 +59,7 @@ nRF7002 (WiFi 5GHz) ────────────────────
 | Path | Components in Chain | Estimated Insertion Loss | Notes |
 |------|---------------------|--------------------------|-------|
 | BLE 2.4GHz | L3/L4 match + RF switch (U10) + diplexer (U3) low-band | ~1.5–2.5 dB total | Highest loss — three components in chain |
-| WiFi 2.4GHz | RF switch (U10) + diplexer (U3) low-band | ~1.0–2.0 dB total | No matching network in path |
+| WiFi 2.4GHz | RF switch (U10) + diplexer (U3) low-band | ~1.0–2.0 dB total | nRF7002 has internal matching; no external matching network on this path |
 | WiFi 5GHz | Diplexer (U3) high-band only | ~0.5–1.0 dB | Shortest path, lowest loss |
 
 **⚠ These are estimates.** Request S-parameter data from Murata (U3) and FUMAN (U10) for accurate link budgets. Measure actual insertion loss with a VNA on populated boards.
@@ -72,7 +72,7 @@ The following components are part of the RF matching network and antenna path. *
 |-----|-----|-------|------|-------------------|
 | L3, L4 | CHQ0603T-2N2B-HU | 2.2nH | BLE radio-side match (nRF5340 ANT → 50Ω) | **HIGH** — Q >15 at 2.4GHz, SRF >6GHz required |
 | C12, C15 | CC0201BRNPO9BNR70 | 0.7pF | BLE matching/tuning | **HIGH** — NPO/C0G only, ±0.05pF absolute tolerance, 50V min |
-| C49, C50 | CC0201BRNPO9BNR70 | 0.7pF | WiFi matching/tuning | **HIGH** — same as C12/C15 |
+| C49, C50 | CC0201BRNPO9BNR70 | 0.7pF | RF matching/tuning (same value as C12/C15 — verify placement in schematic for BLE vs WiFi path) | **HIGH** — same as C12/C15 |
 | U3 | LFD182G45DCHD277 | Diplexer | Band splitting | **CRITICAL** — no equivalent; must use exact part |
 | U10 | FM8625H | RF switch | Antenna selection | **CRITICAL** — no equivalent; must use exact part |
 | R34–R37 | RC0201FR-070RL | 0Ω | RF path configuration | **LOW** — standard 0201 0Ω jumper; population determines RF configuration |
@@ -115,6 +115,8 @@ The Omi device uses a **CNC aluminium enclosure** (front cover case-a, back cove
 - **Acoustic ports as RF windows (hypothesis — not measured):** The microphone holes in the enclosure may serve as RF apertures — do not block them with conductive material. A CNC aluminum enclosure needs a verified RF window/slot strategy; this assumption should be confirmed with VNA measurement in the final enclosure.
 
 **⚠ If using a different enclosure:** The RF matching network may need re-tuning. This requires a VNA (Vector Network Analyzer) and expertise in antenna matching. Without re-tuning, expect degraded BLE range and WiFi throughput.
+
+**⚠ Regulatory:** Any change to the antenna, enclosure, or RF matching network invalidates the original FCC/CE/IC certification (if one exists). A modified design requires re-testing per FCC Part 15.247 (2.4 GHz), Part 15.407 (5 GHz UNII), and ETSI EN 300 328 / EN 301 893. Budget $5–15K for a pre-scan at an accredited test lab before production.
 
 ### Antenna Testing
 

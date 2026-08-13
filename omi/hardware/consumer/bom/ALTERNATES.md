@@ -149,16 +149,17 @@ These parts have no pin-compatible alternate. Plan inventory accordingly.
 
 ### U12: SPI Flash (P25Q16SH-UXH-IR, USON-8 3×2mm — back side)
 
-⚠️ **Candidate only.** Other 128Mbit SPI NOR flash in USON-8 may work but require:
+⚠️ **Candidate only.** The P25Q16SH is a **16 Mbit** (2 MB) SPI NOR flash. Other 16Mbit SPI NOR flash in USON-8 may work but require:
 - Exact USON-8 (3×2mm) package and pinout match
+- **16 Mbit capacity** (not 128 Mbit — firmware expects 2 MB)
 - SFDP (Serial Flash Discoverable Parameters) table compatibility
 - QE (Quad Enable) bit behavior matching for firmware
 - Same or better read/erase performance
 
 | MPN | Manufacturer | Status | Notes |
 |-----|-------------|--------|-------|
-| W25Q128JWSIQ (Winbond) | Winbond | ⚠️ **Unverified** | 128Mbit USON-8 (3×2mm). Widely available on LCSC. Requires firmware SFDP/QE bit verification. |
-| GD25Q128EWIGR (GigaDevice) | GigaDevice | ⚠️ **Unverified** | 128Mbit USON-8. LCSC available. Same caveat on SFDP/QE. |
+| W25Q16JWSSIQ (Winbond) | Winbond | ⚠️ **Unverified** | 16Mbit USON-8 (3×2mm). Verify LCSC availability and SFDP/QE compatibility. |
+| GD25Q16CEIGR (GigaDevice) | GigaDevice | ⚠️ **Unverified** | 16Mbit USON-8. Verify package is 3×2mm (not 4×4mm WSON). |
 
 **If OOS:** Source Puya P25Q16SH from Puya Semi direct. LCSC has `-SSH` variant (SOIC-8) — **wrong package**, do not use.
 
