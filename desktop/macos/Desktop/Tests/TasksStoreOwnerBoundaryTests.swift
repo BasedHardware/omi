@@ -42,6 +42,34 @@ private final class TasksStoreOperationProbe {
 
 final class TasksStoreOwnerBoundaryTests: XCTestCase {
   @MainActor
+  func testCanonicalTaskResolutionRepublishesCompletedLocalTaskBeforeRemoteFetch() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+    let completed = task(id: "completed-chat-card", completed: true)
+    var remoteFetches = 0
+
+    let resolved = await store.resolveCanonicalTask(
+      id: completed.id,
+      operations: TasksStore.OwnerBoundOperations(
+        fetchTaskDetail: { _, _ in
+          remoteFetches += 1
+          return nil
+        },
+        loadTaskDetail: { id, ownerID in
+          XCTAssertEqual(id, completed.id)
+          XCTAssertEqual(ownerID, "owner-a")
+          return completed
+        }
+      )
+    )
+
+    XCTAssertEqual(resolved, completed)
+    XCTAssertEqual(store.completedTasks, [completed])
+    XCTAssertTrue(store.incompleteTasks.isEmpty)
+    XCTAssertEqual(remoteFetches, 0)
+  }
+
+  @MainActor
   func testNoDeadlinePaginationUsesAPIConsumptionOffsetInsteadOfLocalPresentationCount() async {
     let store = TasksStore.shared
     await prepareOwnerBoundaryTest(store: store)
