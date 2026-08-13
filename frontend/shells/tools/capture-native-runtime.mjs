@@ -26,6 +26,7 @@ const coreRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const macRoot = path.join(coreRoot, "shells/macos");
 const iosRoot = path.join(coreRoot, "shells/ios");
 const foregroundGuard = path.join(coreRoot, "shells/tools/macos-foreground-guard.mjs");
+const forbiddenForegroundBundleIds = ["com.apple.iphonesimulator", "me.omi.proto.omiWebviewProto"];
 const safeId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
 const sha = /^[0-9a-f]{40}$/;
 const domains = new Set(["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"]);
@@ -139,7 +140,7 @@ function metadata(manifest) {
 
 function validateForegroundCustody(custody) {
   if (!custody || custody.schema !== "omi.macos-foreground-guard/v1" || custody.status !== 0 || custody.error !== null || custody.monitor_error !== null) throw new Error("runtime preparation lacks successful foreground custody");
-  if (custody.policy !== "sampled-macos-foreground-custody-20ms-target-250ms-probe-timeout-no-activation-request" || custody.target_interval_milliseconds !== 20 || custody.probe_timeout_milliseconds !== 250 || !Number.isInteger(custody.sample_count) || custody.sample_count < 1 || !Number.isFinite(custody.max_sample_gap_milliseconds) || custody.max_sample_gap_milliseconds < 0) throw new Error("runtime preparation foreground custody policy is malformed");
+  if (custody.policy !== "sampled-macos-forbidden-fixture-foreground-detection-20ms-target-250ms-probe-timeout-no-activation-request" || JSON.stringify(custody.forbidden_bundle_ids) !== JSON.stringify([...forbiddenForegroundBundleIds].sort()) || custody.target_interval_milliseconds !== 20 || custody.probe_timeout_milliseconds !== 250 || !Number.isInteger(custody.sample_count) || custody.sample_count < 1 || !Number.isFinite(custody.max_sample_gap_milliseconds) || custody.max_sample_gap_milliseconds < 0) throw new Error("runtime preparation foreground custody policy is malformed");
 }
 
 export function validateEvent(event) {
@@ -345,7 +346,7 @@ function runIos(manifest, outputDir) {
   const guardResult = path.join(outputDir, "foreground-guard.json");
   const stdoutPath = path.join(outputDir, "xcodebuild.stdout");
   const stderrPath = path.join(outputDir, "xcodebuild.stderr");
-  const guarded = spawnSync(process.execPath, [foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--", "xcodebuild", ...args], { cwd: path.join(iosRoot, "app"), env, encoding: "utf8", timeout: 310_000, maxBuffer: 16 * 1024 * 1024 });
+  const guarded = spawnSync(process.execPath, [foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","), "--", "xcodebuild", ...args], { cwd: path.join(iosRoot, "app"), env, encoding: "utf8", timeout: 310_000, maxBuffer: 16 * 1024 * 1024 });
   const finished = new Date();
   if (!existsSync(guardResult)) throw new Error("iOS runtime foreground guard produced no terminal receipt");
   const custody = readJson(guardResult, "iOS runtime foreground guard");
@@ -362,7 +363,7 @@ function runIos(manifest, outputDir) {
   const markerFile = path.join(exportDir, attachments[0].exportedFileName);
   if (!existsSync(markerFile) || !statSync(markerFile).isFile()) throw new Error("iOS runtime host marker bytes are missing");
   const marker = validateHostMarker(readJson(markerFile, "iOS runtime marker"), manifest);
-  return { marker, started, finished, argv: [process.execPath, foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--", "xcodebuild", ...args], stdout: result.stdout || "", stderr: result.stderr || "", commandTimeoutSeconds: 310, query, foregroundCustody: custody, buildCommands: { surfaces: [nodeBin, path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], surfaces_stdout_sha256: sha256(Buffer.from(bundle.stdout || "")), surfaces_stderr_sha256: sha256(Buffer.from(bundle.stderr || "")), flutter: [flutterBin, ...flutterArgs], flutter_stdout_sha256: sha256(Buffer.from(flutter.stdout || "")), flutter_stderr_sha256: sha256(Buffer.from(flutter.stderr || "")) } };
+  return { marker, started, finished, argv: [process.execPath, foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--forbid-bundle-ids", forbiddenForegroundBundleIds.join(","), "--", "xcodebuild", ...args], stdout: result.stdout || "", stderr: result.stderr || "", commandTimeoutSeconds: 310, query, foregroundCustody: custody, buildCommands: { surfaces: [nodeBin, path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], surfaces_stdout_sha256: sha256(Buffer.from(bundle.stdout || "")), surfaces_stderr_sha256: sha256(Buffer.from(bundle.stderr || "")), flutter: [flutterBin, ...flutterArgs], flutter_stdout_sha256: sha256(Buffer.from(flutter.stdout || "")), flutter_stderr_sha256: sha256(Buffer.from(flutter.stderr || "")) } };
 }
 
 function main() {

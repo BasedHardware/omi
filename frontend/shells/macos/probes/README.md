@@ -55,4 +55,6 @@ artifacts. `native_live` manifests fail closed at this producer boundary.
 Keyboard coverage is accepted only when every target transition is observed,
 Escape restores the bound focus identity, and the previously frontmost app is
 restored. AX coverage never passes `--activate`; the coordinator also verifies
-that the foreground application is unchanged across launch, probe, and cleanup.
+with a continuous bounded monitor that the fixture bundle never becomes the
+foreground application. Switching normally between unrelated user apps is
+allowed and is not treated as a capture failure.

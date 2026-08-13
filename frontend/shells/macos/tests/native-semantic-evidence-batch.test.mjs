@@ -104,12 +104,14 @@ test("semantic batch emits exact AX coverage and immutable prepared inputs", () 
 
 test("foreground classification fails closed and identifies a locked loginwindow", () => {
   const front = { status: 0, stdout: "ASN:0x0-0x1001:\n" };
-  assert.deepEqual(foregroundApplicationFromResults(front, { status: 0, stdout: '"LSDisplayName"="loginwindow"\n' }), { identity: "ASN:0x0-0x1001:", name: "loginwindow" });
-  const blocked = lockedGuiBlock({ identity: "ASN:0x0-0x1001:", name: "loginwindow" }, { core: coreSha, platform: platformSha }, manifest().coordinates);
+  const bundle = { status: 0, stdout: '"CFBundleIdentifier"="com.apple.loginwindow"\n' };
+  assert.deepEqual(foregroundApplicationFromResults(front, { status: 0, stdout: '"LSDisplayName"="loginwindow"\n' }, bundle), { identity: "ASN:0x0-0x1001:", name: "loginwindow", bundleId: "com.apple.loginwindow" });
+  const blocked = lockedGuiBlock({ identity: "ASN:0x0-0x1001:", name: "loginwindow", bundleId: "com.apple.loginwindow" }, { core: coreSha, platform: platformSha }, manifest().coordinates);
   assert.equal(blocked.status, "blocked_gui_locked");
-  assert.equal(lockedGuiBlock({ identity: "ASN:0x0-0x1234:", name: "Codex" }, { core: coreSha, platform: platformSha }, manifest().coordinates), null);
-  assert.throws(() => foregroundApplicationFromResults({ status: 1, stdout: "" }, { status: 0, stdout: "" }), /identity is unavailable/);
-  assert.throws(() => foregroundApplicationFromResults(front, { status: 1, stdout: "" }), /metadata is unavailable/);
+  assert.equal(lockedGuiBlock({ identity: "ASN:0x0-0x1234:", name: "Codex", bundleId: "com.openai.codex" }, { core: coreSha, platform: platformSha }, manifest().coordinates), null);
+  assert.throws(() => foregroundApplicationFromResults({ status: 1, stdout: "" }, { status: 0, stdout: "" }, bundle), /identity is unavailable/);
+  assert.throws(() => foregroundApplicationFromResults(front, { status: 1, stdout: "" }, bundle), /metadata is unavailable/);
+  assert.throws(() => foregroundApplicationFromResults(front, { status: 0, stdout: '"LSDisplayName"="Codex"\n' }, { status: 1, stdout: "" }), /bundle metadata is unavailable/);
 });
 
 test("prepared semantic ranges are immutable and cannot be widened on replay", () => {
