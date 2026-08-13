@@ -141,7 +141,7 @@ final class SearchResultsModel: ObservableObject {
     /// **Closed is the resting state, and that is the whole of a defect this surface shipped with.**
     /// The filter block is three full-width sections — time chips, a site row, a row of 46 pt app
     /// icons — and it sat above the results inside a panel whose ceiling is
-    /// `SearchLayout.maximumResultsBodyHeight`. It ate very nearly all of it. So the answer to a
+    /// `SearchLayout.defaultResultsBodyHeight`. It ate very nearly all of it. So the answer to a
     /// query was: a screenful of filter furniture, the word `RESULTS`, one row of cards, and the
     /// next row sliced by the panel's edge. A person who had just searched their own machine saw
     /// three of their hundred-and-nine screenshots without scrolling, under a stack of controls they
@@ -181,9 +181,18 @@ final class SearchResultsModel: ObservableObject {
 
     let loader = FrameLoader()
 
-    private let store: ContextStore?
+    /// **The capture database, asked for on every read rather than captured once.**
+    ///
+    /// A provider and not a `ContextStore?`, and the difference is the whole of a latent bug the main
+    /// window would have made permanent. The store opens lazily on the engine's own queue, so it is
+    /// routinely `nil` for the second or two after launch. While the search surface was rebuilt from
+    /// nothing on every open, a `nil` healed itself — the next open captured a store that was by then
+    /// open. The window is built once and kept for the life of the process, so the same code would
+    /// have captured `nil` **forever**: a surface that renders as permanently empty, with no error to
+    /// explain it and no path back.
+    private let store: () -> ContextStore?
 
-    init(store: ContextStore?) {
+    init(store: @escaping () -> ContextStore?) {
         self.store = store
     }
 
@@ -196,7 +205,7 @@ final class SearchResultsModel: ObservableObject {
         apps: [SearchAppFacet] = [],
         query: String = ""
     ) {
-        self.store = nil
+        self.store = { nil }
         self.moments = moments
         self.totalCount = totalCount ?? moments.count
         self.websites = websites
@@ -385,7 +394,12 @@ final class SearchResultsModel: ObservableObject {
     /// that cannot satisfy the filter. That is why the facets are derived from the screen half alone:
     /// a chip the conversation rows could never match must not be offered as if they could.
     func reload() {
-        guard let store else { return }
+        guard let store = store() else {
+            waitForTheStore()
+            return
+        }
+        storeWatch?.cancel()
+        storeWatch = nil
         let bounds = time.range(pickedDate: pickedDate)
         do {
             let seen = try RewindQueries.search(
@@ -454,6 +468,37 @@ final class SearchResultsModel: ObservableObject {
             SearchPanelWatch.report(.answered(query: query, results: 0))
         }
     }
+
+    /// **Reads again once capture has a database to read.**
+    ///
+    /// The other half of the provider above. A window opened at launch asks before the store is open
+    /// and gets nothing; without this it would sit on an empty panel until the user typed, which on
+    /// the app's main window is the first thing anybody sees. Nothing publishes the store's opening —
+    /// `Engine.contextStore` is a computed property over the capture stack's own queue — so this
+    /// looks, briefly and at a cadence nobody can perceive.
+    ///
+    /// **Bounded, and that is not a detail.** A store that never opens is a real state (a denied
+    /// grant, a disk that will not take the file), and an unbounded retry against it is a loop that
+    /// outlives the reason for it. Thirty seconds is comfortably longer than the open takes and short
+    /// enough that a machine where it will not happen stops asking.
+    private func waitForTheStore() {
+        guard storeWatch == nil else { return }
+        storeWatch = Task { @MainActor [weak self] in
+            for _ in 0..<Self.storeWaitAttempts {
+                try? await Task.sleep(nanoseconds: UInt64(Self.storeWaitInterval * 1_000_000_000))
+                guard !Task.isCancelled, let self else { return }
+                guard self.store() != nil else { continue }
+                self.storeWatch = nil
+                self.reload()
+                return
+            }
+            self?.storeWatch = nil
+        }
+    }
+
+    private var storeWatch: Task<Void, Never>?
+    private static let storeWaitInterval: Double = 0.5
+    private static let storeWaitAttempts = 60
 
     /// Distinct hosts in the answer, most frequent first — the sites the user actually spent the
     /// query's time on, rather than whichever one happened to be captured last.

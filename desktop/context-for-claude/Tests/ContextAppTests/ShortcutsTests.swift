@@ -306,20 +306,20 @@ final class BothCommandKeysTests: XCTestCase {
 // MARK: - Chords
 
 final class ShortcutChordTests: XCTestCase {
-    /// The timeline is the two Command keys together; search is still a double tap.
+    /// Activity is the two Command keys together; search is still a double tap.
     func testTheDefaultsPrintAsTheReferenceWritesThem() {
-        XCTAssertEqual(GlobalShortcuts.Action.openTimeline.defaultChord, .bothCommandKeys)
-        XCTAssertEqual(GlobalShortcuts.Action.openTimeline.defaultChord.display, "⌘ + ⌘")
+        XCTAssertEqual(GlobalShortcuts.Action.openActivity.defaultChord, .bothCommandKeys)
+        XCTAssertEqual(GlobalShortcuts.Action.openActivity.defaultChord.display, "⌘ + ⌘")
         XCTAssertEqual(GlobalShortcuts.Action.openSearch.defaultChord.display, "⌘⌘⇧")
     }
 
     /// The two gestures may never be printed the same way. `⌘⌘` means "tapped twice" everywhere in
     /// this app, and it is *taken* — it is the first two glyphs of the search default — so printing
-    /// the timeline's gesture that way would tell the user the wrong thing twice over.
+    /// the launch gesture that way would tell the user the wrong thing twice over.
     func testTheTwoGesturesAreSpelledApart() {
-        let timeline = GlobalShortcuts.Action.openTimeline.defaultChord.display
-        XCTAssertNotEqual(timeline, "⌘⌘")
-        XCTAssertFalse(GlobalShortcuts.Action.openSearch.defaultChord.display.hasPrefix(timeline))
+        let launch = GlobalShortcuts.Action.openActivity.defaultChord.display
+        XCTAssertNotEqual(launch, "⌘⌘")
+        XCTAssertFalse(GlobalShortcuts.Action.openSearch.defaultChord.display.hasPrefix(launch))
     }
 
     /// Settings and the shortcut layer describe the same two shortcuts through two different chord
@@ -327,8 +327,8 @@ final class ShortcutChordTests: XCTestCase {
     /// shortcut nobody bound.
     func testSettingsAndTheShortcutLayerSpellTheDefaultsIdentically() {
         XCTAssertEqual(
-            ShortcutAction.openTimeline.defaultChord.displayString,
-            GlobalShortcuts.Action.openTimeline.defaultChord.display)
+            ShortcutAction.openActivity.defaultChord.displayString,
+            GlobalShortcuts.Action.openActivity.defaultChord.display)
         XCTAssertEqual(
             ShortcutAction.openSearch.defaultChord.displayString,
             GlobalShortcuts.Action.openSearch.defaultChord.display)
@@ -339,7 +339,7 @@ final class ShortcutChordTests: XCTestCase {
     /// accessibility label take the words from here rather than inventing their own.
     func testTheGestureHasWordsAsWellAsGlyphs() {
         XCTAssertEqual(ShortcutChord.bothCommandKeys.spokenDescription, "both Command keys")
-        XCTAssertEqual(ShortcutAction.openTimeline.defaultChord.spokenDescription, "both Command keys")
+        XCTAssertEqual(ShortcutAction.openActivity.defaultChord.spokenDescription, "both Command keys")
         XCTAssertEqual(
             ShortcutChord.doubleTap(.command, alsoHeld: []).spokenDescription, "a double tap of ⌘")
         XCTAssertEqual(
@@ -359,11 +359,26 @@ final class ShortcutChordTests: XCTestCase {
 
     func testTheSubtitleNamesTheDefaultItFallsBackTo() {
         XCTAssertEqual(
-            GlobalShortcuts.Action.openTimeline.subtitle,
+            GlobalShortcuts.Action.openActivity.subtitle,
             "Record a keyboard shortcut. Clear it to use ⌘ + ⌘.")
         XCTAssertEqual(
             GlobalShortcuts.Action.openSearch.subtitle,
             "Record a keyboard shortcut. Clear it to use ⌘⌘⇧.")
+    }
+
+    /// **A row is named for the window it opens.** `⌘ + ⌘` used to open the timeline and the row said
+    /// so; it opens Activity now, and a recorder still offering to rebind "Open Timeline Shortcut"
+    /// would send anyone who used it to the wrong window — a rename that stopped at the case name is
+    /// exactly the kind of half-done that leaves the copy lying.
+    func testTheRowsAreNamedForTheWindowsTheyOpen() {
+        XCTAssertEqual(GlobalShortcuts.Action.openActivity.title, "Open Activity Shortcut")
+        XCTAssertEqual(ShortcutAction.openActivity.title, "Open Activity Shortcut")
+        // The two layers print one title for one shortcut, the way they already print one chord.
+        for action in ShortcutAction.allCases {
+            XCTAssertFalse(
+                action.title.contains("Timeline"),
+                "\(action.title) names a window this chord no longer opens")
+        }
     }
 }
 
@@ -400,25 +415,57 @@ final class ShortcutStoreTests: XCTestCase {
         XCTAssertEqual(store.binding(for: .openSearch), .recorded(recorded))
         XCTAssertEqual(store.chord(for: .openSearch).display, "⇧⌘K")
         // The other action is untouched — one recorder must not move the other row.
-        XCTAssertEqual(store.binding(for: .openTimeline), .gestureDefault)
+        XCTAssertEqual(store.binding(for: .openActivity), .gestureDefault)
     }
 
     /// The behaviour the reference's copy promises out loud.
     func testClearingARecordedShortcutFallsBackToTheGestureDefault() {
         store.setRecorded(
-            GlobalShortcuts.Recorded(keyCode: 40, modifiers: [.command], label: "K"), for: .openTimeline)
-        XCTAssertNotEqual(store.binding(for: .openTimeline), .gestureDefault)
-        store.setRecorded(nil, for: .openTimeline)
-        XCTAssertEqual(store.binding(for: .openTimeline), .gestureDefault)
-        XCTAssertEqual(store.chord(for: .openTimeline).display, "⌘ + ⌘")
+            GlobalShortcuts.Recorded(keyCode: 40, modifiers: [.command], label: "K"), for: .openActivity)
+        XCTAssertNotEqual(store.binding(for: .openActivity), .gestureDefault)
+        store.setRecorded(nil, for: .openActivity)
+        XCTAssertEqual(store.binding(for: .openActivity), .gestureDefault)
+        XCTAssertEqual(store.chord(for: .openActivity).display, "⌘ + ⌘")
     }
 
-    /// The keys are namespaced the way every other persisted value in this app is.
+    /// The keys are namespaced the way every other persisted value in this app is — **and
+    /// `openActivity` is filed under the name it shipped with.**
+    ///
+    /// The literals are the point of this test and they are not tidied. `openActivity` was
+    /// `openActivity`, and a stored binding lives at `context.shortcut.<name>.keyEquivalent`; if this
+    /// key ever follows the case name, every chord anybody has recorded is orphaned at the old key
+    /// and silently replaced by the default. Writing the key out by hand is what makes that a failing
+    /// test rather than a rename nobody notices.
     func testStorageKeysFollowTheContextNamespace() {
         XCTAssertEqual(
-            GlobalShortcuts.Action.openTimeline.storageKey, "context.shortcut.openTimeline.keyEquivalent")
+            GlobalShortcuts.Action.openActivity.storageKey, "context.shortcut.openTimeline.keyEquivalent")
         XCTAssertEqual(
             GlobalShortcuts.Action.openSearch.storageKey, "context.shortcut.openSearch.keyEquivalent")
+    }
+
+    /// **A chord recorded before the rename still fires after it.**
+    ///
+    /// The regression the rename could cause and the only one that is invisible without a test: a
+    /// user who bound ⌥⌘K to the timeline chord has a dictionary sitting at
+    /// `context.shortcut.openTimeline.keyEquivalent`, written by a build that had never heard of
+    /// `openActivity`. Nothing announces it going missing — `binding(for:)` simply falls through to
+    /// `.gestureDefault`, the machine goes back to answering ⌘ + ⌘, and the user's own shortcut is
+    /// gone with no error and no message.
+    ///
+    /// So the defaults are written here the way the *old build* wrote them — the literal key, and the
+    /// three raw fields — rather than through `setRecorded`, which would only prove the store agrees
+    /// with itself.
+    func testAChordBoundBeforeTheRenameStillResolves() {
+        suite.set(
+            ["keyCode": 40, "modifiers": ShortcutModifiers([.command, .option]).rawValue, "label": "K"],
+            forKey: "context.shortcut.openTimeline.keyEquivalent")
+
+        XCTAssertEqual(
+            store.binding(for: .openActivity),
+            .recorded(
+                GlobalShortcuts.Recorded(keyCode: 40, modifiers: [.command, .option], label: "K")),
+            "a binding recorded before the rename was dropped on the floor")
+        XCTAssertEqual(store.chord(for: .openActivity).display, "⌥⌘K")
     }
 }
 
@@ -521,7 +568,7 @@ final class ShortcutConflictsTests: XCTestCase {
     }
 
     private static let ourDefaults: [GlobalShortcuts.Action: ShortcutChord] = [
-        .openTimeline: .bothCommandKeys,
+        .openActivity: .bothCommandKeys,
         .openSearch: .doubleTap(.command, alsoHeld: [.shift]),
     ]
 
@@ -545,7 +592,7 @@ final class ShortcutConflictsTests: XCTestCase {
     func testCodexBindingDoubleCommandInItsKeymapIsARealConflict() throws {
         try write(#"[{"command":"globalDictationToggle","key":"doubleCommand"}]"#, to: "keybindings.json")
         let report = ShortcutConflicts.scan(
-            ours: [.openTimeline: .doubleTap(.command, alsoHeld: [])],
+            ours: [.openActivity: .doubleTap(.command, alsoHeld: [])],
             at: try locations(codexInstalled: true), airgapMode: false)
 
         guard case .bound(_, let binding, let evidence)? = report.findings[.codex] else {
@@ -556,7 +603,7 @@ final class ShortcutConflictsTests: XCTestCase {
 
         XCTAssertEqual(report.conflicts.count, 1)
         let conflict = report.conflicts[0]
-        XCTAssertEqual(conflict.action, .openTimeline)
+        XCTAssertEqual(conflict.action, .openActivity)
         XCTAssertEqual(conflict.title, "Codex also uses ⌘⌘")
         XCTAssertTrue(conflict.subtitle.contains("keybindings.json"), conflict.subtitle)
         // The remedy is instructions plus the file, never an edit we make.
@@ -615,7 +662,7 @@ final class ShortcutConflictsTests: XCTestCase {
         XCTAssertEqual(report.conflicts.count, 2, "one per default, since both start on Command")
         XCTAssertEqual(report.conflicts.first?.tool, .codex)
         XCTAssertEqual(
-            report.conflicts.first(where: { $0.action == .openTimeline })?.title, "Codex also uses ⌘ + ⌘")
+            report.conflicts.first(where: { $0.action == .openActivity })?.title, "Codex also uses ⌘ + ⌘")
     }
 
     /// The legacy home of the popout window's chord, still read because a Codex configured before the
@@ -625,7 +672,7 @@ final class ShortcutConflictsTests: XCTestCase {
         let report = ShortcutConflicts.scan(
             // A double tap is what that legacy value means, so a double tap is what it can be in the
             // way of — our own defaults have moved off that chord, which the test above pins down.
-            ours: [.openTimeline: .doubleTap(.command, alsoHeld: [])],
+            ours: [.openActivity: .doubleTap(.command, alsoHeld: [])],
             at: try locations(codexInstalled: true), airgapMode: false)
         XCTAssertEqual(report.conflicts.count, 1)
         XCTAssertEqual(report.conflicts[0].evidence, .configFile(path: path("codex-global-state.json")))
@@ -664,7 +711,7 @@ final class ShortcutConflictsTests: XCTestCase {
     func testRebindingOurselvesOntoClaudesDefaultIsReported() throws {
         try write(#"{"menuBarEnabled":true}"#, to: "claude-config.json")
         let report = ShortcutConflicts.scan(
-            ours: [.openTimeline: .doubleTap(.option, alsoHeld: [])],
+            ours: [.openActivity: .doubleTap(.option, alsoHeld: [])],
             at: try locations(claudeInstalled: true), airgapMode: false)
         XCTAssertEqual(report.conflicts.count, 1)
         XCTAssertEqual(report.conflicts[0].title, "Claude also uses ⌥⌥")
@@ -674,7 +721,7 @@ final class ShortcutConflictsTests: XCTestCase {
     func testClaudeQuickEntryTurnedOffIsNotAConflict() throws {
         try write(#"{"quickEntryShortcut":"off"}"#, to: "claude-config.json")
         let report = ShortcutConflicts.scan(
-            ours: [.openTimeline: .doubleTap(.option, alsoHeld: [])],
+            ours: [.openActivity: .doubleTap(.option, alsoHeld: [])],
             at: try locations(claudeInstalled: true), airgapMode: false)
         guard case .noGlobalBinding? = report.findings[.claudeDesktop] else {
             return XCTFail("expected no global binding, got \(String(describing: report.findings[.claudeDesktop]))")

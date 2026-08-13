@@ -161,14 +161,14 @@ struct TutorialCardView: View {
         // "press the left one, then the right one", and that ambiguity has been reported before. So
         // it gets a keyboard's bottom row with the space bar between the two caps, and they go down
         // on the same beat. A rebound chord is typed, and gets the chip that types itself. The model
-        // decides which from the printed shortcut and nothing else (`timelineChordIsCommandPair`),
+        // decides which from the printed shortcut and nothing else (`activityChordIsCommandPair`),
         // so the drawing and the card's own sentence cannot disagree about the gesture.
-        case .openTimeline where model.timelineChordIsArmed:
+        case .openActivity where model.activityChordIsArmed:
             HStack(spacing: 10) {
-                if model.timelineChordIsCommandPair {
+                if model.activityChordIsCommandPair {
                     TutorialCommandPairDemo()
                 } else {
-                    TutorialChordDemo(chord: model.timelineChord)
+                    TutorialChordDemo(chord: model.activityChord)
                 }
                 Text("opens it from anywhere.")
                     .inkStyle(InkType.statusLabel, color: Ink.secondary)
@@ -301,7 +301,7 @@ struct TutorialCardView: View {
         // gesture it must not mime, and one a click on the real pill — the press *is* the transition
         // in every case, and a Continue beside it would be a second way past a lesson that has not
         // been given. All three have a labelled way out that says what did not happen.
-        case .openTimeline: return nil
+        case .openActivity: return nil
         case .timeline: return model.didDrag ? "Continue" : nil
         case .findMoments: return nil
         case .query, .claudeHandoff: return "Continue"
@@ -316,7 +316,12 @@ struct TutorialCardView: View {
         switch model.step.gate {
         case .realFrames: return "Nothing is arriving — carry on anyway"
         case .screenRecordingGrant: return "Carry on without it"
-        case .realHotkey: return "That shortcut isn't working — open it for me"
+        // "Carry on anyway" and no longer "open it for me". The waiver used to promise a window,
+        // because the chord opened the timeline and the beat after it needed one; the chord brings
+        // the app's main window forward now — already on screen for almost everybody — and the beat
+        // after opens its own timeline whatever happened here. There is nothing left to offer but
+        // the way past, and a label that offered more would be describing an action nothing takes.
+        case .realHotkey: return "That shortcut isn't working — carry on anyway"
         case .realGesture: return "I can't drag it — carry on anyway"
         case .realSearchPanel: return "I can't find that button — open search for me"
         case .userAction, .realSearchResult, .genuineToolCall: return ""

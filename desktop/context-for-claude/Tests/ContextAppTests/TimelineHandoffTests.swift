@@ -333,7 +333,7 @@ final class TimelineHandoffTests: XCTestCase {
                 bundleId: nil, windowTitle: "Downloads", ocrText: "screenshots",
                 imagePath: "/tmp/handoff-today.heic"))
 
-        let results = SearchResultsModel(store: store)
+        let results = SearchResultsModel(store: { store })
         results.ask("invoice")
         XCTAssertNil(results.loadError)
 
@@ -447,7 +447,7 @@ final class TimelineHandoffTests: XCTestCase {
                 capturedAt: base + 30, appName: "Finder", bundleId: nil, windowTitle: "Downloads",
                 ocrText: "screenshots", imagePath: "/tmp/handoff-sel-2.heic"))
 
-        let model = SearchResultsModel(store: store)
+        let model = SearchResultsModel(store: { store })
         model.ask("")
         XCTAssertEqual(model.moments.count, 2)
 

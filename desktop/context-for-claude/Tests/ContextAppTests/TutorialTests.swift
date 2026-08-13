@@ -37,7 +37,6 @@ final class TutorialTests: XCTestCase {
         /// before the user had touched anything.
         var searchPanelIsVisible = false
         var searchPanelPresentations = 0
-        var searchPanelDismissals = 0
 
         /// What the world answers when the tutorial hands the first question over. The happy path by
         /// default; every test that cares about a failing handoff sets its own.
@@ -60,7 +59,7 @@ final class TutorialTests: XCTestCase {
         var claudeWindow: CGRect?
         var claudeWindowLookups = 0
 
-        /// Whether the machine is genuinely listening for the timeline chord.
+        /// Whether the machine is genuinely listening for the chord that opens Activity.
         var chordIsArmed = true
         /// The shortcut as the shortcut layer *prints* it, which is the only thing the tutorial ever
         /// learns about it. A repeated tap by default, so every test written before the beat grew a
@@ -114,10 +113,10 @@ final class TutorialTests: XCTestCase {
                 if let outcome = self.claudeAnswer { answer(outcome) }
             }
             environment.claudeRestartIsNeeded = { self.claudeNeedsRestart }
-            environment.timelineChord = { self.chord }
-            environment.timelineChordIsArmed = { self.chordIsArmed }
-            environment.watchForTimelineHotkey = { self.hotkeyWatch = $0 }
-            environment.stopWatchingTimelineHotkey = { self.hotkeyWatch = nil }
+            environment.activityChord = { self.chord }
+            environment.activityChordIsArmed = { self.chordIsArmed }
+            environment.watchForActivityHotkey = { self.hotkeyWatch = $0 }
+            environment.stopWatchingActivityHotkey = { self.hotkeyWatch = nil }
             environment.watchForDrag = { self.dragWatch = $0 }
             environment.stopWatchingDrag = { self.dragWatch = nil }
             environment.presentTimeline = {
@@ -132,10 +131,6 @@ final class TutorialTests: XCTestCase {
             environment.presentSearchPanel = {
                 self.searchPanelPresentations += 1
                 self.reportFromTheSearchPanel(.opened)
-            }
-            environment.dismissSearchPanel = {
-                self.searchPanelDismissals += 1
-                self.reportFromTheSearchPanel(.closed)
             }
             environment.locateTarget = { _ in nil }
             environment.presentOverlay = { self.overlayPresented.append($0) }
@@ -157,15 +152,16 @@ final class TutorialTests: XCTestCase {
         /// The user really presses the chord.
         ///
         /// Modelled the way it happens: the shortcut layer delivers to the app's own handler, which
-        /// is what opens the window, and *then* to the tutorial's observer. Nothing here reaches
-        /// into the model to set a flag — the only route in is the callback the model itself armed,
-        /// which is what makes this beat's gate a fact about the user.
-        func pressTimelineChord() {
+        /// brings the **Activity window** forward, and *then* to the tutorial's observer. Nothing
+        /// here reaches into the model to set a flag — the only route in is the callback the model
+        /// itself armed, which is what makes this beat's gate a fact about the user.
+        ///
+        /// It used to open a timeline here, because that is what the chord did. Repointing it at the
+        /// main window is what this world has to model now, and it is why the beat after it can no
+        /// longer assume a timeline anybody opened.
+        func pressActivityChord() {
             guard let fired = hotkeyWatch else { return }
-            if timelineCanOpen {
-                timelinePresentations += 1
-                timelineIsVisible = true
-            }
+            reportFromTheSearchPanel(.opened)
             fired()
         }
 
@@ -220,7 +216,7 @@ final class TutorialTests: XCTestCase {
             model.advance()
         case .realHotkey:
             // The keypress is the transition; there is no button to press afterwards.
-            world.pressTimelineChord()
+            world.pressActivityChord()
         case .realGesture:
             world.dragAcrossTheTimeline()
             model.advance()
@@ -286,7 +282,7 @@ final class TutorialTests: XCTestCase {
         XCTAssertEqual(
             visited,
             [
-                .invitation, .collectFrames, .openTimeline, .timeline, .findMoments, .query,
+                .invitation, .collectFrames, .openActivity, .timeline, .findMoments, .query,
                 .claudeHandoff, .claudeProof, .allSet, .menuBar, .finished,
             ],
             "the tutorial's order is the lesson; a reordering has to be deliberate")
@@ -351,7 +347,7 @@ final class TutorialTests: XCTestCase {
         XCTAssertEqual(model.framesCollected, TutorialModel.frameTarget)
         XCTAssertEqual(model.outcome, .caught)
         XCTAssertTrue(model.advance())
-        XCTAssertEqual(model.step, .openTimeline)
+        XCTAssertEqual(model.step, .openActivity)
     }
 
     /// The sentence the user reads is a consequence of the store, not of the step being on screen.
@@ -406,7 +402,7 @@ final class TutorialTests: XCTestCase {
         world.clock += TutorialModel.framePatience + 1
         XCTAssertTrue(model.waiverIsOffered)
         XCTAssertTrue(model.waive())
-        XCTAssertEqual(model.step, .openTimeline)
+        XCTAssertEqual(model.step, .openActivity)
         XCTAssertTrue(model.didWaiveFrames)
         XCTAssertEqual(model.outcome, .nothingArrived)
 
@@ -513,7 +509,7 @@ final class TutorialTests: XCTestCase {
         unarmed.screenGranted = true
         unarmed.chordIsArmed = false
         let unarmedModel = makeModel(unarmed)
-        drive(unarmedModel, unarmed, to: .openTimeline)
+        drive(unarmedModel, unarmed, to: .openActivity)
         said.append(unarmedModel.speech.everythingSaid)
 
         // The consent beat, which only appears when a restart would cost the user something.
@@ -598,13 +594,38 @@ final class TutorialTests: XCTestCase {
         drive(model, world, to: .findMoments)
 
         XCTAssertEqual(model.step.gate, .realSearchPanel)
-        XCTAssertFalse(model.gateIsSatisfied, "nothing is on screen yet")
-        XCTAssertFalse(model.advance(), "and no button may move past a panel that never came up")
+        XCTAssertFalse(model.gateIsSatisfied, "nobody has asked for search yet")
+        XCTAssertFalse(model.advance(), "and no button may move past an ask that never happened")
         XCTAssertEqual(model.step, .findMoments)
 
         world.pressTheSearchPill()
         XCTAssertTrue(model.searchPanelIsOpen)
-        XCTAssertEqual(model.step, .query, "the panel appearing is the transition")
+        XCTAssertEqual(model.step, .query, "the press is the transition")
+    }
+
+    /// **…and a window that was already up does not satisfy it.**
+    ///
+    /// The regating this beat needed when the search surface became the app's main window. Its gate
+    /// used to be "the panel is on screen", and the beat read that off the screen on entry so that a
+    /// user who had opened the panel while reading the previous card was not left waiting for
+    /// something that had already happened. The main window is up before the tutorial starts and up
+    /// between every beat, so that entry read would now walk straight past the one beat that teaches
+    /// people where search is — the card would appear and vanish in the same frame. What the beat
+    /// waits for is the *ask*.
+    func testThePillBeatIsNotSatisfiedByASearchWindowThatWasAlreadyOpen() {
+        let world = World()
+        world.screenGranted = true
+        // Up the whole time, which is the ordinary state of the app's main window.
+        world.searchPanelIsVisible = true
+        let model = makeModel(world)
+        drive(model, world, to: .findMoments)
+
+        XCTAssertEqual(model.step, .findMoments, "the beat was skipped by a window nobody asked for")
+        XCTAssertTrue(model.searchPanelIsOpen, "the window really is up — that is the point")
+        XCTAssertFalse(model.gateIsSatisfied)
+
+        world.pressTheSearchPill()
+        XCTAssertEqual(model.step, .query)
     }
 
     /// The tutorial never consumes the press, which is what lets the real bar open at all.
@@ -741,6 +762,13 @@ final class TutorialTests: XCTestCase {
         let model = makeModel(world)
         drive(model, world, to: .findMoments)
 
+        // Closed first, because that is the only state in which this waiver has anything to do. The
+        // chord beat brings the main window forward — it is the window ⌘ + ⌘ opens now — so a run
+        // that reached this beat normally already has one on screen and the waiver correctly opens
+        // nothing. A test that did not close it would be asserting a presentation that the model is
+        // right not to make.
+        world.reportFromTheSearchPanel(.closed)
+
         XCTAssertFalse(model.waiverIsOffered, "not before the patience has run")
         world.clock += TutorialModel.searchPanelPatience
         XCTAssertTrue(model.waiverIsOffered)
@@ -753,14 +781,15 @@ final class TutorialTests: XCTestCase {
         XCTAssertEqual(model.speech.lead, "I opened the search bar for you.")
     }
 
-    /// **The panel is the tutorial's furniture for two beats and nobody else's.**
+    /// **The search window is the user's, and leaving the search beats leaves it alone.**
     ///
-    /// Leaving the search beats has to take it away, and the reason is not tidiness: the timeline
-    /// *stands aside* while the panel is up (`RewindWindow.setHidden`), and the only thing that ever
-    /// brings it back is the panel being dismissed. A run that carried an open panel into the Claude
-    /// beats would be covering Claude with it; a run abandoned mid-beat would leave the timeline
-    /// ordered out on an `LSUIElement` app with nothing to restore it.
-    func testTheSearchPanelIsClosedOnTheWayOutOfTheSearchBeats() {
+    /// The repealed behaviour, and the reason it was there: the panel was the tutorial's own
+    /// furniture for two beats — a floating slab that would have covered the very window the Claude
+    /// beats are about — and the timeline *stood aside* while it was up, so a run that ended without
+    /// dismissing it left the timeline ordered out with nothing to restore it. Both facts died with
+    /// the panel. What is left is the app's main window, which the tutorial did not open, and closing
+    /// somebody's main window because they pressed Continue is not a thing a walkthrough gets to do.
+    func testTheSearchWindowSurvivesLeavingTheSearchBeats() {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
@@ -770,11 +799,12 @@ final class TutorialTests: XCTestCase {
         world.searchInTheRealPanel("captured", results: 1)
         XCTAssertTrue(model.advance(), "query → claudeHandoff")
 
-        XCTAssertEqual(world.searchPanelDismissals, 1)
-        XCTAssertFalse(world.searchPanelIsVisible)
+        XCTAssertTrue(world.searchPanelIsVisible, "the tutorial closed the user's main window")
     }
 
-    func testAbandoningTheTutorialMidSearchTakesThePanelWithIt() {
+    /// …and so does abandoning the run outright. A user who presses Skip has said something about the
+    /// tutorial and nothing at all about their window.
+    func testAbandoningTheTutorialMidSearchLeavesTheWindowAlone() {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
@@ -784,23 +814,7 @@ final class TutorialTests: XCTestCase {
         model.abandon()
 
         XCTAssertEqual(model.step, .skipped)
-        XCTAssertEqual(world.searchPanelDismissals, 1)
-        XCTAssertFalse(world.searchPanelIsVisible)
-    }
-
-    /// A panel the user closed themselves is not closed a second time on the way out. The dismissal
-    /// is what restores the timeline, and asking for one that is not needed is how a surface ends up
-    /// being told to come back at a moment nobody asked it to.
-    func testAPanelTheUserAlreadyClosedIsNotDismissedAgain() {
-        let world = World()
-        world.screenGranted = true
-        let model = makeModel(world)
-        drive(model, world, to: .query)
-
-        world.reportFromTheSearchPanel(.closed)
-        let dismissalsAfterTheirOwn = world.searchPanelDismissals
-        model.abandon()
-        XCTAssertEqual(world.searchPanelDismissals, dismissalsAfterTheirOwn)
+        XCTAssertTrue(world.searchPanelIsVisible)
     }
 
     // MARK: - The Claude payoff
@@ -953,7 +967,7 @@ final class TutorialTests: XCTestCase {
         let openModel = makeModel(second)
         drive(openModel, second, to: .timeline)
         XCTAssertTrue(openModel.timelineIsOpen)
-        XCTAssertEqual(openModel.speech.lead, "Everything I have seen.")
+        XCTAssertEqual(openModel.speech.lead, "I opened your timeline.")
     }
 
     // MARK: - The chord, which the user has to press
@@ -961,12 +975,17 @@ final class TutorialTests: XCTestCase {
     /// The whole of the second defect this beat exists to fix. The window used to open on its own
     /// the moment the step began, which taught nothing: the tutorial announced a shortcut and then
     /// did the shortcut's job. Now the step waits, and the only thing that satisfies it is the real
-    /// shortcut layer delivering — the same delivery that opens the window.
+    /// shortcut layer delivering — the same delivery that brings the window forward.
+    ///
+    /// **The window it must not open itself is the main one**, since that is what this chord opens.
+    /// The old version of this test watched `timelinePresentations`, which no longer says anything
+    /// about this beat at all: the chord does not reach the timeline, so a tutorial that opened one
+    /// here would be cheating at a lesson nobody is being taught.
     func testTheChordBeatWaitsForTheRealShortcutAndOpensNothingItself() {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
-        drive(model, world, to: .openTimeline)
+        drive(model, world, to: .openActivity)
 
         // Five minutes of ticking on the step.
         for _ in 0..<100 {
@@ -974,41 +993,48 @@ final class TutorialTests: XCTestCase {
             model.poll()
         }
         XCTAssertEqual(
-            world.timelinePresentations, 0,
+            world.searchPanelPresentations, 0,
             "the tutorial must not open the window it is asking the user to open")
+        XCTAssertEqual(world.timelinePresentations, 0, "and it must not open the other one either")
         XCTAssertFalse(model.hotkeyFired)
         XCTAssertFalse(model.gateIsSatisfied)
         XCTAssertFalse(model.advance(), "no keypress, no advance")
-        XCTAssertEqual(model.step, .openTimeline)
+        XCTAssertEqual(model.step, .openActivity)
 
-        // The user presses it. The shell's handler opens the window; the observer reports it.
-        world.pressTimelineChord()
+        // The user presses it. The shell's handler brings Activity forward; the observer reports it.
+        world.pressActivityChord()
         XCTAssertTrue(model.hotkeyFired)
         XCTAssertEqual(model.step, .timeline, "the keypress is the transition")
-        XCTAssertTrue(model.timelineIsOpen)
-        XCTAssertFalse(model.didWaiveHotkey)
-        XCTAssertEqual(model.speech.lead, "Everything I have seen.")
     }
 
-    /// The honest way forward when the chord cannot fire at all: offered immediately, labelled with
-    /// what did not happen, and the card owns up to having opened the window itself.
-    func testAChordThatCannotFireOffersTheWayOutAtOnceAndSaysWhoOpenedIt() {
+    /// The honest way forward when the chord cannot fire at all: offered immediately, and labelled
+    /// with what did not happen.
+    ///
+    /// **The waiver opens nothing now, and that is the change.** It used to have to — the chord
+    /// opened the timeline, so a chord that could not fire left the next beat with no window — and
+    /// the card then owned up to having opened it. The chord opens Activity, which is already up, and
+    /// the timeline beat opens its own window whichever way this one ended: there is no fallback left
+    /// to take, so the waiver records nothing and the beat after it reads identically either way.
+    func testAChordThatCannotFireOffersTheWayOutAtOnceAndOpensNothingToCompensate() {
         let world = World()
         world.screenGranted = true
         world.chordIsArmed = false
         let model = makeModel(world)
-        drive(model, world, to: .openTimeline)
+        drive(model, world, to: .openActivity)
 
         XCTAssertTrue(model.waiverIsOffered, "a chord nothing is listening for is not a slow start")
         XCTAssertEqual(model.speech.lead, "I cannot listen for that shortcut.")
+        XCTAssertEqual(
+            model.speech.aside, "Accessibility is off, so those keys will not reach me.",
+            "the card must not promise to open a window nothing here opens")
+        XCTAssertEqual(world.searchPanelPresentations, 0)
         XCTAssertTrue(model.waive())
 
         XCTAssertEqual(model.step, .timeline)
-        XCTAssertTrue(model.didWaiveHotkey)
-        XCTAssertEqual(world.timelinePresentations, 1, "the fallback is the only thing that opens it")
-        XCTAssertEqual(
-            model.speech.lead, "I opened it for you.",
-            "a window the tutorial opened must not be reported as the user's keypress")
+        XCTAssertFalse(model.hotkeyFired, "waiving is not pressing")
+        // The timeline the next beat needs was opened by that beat, not by this waiver.
+        XCTAssertEqual(world.timelinePresentations, 1)
+        XCTAssertEqual(model.speech.lead, "I opened your timeline.")
     }
 
     /// An armed chord gets the full wait before the escape hatch appears — otherwise the way out is
@@ -1017,7 +1043,7 @@ final class TutorialTests: XCTestCase {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
-        drive(model, world, to: .openTimeline)
+        drive(model, world, to: .openActivity)
 
         XCTAssertFalse(model.waiverIsOffered)
         XCTAssertFalse(model.waive())
@@ -1030,10 +1056,10 @@ final class TutorialTests: XCTestCase {
         let world = World()
         world.screenGranted = true
         let model = makeModel(world)
-        drive(model, world, to: .openTimeline)
+        drive(model, world, to: .openActivity)
         XCTAssertNotNil(world.hotkeyWatch, "the step that needs it arms it")
 
-        world.pressTimelineChord()
+        world.pressActivityChord()
         XCTAssertNil(world.hotkeyWatch, "and leaving the step takes it back down")
 
         model.skip()
@@ -1041,6 +1067,36 @@ final class TutorialTests: XCTestCase {
     }
 
     // MARK: - The drag, which the user has to make
+
+    /// **The drag beat opens its own timeline, and says so.**
+    ///
+    /// The regating this whole change turns on. The beat used to ride the chord: ⌘ + ⌘ opened the
+    /// timeline, the user's keypress put it on screen, and the card's opening line took care not to
+    /// claim credit for a window the tutorial had opened on the one branch where it had. The chord
+    /// opens Activity now, so nothing before this beat produces a timeline — a version of this flow
+    /// that left the beat alone would ask somebody to drag through a window that is not there.
+    ///
+    /// So: exactly one presentation, made by this beat, on the ordinary path where the user really
+    /// pressed the chord — and one sentence, which names who opened it.
+    func testTheDragBeatOpensTheTimelineItselfAndSaysSo() {
+        let world = World()
+        world.screenGranted = true
+        let model = makeModel(world)
+        drive(model, world, to: .openActivity)
+        XCTAssertEqual(world.timelinePresentations, 0, "nothing before this beat opens a timeline")
+
+        world.pressActivityChord()
+
+        XCTAssertEqual(model.step, .timeline)
+        XCTAssertEqual(
+            world.timelinePresentations, 1,
+            "the beat that asks for a drag has to put something on screen to drag")
+        XCTAssertTrue(model.timelineIsOpen)
+        XCTAssertEqual(model.speech.lead, "I opened your timeline.")
+        // And it is handed back, because the user never asked for it.
+        model.skip()
+        XCTAssertEqual(world.timelineDismissals, 1)
+    }
 
     /// The first defect, at the level the machine reads it. The beat asks for a gesture; only a
     /// gesture satisfies it, and no amount of time on the step does.
@@ -1358,7 +1414,7 @@ final class TutorialTests: XCTestCase {
         // itself, while a search that found nothing is the one thing it may never work around.
         XCTAssertTrue(TutorialGate.realSearchPanel.isWaivable)
         XCTAssertEqual(TutorialStep.collectFrames.gate, .realFrames)
-        XCTAssertEqual(TutorialStep.openTimeline.gate, .realHotkey)
+        XCTAssertEqual(TutorialStep.openActivity.gate, .realHotkey)
         XCTAssertEqual(TutorialStep.timeline.gate, .realGesture)
         XCTAssertEqual(TutorialStep.findMoments.gate, .realSearchPanel)
         XCTAssertEqual(TutorialStep.query.gate, .realSearchResult)
@@ -1801,14 +1857,18 @@ final class TutorialTests: XCTestCase {
 
     /// **The card's sentence and the card's drawing describe the same gesture**, and the beat picks
     /// both from the one thing it knows about the shortcut: how it is printed.
-    func testTheOpenTimelineBeatSaysTheGestureItDraws() {
+    func testTheOpenActivityBeatSaysTheGestureItDraws() {
         let pair = World()
         pair.screenGranted = true
         pair.chord = "⌘ + ⌘"
         let pairModel = makeModel(pair)
-        drive(pairModel, pair, to: .openTimeline)
+        drive(pairModel, pair, to: .openActivity)
 
-        XCTAssertTrue(pairModel.timelineChordIsCommandPair)
+        XCTAssertTrue(pairModel.activityChordIsCommandPair)
+        // And it names the window the chord actually opens. "Open your timeline." was the line until
+        // ⌘ + ⌘ stopped opening one, and a card teaching a gesture towards the wrong window is the
+        // single worst thing this beat can do.
+        XCTAssertEqual(pairModel.speech.lead, "Open your activity.")
         XCTAssertEqual(
             pairModel.speech.aside,
             "Press both Command keys together — the two either side of the space bar.")
@@ -1824,9 +1884,10 @@ final class TutorialTests: XCTestCase {
         typed.screenGranted = true
         typed.chord = "⌘⇧K"
         let typedModel = makeModel(typed)
-        drive(typedModel, typed, to: .openTimeline)
+        drive(typedModel, typed, to: .openActivity)
 
-        XCTAssertFalse(typedModel.timelineChordIsCommandPair)
+        XCTAssertFalse(typedModel.activityChordIsCommandPair)
+        XCTAssertEqual(typedModel.speech.lead, "Open your activity.")
         XCTAssertEqual(typedModel.speech.aside, "Press these keys, and it will come up.")
     }
 
@@ -2145,24 +2206,25 @@ final class TutorialTests: XCTestCase {
 
     // MARK: - The search beats are coach marks, not a search surface
 
-    /// **The two search beats point at the real panel and stand clear of it.**
+    /// **The two search beats point at the real surface and stand clear of it.**
     ///
     /// This is the layout half of the same fix. The pill beat hangs its card under the "Search All"
-    /// pill; the query beat's card used to sit in the middle of the timeline window, which is the one
-    /// place it cannot be now — the timeline *stands aside* while the panel is up, so a mark aimed at
-    /// it would be aimed at something ordered off screen. It targets the panel instead and is placed
-    /// under its foot, because the panel's field is its top edge and that is the part of it the user
-    /// is being asked to type into.
+    /// pill; the query beat's card targets the search window and is placed under its foot, because
+    /// that window's field is its top edge and that is the part of it the user is being asked to type
+    /// into.
+    ///
+    /// **No beat "uses" the search surface any more, and there is no property saying so.**
+    /// `usesSearchPanel` decided which transitions closed the panel on the way out; the surface is
+    /// the app's main window now and the tutorial does not close it at all — see `TutorialModel.enter`.
     func testTheSearchBeatsPointAtTheSurfaceTheyAreCoaching() {
         XCTAssertEqual(TutorialStep.findMoments.target, .searchAllButton)
         XCTAssertEqual(TutorialStep.query.target, .searchPanel)
-        XCTAssertTrue(TutorialStep.findMoments.usesSearchPanel)
-        XCTAssertTrue(TutorialStep.query.usesSearchPanel)
 
-        // …and nothing else in the flow does, which is what makes `enter` closing the panel on the
-        // way into every other beat a complete rule rather than two named transitions.
+        // …and nothing else in the flow aims at either, so no other beat can quietly inherit a coach
+        // mark pointing at a surface it is not about.
         for step in TutorialStep.allCases where step != .findMoments && step != .query {
-            XCTAssertFalse(step.usesSearchPanel, "\(step) would carry the panel into a beat about something else")
+            XCTAssertNotEqual(step.target, .searchPanel, "\(step)")
+            XCTAssertNotEqual(step.target, .searchAllButton, "\(step)")
         }
     }
 
@@ -2173,16 +2235,21 @@ final class TutorialTests: XCTestCase {
         XCTAssertFalse(TutorialStep.query.handsOverToAnotherApp)
     }
 
-    /// **A card under the real panel, measured against the real panel's real size.**
+    /// **A card under the real search window, measured against the window's own frame.**
     ///
     /// The card used to draw a two-across grid of screenshots and this test used to hold that grid
     /// under a ceiling derived from the search surface's own maximum. Neither is a claim about this
     /// card any more — the results are `SearchResultsView`'s — but the argument survives inverted:
-    /// the coach mark now has to stand *beside* the tallest panel the search surface is allowed to
-    /// be, and the one thing it may never be laid over is the field at the top of it.
+    /// the coach mark has to stand *beside* the search window, and the one thing it may never be laid
+    /// over is the field at the top of it.
     ///
-    /// Two real geometries, both computed from shipped constants rather than picked: the display the
-    /// card comfortably clears, and the one where it cannot and degrades instead.
+    /// **The rectangle comes from `SearchBarWindow.defaultFrame(in:)` rather than from `SearchLayout`
+    /// arithmetic.** Reassembling the window's geometry out of layout constants was defensible while
+    /// the surface derived its own frame from its content; the window is a real frame the user owns
+    /// now, and a test that rebuilt it by hand would keep asserting against a shape the app had
+    /// stopped opening at. What is measured is the frame the app really opens at, on two real
+    /// displays: the one the card comfortably clears, and the one where it cannot and degrades
+    /// instead.
     @MainActor
     func testTheQueryCardStandsUnderTheSearchPanelAndNeverOverItsField() {
         XCTAssertTrue(InkTestFonts.registered, "the bundled faces have to be registered to measure type")
@@ -2201,32 +2268,20 @@ final class TutorialTests: XCTestCase {
         tallest = max(tallest, cardHeight(model))
         let card = NSSize(width: TutorialOverlay.width, height: tallest)
 
-        // The search surface at its ceiling, where `SearchBarWindow.barFrame` puts it: horizontally
-        // centred, its top an easy tenth of the way down.
-        //
-        // `showingNote: false`, and that is the honest worst case rather than the arithmetic one. The
-        // note is the read-failure line (`SearchResultsModel.readFailureNote`) and it appears only
-        // when the panel has **nothing** in it — a surface cannot be 34 pt taller for an error and
-        // simultaneously full to its 545 pt result ceiling.
-        let panelHeight = SearchLayout.surfaceHeight(
-            showingNote: false, panelHeight: SearchLayout.maximumResultsBodyHeight)
-        func panel(in visible: NSRect) -> NSRect {
-            let width = SearchLayout.surfaceWidth
-            let y = max(visible.minY, visible.maxY - panelHeight - visible.height * 0.10)
-            return NSRect(
-                x: visible.midX - width / 2, y: y, width: width, height: panelHeight)
-        }
+        // The window where the app really puts it on a first run: horizontally centred, its top an
+        // easy tenth of the way down, clamped into the display.
+        func panel(in visible: NSRect) -> NSRect { SearchBarWindow.defaultFrame(in: visible) }
 
-        // A 16" MacBook's usable area. The card clears the panel outright here.
+        // A 16" MacBook's usable area. The card clears the window outright here.
         let large = NSRect(x: 0, y: 0, width: 1728, height: 1092)
         let onLarge = TutorialOverlay.under(card, panel: panel(in: large), in: large, margin: 14)
         XCTAssertFalse(
             onLarge.intersects(panel(in: large)),
-            "the card overlaps a full search panel on a 16\" display, where there is room for it not to")
+            "the card overlaps the search window on a 16\" display, where there is room for it not to")
         XCTAssertTrue(large.contains(onLarge))
 
-        // A 13" MacBook's, where a panel at its ceiling leaves less room than this card needs. It has
-        // to degrade over the *foot* of the panel — a scrolling grid — and never over its head.
+        // A 13" MacBook's, where the window leaves less room under it than this card needs. It has to
+        // degrade over the *foot* of the window — a scrolling grid — and never over its head.
         let small = NSRect(x: 0, y: 0, width: 1470, height: 931)
         let onSmall = TutorialOverlay.under(card, panel: panel(in: small), in: small, margin: 14)
         XCTAssertTrue(small.contains(onSmall), "the card must stay on the display whatever it overlaps")

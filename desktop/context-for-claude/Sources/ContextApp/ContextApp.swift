@@ -254,20 +254,30 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             // because nothing about onboarding may depend on audio succeeding.
             Sound.prepare()
 
-            // Both Command keys together open the timeline, double-tap Command-Shift opens search.
-            // Both are
-            // rebindable, and both simply do not fire while Accessibility is ungranted — a global
-            // monitor cannot see keys without it, and pretending to be armed would be worse.
+            // **Both chords open the main window, and that is the product decision rather than a
+            // duplicated case.** Both Command keys together is this app's advertised way in, and
+            // what a way in has to land on is the window the app opens on — Activity. It used to
+            // land on the timeline, from when the timeline *was* the app's one real window; leaving
+            // it there once Activity became the main window would have made the gesture the product
+            // teaches the one gesture that does not take you to the app. Double-tap Command-Shift
+            // brings the same window forward with its search field focused.
+            //
+            // Both are rebindable, and both simply do not fire while Accessibility is ungranted — a
+            // global monitor cannot see keys without it, and pretending to be armed would be worse.
+            // The timeline is reached from a moment inside Activity, and from the menu bar's own row.
             GlobalShortcuts.shared.start { action in
                 switch action {
                 case .openSearch:
-                    SearchBarWindow.toggle()
-                case .openTimeline:
-                    // This is also what the tutorial's timeline beat rides on: it observes the
-                    // shortcut rather than opening anything itself, so the window the user learns to
-                    // summon is opened here, by their own keypress, exactly as it will be forever
-                    // after.
-                    Self.openTimeline()
+                    // `present`, never `toggle`. A chord that *closed* the app's main window on its
+                    // second press is the Spotlight bargain applied to the wrong kind of object: the
+                    // user asked to search, and the answer to asking twice is the field focused with
+                    // its text selected, not the window they were reading gone.
+                    Self.openActivities()
+                case .openActivity:
+                    // This is also what the tutorial's chord beat rides on: it observes the shortcut
+                    // rather than opening anything itself, so the window the user learns to summon is
+                    // opened here, by their own keypress, exactly as it will be forever after.
+                    Self.openActivities()
                 }
             }
 
@@ -288,6 +298,14 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             let onboarded = UserDefaults.standard.bool(forKey: Self.onboardedKey)
             if !onboarded || OnboardingResume().step != nil {
                 OnboardingWindow.present()
+            } else {
+                // **The app opens on its main window.** It used to open on nothing at all, which was
+                // defensible while every surface was summoned by a chord and is not now that there
+                // is one: an app with a Dock icon that launches to an empty screen has not launched.
+                // Deliberately not gated on the capture database being open — the store opens
+                // lazily, and the surface waits for it rather than the launch waiting for the
+                // surface (see `SearchResultsModel`).
+                Self.openActivities()
             }
         }
     }
@@ -308,7 +326,7 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     /// rest of a reopen — un-minimising a window the user had put in the Dock is its half, and
     /// nothing here duplicates it.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        MainActor.assumeIsolated { Self.surfaceSomethingForTheUser(hasVisibleWindows: hasVisibleWindows) }
+        MainActor.assumeIsolated { Self.surfaceSomethingForTheUser() }
         return true
     }
 
@@ -319,34 +337,57 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     /// - **An unfinished setup outranks everything.** The card is a floating window that steps aside
     ///   while System Settings is frontmost (`Permissions.systemSettingsIsFrontmost`) and that the
     ///   flow itself hides between beats, so "there is no card on screen" is a routine state of a run
-    ///   that is very much in progress. Opening a timeline over it would bury the one thing the user
-    ///   still has to finish; `OnboardingWindow.present()` brings back the run they were in.
-    /// - **Something already up is enough.** AppKit brings the app's windows forward on a reopen by
-    ///   itself. A second window ordered in on top of that is the Dock icon opening a timeline over
-    ///   the Settings sheet the user was reading.
-    /// - **Otherwise the timeline**, which is this app's one real window: the whole capture record,
-    ///   with search and Settings reachable from inside it.
+    ///   that is very much in progress. Opening another window over it would bury the one thing the
+    ///   user still has to finish; `OnboardingWindow.present()` brings back the run they were in.
+    /// - **Otherwise the main window**, always.
+    ///
+    /// **`hasVisibleWindows` used to gate the second clause and no longer does, and that is the fix
+    /// rather than an oversight.** The reasoning was "AppKit brings the app's windows forward by
+    /// itself, so a second window ordered in on top is the Dock icon opening a timeline over the
+    /// Settings sheet the user was reading". It stopped being true the moment the target became the
+    /// window this gesture *means*: with any window at all on screen — the timeline, Settings, a
+    /// minimised anything — a Dock click did nothing whatsoever, which is the definition of an app
+    /// that cannot be found. `SearchBarWindow.present()` is idempotent and brings the main window
+    /// forward, so the answer to "show me the app" is the same window every time.
     @MainActor
-    private static func surfaceSomethingForTheUser(hasVisibleWindows: Bool) {
+    private static func surfaceSomethingForTheUser() {
         let onboarded = UserDefaults.standard.bool(forKey: onboardedKey)
         if !onboarded || OnboardingResume().step != nil {
             OnboardingWindow.present()
             return
         }
 
-        guard !hasVisibleWindows else { return }
+        openActivities()
+    }
 
-        openTimeline()
+    /// **The main window**, opened the one way it is ever opened.
+    ///
+    /// What "show me the app" means: launch, the Dock icon, the ⌘⌘⇧ chord and the menu bar's row all
+    /// arrive here. It used to be the timeline — "this app's one real window" — and the timeline is
+    /// the app's *second* window now: the place a moment opens into, not the place the app starts.
+    ///
+    /// No store guard, unlike `openTimeline` below. The surface asks for the capture database on
+    /// every read and waits for it to open, so there is nothing to decline over — and a launch that
+    /// showed nothing for the second or two before the store opens would be exactly the inert gesture
+    /// this window exists to stop.
+    @MainActor
+    private static func openActivities() {
+        SearchBarWindow.present()
     }
 
     /// The timeline, opened the one way it is ever opened.
     ///
-    /// Lifted out of the shortcut handler when the Dock icon became a second caller, and `static` so
-    /// neither caller has to capture the delegate. The two hand-offs it installs are not incidental —
-    /// they are what makes the window behave, and a second call site that reconstructed them by hand
-    /// is how one of the two quietly stops being passed.
+    /// `static` so no caller has to capture the delegate. The two hand-offs it installs are not
+    /// incidental — they are what makes the window behave, and a second call site that reconstructed
+    /// them by hand is how one of the two quietly stops being passed.
+    ///
+    /// **Not `private`, since the chord stopped being the caller.** Repointing `openActivity` at the
+    /// main window left this with no call site inside the shell, and the honest answer to that is not
+    /// to delete it: the menu bar's "Open Timeline" row is now the app's route to this window, and it
+    /// had a hand-rolled copy of exactly the reconstruction the note above warns about. One owner,
+    /// called from there.
     @MainActor
-    private static func openTimeline() {
+    static func openTimeline() {
         // The store opens lazily on the engine's own queue, so ask at open time rather than at
         // launch. Nil means it is not open yet: decline to put a timeline over nothing instead of
         // showing an empty one. That answer is worth keeping even though it makes a Dock click do
@@ -360,10 +401,10 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
         RewindWindow.present(
             store: store,
             onOpenSettings: { SettingsWindow.present() },
+            // The "Search All" pill brings the main window forward with the timeline's query in it.
             // The tutorial's search beat rides on this the way the timeline beat rides on the
-            // shortcut: the press falls straight through, the real bar opens because the user
-            // clicked the real pill, and the tutorial observes the panel that came up rather than
-            // taking the press.
+            // shortcut: the press falls straight through, the real window comes forward because the
+            // user clicked the real pill, and the tutorial observes the ask rather than taking it.
             //
             // It used to `guard !Tutorial.searchPillWasPressed() else { return }` — the tutorial
             // consumed the click and drew its own imitation of the results, so the one beat that

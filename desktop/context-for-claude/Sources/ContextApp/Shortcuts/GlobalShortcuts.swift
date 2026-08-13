@@ -69,7 +69,7 @@ enum ShortcutChord: Equatable, Hashable, Sendable {
     /// One modifier tapped twice, optionally with others held down throughout. `⌘⌘` is
     /// `.doubleTap(.command, alsoHeld: [])`; `⌘⌘⇧` is `.doubleTap(.command, alsoHeld: [.shift])`.
     ///
-    /// Still here after `openTimeline` moved off it, for two reasons that are not going away:
+    /// Still here after `openActivity` moved off it, for two reasons that are not going away:
     /// `openSearch` is still a double tap, and the conflict scanner has to be able to *say* what
     /// another tool bound — Claude's Quick Entry is ⌥⌥ and Codex spells one of its own bindings
     /// `doubleCommand`. A vocabulary that could not express a double tap could not report a
@@ -105,7 +105,7 @@ enum ShortcutChord: Equatable, Hashable, Sendable {
         case .bothCommandKeys:
             // The `+` is doing real work. `⌘⌘` already means "tapped twice" everywhere else in this
             // app, so printing this gesture the same way would say the wrong thing about it — and
-            // would print the timeline's chord identically to the first half of the search one.
+            // would print the launch gesture identically to the first half of the search one.
             return Self.bothCommandKeysDisplay
         case .key(let label, let modifiers):
             return modifiers.display + label
@@ -145,7 +145,7 @@ enum ShortcutChord: Equatable, Hashable, Sendable {
 ///
 /// Fires on the **second release**, not the second press. Firing on the press is a few tens of
 /// milliseconds quicker and wrong: `⌘` down, `⌘` down again and *held* is the opening of ⌘S, and a
-/// timeline window that opens on its way there is worse than one that opens 40 ms later.
+/// window that opens on its way there is worse than one that opens 40 ms later.
 struct ModifierDoubleTap {
     /// Between the two presses. The reference calls for 350–400 ms; 380 is the middle of that, and
     /// comfortably below the ~500 ms at which two deliberate taps stop feeling like one gesture.
@@ -297,7 +297,7 @@ struct ModifierDoubleTap {
 /// or cancels the first through the toggle below — and nothing here guesses, because a guess would
 /// be a window opening on a keystroke the user did not make. That failure is survivable only because
 /// it is not the only door: the Settings recorder binds an ordinary key equivalent, which needs no
-/// Accessibility grant at all, and the menu bar carries "Open Timeline" as a plain item.
+/// Accessibility grant at all, and the menu bar carries a plain row for each of this app's windows.
 struct BothCommandKeys {
     /// How far apart the two presses may be and still be one gesture.
     ///
@@ -431,14 +431,23 @@ final class GlobalShortcuts {
 
     // MARK: Actions
 
+    /// What a chord does when it fires.
+    ///
+    /// `openActivity` was `openTimeline` for as long as the timeline was this app's one real window.
+    /// It is not: Activity is the main window — what a launch, the Dock icon and this chord all open
+    /// — and the timeline is the second window a moment inside Activity opens into. The case name
+    /// followed the behaviour; the *stored* name deliberately did not, and `storageKey` says why.
     enum Action: String, CaseIterable, Sendable {
-        case openTimeline
+        /// The app's primary way in. Brings the Activity window — the main window — forward.
+        case openActivity
         case openSearch
 
-        /// The Settings row title, verbatim from the reference's General pane.
+        /// The Settings row title. Named for the window it opens, which is the only thing about a
+        /// shortcut row a user can check: a row still called "Open Timeline Shortcut" over a chord
+        /// that opens Activity is a recorder that lies about what it records.
         var title: String {
             switch self {
-            case .openTimeline: return "Open Timeline Shortcut"
+            case .openActivity: return "Open Activity Shortcut"
             case .openSearch: return "Open Search Shortcut"
             }
         }
@@ -449,21 +458,23 @@ final class GlobalShortcuts {
             "Record a keyboard shortcut. Clear it to use \(defaultChord.display)."
         }
 
-        /// `⌘ + ⌘` for the timeline, `⌘⌘⇧` for search.
+        /// `⌘ + ⌘` for Activity, `⌘⌘⇧` for search.
         ///
-        /// The timeline used to be `⌘⌘` — a double tap — and it was reported as the wrong gesture
-        /// twice: *"expressing both the command keys one by one. It's supposed to be both the
-        /// command keys together"*, and then *"it should not be clicking the command key twice, it
-        /// should be clicking both command keys on the keyboard together."* Two ⌘ glyphs side by
+        /// The app's way in used to be `⌘⌘` — a double tap — and it was reported as the wrong
+        /// gesture twice: *"expressing both the command keys one by one. It's supposed to be both
+        /// the command keys together"*, and then *"it should not be clicking the command key twice,
+        /// it should be clicking both command keys on the keyboard together."* Two ⌘ glyphs side by
         /// side is a picture of the two keys a Mac actually has, so that is the gesture it was read
-        /// as, and the app is now what it looks like.
+        /// as, and the app is now what it looks like. The chord did not move when the window behind
+        /// it did — this is the gesture the product advertises, and it now lands on the main window
+        /// rather than on the timeline.
         ///
         /// Search stays a double tap. Its chord is `⌘⌘⇧`, which cannot be confused with `⌘ + ⌘` by
         /// hand or by this file — the two detectors cannot both fire on one gesture, since pressing
         /// both Command keys puts the `.command` bit down once and a double tap puts it down twice.
         var defaultChord: ShortcutChord {
             switch self {
-            case .openTimeline: return .bothCommandKeys
+            case .openActivity: return .bothCommandKeys
             case .openSearch: return .doubleTap(.command, alsoHeld: [.shift])
             }
         }
@@ -472,14 +483,34 @@ final class GlobalShortcuts {
         /// would not be able to tell from an uninitialised struct.
         fileprivate var hotKeyID: UInt32 {
             switch self {
-            case .openTimeline: return 1
+            case .openActivity: return 1
             case .openSearch: return 2
+            }
+        }
+
+        /// The name a recorded binding is **filed under on disk**, which is deliberately not
+        /// `rawValue`.
+        ///
+        /// `openActivity` shipped as `openTimeline`, and every chord a user has already recorded sits
+        /// at `context.shortcut.openTimeline.keyEquivalent`. Building the key out of the case name
+        /// would have renamed the *lock* along with the code: `binding(for:)` would find nothing at
+        /// the new key, fall through to `.gestureDefault`, and the user's own chord would be gone
+        /// with no error raised anywhere and no way to tell it had happened. A rename is not a
+        /// migration, so the stored name stays where it was written and only this app's name for it
+        /// moved.
+        ///
+        /// A `switch` rather than a table, so a third action cannot be added without someone deciding
+        /// what it is filed under.
+        private var storedName: String {
+            switch self {
+            case .openActivity: return "openTimeline"
+            case .openSearch: return "openSearch"
             }
         }
 
         /// Namespaced the way every other persisted value in this app is (see `Permissions.Key`).
         var storageKey: String {
-            "context.shortcut.\(rawValue).keyEquivalent"
+            "context.shortcut.\(storedName).keyEquivalent"
         }
     }
 
@@ -496,8 +527,8 @@ final class GlobalShortcuts {
     enum Binding: Equatable, Sendable {
         /// Nothing recorded, so the action answers to the modifier gesture it ships with —
         /// `⌘ + ⌘` or `⌘⌘⇧`, whichever `Action.defaultChord` names. Named for the *kind* of binding
-        /// rather than for one gesture, because the timeline's default is no longer a double tap and
-        /// a case called `doubleTapDefault` would have quietly become a lie about half of them.
+        /// rather than for one gesture, because `openActivity`'s default is not a double tap and a
+        /// case called `doubleTapDefault` would have quietly become a lie about half of them.
         case gestureDefault
         case recorded(Recorded)
     }
@@ -583,11 +614,11 @@ final class GlobalShortcuts {
     /// Extra listeners, for a surface that needs to know a chord really fired without taking the
     /// app's single handler away from it.
     ///
-    /// The tutorial is why this exists: its timeline beat may only be satisfied by the user
-    /// genuinely pressing the chord, and the window that opens is opened by the app's own handler —
-    /// not by the tutorial reaching for `RewindWindow` itself. Replacing `onTrigger` for the length
-    /// of a walkthrough would have meant the tutorial owning the shortcut, which is exactly the
-    /// arrangement where "we opened something" can quietly stand in for "they pressed it".
+    /// The tutorial is why this exists: its chord beat may only be satisfied by the user genuinely
+    /// pressing the chord, and the window that opens is opened by the app's own handler — not by the
+    /// tutorial reaching for a window itself. Replacing `onTrigger` for the length of a walkthrough
+    /// would have meant the tutorial owning the shortcut, which is exactly the arrangement where "we
+    /// opened something" can quietly stand in for "they pressed it".
     private var observers: [UUID: (Action) -> Void] = [:]
     private var carbonHandler: EventHandlerRef?
     private var activationObserver: NSObjectProtocol?
@@ -803,8 +834,8 @@ final class GlobalShortcuts {
 
     /// Delivers a gesture to whichever action is still on its default *and* ships that gesture.
     ///
-    /// Only an action still on its default answers to a gesture: rebinding the timeline to ⌥Space
-    /// and leaving search on ⌘⌘⇧ must not leave ⌘ + ⌘ opening the timeline as well. Matched against
+    /// Only an action still on its default answers to a gesture: rebinding `openActivity` to ⌥Space
+    /// and leaving search on ⌘⌘⇧ must not leave ⌘ + ⌘ opening Activity as well. Matched against
     /// `defaultChord` itself rather than against a second copy of the gesture's parts, so the table
     /// Settings prints and the table that fires cannot drift apart.
     private func fire(_ chord: ShortcutChord) {

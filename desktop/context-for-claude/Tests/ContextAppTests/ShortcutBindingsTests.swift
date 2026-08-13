@@ -117,10 +117,10 @@ final class LiveShortcutBindingsTests: XCTestCase {
 
     func testRecordingPersistsThroughTheStoreAndRearmsImmediately() {
         let bindings = provider()
-        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openTimeline), .recorded)
+        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openActivity), .recorded)
 
         // Stored where the hot key layer reads it, not in the provider.
-        guard case .recorded(let recorded) = registry.binding(for: .openTimeline) else {
+        guard case .recorded(let recorded) = registry.binding(for: .openActivity) else {
             return XCTFail("the chord never reached the shortcut layer")
         }
         XCTAssertEqual(recorded.keyCode, 40)
@@ -132,7 +132,7 @@ final class LiveShortcutBindingsTests: XCTestCase {
         // Re-armed on the way through: no relaunch, no second step.
         XCTAssertEqual(registry.reapplies, 1)
         // And the recorder now shows a recorded chord, so the ✕ appears.
-        XCTAssertEqual(bindings.binding(for: .openTimeline), Self.optionCommandK)
+        XCTAssertEqual(bindings.binding(for: .openActivity), Self.optionCommandK)
         // The other slot is untouched — one recorder must not move the other row.
         XCTAssertNil(bindings.binding(for: .openSearch))
     }
@@ -144,21 +144,21 @@ final class LiveShortcutBindingsTests: XCTestCase {
         let bindings = provider()
         let withCapsLock = SettingsShortcutChord(
             keyCode: 40, modifierFlags: [.command, .option, .capsLock])
-        XCTAssertEqual(bindings.record(withCapsLock, for: .openTimeline), .recorded)
-        XCTAssertEqual(bindings.binding(for: .openTimeline), Self.optionCommandK)
+        XCTAssertEqual(bindings.record(withCapsLock, for: .openActivity), .recorded)
+        XCTAssertEqual(bindings.binding(for: .openActivity), Self.optionCommandK)
     }
 
     func testClearingReturnsToTheGestureDefaultAndRearms() {
         let bindings = provider()
-        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openTimeline), .recorded)
+        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openActivity), .recorded)
 
-        bindings.clear(.openTimeline)
+        bindings.clear(.openActivity)
 
-        XCTAssertEqual(registry.binding(for: .openTimeline), .gestureDefault)
-        XCTAssertNil(bindings.binding(for: .openTimeline), "cleared is not 'bound to the default'")
+        XCTAssertEqual(registry.binding(for: .openActivity), .gestureDefault)
+        XCTAssertNil(bindings.binding(for: .openActivity), "cleared is not 'bound to the default'")
         // The clear is a re-arm too: it is what puts the `flagsChanged` monitor back.
         XCTAssertEqual(registry.reapplies, 2)
-        XCTAssertEqual(registry.armedChords()[.openTimeline], ShortcutChord.bothCommandKeys)
+        XCTAssertEqual(registry.armedChords()[.openActivity], ShortcutChord.bothCommandKeys)
     }
 
     // MARK: Refusal
@@ -169,28 +169,28 @@ final class LiveShortcutBindingsTests: XCTestCase {
         let bindings = provider()
         registry.refusedLabels = ["K"]
 
-        guard case .rejected(let reason) = bindings.record(Self.optionCommandK, for: .openTimeline) else {
+        guard case .rejected(let reason) = bindings.record(Self.optionCommandK, for: .openActivity) else {
             return XCTFail("a chord macOS will not register must not report success")
         }
         XCTAssertTrue(reason.contains("already uses"), reason)
 
         // Rolled back, so the user is left with a shortcut that works rather than a stored dead one.
-        XCTAssertEqual(registry.binding(for: .openTimeline), .gestureDefault)
-        XCTAssertNil(bindings.binding(for: .openTimeline))
-        XCTAssertEqual(registry.readiness(for: .openTimeline), .armed)
+        XCTAssertEqual(registry.binding(for: .openActivity), .gestureDefault)
+        XCTAssertNil(bindings.binding(for: .openActivity))
+        XCTAssertEqual(registry.readiness(for: .openActivity), .armed)
     }
 
     /// A refusal must restore the *previous recording*, not just wipe the slot.
     func testARefusalAfterAnEarlierRecordingRestoresTheEarlierOne() {
         let bindings = provider()
-        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openTimeline), .recorded)
+        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openActivity), .recorded)
 
         registry.refusedLabels = ["Key 49"]
         let space = SettingsShortcutChord(keyCode: 49, modifierFlags: [.control])
-        guard case .rejected = bindings.record(space, for: .openTimeline) else {
+        guard case .rejected = bindings.record(space, for: .openActivity) else {
             return XCTFail("expected the refusal")
         }
-        XCTAssertEqual(bindings.binding(for: .openTimeline), Self.optionCommandK)
+        XCTAssertEqual(bindings.binding(for: .openActivity), Self.optionCommandK)
     }
 
     // MARK: Validation
@@ -200,19 +200,19 @@ final class LiveShortcutBindingsTests: XCTestCase {
     func testChordsMacOSOwnsAreRefusedWithoutReachingTheRegistry() {
         let bindings = provider()
         for reserved in SettingsShortcutChord.reservedByMacOS {
-            guard case .rejected = bindings.record(reserved, for: .openTimeline) else {
+            guard case .rejected = bindings.record(reserved, for: .openActivity) else {
                 return XCTFail("\(reserved.displayString) is reserved by macOS and must be refused")
             }
         }
         // ⇧K is K to the rest of the system, so binding it eats a letter everywhere.
         let shiftOnly = SettingsShortcutChord(keyCode: 40, modifierFlags: [.shift])
-        guard case .rejected = bindings.record(shiftOnly, for: .openTimeline) else {
+        guard case .rejected = bindings.record(shiftOnly, for: .openActivity) else {
             return XCTFail("a shift-only chord must be refused")
         }
         // Return means something specific in every app; the shortcut layer refuses it on the event
         // path too, and the two paths must agree.
         let commandReturn = SettingsShortcutChord(keyCode: 36, modifierFlags: [.command])
-        guard case .rejected = bindings.record(commandReturn, for: .openTimeline) else {
+        guard case .rejected = bindings.record(commandReturn, for: .openActivity) else {
             return XCTFail("↵ must be refused")
         }
         XCTAssertEqual(registry.reapplies, 0, "a refused chord must never be stored or armed")
@@ -229,21 +229,21 @@ final class LiveShortcutBindingsTests: XCTestCase {
         let bindings = provider()
         for gesture in [SettingsShortcutChord.Gesture.bothCommandKeys, .doubleTap] {
             let chord = SettingsShortcutChord(modifierFlags: .command, gesture: gesture)
-            guard case .rejected = bindings.record(chord, for: .openTimeline) else {
+            guard case .rejected = bindings.record(chord, for: .openActivity) else {
                 return XCTFail("\(chord.displayString) has no key for a hot key to take")
             }
         }
         XCTAssertEqual(registry.reapplies, 0, "a refused chord must never be stored or armed")
-        XCTAssertNil(bindings.binding(for: .openTimeline))
+        XCTAssertNil(bindings.binding(for: .openActivity))
     }
 
     func testTheTwoSlotsCannotShareOneChord() {
         let bindings = provider()
-        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openTimeline), .recorded)
+        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openActivity), .recorded)
         guard case .rejected(let reason) = bindings.record(Self.optionCommandK, for: .openSearch) else {
             return XCTFail("one chord cannot drive two actions")
         }
-        XCTAssertTrue(reason.contains(ShortcutAction.openTimeline.title), reason)
+        XCTAssertTrue(reason.contains(ShortcutAction.openActivity.title), reason)
     }
 
     // MARK: Observers
@@ -253,8 +253,8 @@ final class LiveShortcutBindingsTests: XCTestCase {
         var notifications = 0
         let token = bindings.addObserver { notifications += 1 }
 
-        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openTimeline), .recorded)
-        bindings.clear(.openTimeline)
+        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openActivity), .recorded)
+        bindings.clear(.openActivity)
         XCTAssertEqual(notifications, 2)
 
         bindings.removeObserver(token)
@@ -299,7 +299,7 @@ final class LiveShortcutBindingsTests: XCTestCase {
 
         let rows = bindings.conflicts()
         XCTAssertEqual(rows.count, 2, "a bare ⌘ starts both of this app's gestures")
-        let row = try XCTUnwrap(rows.first { $0.action == .openTimeline })
+        let row = try XCTUnwrap(rows.first { $0.action == .openActivity })
         XCTAssertEqual(row.owner, "Codex")
         // Spelled by `SettingsShortcutChord` here and by `ShortcutChord` in the scan: one gesture,
         // one spelling, or the row describes a shortcut the user does not recognise as theirs.
@@ -334,7 +334,7 @@ final class LiveShortcutBindingsTests: XCTestCase {
         // A conflict with nowhere to reveal offers no button rather than a dead one.
         XCTAssertNil(bindings.conflicts().first?.remedyTitle)
 
-        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openTimeline), .recorded)
+        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openActivity), .recorded)
         XCTAssertTrue(bindings.conflicts().isEmpty, "nothing claims ⌥⌘K")
     }
 
@@ -353,7 +353,7 @@ final class LiveShortcutBindingsTests: XCTestCase {
         _ = bindings.conflicts()
         XCTAssertEqual(scans, 1, "an unchanged question is not re-read from disk on every render")
 
-        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openTimeline), .recorded)
+        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openActivity), .recorded)
         _ = bindings.conflicts()
         XCTAssertEqual(scans, 2, "a rebind changes which chords are contested")
 
@@ -463,6 +463,6 @@ final class ShortcutKeyLabelTests: XCTestCase {
             ShortcutChord.key(label: "Space", modifiers: [.command, .control]).display,
             "Settings and the shortcut layer must not spell one shortcut two ways")
         XCTAssertEqual(ShortcutAction.openSearch.defaultChord.displayString, "⌘⌘⇧")
-        XCTAssertEqual(ShortcutAction.openTimeline.defaultChord.displayString, "⌘ + ⌘")
+        XCTAssertEqual(ShortcutAction.openActivity.defaultChord.displayString, "⌘ + ⌘")
     }
 }

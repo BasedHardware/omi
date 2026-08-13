@@ -135,13 +135,12 @@ final class SearchRenderHarness: XCTestCase {
         NSApp.appearance = NSAppearance(named: appearance)
 
         let screen = try XCTUnwrap(NSScreen.main)
-        let surface = SearchLayout.surfaceWidth
-        // The tallest the surface can get. The shipped window resizes itself to the measured height
-        // (`onHeightChange`); this harness has no such loop, so it opens at the ceiling and lets the
-        // panel sit shorter inside it rather than clipping a panel that grew.
-        let height = SearchLayout.surfaceHeight(
-            showingNote: false,
-            panelHeight: SearchLayout.panelHeaderHeight + SearchLayout.maximumResultsBodyHeight)
+        // The window's own default frame, which is what a person opening this app actually sees. It
+        // used to be "the tallest the surface can get", because the surface resized itself to its
+        // content and the harness had no such loop to run; the window is a fixed frame the content
+        // fits into now, so there is nothing to predict.
+        let surface = SearchLayout.defaultWindowSize.width
+        let height = SearchLayout.defaultWindowSize.height
         // The captured rectangle: the surface plus a frame of synthetic desktop around it, so the
         // shadow and the glass have something real to sit on and the whole capture is ours.
         let inset: CGFloat = 34
@@ -173,25 +172,42 @@ final class SearchRenderHarness: XCTestCase {
         let panelFrame = NSRect(
             x: backdropFrame.minX + inset, y: backdropFrame.minY + inset,
             width: surface, height: height)
-        let window = NSPanel(
+        // **The shipped window's shape, not a stand-in for it.** This used to rebuild the borderless
+        // non-activating panel by hand, which would now emit goldens of a surface that does not
+        // ship — no title bar, no window shadow, two pieces of glass over the desktop instead of two
+        // regions on one. Same style mask, same `WindowGlass.wear(_:as: .titled)`, same
+        // `InkGlassView` container and constraints as `SearchBarWindow.present`.
+        //
+        // `.popUpMenu` is the one deliberate difference: the harness has an opaque backdrop window
+        // it must sit on top of, and window level is not something a golden can see.
+        let window = NSWindow(
             contentRect: panelFrame,
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        // The shipped configuration: no window shadow, because each panel casts its own.
-        window.hasShadow = false
+        window.title = SearchBarWindow.title
+        window.minSize = SearchLayout.minimumWindowSize
+        window.isReleasedWhenClosed = false
+        WindowGlass.wear(window, as: .titled)
         window.level = .popUpMenu
-        InkGlass.pin(window)
 
-        let root = NSView(frame: NSRect(origin: .zero, size: panelFrame.size))
+        let root = InkGlassView(
+            frame: NSRect(origin: .zero, size: panelFrame.size), style: .fullBleed)
+        root.autoresizingMask = [.width, .height]
+        window.contentView = root
+        root.layoutSubtreeIfNeeded()
+
         let hosting = NSHostingView(
             rootView: SearchBarView(query: query, results: model))
-        hosting.frame = root.bounds
-        hosting.autoresizingMask = [.width, .height]
+        hosting.sizingOptions = [.minSize, .maxSize]
+        hosting.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(hosting)
-        window.contentView = root
+        NSLayoutConstraint.activate([
+            hosting.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            hosting.topAnchor.constraint(equalTo: root.topAnchor),
+            hosting.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+        ])
         window.orderFrontRegardless()
 
         // A run loop, not a sleep: the material samples the desktop through the window server, the

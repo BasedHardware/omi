@@ -29,7 +29,7 @@ import SwiftUI
 // test can make. What cannot be asserted headlessly is the drawing, and nothing about the drawing
 // decides what is being demonstrated.
 
-// MARK: - Which gesture opens the timeline
+// MARK: - Which gesture opens the app
 
 /// **Both Command keys, pressed together**: the app's own way in, and a gesture no keycap chip can
 /// spell.
@@ -37,7 +37,7 @@ import SwiftUI
 /// This is a *local* description of the gesture, held here and nowhere else on purpose. The shortcut
 /// layer owns what the app listens for; this file owns what the card draws; and the only thing that
 /// crosses between them is the printed shortcut string the tutorial already reads through
-/// `TutorialEnvironment.timelineChord`. Nothing here imports a case name, so a rename in
+/// `TutorialEnvironment.activityChord`. Nothing here imports a case name, so a rename in
 /// `Shortcuts/` cannot silently repoint the picture at a different gesture — it can only ever make
 /// `matches` stop recognising the string, which falls back to the typed-chord drawing and is visible
 /// in one look at the beat.

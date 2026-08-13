@@ -80,28 +80,32 @@ final class TutorialModel: ObservableObject {
     /// page, maybe, because there's just more content to read and people can scroll through."
     static let readingMaterial = URL(string: "https://www.anthropic.com/research")!
 
-    /// The chord the timeline really opens on, read through the environment from the shortcut layer
-    /// that registers it rather than written out here. A tutorial that taught a chord the app does
-    /// not listen for would be teaching a surface that does not exist — and the user can rebind it in
-    /// Settings, after which a literal string would be wrong for them specifically.
-    var timelineChord: String { environment.timelineChord() }
+    /// The chord the Activity window really opens on, read through the environment from the shortcut
+    /// layer that registers it rather than written out here. A tutorial that taught a chord the app
+    /// does not listen for would be teaching a surface that does not exist — and the user can rebind
+    /// it in Settings, after which a literal string would be wrong for them specifically.
+    ///
+    /// It was `timelineChord`, and the rename is the point rather than tidying: this chord opened the
+    /// timeline until Activity became the main window, and a tutorial reading a property named for
+    /// the old window is one edit away from teaching the old window again.
+    var activityChord: String { environment.activityChord() }
 
     /// Whether that chord is actually live. When it is not — Accessibility not granted, a conflict, a
     /// registration that was refused — the beat cannot be earned at all, so the way forward is
     /// offered immediately rather than after a wait nothing can end.
-    var timelineChordIsArmed: Bool { environment.timelineChordIsArmed() }
+    var activityChordIsArmed: Bool { environment.activityChordIsArmed() }
 
-    /// Whether the timeline's shortcut is the app's own launch gesture — **both Command keys pressed
+    /// Whether that shortcut is the app's own launch gesture — **both Command keys pressed
     /// together** — rather than a set of keys that is typed.
     ///
     /// Decided from the printed shortcut and from nothing else, which is the same rule
-    /// `timelineChord` already follows and it matters more here. This beat has two drawings and two
+    /// `activityChord` already follows and it matters more here. This beat has two drawings and two
     /// sentences, and picking between them by asking the shortcut layer what *kind* of binding it
     /// holds would put a second copy of "what the app listens for" in the tutorial — one that goes
     /// stale silently the moment somebody rebinds. The string the user is being shown is the only
     /// thing that can be trusted to describe the gesture they have to make; see
     /// `TutorialCommandPair` for what counts as this gesture and why.
-    var timelineChordIsCommandPair: Bool { TutorialCommandPair.matches(timelineChord) }
+    var activityChordIsCommandPair: Bool { TutorialCommandPair.matches(activityChord) }
 
     // MARK: - Published state
 
@@ -126,17 +130,15 @@ final class TutorialModel: ObservableObject {
     /// never "they answered", and never "they said yes".
     @Published private(set) var didAskForScreenAccess = false
 
-    /// Whether the timeline window really came up. The step's copy depends on it — describing a
-    /// window that is not on screen would be the same class of lie as a fake frame count.
+    /// Whether the timeline window really came up when the drag beat asked for it. The step's copy
+    /// depends on it — describing a window that is not on screen would be the same class of lie as a
+    /// fake frame count, and the shell genuinely declines to open a timeline over an unopened store.
     @Published private(set) var timelineIsOpen = false
 
-    /// Whether the real `openTimeline` shortcut really fired while this step was watching for it.
+    /// Whether the real `openActivity` shortcut really fired while this step was watching for it.
     /// Set from the shortcut layer's own delivery and from nowhere else: there is deliberately no
     /// path in this type that can set it on the tutorial's behalf.
     @Published private(set) var hotkeyFired = false
-    /// Whether the tutorial had to open the timeline itself because the chord could not. Read by the
-    /// card, which then says so rather than congratulating the user on a keypress they never made.
-    @Published private(set) var didWaiveHotkey = false
 
     /// Whether the user really dragged. Set only by `TutorialDrag` clearing its threshold on real
     /// scroll events; no amount of time on this step moves it.
@@ -148,8 +150,25 @@ final class TutorialModel: ObservableObject {
     // else. There is deliberately no search in this type any more: the tutorial cannot produce a
     // result, cannot open a moment, and cannot make its own panel appear — it can only be told.
 
-    /// Whether the real search panel is on screen.
+    /// Whether the real search window is on screen.
+    ///
+    /// **Not a gate any more, and that is the whole of this beat's regating.** It used to be one —
+    /// `findMoments` waited for the panel to appear — which worked while the panel was summoned by
+    /// the very press the beat was teaching and closed again the moment it was done. The search
+    /// surface is the app's main window now: it is up when the tutorial starts, it is up between
+    /// beats, and "is it on screen" is very nearly always true. A gate on it would be satisfied
+    /// before the card had finished drawing. What this still answers is the state the *query* beat
+    /// needs — the user closed the window and there is nothing to type into (see `speech` and the
+    /// "Open search" button `TutorialCardView` grows from it).
     @Published private(set) var searchPanelIsOpen = false
+
+    /// **Whether the user really asked for the search window during this beat.**
+    ///
+    /// The replacement gate, and the fact the pill beat was always about: pressing "Search All"
+    /// brings the main window forward, and `SearchPanelEvent.opened` is that ask being announced.
+    /// Reset on the way into the beat, so a window asked for five minutes ago cannot satisfy it —
+    /// the same rule `framesSince` applies to frames and `hotkeyFired` to the chord.
+    @Published private(set) var searchWasAskedFor = false
     /// Whether the tutorial had to open it because the pill could not. Read by the card, which then
     /// says so rather than congratulating the user on a press they never made.
     @Published private(set) var didWaiveSearchPanel = false
@@ -194,10 +213,6 @@ final class TutorialModel: ObservableObject {
     private var proofSince: Double = 0
     private var stepEnteredAt: Double = 0
     private var didOpenTimeline = false
-    /// Whether a search panel came up during this run, and so is this run's to take back off screen.
-    /// Set from the panel's own `.opened`, cleared the moment it is closed again, so a panel the user
-    /// dismissed themselves is never closed a second time on the way out.
-    private var searchPanelIsOurs = false
     private var hasBegun = false
     /// Whether the bed this run started is still running. Held so the fade is asked for exactly once
     /// however the run ends: the beat that hands the user to another app stops it (see
@@ -240,16 +255,16 @@ final class TutorialModel: ObservableObject {
         switch step.gate {
         case .realFrames: didWaiveFrames = true
         case .screenRecordingGrant: didWaiveScreenAccess = true
-        case .realHotkey: didWaiveHotkey = true
-        // Recorded for the same reason `didWaiveHotkey` is, and read in the same place: the next
-        // beat's card would otherwise say "there it is" about a panel the *tutorial* put on screen,
-        // which is a small lie of exactly the kind rule 4 is about.
+        // Recorded because the next beat's card would otherwise say "there it is" about a panel the
+        // *tutorial* put on screen, which is a small lie of exactly the kind rule 4 is about.
         case .realSearchPanel: didWaiveSearchPanel = true
-        // Nothing recorded, and deliberately: `didWaiveHotkey` exists because a later card would
-        // otherwise credit the user with a keypress they never made, and there is no equivalent
-        // claim about the drag anywhere downstream to qualify. A flag set and never read is the
-        // defect this file's rule 4 was written about.
-        case .realGesture: break
+        // Nothing recorded for either of these, and deliberately. A waiver flag earns its keep only
+        // when a later card would otherwise credit the user with something they did not do, and
+        // neither of these has such a card: the drag has no downstream claim at all, and the chord
+        // lost its one when the beat after it stopped depending on which window the chord opened —
+        // the timeline beat opens its own window on every run now and says so either way. A flag set
+        // and never read is the defect this file's rule 4 was written about.
+        case .realHotkey, .realGesture: break
         case .userAction, .realSearchResult, .genuineToolCall: return false
         }
         environment.playClick()
@@ -292,7 +307,7 @@ final class TutorialModel: ObservableObject {
             return isAskingClaude || (claudeAsk == nil && claudeNeedsRestart)
         // Listed rather than defaulted: a beat that starts asking something has to come here and say
         // so, which is the whole reason this is not an `if` inside one card's view.
-        case .invitation, .screenAccess, .collectFrames, .openTimeline, .timeline, .findMoments,
+        case .invitation, .screenAccess, .collectFrames, .openActivity, .timeline, .findMoments,
             .query, .claudeProof, .allSet, .menuBar, .finished, .skipped:
             return false
         }
@@ -308,7 +323,7 @@ final class TutorialModel: ObservableObject {
         case .realFrames: return framesCollected >= Self.frameTarget
         case .realHotkey: return hotkeyFired
         case .realGesture: return didDrag
-        case .realSearchPanel: return searchPanelIsOpen
+        case .realSearchPanel: return searchWasAskedFor
         // A **question** that came back with something, which is not the same as the panel having
         // rows in it: it opens by reading the newest captures with nothing typed, and that read is
         // the surface introducing itself rather than an answer to anybody. `lastQuery` is only ever
@@ -335,7 +350,7 @@ final class TutorialModel: ObservableObject {
             // A chord this machine is not listening for can never fire. Making the user wait out a
             // patience for a fact the tutorial already holds is the flow being stubborn — and worse,
             // it is a card teaching keys that do nothing.
-            if !timelineChordIsArmed { return true }
+            if !activityChordIsArmed { return true }
             return environment.now() - stepEnteredAt >= Self.hotkeyPatience
         case .realGesture:
             // Nothing on screen to drag. Same reasoning.
@@ -431,39 +446,34 @@ final class TutorialModel: ObservableObject {
         environment.openScreenSettings()
     }
 
-    /// Puts the search panel back, when the user has closed it on a beat that needs it.
+    /// Puts the search window back, when the user has closed it on a beat that needs it.
     ///
     /// A button on the card and never automatic, which is the difference between a helpful surface
-    /// and one that will not go away: the panel is dismissed by Escape, and an app that reopens it on
-    /// the next poll tick has taken the Escape key away from the user. The gate this serves cannot be
-    /// waived — a "found it" with nothing behind it is the one claim that would make the rest of the
-    /// product suspect — so a way back has to exist, and this is it.
+    /// and one that will not go away: an app that reopens a window on the next poll tick has taken
+    /// the close button away from the user. The gate this serves cannot be waived — a "found it" with
+    /// nothing behind it is the one claim that would make the rest of the product suspect — so a way
+    /// back has to exist, and this is it.
     func openSearchPanel() {
         guard step == .query, !searchPanelIsOpen else { return }
         environment.playClick()
         environment.presentSearchPanel()
         searchPanelIsOpen = environment.searchPanelIsVisible()
-        searchPanelIsOurs = searchPanelIsOurs || searchPanelIsOpen
     }
 
-    /// The real `openTimeline` shortcut fired.
+    /// The real `openActivity` shortcut fired.
     ///
-    /// The window is already up by the time this runs — the shortcut's own handler opened it, which
-    /// is the entire point of the beat: the user pressed keys and a window appeared *because they
-    /// did*. This only records that it happened and moves on, so the keypress is the transition
-    /// rather than a button press afterwards congratulating them on it.
+    /// The window is already up by the time this runs — the shortcut's own handler brought it
+    /// forward, which is the entire point of the beat: the user pressed keys and the app appeared
+    /// *because they did*. This only records that it happened and moves on, so the keypress is the
+    /// transition rather than a button press afterwards congratulating them on it.
     ///
-    /// It reads `timelineIsVisible()` rather than assuming: the shell declines to open a timeline
-    /// over an unopened store, and a card describing a window that is not there is the same class of
-    /// lie as a frame count driven by a clock.
-    func timelineHotkeyFired() {
-        guard step == .openTimeline, !hotkeyFired else { return }
+    /// **No swoosh, unlike every other beat that puts something on screen.** That sound means "a
+    /// window you did not open has arrived", and it is the wrong claim here: Activity is the app's
+    /// main window, it is up before the tutorial starts on almost every run, and the chord brings it
+    /// forward rather than conjuring it. The chime — this gate is met — is the honest half.
+    func activityHotkeyFired() {
+        guard step == .openActivity, !hotkeyFired else { return }
         hotkeyFired = true
-        timelineIsOpen = environment.timelineIsVisible()
-        if timelineIsOpen {
-            didOpenTimeline = true
-            environment.playSwoosh()
-        }
         environment.playChime()
         advance()
     }
@@ -498,9 +508,13 @@ final class TutorialModel: ObservableObject {
         switch event {
         case .opened:
             searchPanelIsOpen = true
-            searchPanelIsOurs = true
+            // **The ask, not the window.** `.opened` fires when somebody asks for the search surface
+            // — the pill, the chord, the Dock — and that is what the pill beat is waiting for now
+            // that the window itself is nearly always up. Recorded whatever the step, because it is a
+            // fact about what the user did; the *transition* below is still guarded by the step.
+            searchWasAskedFor = true
             // The press *is* the transition, so there is no button afterwards congratulating them on
-            // it — the same shape as `timelineHotkeyFired`. No "have I already done this" flag is
+            // it — the same shape as `activityHotkeyFired`. No "have I already done this" flag is
             // needed and none is kept: `advance()` leaves the step, so a second `.opened` cannot find
             // this branch again.
             guard step == .findMoments else { return }
@@ -509,7 +523,6 @@ final class TutorialModel: ObservableObject {
 
         case .closed:
             searchPanelIsOpen = false
-            searchPanelIsOurs = false
 
         case .answered(let query, let results):
             // Assigned whatever the step, so the card is never describing an answer that has been
@@ -639,13 +652,18 @@ final class TutorialModel: ObservableObject {
                     aside: "Scroll through it for a bit, and I will tell you when I have it.")
             }
 
-        case .openTimeline:
+        case .openActivity:
             // The chord itself is never spoken — the card shows it as a key chip, because it can
             // contain a digit on a rebound machine and because keys are read, not said.
-            guard timelineChordIsArmed else {
+            //
+            // The unarmed line no longer promises to open anything. It used to — the beat after this
+            // one needed a window this chord had opened — and the aside said the tutorial would open
+            // the timeline itself. Neither half survived the chord moving to Activity: this window is
+            // already up, and the timeline beat opens its own. What is left to say is the fact.
+            guard activityChordIsArmed else {
                 return TutorialSpeech(
                     "I cannot listen for that shortcut.",
-                    aside: "Accessibility is off, so I will have to open your timeline myself.")
+                    aside: "Accessibility is off, so those keys will not reach me.")
             }
             // The one gesture in this app that a chip of keycaps cannot spell, so it gets its own
             // sentence as well as its own drawing. "These keys" is a fine thing to say about a chord
@@ -654,13 +672,15 @@ final class TutorialModel: ObservableObject {
             // both go down at once, because the picture and the words are the only two places that
             // can be said. They say it in the same words on purpose: `TutorialCommandPair.spoken` is
             // the label a screen reader gets for the animation.
-            guard !timelineChordIsCommandPair else {
+            // "Your activity" and not "the Activity window": the same words the menu bar's own row
+            // uses, so the chord, the row and the card are all naming one thing.
+            guard !activityChordIsCommandPair else {
                 return TutorialSpeech(
-                    "Open your timeline.",
+                    "Open your activity.",
                     aside: "Press both Command keys together — the two either side of the space bar.")
             }
             return TutorialSpeech(
-                "Open your timeline.", aside: "Press these keys, and it will come up.")
+                "Open your activity.", aside: "Press these keys, and it will come up.")
 
         case .timeline:
             guard timelineIsOpen else {
@@ -686,9 +706,16 @@ final class TutorialModel: ObservableObject {
             //
             // Reported as: "it isn't clear that they have to swipe on the trackpad with two
             // fingers." The words counted the fingers before; nothing else in the beat did.
-            let opening = didWaiveHotkey ? "I opened it for you." : "Everything I have seen."
+            //
+            // **One opening line, and it names who opened the window.** There used to be two, chosen
+            // by `didWaiveHotkey`: the chord opened the timeline, so the card said "Everything I have
+            // seen." when the user's own keypress had put it there and "I opened it for you." when
+            // the tutorial had. The chord opens Activity now and this beat opens the timeline on
+            // every run, so the second sentence is the only true one and the first would be the beat
+            // taking credit for a window nobody summoned.
             return TutorialSpeech(
-                opening, aside: "Swipe two fingers across your trackpad to travel through your day.")
+                "I opened your timeline.",
+                aside: "Swipe two fingers across your trackpad to travel through your day.")
 
         case .findMoments:
             return TutorialSpeech("Now find one moment.", aside: "Click Search All, just up there.")
@@ -846,15 +873,17 @@ final class TutorialModel: ObservableObject {
         // Every watcher this flow can install is torn down here and re-armed by the step that wants
         // it. One place, so a beat cannot leave a system-wide event monitor running behind it — and
         // so no watcher can outlive the step whose gate it feeds.
-        environment.stopWatchingTimelineHotkey()
+        environment.stopWatchingActivityHotkey()
         environment.stopWatchingDrag()
         environment.stopWatchingSearchPanel()
-        // The search panel is the tutorial's own furniture for exactly two beats, and it goes back
-        // where it came from on the way into any other one — a 760 pt floating slab carried into the
-        // Claude beats would be sitting over the window those beats are about. Decided by the step
-        // (`TutorialStep.usesSearchPanel`) rather than by naming the two transitions here, so a beat
-        // inserted later cannot silently inherit a panel it knows nothing about.
-        if !next.usesSearchPanel { closeTheSearchPanel() }
+        // **Nothing here closes the search window.** It used to, on the way into any beat that did
+        // not use it: the panel was the tutorial's own furniture, a floating slab that would have sat
+        // over the very window the Claude beats are about, and leaving it up also left the timeline
+        // ordered out with nothing to restore it. Both of those facts are gone with the panel. What
+        // is left is the app's main window, which the tutorial did not open and does not own: a
+        // walkthrough that closed it on the way past would be taking the user's window away from them
+        // for reaching the next card.
+        //
         // The bed's last beat, decided by the step rather than by a timer — see
         // `TutorialStep.handsOverToAnotherApp`. Here rather than in `tearDown` because the run's end
         // is not something the tutorial gets to schedule: the proof beat waits on Claude and can wait
@@ -899,23 +928,33 @@ final class TutorialModel: ObservableObject {
             // placeholder that happens to be zero.
             poll()
 
-        case .openTimeline:
+        case .openActivity:
             hotkeyFired = false
             // Armed before the card is on screen, so a user who presses the chord the instant they
             // read it is not racing the watcher.
-            environment.watchForTimelineHotkey { [weak self] in self?.timelineHotkeyFired() }
+            environment.watchForActivityHotkey { [weak self] in self?.activityHotkeyFired() }
             environment.presentOverlay(next)
 
         case .timeline:
-            // The window is normally already up — the user's own keypress opened it through the
-            // shortcut's own handler. The tutorial opens it itself on exactly one branch: the chord
-            // could not fire and the user took the way out that says so.
-            if didWaiveHotkey {
-                environment.presentTimeline()
-                didOpenTimeline = true
-                environment.playSwoosh()
-            }
+            // **The tutorial opens this window, on every run.** It used to open it on one branch
+            // only — the chord could not fire and the user took the way out — because the chord
+            // itself opened the timeline and the ordinary path was the user's own keypress. The
+            // chord opens Activity now, so nothing in the flow before this beat puts a timeline on
+            // screen, and a beat that asked somebody to drag through a window that is not there
+            // would be teaching a gesture with nowhere to make it.
+            //
+            // That is a real demotion of this beat and it is the honest one: what the user is being
+            // taught here is the *drag*, not the summoning, and the card says who opened the window
+            // (see `speech`). `didOpenTimeline` is what hands it back at teardown — the tutorial does
+            // not get to leave a window behind that the user never asked for.
+            environment.presentTimeline()
+            didOpenTimeline = true
+            // Assigned from the window rather than from the call: the shell declines to open a
+            // timeline over a store that has not finished opening, and the card must not describe a
+            // window that is not there. The sound follows the same answer — a swoosh for a window
+            // that never arrived is the smallest possible version of the lie this file is about.
             timelineIsOpen = environment.timelineIsVisible()
+            if timelineIsOpen { environment.playSwoosh() }
             environment.watchForDrag { [weak self] in self?.dragTravelled() }
             environment.presentOverlay(next)
             poll()
@@ -926,29 +965,30 @@ final class TutorialModel: ObservableObject {
             environment.watchSearchPanel { [weak self] event in
                 self?.searchPanelReported(event)
             }
-            // Whatever is true right now, not what the last beat left behind: the panel can be open
-            // already — the user pressed the pill while reading the timeline card, or it was up
-            // before the tutorial started — and a beat waiting for something that has already
-            // happened is a beat that never ends.
+            // **Cleared, not read off the screen.** This beat used to satisfy itself on entry from
+            // `searchPanelIsVisible()`, on the reasoning that a beat waiting for something that has
+            // already happened never ends. That was right about a summoned panel and is a defect
+            // about a main window: the window is up before the tutorial starts and up between every
+            // beat, so reading it here would walk straight past the one beat that teaches people
+            // where search is. What the beat waits for is the *ask*, and nobody has made one yet.
+            searchWasAskedFor = false
             searchPanelIsOpen = environment.searchPanelIsVisible()
             environment.presentOverlay(next)
             poll()
-            // After the card, so the beat is already on screen if the gate is met on entry.
-            if searchPanelIsOpen { advance() }
 
         case .query:
             environment.watchSearchPanel { [weak self] event in
                 self?.searchPanelReported(event)
             }
-            // The one branch on which the tutorial opens the panel itself: the pill could not be
-            // pressed and the user took the way out that says so. Everywhere else it is already up,
-            // opened by their own click through the shell's own handler.
+            // The one branch on which the tutorial asks for the window itself: the pill could not be
+            // pressed and the user took the way out that says so. Everywhere else it is already up —
+            // brought forward by their own click through the shell's own handler, or simply never
+            // closed.
             if didWaiveSearchPanel, !environment.searchPanelIsVisible() {
                 environment.presentSearchPanel()
                 environment.playSwoosh()
             }
             searchPanelIsOpen = environment.searchPanelIsVisible()
-            searchPanelIsOurs = searchPanelIsOurs || searchPanelIsOpen
             environment.presentOverlay(next)
             poll()
 
@@ -982,17 +1022,15 @@ final class TutorialModel: ObservableObject {
     /// Everything this tutorial put on screen, taken back off it. Runs for both terminal states:
     /// finishing and abandoning leave the same empty desktop, and only one of them is a success.
     private func tearDown() {
-        environment.stopWatchingTimelineHotkey()
+        environment.stopWatchingActivityHotkey()
         environment.stopWatchingDrag()
         environment.stopWatchingSearchPanel()
         environment.dismissOverlay()
         environment.hideMenuBarSpotlight()
-        // Before the timeline, and the order is the point. Closing the panel is what brings a
-        // yielded timeline back (`RewindWindow.setHidden`), so a teardown that dismissed the timeline
-        // first would order out a window that the panel's close then restores — leaving the user
-        // looking at a timeline the tutorial thought it had taken away. `enter` has usually done this
-        // already; it is idempotent, which is what lets both call it.
-        closeTheSearchPanel()
+        // The search window is deliberately left where it is. It is the app's main window rather than
+        // this run's furniture, and the timeline no longer stands aside for it — the two facts that
+        // used to make closing it part of a clean teardown. What the tutorial still takes back is the
+        // timeline, and only when the tutorial is what opened it.
         if didOpenTimeline {
             environment.dismissTimeline()
             didOpenTimeline = false
@@ -1003,20 +1041,6 @@ final class TutorialModel: ObservableObject {
         stopTheBed()
         targetFrame = nil
         claudeFrame = nil
-    }
-
-    /// Takes the search panel back off screen, once, and only if this run is what put it there.
-    ///
-    /// The guard is not politeness. This app is `LSUIElement` and the timeline **stands aside** while
-    /// the panel is up, so a panel closed by anything other than the panel's own dismissal would
-    /// leave the timeline ordered out with nothing to bring it back. Routing every close through
-    /// `dismissSearchPanel` — which is `SearchBarWindow.dismiss`, which announces `.closed`, which is
-    /// what restores the timeline — is what makes abandoning the tutorial mid-beat safe.
-    private func closeTheSearchPanel() {
-        guard searchPanelIsOurs else { return }
-        searchPanelIsOurs = false
-        searchPanelIsOpen = false
-        environment.dismissSearchPanel()
     }
 
     /// Fades the bed out, once.

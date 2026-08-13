@@ -287,14 +287,14 @@ final class LiveShortcutBindings: ShortcutBindingProvider {
     /// compile here, not return nil at runtime and drop a row out of Settings.
     private func registryAction(_ action: ShortcutAction) -> GlobalShortcuts.Action {
         switch action {
-        case .openTimeline: return .openTimeline
+        case .openActivity: return .openActivity
         case .openSearch: return .openSearch
         }
     }
 
     private func settingsAction(_ action: GlobalShortcuts.Action) -> ShortcutAction {
         switch action {
-        case .openTimeline: return .openTimeline
+        case .openActivity: return .openActivity
         case .openSearch: return .openSearch
         }
     }

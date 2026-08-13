@@ -129,15 +129,21 @@ struct SettingsShortcutChord: Equatable, Hashable, Codable, Sendable {
 // MARK: - The slots
 
 /// The two shortcuts the General pane records.
+///
+/// The mirror of `GlobalShortcuts.Action`, and `openActivity` carries the same rename for the same
+/// reason: the chord opens the Activity window rather than the timeline, so a slot that still said
+/// timeline would be a recorder describing a window it does not summon. Nothing here is persisted —
+/// `rawValue` is only this pane's `Identifiable` id and half of a conflict row's — so unlike the
+/// shortcut layer's own case, this one had no stored name to leave behind.
 enum ShortcutAction: String, CaseIterable, Identifiable, Sendable {
-    case openTimeline
+    case openActivity
     case openSearch
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .openTimeline: "Open Timeline Shortcut"
+        case .openActivity: "Open Activity Shortcut"
         case .openSearch: "Open Search Shortcut"
         }
     }
@@ -150,19 +156,21 @@ enum ShortcutAction: String, CaseIterable, Identifiable, Sendable {
     /// What the app falls back to when the slot is cleared.
     ///
     /// The same two chords `GlobalShortcuts.Action.defaultChord` names, in this pane's vocabulary —
-    /// the timeline is the two Command keys pressed together, search is still a double tap of ⌘ with
+    /// Activity is the two Command keys pressed together, search is still a double tap of ⌘ with
     /// Shift held. Both are asserted against each other in the tests, because a recorder showing a
     /// gesture the shortcut layer does not listen for is worse than showing nothing.
     var defaultChord: SettingsShortcutChord {
         switch self {
-        case .openTimeline: SettingsShortcutChord(modifierFlags: .command, gesture: .bothCommandKeys)
+        case .openActivity: SettingsShortcutChord(modifierFlags: .command, gesture: .bothCommandKeys)
         case .openSearch: SettingsShortcutChord(modifierFlags: [.command, .shift], gesture: .doubleTap)
         }
     }
 
+    /// A clock rewinding stood here for `openActivity`, and it was drawn for the timeline. The row
+    /// opens the day's stream of what happened, so it gets the glyph for a list of entries.
     var symbol: String {
         switch self {
-        case .openTimeline: "clock.arrow.circlepath"
+        case .openActivity: "list.bullet.rectangle"
         case .openSearch: "magnifyingglass"
         }
     }

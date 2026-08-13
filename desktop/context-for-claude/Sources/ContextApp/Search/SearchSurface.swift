@@ -1,13 +1,13 @@
 //
-//  SearchSurface.swift — the two floating panels the search surface is made of, and the pure
-//  values behind them.
+//  SearchSurface.swift — the two panels the search surface is made of, and the pure values behind
+//  them.
 //
 //  The whole point of this file is that the search surface is **two objects, not one**. A prompt bar
 //  and a panel of things to filter or look at are different in kind: one is a place you type, the
 //  other is a place you look. Drawing them as one tall slab with a rule across it says they are the
 //  same object, and that is exactly what the surface used to say. Here they are two panels with real
-//  air between them, each with its own corner, its own glass and its own shadow — so the eye reads
-//  two floating things over the desktop rather than one window pretending not to be a window.
+//  air between them, each with its own corner — so the eye reads two things on the window's glass
+//  rather than one undifferentiated sheet.
 //
 //  Everything a test can hold is a value in here rather than a number inside a `body`: the gap, the
 //  grid's column count and the card width it implies, the relative timestamp, the result count
@@ -26,23 +26,35 @@ import SwiftUI
 
 // MARK: - The glass
 
-/// One floating panel of the app's **one** glass.
+/// One of the two panels the surface is made of, drawn **on** the window's glass rather than as a
+/// piece of glass in its own right.
 ///
-/// Everything about what the panel is made of — the `.headerView` material, the 0.10 scrim, the 22 pt
-/// corner, the broad ambient shadow, the light-appearance pin that makes the type on it dark — comes
-/// from `InkGlass`, which is the shared surface every window in this app now wears. Nothing about the
-/// material is decided here, and a second `NSVisualEffectView` configured in this file would be the
-/// defect that component exists to prevent.
+/// It used to be the second: the surface was a borderless window, each panel wore
+/// `InkGlass` — material, scrim, ambient shadow — and the transparent window between them let the
+/// desktop through the gap. That is the right construction for a floating slab and the wrong one for
+/// a window. The main window's ground is already one sheet of glass
+/// (`InkGlassView(style: .fullBleed)`, exactly as the timeline and Settings wear it), so a panel that
+/// brought its own material would stack a second blur on the first — roughly a third of the desktop
+/// passthrough the glass is tuned for, paid for twice — and its ambient shadow would be a shadow cast
+/// by a card onto the sheet it is printed on.
 ///
-/// What this type adds is only the *arrangement*: there are two of these, they are the same width,
-/// and there is `SearchLayout.panelGap` of real air between them.
+/// So what is left here is only the *arrangement*, which is the part that was always the design:
+/// there are two of these, they are the same width, there is `SearchLayout.panelGap` of real air
+/// between them, and each is a faintly raised region with its own corner. Two panels 12 pt apart read
+/// as two objects — a place you type and a place you look — and that separation is the one thing a
+/// refactor here must not quietly undo.
 struct SearchGlassPanel<Content: View>: View {
     var cornerRadius: CGFloat = InkGlass.cornerRadius
     @ViewBuilder var content: Content
 
     var body: some View {
         content
-            .inkGlassPanel(cornerRadius: cornerRadius, shadow: .ambient)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(SearchInk.panelFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(SearchInk.panelStroke, lineWidth: 1)))
             // The hit shape is the panel, not its bounding box, so the rounded corners are really
             // corners: a click in the notch outside the curve belongs to whatever is behind.
             .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -58,8 +70,14 @@ struct SearchGlassPanel<Content: View>: View {
 /// introduces are stated here, each with what set it.
 enum SearchLayout {
 
-    /// The width of both panels. Wide enough for a three-across grid of legible cards (see
-    /// `cardWidth`) and no wider: past this the prompt bar stops reading as a bar.
+    /// The width of both panels **in the window's default frame**. Wide enough for a three-across
+    /// grid of legible cards (see `cardWidth`) and no wider: past this the prompt bar stops reading
+    /// as a bar.
+    ///
+    /// A starting size and not a contract — the window is resizable, so the width the panels really
+    /// get is `panelWidth(inWindowOfWidth:)`. Everything downstream of it is already a function of a
+    /// width (`contentWidth`, `cardWidth`, `queryFieldWidth`), which is what makes the surface
+    /// reflow rather than merely stretch.
     static let panelWidth: CGFloat = 760
 
     /// **The gap.** The single most important number in this file.
@@ -77,46 +95,56 @@ enum SearchLayout {
     /// The prompt bar's height. Roomy — the reference's bar is a place to type, not a control strip.
     static let barHeight: CGFloat = 60
 
-    /// The second panel is **as tall as what is in it**, between these two bounds.
-    ///
-    /// A fixed height was the first attempt and it is wrong at both ends: on a fresh install the
-    /// panel is three empty sections over 200 pt of nothing, and with a page of results the last row
-    /// of cards is sliced through the middle at the panel's edge — which is precisely the "cards get
-    /// clipped" failure this design is supposed to avoid. The panel measures its own content
-    /// (`SearchPanelHeightKey`) and clamps it here instead, so a sparse panel is short and a full one
-    /// stops at a height that still fits a 13" display.
+    /// The shortest the results body may be, however small the window is dragged. Below this it is a
+    /// sliver rather than a panel.
     static let minimumResultsBodyHeight: CGFloat = 40
-    /// The ceiling is **set by the cards, not by taste**: it is the filter block plus one whole card
-    /// — thumbnail, title and source line — plus the panel's bottom padding. A ceiling under that is
-    /// the clipped-card defect by another route, because the first row the user sees would be sliced
-    /// through the middle. `testTheCeilingLeavesRoomForAWholeCard` holds it there.
-    static let maximumResultsBodyHeight: CGFloat = 545
 
-    /// What the window opens at, before the view has measured itself. A prediction, not the truth —
-    /// the measured height arrives within a frame and the window resizes to it.
-    static let initialFilterPanelHeight: CGFloat = 430
-
-    /// The scroll view's height for a given natural content height.
+    /// **The results body's share of the window's default frame** — a starting size, not a ceiling.
     ///
-    /// The clamp, as a function, so both ends of it are a test rather than a screenshot: below the
-    /// floor the panel is a sliver, above the ceiling it is taller than a 13" display, and inside it
-    /// the panel is exactly as tall as what is in it and nothing scrolls that did not need to.
-    static func resultsBodyHeight(contentHeight: CGFloat) -> CGFloat {
-        min(max(contentHeight, minimumResultsBodyHeight), maximumResultsBodyHeight)
+    /// This was `maximumResultsBodyHeight`, a hard 545 pt cap, and the cap belonged to a surface that
+    /// resized itself around its own content on every keystroke. A window the user owns has no such
+    /// number: the room the body gets is whatever the window is, less its chrome
+    /// (`availableResultsBodyHeight(inWindowOfHeight:showingNote:)`), and dragging the frame taller
+    /// has to buy rows of cards.
+    ///
+    /// What the number still decides is the frame a machine that has never moved the window opens at,
+    /// and it is chosen the way the ceiling was: the filter block plus one whole card — thumbnail,
+    /// title and source line — plus the panel's bottom padding. A default under that would open on
+    /// the clipped-card defect. `testTheDefaultFrameLeavesRoomForAWholeCard` holds it there.
+    static let defaultResultsBodyHeight: CGFloat = 545
+
+    /// **The results body takes all the room the window has for it.**
+    ///
+    /// It used to hug its content between a floor and a 545 pt ceiling, and that was right for a
+    /// floating panel over the desktop: a slab of empty glass hanging under a prompt bar is a surface
+    /// that has not finished loading, and a full one sliced at the ceiling is the clipped-card defect.
+    ///
+    /// Neither argument survives the move into a window, and the first one inverts. A window the user
+    /// sized has a bottom edge whatever the panel does, so a body that hugs three results leaves half
+    /// the frame as bare glass — which reads as a rendering fault rather than as "there are only
+    /// three". Filling says the same thing the right way round: this is the place, and this is
+    /// everything in it.
+    ///
+    /// `available` is defaulted so a preview, a golden render or a pure test can ask what the body
+    /// does in the default frame without inventing a window to ask it about.
+    static func resultsBodyHeight(available: CGFloat = defaultResultsBodyHeight) -> CGFloat {
+        max(minimumResultsBodyHeight, available)
     }
 
     /// **Whether the body scrolls** — the content did not fit in the height the clamp gave it.
     ///
-    /// The one question the bottom edge's appearance turns on. Above the ceiling the grid keeps
-    /// going past the panel, which is fine and is what the scroll view is for; what is not fine is
-    /// that state looking identical to the state where the panel really does contain everything. A
-    /// row of cards sliced by the panel's edge with no fade, no scroller and no motion reads as a
-    /// clipped view, not as "there is more below" — that is the defect this predicate exists to let
-    /// the view answer.
-    static func bodyScrolls(contentHeight: CGFloat) -> Bool {
-        // Half a point of slack: a content height that lands exactly on the ceiling fits, and
+    /// The one question the bottom edge's appearance turns on. Past the room the window has, the grid
+    /// keeps going below the panel, which is fine and is what the scroll view is for; what is not
+    /// fine is that state looking identical to the state where the panel really does contain
+    /// everything. A row of cards sliced by the panel's edge with no fade, no scroller and no motion
+    /// reads as a clipped view, not as "there is more below" — that is the defect this predicate
+    /// exists to let the view answer.
+    static func bodyScrolls(contentHeight: CGFloat, available: CGFloat = defaultResultsBodyHeight)
+        -> Bool
+    {
+        // Half a point of slack: a content height that lands exactly on the available room fits, and
         // floating-point measurement noise must not make a settled panel flicker its fade on.
-        contentHeight > resultsBodyHeight(contentHeight: contentHeight) + 0.5
+        contentHeight > resultsBodyHeight(available: available) + 0.5
     }
 
     /// The soft edge at the bottom of a body that has more below it, and the room the content gains
@@ -140,8 +168,10 @@ enum SearchLayout {
     /// fade the panel forgets to turn on, and a fade it leaves on over content that fits, are both
     /// invisible in a `body` and both obvious here. It also feeds the matching bottom inset, so the
     /// fade and the room it falls on cannot drift apart.
-    static func scrollFade(contentHeight: CGFloat) -> CGFloat {
-        bodyScrolls(contentHeight: contentHeight) ? scrollFadeHeight : 0
+    static func scrollFade(contentHeight: CGFloat, available: CGFloat = defaultResultsBodyHeight)
+        -> CGFloat
+    {
+        bodyScrolls(contentHeight: contentHeight, available: available) ? scrollFadeHeight : 0
     }
 
     /// The filter panel's own header — the `Filter` row and the rule under it.
@@ -150,11 +180,21 @@ enum SearchLayout {
     static let panelPaddingHorizontal: CGFloat = 20
     static let panelPaddingVertical: CGFloat = 16
 
-    /// Clear margin the window keeps around the panels so the shared ambient shadow has room to fall
-    /// off instead of being clipped at the window's edge. Taken from the shadow itself
-    /// (`InkGlassShadow.padding`), never guessed — a margin that stops tracking the shadow is a
-    /// panel with a straight grey line down one side.
-    static var shadowMargin: CGFloat { InkGlassShadow.ambient.padding }
+    /// The margin between the window's edge and the two panels on it.
+    ///
+    /// This replaces the clear shadow margin the borderless window kept (`InkGlassShadow.padding`,
+    /// 56 pt of transparent window for the panels' own shadows to fall into). A titled window's frame
+    /// draws the only shadow there is, so what is left is an ordinary inset — the same 16 pt the
+    /// timeline's header uses, so the two windows agree about where their content starts.
+    static let windowInset: CGFloat = 16
+
+    /// The band at the top of a `.fullSizeContentView` window that belongs to the traffic lights.
+    ///
+    /// The glass runs edge to edge underneath the title bar, which is the whole point of that style
+    /// mask — but the *content* may not, and the prompt bar is the one thing on this surface that
+    /// must never be underneath anything: it is the field the user is typing into. 28 pt is the
+    /// standard title bar's height.
+    static let titleBarInset: CGFloat = 28
 
     // The results grid.
 
@@ -196,6 +236,13 @@ enum SearchLayout {
     /// stops being recognisable as a screen.
     static let minimumCardWidth: CGFloat = 150
 
+    /// The narrowest panel that still holds three legible cards — where `minimumCardWidth` stops
+    /// being an opinion and becomes the window's minimum width.
+    static var minimumPanelWidth: CGFloat {
+        minimumCardWidth * CGFloat(resultColumns) + cardGutter * CGFloat(resultColumns - 1)
+            + panelPaddingHorizontal * 2
+    }
+
     /// The gap between the thumbnail and the two lines under it, and the height those two lines take.
     /// Stated rather than measured so `cardHeight` is arithmetic; `testACardIsAsTallAsTheLayoutSays`
     /// checks it against the real card.
@@ -215,23 +262,63 @@ enum SearchLayout {
 
     /// Room the query chip may grow into before it stops. The bar's content width, less the glyph
     /// and the space the keyboard hint needs on the other side.
-    static let queryFieldWidth: CGFloat = contentWidth() - glyphSize - 12 - 190
+    static func queryFieldWidth(panelWidth: CGFloat = panelWidth) -> CGFloat {
+        max(minimumCardWidth, contentWidth(panelWidth: panelWidth) - glyphSize - 12 - 190)
+    }
 
-    // The window.
+    // MARK: - The window
+    //
+    // The surface is a real, resizable, titled window now — the app's main one — so every number
+    // below is either a *default frame* (what a machine that has never moved it opens at) or a
+    // *function of the frame the user is actually in*. There is deliberately no third kind: a
+    // constant that silently caps what a window may show is the auto-resizing loop this design
+    // replaced, wearing a different hat.
 
-    /// The whole surface including the clear margin the shadows fall into.
-    static var surfaceWidth: CGFloat { panelWidth + shadowMargin * 2 }
-
-    /// The surface's height for a given panel height — what the window is sized to.
+    /// The panels' width inside a window of `width`.
     ///
-    /// The view measures its own content and hands the result back (`onHeightChange`), so this is
-    /// the arithmetic that turns a panel height into a window height and nothing more. The default
-    /// argument is the opening prediction.
-    static func surfaceHeight(
-        showingNote: Bool, panelHeight: CGFloat = initialFilterPanelHeight
+    /// Clamped at `minimumPanelWidth` rather than allowed to go negative, so the arithmetic below it
+    /// — `contentWidth`, `cardWidth` — cannot produce a clipped column even if a window somehow ends
+    /// up narrower than its own minimum size.
+    static func panelWidth(inWindowOfWidth width: CGFloat) -> CGFloat {
+        max(minimumPanelWidth, width - windowInset * 2)
+    }
+
+    /// Everything in the window that is **not** the results body: the title bar band, the prompt bar
+    /// and its note, the gap, the second panel's own header, and the inset under it all.
+    static func windowChrome(showingNote: Bool) -> CGFloat {
+        titleBarInset + barHeight + (showingNote ? noteHeight : 0) + panelGap + panelHeaderHeight
+            + windowInset
+    }
+
+    /// **How much room the results body has in a window of `height`.**
+    ///
+    /// The replacement for the old hard ceiling, and the reason the window is worth resizing: drag
+    /// the frame taller and this grows, so the grid shows more rows rather than scrolling more.
+    static func availableResultsBodyHeight(inWindowOfHeight height: CGFloat, showingNote: Bool = false)
+        -> CGFloat
+    {
+        max(minimumResultsBodyHeight, height - windowChrome(showingNote: showingNote))
+    }
+
+    /// The window height that gives the results body exactly `resultsBodyHeight` — the inverse of
+    /// the function above, and what the default frame is built from.
+    static func windowHeight(
+        resultsBodyHeight: CGFloat = defaultResultsBodyHeight, showingNote: Bool = false
     ) -> CGFloat {
-        let bar = barHeight + (showingNote ? noteHeight : 0)
-        return shadowMargin * 2 + bar + panelGap + panelHeight
+        windowChrome(showingNote: showingNote) + resultsBodyHeight
+    }
+
+    /// The frame a machine that has never moved this window opens it at.
+    static var defaultWindowSize: NSSize {
+        NSSize(width: panelWidth + windowInset * 2, height: windowHeight())
+    }
+
+    /// The smallest the user may make it: three legible cards across, and one whole row of the body
+    /// still visible under the bar.
+    static var minimumWindowSize: NSSize {
+        NSSize(
+            width: minimumPanelWidth + windowInset * 2,
+            height: windowChrome(showingNote: false) + minimumResultsBodyHeight)
     }
 }
 
@@ -242,17 +329,6 @@ enum SearchLayout {
 /// in a way the user sees immediately — either a slab of empty glass or a row of cards sliced
 /// through the middle.
 struct SearchPanelHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
-/// The whole surface's measured height, on its way to the window's frame.
-///
-/// A second key rather than the panel's, so the two measurements cannot be confused for each other:
-/// one is what the scroll view may show, the other is what the window has to be.
-struct SearchSurfaceHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
@@ -362,6 +438,19 @@ enum SearchInk {
     /// The magnifier inside the chip. Full-strength `systemBlue` is legible as a *glyph* at 11 pt on
     /// both grounds where it would not be as text.
     static let queryChipGlyph = Color(nsColor: .systemBlue)
+
+    /// **A panel, on the window's glass.** The two together are what make the bar and the results
+    /// read as two objects rather than as one sheet with a gap drawn across it.
+    ///
+    /// An alpha on `labelColor` and not a grey, for the same reason every other fill on this surface
+    /// is one: it darkens light glass and lightens dark glass instead of being one value that is
+    /// wrong in one appearance. 0.04 is deliberately at the edge of visible — the separation is
+    /// carried by the gap and the corner, and a fill strong enough to be *read* as a colour would put
+    /// a second ground under type that is already on glass.
+    static let panelFill = Color(nsColor: .labelColor).opacity(0.04)
+    /// The panel's edge. `chipStroke`'s weight, because a panel is the same kind of promise a chip is
+    /// — a boundary, not something you press.
+    static let panelStroke = Color(nsColor: .labelColor).opacity(0.10)
 
     /// A filter chip at rest: the near-white/very light grey of the reference, expressed the way
     /// every other fill in this app is — an alpha on `labelColor`, so it darkens light glass and

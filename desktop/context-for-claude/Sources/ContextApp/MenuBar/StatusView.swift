@@ -411,19 +411,33 @@ struct StatusView: View {
                 }
             }
 
-            // The timeline and Settings both existed with nothing able to open them. The shortcuts are
-            // the fast path, but a menu-bar-only app whose windows are reachable ONLY by an
-            // undiscoverable modifier double-tap has effectively hidden them — and the shortcut is
-            // gated on Accessibility, so without these rows an ungranted user cannot reach either
-            // window at all.
-            MenuCommand(title: "Open Timeline", shortcut: GlobalShortcuts.shared.display(for: .openTimeline)) {
-                // Nil until the database finishes opening on the engine's queue. Declining beats
-                // presenting a timeline with nothing behind it.
-                guard let store = Engine.shared.contextStore else { return }
-                RewindWindow.present(
-                    store: store,
-                    onOpenSettings: { SettingsWindow.present() },
-                    onSearch: { query in SearchBarWindow.present(prefill: query) })
+            // The app's windows and Settings all existed with nothing able to open them. The
+            // shortcuts are the fast path, but an app whose windows are reachable ONLY by an
+            // undiscoverable modifier double-tap has effectively hidden them — and the shortcuts are
+            // gated on Accessibility, so without these rows an ungranted user cannot reach any of
+            // them at all. That is why there is a row for each window rather than one for whichever
+            // is more important.
+            //
+            // Activity leads because it is the main window: it is what the Dock icon and a launch
+            // open, and the timeline is what a moment inside it opens into.
+            //
+            // The chord printed here is `openActivity`'s — the app's advertised way in, and the one
+            // a user is most likely to have seen. `openSearch` opens this same window with its field
+            // focused, but a row can only print one shortcut and the primary is the one to teach.
+            MenuCommand(title: "Open Activity", shortcut: GlobalShortcuts.shared.display(for: .openActivity)) {
+                SearchBarWindow.present()
+            }
+
+            // **No shortcut, because the timeline has none.** ⌘ + ⌘ opens Activity now, and printing
+            // a chord beside a row that a chord no longer reaches would send the user to the wrong
+            // window every time they used it. This row *is* the timeline's keyboard-free route, which
+            // is why it stays.
+            //
+            // The presentation itself lives in `ContextAppDelegate.openTimeline()`. It used to be
+            // rebuilt here — store guard, Settings hand-off, search hand-off — and a second
+            // reconstruction of three arguments is how one of them quietly stops being passed.
+            MenuCommand(title: "Open Timeline") {
+                ContextAppDelegate.openTimeline()
             }
 
             MenuCommand(title: "Settings…", shortcut: "⌘,") { SettingsWindow.present() }

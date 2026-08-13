@@ -347,22 +347,25 @@ final class TutorialWorld {
         model.begin()
         model.advance()  // invitation → collectFrames
         model.poll()
-        model.advance()  // collectFrames → openTimeline
-        precondition(model.step == .openTimeline, "the harness did not reach the chord beat")
+        model.advance()  // collectFrames → openActivity
+        precondition(model.step == .openActivity, "the harness did not reach the chord beat")
         return model
     }
 
-    /// One beat on: the user really pressed it, and the window really came up. This is the state the
-    /// drag demonstration is drawn in.
+    /// One beat on: the user really pressed the chord, and the drag beat opened the timeline. This is
+    /// the state the drag demonstration is drawn in.
     ///
-    /// The window is marked visible *before* the keypress is delivered, because the model reads
-    /// whether the timeline is on screen as it enters the step — the same order the real shell
-    /// produces, where the shortcut's own handler opens the window and the observer reports it after.
+    /// The window is no longer marked visible before the keypress. It used to be, because the chord
+    /// itself opened the timeline and the model read whether it was on screen as it entered the step;
+    /// the chord opens Activity now, and the beat being entered is what puts a timeline up
+    /// (`environment.presentTimeline`). Nothing here pokes the model — the keypress goes through the
+    /// observer the model armed, exactly as the shortcut layer delivers it.
     func modelAtTheTimelineBeat() -> TutorialModel {
         let model = modelAtTheChordBeat()
-        timelineIsVisible = true
-        hotkeyFired?()  // openTimeline → timeline
+        report(.opened)  // the chord brings the main window forward
+        hotkeyFired?()  // openActivity → timeline
         precondition(model.step == .timeline, "the harness did not reach the drag beat")
+        precondition(timelineIsVisible, "the drag beat has to have opened a timeline to drag")
         return model
     }
 
@@ -389,10 +392,10 @@ final class TutorialWorld {
         environment.screenIsGranted = { true }
         environment.frameCount = { _ in TutorialModel.frameTarget }
         environment.openPage = { _ in true }
-        environment.timelineChord = { self.chord }
-        environment.timelineChordIsArmed = { true }
-        environment.watchForTimelineHotkey = { self.hotkeyFired = $0 }
-        environment.stopWatchingTimelineHotkey = { self.hotkeyFired = nil }
+        environment.activityChord = { self.chord }
+        environment.activityChordIsArmed = { true }
+        environment.watchForActivityHotkey = { self.hotkeyFired = $0 }
+        environment.stopWatchingActivityHotkey = { self.hotkeyFired = nil }
         environment.watchForDrag = { self.dragTravelled = $0 }
         environment.stopWatchingDrag = { self.dragTravelled = nil }
         environment.presentTimeline = { self.timelineIsVisible = true }
@@ -401,7 +404,6 @@ final class TutorialWorld {
         environment.stopWatchingSearchPanel = { self.searchPanelHappened = nil }
         environment.searchPanelIsVisible = { self.searchPanelIsVisible }
         environment.presentSearchPanel = { self.report(.opened) }
-        environment.dismissSearchPanel = { self.report(.closed) }
         environment.locateTarget = { _ in nil }
         return environment
     }

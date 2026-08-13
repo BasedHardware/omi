@@ -323,7 +323,7 @@ final class TutorialOverlay {
     /// Its bottom edge is the last row of a grid that scrolls. The card goes under the bottom.
     ///
     /// **Where it stops being possible, and what happens then.** At the search surface's own ceiling
-    /// (`SearchLayout.maximumResultsBodyHeight`, the height that file says "still fits a 13"
+    /// (`SearchLayout.defaultResultsBodyHeight`, the height that file says "still fits a 13"
     /// display") the panel leaves about 140 pt under it on that display, and this card is taller than
     /// that. There is no placement that both fits and clears — so it takes the bottom of the screen
     /// and overlaps the panel's foot, which costs the user part of the last visible row of results

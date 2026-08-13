@@ -771,94 +771,93 @@ final class RewindTests: XCTestCase {
     }
 }
 
-// MARK: - Standing aside for the search panel
+// MARK: - The timeline does not stand aside
 
-/// **The timeline gets out of the way while the search panel is up, and comes back when it goes.**
+/// **The timeline stays where it is while the search window is up, and a closed one stays closed.**
 ///
-/// Reported as: *"when this is shown the rewind tab is hidden"* — the search bar is opened from the
-/// timeline's own header and lands as a second floating slab over the top half of the display, so the
-/// panel ends up covering the very window it was summoned from.
+/// The repealed behaviour: the timeline used to order itself out on `SearchPanelEvent.opened` and
+/// come back on `.closed`, because the search surface was a borderless slab summoned from the
+/// timeline's own header that landed over the very window it was summoned from. That yield is a dead
+/// end against a persistent main window — open the timeline, press its own "Search All" pill,
+/// `.opened` fires, the timeline is ordered off screen, `.closed` never arrives, and there is nothing
+/// left to bring it back.
 ///
-/// None of this puts a window on screen. The yield is driven by `SearchPanelEvent`, which the real
-/// `SearchBarWindow` reports on every open and every dismissal — so the behaviour is reachable by
-/// telling `RewindWindow` what the panel did, which is exactly what the app does. `isHiddenIntent` is
-/// recorded whether or not there is a window to move, which is what makes that possible and is also
-/// the honest answer: it is the *intent*, and a window mid-fade is visible either way.
+/// These put a real window on screen, which the old tests did not have to: the yield was observable
+/// as an *intent* flag, and there is no flag any more precisely because there is no yield. What
+/// replaced it is only observable as the window's own visibility, so that is what is asserted.
 @MainActor
-final class RewindYieldTests: XCTestCase {
+final class RewindVisibilityTests: XCTestCase {
 
-    override func setUp() {
-        super.setUp()
-        RewindWindow.observeTheSearchPanel()
-        // Both directions, because `setHidden` is idempotent on intent and a test that inherited a
-        // yield from the one before it would assert nothing.
-        RewindWindow.setHidden(false)
+    private var root: URL!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("rewind-visibility-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
     override func tearDown() {
-        RewindWindow.setHidden(false)
+        RewindWindow.dismiss()
+        if let root { try? FileManager.default.removeItem(at: root) }
         super.tearDown()
     }
 
-    func testThePanelOpeningYieldsTheTimelineAndClosingBringsItBack() {
-        SearchPanelWatch.report(.opened)
-        XCTAssertTrue(RewindWindow.isHiddenIntent, "the timeline is still over the panel")
-
-        SearchPanelWatch.report(.closed)
-        XCTAssertFalse(RewindWindow.isHiddenIntent, "and it never came back")
+    /// A timeline over an empty capture database. Enough to have a real window: what is being
+    /// asserted is where the window is, not what is in it.
+    private func presentTheTimeline() throws {
+        let store = try ContextStore(url: root.appendingPathComponent("context.db"))
+        RewindWindow.present(store: store)
     }
 
-    /// Everything the panel does that is not opening or closing leaves the timeline alone. A window
-    /// that hid itself because somebody typed would be unusable.
-    func testAskingAndAnsweringDoNotMoveTheTimeline() {
-        SearchPanelWatch.report(.answered(query: "invoice", results: 4))
-        XCTAssertFalse(RewindWindow.isHiddenIntent)
-
-        SearchPanelWatch.report(.opened)
-        SearchPanelWatch.report(.answered(query: "invoice", results: 4))
-        XCTAssertTrue(RewindWindow.isHiddenIntent, "an answer must not cancel the yield either")
-    }
-
-    /// **A `dismiss()` of an already-closed bar still restores the timeline.**
+    /// The search surface being asked for, and going away again, leaves the timeline alone.
     ///
-    /// The dead end this guards is the whole reason the announcement in `SearchBarWindow.dismiss`
-    /// sits before its `guard`: this app is `LSUIElement`, so a timeline ordered out with nothing
-    /// left to bring it back cannot be recovered by clicking anything. Dismissing a bar that some
-    /// other path already closed is the shape that reaches that code, and it is exactly the call that
-    /// has to still say `.closed`.
-    func testDismissingAnAlreadyClosedBarStillRestoresTheTimeline() {
+    /// Both halves matter. `.opened` not hiding it is the repeal; `.closed` not *showing* it is the
+    /// other half of the same statement — a window that reappears because something else went away is
+    /// a window the user cannot get rid of.
+    func testTheTimelineDoesNotYieldToTheSearchWindow() throws {
+        try presentTheTimeline()
+        XCTAssertTrue(RewindWindow.isVisible, "the timeline never came up, so nothing here is measured")
+
         SearchPanelWatch.report(.opened)
-        XCTAssertTrue(RewindWindow.isHiddenIntent)
+        XCTAssertTrue(RewindWindow.isVisible, "the timeline stood aside for the main window")
 
-        XCTAssertFalse(SearchBarWindow.isVisible, "no bar was ever put on screen by this test")
-        SearchBarWindow.dismiss()
-
-        XCTAssertFalse(RewindWindow.isHiddenIntent)
+        SearchPanelWatch.report(.closed)
+        XCTAssertTrue(RewindWindow.isVisible)
     }
 
-    /// A close outranks a yield. Once the timeline has been genuinely dismissed, the search panel
-    /// closing later must not put it back — the user closed it, and a window that reappears because
-    /// something else went away is a window they cannot get rid of.
-    func testATimelineThatWasDismissedIsNotResurrectedWhenThePanelCloses() {
-        SearchPanelWatch.report(.opened)
-        XCTAssertTrue(RewindWindow.isHiddenIntent)
+    /// Everything else the search surface reports leaves it alone too.
+    func testAskingAndAnsweringDoNotMoveTheTimeline() throws {
+        try presentTheTimeline()
 
+        SearchPanelWatch.report(.answered(query: "invoice", results: 4))
+        SearchPanelWatch.report(.openedMoment(at: 1_699_998_888, hasPicture: true))
+
+        XCTAssertTrue(RewindWindow.isVisible)
+    }
+
+    /// **A timeline the user closed stays closed.** This is the dead end the yield produced, stated
+    /// as the contract that replaced it: nothing the search surface announces may put the timeline
+    /// back on screen, because the only thing that closed it was the user.
+    func testATimelineTheUserClosedStaysClosed() throws {
+        try presentTheTimeline()
         RewindWindow.dismiss()
-        XCTAssertFalse(RewindWindow.isHiddenIntent, "the close cleared the yield")
-
-        SearchPanelWatch.report(.closed)
-        XCTAssertFalse(RewindWindow.isHiddenIntent)
-    }
-
-    /// Observing twice must not stack two observers: the second would take the yield down and up
-    /// again on one event, which is the shape that produces a flicker nobody can trace.
-    func testObservingIsIdempotent() {
-        RewindWindow.observeTheSearchPanel()
-        RewindWindow.observeTheSearchPanel()
+        XCTAssertFalse(RewindWindow.isVisible)
 
         SearchPanelWatch.report(.opened)
-        XCTAssertTrue(RewindWindow.isHiddenIntent)
         SearchPanelWatch.report(.closed)
-        XCTAssertFalse(RewindWindow.isHiddenIntent)
+
+        XCTAssertFalse(RewindWindow.isVisible, "something brought the timeline back that the user did not")
+    }
+
+    /// …and an explicit ask still brings it back, which is what makes the close recoverable rather
+    /// than final.
+    func testPresentingAgainBringsAClosedTimelineBack() throws {
+        try presentTheTimeline()
+        RewindWindow.dismiss()
+        XCTAssertFalse(RewindWindow.isVisible)
+
+        try presentTheTimeline()
+        XCTAssertTrue(RewindWindow.isVisible)
     }
 }

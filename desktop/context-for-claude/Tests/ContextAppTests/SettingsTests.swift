@@ -865,10 +865,10 @@ final class SettingsTests: XCTestCase {
 
     /// The two defaults the reference names, printed the way it prints them.
     func testDefaultChordsPrintAsTheReferenceWritesThem() {
-        XCTAssertEqual(ShortcutAction.openTimeline.defaultChord.displayString, "⌘ + ⌘")
+        XCTAssertEqual(ShortcutAction.openActivity.defaultChord.displayString, "⌘ + ⌘")
         XCTAssertEqual(ShortcutAction.openSearch.defaultChord.displayString, "⌘⌘⇧")
         XCTAssertEqual(
-            ShortcutAction.openTimeline.subtitle,
+            ShortcutAction.openActivity.subtitle,
             "Record a keyboard shortcut. Clear it to use ⌘ + ⌘.")
         XCTAssertEqual(
             ShortcutAction.openSearch.subtitle,
@@ -878,25 +878,25 @@ final class SettingsTests: XCTestCase {
     @MainActor
     func testRecordingClearingAndRefusal() {
         let provider = InMemoryShortcutBindings()
-        XCTAssertEqual(provider.binding(for: .openTimeline), ShortcutAction.openTimeline.defaultChord)
+        XCTAssertEqual(provider.binding(for: .openActivity), ShortcutAction.openActivity.defaultChord)
 
         let chord = SettingsShortcutChord(keyCode: 40, modifierFlags: [.command, .shift])
-        XCTAssertEqual(provider.record(chord, for: .openTimeline), .recorded)
-        XCTAssertEqual(provider.binding(for: .openTimeline), chord)
+        XCTAssertEqual(provider.record(chord, for: .openActivity), .recorded)
+        XCTAssertEqual(provider.binding(for: .openActivity), chord)
 
         // Cleared is a real state, not an error: the slot falls back to the default chord, which is
         // exactly what "Clear it to use ⌘ + ⌘" describes.
-        provider.clear(.openTimeline)
-        XCTAssertNil(provider.binding(for: .openTimeline))
+        provider.clear(.openActivity)
+        XCTAssertNil(provider.binding(for: .openActivity))
 
         // A recorder that always succeeded would let the user bind ⌘Q.
         let quit = SettingsShortcutChord(keyCode: 12, modifierFlags: .command)
-        guard case .rejected = provider.record(quit, for: .openTimeline) else {
+        guard case .rejected = provider.record(quit, for: .openActivity) else {
             return XCTFail("⌘Q is reserved by macOS and must be refused")
         }
 
         // And the two slots may not collide with each other.
-        provider.record(chord, for: .openTimeline)
+        provider.record(chord, for: .openActivity)
         guard case .rejected = provider.record(chord, for: .openSearch) else {
             return XCTFail("one chord cannot drive two actions")
         }
@@ -908,9 +908,9 @@ final class SettingsTests: XCTestCase {
         XCTAssertTrue(InMemoryShortcutBindings().conflicts().isEmpty)
 
         let conflict = SettingsShortcutConflict(
-            action: .openTimeline,
+            action: .openActivity,
             owner: "Codex",
-            chord: ShortcutAction.openTimeline.defaultChord,
+            chord: ShortcutAction.openActivity.defaultChord,
             remedyTitle: "Switch Codex to ⌥⌥")
         let provider = InMemoryShortcutBindings(conflicts: [conflict])
 
@@ -931,7 +931,7 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(notifications, 1)
 
         provider.removeObserver(token)
-        provider.clear(.openTimeline)
+        provider.clear(.openActivity)
         XCTAssertEqual(notifications, 1)
     }
 
