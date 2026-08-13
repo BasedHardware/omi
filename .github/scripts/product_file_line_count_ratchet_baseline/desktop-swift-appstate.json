@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1607
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1623
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds local transcript duplicate suppression and persistence flushes before stop or rotation so source-aware deduplication cannot leave stale rows."
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "silentMicHealedDeviceID plus the SilentMicRoutePolicy call at the rebuild site: the healed input route must survive a CoreAudio rebuild, otherwise the rebuild re-resolves the system default back onto the silent device and the fallback loops into a user-facing alert."
   },
   "threshold": 1500
 }

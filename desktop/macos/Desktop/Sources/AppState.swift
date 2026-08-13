@@ -449,6 +449,15 @@ class AppState: ObservableObject {
   /// transcription session. This lives above `AudioCaptureService` because each
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
   var silentMicRecoveryAttempts = 0
+
+  /// The input device a silent-mic fallback healed onto, held for the rest of the session.
+  ///
+  /// Without this the heal is undone by its own recovery: `handleSilentMicFallback` pins
+  /// capture to the built-in mic, then the next watchdog trip rebuilds the CoreAudio stack
+  /// with a plain `AudioCaptureService()`, which re-resolves the *system default* input —
+  /// still the silent Bluetooth device. The two fight until the attempt cap is hit and the
+  /// user gets an alert, then it starts over.
+  var silentMicHealedDeviceID: AudioDeviceID?
   var meetingEndFinalizationInProgress = false
   @Published var isAwaitingMeeting = false
 
@@ -597,6 +606,11 @@ class AppState: ObservableObject {
   }
 
   init() {
+    // Fold any legacy PTT-only microphone choice into the shared preference before
+    // anything reads it. Running this only from PTT routing meant a user who had picked a
+    // PTT microphone saw "System Default" in Transcription — and was recorded by it —
+    // until they happened to take a push-to-talk turn.
+    ShortcutSettings.migratePTTMicrophoneChoiceIfNeeded()
     // Register as the current instance so background services can check recording state
     AppState.current = self
     ownerChangeObserver = NotificationCenter.default.addObserver(
