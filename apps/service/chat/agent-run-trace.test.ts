@@ -10,11 +10,11 @@ import { exportAgentRunTrace, replayAgentRunTrace } from "./agent-run-trace";
 
 const HASH = `sha256:${"a".repeat(64)}`;
 
-const makeStore = () => {
+const makeStore = (capabilityId = "internal-capability") => {
   const result = runAgentRunScenario({
     runId: "internal-run-42",
     attemptId: "internal-attempt-1",
-    capability: { capabilityId: "internal-capability", tier: "deterministic-scripted", adapter: "scripted", deterministic: true },
+    capability: { capabilityId, tier: "deterministic-scripted", adapter: "scripted", deterministic: true },
     context: {
       contextReceiptId: "internal-context", sourceKind: "memory", sourceRef: "internal-source",
       sourceHash: HASH, ownerRef: "internal-owner", expiresAt: 100, redactedPreview: "Safe context",
@@ -39,6 +39,7 @@ describe("agent-run redacted export and hermetic replay", () => {
     expect(exported.bytes).toBe(repeated.bytes);
     expect(exported.bytes.endsWith("\n")).toBe(true);
     expect(exported.bundle.runId).toBe("run:1");
+    expect(exported.bundle.bundleDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(exported.bundle.eventTrace.every((event) => event.runLabel === "run:1")).toBe(true);
     for (const raw of [first.runId, "internal-attempt-1", "internal-context", "internal-source", "internal-owner", "internal-call", "internal-idem", HASH]) {
       expect(exported.bytes).not.toContain(raw);
@@ -55,8 +56,54 @@ describe("agent-run redacted export and hermetic replay", () => {
     const { store, runId } = makeStore();
     const exported = exportAgentRunTrace(store, runId, { buildId: "platform-test-build" });
     expect(() => replayAgentRunTrace({ ...exported.bundle, traceDigest: "sha256:bad" })).toThrow();
+    expect(() => replayAgentRunTrace({ ...exported.bundle, bundleDigest: `sha256:${"b".repeat(64)}` })).toThrow();
     expect(() => replayAgentRunTrace({ ...exported.bundle, projection: { ...exported.bundle.projection, runId: "internal-run-42" } })).toThrow();
     expect(() => replayAgentRunTrace({ ...exported.bundle, eventTrace: exported.bundle.eventTrace.map((event) => ({ ...event, payload: { ...event.payload, prompt: "secret" } })) })).toThrow();
+
+    const detailMutations: readonly [keyof typeof exported.bundle, unknown][] = [
+      ["contextReceipts", [...exported.bundle.contextReceipts, { ...exported.bundle.contextReceipts[0]! }]],
+      ["toolEnvelopes", [...exported.bundle.toolEnvelopes, { ...exported.bundle.toolEnvelopes[0]! }]],
+      ["timings", exported.bundle.timings.map((entry, index) => index === 0 ? { ...entry, createdAt: entry.createdAt + 1 } : entry)],
+      ["durableState", exported.bundle.durableState.map((entry, index) => index === 0 ? { ...entry, stateKind: "status" } : entry)],
+      ["buildId", "different-build"],
+      ["schema", "omi.agent-run-trace-tampered"],
+      ["runId", "run:2"],
+    ];
+    for (const [key, value] of detailMutations) {
+      expect(() => replayAgentRunTrace({ ...exported.bundle, [key]: value })).toThrow();
+    }
+
+    const attachment = {
+      ...exported.bundle,
+      projection: {
+        ...exported.bundle.projection,
+        events: exported.bundle.projection.events.map((event, index) => index === 0
+          ? { ...event, safeSummary: "attachment_opaque123" }
+          : event),
+      },
+    };
+    expect(() => replayAgentRunTrace(attachment)).toThrow("attachment");
+
+    const unsafeSource = makeStore();
+    const sourceSnapshot = unsafeSource.store.snapshot();
+    unsafeSource.store.restore({
+      runs: sourceSnapshot.runs.map((run) => ({
+        ...run,
+        events: run.events.map((event, index) => index === 0
+          ? { ...event, safeSummary: "attachment_opaque123" }
+          : event),
+      })),
+    });
+    expect(() => exportAgentRunTrace(unsafeSource.store, unsafeSource.runId, { buildId: "platform-test-build" }))
+      .toThrow("attachment");
+  });
+
+  test("raw IDs are checked as value tokens, not substrings of safe field names", () => {
+    const { store, runId } = makeStore("cap");
+    const exported = exportAgentRunTrace(store, runId, { buildId: "platform-test-build" });
+    expect(exported.bytes).toContain("capability:1");
+    expect(exported.bytes).not.toContain('"cap"');
+    expect(replayAgentRunTrace(JSON.parse(exported.bytes)).projection.events.length).toBeGreaterThan(0);
   });
 
   test("CLI replays only the artifact and emits a bounded receipt", () => {

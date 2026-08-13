@@ -30,6 +30,10 @@ export const AGENT_RUN_TRACE_BUILD_ID_MAX = 128;
 const SAFE_LABEL = /^[A-Za-z][A-Za-z0-9._:/+-]{0,127}$/u;
 const SAFE_DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/u;
+// Attachment references are intentionally opaque.  Even when a caller puts
+// one in a prose field (rather than an `attachmentId` key), it must not leave
+// this export boundary.
+const BARE_ATTACHMENT_REFERENCE = /\battachment[_-][A-Za-z0-9][A-Za-z0-9._:@+-]*/iu;
 const EVENT_KINDS = new Set<AgentRunEvent["kind"]>([
   "run_accepted", "capability_receipt", "context_receipt", "status", "tool_request",
   "tool_result", "tool_error", "approval_requested", "approval_resolved", "usage",
@@ -66,6 +70,8 @@ export interface AgentRunTraceBundle {
   readonly projection: AgentRunVisibleTimeline;
   readonly projectionDigest: string;
   readonly traceDigest: string;
+  /** Binds every field above, including identity and diagnostic detail arrays. */
+  readonly bundleDigest: string;
 }
 
 export interface AgentRunTraceExport {
@@ -107,24 +113,34 @@ const assertPlainJson = (value: unknown, seen = new Set<object>()): asserts valu
     if (!Number.isFinite(value)) fail("non-finite number");
     return;
   }
-  if (typeof value !== "object" || seen.has(value)) fail("non-plain JSON");
-  seen.add(value);
+  if (typeof value !== "object") fail("non-plain JSON");
+  const objectValue = value as object;
+  if (seen.has(objectValue)) fail("non-plain JSON");
+  seen.add(objectValue);
   if (Array.isArray(value)) {
-    value.forEach((item) => assertPlainJson(item, seen));
+    for (let index = 0; index < value.length; index += 1) {
+      if (!Object.prototype.hasOwnProperty.call(value, index)) fail("sparse array");
+      assertPlainJson(value[index], seen);
+    }
   } else {
     if (!isRecord(value)) fail("non-plain JSON");
-    for (const [key, item] of Object.entries(value)) {
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== "string") fail("symbol key");
+      const descriptor = descriptors[key];
+      if (descriptor === undefined || !("value" in descriptor)) fail("accessor value");
       if (CONTROL_CHARACTERS.test(key)) fail("control character in key");
-      assertPlainJson(item, seen);
+      assertPlainJson(descriptor.value, seen);
     }
   }
-  seen.delete(value);
+  seen.delete(objectValue);
 };
 
 const sortJson = (value: JsonValue): JsonValue => {
   if (Array.isArray(value)) return value.map(sortJson);
   if (value !== null && typeof value === "object") {
-    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortJson(value[key]!)]));
+    const record = value as { readonly [key: string]: JsonValue };
+    return Object.fromEntries(Object.keys(record).sort().map((key) => [key, sortJson(record[key]!)]));
   }
   return value;
 };
@@ -136,6 +152,29 @@ export const canonicalTraceJson = (value: JsonValue): string => {
   const output = JSON.stringify(sorted);
   if (output === undefined) fail("unable to serialize");
   return output;
+};
+
+const jsonStringValues = (value: unknown, visit: (text: string) => void): void => {
+  if (typeof value === "string") {
+    visit(value);
+    return;
+  }
+  if (value === null || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((item) => jsonStringValues(item, visit));
+    return;
+  }
+  if (!isRecord(value)) return;
+  for (const item of Object.values(value)) jsonStringValues(item, visit);
+};
+
+const assertTracePrivacy = (value: unknown): void => {
+  if (scanAgentRunRedactions(value).length > 0) fail("privacy denylist match");
+  let bareAttachment = false;
+  jsonStringValues(value, (text) => {
+    if (BARE_ATTACHMENT_REFERENCE.test(text)) bareAttachment = true;
+  });
+  if (bareAttachment) fail("bare attachment reference");
 };
 
 const digest = (bytes: string): string => `sha256:${createHash("sha256").update(bytes, "utf8").digest("hex")}`;
@@ -260,12 +299,13 @@ const payloadKeys = (kind: AgentRunEvent["kind"]): readonly string[] => {
 };
 
 const validateTraceBundle = (value: unknown): AgentRunTraceBundle => {
-  if (!isRecord(value) || !exactKeys(value, ["buildId", "contextReceipts", "durableState", "eventTrace", "projection", "projectionDigest", "runId", "schema", "schemaVersion", "timings", "toolEnvelopes", "traceDigest"])) fail("bundle shape");
+  if (!isRecord(value) || !exactKeys(value, ["buildId", "bundleDigest", "contextReceipts", "durableState", "eventTrace", "projection", "projectionDigest", "runId", "schema", "schemaVersion", "timings", "toolEnvelopes", "traceDigest"])) fail("bundle shape");
   if (value.schema !== AGENT_RUN_TRACE_SCHEMA || value.schemaVersion !== CURRENT_AGENT_RUN_TRACE_SCHEMA_VERSION
     || !isSafeLabel(value.buildId) || !isSafeLabel(value.runId) || !Array.isArray(value.eventTrace)
     || !Array.isArray(value.contextReceipts) || !Array.isArray(value.toolEnvelopes)
     || !Array.isArray(value.timings) || !Array.isArray(value.durableState)
-    || !SAFE_DIGEST.test(String(value.projectionDigest)) || !SAFE_DIGEST.test(String(value.traceDigest))) fail("bundle fields");
+    || !SAFE_DIGEST.test(String(value.projectionDigest)) || !SAFE_DIGEST.test(String(value.traceDigest))
+    || !SAFE_DIGEST.test(String(value.bundleDigest))) fail("bundle fields");
   const eventTrace = value.eventTrace.map(validateTraceEvent);
   if (eventTrace.length === 0 || eventTrace[0]!.kind !== "run_accepted") fail("empty or unaccepted trace");
   for (const [index, event] of eventTrace.entries()) {
@@ -287,7 +327,7 @@ const validateTraceBundle = (value: unknown): AgentRunTraceBundle => {
     }
   }
   assertPlainJson(value.projection);
-  if (scanAgentRunRedactions(value).length > 0) fail("privacy denylist match");
+  assertTracePrivacy(value);
   return value as unknown as AgentRunTraceBundle;
 };
 
@@ -322,12 +362,23 @@ const syntheticEvent = (event: AgentRunTraceEvent): AgentRunEvent => {
 };
 
 const validateNoRawSecrets = (bundle: AgentRunTraceBundle, sourceEvents: readonly AgentRunEvent[], bytes: string): void => {
-  if (scanAgentRunRedactions(bundle).length > 0) fail("privacy denylist match");
+  assertTracePrivacy(bundle);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bytes);
+  } catch {
+    fail("export bytes are not JSON");
+  }
+  const strings: string[] = [];
+  jsonStringValues(parsed, (text) => strings.push(text));
   for (const event of sourceEvents) {
     const candidate = event as unknown as Record<string, unknown>;
     for (const key of ["runId", "attemptId", "eventId", "admissionId", "capabilityId", "contextReceiptId", "sourceRef", "sourceHash", "ownerRef", "callId", "idempotencyKey", "approvalId", "usageId", "recoveryId", "fromAttemptId", "toAttemptId"]) {
       const raw = candidate[key];
-      if (typeof raw === "string" && raw.length >= 3 && bytes.includes(raw)) fail(`raw ${key} escaped`);
+      if (typeof raw !== "string" || raw.length < 3) continue;
+      const escaped = raw.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+      const token = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:$|[^A-Za-z0-9])`, "u");
+      if (strings.some((text) => text === raw || token.test(text))) fail(`raw ${key} escaped`);
     }
   }
 };
@@ -357,7 +408,9 @@ export const exportAgentRunTrace = (
   const traceWithoutDigests = { schema: AGENT_RUN_TRACE_SCHEMA, schemaVersion: CURRENT_AGENT_RUN_TRACE_SCHEMA_VERSION, buildId: input.buildId, runId: safeRunId, eventTrace, contextReceipts, toolEnvelopes, timings, durableState, projection: redactedProjection } as const;
   const traceDigest = digest(canonicalTraceJson(eventTrace as unknown as JsonValue));
   const projectionDigest = digest(canonicalTraceJson(redactedProjection as unknown as JsonValue));
-  const bundle = { ...traceWithoutDigests, projectionDigest, traceDigest } as AgentRunTraceBundle;
+  const unsignedBundle = { ...traceWithoutDigests, projectionDigest, traceDigest } as const;
+  const bundleDigest = digest(canonicalTraceJson(unsignedBundle as unknown as JsonValue));
+  const bundle = { ...unsignedBundle, bundleDigest } as AgentRunTraceBundle;
   const bytes = `${canonicalTraceJson(bundle as unknown as JsonValue)}\n`;
   validateNoRawSecrets(bundle, sourceEvents, bytes);
   return { bundle, bytes };
@@ -365,6 +418,10 @@ export const exportAgentRunTrace = (
 
 export const replayAgentRunTrace = (input: unknown): AgentRunTraceReplay => {
   const bundle = validateTraceBundle(input);
+  const { bundleDigest, ...unsignedBundle } = bundle;
+  if (digest(canonicalTraceJson(unsignedBundle as unknown as JsonValue)) !== bundleDigest) {
+    fail("bundle digest mismatch");
+  }
   const traceDigest = digest(canonicalTraceJson(bundle.eventTrace as unknown as JsonValue));
   if (traceDigest !== bundle.traceDigest) fail("trace digest mismatch");
   const projection = projectAgentRunTimeline(bundle.eventTrace.map(syntheticEvent));
