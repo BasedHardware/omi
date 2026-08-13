@@ -13,6 +13,10 @@ import {
   type AgentRunTerminalCode,
   type AgentRunTerminalOutcome,
 } from "./agent-run-events";
+import {
+  reportForLegacyChatCapability,
+  type AgentHarnessTierReport,
+} from "./capability-tier-report";
 
 export interface AgentRunScenario {
   readonly runId?: string;
@@ -80,6 +84,8 @@ export interface AgentRunScenarioResult {
   readonly events: readonly AgentRunEvent[];
   readonly timeline: ReturnType<typeof projectAgentRunTimeline>;
   readonly replayEvents: readonly AgentRunEvent[];
+  /** Named harness evidence tier; legacy event capability fields remain unchanged. */
+  readonly tierReport: AgentHarnessTierReport | null;
 }
 
 const SCENARIO_RUN = "scenario-run";
@@ -149,5 +155,13 @@ export const runAgentRunScenario = (
     events: Object.freeze(store.list(runId)),
     timeline: projectAgentRunTimeline(store.list(runId)),
     replayEvents: Object.freeze(reloaded.list(runId)),
+    tierReport: scenario.capability === undefined
+      ? null
+      : reportForLegacyChatCapability({
+        tier: scenario.capability.tier,
+        adapter: scenario.capability.adapter,
+        deterministic: scenario.capability.deterministic,
+      },
+        scenario.terminal.outcome === "completed" ? "passed" : "failed"),
   });
 };

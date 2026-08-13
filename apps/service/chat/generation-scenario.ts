@@ -21,6 +21,10 @@ import type {
   ChatGenerationEventsStore,
 } from "../stores/chat-generation-events-store";
 import type { ChatMessageRecord } from "../stores/chat-messages-store";
+import {
+  reportForLegacyChatCapability,
+  type AgentHarnessTierReport,
+} from "./capability-tier-report";
 
 /** Small deterministic scheduler used by Chat scenarios and unit tests. */
 export class DeterministicChatGenerationScheduler implements ChatGenerationScheduler {
@@ -84,6 +88,8 @@ export interface ChatGenerationScenarioTraceEntry {
 
 export interface ChatGenerationScenarioResult {
   readonly capability: ChatGenerationSourceCapabilityReceipt;
+  /** Named harness evidence tier; legacy capability fields remain unchanged. */
+  readonly tierReport: AgentHarnessTierReport;
   readonly trace: readonly ChatGenerationScenarioTraceEntry[];
   readonly terminal: "done" | "failed" | "cancelled" | null;
 }
@@ -250,9 +256,13 @@ export const runChatGenerationScenario = async (
   const durable = baseEvents.listAfter(SCENARIO_ACCOUNT, generationId, null) ?? [];
   const terminal = durable.filter((event) =>
     event.frame.kind === "done" || event.frame.kind === "failed" || event.frame.kind === "cancelled");
+  const capability = readChatGenerationSourceCapability(source);
+  const terminalKind = terminal.length === 1 ? terminal[0]!.frame.kind as "done" | "failed" | "cancelled" : null;
   return Object.freeze({
-    capability: readChatGenerationSourceCapability(source),
+    capability,
+    tierReport: reportForLegacyChatCapability(capability,
+      terminalKind === null ? "not-evaluated" : terminalKind === "done" ? "passed" : "failed"),
     trace: traceOf(durable),
-    terminal: terminal.length === 1 ? terminal[0]!.frame.kind as "done" | "failed" | "cancelled" : null,
+    terminal: terminalKind,
   });
 };

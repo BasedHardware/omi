@@ -75,6 +75,16 @@ describe("versioned agent run events", () => {
     expect(first.events.map((event) => event.sequence)).toEqual(first.events.map((_, index) => index + 1));
     expect(JSON.stringify(first.events)).toBe(JSON.stringify(second.events));
     expect(JSON.stringify(first.replayEvents)).toBe(JSON.stringify(first.events));
+    expect(first.tierReport).toEqual({
+      schemaVersion: 1,
+      tier: "deterministic-adapter",
+      adapter: "scripted-chat-generation",
+      deterministic: true,
+      providerEvidence: "none",
+      outcome: "passed",
+      claimsRealAgentSuccess: false,
+      fakeSuccessClaimsForbidden: true,
+    });
     expect(first.timeline).not.toBeNull();
     expect(first.timeline?.events.at(-1)?.details).toEqual({
       terminalOutcome: "completed", terminalCode: "completed", retryable: false, recoveryAction: null,

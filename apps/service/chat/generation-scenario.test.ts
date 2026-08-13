@@ -2,6 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import { runChatGenerationScenario } from "./generation-scenario";
 import { validateChatGenerationAttachmentDescriptors } from "./generation-supervisor";
+import {
+  createAgentHarnessTierReport,
+  parseAgentHarnessTierReport,
+  reportForLegacyChatCapability,
+  serializeAgentHarnessTierReport,
+} from "./capability-tier-report";
 import type { ChatGenerationAttachmentDescriptor } from "./attachment-content";
 import {
   createScriptedChatGenerationSource,
@@ -111,6 +117,16 @@ describe("deterministic Chat generation scenarios", () => {
       adapter: "scripted-chat-generation",
       deterministic: true,
     });
+    expect(result.tierReport).toEqual({
+      schemaVersion: 1,
+      tier: "deterministic-adapter",
+      adapter: "scripted-chat-generation",
+      deterministic: true,
+      providerEvidence: "none",
+      outcome: "passed",
+      claimsRealAgentSuccess: false,
+      fakeSuccessClaimsForbidden: true,
+    });
     expect(result.trace).toEqual([
       { atMs: 0, kind: "snapshot", text: "" },
       { atMs: 5, kind: "delta", text: "hi " },
@@ -118,6 +134,91 @@ describe("deterministic Chat generation scenarios", () => {
       { atMs: 12, kind: "done" },
     ]);
     expect(result.terminal).toBe("done");
+  });
+
+  test("normalizes every named harness tier and rejects fake real-agent claims", () => {
+    const tiers = [
+      createAgentHarnessTierReport({
+        tier: "pure-contract", adapter: "contract-fixture", deterministic: true,
+        providerEvidence: "none", outcome: "passed",
+      }),
+      createAgentHarnessTierReport({
+        tier: "deterministic-adapter", adapter: "scripted-chat-generation", deterministic: true,
+        providerEvidence: "none", outcome: "passed",
+      }),
+      createAgentHarnessTierReport({
+        tier: "local-integration", adapter: "omi-llm-gateway", deterministic: false,
+        providerEvidence: "gateway-routed", outcome: "passed",
+      }),
+      createAgentHarnessTierReport({
+        tier: "native-consumer", adapter: "macos-webview", deterministic: false,
+        providerEvidence: "gateway-routed", outcome: "passed",
+      }),
+      createAgentHarnessTierReport({
+        tier: "optional-provider-eval", adapter: "provider-eval", deterministic: false,
+        providerEvidence: "none", outcome: "not-evaluated",
+      }),
+    ];
+    expect(tiers.map((report) => report.tier)).toEqual([
+      "pure-contract", "deterministic-adapter", "local-integration", "native-consumer", "optional-provider-eval",
+    ]);
+    expect(tiers.every((report) => report.claimsRealAgentSuccess === false)).toBe(true);
+    expect(tiers.every((report) => parseAgentHarnessTierReport(JSON.parse(serializeAgentHarnessTierReport(report))) !== null)).toBe(true);
+
+    const fakeSuccess = {
+      ...tiers[1]!,
+      claimsRealAgentSuccess: true,
+    };
+    expect(parseAgentHarnessTierReport(fakeSuccess)).toBeNull();
+    expect(parseAgentHarnessTierReport({
+      ...tiers[1]!, fakeSuccessClaimsForbidden: false,
+    })).toBeNull();
+    expect(parseAgentHarnessTierReport({
+      ...tiers[1]!, extra: "must fail",
+    })).toBeNull();
+    expect(() => createAgentHarnessTierReport({
+      tier: "deterministic-adapter", adapter: "scripted-chat-generation", deterministic: true,
+      providerEvidence: "none", outcome: "passed", claimsRealAgentSuccess: true,
+    })).toThrow("invalid agent harness tier report");
+  });
+
+  test("legacy gateway and unknown receipts remain truthful under named tiers", () => {
+    expect(reportForLegacyChatCapability({
+      tier: "real-provider", adapter: "omi-llm-gateway", deterministic: false,
+    }, "passed")).toEqual({
+      schemaVersion: 1,
+      tier: "local-integration",
+      adapter: "omi-llm-gateway",
+      deterministic: false,
+      providerEvidence: "gateway-routed",
+      outcome: "passed",
+      claimsRealAgentSuccess: false,
+      fakeSuccessClaimsForbidden: true,
+    });
+    expect(reportForLegacyChatCapability({
+      tier: "unknown", adapter: "unreported", deterministic: false,
+    })).toEqual({
+      schemaVersion: 1,
+      tier: "pure-contract",
+      adapter: "unreported",
+      deterministic: false,
+      providerEvidence: "none",
+      outcome: "not-evaluated",
+      claimsRealAgentSuccess: false,
+      fakeSuccessClaimsForbidden: true,
+    });
+    expect(reportForLegacyChatCapability({
+      tier: "real-provider", adapter: "omi-llm-gateway", deterministic: true,
+    })).toEqual({
+      schemaVersion: 1,
+      tier: "pure-contract",
+      adapter: "unreported",
+      deterministic: false,
+      providerEvidence: "none",
+      outcome: "not-evaluated",
+      claimsRealAgentSuccess: false,
+      fakeSuccessClaimsForbidden: true,
+    });
   });
 
   test("provider and context faults are truthful failed terminals", async () => {
