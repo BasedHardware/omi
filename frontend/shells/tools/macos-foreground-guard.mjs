@@ -44,14 +44,16 @@ export async function guardedRun(spec) {
   let terminal = null;
   let monitorFault = null;
   let monitoring = false;
-  const child = spawn(spec.command, spec.args, { cwd: spec.cwd, env: spec.env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(spec.command, spec.args, { cwd: spec.cwd, env: spec.env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
   child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
   const stopChild = () => {
     if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGTERM");
+      try { process.kill(-child.pid, "SIGTERM"); } catch { child.kill("SIGTERM"); }
       setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+        if (child.exitCode === null && child.signalCode === null) {
+          try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
+        }
       }, 1_000).unref();
     }
   };
