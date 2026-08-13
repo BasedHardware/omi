@@ -22,9 +22,14 @@ from database.memory_vector_repair_outbox import (
 )
 
 
-class _FailingStore:
-    def set(self, _path: str, _data: Any, *, merge: bool = False) -> None:
+class _FailingDocument:
+    def set(self, _payload: Any) -> None:
         raise RuntimeError("intentional emulator validation write failure")
+
+
+class _FailingDb:
+    def document(self, _path: str) -> _FailingDocument:
+        return _FailingDocument()
 
 
 def _required_doc(db_client: Any, path: str) -> dict[str, Any]:
@@ -73,8 +78,8 @@ def main() -> int:
     if record["record_id"] != record["idempotency_key"]:
         raise AssertionError("record_id must equal idempotency_key for stable replay")
 
-    first = write_vector_repair_purge_outbox_records(records=records)
-    second = write_vector_repair_purge_outbox_records(records=records)
+    first = write_vector_repair_purge_outbox_records(db_client=db_client, records=records)
+    second = write_vector_repair_purge_outbox_records(db_client=db_client, records=records)
     if first != records or second != records:
         raise AssertionError("writer returned a mutated record payload")
 
@@ -95,18 +100,13 @@ def main() -> int:
             f"expected exactly one idempotent memory_outbox document for {record['record_id']}, got {len(matching)}"
         )
 
-    import database.memory_vector_repair_outbox as _outbox_mod
-    _orig_store = _outbox_mod._store
-    _outbox_mod._store = lambda: _FailingStore()  # type: ignore[assignment]
     try:
-        write_vector_repair_purge_outbox_records(records=records)
+        write_vector_repair_purge_outbox_records(db_client=_FailingDb(), records=records)
     except RuntimeError as exc:
         if "intentional emulator validation write failure" not in str(exc):
             raise
     else:
         raise AssertionError("write failure propagated check failed: writer swallowed an exception")
-    finally:
-        _outbox_mod._store = _orig_store  # type: ignore[assignment]
 
     print(
         "PASS: memory vector repair/purge outbox idempotent Firestore emulator set validated "

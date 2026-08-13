@@ -1,18 +1,21 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
+from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
+from google.cloud.firestore import ArrayUnion, ArrayRemove
+
 from ulid import ULID
 
 from models.app import UsageHistoryType
-from database.store import Filter, get_document_store
-from database.store.sentinels import ArrayRemove, ArrayUnion
+from ._client import db
 import logging
 
 logger = logging.getLogger(__name__)
 
-
-def _store():
-    return get_document_store()
+# BaseCompositeFilter expects Operator enum but accepts 'AND' string at runtime.
+# Typed as Any to satisfy pyright without importing StructuredQuery (which fails
+# on some google-cloud-firestore versions).
+_AND_OP: Any = 'AND'
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -29,20 +32,9 @@ app_analytics_collection = 'plugins'
 testers_collection = 'testers'
 
 
-def _app_path(app_id: str) -> str:
-    return f'{apps_collection}/{app_id}'
-
-
-def _usage_history_path(app_id: str) -> str:
-    return f'{app_analytics_collection}/{app_id}/usage_history'
-
-
-def _api_keys_path(app_id: str) -> str:
-    return f'{apps_collection}/{app_id}/api_keys'
-
-
 def get_app_by_id_db(app_id: str) -> Optional[Dict[str, Any]]:
-    doc = _store().get(_app_path(app_id))
+    app_ref = db.collection(apps_collection).document(app_id)
+    doc = app_ref.get()
     if doc.exists:
         raw: object = doc.to_dict()
         return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
@@ -52,33 +44,40 @@ def get_app_by_id_db(app_id: str) -> Optional[Dict[str, Any]]:
 def get_audio_apps_count(app_ids: List[str]) -> int:
     if not app_ids or len(app_ids) == 0:
         return 0
-    filters: List[Filter] = [('id', 'in', app_ids), ('external_integration.triggers_on', '==', 'audio_bytes')]
-    return _store().count(apps_collection, filters=filters)
+    filters = [FieldFilter('id', 'in', app_ids), FieldFilter('external_integration.triggers_on', '==', 'audio_bytes')]
+    apps_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).count().get()
+    return apps_ref[0][0].value
 
 
 def get_private_apps_db(uid: str) -> List[Dict[str, Any]]:
-    filters: List[Filter] = [('uid', '==', uid), ('private', '==', True)]
-    return [_typed_doc(doc) for doc in _store().query(apps_collection, filters=filters)]
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('private', '==', True)]
+    private_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
+    data = [_typed_doc(doc) for doc in private_apps]
+    return data
 
 
 # This returns public unapproved apps of all users
 def get_unapproved_public_apps_db() -> List[Dict[str, Any]]:
-    filters: List[Filter] = [('approved', '==', False), ('private', '==', False)]
-    return [_typed_doc(doc) for doc in _store().query(apps_collection, filters=filters)]
+    filters = [FieldFilter('approved', '==', False), FieldFilter('private', '==', False)]
+    public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
+    return [_typed_doc(doc) for doc in public_apps]
 
 
 def get_public_approved_apps_db() -> List[Dict[str, Any]]:
-    filters: List[Filter] = [('approved', '==', True), ('private', '==', False)]
-    return [_typed_doc(doc) for doc in _store().query(apps_collection, filters=filters)]
+    filters = [FieldFilter('approved', '==', True), FieldFilter('private', '==', False)]
+    public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
+    return [_typed_doc(doc) for doc in public_apps]
 
 
 def get_popular_apps_db() -> List[Dict[str, Any]]:
-    filters: List[Filter] = [('approved', '==', True), ('is_popular', '==', True)]
-    return [_typed_doc(doc) for doc in _store().query(apps_collection, filters=filters)]
+    filters = [FieldFilter('approved', '==', True), FieldFilter('is_popular', '==', True)]
+    popular_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
+    return [_typed_doc(doc) for doc in popular_apps]
 
 
 def set_app_popular_db(app_id: str, popular: bool) -> None:
-    _store().update(_app_path(app_id), {'is_popular': popular})
+    app_ref = db.collection(apps_collection).document(app_id)
+    app_ref.update({'is_popular': popular})
 
 
 def search_apps_db(
@@ -91,10 +90,10 @@ def search_apps_db(
 ) -> List[Dict[str, Any]]:
     """
     Optimized search function that applies filters at database level.
-    Uses smart filter ordering to minimize data fetched from the store.
+    Uses smart filter ordering to minimize data fetched from Firestore.
 
     Note: Rating filter is NOT applied here as rating_avg is calculated from Redis,
-    not stored in the document. Apply rating filter after fetching from DB.
+    not stored in Firestore. Apply rating filter after fetching from DB.
 
     Args:
         uid: User ID for private apps and filtering
@@ -107,11 +106,11 @@ def search_apps_db(
     Returns:
         List of app dictionaries matching the filters
     """
-    filters: List[Filter] = []
+    filters: List[FieldFilter] = []
 
     # 1. Apply most restrictive filter first
     if my_apps:
-        filters.append(('uid', '==', uid))
+        filters.append(FieldFilter('uid', '==', uid))
 
     elif installed_apps:
         if not enabled_app_ids or len(enabled_app_ids) == 0:
@@ -119,31 +118,32 @@ def search_apps_db(
             return []
 
         if len(enabled_app_ids) > 30:
-            # 'in' filter limited to 30 items
+            # Firestore 'in' limited to 30 items
             # Query public approved apps first, then add user's own apps
-            filters.append(('approved', '==', True))
-            filters.append(('private', '==', False))
+            filters.append(FieldFilter('approved', '==', True))
+            filters.append(FieldFilter('private', '==', False))
         else:
             # Query by specific IDs
-            filters.append(('id', 'in', enabled_app_ids))
+            filters.append(FieldFilter('id', 'in', enabled_app_ids))
 
     else:
         # Default: Public approved apps
-        filters.append(('approved', '==', True))
-        filters.append(('private', '==', False))
+        filters.append(FieldFilter('approved', '==', True))
+        filters.append(FieldFilter('private', '==', False))
 
     # 2. Add category filter
     if category and not my_apps:  # Don't add if already filtering by my_apps
-        filters.append(('category', '==', category))
+        filters.append(FieldFilter('category', '==', category))
 
     # 3. Add capability filter
     if capability and not my_apps:
-        filters.append(('capabilities', 'array_contains', capability))
+        filters.append(FieldFilter('capabilities', 'array_contains', capability))
 
     # Execute query with all filters
     apps: List[Dict[str, Any]] = []
     if filters:
-        apps = [_typed_doc(doc) for doc in _store().query(apps_collection, filters=filters)]
+        query = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters))
+        apps = [_typed_doc(doc) for doc in query.stream()]
 
     # For installed_apps with > 30 enabled apps, we need to also fetch user's own apps
     # because the main query only returns approved+public apps
@@ -153,7 +153,9 @@ def search_apps_db(
         apps = [app for app in apps if app.get('id') in enabled_set]
 
         # Also fetch user's own enabled apps (which may be private or unapproved)
-        user_apps = [_typed_doc(doc) for doc in _store().query(apps_collection, filters=[('uid', '==', uid)])]
+        user_apps_filter = FieldFilter('uid', '==', uid)
+        user_apps_query = db.collection(apps_collection).where(filter=user_apps_filter)
+        user_apps = [_typed_doc(doc) for doc in user_apps_query.stream()]
 
         # Add user's own enabled apps that aren't already in the list
         existing_ids = {app.get('id') for app in apps}
@@ -174,86 +176,112 @@ def search_apps_db(
 
 # This returns public unapproved apps for a user
 def get_public_unapproved_apps_db(uid: str) -> List[Dict[str, Any]]:
-    filters: List[Filter] = [('approved', '==', False), ('uid', '==', uid), ('private', '==', False)]
-    return [_typed_doc(doc) for doc in _store().query(apps_collection, filters=filters)]
+    filters = [FieldFilter('approved', '==', False), FieldFilter('uid', '==', uid), FieldFilter('private', '==', False)]
+    public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
+    return [_typed_doc(doc) for doc in public_apps]
 
 
 def get_apps_for_tester_db(uid: str) -> List[Dict[str, Any]]:
-    doc = _store().get(f'{testers_collection}/{uid}')
+    tester_ref = db.collection(testers_collection).document(uid)
+    doc = tester_ref.get()
     if doc.exists:
         apps = _typed_doc(doc).get('apps', [])
         if not apps:
             return []
-        filters: List[Filter] = [('approved', '==', False), ('id', 'in', apps)]
-        return [_typed_doc(d) for d in _store().query(apps_collection, filters=filters)]
+        filters = [FieldFilter('approved', '==', False), FieldFilter('id', 'in', apps)]
+        public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
+        return [_typed_doc(doc) for doc in public_apps]
     return []
 
 
 def add_app_to_db(app_data: Dict[str, Any]) -> None:
-    _store().create(_app_path(app_data['id']), app_data)
+    app_ref = db.collection(apps_collection)
+    app_ref.add(app_data, app_data['id'])
 
 
 def upsert_app_to_db(app_data: Dict[str, Any]) -> None:
-    _store().set(_app_path(app_data['id']), app_data)
+    app_ref = db.collection(apps_collection).document(app_data['id'])
+    app_ref.set(app_data)
 
 
 def update_app_in_db(app_data: Dict[str, Any]) -> None:
-    _store().update(_app_path(app_data['id']), app_data)
+    app_ref = db.collection(apps_collection).document(app_data['id'])
+    app_ref.update(app_data)
 
 
 def delete_app_from_db(app_id: str) -> None:
-    _store().delete(_app_path(app_id))
+    app_ref = db.collection(apps_collection).document(app_id)
+    app_ref.delete()
 
 
 def update_app_visibility_in_db(app_id: str, private: bool) -> None:
-    store = _store()
+    app_ref = db.collection(apps_collection).document(app_id)
     if 'private' in app_id and not private:
-        app = _typed_doc(store.get(_app_path(app_id)))
+        app = _typed_doc(app_ref.get())
         if not app:
             # The private app document is gone (deleted, or a stale read-cache pointed the caller
             # here). There is nothing to republish, so skip the delete-and-recreate instead of
             # dereferencing None below (which raised TypeError -> 500).
             return
-        store.delete(_app_path(app_id))
+        app_ref.delete()
         new_app_id = app_id.split('-private')[0] + '-' + str(ULID())
         app['id'] = new_app_id
         app['private'] = private
-        store.set(_app_path(new_app_id), app)
+        app_ref = db.collection(apps_collection).document(new_app_id)
+        app_ref.set(app)
     else:
-        store.update(_app_path(app_id), {'private': private})
+        app_ref.update({'private': private})
 
 
 def change_app_approval_status(app_id: str, approved: bool) -> None:
-    _store().update(_app_path(app_id), {'approved': approved, 'status': 'approved' if approved else 'rejected'})
+    app_ref = db.collection(apps_collection).document(app_id)
+    app_ref.update({'approved': approved, 'status': 'approved' if approved else 'rejected'})
 
 
 def get_app_usage_history_db(app_id: str) -> List[Dict[str, Any]]:
-    return [_typed_doc(doc) for doc in _store().query(_usage_history_path(app_id))]
+    usage = db.collection(app_analytics_collection).document(app_id).collection('usage_history').stream()
+    return [_typed_doc(doc) for doc in usage]
 
 
 def get_app_memory_created_integration_usage_count_db(app_id: str) -> Any:
-    return _store().count(
-        _usage_history_path(app_id),
-        filters=[('type', '==', UsageHistoryType.memory_created_external_integration)],
+    usage = (
+        db.collection(app_analytics_collection)
+        .document(app_id)
+        .collection('usage_history')
+        .where(filter=FieldFilter('type', '==', UsageHistoryType.memory_created_external_integration))
+        .count()
+        .get()
     )
+    return usage[0][0].value
 
 
 def get_app_memory_prompt_usage_count_db(app_id: str) -> Any:
-    return _store().count(
-        _usage_history_path(app_id),
-        filters=[('type', '==', UsageHistoryType.memory_created_prompt)],
+    usage = (
+        db.collection(app_analytics_collection)
+        .document(app_id)
+        .collection('usage_history')
+        .where(filter=FieldFilter('type', '==', UsageHistoryType.memory_created_prompt))
+        .count()
+        .get()
     )
+    return usage[0][0].value
 
 
 def get_app_chat_message_sent_usage_count_db(app_id: str) -> Any:
-    return _store().count(
-        _usage_history_path(app_id),
-        filters=[('type', '==', UsageHistoryType.chat_message_sent)],
+    usage = (
+        db.collection(app_analytics_collection)
+        .document(app_id)
+        .collection('usage_history')
+        .where(filter=FieldFilter('type', '==', UsageHistoryType.chat_message_sent))
+        .count()
+        .get()
     )
+    return usage[0][0].value
 
 
 def get_app_usage_count_db(app_id: str) -> Any:
-    return _store().count(_usage_history_path(app_id))
+    usage = db.collection(app_analytics_collection).document(app_id).collection('usage_history').count().get()
+    return usage[0][0].value
 
 
 # ********************************
@@ -262,7 +290,8 @@ def get_app_usage_count_db(app_id: str) -> Any:
 
 
 def set_app_review_in_db(app_id: str, uid: str, review: Dict[str, Any]) -> None:
-    _store().set(f'{apps_collection}/{app_id}/reviews/{uid}', review)
+    app_ref = db.collection(apps_collection).document(app_id).collection('reviews').document(uid)
+    app_ref.set(review)
 
 
 # ********************************
@@ -271,30 +300,36 @@ def set_app_review_in_db(app_id: str, uid: str, review: Dict[str, Any]) -> None:
 
 
 def add_tester_db(data: Dict[str, Any]) -> None:
-    _store().set(f'{testers_collection}/{data["uid"]}', data)
+    app_ref = db.collection(testers_collection).document(data['uid'])
+    app_ref.set(data)
 
 
 def add_app_access_for_tester_db(app_id: str, uid: str) -> None:
-    _store().update(f'{testers_collection}/{uid}', {'apps': ArrayUnion([app_id])})
+    app_ref = db.collection(testers_collection).document(uid)
+    app_ref.update({'apps': ArrayUnion([app_id])})
 
 
 def remove_app_access_for_tester_db(app_id: str, uid: str) -> None:
-    _store().update(f'{testers_collection}/{uid}', {'apps': ArrayRemove([app_id])})
+    app_ref = db.collection(testers_collection).document(uid)
+    app_ref.update({'apps': ArrayRemove([app_id])})
 
 
 def remove_tester_db(uid: str) -> None:
-    _store().delete(f'{testers_collection}/{uid}')
+    app_ref = db.collection(testers_collection).document(uid)
+    app_ref.delete()
 
 
 def can_tester_access_app_db(app_id: str, uid: str) -> bool:
-    doc = _store().get(f'{testers_collection}/{uid}')
+    app_ref = db.collection(testers_collection).document(uid)
+    doc = app_ref.get()
     if doc.exists:
         return app_id in _typed_doc(doc).get('apps', [])
     return False
 
 
 def is_tester_db(uid: str) -> bool:
-    return _store().exists(f'{testers_collection}/{uid}')
+    app_ref = db.collection(testers_collection).document(uid)
+    return app_ref.get().exists
 
 
 # ********************************
@@ -321,7 +356,9 @@ def record_app_usage(
         'type': usage_type,
     }
 
-    _store().set(f'{_usage_history_path(app_id)}/{conversation_id or message_id}', data)
+    db.collection(app_analytics_collection).document(app_id).collection('usage_history').document(
+        conversation_id or message_id
+    ).set(data)
     return data
 
 
@@ -331,27 +368,34 @@ def record_app_usage(
 
 
 def delete_persona_db(persona_id: str) -> None:
-    _store().delete(_app_path(persona_id))
+    persona_ref = db.collection(apps_collection).document(persona_id)
+    persona_ref.delete()
 
 
 def get_personas_by_username_db(persona_id: str) -> Optional[List[Dict[str, Any]]]:
-    docs = _store().query(apps_collection, filters=[('username', '==', persona_id)])
+    persona_ref = db.collection(apps_collection).where('username', '==', persona_id)
+    docs = persona_ref.get()
     if not docs:
         return None
     return [{**_typed_doc(doc), 'doc_id': doc.id} for doc in docs]
 
 
 def get_persona_by_username_db(username: str) -> Optional[Dict[str, Any]]:
-    filters: List[Filter] = [('username', '==', username), ('capabilities', 'array_contains', 'persona')]
-    docs = _store().query(apps_collection, filters=filters, limit=1)
+    filters = [FieldFilter('username', '==', username), FieldFilter('capabilities', 'array_contains', 'persona')]
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).limit(1)
+    docs = persona_ref.get()
     if not docs:
         return None
-    raw: object = docs[0].to_dict()
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
 
 
 def get_persona_by_id_db(persona_id: str) -> Optional[Dict[str, Any]]:
-    doc = _store().get(_app_path(persona_id))
+    persona_ref = db.collection(apps_collection).document(persona_id)
+    doc = persona_ref.get()
     if doc.exists:
         raw: object = doc.to_dict()
         return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
@@ -359,49 +403,66 @@ def get_persona_by_id_db(persona_id: str) -> Optional[Dict[str, Any]]:
 
 
 def get_persona_by_uid_db(uid: str) -> Optional[Dict[str, Any]]:
-    filters: List[Filter] = [('uid', '==', uid), ('capabilities', 'array_contains', 'persona')]
-    docs = _store().query(apps_collection, filters=filters, limit=1)
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona')]
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).limit(1)
+    docs = persona_ref.get()
     if not docs:
         return None
-    raw: object = docs[0].to_dict()
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
 
 
 def get_user_persona_by_uid(uid: str) -> Optional[Dict[str, Any]]:
-    filters: List[Filter] = [
-        ('capabilities', 'array_contains', 'persona'),
-        ('category', '==', 'personality-emulation'),
-        ('uid', '==', uid),
+    filters = [
+        FieldFilter('capabilities', 'array_contains', 'persona'),
+        FieldFilter('category', '==', 'personality-emulation'),
+        FieldFilter('uid', '==', uid),
     ]
-    docs = _store().query(apps_collection, filters=filters, limit=1)
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).limit(1)
+    docs = persona_ref.get()
     if not docs:
         return None
-    return {'id': docs[0].id, **_typed_doc(docs[0])}
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return {'id': doc.id, **_typed_doc(doc)}
 
 
 def get_persona_by_twitter_handle_db(handle: str) -> Optional[Dict[str, Any]]:
-    filters: List[Filter] = [('category', '==', 'personality-emulation'), ('twitter.username', '==', handle)]
-    docs = _store().query(apps_collection, filters=filters, limit=1)
+    filters = [FieldFilter('category', '==', 'personality-emulation'), FieldFilter('twitter.username', '==', handle)]
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).limit(1)
+    docs = persona_ref.get()
     if not docs:
         return None
-    return {'id': docs[0].id, **_typed_doc(docs[0])}
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return {'id': doc.id, **_typed_doc(doc)}
 
 
 def get_persona_by_username_twitter_handle_db(username: str, handle: str) -> Optional[Dict[str, Any]]:
-    filters: List[Filter] = [
-        ('username', '==', username),
-        ('category', '==', 'personality-emulation'),
-        ('twitter.username', '==', handle),
+    filters = [
+        FieldFilter('username', '==', username),
+        FieldFilter('category', '==', 'personality-emulation'),
+        FieldFilter('twitter.username', '==', handle),
     ]
-    docs = _store().query(apps_collection, filters=filters, limit=1)
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).limit(1)
+    docs = persona_ref.get()
     if not docs:
         return None
-    return {'id': docs[0].id, **_typed_doc(docs[0])}
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return {'id': doc.id, **_typed_doc(doc)}
 
 
 def get_omi_personas_by_uid_db(uid: str) -> List[Dict[str, Any]]:
-    filters: List[Filter] = [('uid', '==', uid), ('capabilities', 'array_contains', 'persona')]
-    docs = _store().query(apps_collection, filters=filters)
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona')]
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters))
+    docs = persona_ref.get()
     if not docs:
         return []
     typed_docs = [_typed_doc(doc) for doc in docs]
@@ -410,45 +471,69 @@ def get_omi_personas_by_uid_db(uid: str) -> List[Dict[str, Any]]:
 
 
 def get_omi_persona_apps_by_uid_db(uid: str) -> List[Dict[str, Any]]:
-    filters: List[Filter] = [('uid', '==', uid), ('category', '==', 'personality-emulation')]
-    docs = _store().query(apps_collection, filters=filters)
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('category', '==', 'personality-emulation')]
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters))
+    docs = persona_ref.get()
     if not docs:
         return []
-    return [_typed_doc(doc) for doc in docs]
+    docs_out = [_typed_doc(doc) for doc in docs]
+    return docs_out
 
 
 def update_persona_in_db(persona_data: Dict[str, Any]) -> None:
-    _store().update(_app_path(persona_data['id']), persona_data)
+    persona_ref = db.collection(apps_collection).document(persona_data['id'])
+    persona_ref.update(persona_data)
 
 
 def migrate_app_owner_id_db(new_id: str, old_id: str) -> None:
-    store = _store()
-    for app in store.query(apps_collection, filters=[('uid', '==', old_id)]):
-        store.update(_app_path(app.id), {'uid': new_id})
+    filters = [FieldFilter('uid', '==', old_id)]
+    apps_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
+    for app in apps_ref:
+        app_ref = db.collection(apps_collection).document(app.id)
+        app_ref.update({'uid': new_id})
 
 
 def create_api_key_db(app_id: str, api_key_data: Dict[str, Any]) -> Dict[str, Any]:
     """Create a new API key for an app in the database"""
-    _store().set(f'{_api_keys_path(app_id)}/{api_key_data["id"]}', api_key_data)
+    api_key_ref = db.collection(apps_collection).document(app_id).collection('api_keys').document(api_key_data['id'])
+    api_key_ref.set(api_key_data)
     return api_key_data
 
 
 def get_api_key_by_hash_db(app_id: str, hashed_key: str) -> Optional[Dict[str, Any]]:
     """Get an API key by its hash value"""
-    docs = _store().query(_api_keys_path(app_id), filters=[('hashed', '==', hashed_key)], limit=1)
+    filters = [FieldFilter('hashed', '==', hashed_key)]
+    api_keys_ref = (
+        db.collection(apps_collection)
+        .document(app_id)
+        .collection('api_keys')
+        .where(filter=BaseCompositeFilter(_AND_OP, filters))
+        .limit(1)
+    )
+    docs = api_keys_ref.get()
     if not docs:
         return None
-    raw: object = docs[0].to_dict()
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
 
 
 def list_api_keys_db(app_id: str) -> List[Dict[str, Any]]:
     """List all API keys for an app (excluding the hashed values)"""
-    docs = _store().query(_api_keys_path(app_id), order_by='created_at', direction='desc')
-    return [{k: v for k, v in _typed_doc(doc).items() if k != 'hashed'} for doc in docs]
+    api_keys_ref = (
+        db.collection(apps_collection)
+        .document(app_id)
+        .collection('api_keys')
+        .order_by('created_at', direction='DESCENDING')
+        .stream()
+    )
+    return [{k: v for k, v in _typed_doc(doc).items() if k != 'hashed'} for doc in api_keys_ref]
 
 
 def delete_api_key_db(app_id: str, key_id: str) -> bool:
     """Delete an API key"""
-    _store().delete(f'{_api_keys_path(app_id)}/{key_id}')
+    api_key_ref = db.collection(apps_collection).document(app_id).collection('api_keys').document(key_id)
+    api_key_ref.delete()
     return True

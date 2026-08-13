@@ -2,12 +2,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, cast
 
-from database.store import get_document_store
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
+
+from ._client import db
 from database.document_ids import system_folder_doc_id
-
-
-def _store():
-    return get_document_store()
 
 # System folders that are created for new users
 SYSTEM_FOLDERS: List[Dict[str, Any]] = [
@@ -109,10 +108,11 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
 
 def get_folders(uid: str) -> List[Dict[str, Any]]:
     """Get all folders for a user, sorted by order."""
-    folders_path = f'users/{uid}/folders'
+    user_ref = db.collection('users').document(uid)
+    folders_ref = user_ref.collection('folders')
 
     folders: List[Dict[str, Any]] = []
-    for doc in _store().query(folders_path, order_by='order'):
+    for doc in folders_ref.order_by('order').stream():
         folder_data = _typed_doc(doc)
         folder_data['id'] = doc.id
         folders.append(folder_data)
@@ -122,9 +122,10 @@ def get_folders(uid: str) -> List[Dict[str, Any]]:
 
 def get_folder(uid: str, folder_id: str) -> Optional[Dict[str, Any]]:
     """Get a specific folder by ID."""
-    folder_doc = _store().get(f'users/{uid}/folders/{folder_id}')
+    user_ref = db.collection('users').document(uid)
+    folder_doc = user_ref.collection('folders').document(folder_id).get()
 
-    if folder_doc.exists:
+    if getattr(folder_doc, "exists", False):
         folder_data = _typed_doc(folder_doc)
         folder_data['id'] = folder_doc.id
         return folder_data
@@ -140,10 +141,11 @@ def create_folder(
     icon: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a new custom folder for a user."""
-    folders_path = f'users/{uid}/folders'
+    user_ref = db.collection('users').document(uid)
+    folders_ref = user_ref.collection('folders')
 
     # Get the highest order number
-    existing_folders = _store().query(folders_path, order_by='order', direction='desc', limit=1)
+    existing_folders = list(folders_ref.order_by('order', direction=firestore.Query.DESCENDING).limit(1).stream())
     max_order = _typed_doc(existing_folders[0]).get('order', 0) if existing_folders else 0
 
     folder_id = str(uuid.uuid4())
@@ -164,16 +166,19 @@ def create_folder(
         'conversation_count': 0,
     }
 
-    _store().set(f'{folders_path}/{folder_id}', folder_data)
+    folders_ref.document(folder_id).set(folder_data)
     return folder_data
 
 
 def update_folder(uid: str, folder_id: str, update_data: Dict[str, Any]) -> bool:
     """Update a folder's metadata."""
+    user_ref = db.collection('users').document(uid)
+    folder_ref = user_ref.collection('folders').document(folder_id)
+
     # Add updated_at timestamp
     update_data['updated_at'] = datetime.now(timezone.utc)
 
-    _store().update(f'users/{uid}/folders/{folder_id}', update_data)
+    folder_ref.update(update_data)
     return True
 
 
@@ -182,7 +187,8 @@ def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = N
     Delete a folder and move its conversations to another folder.
     If move_to_folder_id is not provided, moves to the default 'Other' folder.
     """
-    store = _store()
+    user_ref = db.collection('users').document(uid)
+    folder_ref = user_ref.collection('folders').document(folder_id)
 
     # Find target folder
     target_folder_id: Optional[str] = move_to_folder_id
@@ -195,18 +201,17 @@ def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = N
 
     # Move all conversations from this folder to the target folder
     if target_folder_id:
-        conversations = store.query(
-            f'users/{uid}/conversations', filters=[('folder_id', '==', folder_id)]
-        )
+        conversations_ref = user_ref.collection('conversations')
+        conversations = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id)).stream()
 
-        batch = store.batch()
+        batch = db.batch()
         count = 0
         for conv_doc in conversations:
-            batch.update(conv_doc.path, {'folder_id': target_folder_id})
+            batch.update(conv_doc.reference, {'folder_id': target_folder_id})
             count += 1
             if count >= 450:
                 batch.commit()
-                batch = store.batch()
+                batch = db.batch()
                 count = 0
 
         if count > 0:
@@ -216,17 +221,19 @@ def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = N
         update_folder_conversation_count(uid, target_folder_id)
 
     # Delete the folder
-    store.delete(f'users/{uid}/folders/{folder_id}')
+    folder_ref.delete()
     return True
 
 
 def reorder_folders(uid: str, folder_ids: List[str]) -> bool:
     """Reorder folders by providing an ordered list of folder IDs."""
-    folders_path = f'users/{uid}/folders'
+    user_ref = db.collection('users').document(uid)
+    folders_ref = user_ref.collection('folders')
 
-    batch = _store().batch()
+    batch = db.batch()
     for i, folder_id in enumerate(folder_ids):
-        batch.update(f'{folders_path}/{folder_id}', {'order': i, 'updated_at': datetime.now(timezone.utc)})
+        folder_ref = folders_ref.document(folder_id)
+        batch.update(folder_ref, {'order': i, 'updated_at': datetime.now(timezone.utc)})
 
     batch.commit()
     return True
@@ -237,10 +244,11 @@ def initialize_system_folders(uid: str) -> List[Dict[str, Any]]:
     Create system folders for a new user or user without folders.
     Returns the list of created folders.
     """
-    folders_path = f'users/{uid}/folders'
+    user_ref = db.collection('users').document(uid)
+    folders_ref = user_ref.collection('folders')
 
     # Check if already initialized
-    existing = _store().query(folders_path, limit=1)
+    existing = list(folders_ref.limit(1).stream())
     if existing:
         return get_folders(uid)
 
@@ -263,7 +271,7 @@ def initialize_system_folders(uid: str) -> List[Dict[str, Any]]:
             'category_mapping': folder_config['category_mapping'],
             'conversation_count': 0,
         }
-        _store().set(f'{folders_path}/{folder_id}', folder_data)
+        folders_ref.document(folder_id).set(folder_data)
         created_folders.append(folder_data)
 
     return created_folders
@@ -277,19 +285,19 @@ def get_conversations_in_folder(
     include_discarded: bool = False,
 ) -> List[Dict[str, Any]]:
     """Get all conversations in a specific folder."""
-    filters: List[Any] = [('folder_id', '==', folder_id)]
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection('conversations')
+
+    query = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+
     if not include_discarded:
-        filters.append(('discarded', '==', False))
+        query = query.where(filter=FieldFilter('discarded', '==', False))
+
+    query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
+    query = query.offset(offset).limit(limit)
 
     conversations: List[Dict[str, Any]] = []
-    for doc in _store().query(
-        f'users/{uid}/conversations',
-        filters=filters,
-        order_by='created_at',
-        direction='desc',
-        offset=offset,
-        limit=limit,
-    ):
+    for doc in query.stream():
         conv_data = _typed_doc(doc)
         conv_data['id'] = doc.id
         conversations.append(conv_data)
@@ -303,11 +311,12 @@ def move_conversation_to_folder(
     folder_id: Optional[str],
 ) -> bool:
     """Move a conversation to a different folder."""
-    conv_path = f'users/{uid}/conversations/{conversation_id}'
+    user_ref = db.collection('users').document(uid)
+    conv_ref = user_ref.collection('conversations').document(conversation_id)
 
     # Get the old folder_id to update counts
-    conv_doc = _store().get(conv_path)
-    if not conv_doc.exists:
+    conv_doc = conv_ref.get()
+    if not getattr(conv_doc, "exists", False):
         return False
 
     old_folder_id = _typed_doc(conv_doc).get('folder_id')
@@ -315,7 +324,7 @@ def move_conversation_to_folder(
     # Update the conversation's folder_id. folder_user_set marks this as an
     # explicit user decision so processing upserts preserve it even when the
     # user cleared the folder (folder_id None).
-    _store().update(conv_path, {'folder_id': folder_id, 'folder_user_set': True})
+    conv_ref.update({'folder_id': folder_id, 'folder_user_set': True})
 
     # Update folder counts
     if old_folder_id:
@@ -335,29 +344,32 @@ def bulk_move_conversations_to_folder(
     if not conversation_ids:
         return 0
 
-    store = _store()
-    conv_docs = store.get_many(f'users/{uid}/conversations', [str(conv_id) for conv_id in conversation_ids])
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection('conversations')
+
+    conv_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
+    conv_docs = db.get_all(conv_refs)
 
     affected_folders: Set[str] = set()
-    batch = store.batch()
+    batch = db.batch()
     count = 0
     moved = 0
 
     for conv_doc in conv_docs:
-        if conv_doc is None or not conv_doc.exists:
+        if conv_doc is None or not getattr(conv_doc, "exists", False):
             continue
 
         old_folder_id = _typed_doc(conv_doc).get('folder_id')
         if old_folder_id:
             affected_folders.add(str(old_folder_id))
 
-        batch.update(conv_doc.path, {'folder_id': folder_id, 'folder_user_set': True})
+        batch.update(conv_doc.reference, {'folder_id': folder_id, 'folder_user_set': True})
         moved += 1
         count += 1
 
         if count >= 450:
             batch.commit()
-            batch = store.batch()
+            batch = db.batch()
             count = 0
 
     if count > 0:
@@ -372,12 +384,19 @@ def bulk_move_conversations_to_folder(
 
 def update_folder_conversation_count(uid: str, folder_id: str) -> int:
     """Update the conversation count for a folder."""
-    count = _store().count(
-        f'users/{uid}/conversations',
-        filters=[('folder_id', '==', folder_id), ('discarded', '==', False)],
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection('conversations')
+
+    query = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id)).where(
+        filter=FieldFilter('discarded', '==', False)
     )
 
-    _store().update(f'users/{uid}/folders/{folder_id}', {'conversation_count': count})
+    count_query = query.count()
+    result = count_query.get()
+    count = int(result[0][0].value or 0)
+
+    folder_ref = user_ref.collection('folders').document(folder_id)
+    folder_ref.update({'conversation_count': count})
 
     return count
 

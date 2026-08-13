@@ -2,8 +2,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from database import document_store
-from tests.store_fakes import FakeDocumentStore
+import database.memories as memories_db
+from fastapi import HTTPException
+
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import (
     MemoryAccessPolicy,
@@ -13,7 +14,6 @@ from models.product_memory import (
     MemoryItem,
 )
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
-from utils.memory import product_memory_read_service
 from utils.memory.product_memory_read_service import (
     fetch_authoritative_product_memory_items_for_source,
     fetch_authoritative_superseded_memory_items_for_targets,
@@ -53,6 +53,12 @@ class _FirestoreFake:
     def collection(self, path):
         self.collection_paths.append(path)
         return _CollectionRef(self, path)
+
+
+@pytest.fixture(autouse=True)
+def _empty_historical_store(monkeypatch):
+    """Canonical fixtures in this module intentionally have no legacy rows."""
+    monkeypatch.setattr(memories_db, 'get_memories', lambda *args, **kwargs: [])
 
 
 def _evidence(source_id='conv1'):
@@ -100,7 +106,7 @@ def _stored_item(item):
     return item.model_dump(mode='json')
 
 
-def test_fetch_default_product_memory_search_reads_authoritative_items_and_filters_default_visibility(monkeypatch):
+def test_fetch_default_product_memory_search_reads_authoritative_items_and_filters_default_visibility():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -116,15 +122,16 @@ def test_fetch_default_product_memory_search_reads_authoritative_items_and_filte
             f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term),
         }
     )
-    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     response = fetch_default_product_memory_search(
         uid='u1',
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(),
         now=now,
+        db_client=db_client,
     )
 
+    assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['memory_id'] for item in response['items']] == ['fresh-short-term', 'long-term']
     assert response['total_count'] == 2
     assert response['returned_count'] == 2
@@ -135,7 +142,7 @@ def test_fetch_default_product_memory_search_reads_authoritative_items_and_filte
     assert response['items'][1]['tier'] == 'long_term'
 
 
-def test_fetch_default_product_memory_search_collapses_alias_before_pagination(monkeypatch):
+def test_fetch_default_product_memory_search_collapses_alias_before_pagination():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     survivor = _memory_item(
         'canonical-survivor',
@@ -156,13 +163,13 @@ def test_fetch_default_product_memory_search_collapses_alias_before_pagination(m
     db_client = _FirestoreFake(
         {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [alias, survivor]}
     )
-    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     response = fetch_default_product_memory_search(
         uid='u1',
         query='Project Beacon',
         policy=MemoryAccessPolicy.for_omi_chat(),
         now=now,
+        db_client=db_client,
         limit=1,
     )
 
@@ -171,7 +178,7 @@ def test_fetch_default_product_memory_search_collapses_alias_before_pagination(m
     assert response['returned_count'] == 1
 
 
-def test_fetch_default_product_memory_search_excludes_pending_short_term_text(monkeypatch):
+def test_fetch_default_product_memory_search_excludes_pending_short_term_text():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     pending = _memory_item(
         'pending-explicit',
@@ -180,20 +187,20 @@ def test_fetch_default_product_memory_search_excludes_pending_short_term_text(mo
         processing_state=ProcessingState.pending,
     )
     db_client = _FirestoreFake({f'users/u1/memory_items/{pending.memory_id}': _stored_item(pending)})
-    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     response = fetch_default_product_memory_search(
         uid='u1',
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(),
         now=now,
+        db_client=db_client,
     )
 
     assert response['items'] == []
     assert response['total_count'] == 0
 
 
-def test_fetch_default_product_memory_search_paginates_after_filtering_with_deterministic_order(monkeypatch):
+def test_fetch_default_product_memory_search_paginates_after_filtering_with_deterministic_order():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     first = _memory_item('a-fresh', now=now, updated_at=now - timedelta(minutes=1), content='coffee alpha')
     stale = _memory_item(
@@ -208,13 +215,13 @@ def test_fetch_default_product_memory_search_paginates_after_filtering_with_dete
     db_client = _FirestoreFake(
         {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [third, stale, second, first]}
     )
-    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     response = fetch_default_product_memory_search(
         uid='u1',
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(),
         now=now,
+        db_client=db_client,
         limit=2,
         offset=1,
     )
@@ -226,22 +233,23 @@ def test_fetch_default_product_memory_search_paginates_after_filtering_with_dete
     assert response['limit'] == 2
 
 
-def test_fetch_default_product_memory_search_rejects_uid_mismatches(monkeypatch):
+def test_fetch_default_product_memory_search_rejects_uid_mismatches():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     item = _memory_item('wrong-uid', now=now, uid='other-user')
     db_client = _FirestoreFake({f'users/u1/memory_items/{item.memory_id}': _stored_item(item)})
-    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
-    with pytest.raises(ValueError, match='memory item uid mismatch'):
+    with pytest.raises(HTTPException) as exc_info:
         fetch_default_product_memory_search(
             uid='u1',
             query='coffee',
             policy=MemoryAccessPolicy.for_omi_chat(),
             now=now,
+            db_client=db_client,
         )
+    assert exc_info.value.status_code == 503
 
 
-def test_fetch_archive_product_memory_search_requires_archive_capability_and_keeps_default_separate(monkeypatch):
+def test_fetch_archive_product_memory_search_requires_archive_capability_and_keeps_default_separate():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
@@ -252,25 +260,27 @@ def test_fetch_archive_product_memory_search_requires_archive_capability_and_kee
             for item in [archive, fresh_short_term, long_term]
         }
     )
-    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     denied = fetch_archive_product_memory_search(
         uid='u1',
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False),
         now=now,
+        db_client=db_client,
     )
     allowed = fetch_archive_product_memory_search(
         uid='u1',
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(archive_capability=True),
         now=now,
+        db_client=db_client,
     )
     default = fetch_default_product_memory_search(
         uid='u1',
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(),
         now=now,
+        db_client=db_client,
     )
 
     assert denied['archive_capability_required'] is True
@@ -284,47 +294,81 @@ def test_fetch_archive_product_memory_search_requires_archive_capability_and_kee
     assert [item['memory_id'] for item in default['items']] == ['fresh-short-term', 'long-term']
 
 
-class _PagingRecorderStore(FakeDocumentStore):
-    """FakeDocumentStore that records the (limit, offset) of each ``query`` page.
-
-    After the WP2/ADR-0028 migration the source-replacement reads page through the neutral
-    storage port's ``query(collection, filters=..., limit=..., offset=...)`` (offset-bounded
-    pages in document-name order) instead of the retired raw-Firestore cursor API
-    (``order_by('__name__')`` + ``start_after``). Recording the per-page limits/offsets keeps
-    the original "reads the cohort in bounded pages" intent as a behavioral assertion on the
-    seam the source actually uses.
-    """
-
-    def __init__(self, *, backing, page_limits, page_offsets):
-        super().__init__(backing=backing)
-        self._page_limits = page_limits
-        self._page_offsets = page_offsets
-
-    def query(self, collection, **kwargs):
-        self._page_limits.append(kwargs.get('limit'))
-        self._page_offsets.append(kwargs.get('offset'))
-        return super().query(collection, **kwargs)
+class _QuerySnapshot(_Snapshot):
+    def __init__(self, document_id, data):
+        super().__init__(data)
+        self.id = document_id
 
 
-def _patch_read_service_store(monkeypatch, docs):
-    """Route the read service's paging seam to a recorder over ``docs``; return trackers.
+class _BoundedQuery:
+    def __init__(self, db_client, *, filters=(), cursor=None, limit_value=None):
+        self._db_client = db_client
+        self._filters = filters
+        self._cursor = cursor
+        self._limit_value = limit_value
 
-    The paging helpers hydrate through the module-local ``_store()`` seam (``get_document_store()``),
-    not ``document_store._store``, so patch that; returns ``(page_limits, page_offsets)`` collected
-    across the whole call.
-    """
-    page_limits: list = []
-    page_offsets: list = []
-    monkeypatch.setattr(
-        product_memory_read_service,
-        '_store',
-        lambda: _PagingRecorderStore(backing=docs, page_limits=page_limits, page_offsets=page_offsets),
-    )
-    return page_limits, page_offsets
+    def where(self, *, filter):
+        return _BoundedQuery(
+            self._db_client,
+            filters=(*self._filters, (filter.field_path, filter.op_string, filter.value)),
+            cursor=self._cursor,
+            limit_value=self._limit_value,
+        )
+
+    def order_by(self, field_path):
+        assert field_path == '__name__'
+        return self
+
+    def start_after(self, snapshot):
+        self._db_client.start_after_ids.append(snapshot.id)
+        return _BoundedQuery(
+            self._db_client,
+            filters=self._filters,
+            cursor=snapshot.id,
+            limit_value=self._limit_value,
+        )
+
+    def limit(self, value):
+        return _BoundedQuery(
+            self._db_client,
+            filters=self._filters,
+            cursor=self._cursor,
+            limit_value=value,
+        )
+
+    def stream(self):
+        assert self._limit_value is not None
+        self._db_client.stream_limits.append(self._limit_value)
+        rows = []
+        for document_id, payload in sorted(self._db_client.rows.items()):
+            if self._cursor is not None and document_id <= self._cursor:
+                continue
+            if not self._matches(payload):
+                continue
+            rows.append(_QuerySnapshot(document_id, payload))
+        return rows[: self._limit_value]
+
+    def _matches(self, payload):
+        for field_path, operator, expected in self._filters:
+            actual = payload.get(field_path)
+            if operator == '==' and actual != expected:
+                return False
+            if operator == 'array_contains' and expected not in (actual or []):
+                return False
+            if operator == 'in' and actual not in expected:
+                return False
+        return True
 
 
-def _seed_items(items):
-    return {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in items}
+class _BoundedQueryFirestore:
+    def __init__(self, items):
+        self.rows = {item.memory_id: _stored_item(item) for item in items}
+        self.stream_limits = []
+        self.start_after_ids = []
+
+    def collection(self, path):
+        assert path == 'users/u1/memory_items'
+        return _BoundedQuery(self)
 
 
 def test_memory_item_computes_source_ids_from_current_evidence_without_stale_mutable_state():
@@ -337,29 +381,26 @@ def test_memory_item_computes_source_ids_from_current_evidence_without_stale_mut
     assert item.model_dump(mode='json')['source_ids'] == item.source_ids
 
 
-def test_source_replacement_reads_only_the_indexed_source_cohort_in_bounded_pages(monkeypatch):
+def test_source_replacement_reads_only_the_indexed_source_cohort_in_cursor_bounded_pages():
     source_items = [_memory_item(f'source-{index}', evidence=[_evidence('conversation-a')]) for index in range(3)]
     unrelated_items = [
         _memory_item(f'unrelated-{index}', evidence=[_evidence(f'conversation-{index}')]) for index in range(200)
     ]
-    docs = _seed_items([*source_items, *unrelated_items])
-    page_limits, page_offsets = _patch_read_service_store(monkeypatch, docs)
+    db_client = _BoundedQueryFirestore([*source_items, *unrelated_items])
 
     items = fetch_authoritative_product_memory_items_for_source(
         'u1',
         'conversation-a',
+        db_client=db_client,
         page_size=2,
     )
 
-    # Only the indexed ``source_ids array_contains 'conversation-a'`` cohort is read back, never the
-    # 200 unrelated rows — the storage-port filter scopes the scan the way the Firestore index did.
     assert [item.memory_id for item in items] == ['source-0', 'source-1', 'source-2']
-    # Three matching rows drained in size-2 pages: (limit=2, offset=0) then (limit=2, offset=2).
-    assert page_limits == [2, 2]
-    assert page_offsets == [0, 2]
+    assert db_client.stream_limits == [2, 2]
+    assert db_client.start_after_ids == ['source-1']
 
 
-def test_source_replacement_discovers_canonical_and_legacy_supersession_edges(monkeypatch):
+def test_source_replacement_discovers_canonical_and_legacy_supersession_edges():
     target = 'source-survivor'
     canonical_alias = _memory_item(
         'canonical-alias',
@@ -379,14 +420,14 @@ def test_source_replacement_discovers_canonical_and_legacy_supersession_edges(mo
         canonical_memory_id='other-target',
         superseded_by='other-target',
     )
-    docs = _seed_items([canonical_alias, legacy_alias, unrelated])
-    page_limits, _page_offsets = _patch_read_service_store(monkeypatch, docs)
+    db_client = _BoundedQueryFirestore([canonical_alias, legacy_alias, unrelated])
 
     items = fetch_authoritative_superseded_memory_items_for_targets(
         'u1',
         [target],
+        db_client=db_client,
         page_size=2,
     )
 
     assert [item.memory_id for item in items] == ['canonical-alias', 'legacy-alias']
-    assert all(limit == 2 for limit in page_limits)
+    assert all(limit == 2 for limit in db_client.stream_limits)

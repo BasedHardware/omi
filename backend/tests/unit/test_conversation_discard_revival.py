@@ -1,13 +1,18 @@
 """Only deletion refuses a processor's write.
 
-Lifecycle state does not: a discard is the system's own verdict that a conversation held nothing,
-and a status records which generation ran. Deletion is different in kind — a merge write to a
-missing document would recreate what the owner removed. Migrated to the WP2 storage port: the test
-injects a FakeDocumentStore and drives persist_processing_result_with_lifecycle through the neutral
-transaction seam.
+Lifecycle state does not: a discard is the system's own verdict that a
+conversation held nothing, and a status records which generation ran. Fencing on
+either stranded conversations a later sync had filled with speech — transcribed,
+untitled, invisible to their owner, and beyond the in-app reprocess meant to
+recover them, which hit the same fence — to prevent races never observed in
+production.
+
+Deletion is different in kind. It is a decision its owner made, and a merge
+write to a missing document would create it.
 """
 
 import os
+from unittest.mock import MagicMock
 
 os.environ.setdefault(
     'ENCRYPTION_SECRET',
@@ -15,16 +20,49 @@ os.environ.setdefault(
 )
 
 import database.conversations as conversations_db
-from tests.store_fakes import FakeDocumentStore
 
-CONV = 'users/uid-1/conversations/conv-1'
+
+class _Snapshot:
+    def __init__(self, data):
+        self.exists = data is not None
+        self._data = data
+
+    def to_dict(self):
+        return self._data
+
+
+class _Ref:
+    def __init__(self, snapshot):
+        self._snapshot = snapshot
+        self.written = None
+
+    def get(self, transaction=None):
+        return self._snapshot
+
+    def collection(self, _name):
+        return self
+
+    def document(self, _name):
+        return self
+
+
+class _Transaction:
+    def set(self, ref, data, merge=False):
+        ref.written = data
+
+    def update(self, ref, data):
+        ref.written = data
 
 
 def _persist(monkeypatch, existing):
-    store = FakeDocumentStore()
-    if existing is not None:
-        store.set(CONV, existing)
-    monkeypatch.setattr(conversations_db, '_store', lambda: store)
+    ref = _Ref(_Snapshot(existing))
+
+    fake_db = MagicMock()
+    fake_db.collection.return_value.document.return_value = ref
+    fake_db.transaction.return_value = _Transaction()
+
+    monkeypatch.setattr(conversations_db, 'db', fake_db)
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda fn: fn)
 
     persisted = conversations_db.persist_processing_result_with_lifecycle(
         'uid-1',
@@ -37,30 +75,29 @@ def _persist(monkeypatch, existing):
             'data_protection_level': 'standard',
         },
     )
-    written = store.get(CONV).to_dict() if store.exists(CONV) else None
-    return persisted, written
+    return persisted, ref
 
 
 def test_a_discarded_conversation_can_be_rewritten(monkeypatch):
-    persisted, written = _persist(monkeypatch, {'discarded': True, 'status': 'processing'})
+    persisted, ref = _persist(monkeypatch, {'discarded': True, 'status': 'processing'})
 
     assert persisted is True
-    assert written is not None, 'a sync that filled it with speech must be able to land'
-    assert written['discarded'] is False, 'the write carries the fresh verdict, which is what unhides it'
+    assert ref.written is not None, 'a sync that filled it with speech must be able to land'
+    assert ref.written['discarded'] is False, 'the write carries the fresh verdict, which is what unhides it'
 
 
 def test_a_deleted_conversation_is_not_recreated(monkeypatch):
-    persisted, written = _persist(monkeypatch, None)
+    persisted, ref = _persist(monkeypatch, None)
 
     assert persisted is False
-    assert written is None
+    assert ref.written is None
 
 
 def test_a_dead_lettered_conversation_can_be_rewritten(monkeypatch):
-    # A finalization that exhausted its attempts leaves the conversation failed and discarded.
-    # Fencing on either state made that terminal, so a later sync carrying the speech it was
-    # missing could never revive it.
-    persisted, written = _persist(monkeypatch, {'discarded': True, 'status': 'failed'})
+    # A finalization that exhausted its attempts leaves the conversation failed
+    # and discarded. Fencing on either state made that terminal, so a later sync
+    # carrying the speech it was missing could never revive it.
+    persisted, ref = _persist(monkeypatch, {'discarded': True, 'status': 'failed'})
 
     assert persisted is True
-    assert written is not None
+    assert ref.written is not None

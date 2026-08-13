@@ -1,20 +1,16 @@
-"""Transactional state transitions for durable account deletion markers (neutral store port).
-
-Called inside ``get_document_store().run_transaction(...)`` — each helper takes the port's transaction
-handle ``tx`` and the document ``path`` instead of a raw Firestore ``(transaction, doc_ref)``. The
-state-machine logic is unchanged; only the storage seam is neutral so it runs on Firestore or Mongo.
-Also hosts deletion-scoped resource reads (e.g. Agent VM migration journals) through the same port.
-"""
+"""Account-deletion state transitions and deletion-scoped resource reads."""
 
 from datetime import datetime, timezone
 from typing import Any
 
-from database import document_store
+from database._client import get_firestore_client
+from google.cloud.firestore_v1 import transactional
+
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 
 def read_agent_vm_migration_journals(uid: str) -> list[dict[str, Any]]:
-    """Read migration journals before deleting the user's subtree.
+    """Read migration journals before deleting the user's Firestore subtree.
 
     The journal is the durable source of truth for provider resources created
     during an Agent VM migration.  Callers must validate each returned record
@@ -22,8 +18,10 @@ def read_agent_vm_migration_journals(uid: str) -> list[dict[str, Any]]:
     """
     if not uid.strip():
         raise ValueError('uid is required')
+    client = get_firestore_client()
+    migration_ref = client.collection('users').document(uid).collection('agentVmMigrations')
     journals: list[dict[str, Any]] = []
-    for snapshot in document_store.stream_collection(f'users/{uid}/agentVmMigrations'):
+    for snapshot in migration_ref.stream():
         data = snapshot.to_dict()
         if not isinstance(data, dict):
             raise RuntimeError('Agent VM migration journal is malformed')
@@ -36,32 +34,34 @@ def read_agent_vm_migration_journals(uid: str) -> list[dict[str, Any]]:
     return journals
 
 
-def mark_wipe_completed(tx, path) -> bool:
-    snapshot = tx.get(path)
+@transactional
+def mark_wipe_completed(transaction, doc_ref) -> bool:
+    snapshot = doc_ref.get(transaction=transaction)
     data = (snapshot.to_dict() or {}) if snapshot.exists else {}
     if data.get('late_agent_vm_cleanup'):
-        tx.set(
-            path,
+        transaction.set(
+            doc_ref,
             {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
             merge=True,
         )
         return False
-    tx.set(
-        path,
+    transaction.set(
+        doc_ref,
         {'wipe_status': 'completed', 'wipe_completed_at': datetime.now(timezone.utc)},
         merge=True,
     )
     return True
 
 
+@transactional
 def record_late_agent_vm_cleanup(
-    tx,
-    path,
+    transaction,
+    doc_ref,
     vm_name: str,
     zone: str,
     expected_instance_id: str | None = None,
 ) -> bool:
-    snapshot = tx.get(path)
+    snapshot = doc_ref.get(transaction=transaction)
     raw_status = (snapshot.to_dict() or {}).get('wipe_status') if snapshot.exists else None
     status = normalize_account_deletion_status(marker_exists=snapshot.exists, raw_status=raw_status)
     if not account_deletion_blocks_access(status):
@@ -71,8 +71,8 @@ def record_late_agent_vm_cleanup(
     pending = {'vmName': vm_name, 'zone': zone}
     if expected_instance_id is not None:
         pending['expectedInstanceId'] = expected_instance_id
-    tx.set(
-        path,
+    transaction.set(
+        doc_ref,
         {
             'late_agent_vm_cleanup': pending,
             'wipe_status': 'failed',
@@ -83,9 +83,10 @@ def record_late_agent_vm_cleanup(
     return True
 
 
+@transactional
 def adopt_legacy_late_agent_vm_cleanup(
-    tx,
-    path,
+    transaction,
+    doc_ref,
     vm_name: str,
     zone: str,
     expected_instance_id: str,
@@ -93,7 +94,7 @@ def adopt_legacy_late_agent_vm_cleanup(
     """Add a provider identity fence to an exact pre-fence cleanup record."""
     if not expected_instance_id.isascii() or not expected_instance_id.isdigit():
         raise ValueError('late Agent VM cleanup instance identity must be numeric')
-    snapshot = tx.get(path)
+    snapshot = doc_ref.get(transaction=transaction)
     data = (snapshot.to_dict() or {}) if snapshot.exists else {}
     raw_status = data.get('wipe_status')
     status = normalize_account_deletion_status(marker_exists=snapshot.exists, raw_status=raw_status)
@@ -105,5 +106,5 @@ def adopt_legacy_late_agent_vm_cleanup(
     current_id = pending.get('expectedInstanceId')
     if current_id is not None:
         return current_id == expected_instance_id
-    tx.update(path, {'late_agent_vm_cleanup.expectedInstanceId': expected_instance_id})
+    transaction.update(doc_ref, {'late_agent_vm_cleanup.expectedInstanceId': expected_instance_id})
     return True

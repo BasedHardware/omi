@@ -7,79 +7,61 @@ This is the sanctioned Tier-2 "fake must precede import" case (see
 ``backend/docs/test_isolation.md`` and ``testing/import_isolation.load_module_fresh``).
 """
 
+import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from pathlib import Path
+from threading import Barrier, Lock
+from types import ModuleType
 from unittest.mock import MagicMock
 
 from google.api_core.exceptions import Aborted
 import pytest
 
-from database import document_store, firestore_transaction_retry
-from tests.store_fakes import FakeDocumentStore
+from database import firestore_transaction_retry
+from testing.import_isolation import load_module_fresh, stub_modules
 from tests.unit.fake_firestore import FakeFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
+
+_BACKEND = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _load_modules():
-    """Bind the (now import-clean, WP2 port-backed) ledger + projection_repair as module globals.
+    """Load fresh database.memory_ledger (+ its database.projection_repair dep) against
+    a stubbed database._client + google.cloud.firestore_v1 chain."""
+    client_stub = ModuleType("database._client")
+    client_stub.db = MagicMock(name="db")
+    client_stub.document_id_from_seed = lambda seed: "id-" + str(abs(hash(seed)) % (10**12))
 
-    Both defer their store to a lazy ``get_document_store()``; tests inject a FakeDocumentStore via
-    the ``store`` fixture below (the sanctioned ``_store`` seam), so no import-time fakery is needed.
-    """
-    import database.memory_ledger as memory_ledger
-    import database.projection_repair as projection_repair
+    google_pkg = ModuleType("google")
+    google_pkg.__path__ = []  # type: ignore[attr-defined]
+    google_cloud_pkg = ModuleType("google.cloud")
+    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
+    firestore_v1_stub = ModuleType("google.cloud.firestore_v1")
+    firestore_v1_stub.transactional = lambda func: func
 
-    globals()["memory_ledger"] = memory_ledger
-    globals()["projection_repair"] = projection_repair
-    yield
+    fakes = {
+        "database._client": client_stub,
+        "google": google_pkg,
+        "google.cloud": google_cloud_pkg,
+        "google.cloud.firestore_v1": firestore_v1_stub,
+    }
+    with stub_modules(fakes):
+        memory_ledger = load_module_fresh(
+            "database.memory_ledger",
+            os.path.join(str(_BACKEND), "database", "memory_ledger.py"),
+        )
+        projection_repair = memory_ledger.projection_repair
+        globals()["memory_ledger"] = memory_ledger
+        globals()["projection_repair"] = projection_repair
+        yield
 
 
 @pytest.fixture(autouse=True)
 def _isolate_retry_logging_cost(monkeypatch):
     monkeypatch.setattr(firestore_transaction_retry, "logger", MagicMock())
-
-
-class _StrictTx:
-    """A neutral transaction that raises if a read lands after a write.
-
-    Reproduces Firestore's read-before-write ordering contract (#9780) on the port seam, so the
-    ledger's apply_control fallback read is still guarded even though the base fake is lenient.
-    """
-
-    def __init__(self, store):
-        self._store = store
-        self._wrote = False
-
-    def get(self, path):
-        if self._wrote:
-            raise AssertionError(f"read after write in transaction: {path}")
-        return self._store.get(path)
-
-    def set(self, path, data, *, merge=False):
-        self._wrote = True
-        self._store.set(path, data, merge=merge)
-
-    def update(self, path, data):
-        self._wrote = True
-        self._store.update(path, data)
-
-    def delete(self, path):
-        self._wrote = True
-        self._store.delete(path)
-
-
-class _StrictStore(FakeDocumentStore):
-    def run_transaction(self, fn, *, attempts=3):
-        return fn(_StrictTx(self))
-
-
-@pytest.fixture
-def store(monkeypatch):
-    fake = FakeDocumentStore()
-    monkeypatch.setattr(memory_ledger, "_store", lambda: fake)
-    monkeypatch.setattr(projection_repair, "_store", lambda: fake)
-    monkeypatch.setattr(document_store, "_store", lambda: fake)
-    return fake
 
 
 def _fact(fact_id, content, *, valid_from=None, valid_to=None):
@@ -98,13 +80,57 @@ def _fact(fact_id, content, *, valid_from=None, valid_to=None):
     }
 
 
-def _seed_clobbered_state(store, uid):
-    """State head lacks trusted canonical fields, so the write must fall back to reading
-    memory_state/apply_control — the read that regressed to land after writes (issue #9780)."""
-    store.set(f"users/{uid}/memory_state/head", {"current_head_commit_id": "legacy-head", "projection_version": 1})
-    store.set(
-        f"users/{uid}/memory_state/apply_control",
-        {"uid": uid, "account_generation": 7, "head_commit_id": "canonical-head", "commit_sequence": 11},
+class _LedgerSnapshot:
+    def __init__(self, data):
+        self._data = data
+        self.exists = data is not None
+
+    def to_dict(self):
+        return self._data
+
+
+class _LedgerDocument:
+    def __init__(self, db, path):
+        self._db = db
+        self.path = path
+
+    def collection(self, name):
+        return _LedgerCollection(self._db, f"{self.path}/{name}")
+
+    def get(self, transaction=None):
+        return _LedgerSnapshot(self._db.docs.get(self.path))
+
+
+class _LedgerCollection:
+    def __init__(self, db, path):
+        self._db = db
+        self.path = path
+
+    def document(self, document_id):
+        return _LedgerDocument(self._db, f"{self.path}/{document_id}")
+
+
+class _LedgerDb:
+    def __init__(self, docs):
+        self.docs = dict(docs)
+
+    def collection(self, name):
+        return _LedgerCollection(self, name)
+
+
+class _LedgerTransaction:
+    def __init__(self):
+        self.sets = []
+
+    def set(self, ref, payload):
+        self.sets.append((ref.path, payload))
+
+
+def _ledger_state_write(transaction):
+    return next(
+        payload
+        for path, payload in transaction.sets
+        if (path.endswith("/memory_state/head") if isinstance(path, str) else path[-2:] == ("memory_state", "head"))
     )
 
 
@@ -293,125 +319,183 @@ def test_append_commit_to_history_rejects_sibling_heads():
         raise AssertionError("Expected same-parent sibling append to fail")
 
 
-def test_ledger_append_repairs_clobbered_trusted_state_head_from_canonical_apply_control(store):
+def test_ledger_append_repairs_clobbered_trusted_state_head_from_canonical_apply_control():
     uid = "u1"
-    _seed_clobbered_state(store, uid)
+    database = _LedgerDb(
+        {
+            f"users/{uid}/memory_state/head": {
+                "current_head_commit_id": "legacy-head",
+                "projection_version": 1,
+            },
+            f"users/{uid}/memory_state/apply_control": {
+                "uid": uid,
+                "account_generation": 7,
+                "head_commit_id": "canonical-head",
+                "commit_sequence": 11,
+            },
+        }
+    )
+    transaction = _LedgerTransaction()
 
-    result = store.run_transaction(
-        lambda tx: memory_ledger._append_commit_transaction(
-            tx,
-            uid,
-            "legacy-head",
-            [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
-            None,
-            datetime(2026, 7, 14, tzinfo=timezone.utc),
-            None,
-            False,
-        )
+    result = memory_ledger._append_commit_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+        None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        None,
+        False,
     )
 
-    state_head = store.get(f"users/{uid}/memory_state/head").to_dict()
+    state_head = _ledger_state_write(transaction)
     assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
     assert state_head["head_commit_id"] == "canonical-head"
     assert state_head["commit_sequence"] == 11
 
     trusted = read_memory_v3_trusted_account_generation(
         uid=uid,
+        db_client=FakeFirestore({f"users/{uid}/memory_state/head": state_head}),
     )
     assert trusted.read_error_reason is None
     assert trusted.account_generation == 7
 
 
-def test_ledger_append_reads_apply_control_before_any_write(monkeypatch):
-    """Regression for #9780: the apply_control fallback read must precede writes.
-
-    The strict store's transaction raises if a get() lands after a set(), reproducing Firestore's
-    ordering contract on the neutral port seam (the base fake is lenient). The dual-backend contract
-    additionally exercises the ordering against the real Firestore adapter.
-    """
-    uid = "u1"
-    store = _StrictStore()
-    monkeypatch.setattr(memory_ledger, "_store", lambda: store)
-    monkeypatch.setattr(projection_repair, "_store", lambda: store)
-    _seed_clobbered_state(store, uid)
-
-    result = store.run_transaction(
-        lambda tx: memory_ledger._append_commit_transaction(
-            tx,
-            uid,
-            "legacy-head",
-            [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
-            None,
-            datetime(2026, 7, 14, tzinfo=timezone.utc),
-            lambda _tx: None,
-            False,
-        )
-    )
-
-    state_head = store.get(f"users/{uid}/memory_state/head").to_dict()
-    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
-    assert state_head["head_commit_id"] == "canonical-head"
-    assert state_head["commit_sequence"] == 11
-
-
-def test_ledger_builder_append_reads_apply_control_before_any_write(monkeypatch):
-    """Regression for #9780 on the builder append path (strict read-before-write store)."""
-    uid = "u1"
-    store = _StrictStore()
-    monkeypatch.setattr(memory_ledger, "_store", lambda: store)
-    monkeypatch.setattr(projection_repair, "_store", lambda: store)
-    _seed_clobbered_state(store, uid)
-
-    result = store.run_transaction(
-        lambda tx: memory_ledger._append_commit_with_builder_transaction(
-            tx,
-            uid,
-            "legacy-head",
-            lambda _tx: {"mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))]},
-            None,
-            datetime(2026, 7, 14, tzinfo=timezone.utc),
-            False,
-        )
-    )
-
-    state_head = store.get(f"users/{uid}/memory_state/head").to_dict()
-    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
-    assert state_head["head_commit_id"] == "canonical-head"
-    assert state_head["commit_sequence"] == 11
-
-
-def test_ledger_builder_append_preserves_existing_trusted_state_head_without_control_fallback(store):
-    uid = "u1"
-    store.set(
-        f"users/{uid}/memory_state/head",
-        {
+def _clobbered_state_docs(uid):
+    """State head lacks trusted canonical fields, so the write must fall back to
+    reading memory_state/apply_control — the read that regressed to happen after
+    the commit/projection writes (issue #9780)."""
+    return {
+        ('users', uid, 'memory_state', 'head'): {
             "current_head_commit_id": "legacy-head",
             "projection_version": 1,
-            "schema_version": 1,
+        },
+        ('users', uid, 'memory_state', 'apply_control'): {
             "uid": uid,
-            "source": "memory_state_head",
             "account_generation": 7,
             "head_commit_id": "canonical-head",
             "commit_sequence": 11,
         },
+    }
+
+
+def test_ledger_append_reads_apply_control_before_any_write():
+    """Regression for #9780: the apply_control fallback read must precede writes.
+
+    The strict transaction fake raises ReadAfterWriteError if a get() lands after
+    a set(), reproducing Firestore's ordering contract that the pre-fix code and
+    the lenient fake did not enforce.
+    """
+    uid = "u1"
+    database = StrictFirestore(_clobbered_state_docs(uid))
+    transaction = database.transaction()
+
+    result = memory_ledger._append_commit_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+        lambda _transaction: None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        None,
+        False,
     )
 
-    result = store.run_transaction(
-        lambda tx: memory_ledger._append_commit_with_builder_transaction(
-            tx,
-            uid,
-            "legacy-head",
-            lambda _tx: {"mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))]},
-            None,
-            datetime(2026, 7, 14, tzinfo=timezone.utc),
-            False,
-        )
-    )
-
-    state_head = store.get(f"users/{uid}/memory_state/head").to_dict()
+    state_head = _ledger_state_write(transaction)
     assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
     assert state_head["head_commit_id"] == "canonical-head"
     assert state_head["commit_sequence"] == 11
+
+
+def test_ledger_builder_append_reads_apply_control_before_any_write():
+    """Regression for #9780 on the builder append path."""
+    uid = "u1"
+    database = StrictFirestore(_clobbered_state_docs(uid))
+    transaction = database.transaction()
+
+    result = memory_ledger._append_commit_with_builder_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        lambda _transaction: {"mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))]},
+        None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
+
+
+def test_ledger_builder_append_preserves_existing_trusted_state_head_without_control_fallback():
+    uid = "u1"
+    database = _LedgerDb(
+        {
+            f"users/{uid}/memory_state/head": {
+                "current_head_commit_id": "legacy-head",
+                "projection_version": 1,
+                "schema_version": 1,
+                "uid": uid,
+                "source": "memory_state_head",
+                "account_generation": 7,
+                "head_commit_id": "canonical-head",
+                "commit_sequence": 11,
+            },
+        }
+    )
+    transaction = _LedgerTransaction()
+
+    result = memory_ledger._append_commit_with_builder_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        lambda _transaction: {"mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))]},
+        None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
+
+
+def test_typed_transactional_isolates_sdk_wrapper_state_per_concurrent_call(monkeypatch):
+    barrier = Barrier(2)
+    created_wrappers = []
+    created_lock = Lock()
+
+    class StatefulTransactional:
+        def __init__(self, function):
+            self.function = function
+            self.current_id = None
+            with created_lock:
+                created_wrappers.append(self)
+
+        def __call__(self, transaction, value):
+            self.current_id = value
+            barrier.wait(timeout=2)
+            assert self.current_id == value
+            return self.function(transaction, value)
+
+    monkeypatch.setattr(memory_ledger, "transactional", StatefulTransactional)
+
+    @memory_ledger._typed_transactional
+    def operation(_transaction, value):
+        return value
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda value: operation(object(), value), ["first", "second"]))
+
+    assert results == ["first", "second"]
+    assert len(created_wrappers) == 2
 
 
 def test_contention_retry_uses_fresh_transactions_and_equal_jitter():
@@ -594,7 +678,7 @@ def test_reconcile_projection_detects_and_repairs_drift_to_zero():
     assert repaired["projection_fail_count"] == 0
 
 
-def test_append_commit_enqueues_projection_repairs(monkeypatch, store):
+def test_append_commit_enqueues_projection_repairs(monkeypatch):
     queued = []
     commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
 
@@ -615,16 +699,159 @@ def test_append_commit_enqueues_projection_repairs(monkeypatch, store):
     assert queued == [("uid-1", commit)]
 
 
-# NOTE: the ledger no longer owns outer contention retry — that moved into the port's
-# run_transaction (ADR-0021), covered by the adapters' dual-backend contract. The
-# run_with_transaction_contention_retry helper is still unit-tested directly below.
+def test_append_commit_retries_precommit_contention_and_enqueues_projection_once(monkeypatch):
+    queued = []
+    calls = 0
+    commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
 
+    def append_transaction(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise Aborted("read contention")
+        return {"commit": commit, "applied": True}
 
-def test_process_projection_repairs_applies_queued_vector_repairs(store):
-    store.set(
-        "users/uid-1/projection_repairs/repair1",
-        {"repair_id": "repair1", "fact_id": "m1", "status": "queued"},
+    def fast_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(memory_ledger, "_append_commit_transaction", append_transaction)
+    monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
+    monkeypatch.setattr(
+        memory_ledger.projection_repair,
+        "enqueue_projection_repairs",
+        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
     )
+
+    result = memory_ledger.append_commit("uid-1", None, commit["mutations"])
+
+    assert result["applied"] is True
+    assert calls == 2
+    assert queued == [("uid-1", commit)]
+
+
+def test_append_commit_with_builder_retries_contention_and_enqueues_projection_once(monkeypatch):
+    queued = []
+    seen_transactions = []
+    commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
+    database = MagicMock()
+    database.transaction.side_effect = [object(), object()]
+
+    def append_transaction(transaction, *args, **kwargs):
+        seen_transactions.append(transaction)
+        if len(seen_transactions) == 1:
+            raise Aborted("read contention")
+        return {"commit": commit, "applied": True}
+
+    def fast_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(memory_ledger, "_append_commit_with_builder_transaction", append_transaction)
+    monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
+    monkeypatch.setattr(
+        memory_ledger.projection_repair,
+        "enqueue_projection_repairs",
+        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
+    )
+
+    result = memory_ledger.append_commit_with_builder(
+        "uid-1",
+        None,
+        lambda _transaction: {"mutations": commit["mutations"]},
+        firestore_client=database,
+    )
+
+    assert result["applied"] is True
+    assert len(seen_transactions) == 2
+    assert seen_transactions[0] is not seen_transactions[1]
+    assert queued == [("uid-1", commit)]
+
+
+def test_append_commit_with_builder_exhaustion_never_enqueues_projection(monkeypatch):
+    queued = []
+    database = MagicMock()
+
+    def append_transaction(*args, **kwargs):
+        raise Aborted("persistent contention")
+
+    def fast_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(memory_ledger, "_append_commit_with_builder_transaction", append_transaction)
+    monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
+    monkeypatch.setattr(
+        memory_ledger.projection_repair,
+        "enqueue_projection_repairs",
+        lambda *args, **kwargs: queued.append(args),
+    )
+
+    with pytest.raises(firestore_transaction_retry.FirestoreContentionExhausted):
+        memory_ledger.append_commit_with_builder(
+            "uid-1",
+            None,
+            lambda _transaction: {"mutations": []},
+            firestore_client=database,
+        )
+
+    assert database.transaction.call_count == firestore_transaction_retry.DEFAULT_MAX_ATTEMPTS
+    assert queued == []
+
+
+def test_process_projection_repairs_applies_queued_vector_repairs(monkeypatch):
+    updates = []
+
+    class FakeDoc:
+        id = "repair1"
+
+        @property
+        def reference(self):
+            return self
+
+        def to_dict(self):
+            return {"repair_id": "repair1", "fact_id": "m1", "status": "queued"}
+
+        def update(self, payload):
+            updates.append(payload)
+
+    class FakeQuery:
+        def limit(self, value):
+            return self
+
+        def stream(self):
+            return [FakeDoc()]
+
+    class FakeCollection:
+        def document(self, value):
+            return self
+
+        def collection(self, value):
+            return self
+
+        def where(self, *args):
+            return FakeQuery()
+
+    class FakeDB:
+        def collection(self, value):
+            return FakeCollection()
+
+    monkeypatch.setattr(projection_repair, "db", FakeDB())
 
     result = projection_repair.process_projection_repairs(
         "uid-1",
@@ -633,16 +860,48 @@ def test_process_projection_repairs_applies_queued_vector_repairs(store):
     )
 
     assert result == {"repaired": ["repair1"], "failed": [], "processed": 1}
-    stored = store.get("users/uid-1/projection_repairs/repair1").to_dict()
-    assert stored["status"] == "repaired"
-    assert stored["repair_action"] == "delete"
+    assert updates[0]["status"] == "repaired"
+    assert updates[0]["repair_action"] == "delete"
 
 
-def test_process_projection_repairs_dead_letters_after_max_attempts(store):
-    store.set(
-        "users/uid-1/projection_repairs/repair1",
-        {"repair_id": "repair1", "fact_id": "m1", "status": "failed", "attempt_count": 1},
-    )
+def test_process_projection_repairs_dead_letters_after_max_attempts(monkeypatch):
+    updates = []
+
+    class FakeDoc:
+        id = "repair1"
+
+        @property
+        def reference(self):
+            return self
+
+        def to_dict(self):
+            return {"repair_id": "repair1", "fact_id": "m1", "status": "failed", "attempt_count": 1}
+
+        def update(self, payload):
+            updates.append(payload)
+
+    class FakeQuery:
+        def limit(self, value):
+            return self
+
+        def stream(self):
+            return [FakeDoc()]
+
+    class FakeCollection:
+        def document(self, value):
+            return self
+
+        def collection(self, value):
+            return self
+
+        def where(self, *args):
+            return FakeQuery()
+
+    class FakeDB:
+        def collection(self, value):
+            return FakeCollection()
+
+    monkeypatch.setattr(projection_repair, "db", FakeDB())
 
     def _failing_repair(uid, fact):
         raise RuntimeError("repair failed")
@@ -655,6 +914,5 @@ def test_process_projection_repairs_dead_letters_after_max_attempts(store):
     )
 
     assert result == {"repaired": [], "failed": ["repair1"], "processed": 1}
-    stored = store.get("users/uid-1/projection_repairs/repair1").to_dict()
-    assert stored["status"] == "dead_letter"
-    assert stored["attempt_count"] == 2
+    assert updates[0]["status"] == "dead_letter"
+    assert updates[0]["attempt_count"] == 2

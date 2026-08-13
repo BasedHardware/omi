@@ -6,12 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from database.memory_collections import MemoryCollections
-from database.store import get_document_store
 from models.memory_contracts import deterministic_contract_id
-
-
-def _store():
-    return get_document_store()
 
 VECTOR_REPAIR_PURGE_OUTBOX_EVENT_TYPE = "vector_repair_purge"
 VECTOR_REPAIR_PURGE_OUTBOX_SCHEMA_VERSION = 1
@@ -89,7 +84,7 @@ def build_vector_repair_purge_outbox_records(
     return records
 
 
-def write_vector_repair_purge_outbox_records(*, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def write_vector_repair_purge_outbox_records(*, db_client: Any, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Persist prepared vector repair/purge records with stable ids.
 
     The function is deliberately small and fake-friendly. Callers may inject a
@@ -102,7 +97,7 @@ def write_vector_repair_purge_outbox_records(*, records: List[Dict[str, Any]]) -
         return []
     for record in records:
         path = _required_str(record, "outbox_path")
-        _store().set(path, dict(record))
+        db_client.document(path).set(dict(record))
     return records
 
 

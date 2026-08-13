@@ -54,11 +54,6 @@ MEMORY_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_MAX_
 PINECONE_API_KEY_ENV = "PINECONE_API_KEY"
 PINECONE_INDEX_NAME_ENV = "PINECONE_INDEX_NAME"
 OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
-VECTOR_STORE_BACKEND_ENV = "VECTOR_STORE_BACKEND"
-QDRANT_URL_ENV = "QDRANT_URL"
-# When set, embeddings go through an on-prem OpenAI-compatible endpoint (its own optional
-# OMI_EMBEDDINGS_API_KEY), so the cloud OPENAI_API_KEY is not required — see utils/llm/clients.py.
-EMBEDDINGS_BASE_URL_ENV = "OMI_EMBEDDINGS_BASE_URL"
 
 
 @dataclass(frozen=True)
@@ -70,6 +65,7 @@ class VectorRepairOutboxEntrypointConfig:
 
 @dataclass(frozen=True)
 class VectorRepairOutboxProductionDependencies:
+    db_client: Any
     authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]]
     vector_deleter: Callable[[Dict[str, Any]], Any]
     vector_repairer: Callable[[Dict[str, Any], Any], Any]
@@ -78,6 +74,7 @@ class VectorRepairOutboxProductionDependencies:
 def run_vector_repair_outbox_worker_entrypoint(
     *,
     env: Mapping[str, str],
+    db_client: Any,
     authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]],
     vector_deleter: Callable[[Dict[str, Any]], Any],
     vector_repairer: Callable[[Dict[str, Any], Any], Any],
@@ -116,6 +113,7 @@ def run_vector_repair_outbox_worker_entrypoint(
 
     try:
         summary = tick_runner(
+            db_client=db_client,
             uid=entrypoint_config.uid,
             config=entrypoint_config.tick_config,
             authoritative_item_loader=authoritative_item_loader,
@@ -174,55 +172,31 @@ def build_vector_repair_outbox_production_dependencies(
     Pinecone, embedding, or Firestore client singletons. Required secret/config
     env is validated before importing network clients so enabled misconfiguration
     fails deterministically before leasing any outbox record.
-
-    Secret validation follows the selected vector-store backend (ADR-0033): the default
-    ``pinecone`` backend requires its API key and index, while the neutral ``qdrant`` on-prem
-    backend must not demand unused Pinecone creds. The delete/upsert seams route through the
-    ``VectorStore`` port either way, so ``VECTOR_REPAIR_PINECONE_NAMESPACE`` is just the record
-    namespace, not a Pinecone-only dependency.
     """
-    backend = (env.get(VECTOR_STORE_BACKEND_ENV) or "pinecone").strip().lower()
-    if backend == "pinecone":
-        _required_dependency_env(env, PINECONE_API_KEY_ENV)
-        _required_dependency_env(env, PINECONE_INDEX_NAME_ENV)
-    elif backend == "qdrant":
-        # Fail fast on the Qdrant connection here, before any record is leased — otherwise a missing
-        # QDRANT_URL only surfaces lazily inside the adapter on first use, turning a config error into
-        # repeated post-lease record failures/retries.
-        _required_dependency_env(env, QDRANT_URL_ENV)
-    # The cloud OpenAI key is required only when no on-prem OpenAI-compatible embeddings endpoint is
-    # configured. With OMI_EMBEDDINGS_BASE_URL set, embeddings use that endpoint (optional
-    # OMI_EMBEDDINGS_API_KEY), so demanding OPENAI_API_KEY would break the documented Qdrant/on-prem path.
-    if not (env.get(EMBEDDINGS_BASE_URL_ENV) or "").strip():
-        _required_dependency_env(env, OPENAI_API_KEY_ENV)
+    pinecone_api_key = _required_dependency_env(env, PINECONE_API_KEY_ENV)
+    pinecone_index_name = _required_dependency_env(env, PINECONE_INDEX_NAME_ENV)
+    _required_dependency_env(env, OPENAI_API_KEY_ENV)
 
-    vector_module = module_loader("utils.vector")
+    pinecone_module = module_loader("pinecone")
     firestore_client_module = module_loader("database._client")
     llm_clients_module = module_loader("utils.llm.clients")
 
-    # Route the repair adapter's delete/upsert seams through the neutral vector-store port
-    # (ADR-0033) instead of a raw Pinecone client, so the worker honors VECTOR_STORE_BACKEND. The
-    # adapter calls delete_vectors(filter=, namespace=) and upsert_vectors(vectors=, namespace=).
-    vector_store = vector_module.get_vector_store(env=env)
+    pinecone_client = pinecone_module.Pinecone(api_key=pinecone_api_key)
+    pinecone_index = pinecone_client.Index(pinecone_index_name)
     db_client = firestore_client_module.db
     embeddings = llm_clients_module.embeddings
 
-    def _delete_vectors(*, filter, namespace):
-        return vector_store.delete_by_filter(namespace, filter)
-
-    def _upsert_vectors(*, vectors, namespace):
-        return vector_store.upsert(namespace, vectors)
-
     return VectorRepairOutboxProductionDependencies(
+        db_client=db_client,
         authoritative_item_loader=make_authoritative_item_loader(db_client=db_client),
         vector_deleter=make_pinecone_vector_deleter(
-            delete_vectors=_delete_vectors,
+            delete_vectors=pinecone_index.delete,
             namespace=VECTOR_REPAIR_PINECONE_NAMESPACE,
         ),
         vector_repairer=make_pinecone_vector_repairer(
             embed_text=embeddings.embed_query,
-            delete_vectors=_delete_vectors,
-            upsert_vectors=_upsert_vectors,
+            delete_vectors=pinecone_index.delete,
+            upsert_vectors=pinecone_index.upsert,
             namespace=VECTOR_REPAIR_PINECONE_NAMESPACE,
         ),
     )
@@ -280,6 +254,7 @@ def run_vector_repair_outbox_worker_http_tick(
 
     try:
         summary = tick_runner(
+            db_client=dependencies.db_client,
             uid=entrypoint_config.uid,
             config=entrypoint_config.tick_config,
             authoritative_item_loader=dependencies.authoritative_item_loader,
@@ -362,6 +337,7 @@ def main(
 
     return run_vector_repair_outbox_worker_entrypoint(
         env=effective_env,
+        db_client=dependencies.db_client,
         authoritative_item_loader=dependencies.authoritative_item_loader,
         vector_deleter=dependencies.vector_deleter,
         vector_repairer=dependencies.vector_repairer,

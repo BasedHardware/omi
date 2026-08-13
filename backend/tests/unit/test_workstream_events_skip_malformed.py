@@ -30,19 +30,19 @@ def test_list_workstream_events_skips_malformed(monkeypatch):
     bad.id = "bad"
     bad.to_dict.return_value = {"bad": True}
 
-    class _FakeStore:  # storage-port stand-in whose query() returns the seeded event snapshots
-        def query(self, collection, **kwargs):
-            return [good, bad]
+    fake = MagicMock()  # self-chaining fake firestore_client
+    for method in ("collection", "document", "where", "order_by", "limit"):
+        getattr(fake, method).return_value = fake
+    fake.stream.return_value = [good, bad]
 
     def fake_validate(data):
         if data.get("bad"):
             _Probe.model_validate({})  # raises a genuine pydantic ValidationError
         return data  # stand-in for a parsed WorkstreamEvent
 
-    monkeypatch.setattr(workstreams_db, "_store", lambda: _FakeStore())
     monkeypatch.setattr(workstreams_db, "_snapshot_dict", lambda snap: snap.to_dict())
     monkeypatch.setattr(workstreams_db.WorkstreamEvent, "model_validate", staticmethod(fake_validate))
 
-    result = workstreams_db.list_workstream_events("u1", "w1")
+    result = workstreams_db.list_workstream_events("u1", "w1", firestore_client=fake)
 
     assert result == [{"ok": True}]  # malformed event skipped, good one kept

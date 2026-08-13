@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple, cast
 
 import database.redis_db as redis_db
-from database.store import get_document_store
+from database._client import get_firestore_client
 from database.api_key_metadata import (
     DEV_API_KEY_AUTH_CONTEXT_VERSION,
     ApiKeyAuthLookupResult,
@@ -30,8 +30,8 @@ from utils.scopes import AVAILABLE_SCOPES, READ_ONLY_SCOPES, Scopes
 DEV_API_KEY_APP_ID = "developer_api"
 
 
-def _store():
-    return get_document_store()
+def _db() -> Any:
+    return get_firestore_client()
 
 
 def _normalize_dev_scopes(value: object, *, new_key_default: bool = False) -> Optional[list[str]]:
@@ -72,6 +72,7 @@ def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) 
     key_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     resolved_scopes = _normalize_dev_scopes(scopes, new_key_default=True)
+    firestore_client = _db()
 
     api_key_doc = {
         "id": key_id,
@@ -85,7 +86,7 @@ def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) 
         "scopes": resolved_scopes,
     }
 
-    _store().set(f"dev_api_keys/{key_id}", api_key_doc)
+    firestore_client.collection("dev_api_keys").document(key_id).set(api_key_doc)
 
     # Seed the matching app/key memory grant so a freshly created Developer key
     # with memories:read and/or memories:write is immediately usable through
@@ -98,6 +99,7 @@ def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) 
             key_id,
             default_read=grant_default_read,
             write=grant_write,
+            db_client=firestore_client,
         )
 
     api_key_data = DevApiKey(
@@ -117,7 +119,8 @@ def get_dev_keys_for_user_with_repair_info(
     """
     Retrieves Developer API keys and bounded metadata-repair reasons for a user.
     """
-    docs = _store().query("dev_api_keys", filters=[("user_id", "==", user_id)])
+    keys_ref = _db().collection("dev_api_keys").where("user_id", "==", user_id)
+    docs = keys_ref.stream()
     keys: list[DevApiKey] = []
     repairs: set[ApiKeyMetadataRepair] = set()
     for doc in docs:
@@ -126,7 +129,7 @@ def get_dev_keys_for_user_with_repair_info(
         projection = project_api_key_metadata(
             document_id=doc.id,
             raw=data,
-            snapshot_create_time=doc.updated_at,
+            snapshot_create_time=getattr(doc, "create_time", None),
             key_kind="dev",
         )
         projected = projection.metadata
@@ -157,8 +160,9 @@ def delete_dev_key(user_id: str, key_id: str):
     """
     Deletes a Developer API key.
     """
-    key_path = f"dev_api_keys/{key_id}"
-    key_doc = _store().get(key_path)
+    firestore_client = _db()
+    key_ref = firestore_client.collection("dev_api_keys").document(key_id)
+    key_doc = key_ref.get()
     if key_doc.exists:
         key_data = key_doc.to_dict()
         if key_data.get("user_id") == user_id:
@@ -171,10 +175,10 @@ def delete_dev_key(user_id: str, key_id: str):
                 raise ApiKeyRevocationUnavailableError("Developer API key cache invalidation failed") from exc
             if cache_deleted is not True:
                 raise ApiKeyRevocationUnavailableError("Developer API key cache invalidation was not confirmed")
-            _store().delete(key_path)
+            key_ref.delete()
             # Remove the persisted app/key memory grant for this key so a
             # deleted key can no longer pass the memory grant gate.
-            remove_developer_api_key_memory_grant(user_id, key_id)
+            remove_developer_api_key_memory_grant(user_id, key_id, db_client=firestore_client)
 
 
 def get_user_id_by_api_key(api_key: str) -> Optional[str]:
@@ -214,7 +218,8 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
         )
 
     # If not in cache, query database
-    docs = _store().query("dev_api_keys", filters=[("hashed_key", "==", hashed_key)], limit=1)
+    keys_ref = _db().collection("dev_api_keys").where("hashed_key", "==", hashed_key).limit(1)
+    docs = list(keys_ref.stream())
 
     if not docs:
         return ApiKeyAuthLookupResult(context=None)
@@ -253,14 +258,14 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     )
     if cache_written is not True:
         repairs.add(ApiKeyAuthRepair.CACHE_WRITE)
-    _store().update(
-        key_doc.path,
+    key_ref = key_doc.reference
+    key_ref.update(
         {
             "id": key_id,
             "last_used_at": datetime.now(timezone.utc),
             "app_id": app_id,
             "scopes": scopes,
-        },
+        }
     )
 
     return ApiKeyAuthLookupResult(

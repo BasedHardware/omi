@@ -1,30 +1,9 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List
 
-from database import document_store
 from database.memory_non_active_routes import NonActiveRoute
 from utils.memory.non_active_route_audit import fetch_non_active_route_audit_report
 
-from tests.store_fakes import FakeDocumentStore
 from tests.unit.fixtures.non_active_firestore import QueryFakeDb as _FakeDb
-
-_ROUTE_COLLECTION = "users/u1/non_active_memory_routes"
-
-
-class _RecordingStore(FakeDocumentStore):
-    """FakeDocumentStore that records which collections ``document_store`` queried.
-
-    Lets the tests assert behaviorally on the neutral port seam that ``document_store`` now
-    reads through (ADR-0022) instead of on the retired Firestore fake's call internals.
-    """
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self.queried_collections: List[str] = []
-
-    def query(self, collection: str, **kwargs: Any) -> Any:
-        self.queried_collections.append(collection)
-        return super().query(collection, **kwargs)
 
 
 def _route_doc(route, *, source_id=None, run_id="run-1"):
@@ -45,31 +24,22 @@ def _route_doc(route, *, source_id=None, run_id="run-1"):
     }
 
 
-def _seed_store(monkeypatch, docs: List[Dict[str, Any]]) -> _RecordingStore:
-    """Seed the route docs into the neutral store that ``document_store`` reads through."""
-    backing: Dict[str, Dict[str, Any]] = {
-        f"{_ROUTE_COLLECTION}/{doc['outcome_id']}-{index}": doc for index, doc in enumerate(docs)
-    }
-    store = _RecordingStore(backing=backing)
-    monkeypatch.setattr(document_store, "_store", lambda: store)
-    return store
-
-
-def test_fetch_non_active_route_audit_report_fetches_run_docs_and_returns_accounted_terminal_counts(monkeypatch):
+def test_fetch_non_active_route_audit_report_fetches_run_docs_and_returns_accounted_terminal_counts():
     docs = [_route_doc(route) for route in NonActiveRoute]
     docs.append(_route_doc(NonActiveRoute.review, source_id="other-run-source", run_id="run-2"))
     db = _FakeDb(docs)
-    store = _seed_store(monkeypatch, docs)
 
     report = fetch_non_active_route_audit_report(
         "u1",
         run_id="run-1",
         expected_source_ids=[f"src-{route.value}" for route in NonActiveRoute],
+        db_client=db,
     )
 
-    assert store.queried_collections == [_ROUTE_COLLECTION]
+    assert db.collection_paths == ["users/u1/non_active_memory_routes"]
+    assert db.where_calls == [("run_id", "==", "run-1")]
+    assert db.streamed is True
     assert report.status == "green"
-    # Only run-1 docs are accounted; the extra run-2 review doc is filtered out by the run_id query.
     assert report.total_accounted_outcomes == 6
     assert report.counts_by_route == {
         "review": 1,
@@ -86,16 +56,14 @@ def test_fetch_non_active_route_audit_report_fetches_run_docs_and_returns_accoun
     assert all(evidence.default_long_term_visible is False for evidence in report.evidence)
 
 
-def test_fetch_non_active_route_audit_report_does_not_query_default_long_term_memory_items(monkeypatch):
-    docs = [_route_doc(NonActiveRoute.context_only)]
-    db = _FakeDb(docs)
-    store = _seed_store(monkeypatch, docs)
+def test_fetch_non_active_route_audit_report_does_not_query_default_long_term_memory_items():
+    db = _FakeDb([_route_doc(NonActiveRoute.context_only)])
 
-    report = fetch_non_active_route_audit_report("u1", expected_source_ids=["src-context_only"])
+    report = fetch_non_active_route_audit_report("u1", expected_source_ids=["src-context_only"], db_client=db)
 
     assert report.status == "green"
-    assert store.queried_collections == [_ROUTE_COLLECTION]
-    assert not any("memory_items" in path for path in store.queried_collections)
+    assert db.collection_paths == ["users/u1/non_active_memory_routes"]
+    assert not any("memory_items" in path for path in db.collection_paths)
     context_only = report.evidence[0]
     assert context_only.route == NonActiveRoute.context_only
     assert context_only.preserved is True

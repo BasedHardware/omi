@@ -13,8 +13,9 @@ class _GrantStateRead:
         self.source_path = 'users/u1/memory_control/app_key_memory_grants'
 
 
-def _grant_reader(*, uid):
+def _grant_reader(*, uid, db_client):
     assert uid == 'u1'
+    assert db_client == 'fake-db'
     return _GrantStateRead(
         {
             'grants': {
@@ -51,6 +52,7 @@ def test_mcp_memory_context_fails_closed_without_app_or_key_identity():
     context = build_mcp_default_memory_read_context(auth)
     decision = authorize_memory_external_default_memory_read(
         context,
+        db_client='fake-db',
         read_app_key_grants_state=_grant_reader,
     )
 
@@ -64,6 +66,7 @@ def test_mcp_memory_context_fails_closed_without_verified_memories_read_scope():
     context = build_mcp_default_memory_read_context(auth)
     decision = authorize_memory_external_default_memory_read(
         context,
+        db_client='fake-db',
         read_app_key_grants_state=_grant_reader,
     )
 
@@ -77,6 +80,7 @@ def test_valid_injected_mcp_context_composes_with_stored_default_read_grant_with
 
     decision = authorize_memory_external_default_memory_read(
         context,
+        db_client='fake-db',
         read_app_key_grants_state=_grant_reader,
     )
 
@@ -97,6 +101,6 @@ def test_mcp_routes_advertise_memories_read_and_wire_memory_context_only_on_memo
     assert 'MEMORIES_READ_SECURITY = [{"type": "oauth2", "scopes": ["memories.read"]}]' in sse_source
     assert 'auth_context: Optional[ProductAuthorizationContext] = None' in sse_source
     assert 'authenticate_api_key_auth_context' in sse_source
-    assert 'authorize_memory_external_default_memory_read(auth_context)' in sse_source
+    assert 'authorize_memory_external_default_memory_read(auth_context, db_client=db)' in sse_source
     assert 'get_mcp_memory_default_memory_read_context' in rest_source
     assert 'build_mcp_default_memory_read_context' in sse_source

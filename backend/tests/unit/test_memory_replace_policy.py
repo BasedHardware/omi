@@ -1,4 +1,4 @@
-"""Memory replace policy — legacy re-extract and cascade delete invariants."""
+"""Universal memory source-replacement and cascade-delete invariants."""
 
 from __future__ import annotations
 
@@ -66,16 +66,14 @@ def _function_body(source: str, fn_name: str) -> str:
     raise AssertionError(f"{fn_name} not found")
 
 
-def test_legacy_extract_deletes_only_after_successful_parse():
-    """Legacy re-extract must not delete conversation memories before extraction completes."""
+def test_conversation_extraction_has_no_historical_writer_or_selector():
+    """Conversation finalization has one canonical source-replacement path."""
     source = PROCESS_CONVERSATION_PATH.read_text(encoding="utf-8")
-    body = _function_body(source, "_extract_memories_legacy")
-    delete_idx = body.index("delete_memories_for_conversation")
-    extract_idx = body.index("new_memories_extractor")
-    save_idx = body.index("save_memories")
-    assert (
-        extract_idx < delete_idx < save_idx
-    ), "legacy path must extract, then delete old conversation memories, then save new ones"
+    body = _function_body(source, "_extract_memories_inner")
+    assert "_extract_memories_canonical" in body
+    assert "memory_system" not in body
+    assert "delete_memories_for_conversation" not in source
+    assert "memories_db.save_memories" not in source
 
 
 def test_canonical_extract_replaces_only_after_successful_parse():
@@ -97,62 +95,14 @@ def test_cascade_delete_cleans_memories_before_conversation_doc():
     body = source[fn_start:fn_end]
     conv_delete_idx = body.index("conversations_db.delete_conversation")
     cascade_idx = body.index("if cascade:")
-    memories_idx = body.index("delete_memories_for_conversation")
+    memories_idx = body.index("retract_conversation_memories")
     action_items_idx = body.index("delete_action_items_for_conversation")
     assert cascade_idx < memories_idx < conv_delete_idx
     assert cascade_idx < action_items_idx < conv_delete_idx
 
 
-@pytest.mark.parametrize("extractor_side_effect", [Exception("llm down"), []])
-def test_legacy_reextract_failure_preserves_existing_memories(extractor_side_effect, monkeypatch):
-    """If extraction fails or yields nothing, prior conversation memories must remain."""
-    pc = _load_process_conversation()
-    from models.conversation import Conversation
-    from models.conversation_enums import CategoryEnum, ConversationSource
-    from models.structured import Structured
-
-    legacy_delete = sys.modules["database.memories"].delete_memories_for_conversation
-    legacy_delete.reset_mock(return_value={"vector_delete_ids": ["old-mem-1"]})
-    legacy_save = sys.modules["database.memories"].save_memories
-    legacy_save.reset_mock()
-
-    monkeypatch.setattr(
-        pc,
-        "new_memories_extractor",
-        MagicMock(
-            side_effect=extractor_side_effect if isinstance(extractor_side_effect, Exception) else lambda *a, **k: []
-        ),
-    )
-    monkeypatch.setattr(
-        pc,
-        "memory_system_request_scope",
-        lambda uid: MagicMock(__enter__=lambda s: pc.MemorySystem.LEGACY, __exit__=lambda *a: None),
-    )
-    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
-    monkeypatch.setattr(pc.notification_db, "get_user_time_zone", lambda uid: "UTC")
-
-    conversation = Conversation(
-        id="conv-preserve",
-        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
-        source=ConversationSource.omi,
-        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
-        transcript_segments=[],
-    )
-
-    if isinstance(extractor_side_effect, Exception):
-        with pytest.raises(Exception, match="llm down"):
-            pc._extract_memories_inner("uid-preserve", conversation)
-    else:
-        pc._extract_memories_inner("uid-preserve", conversation)
-
-    legacy_delete.assert_not_called()
-    legacy_save.assert_not_called()
-
-
-def test_canonical_reextract_failure_preserves_existing_memories(monkeypatch):
-    """Canonical path: strict extraction failure must not submit a replacement."""
+def test_universal_reextract_failure_preserves_existing_memories(monkeypatch):
+    """Strict extraction failure must not submit a source replacement."""
     pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
@@ -160,17 +110,12 @@ def test_canonical_reextract_failure_preserves_existing_memories(monkeypatch):
 
     # Intercept the MemoryService created inside _extract_memories_canonical
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
 
     monkeypatch.setattr(
         pc,
         "extract_canonical_l1_memory_candidates",
         MagicMock(side_effect=Exception("llm down")),
-    )
-    monkeypatch.setattr(
-        pc,
-        "memory_system_request_scope",
-        lambda uid: MagicMock(__enter__=lambda s: pc.MemorySystem.CANONICAL, __exit__=lambda *a: None),
     )
     monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
 
@@ -190,21 +135,16 @@ def test_canonical_reextract_failure_preserves_existing_memories(monkeypatch):
     mock_service.replace_conversation_memories.assert_not_called()
 
 
-def test_canonical_reextract_valid_empty_replaces_existing_source_state(monkeypatch):
-    """A valid empty canonical extraction is an authoritative source replacement."""
+def test_universal_reextract_valid_empty_replaces_existing_source_state(monkeypatch):
+    """A valid empty extraction is an authoritative source replacement."""
     pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
     from models.structured import Structured
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
     monkeypatch.setattr(pc, "extract_canonical_l1_memory_candidates", MagicMock(return_value=[]))
-    monkeypatch.setattr(
-        pc,
-        "memory_system_request_scope",
-        lambda uid: MagicMock(__enter__=lambda s: pc.MemorySystem.CANONICAL, __exit__=lambda *a: None),
-    )
     monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
 
     conversation = Conversation(
@@ -235,7 +175,7 @@ def test_canonical_capture_preserves_prior_state_when_candidate_has_any_unground
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
     monkeypatch.setattr(
         pc,
         "extract_canonical_l1_memory_candidates",
@@ -280,7 +220,7 @@ def test_canonical_capture_preserves_prior_state_when_candidate_has_any_unground
         ValueError,
         match="evidence without a unique source binding",
     ):
-        pc._extract_memories_canonical("uid-quote-grounding", conversation)
+        pc._extract_memories_canonical("uid-quote-grounding", conversation, db_client=MagicMock())
 
     mock_service.replace_conversation_memories.assert_not_called()
 
@@ -320,7 +260,7 @@ def test_canonical_capture_known_non_user_speaker_overrides_model_about_user(mon
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
     monkeypatch.setattr(
         pc,
         "extract_canonical_l1_memory_candidates",
@@ -359,7 +299,7 @@ def test_canonical_capture_known_non_user_speaker_overrides_model_about_user(mon
         ],
     )
 
-    result = pc._extract_memories_canonical("uid-subject", conversation)
+    result = pc._extract_memories_canonical("uid-subject", conversation, db_client=MagicMock())
 
     assert result.count == 1
     replacement_payloads = mock_service.replace_conversation_memories.call_args.args[2]
@@ -377,7 +317,7 @@ def test_canonical_capture_maps_rendered_contact_name_back_to_person_id(monkeypa
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
     monkeypatch.setattr(
         pc,
         "extract_canonical_l1_memory_candidates",
@@ -419,6 +359,7 @@ def test_canonical_capture_maps_rendered_contact_name_back_to_person_id(monkeypa
     result = pc._extract_memories_canonical(
         "uid-contact-name",
         conversation,
+        db_client=MagicMock(),
     )
 
     assert result.count == 1
@@ -437,7 +378,7 @@ def test_canonical_capture_quote_speaker_overrides_hallucinated_user_label(monke
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
     monkeypatch.setattr(
         pc,
         "extract_canonical_l1_memory_candidates",
@@ -476,7 +417,7 @@ def test_canonical_capture_quote_speaker_overrides_hallucinated_user_label(monke
         ],
     )
 
-    result = pc._extract_memories_canonical("uid-spoofed-speaker", conversation)
+    result = pc._extract_memories_canonical("uid-spoofed-speaker", conversation, db_client=MagicMock())
 
     assert result.count == 1
     replacement_payloads = mock_service.replace_conversation_memories.call_args.args[2]
@@ -494,7 +435,7 @@ def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speak
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
     monkeypatch.setattr(
         pc,
         "extract_canonical_l1_memory_candidates",
@@ -535,6 +476,7 @@ def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speak
     result = pc._extract_memories_canonical(
         "uid-source-speaker-subject",
         conversation,
+        db_client=MagicMock(),
     )
 
     assert result.count == 1
@@ -564,7 +506,7 @@ def test_canonical_dense_capture_is_bounded_before_atomic_replacement(monkeypatc
     from utils.llm.working_observations import MAX_WORKING_OBSERVATION_ITEMS
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
     monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
 
     candidates = [
@@ -608,6 +550,7 @@ def test_canonical_dense_capture_is_bounded_before_atomic_replacement(monkeypatc
     result = pc._extract_memories_canonical(
         "uid-dense-capture",
         conversation,
+        db_client=MagicMock(),
     )
 
     payloads = mock_service.replace_conversation_memories.call_args.args[2]
@@ -626,7 +569,7 @@ def test_canonical_capture_deduplicates_per_subject_and_assigns_subject_scoped_i
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
     monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
     monkeypatch.setattr(
         pc,
@@ -696,6 +639,7 @@ def test_canonical_capture_deduplicates_per_subject_and_assigns_subject_scoped_i
     result = pc._extract_memories_canonical(
         "uid-subject-aware-dedup",
         conversation,
+        db_client=MagicMock(),
     )
 
     payloads = mock_service.replace_conversation_memories.call_args.args[2]

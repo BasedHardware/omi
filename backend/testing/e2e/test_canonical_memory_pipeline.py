@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
 import pytest
 
-from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
 from database.memory_vector_metadata import canonical_memory_provider_id
 from fakes.firestore import seed_conversation
 from fakes.vector_search import install_vector_search_fakes
@@ -22,16 +20,14 @@ from models.product_memory import (
     MemoryTier,
     ProcessingState,
 )
-from database import document_store
-from database.store.adapters.firestore import FirestoreDocumentStore
-from tests.store_fakes import FakeDocumentStore
-from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+from tests.unit.universal_memory_test_helpers import configure_universal_memory
 from tests.unit.fixtures.memory_adapter_fakes import (
+    FirestoreFake,
     enabled_rollout_doc,
     memory_item,
     stored_item,
 )
-from tests.unit.test_ws_i_write_convergence import _sample_memory_payload
+from tests.unit.fixtures.canonical_memory_fakes import _sample_memory_payload
 from utils.memory.canonical_consolidation import ConsolidationAgentBatch, ConsolidationAgentDecision
 from utils.memory.canonical_memory_adapter import (
     delete_canonical_memory,
@@ -47,11 +43,6 @@ from utils.memory.developer_memory_adapter import search_memory_default_develope
 from utils.memory.memory_service import MemoryService
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
 from utils.memory.short_term_promotion import _drain_canonical_outbox, run_canonical_short_term_maintenance
-from utils.memory.v3.projection_reader_contract import (
-    V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
-    V3_COMPATIBILITY_PROJECTION_SOURCE,
-    V3_COMPATIBILITY_PROJECTION_VERSION,
-)
 from utils.retrieval.tool_services import memories as tool_memories_service
 
 NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
@@ -81,7 +72,7 @@ def _consolidation_side_effect_patches(monkeypatch) -> None:
         raising=False,
     )
     # Typesense has focused provider tests; this E2E keeps that network boundary
-    # hermetic while exercising the normal outbox, vector, and `/v3` projection.
+    # hermetic while exercising the normal canonical outbox and vector path.
     monkeypatch.setattr("utils.memory.short_term_promotion.sync_atom_keyword_index_for_item", lambda *_, **__: True)
     monkeypatch.setattr("utils.memory.short_term_promotion.delete_atom_keyword_doc", lambda *_, **__: True)
 
@@ -96,49 +87,12 @@ def _seed_apply_control(db, uid: str, *, account_generation: int = 3) -> None:
     (db.collection("users").document(uid).collection("memory_state").document("apply_control").set(control))
 
 
-def _seed_rollout_readiness(db, uid: str, *, grant_consumer: str) -> None:
+def _seed_product_access(db, uid: str, *, grant_consumer: str) -> None:
     db.collection("memory_control").document("global_read_gate").set(
         {"memory_reads_enabled": True, "kill_switch_active": False}
     )
-    db.collection("memory_control").document("write_convergence_gate").set(
-        {
-            "durable_outbox_enabled": True,
-            "dual_write_projection_ready": True,
-            "delete_convergence_ready": True,
-            "idempotency_contract_ready": True,
-        }
-    )
     rollout = enabled_rollout_doc(uid, grant_consumer=grant_consumer)
-    rollout["mode"] = MemoryRolloutMode.read.value
-    rollout["stage_gates"] = {
-        MemoryRolloutStageGate.shadow.value: PASSED,
-        MemoryRolloutStageGate.write.value: PASSED,
-        MemoryRolloutStageGate.read.value: PASSED,
-    }
     db.collection("users").document(uid).collection("memory_control").document("state").set(rollout)
-    db.collection("users").document(uid).collection("v3_compatibility_projection").document("state").set(
-        {
-            "uid": uid,
-            "schema_version": V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
-            "source": V3_COMPATIBILITY_PROJECTION_SOURCE,
-            "ready": True,
-            "account_generation": 3,
-            "projection_generation": 3,
-            "freshness_fence_generation": 3,
-            "tombstone_fence_generation": 3,
-            "vector_cleanup_fence_generation": 3,
-            "source_commit_id": "head-enrollment",
-            "projection_commit_id": "commit-head-enrollment",
-            "source_evidence_fence": "head-head-enrollment",
-            "projection_evidence_fence": "head-head-enrollment",
-            "projection_version": V3_COMPATIBILITY_PROJECTION_VERSION,
-            "source_version": "memory_state_head:3",
-            "write_convergence_complete": True,
-            "delete_convergence_complete": True,
-            "tombstone_convergence_complete": True,
-            "empty_projection": False,
-        }
-    )
 
 
 def _seed_memory_item_doc(db, item: MemoryItem) -> None:
@@ -189,8 +143,8 @@ def _scripted_consolidation_llm(_prompt: str) -> str:
     return json.dumps(ConsolidationAgentBatch(decisions=[decision]).model_dump(mode="json"))
 
 
-def _enroll_canonical_pipeline(monkeypatch, uid: str = PIPELINE_UID) -> None:
-    set_canonical_cohort(monkeypatch, uid)
+def _configure_universal_pipeline(monkeypatch, uid: str = PIPELINE_UID) -> None:
+    configure_universal_memory(monkeypatch, uid)
     monkeypatch.setenv("MEMORY_CANONICAL_CONSOLIDATION_BATCH_THRESHOLD", "1")
     monkeypatch.setattr("utils.memory.canonical_consolidation.consolidation_batch_threshold", lambda: 1)
     monkeypatch.setattr("utils.other.endpoints._enforce_rate_limit", lambda *args, **kwargs: None)
@@ -241,7 +195,7 @@ def _write_short_term_via_conversation_ingress(client, auth_headers, monkeypatch
         payload["category"] = MemoryCategory.system.value
         payload["subject_entity_id"] = "user"
         payload["subject_attribution"] = "user"
-        memory_id = write_canonical_extraction_memory(uid, payload)
+        memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
         import database.conversations as conversations_db
 
         structured = conversation.structured.model_dump() if hasattr(conversation.structured, "model_dump") else {}
@@ -272,41 +226,16 @@ def _write_short_term_via_conversation_ingress(client, auth_headers, monkeypatch
     return extraction_memory_id(uid=PIPELINE_UID, source_id=CONV_ID, content=PIPELINE_CONTENT)
 
 
-@contextmanager
-def _override_memory_runtime(client, runtime):
-    import routers.memories as memories_router
-
-    client.app.dependency_overrides[memories_router.get_v3_get_runtime] = lambda: runtime
-    try:
-        yield
-    finally:
-        client.app.dependency_overrides.pop(memories_router.get_v3_get_runtime, None)
-
-
-def _runtime(*, enabled: bool, source_decision: str, service=None):
-    import routers.memories as memories_router
-
-    return memories_router.V3GetRuntime(
-        enabled=enabled,
-        source_decision=source_decision,
-        service=service,
-        adapters=object(),
-    )
-
-
 class TestCanonicalMemoryPipelineE2E:
     def test_capture_consolidate_promote_read_archive_excluded_vectors_and_delete_outbox(
         self, client, auth_headers, fake_firestore, monkeypatch
     ):
         import database.vector_db as vector_db
 
-        _enroll_canonical_pipeline(monkeypatch)
+        _configure_universal_pipeline(monkeypatch)
         fake_index, _embeddings = install_vector_search_fakes(monkeypatch, vector_db)
         db = fake_firestore
-        # Bind the neutral store port to the same fake Firestore the helpers seed/read (ADR-0028:
-        # the canonical-memory functions no longer take db_client — persistence flows through _store()).
-        monkeypatch.setattr(document_store, "_store", lambda: FirestoreDocumentStore(db))
-        _seed_rollout_readiness(db, PIPELINE_UID, grant_consumer="omi_chat")
+        _seed_product_access(db, PIPELINE_UID, grant_consumer="omi_chat")
 
         memory_id = _write_short_term_via_conversation_ingress(client, auth_headers, monkeypatch, db=db)
         provider_id = canonical_memory_provider_id(PIPELINE_UID, memory_id)
@@ -316,6 +245,7 @@ class TestCanonicalMemoryPipelineE2E:
 
         maintenance = run_canonical_short_term_maintenance(
             PIPELINE_UID,
+            db_client=db,
             now=NOW,
             run_id="e2e-canonical-pipeline",
             llm_invoke=_scripted_consolidation_llm,
@@ -335,6 +265,7 @@ class TestCanonicalMemoryPipelineE2E:
         assert provider_id not in vectors, "canonical apply must not bypass the durable outbox"
         projection = _drain_canonical_outbox(
             PIPELINE_UID,
+            db_client=db,
             run_id="e2e-canonical-pipeline-projection",
             now=OUTBOX_DUE_AT,
         )
@@ -349,7 +280,7 @@ class TestCanonicalMemoryPipelineE2E:
 
         promoted_item = MemoryItem(**promoted)
         authoritative_items = {
-            item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=PIPELINE_UID)
+            item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=PIPELINE_UID, db_client=db)
         }
         assert memory_id in authoritative_items
         assert authoritative_items[memory_id].content == promoted_item.content
@@ -374,7 +305,7 @@ class TestCanonicalMemoryPipelineE2E:
         _seed_memory_item_doc(db, archive_item)
         _seed_memory_item_doc(db, visible_item)
 
-        service = MemoryService()
+        service = MemoryService(db_client=db)
         read_ids = {memory.id for memory in service.read(PIPELINE_UID, limit=50)}
         assert memory_id in read_ids
         assert "archive-hidden" not in read_ids
@@ -384,6 +315,7 @@ class TestCanonicalMemoryPipelineE2E:
             uid=PIPELINE_UID,
             query="visible",
             limit=10,
+            db_client=db,
             now=NOW,
         )
         assert chat_text is not None
@@ -398,6 +330,7 @@ class TestCanonicalMemoryPipelineE2E:
         product = fetch_default_product_memory_search(
             uid=PIPELINE_UID,
             query="visible",
+            db_client=db,
             policy=product_policy,
             now=NOW,
         )
@@ -405,7 +338,7 @@ class TestCanonicalMemoryPipelineE2E:
         assert "archive-hidden" not in product_ids
         assert "visible-long-term" in product_ids
 
-        delete_canonical_memory(PIPELINE_UID, memory_id)
+        delete_canonical_memory(PIPELINE_UID, memory_id, db_client=db)
         tombstoned = _read_memory_item(db, PIPELINE_UID, memory_id)
         assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
 
@@ -422,6 +355,7 @@ class TestCanonicalMemoryPipelineE2E:
 
         cleanup = _drain_canonical_outbox(
             PIPELINE_UID,
+            db_client=db,
             run_id="e2e-canonical-pipeline-delete",
             now=OUTBOX_DUE_AT,
         )
@@ -430,12 +364,14 @@ class TestCanonicalMemoryPipelineE2E:
         assert {action["action"] for action in cleanup["actions"]} >= {"projection_delete", "vector_delete"}
         assert provider_id not in vectors
 
-    def test_dual_stack_projection_failure_fails_closed_without_legacy_bleed(
+    def test_universal_repository_failure_fails_closed_without_historical_bleed(
         self, client, auth_headers, fake_firestore, monkeypatch
     ):
+        from fastapi import HTTPException
         from fakes.firestore import seed_memory
+        import routers.memories as memories_router
 
-        _enroll_canonical_pipeline(monkeypatch)
+        _configure_universal_pipeline(monkeypatch)
         seed_memory(
             PIPELINE_UID,
             {
@@ -446,21 +382,17 @@ class TestCanonicalMemoryPipelineE2E:
             },
         )
 
-        def failing_memory_service(_params, _adapters):
-            from utils.memory.v3.composed_get_service import V3ComposedResponse
-
-            return V3ComposedResponse.error(503, "infrastructure_failure")
-
-        with _override_memory_runtime(
-            client,
-            _runtime(enabled=True, source_decision="memory_read", service=failing_memory_service),
-        ):
-            resp = client.get("/v3/memories", headers=auth_headers)
+        monkeypatch.setattr(
+            memories_router.MemoryService,
+            "read",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                HTTPException(status_code=503, detail="infrastructure_failure")
+            ),
+        )
+        resp = client.get("/v3/memories", headers=auth_headers)
 
         assert resp.status_code == 503
         assert resp.json() == {"detail": "infrastructure_failure"}
-        assert resp.headers["x-omi-memory-read-source"] == "none"
-        assert resp.headers["x-omi-memory-read-decision"] == "infrastructure_failure"
         assert "legacy-must-not-bleed" not in resp.text
 
 
@@ -469,30 +401,29 @@ def _vector_store(fake_index, namespace: str = "ns2") -> dict:
 
 
 def _invoke_surface_reader(surface_name, *, uid, db, rollout, policy, now):
-    # Neutral-store API (ADR-0022): these read paths resolve the DocumentStore via the process
-    # port, no longer an injected ``db_client``. In this hermetic suite the port is the patched
-    # fake Firestore the surfaces seed into, so ``db_client`` is simply omitted.
     if surface_name == "chat_text":
-        return search_memory_default_chat_memories_text(uid=uid, query="coffee", limit=10, now=now)
+        return search_memory_default_chat_memories_text(uid=uid, query="coffee", limit=10, db_client=db, now=now)
     if surface_name == "chat_list":
-        return list_default_chat_memories_decision_text(uid=uid, limit=10, offset=0).text
+        return list_default_chat_memories_decision_text(uid=uid, limit=10, offset=0, db_client=db).text
     if surface_name == "developer":
         return search_memory_default_developer_memories(
             uid=uid,
             query="coffee",
             limit=10,
             offset=0,
+            db_client=db,
             rollout_decision=rollout,
             now=now,
         ).memories
     if surface_name == "agent_tools":
         return tool_memories_service.get_memories_text(uid=uid, limit=50, now=now)
     if surface_name == "mcp":
-        return MemoryService().search_mcp(uid, "coffee", limit=10)
+        return MemoryService(db_client=db).search_mcp(uid, "coffee", limit=10)
     if surface_name == "product_search":
         return fetch_default_product_memory_search(
             uid=uid,
             query="coffee",
+            db_client=db,
             policy=policy,
             now=now,
         )["items"]
@@ -517,23 +448,21 @@ class TestSurfaceDefaultAccessMatrix:
         from utils.memory.default_read_rollout import read_default_read_rollout
 
         uid = f"uid-surface-{surface_name}"
-        set_canonical_cohort(monkeypatch, uid)
+        configure_universal_memory(monkeypatch, uid)
         _trusted_generation_patch(monkeypatch)
-        monkeypatch.setattr(
-            "utils.memory.memory_service.canonical_read_enabled",
-            lambda uid, **kwargs: True,
-        )
         if surface_name in {"mcp", "agent_tools"}:
             import database.vector_db as vector_db
 
             install_vector_search_fakes(monkeypatch, vector_db)
         db = fake_firestore
-        # Neutral-store API (ADR-0022): read surfaces resolve the DocumentStore via the process
-        # port instead of an injected db_client. This case does not spin up the patched backend
-        # app, so bind the port to the same fake ``db`` the seeds below write into.
-        monkeypatch.setattr(document_store, "_store", lambda: FirestoreDocumentStore(db))
+        if surface_name == "agent_tools":
+            # get_memories_text reads through the client this module captured at import
+            # time, so bind it explicitly here. Without this the case only passes when an
+            # earlier test's fixture happened to rebind it, and standalone it reaches for
+            # real Firestore (#10423).
+            monkeypatch.setattr(tool_memories_service, "firestore_db", db)
         _seed_apply_control(db, uid)
-        _seed_rollout_readiness(db, uid, grant_consumer=grant_consumer)
+        _seed_product_access(db, uid, grant_consumer=grant_consumer)
 
         fresh_short = memory_item(
             "fresh-short",
@@ -568,7 +497,7 @@ class TestSurfaceDefaultAccessMatrix:
             for item in (fresh_short, long_term):
                 upsert_canonical_memory_vector(item, projection_commit_id="projection-1")
 
-        rollout = read_default_read_rollout(uid=uid, consumer=grant_consumer)
+        rollout = read_default_read_rollout(uid=uid, db_client=db, consumer=grant_consumer)
         assert rollout.read_decision == MemoryReadDecision.USE_MEMORY
 
         policy = MemoryAccessPolicy(
@@ -607,13 +536,15 @@ class TestSurfaceDefaultAccessMatrix:
             assert "coffee archive memory" not in text
             assert "coffee fresh short term" in text or "coffee long term" in text
 
-        # Neutral-store API: rebind the DocumentStore port (not an injected db_client) to a
-        # grantless state doc — an empty per-consumer grant must still DENY.
-        grantless_docs = {
-            GLOBAL_READ_GATE_PATH: {"memory_reads_enabled": True, "kill_switch_active": False},
-            f"users/{uid}/memory_control/state": enabled_rollout_doc(uid, grant_consumer=grant_consumer)
-            | {"grants": {grant_consumer: {}}},
-        }
-        monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=grantless_docs))
-        grantless_rollout = read_default_read_rollout(uid=uid, consumer=grant_consumer)
+        grantless_rollout = read_default_read_rollout(
+            uid=uid,
+            db_client=FirestoreFake(
+                {
+                    GLOBAL_READ_GATE_PATH: {"memory_reads_enabled": True, "kill_switch_active": False},
+                    f"users/{uid}/memory_control/state": enabled_rollout_doc(uid, grant_consumer=grant_consumer)
+                    | {"grants": {grant_consumer: {}}},
+                }
+            ),
+            consumer=grant_consumer,
+        )
         assert grantless_rollout.read_decision == MemoryReadDecision.DENY_MEMORY

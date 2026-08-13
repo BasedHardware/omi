@@ -12,25 +12,55 @@ import pytest
 
 import database.task_intelligence_control as task_control_db
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
-from tests.store_fakes import FakeDocumentStore
-
-_CONTROL_PATH = 'users/uid-1/task_intelligence_control/state'
 
 
-def _install_store(monkeypatch, data):
-    store = FakeDocumentStore()
-    if data is not None:
-        store.set(_CONTROL_PATH, data)
-    monkeypatch.setattr(task_control_db, '_store', lambda: store)
-    return store
+class _FakeSnapshot:
+    def __init__(self, *, exists, data):
+        self.exists = exists
+        self._data = data
+
+    def to_dict(self):
+        return self._data
+
+
+class _FakeDoc:
+    def __init__(self, snapshot):
+        self._snapshot = snapshot
+
+    def collection(self, _name):
+        return _FakeCollection(self._snapshot)
+
+    def get(self):
+        return self._snapshot
+
+
+class _FakeCollection:
+    def __init__(self, snapshot):
+        self._snapshot = snapshot
+
+    def document(self, _id):
+        return _FakeDoc(self._snapshot)
+
+
+class _FakeDb:
+    def __init__(self, snapshot):
+        self._snapshot = snapshot
+
+    def collection(self, _name):
+        return _FakeCollection(self._snapshot)
+
+
+def _install_db(monkeypatch, snapshot):
+    monkeypatch.setattr(task_control_db, 'db', _FakeDb(snapshot))
 
 
 def test_malformed_control_falls_back_to_legacy_default(monkeypatch):
     # extra='forbid': an unknown/renamed persisted field fails to load with ValidationError.
-    _install_store(
-        monkeypatch,
-        {'workflow_mode': 'write', 'account_generation': 2, 'unexpected_legacy_field': True},
+    snapshot = _FakeSnapshot(
+        exists=True,
+        data={'workflow_mode': 'write', 'account_generation': 2, 'unexpected_legacy_field': True},
     )
+    _install_db(monkeypatch, snapshot)
 
     control = task_control_db.get_task_workflow_control('uid-1')
 
@@ -41,7 +71,8 @@ def test_malformed_control_falls_back_to_legacy_default(monkeypatch):
 
 
 def test_valid_control_is_parsed(monkeypatch):
-    _install_store(monkeypatch, {'workflow_mode': 'write', 'account_generation': 2})
+    snapshot = _FakeSnapshot(exists=True, data={'workflow_mode': 'write', 'account_generation': 2})
+    _install_db(monkeypatch, snapshot)
 
     control = task_control_db.get_task_workflow_control('uid-1')
 
@@ -50,7 +81,8 @@ def test_valid_control_is_parsed(monkeypatch):
 
 
 def test_unexpected_error_propagates(monkeypatch):
-    _install_store(monkeypatch, {'workflow_mode': 'write', 'account_generation': 2})
+    snapshot = _FakeSnapshot(exists=True, data={'workflow_mode': 'write', 'account_generation': 2})
+    _install_db(monkeypatch, snapshot)
 
     def _boom(*_args, **_kwargs):
         raise RuntimeError('unexpected non-validation failure')

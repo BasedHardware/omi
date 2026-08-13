@@ -3,9 +3,10 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
 import pytz
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 
-from database.store import get_document_store
-from database.store.sentinels import ArrayUnion, Increment
+from ._client import db
 from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from models.user_usage import UsageStats
 
@@ -15,10 +16,6 @@ logger = logging.getLogger(__name__)
 # literally: tests that stub `google.cloud.firestore_v1` as a plain module cannot
 # import its `field_path` submodule.
 _DOCUMENT_ID_FIELD = '__name__'
-
-
-def _store():
-    return get_document_store()
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -34,6 +31,25 @@ def _next_month(now: datetime) -> Tuple[int, int]:
     return now.year, now.month + 1
 
 
+def _current_month_llm_usage_docs(llm_usage_ref: Any, now: datetime) -> Iterable[Any]:
+    """Stream only the current month's `llm_usage/{YYYY-MM-DD}` docs.
+
+    Bounded by document id, so the read stays at "days elapsed this month"
+    regardless of how long the account has existed. Listing the whole
+    collection and fetching the in-month days one at a time grew both the read
+    count and the round-trips with account age, on the path every chat request
+    takes through ``enforce_chat_quota``.
+    """
+    next_year, next_month = _next_month(now)
+    start = llm_usage_ref.document(f'{now.year}-{now.month:02d}-01')
+    end = llm_usage_ref.document(f'{next_year}-{next_month:02d}-01')
+    return (
+        llm_usage_ref.where(filter=FieldFilter(_DOCUMENT_ID_FIELD, '>=', start))
+        .where(filter=FieldFilter(_DOCUMENT_ID_FIELD, '<', end))
+        .stream()
+    )
+
+
 def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> Dict[str, Any]:
     """Sum current-month chat usage from `users/{uid}/llm_usage/{YYYY-MM-DD}` docs.
 
@@ -47,18 +63,11 @@ def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> Dict[str
     """
     now = now or datetime.now(timezone.utc)
 
-    llm_usage_path = f'users/{uid}/llm_usage'
-    store = _store()
+    llm_usage_ref = db.collection('users').document(uid).collection('llm_usage')
     questions = 0
     cost_usd = 0.0
-    month_prefix = f'{now.year}-{now.month:02d}'
     document_count = 0
-    for doc_id in store.list_ids(llm_usage_path):
-        if not doc_id.startswith(month_prefix):
-            continue
-        snap = store.get(f'{llm_usage_path}/{doc_id}')
-        if not snap.exists:
-            continue
+    for snap in _current_month_llm_usage_docs(llm_usage_ref, now):
         document_count += 1
         data: Dict[str, Any] = _typed_doc(snap)
         has_desktop_realtime_quota_questions = 'desktop_chat_realtime.quota_questions' in data or (
@@ -128,8 +137,9 @@ def update_hourly_usage(uid: str, date: datetime, updates: Dict[str, Any], platf
     ArrayUnion so a single `hourly_usage/{date-hour}` doc can record activity
     from both platforms in the same hour without double-writing.
     """
+    user_ref = db.collection('users').document(uid)
     doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
-    hourly_usage_path = f'users/{uid}/hourly_usage/{doc_id}'
+    hourly_usage_ref = user_ref.collection('hourly_usage').document(doc_id)
 
     update_doc: Dict[str, Any] = {'last_updated': datetime.now(timezone.utc)}
     has_increments = False
@@ -140,7 +150,7 @@ def update_hourly_usage(uid: str, date: datetime, updates: Dict[str, Any], platf
             in ['transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds']
             and value > 0
         ):
-            update_doc[key] = Increment(value)
+            update_doc[key] = firestore.Increment(value)
             has_increments = True
 
     if not has_increments:
@@ -153,16 +163,33 @@ def update_hourly_usage(uid: str, date: datetime, updates: Dict[str, Any], platf
     update_doc['hour'] = date.hour
     update_doc['id'] = doc_id
     if platform in ('desktop', 'mobile'):
-        update_doc['platforms'] = ArrayUnion([platform])
+        update_doc['platforms'] = firestore.ArrayUnion([platform])
 
-    _store().set(hourly_usage_path, update_doc, merge=True)
+    hourly_usage_ref.set(update_doc, merge=True)
+
+
+@firestore.transactional
+def _update_hourly_usage_once_transaction(
+    transaction: Any,
+    marker_ref: Any,
+    usage_ref: Any,
+    update_doc: Dict[str, Any],
+) -> bool:
+    marker_snapshot = marker_ref.get(transaction=transaction)
+    marker_data = marker_snapshot.to_dict() or {} if marker_snapshot.exists else {}
+    if marker_data.get('usage_committed_at') is not None:
+        return False
+    transaction.set(marker_ref, {'usage_committed_at': datetime.now(timezone.utc)}, merge=True)
+    transaction.set(usage_ref, update_doc, merge=True)
+    return True
 
 
 def update_hourly_usage_once(uid: str, date: datetime, updates: Dict[str, Any], idempotency_key: str) -> bool:
     """Atomically increment hourly usage once for a stable sync content key."""
+    user_ref = db.collection('users').document(uid)
     doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
-    usage_path = f'users/{uid}/hourly_usage/{doc_id}'
-    marker_path = f'users/{uid}/sync_content_ledger/{idempotency_key}'
+    usage_ref = user_ref.collection('hourly_usage').document(doc_id)
+    marker_ref = user_ref.collection('sync_content_ledger').document(idempotency_key)
     update_doc: Dict[str, Any] = {
         'last_updated': datetime.now(timezone.utc),
         'year': date.year,
@@ -177,21 +204,10 @@ def update_hourly_usage_once(uid: str, date: datetime, updates: Dict[str, Any], 
             in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
             and value > 0
         ):
-            update_doc[key] = Increment(value)
+            update_doc[key] = firestore.Increment(value)
     if len(update_doc) == 6:
         return False
-
-    def _commit_once(tx: Any) -> bool:
-        # Read before write: Firestore forbids read-after-write inside a transaction.
-        marker_snapshot = tx.get(marker_path)
-        marker_data = marker_snapshot.to_dict() or {} if marker_snapshot.exists else {}
-        if marker_data.get('usage_committed_at') is not None:
-            return False
-        tx.set(marker_path, {'usage_committed_at': datetime.now(timezone.utc)}, merge=True)
-        tx.set(usage_path, update_doc, merge=True)
-        return True
-
-    return _store().run_transaction(_commit_once)
+    return _update_hourly_usage_once_transaction(db.transaction(), marker_ref, usage_ref, update_doc)
 
 
 def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str, Any]]) -> None:
@@ -200,11 +216,11 @@ def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str,
     items: List[Tuple[datetime, Dict[str, Any]]] = list(hourly_updates.items())
 
     for i in range(0, len(items), batch_size):
-        batch = _store().batch()
+        batch = db.batch()
         chunk = items[i : i + batch_size]
         for date, updates in chunk:
             doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
-            hourly_usage_path = f'users/{uid}/hourly_usage/{doc_id}'
+            hourly_usage_ref = db.collection('users').document(uid).collection('hourly_usage').document(doc_id)
 
             update_doc: Dict[str, Any] = updates.copy()
             # Add year, month, day, hour fields for querying
@@ -215,7 +231,7 @@ def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str,
             update_doc['id'] = doc_id
             update_doc['last_updated'] = datetime.now(timezone.utc)
 
-            batch.set(hourly_usage_path, update_doc, merge=True)
+            batch.set(hourly_usage_ref, update_doc, merge=True)
         batch.commit()
 
 
@@ -227,7 +243,8 @@ def get_today_usage_stats(uid: str, start: datetime, end: datetime) -> Dict[str,
     docs are written keyed by UTC date, so a user whose local midnight doesn't
     land on a UTC midnight has their day's buckets split across two UTC dates.
     """
-    hourly_usage_path = f'users/{uid}/hourly_usage'
+    user_ref = db.collection('users').document(uid)
+    hourly_usage_collection = user_ref.collection('hourly_usage')
 
     stats: Dict[str, Any] = {
         'transcription_seconds': 0,
@@ -238,11 +255,12 @@ def get_today_usage_stats(uid: str, start: datetime, end: datetime) -> Dict[str,
     }
     cursor = start.replace(hour=0, minute=0, second=0, microsecond=0)
     while cursor < end:
-        docs = _store().query(
-            hourly_usage_path,
-            filters=[('year', '==', cursor.year), ('month', '==', cursor.month), ('day', '==', cursor.day)],
+        query = (
+            hourly_usage_collection.where(filter=FieldFilter('year', '==', cursor.year))
+            .where(filter=FieldFilter('month', '==', cursor.month))
+            .where(filter=FieldFilter('day', '==', cursor.day))
         )
-        for doc in docs:
+        for doc in query.stream():
             data = _typed_doc(doc)
             bucket_hour = cursor.replace(hour=int(data.get('hour', 0)))
             if start <= bucket_hour < end:
@@ -250,6 +268,10 @@ def get_today_usage_stats(uid: str, start: datetime, end: datetime) -> Dict[str,
                     stats[key] += data.get(key, 0)
         cursor += timedelta(days=1)
     return stats
+
+
+def _aggregate_stats(query: Any) -> Dict[str, Any]:
+    return _aggregate_stats_from_docs(query.stream())
 
 
 def _aggregate_stats_from_docs(docs: Iterable[Any]) -> Dict[str, Any]:
@@ -279,22 +301,28 @@ def _aggregate_stats_with_count(docs: Iterable[Any]) -> Tuple[Dict[str, Any], in
 
 def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore."""
-    docs = _store().query(
-        f'users/{uid}/hourly_usage',
-        filters=[('year', '==', date.year), ('month', '==', date.month)],
+    user_ref = db.collection('users').document(uid)
+    hourly_usage_collection = user_ref.collection('hourly_usage')
+
+    query = hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year)).where(
+        filter=FieldFilter('month', '==', date.month)
     )
-    return _aggregate_stats_from_docs(docs)
+    return _aggregate_stats(query)
 
 
 def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore, starting from a specific date."""
+    user_ref = db.collection('users').document(uid)
+    hourly_usage_collection = user_ref.collection('hourly_usage')
+
     start_doc_id = f'{start_date.year}-{start_date.month:02d}-{start_date.day:02d}-00'
 
-    docs = _store().query(
-        f'users/{uid}/hourly_usage',
-        filters=[('year', '==', date.year), ('month', '==', date.month), ('id', '>=', start_doc_id)],
+    query = (
+        hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year))
+        .where(filter=FieldFilter('month', '==', date.month))
+        .where(filter=FieldFilter('id', '>=', start_doc_id))
     )
-    stats, document_count = _aggregate_stats_with_count(docs)
+    stats, document_count = _aggregate_stats_with_count(query.stream())
     record_firestore_read(
         FirestoreReadFamily.LISTEN_MONTHLY_USAGE,
         FirestoreReadMode.UNBOUNDED,
@@ -305,8 +333,10 @@ def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime
 
 def get_yearly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given year from Firestore."""
-    docs = _store().query(f'users/{uid}/hourly_usage', filters=[('year', '==', date.year)])
-    return _aggregate_stats_from_docs(docs)
+    user_ref = db.collection('users').document(uid)
+    hourly_usage_collection = user_ref.collection('hourly_usage')
+    query = hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year))
+    return _aggregate_stats(query)
 
 
 def get_all_time_usage_stats(uid: str) -> Dict[str, Any]:
@@ -317,10 +347,14 @@ def get_all_time_usage_stats(uid: str) -> Dict[str, Any]:
 
 def get_hourly_history_for_today(uid: str, date: datetime) -> List[Dict[str, Any]]:
     """Gets hourly usage for a specific day by aggregating hourly data."""
-    docs = _store().query(
-        f'users/{uid}/hourly_usage',
-        filters=[('year', '==', date.year), ('month', '==', date.month), ('day', '==', date.day)],
+    user_ref = db.collection('users').document(uid)
+    hourly_usage_collection = user_ref.collection('hourly_usage')
+    query = (
+        hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year))
+        .where(filter=FieldFilter('month', '==', date.month))
+        .where(filter=FieldFilter('day', '==', date.day))
     )
+    docs = query.stream()
     hourly_totals: Dict[int, Dict[str, int]] = {}
     for doc in docs:
         data: Dict[str, Any] = _typed_doc(doc)
@@ -348,10 +382,12 @@ def get_hourly_history_for_today(uid: str, date: datetime) -> List[Dict[str, Any
 
 def get_daily_history_for_month(uid: str, date: datetime) -> List[Dict[str, Any]]:
     """Gets daily usage for a specific month by aggregating hourly data."""
-    docs = _store().query(
-        f'users/{uid}/hourly_usage',
-        filters=[('year', '==', date.year), ('month', '==', date.month)],
+    user_ref = db.collection('users').document(uid)
+    hourly_usage_collection = user_ref.collection('hourly_usage')
+    query = hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year)).where(
+        filter=FieldFilter('month', '==', date.month)
     )
+    docs = query.stream()
     daily_totals: Dict[int, Dict[str, int]] = {}
     for doc in docs:
         data: Dict[str, Any] = _typed_doc(doc)
@@ -378,7 +414,10 @@ def get_daily_history_for_month(uid: str, date: datetime) -> List[Dict[str, Any]
 
 def get_monthly_history_for_year(uid: str, date: datetime) -> List[Dict[str, Any]]:
     """Gets monthly usage for a specific year by aggregating hourly data."""
-    docs = _store().query(f'users/{uid}/hourly_usage', filters=[('year', '==', date.year)])
+    user_ref = db.collection('users').document(uid)
+    hourly_usage_collection = user_ref.collection('hourly_usage')
+    query = hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year))
+    docs = query.stream()
     monthly_totals: Dict[int, Dict[str, int]] = {}
     for doc in docs:
         data: Dict[str, Any] = _typed_doc(doc)
@@ -405,7 +444,9 @@ def get_monthly_history_for_year(uid: str, date: datetime) -> List[Dict[str, Any
 
 def get_yearly_history(uid: str) -> List[Dict[str, Any]]:
     """Gets yearly usage for all time by aggregating hourly data."""
-    docs = _store().query(f'users/{uid}/hourly_usage')
+    user_ref = db.collection('users').document(uid)
+    hourly_usage_collection = user_ref.collection('hourly_usage')
+    docs = hourly_usage_collection.stream()
     yearly_totals: Dict[int, Dict[str, int]] = {}
     for doc in docs:
         data: Dict[str, Any] = _typed_doc(doc)
@@ -430,7 +471,8 @@ def get_yearly_history(uid: str) -> List[Dict[str, Any]]:
 
 def _read_all_time_usage(uid: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """Read hourly usage once while building both the total and yearly history."""
-    docs = _store().query(f'users/{uid}/hourly_usage')
+    user_ref = db.collection('users').document(uid)
+    hourly_usage_collection = user_ref.collection('hourly_usage')
     stats: Dict[str, Any] = {
         'transcription_seconds': 0,
         'words_transcribed': 0,
@@ -440,7 +482,7 @@ def _read_all_time_usage(uid: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]]
     }
     yearly_totals: Dict[int, Dict[str, int]] = {}
     document_count = 0
-    for doc in docs:
+    for doc in hourly_usage_collection.stream():
         document_count += 1
         data = _typed_doc(doc)
         for key in stats:

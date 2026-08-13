@@ -62,51 +62,11 @@ if 'utils.llm.clients' not in sys.modules:
 from database import vector_db  # noqa: E402
 
 
-class _PortOverIndex:
-    """Adapt the neutral vector-store port (ADR-0033) onto a Pinecone-index-shaped fake."""
-
-    def __init__(self, index):
-        self._i = index
-
-    def upsert(self, namespace, records):
-        recs = list(records)
-        self._i.upsert(vectors=recs, namespace=namespace)
-        return len(recs)
-
-    def query(self, namespace, vector, *, top_k, filter=None, include_metadata=True, include_values=False):
-        return self._i.query(
-            vector=vector,
-            top_k=top_k,
-            include_metadata=include_metadata,
-            include_values=include_values,
-            filter=filter,
-            namespace=namespace,
-        )["matches"]
-
-    def update_metadata(self, namespace, id, set_metadata):
-        self._i.update(id, set_metadata=set_metadata, namespace=namespace)
-
-    def delete_by_ids(self, namespace, ids):
-        ids = list(ids)
-        self._i.delete(ids=ids, namespace=namespace)
-        return len(ids)
-
-    def delete_by_filter(self, namespace, filter):
-        self._i.delete(filter=filter, namespace=namespace)
-
-    def list_ids(self, namespace, *, prefix):
-        yield from self._i.list(prefix=prefix, namespace=namespace)
-
-
 class TestUpsertMemoryVectorsBatch:
     def _setup_mocks(self, monkeypatch, *, index_none=False):
         fake_index = MagicMock()
         fake_index.upsert = MagicMock(return_value={'upserted_count': 2})
-        if index_none:
-            monkeypatch.setattr(vector_db, 'is_vector_available', lambda: False)
-        else:
-            monkeypatch.setattr(vector_db, '_vector_store', lambda: _PortOverIndex(fake_index))
-            monkeypatch.setattr(vector_db, 'is_vector_available', lambda: True)
+        monkeypatch.setattr(vector_db, 'index', None if index_none else fake_index)
 
         fake_embeddings = MagicMock()
         fake_embeddings.embed_documents = MagicMock(
@@ -267,18 +227,23 @@ class TestBatchMemoriesEndpointErrorIsolation:
         return rest if end == -1 else rest[:end]
 
     def test_save_and_upsert_are_separate_steps(self):
-        """The bug was bundling save+upsert in one _persist whose vector failure
-        500s the whole (already-saved) request. They must be separate steps."""
+        """The route delegates one authoritative batch write to MemoryService.
+
+        Vector projection belongs to the canonical outbox, so the HTTP route
+        must not write either the legacy store or Pinecone directly.
+        """
         src = self._batch_fn_source()
         assert 'def _persist' not in src, "save and vector upsert must not be bundled into one fallible step"
-        assert 'save_memories' in src
-        assert 'upsert_memory_vectors_batch' in src
+        assert '.create_external_memory_batch' in src
+        assert 'memory_system=MemorySystem.CANONICAL' in src
+        assert 'memories_db.save_memories' not in src
+        assert 'upsert_memory_vectors_batch' not in src
 
     def test_vector_upsert_failure_is_swallowed(self):
-        """The vector upsert must be wrapped so its failure does not fail the
-        request — proven by the 'memories saved, vectors missing' marker."""
+        """The route disables direct vectors; the retryable outbox owns them."""
         src = self._batch_fn_source()
-        assert 'memories saved, vectors missing' in src
+        assert 'upsert_vectors=False' in src
+        assert 'upsert_memory_vectors_batch' not in src
 
     def test_firestore_write_failure_still_raises_503(self):
         """A genuine Firestore write failure must still surface as a retryable 503."""

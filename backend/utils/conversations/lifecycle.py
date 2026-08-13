@@ -383,6 +383,8 @@ def open_recording_session(
     uid: str,
     recording_session_id: str,
     proposed_conversation_id: str,
+    *,
+    firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Open or resume a durable session through the single lifecycle owner.
 
@@ -394,6 +396,7 @@ def open_recording_session(
             uid,
             recording_session_id,
             proposed_conversation_id,
+            firestore_client=firestore_client,
         )
     except Exception:
         if recording_session_mode() == 'enforce':
@@ -453,6 +456,8 @@ def record_recording_session_event(
     recording_session_id: str,
     conversation_id: str,
     phase: recording_sessions_db.RecordingPhase,
+    *,
+    firestore_client: Any = None,
 ) -> dict[str, Any] | None:
     """Persist and return an ordered client envelope, discarding stale callbacks."""
     try:
@@ -461,6 +466,7 @@ def record_recording_session_event(
             recording_session_id,
             conversation_id,
             phase,
+            firestore_client=firestore_client,
         )
     except Exception:
         if recording_session_mode() == 'enforce':
@@ -520,6 +526,8 @@ def tombstone_recording_session(
     uid: str,
     recording_session_id: str,
     conversation_id: str,
+    *,
+    firestore_client: Any = None,
 ) -> dict[str, Any] | None:
     """Terminally close an empty listen generation before its row is deleted."""
     return record_recording_session_event(
@@ -527,6 +535,7 @@ def tombstone_recording_session(
         recording_session_id,
         conversation_id,
         'discarded',
+        firestore_client=firestore_client,
     )
 
 
@@ -552,6 +561,8 @@ def open_live_recording_session(
     uid: str,
     recording_session_id: str,
     proposed_conversation_id: str,
+    *,
+    firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Open a live binding or require a fresh generation for a missing old row.
 
@@ -562,11 +573,13 @@ def open_live_recording_session(
     existing = recording_sessions_db.get_recording_session(
         uid,
         recording_session_id,
+        firestore_client=firestore_client,
     )
     binding = open_recording_session(
         uid,
         recording_session_id,
         proposed_conversation_id,
+        firestore_client=firestore_client,
     )
     if existing is None:
         return dict(binding) | {'requires_rollover': False}
@@ -580,6 +593,7 @@ def open_live_recording_session(
             uid,
             recording_session_id,
             existing['conversation_id'],
+            firestore_client=firestore_client,
         )
     return dict(binding) | {'requires_rollover': True}
 
@@ -648,6 +662,7 @@ def request_finalization(
     force_process: bool = False,
     extra_updates: Mapping[str, Any] | None = None,
     require_cloud_tasks: bool = False,
+    firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
     if require_cloud_tasks and not is_listen_finalization_dispatch_configured():
@@ -664,6 +679,7 @@ def request_finalization(
             finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
             force_process=force_process,
             extra_updates=extra_updates,
+            firestore_client=firestore_client,
         )
     except FirestoreContentionExhausted as error:
         # An exhausted contention budget is a clean retry boundary: no outbox
@@ -688,7 +704,7 @@ def request_finalization(
                 log=logger,
             )
             return dict(intent) | {'route': 'blocked_byok'}
-        resumed = jobs_db.resume_blocked_byok_job_for_live_session(intent['job_id'])
+        resumed = jobs_db.resume_blocked_byok_job_for_live_session(intent['job_id'], firestore_client=firestore_client)
         return dict(resumed) | {'route': 'pusher'}
 
     if not is_listen_finalization_dispatch_enabled():

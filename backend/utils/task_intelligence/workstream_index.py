@@ -11,7 +11,6 @@ from database.vector_db import (
 )
 from models.workstream import Workstream, WorkstreamStatus
 from models.workstream_association import WorkstreamIndexRebuildReport
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.observability.fallback import record_fallback
 
 
@@ -19,18 +18,18 @@ def refresh_workstream_association_index(
     uid: str,
     workstream_id: str,
     *,
+    firestore_client=None,
     hydrate: Callable[..., Optional[Workstream]] = workstreams_db.get_workstream,
     upsert_index: Callable[..., bool] = upsert_workstream_association_vector,
     delete_index: Callable[..., bool] = delete_workstream_association_vector,
 ) -> bool:
-    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
-        return False
     try:
-        control = workstreams_db.get_task_workflow_control(uid)
+        control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
         workstream = hydrate(
             uid,
             workstream_id,
             account_generation=control.account_generation,
+            firestore_client=firestore_client,
         )
         if workstream is None or workstream.status != WorkstreamStatus.open:
             return delete_index(uid, workstream_id, account_generation=control.account_generation)
@@ -55,18 +54,18 @@ def refresh_workstream_association_index(
 def rebuild_workstream_association_index(
     uid: str,
     *,
+    firestore_client=None,
     list_source: Callable[..., list[Workstream]] = workstreams_db.list_open_workstreams,
     reset_index: Callable[..., bool] = reset_workstream_association_vectors,
     upsert_index: Callable[..., bool] = upsert_workstream_association_vector,
 ) -> WorkstreamIndexRebuildReport:
-    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
-        return WorkstreamIndexRebuildReport(uid=uid, source_count=0, indexed_count=0)
-    control = workstreams_db.get_task_workflow_control(uid)
+    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
     workstreams = [
         item
         for item in list_source(
             uid,
             account_generation=control.account_generation,
+            firestore_client=firestore_client,
         )
         if item.status == WorkstreamStatus.open
     ]

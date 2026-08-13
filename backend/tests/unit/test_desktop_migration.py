@@ -141,7 +141,6 @@ client_stub = _stub_module("database._client")
 mock_db = MagicMock()
 client_stub.db = mock_db
 client_stub.delete_collection_recursive = MagicMock()
-client_stub.run_transactional = MagicMock()  # imported by the Firestore adapter (get_document_store path)
 client_stub.document_id_from_seed = MagicMock(return_value="seed-id")
 client_stub.get_firestore_client = MagicMock(return_value=mock_db)
 
@@ -375,149 +374,298 @@ class TestCreateAdviceValidation:
 
 
 # ===========================================================================
-# 2. STORAGE BEHAVIOR (WP2 port) — inject an in-memory FakeDocumentStore via the
-#    _store() seam and assert on observable behavior/state (ADR-0002), rather than
-#    on raw-Firestore call patterns.
+# 2. WIRE-COMPATIBILITY TESTS (mock Firestore)
 # ===========================================================================
-
-from tests.store_fakes import FakeDocumentStore  # noqa: E402
-
-
-@pytest.fixture
-def store(monkeypatch):
-    fake = FakeDocumentStore()
-    monkeypatch.setattr(users_db, '_store', lambda: fake)
-    monkeypatch.setattr(chat_db, '_store', lambda: fake)
-    monkeypatch.setattr(llm_usage_db, '_store', lambda: fake)
-    return fake
-
-
-def _llm_usage_today_id() -> str:
-    return datetime.now(timezone.utc).strftime('%Y-%m-%d')
 
 
 class TestNotificationSettingsWireCompat:
     """Verify notification settings return Swift-compatible field names."""
 
-    def test_returns_enabled_and_frequency_keys(self, store):
-        store.set('users/test-uid', {'notifications_enabled': False, 'notification_frequency': 2})
-        result = users_db.get_notification_settings('test-uid')
-        assert result == {'enabled': False, 'frequency': 2}
+    def _mock_user_doc(self, data, exists=True):
+        """Create a mock user doc snapshot."""
+        snap = MagicMock()
+        snap.exists = exists
+        snap.to_dict.return_value = data
+        return snap
 
-    def test_defaults_frequency_to_off_when_unset(self, store):
-        store.set('users/test-uid', {})
+    def test_returns_enabled_and_frequency_keys(self):
+        """get_notification_settings returns 'enabled'/'frequency' not 'notifications_enabled'."""
+        snap = self._mock_user_doc({'notifications_enabled': False, 'notification_frequency': 2})
+        mock_db.collection.return_value.document.return_value.get.return_value = snap
         result = users_db.get_notification_settings('test-uid')
-        assert result == {'enabled': True, 'frequency': 0}
 
-    def test_defaults_when_doc_missing(self, store):
+        assert 'enabled' in result
+        assert 'frequency' in result
+        assert 'notifications_enabled' not in result
+        assert 'notification_frequency' not in result
+        assert result['enabled'] is False
+        assert result['frequency'] == 2
+
+    def test_defaults_frequency_to_off_when_unset(self):
+        """Frequency defaults to 0 (Off) when the user doc has no notification_frequency."""
+        snap = self._mock_user_doc({})
+        mock_db.collection.return_value.document.return_value.get.return_value = snap
         result = users_db.get_notification_settings('test-uid')
+
+        assert result['frequency'] == 0
+        assert result['enabled'] is True
+
+    def test_defaults_when_doc_missing(self):
+        """Returns defaults when user doc doesn't exist."""
+        snap = self._mock_user_doc({}, exists=False)
+        mock_db.collection.return_value.document.return_value.get.return_value = snap
+        result = users_db.get_notification_settings('test-uid')
+
         assert result == {'enabled': True, 'frequency': 0}
 
 
 class TestAssistantSettingsWireCompat:
     """Verify assistant settings deep-merge and update_channel handling."""
 
-    def test_get_includes_update_channel(self, store):
-        store.set('users/test-uid', {'assistant_settings': {'focus': {'enabled': True}}, 'update_channel': 'beta'})
+    def _mock_user_doc(self, data, exists=True):
+        snap = MagicMock()
+        snap.exists = exists
+        snap.to_dict.return_value = data
+        return snap
+
+    def test_get_includes_update_channel(self):
+        """get_assistant_settings includes top-level update_channel from user doc."""
+        snap = self._mock_user_doc(
+            {
+                'assistant_settings': {'focus': {'enabled': True}},
+                'update_channel': 'beta',
+            }
+        )
+        mock_db.collection.return_value.document.return_value.get.return_value = snap
         result = users_db.get_assistant_settings('test-uid')
+
         assert result['update_channel'] == 'beta'
         assert result['focus'] == {'enabled': True}
 
-    def test_deep_merge_preserves_sibling_sections(self, store):
-        store.set(
-            'users/test-uid',
-            {'assistant_settings': {'focus': {'enabled': True, 'cooldown_interval': 30}, 'task': {'enabled': False}}},
-        )
+    def test_deep_merge_preserves_sibling_sections(self):
+        """update_assistant_settings deep-merges without destroying sibling sections."""
+        existing_data = {
+            'assistant_settings': {
+                'focus': {'enabled': True, 'cooldown_interval': 30},
+                'task': {'enabled': False},
+            },
+        }
+        snap = self._mock_user_doc(existing_data)
+        mock_db.collection.return_value.document.return_value.get.return_value = snap
         result = users_db.update_assistant_settings('test-uid', {'focus': {'enabled': False}})
+
+        # focus.enabled should be updated, but focus.cooldown_interval preserved
         assert result['focus']['enabled'] is False
         assert result['focus']['cooldown_interval'] == 30
+        # task section should be untouched
         assert result['task'] == {'enabled': False}
-        # Persisted deep-merge (sibling sections intact).
-        stored = store.get('users/test-uid').to_dict()['assistant_settings']
-        assert stored == {'focus': {'enabled': False, 'cooldown_interval': 30}, 'task': {'enabled': False}}
 
-    def test_update_channel_written_to_top_level(self, store):
-        store.set('users/test-uid', {'assistant_settings': {}})
+    def test_update_channel_written_to_top_level(self):
+        """update_assistant_settings writes update_channel to top-level, not inside assistant_settings."""
+        snap = self._mock_user_doc({'assistant_settings': {}})
+        captured_updates = {}
+
+        def capture_update(data):
+            import copy
+
+            captured_updates.update(copy.deepcopy(data))
+
+        mock_ref = mock_db.collection.return_value.document.return_value
+        mock_ref.get.return_value = snap
+        mock_ref.update.side_effect = capture_update
         users_db.update_assistant_settings('test-uid', {'update_channel': 'beta'})
-        stored = store.get('users/test-uid').to_dict()
-        assert stored['update_channel'] == 'beta'
-        assert 'update_channel' not in stored.get('assistant_settings', {})
 
-    def test_raw_assistant_settings_excludes_update_channel(self, store):
-        store.set('users/test-uid', {'assistant_settings': {'focus': {'enabled': True}}, 'update_channel': 'beta'})
+        assert 'update_channel' in captured_updates
+        assert captured_updates['update_channel'] == 'beta'
+        assert 'update_channel' not in captured_updates.get('assistant_settings', {})
+
+    def test_raw_assistant_settings_excludes_update_channel(self):
+        """_get_raw_assistant_settings does NOT include update_channel."""
+        snap = self._mock_user_doc(
+            {
+                'assistant_settings': {'focus': {'enabled': True}},
+                'update_channel': 'beta',
+            }
+        )
+        mock_db.collection.return_value.document.return_value.get.return_value = snap
         result = users_db._get_raw_assistant_settings('test-uid')
+
         assert 'update_channel' not in result
         assert result == {'focus': {'enabled': True}}
-
-
-def _msg(store, uid, doc_id, **fields):
-    fields.setdefault('id', doc_id)
-    fields.setdefault('created_at', datetime.now(timezone.utc))
-    store.set(f'users/{uid}/messages/{doc_id}', fields)
 
 
 class TestDesktopMessagesWireCompat:
     """Verify message field names match cross-platform expectations."""
 
-    def test_save_message_writes_expected_fields(self, store, monkeypatch):
-        monkeypatch.setattr(chat_db, 'acquire_chat_session', lambda uid, app_id=None: 'session-123')
-        store.set('users/test-uid/chat_sessions/session-123', {'id': 'session-123'})
-        result = chat_db.save_message('test-uid', text='hello', sender='human', app_id='my-app')
+    def test_save_message_writes_expected_fields(self):
+        """save_message writes plugin_id, chat_session_id, type='text', from_external_integration=False."""
+        mock_doc_ref = MagicMock()
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value.exists = True
 
-        stored = store.get(f"users/test-uid/messages/{result['id']}").to_dict()
-        assert stored['plugin_id'] == 'my-app'
-        assert stored['app_id'] == 'my-app'
-        assert stored['chat_session_id'] == 'session-123'
-        assert stored['type'] == 'text'
-        assert stored['from_external_integration'] is False
-        assert stored['text'] == 'hello'
-        assert stored['sender'] == 'human'
+        # Mock the db.collection chain for messages and chat_sessions
+        def collection_side_effect(name):
+            col_mock = MagicMock()
+            doc_mock = MagicMock()
+            if name == 'users':
+                doc_mock.collection.return_value.document.return_value = mock_doc_ref
+            col_mock.document.return_value = doc_mock
+            return col_mock
+
+        with patch.object(chat_db, 'acquire_chat_session', return_value='session-123'):
+            with patch.object(chat_db, 'db') as patched_db:
+                patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                    mock_doc_ref
+                )
+                result = chat_db.save_message('test-uid', text='hello', sender='human', app_id='my-app')
+
+        # Verify the doc written to Firestore
+        set_call = mock_doc_ref.set.call_args[0][0]
+        assert set_call['plugin_id'] == 'my-app'
+        assert set_call['app_id'] == 'my-app'
+        assert set_call['chat_session_id'] == 'session-123'
+        assert set_call['type'] == 'text'
+        assert set_call['from_external_integration'] is False
+        assert set_call['text'] == 'hello'
+        assert set_call['sender'] == 'human'
 
 
 class TestSessionScopedQueries:
-    """Verify session-scoped reads/deletes are scoped by chat_session_id, app-scoped by plugin_id."""
+    """Verify session-scoped queries use the correct FieldFilter field name."""
 
-    def test_get_messages_session_scoped_filters_by_session_not_plugin(self, store):
-        _msg(store, 'uid', 'm1', chat_session_id='sess-1', plugin_id='app-x', text='a')
-        _msg(store, 'uid', 'm2', chat_session_id='other', plugin_id='app-x', text='b')
-        result = chat_db.get_messages('uid', chat_session_id='sess-1', app_id='some-app')
-        assert [m['id'] for m in result] == ['m1']
+    def _get_field_filter_fields(self):
+        """Extract field names from FieldFilter calls since last reset."""
+        return [call.args[0] for call in field_filter_stub.FieldFilter.call_args_list if call.args]
 
-    def test_get_messages_app_scoped_filters_by_plugin_id(self, store):
-        _msg(store, 'uid', 'm1', plugin_id='my-app', text='a')
-        _msg(store, 'uid', 'm2', plugin_id='other', text='b')
-        result = chat_db.get_messages('uid', app_id='my-app')
-        assert [m['id'] for m in result] == ['m1']
+    def setup_method(self):
+        field_filter_stub.FieldFilter.reset_mock()
 
-    def test_delete_messages_session_scoped_filters_by_session_not_plugin(self, store):
-        _msg(store, 'uid', 'm1', chat_session_id='sess-1', plugin_id='app-x')
-        _msg(store, 'uid', 'm2', chat_session_id='other', plugin_id='app-x')
-        chat_db.delete_messages('uid', session_id='sess-1')
-        assert store.exists('users/uid/messages/m1') is False
-        assert store.exists('users/uid/messages/m2') is True
+    def test_get_messages_session_scoped_filters_by_session_not_plugin(self):
+        """get_messages with chat_session_id should filter by chat_session_id, NOT plugin_id."""
+        mock_query = MagicMock()
+        mock_query.where.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.stream.return_value = []
 
-    def test_delete_messages_app_scoped_filters_by_plugin_id(self, store):
-        _msg(store, 'uid', 'm1', plugin_id='my-app')
-        _msg(store, 'uid', 'm2', plugin_id='other')
-        chat_db.delete_messages('uid', app_id='my-app')
-        assert store.exists('users/uid/messages/m1') is False
-        assert store.exists('users/uid/messages/m2') is True
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_query
+            chat_db.get_messages('uid', chat_session_id='sess-1', app_id='some-app')
+
+        fields = self._get_field_filter_fields()
+        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
+        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id is given: {fields}"
+
+    def test_get_messages_app_scoped_filters_by_plugin_id(self):
+        """get_messages without chat_session_id should filter by plugin_id."""
+        mock_query = MagicMock()
+        mock_query.where.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_query
+            chat_db.get_messages('uid', app_id='my-app')
+
+        fields = self._get_field_filter_fields()
+        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
+        assert 'chat_session_id' not in fields, f"chat_session_id should NOT be filtered in app-scoped mode: {fields}"
+
+    def test_delete_messages_session_scoped_filters_by_session_not_plugin(self):
+        """delete_messages with session_id should filter by chat_session_id, NOT plugin_id."""
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.where.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            chat_db.delete_messages('uid', session_id='sess-1')
+
+        fields = self._get_field_filter_fields()
+        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
+        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id is given: {fields}"
+
+    def test_delete_messages_app_scoped_filters_by_plugin_id(self):
+        """delete_messages without session_id should filter by plugin_id."""
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.where.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            chat_db.delete_messages('uid', app_id='my-app')
+
+        fields = self._get_field_filter_fields()
+        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
+        assert 'chat_session_id' not in fields, f"chat_session_id should NOT be filtered in app-scoped mode: {fields}"
 
 
 class TestMessageReconcileKeyset:
-    """Keyset journal pagination (WP2 tie-safe start_after, ADR-0018).
+    class FakeDocument:
+        def __init__(self, document_id, payload, exists=True):
+            self.id = document_id
+            self._payload = payload
+            self.exists = exists
 
-    With the port, ties on created_at order deterministically by document id, so pages neither skip
-    nor duplicate rows. (Rigorous tie-safety is proven in the storage-port contract test.)
-    """
+        def to_dict(self):
+            return dict(self._payload)
+
+        def get(self):
+            return self
+
+    class FakeQuery:
+        def __init__(self, collection, after_id=None, requested_limit=None):
+            self.collection = collection
+            self.after_id = after_id
+            self.requested_limit = requested_limit
+
+        def where(self, **_kwargs):
+            return self
+
+        def order_by(self, *_args, **_kwargs):
+            return self
+
+        def start_after(self, document):
+            return self.__class__(self.collection, after_id=document.id)
+
+        def limit(self, value):
+            return self.__class__(self.collection, after_id=self.after_id, requested_limit=value)
+
+        def stream(self):
+            rows = self.collection.rows
+            start = 0
+            if self.after_id is not None:
+                start = next(index for index, row in enumerate(rows) if row.id == self.after_id) + 1
+            end = start + (self.requested_limit or len(rows))
+            return rows[start:end]
+
+    class FakeCollection:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def where(self, **_kwargs):
+            return TestMessageReconcileKeyset.FakeQuery(self)
+
+        def document(self, document_id):
+            return next(
+                (row for row in self.rows if row.id == document_id),
+                TestMessageReconcileKeyset.FakeDocument(document_id, {}, exists=False),
+            )
 
     @staticmethod
-    def _seed(store, doc_id, created_at, *, reported=False, plugin_id=None):
-        store.set(
-            f'users/uid/messages/{doc_id}',
+    def message(document_id, created_at, *, reported=False, plugin_id=None):
+        return TestMessageReconcileKeyset.FakeDocument(
+            document_id,
             {
-                'id': doc_id,
-                'text': doc_id,
+                'id': document_id,
+                'text': document_id,
                 'sender': 'human',
                 'type': 'text',
                 'created_at': created_at,
@@ -527,448 +675,914 @@ class TestMessageReconcileKeyset:
             },
         )
 
-    def test_insert_between_pages_does_not_skip_or_duplicate(self, store):
+    @staticmethod
+    def patched_db(collection):
+        patched_db = MagicMock()
+        patched_db.collection.return_value.document.return_value.collection.return_value = collection
+        return patch.object(chat_db, 'db', patched_db)
+
+    def test_insert_between_pages_does_not_skip_or_duplicate(self):
         now = datetime.now(timezone.utc)
-        for doc_id in ('remote-4', 'remote-3', 'remote-2', 'remote-1'):
-            self._seed(store, doc_id, now)
+        collection = self.FakeCollection(
+            [
+                self.message('remote-4', now),
+                self.message('remote-3', now),
+                self.message('remote-2', now),
+                self.message('remote-1', now),
+            ]
+        )
+        with self.patched_db(collection):
+            first, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
+            collection.rows.insert(0, self.message('remote-new', now))
+            second, next_cursor, _ = chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id=cursor)
 
-        first, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
-        self._seed(store, 'remote-new', now)  # a newer row arrives between pages
-        second, next_cursor, _ = chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id=cursor)
-
-        # created_at ties -> deterministic desc-by-id order: remote-4, remote-3, remote-2, remote-1.
         assert [row['id'] for row in first] == ['remote-4', 'remote-3']
         assert cursor == 'remote-3'
         assert has_more is True
-        assert [row['id'] for row in second] == ['remote-2', 'remote-1']  # remote-new not duplicated/skipped
+        assert [row['id'] for row in second] == ['remote-2', 'remote-1']
         assert next_cursor == 'remote-1'
 
-    def test_reported_rows_advance_cursor_without_consuming_page_capacity(self, store):
+    def test_reported_rows_advance_cursor_without_consuming_page_capacity(self):
         now = datetime.now(timezone.utc)
-        self._seed(store, 'visible-2', now)
-        self._seed(store, 'visible-1', now)
-        self._seed(store, 'reported', now, reported=True)
-
-        rows, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
-        tail_rows, tail_cursor, tail_has_more = chat_db.get_messages_reconcile_page(
-            'uid', limit=2, cursor_message_id=cursor
+        collection = self.FakeCollection(
+            [
+                self.message('visible-2', now),
+                self.message('reported', now, reported=True),
+                self.message('visible-1', now),
+            ]
         )
+        with self.patched_db(collection):
+            rows, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
+            tail_rows, tail_cursor, tail_has_more = chat_db.get_messages_reconcile_page(
+                'uid', limit=2, cursor_message_id=cursor
+            )
 
         assert [row['id'] for row in rows] == ['visible-2', 'visible-1']
         assert cursor == 'visible-1'
         assert has_more is True
-        # Tail scans only the reported row (skipped): no visible rows, and no further page.
         assert tail_rows == []
+        assert tail_cursor is None
         assert tail_has_more is False
 
-    def test_cursor_must_exist_in_authenticated_filter_scope(self, store):
+    def test_cursor_must_exist_in_authenticated_filter_scope(self):
         now = datetime.now(timezone.utc)
-        self._seed(store, 'other-app', now, plugin_id='other')
-        with pytest.raises(chat_db.MessageReconcileCursorError):
-            chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id='other-app', app_id='requested')
-
-
-def _session(store, uid, sid, **fields):
-    fields.setdefault('id', sid)
-    fields.setdefault('updated_at', datetime.now(timezone.utc))
-    fields.setdefault('title', sid)
-    fields.setdefault('message_count', 0)
-    fields.setdefault('starred', False)
-    store.set(f'users/{uid}/chat_sessions/{sid}', fields)
+        collection = self.FakeCollection(
+            [
+                self.message('other-app', now, plugin_id='other'),
+            ]
+        )
+        with self.patched_db(collection):
+            with pytest.raises(chat_db.MessageReconcileCursorError):
+                chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id='other-app', app_id='requested')
 
 
 class TestGetChatSessionsQuery:
-    """Verify get_chat_sessions ordering (updated_at desc) and plugin_id scoping."""
+    """Verify get_chat_sessions query construction."""
 
-    def test_orders_by_updated_at_descending(self, store):
-        _session(store, 'uid', 's1', plugin_id=None, updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
-        _session(store, 'uid', 's2', plugin_id=None, updated_at=datetime(2026, 1, 3, tzinfo=timezone.utc))
-        _session(store, 'uid', 's3', plugin_id=None, updated_at=datetime(2026, 1, 2, tzinfo=timezone.utc))
-        result = chat_db.get_chat_sessions('uid')
-        assert [s['id'] for s in result] == ['s2', 's3', 's1']
+    def setup_method(self):
+        field_filter_stub.FieldFilter.reset_mock()
 
-    def test_filters_by_plugin_id_field(self, store):
-        _session(store, 'uid', 's1', plugin_id='test-app')
-        _session(store, 'uid', 's2', plugin_id='other')
-        result = chat_db.get_chat_sessions('uid', app_id='test-app')
-        assert [s['id'] for s in result] == ['s1']
+    def test_orders_by_updated_at_descending(self):
+        """get_chat_sessions should order by updated_at DESC."""
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.order_by.return_value = mock_query
+        mock_query.where.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            chat_db.get_chat_sessions('uid')
+
+        mock_col.order_by.assert_called_once_with('updated_at', direction='DESCENDING')
+
+    def test_filters_by_plugin_id_field(self):
+        """get_chat_sessions should filter by plugin_id == app_id."""
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.order_by.return_value = mock_query
+        mock_query.where.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            chat_db.get_chat_sessions('uid', app_id='test-app')
+
+        fields = [call.args[0] for call in field_filter_stub.FieldFilter.call_args_list if call.args]
+        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
+        assert 'app_id' not in fields, f"Should use plugin_id, not app_id as filter field: {fields}"
 
 
 class TestCreateChatSession:
     """Verify create_chat_session writes correct fields."""
 
-    def test_default_title_and_counters(self, store):
-        result = chat_db.create_chat_session('uid')
+    def test_default_title_and_counters(self):
+        """create_chat_session with no title uses 'New Chat' and initializes counters."""
+        mock_doc_ref = MagicMock()
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_doc_ref
+            )
+            result = chat_db.create_chat_session('uid')
+
         assert result['title'] == 'New Chat'
         assert result['message_count'] == 0
         assert result['starred'] is False
         assert result['preview'] is None
-        assert store.exists(f"users/uid/chat_sessions/{result['id']}")
+        mock_doc_ref.set.assert_called_once()
 
-    def test_plugin_id_matches_app_id(self, store):
-        result = chat_db.create_chat_session('uid', app_id='my-plugin')
+    def test_plugin_id_matches_app_id(self):
+        """create_chat_session sets both plugin_id and app_id to the given app_id."""
+        mock_doc_ref = MagicMock()
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_doc_ref
+            )
+            result = chat_db.create_chat_session('uid', app_id='my-plugin')
+
         assert result['plugin_id'] == 'my-plugin'
         assert result['app_id'] == 'my-plugin'
 
-    def test_custom_title(self, store):
-        result = chat_db.create_chat_session('uid', title='My Custom Chat')
+    def test_custom_title(self):
+        """create_chat_session uses the provided title."""
+        mock_doc_ref = MagicMock()
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_doc_ref
+            )
+            result = chat_db.create_chat_session('uid', title='My Custom Chat')
+
         assert result['title'] == 'My Custom Chat'
 
 
 class TestAcquireChatSession:
     """Verify acquire_chat_session reuse vs create logic."""
 
-    def test_reuses_existing_session(self, store):
-        _session(store, 'uid', 'existing-session-id', plugin_id='my-app')
-        assert chat_db.acquire_chat_session('uid', app_id='my-app') == 'existing-session-id'
+    def test_reuses_existing_session(self):
+        """acquire_chat_session returns existing session ID when one exists."""
+        mock_doc = MagicMock()
+        mock_doc.id = 'existing-session-id'
+        mock_query = MagicMock()
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = [mock_doc]
 
-    def test_creates_new_session_when_none_exists(self, store, monkeypatch):
-        created = {}
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
+                mock_query
+            )
+            result = chat_db.acquire_chat_session('uid', app_id='my-app')
 
-        def _fake_create(uid, app_id=None):
-            created['args'] = (uid, app_id)
-            return {'id': 'new-session-id'}
+        assert result == 'existing-session-id'
 
-        monkeypatch.setattr(chat_db, 'create_chat_session', _fake_create)
-        assert chat_db.acquire_chat_session('uid', app_id='my-app') == 'new-session-id'
-        assert created['args'] == ('uid', 'my-app')
+    def test_creates_new_session_when_none_exists(self):
+        """acquire_chat_session creates a new session when no matching session found."""
+        mock_query = MagicMock()
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = []  # No existing sessions
+
+        with (
+            patch.object(chat_db, 'db') as patched_db,
+            patch.object(chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}) as mock_create,
+        ):
+            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
+                mock_query
+            )
+            result = chat_db.acquire_chat_session('uid', app_id='my-app')
+
+        assert result == 'new-session-id'
+        mock_create.assert_called_once_with('uid', app_id='my-app')
 
 
 class TestUpdateChatSession:
     """Verify update_chat_session behavior."""
 
-    def test_not_found_returns_none(self, store):
-        assert chat_db.update_chat_session('uid', 'nonexistent-session', title='New Title') is None
+    def test_not_found_returns_none(self):
+        """update_chat_session returns None when session doesn't exist."""
+        mock_ref = MagicMock()
+        mock_ref.get.return_value.exists = False
 
-    def test_title_only_update(self, store):
-        _session(store, 'uid', 'sess-1', title='Old')
-        chat_db.update_chat_session('uid', 'sess-1', title='Updated Title')
-        stored = store.get('users/uid/chat_sessions/sess-1').to_dict()
-        assert stored['title'] == 'Updated Title'
-        assert 'updated_at' in stored
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
+            result = chat_db.update_chat_session('uid', 'nonexistent-session', title='New Title')
 
-    def test_starred_only_update(self, store):
-        store.set('users/uid/chat_sessions/sess-1', {'id': 'sess-1', 'starred': False})
-        chat_db.update_chat_session('uid', 'sess-1', starred=True)
-        stored = store.get('users/uid/chat_sessions/sess-1').to_dict()
-        assert stored['starred'] is True
-        assert 'updated_at' in stored
-        assert 'title' not in stored
+        assert result is None
+        mock_ref.update.assert_not_called()
+
+    def test_title_only_update(self):
+        """update_chat_session with title only updates title and updated_at."""
+        mock_ref = MagicMock()
+        mock_ref.get.return_value.exists = True
+        mock_ref.get.return_value.to_dict.return_value = {'title': 'Updated Title'}
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
+            chat_db.update_chat_session('uid', 'sess-1', title='Updated Title')
+
+        update_call = mock_ref.update.call_args[0][0]
+        assert 'title' in update_call
+        assert 'updated_at' in update_call
+        assert 'starred' not in update_call
+
+    def test_starred_only_update(self):
+        """update_chat_session with starred only updates starred and updated_at."""
+        mock_ref = MagicMock()
+        mock_ref.get.return_value.exists = True
+        mock_ref.get.return_value.to_dict.return_value = {'starred': True}
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
+            chat_db.update_chat_session('uid', 'sess-1', starred=True)
+
+        update_call = mock_ref.update.call_args[0][0]
+        assert 'starred' in update_call
+        assert 'updated_at' in update_call
+        assert 'title' not in update_call
 
 
 class TestDeleteChatSessionCascade:
     """Verify delete_chat_session with cascade_messages."""
 
-    def test_cascade_deletes_messages_then_session(self, store):
-        _session(store, 'uid', 'sess-1')
-        _msg(store, 'uid', 'msg-1', chat_session_id='sess-1')
-        _msg(store, 'uid', 'msg-2', chat_session_id='sess-1')
-        chat_db.delete_chat_session('uid', 'sess-1', cascade_messages=True)
-        assert store.exists('users/uid/chat_sessions/sess-1') is False
-        assert store.list_ids('users/uid/messages') == []
+    def test_cascade_deletes_messages_then_session(self):
+        """delete_chat_session with cascade_messages=True deletes messages first."""
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value.exists = True
+        mock_msg_col = MagicMock()
+        mock_query = MagicMock()
+        mock_msg_col.where.return_value = mock_query
 
-    def test_cascade_nonexistent_session_short_circuits(self, store):
-        assert chat_db.delete_chat_session('uid', 'nonexistent', cascade_messages=True) is False
+        # Return 2 docs on first batch, then empty
+        mock_doc1 = MagicMock()
+        mock_doc1.id = 'msg-1'
+        mock_doc2 = MagicMock()
+        mock_doc2.id = 'msg-2'
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.side_effect = [[mock_doc1, mock_doc2], []]
+
+        mock_batch = MagicMock()
+
+        with patch.object(chat_db, 'db') as patched_db:
+            mock_user_ref = MagicMock()
+            mock_user_ref.collection.side_effect = lambda name: (
+                MagicMock(document=MagicMock(return_value=mock_session_ref))
+                if name == 'chat_sessions'
+                else mock_msg_col
+            )
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            chat_db.delete_chat_session('uid', 'sess-1', cascade_messages=True)
+
+        mock_batch.commit.assert_called_once()
+        mock_session_ref.delete.assert_called_once()
+
+    def test_cascade_nonexistent_session_short_circuits(self):
+        """delete_chat_session with cascade on nonexistent session returns False."""
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value.exists = False
+
+        with patch.object(chat_db, 'db') as patched_db:
+            mock_user_ref = MagicMock()
+            mock_user_ref.collection.return_value.document.return_value = mock_session_ref
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            result = chat_db.delete_chat_session('uid', 'nonexistent', cascade_messages=True)
+
+        assert result is False
 
 
 class TestSaveMessageSessionBehavior:
-    """Verify save_message idempotency, journal-revision arbitration, and session behavior."""
+    """Verify save_message session acquisition and preview behavior."""
 
-    def test_client_message_id_retry_returns_same_row_without_second_write(self, store):
+    def test_client_message_id_retry_returns_same_row_without_second_write(self):
         payload_hash = chat_db._message_idempotency_payload_hash(
-            text='hello', sender='human', app_id=None, session_id=None,
-            metadata='{"origin":"typed_chat"}', message_source='desktop_chat',
+            text='hello',
+            sender='human',
+            app_id=None,
+            session_id=None,
+            metadata='{"origin":"typed_chat"}',
+            message_source='desktop_chat',
         )
-        seeded = {
-            'id': 'turn-1', 'text': 'hello', 'sender': 'human', 'metadata': '{"origin":"typed_chat"}',
-            'message_source': 'desktop_chat', 'chat_session_id': 'session-1',
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'metadata': '{"origin":"typed_chat"}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
             'client_message_payload_hash': payload_hash,
         }
-        store.set('users/uid/messages/turn-1', dict(seeded))
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
 
-        result = chat_db.save_message(
-            'uid', text='hello', sender='human', metadata='{"origin":"typed_chat"}', client_message_id='turn-1'
-        )
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='hello',
+                sender='human',
+                metadata='{"origin":"typed_chat"}',
+                client_message_id='turn-1',
+            )
 
         assert result['id'] == 'turn-1'
         assert result['created'] is False
-        assert store.get('users/uid/messages/turn-1').to_dict() == seeded  # unchanged (no second write)
+        message_ref.create.assert_not_called()
+        message_ref.set.assert_not_called()
 
-    def test_newer_journal_revision_atomically_enriches_delivered_message(self, store):
-        store.set('users/uid/messages/turn-1', {
-            'id': 'turn-1', 'text': 'Agent started.', 'sender': 'ai', 'app_id': None, 'plugin_id': None,
-            'metadata': '{"content_blocks":[{"type":"agent_spawn"}]}', 'message_source': 'desktop_chat',
-            'chat_session_id': 'session-1', 'session_id': 'session-1', 'journal_revision': 10,
+    def test_newer_journal_revision_atomically_enriches_delivered_message(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'Agent started.',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': '{"content_blocks":[{"type":"agent_spawn"}]}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 10,
             'client_message_payload_hash': 'sha256:old',
-        })
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
         enriched_metadata = (
             '{"content_blocks":[{"type":"agent_spawn"},{"type":"agent_completion"}],'
             '"resources":[{"id":"artifact-1","type":"file"}]}'
         )
-        result = chat_db.save_message(
-            'uid', text='Agent started.', sender='ai', session_id='session-1',
-            metadata=enriched_metadata, client_message_id='turn-1', journal_revision=11,
-        )
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='Agent started.',
+                sender='ai',
+                session_id='session-1',
+                metadata=enriched_metadata,
+                client_message_id='turn-1',
+                journal_revision=11,
+            )
 
         assert result['created'] is False
         assert result['updated'] is True
         assert result['journal_revision'] == 11
-        stored = store.get('users/uid/messages/turn-1').to_dict()
-        assert stored['metadata'] == enriched_metadata
-        assert stored['journal_revision'] == 11
+        patched_db.transaction.return_value.update.assert_called_once()
+        update = patched_db.transaction.return_value.update.call_args.args[1]
+        assert update['metadata'] == enriched_metadata
+        assert update['journal_revision'] == 11
 
-    def test_equal_journal_revision_with_different_payload_fails_closed(self, store):
-        store.set('users/uid/messages/turn-1', {
-            'id': 'turn-1', 'text': 'original', 'sender': 'ai', 'app_id': None, 'plugin_id': None,
-            'metadata': None, 'message_source': 'desktop_chat', 'chat_session_id': 'session-1',
-            'session_id': 'session-1', 'journal_revision': 7, 'client_message_payload_hash': 'sha256:original',
-        })
-        with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
-            chat_db.save_message(
-                'uid', text='collision', sender='ai', session_id='session-1',
-                client_message_id='turn-1', journal_revision=7,
+    def test_equal_journal_revision_with_different_payload_fails_closed(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 7,
+            'client_message_payload_hash': 'sha256:original',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
             )
-        assert store.get('users/uid/messages/turn-1').to_dict()['text'] == 'original'  # unchanged
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='collision',
+                    sender='ai',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                    journal_revision=7,
+                )
 
-    def test_older_journal_revision_is_ignored_without_rollback(self, store):
-        store.set('users/uid/messages/turn-1', {
-            'id': 'turn-1', 'text': 'newest', 'sender': 'ai', 'app_id': None, 'plugin_id': None,
-            'metadata': '{"resources":[{"id":"new"}]}', 'message_source': 'desktop_chat',
-            'chat_session_id': 'session-1', 'session_id': 'session-1', 'journal_revision': 12,
+        patched_db.transaction.return_value.update.assert_not_called()
+
+    def test_older_journal_revision_is_ignored_without_rollback(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'newest',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': '{"resources":[{"id":"new"}]}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 12,
             'client_message_payload_hash': 'sha256:newest',
-        })
-        result = chat_db.save_message(
-            'uid', text='stale', sender='ai', session_id='session-1',
-            metadata='{"resources":[]}', client_message_id='turn-1', journal_revision=11,
-        )
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='stale',
+                sender='ai',
+                session_id='session-1',
+                metadata='{"resources":[]}',
+                client_message_id='turn-1',
+                journal_revision=11,
+            )
+
         assert result['updated'] is False
         assert result['journal_revision'] == 12
-        assert store.get('users/uid/messages/turn-1').to_dict()['text'] == 'newest'  # unchanged
+        patched_db.transaction.return_value.update.assert_not_called()
 
-    def test_lost_ack_then_newer_journal_revision_converges_without_remote_receipt(self, store):
-        store.set('users/uid/messages/turn-1', {
-            'id': 'turn-1', 'text': 'original', 'sender': 'ai', 'app_id': None, 'plugin_id': None,
-            'metadata': None, 'message_source': 'desktop_chat', 'chat_session_id': 'session-1',
-            'session_id': 'session-1', 'journal_revision': 2, 'client_message_payload_hash': 'sha256:original',
-        })
-        result = chat_db.save_message(
-            'uid', text='enriched after lost ack', sender='ai', session_id='session-1',
-            metadata='{"content_blocks":[{"type":"agent_completion"}]}', client_message_id='turn-1', journal_revision=3,
-        )
+    def test_lost_ack_then_newer_journal_revision_converges_without_remote_receipt(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 2,
+            'client_message_payload_hash': 'sha256:original',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='enriched after lost ack',
+                sender='ai',
+                session_id='session-1',
+                metadata='{"content_blocks":[{"type":"agent_completion"}]}',
+                client_message_id='turn-1',
+                journal_revision=3,
+            )
+
         assert result['updated'] is True
         assert result['journal_revision'] == 3
+        patched_db.transaction.return_value.update.assert_called_once()
 
-    def test_client_message_id_fingerprint_distinguishes_omitted_from_explicit_session(self, store):
+    def test_client_message_id_fingerprint_distinguishes_omitted_from_explicit_session(self):
         payload_hash = chat_db._message_idempotency_payload_hash(
-            text='hello', sender='human', app_id=None, session_id=None, metadata=None, message_source='desktop_chat',
+            text='hello',
+            sender='human',
+            app_id=None,
+            session_id=None,
+            metadata=None,
+            message_source='desktop_chat',
         )
-        store.set('users/uid/messages/turn-1', {
-            'id': 'turn-1', 'text': 'hello', 'sender': 'human', 'metadata': None, 'message_source': 'desktop_chat',
-            'chat_session_id': 'session-1', 'client_message_payload_hash': payload_hash,
-        })
-        with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
-            chat_db.save_message('uid', text='hello', sender='human', session_id='session-1', client_message_id='turn-1')
-
-    def test_client_message_id_payload_collision_is_rejected(self, store):
-        store.set('users/uid/messages/turn-1', {
-            'id': 'turn-1', 'text': 'original', 'sender': 'human', 'metadata': None,
-            'message_source': 'desktop_chat', 'chat_session_id': 'session-1',
-        })
-        with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
-            chat_db.save_message('uid', text='different', sender='human', session_id='session-1', client_message_id='turn-1')
-
-    def test_legacy_client_message_id_rejects_different_app_when_retry_omits_app(self, store):
-        store.set('users/uid/messages/turn-1', {
-            'id': 'turn-1', 'text': 'hello', 'sender': 'human', 'app_id': 'different-app', 'plugin_id': 'different-app',
-            'metadata': None, 'message_source': 'desktop_chat', 'chat_session_id': 'session-1',
-        })
-        with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
-            chat_db.save_message('uid', text='hello', sender='human', client_message_id='turn-1')
-
-    def test_legacy_race_validates_the_requested_session_not_the_locally_acquired_session(self, store, monkeypatch):
-        monkeypatch.setattr(chat_db, 'acquire_chat_session', lambda uid, app_id=None: 'locally-acquired-session')
-        winner = {
-            'id': 'turn-1', 'text': 'hello', 'sender': 'human', 'app_id': None, 'plugin_id': None, 'metadata': None,
-            'message_source': 'desktop_chat', 'chat_session_id': 'winner-session', 'session_id': 'winner-session',
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'client_message_payload_hash': payload_hash,
         }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
 
-        # Simulate a concurrent writer winning the create: absent at the exists-check, then create
-        # loses the race (AlreadyExists) and a re-read sees the winner's row (a different session).
-        def racing_create(path, data):
-            store.set(path, winner)
-            raise chat_db.AlreadyExists('concurrent writer won')
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='hello',
+                    sender='human',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                )
 
-        monkeypatch.setattr(store, 'create', racing_create)
+        message_ref.create.assert_not_called()
 
-        result = chat_db.save_message('uid', text='hello', sender='human', client_message_id='turn-1')
+    def test_client_message_id_payload_collision_is_rejected(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'human',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='different',
+                    sender='human',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                )
+
+        message_ref.create.assert_not_called()
+
+    def test_legacy_client_message_id_rejects_different_app_when_retry_omits_app(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'app_id': 'different-app',
+            'plugin_id': 'different-app',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='hello',
+                    sender='human',
+                    client_message_id='turn-1',
+                )
+
+        message_ref.create.assert_not_called()
+
+    def test_legacy_race_validates_the_requested_session_not_the_locally_acquired_session(self):
+        missing = MagicMock()
+        missing.exists = False
+        winner = MagicMock()
+        winner.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'winner-session',
+            'session_id': 'winner-session',
+        }
+        message_ref = MagicMock()
+        message_ref.get.side_effect = [missing, winner]
+        message_ref.create.side_effect = chat_db.AlreadyExists('concurrent writer won')
+
+        with (
+            patch.object(chat_db, 'acquire_chat_session', return_value='locally-acquired-session'),
+            patch.object(chat_db, 'db') as patched_db,
+        ):
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='hello',
+                sender='human',
+                client_message_id='turn-1',
+            )
 
         assert result['id'] == 'turn-1'
         assert result['session_id'] == 'winner-session'
         assert result['created'] is False
+        message_ref.create.assert_called_once()
 
-    def test_explicit_session_id_skips_acquire(self, store, monkeypatch):
-        calls = []
-        monkeypatch.setattr(chat_db, 'acquire_chat_session', lambda *a, **k: calls.append(1) or 'x')
-        store.set('users/uid/chat_sessions/my-session', {'id': 'my-session'})
-        chat_db.save_message('uid', text='hello', sender='human', session_id='my-session')
-        assert calls == []
+    def test_explicit_session_id_skips_acquire(self):
+        """save_message with explicit session_id doesn't call acquire_chat_session."""
+        mock_doc_ref = MagicMock()
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value.exists = True
 
-    def test_preview_truncated_to_100_chars(self, store, monkeypatch):
-        monkeypatch.setattr(chat_db, 'acquire_chat_session', lambda uid, app_id=None: 'sess-1')
-        store.set('users/uid/chat_sessions/sess-1', {'id': 'sess-1'})
-        chat_db.save_message('uid', text='x' * 200, sender='human')
-        stored_session = store.get('users/uid/chat_sessions/sess-1').to_dict()
-        assert len(stored_session['preview']) == 100
+        with patch.object(chat_db, 'acquire_chat_session') as mock_acquire, patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_doc_ref
+            )
+            # Make session ref accessible for the session update path
+            mock_doc_ref.set.return_value = None
+            chat_db.save_message('uid', text='hello', sender='human', session_id='my-session')
+
+        mock_acquire.assert_not_called()
+
+    def test_preview_truncated_to_100_chars(self):
+        """save_message truncates preview to 100 characters."""
+        long_text = 'x' * 200
+        mock_msg_ref = MagicMock()
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value.exists = True
+
+        with (
+            patch.object(chat_db, 'acquire_chat_session', return_value='sess-1'),
+            patch.object(chat_db, 'db') as patched_db,
+        ):
+            # Mock message write
+            patched_db.collection.return_value.document.return_value.collection.side_effect = lambda name: (
+                MagicMock(document=MagicMock(return_value=mock_session_ref))
+                if name == 'chat_sessions'
+                else MagicMock(document=MagicMock(return_value=mock_msg_ref))
+            )
+            chat_db.save_message('uid', text=long_text, sender='human')
+
+        # Check the session update call has truncated preview
+        if mock_session_ref.update.called:
+            update_call = mock_session_ref.update.call_args[0][0]
+            assert len(update_call['preview']) == 100
 
 
 class TestDeleteMessagesCount:
     """Verify delete_messages returns correct count."""
 
-    def test_returns_zero_when_no_messages(self, store):
-        assert chat_db.delete_messages('uid', app_id='my-app') == 0
+    def test_returns_zero_when_no_messages(self):
+        """delete_messages returns 0 when no matching messages found."""
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.where.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = []
 
-    def test_returns_count_of_deleted_messages(self, store):
-        """delete_messages returns the total count of deleted messages."""
-        for i in range(3):
-            _msg(store, 'uid', f'msg-{i}', plugin_id='my-app')
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            result = chat_db.delete_messages('uid', app_id='my-app')
 
-        assert chat_db.delete_messages('uid', app_id='my-app') == 3
-        assert chat_db.get_messages('uid', app_id='my-app') == []
+        assert result == 0
 
-    def test_delete_applies_inverse_session_metadata_in_same_transaction(self, store):
-        """Source deletion and inverse count/ID/preview updates commit together (ADR-0002)."""
-        _msg(store, 'uid', 'msg-1', id='logical-1', plugin_id=None, chat_session_id='sess-1', text='older')
-        _msg(store, 'uid', 'msg-2', id='logical-2', plugin_id=None, chat_session_id='sess-1', text='latest')
-        _session(
-            store, 'uid', 'sess-1',
-            message_count=5, message_ids=['logical-1', 'logical-2', 'older-id'], preview='latest',
+    def test_returns_count_of_deleted_messages(self):
+        """delete_messages returns total count of deleted messages."""
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.where.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+
+        doc1 = MagicMock()
+        doc1.id = 'msg-1'
+        doc2 = MagicMock()
+        doc2.id = 'msg-2'
+        doc3 = MagicMock()
+        doc3.id = 'msg-3'
+        mock_query.stream.side_effect = [[doc1, doc2, doc3], []]
+
+        mock_batch = MagicMock()
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            patched_db.batch.return_value = mock_batch
+            result = chat_db.delete_messages('uid', app_id='my-app')
+
+        assert result == 3
+        mock_batch.commit.assert_called_once()
+
+    def test_delete_applies_inverse_session_metadata_in_same_preconditioned_batch(self):
+        """Source deletion and inverse count/ID/preview updates commit together."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
+
+        doc1 = MagicMock()
+        doc1.id = 'msg-1'
+        doc1.update_time = object()
+        doc1.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1', 'text': 'older'}
+        doc2 = MagicMock()
+        doc2.id = 'msg-2'
+        doc2.update_time = object()
+        doc2.to_dict.return_value = {'id': 'logical-2', 'chat_session_id': 'sess-1', 'text': 'latest'}
+        mock_delete_query.stream.side_effect = [[doc1, doc2], []]
+
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {
+            'message_count': 5,
+            'message_ids': ['logical-1', 'logical-2', 'older-id'],
+            'preview': 'latest',
+        }
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
+
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
         )
+        mock_batch = MagicMock()
 
-        result = chat_db.delete_messages('uid', app_id=None)
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.side_effect = lambda **kwargs: ('last_update', kwargs['last_update_time'])
+            result = chat_db.delete_messages('uid', app_id=None)
 
         assert result == 2
-        session = store.get('users/uid/chat_sessions/sess-1').to_dict()
-        assert session['message_count'] == 3
-        assert session['message_ids'] == ['older-id']
-        assert session['preview'] is None
-        assert not store.exists('users/uid/messages/msg-1')
-        assert not store.exists('users/uid/messages/msg-2')
+        mock_delete_query.limit.assert_called_with(chat_db.DELETE_MESSAGES_BATCH_LIMIT)
+        mock_batch.update.assert_called_once_with(
+            mock_session_ref,
+            {
+                'message_ids': firestore_stub.ArrayRemove(['logical-1', 'logical-2']),
+                'message_count': firestore_stub.Increment(-2),
+                'preview': None,
+            },
+            option=('last_update', mock_session_snapshot.update_time),
+        )
+        assert mock_batch.delete.call_count == 2
+        assert all(call.kwargs['option'][0] == 'last_update' for call in mock_batch.delete.call_args_list)
 
-    def test_decrement_is_bounded_by_stored_count(self, store):
-        """message_count never goes negative even if the stored counter understates reality."""
-        _msg(store, 'uid', 'msg-1', id='logical-1', plugin_id=None, chat_session_id='sess-1', text='a')
-        _msg(store, 'uid', 'msg-2', id='logical-2', plugin_id=None, chat_session_id='sess-1', text='b')
-        _session(store, 'uid', 'sess-1', message_count=1)  # understated vs the 2 messages present
+    def test_overlapping_clear_requeries_after_precondition_conflict(self):
+        """A losing clear never applies a second decrement to already-deleted docs."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
 
-        assert chat_db.delete_messages('uid', app_id=None) == 2
-        assert store.get('users/uid/chat_sessions/sess-1').to_dict()['message_count'] == 0
+        message = MagicMock()
+        message.id = 'msg-1'
+        message.update_time = object()
+        message.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1'}
+        mock_delete_query.stream.side_effect = [[message], []]
 
-    def test_paginates_across_batches_and_terminates(self, store):
-        """A backlog larger than one batch is drained fully, and the requery loop terminates."""
-        total = chat_db.DELETE_MESSAGES_BATCH_LIMIT + 5
-        for i in range(total):
-            _msg(store, 'uid', f'msg-{i}', plugin_id='bulk')
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {'message_count': 1}
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
 
-        assert chat_db.delete_messages('uid', app_id='bulk') == total
-        assert chat_db.get_messages('uid', app_id='bulk', limit=total) == []
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
+        )
+        mock_batch = MagicMock()
+        mock_batch.commit.side_effect = chat_db.FailedPrecondition('overlapping clear won')
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.return_value = object()
+            result = chat_db.delete_messages('uid', app_id=None)
+
+        assert result == 0
+        mock_batch.commit.assert_called_once()
+
+    def test_persistent_precondition_conflict_is_bounded(self):
+        """A hot session cannot hold a sync worker in an unbounded retry loop."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
+
+        message = MagicMock()
+        message.id = 'msg-1'
+        message.update_time = object()
+        message.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1'}
+        mock_delete_query.stream.side_effect = [[message] for _ in range(chat_db.DELETE_MESSAGES_CONFLICT_RETRIES)]
+
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {'message_count': 1}
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
+
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
+        )
+        mock_batch = MagicMock()
+        mock_batch.commit.side_effect = chat_db.FailedPrecondition('persistent conflict')
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.return_value = object()
+            with pytest.raises(chat_db.FailedPrecondition, match='persistent conflict'):
+                chat_db.delete_messages('uid', app_id=None)
+
+        assert mock_batch.commit.call_count == chat_db.DELETE_MESSAGES_CONFLICT_RETRIES
 
 
 class TestLlmUsageBucketParam:
     """Verify configurable bucket parameter in LLM usage functions."""
 
-    def test_custom_bucket_dual_writes(self, store):
+    def test_custom_bucket_dual_writes(self):
         """record_llm_usage_bucket with custom bucket writes to both bucket and bucket_account."""
-        llm_usage_db.record_llm_usage_bucket(
-            'uid',
-            input_tokens=10,
-            output_tokens=20,
-            bucket='custom_feature',
-            account='openai',
-        )
+        mock_ref = MagicMock()
 
-        data = store.get(f'users/uid/llm_usage/{_llm_usage_today_id()}').to_dict()
+        with patch.object(llm_usage_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
+            llm_usage_db.record_llm_usage_bucket(
+                'uid',
+                input_tokens=10,
+                output_tokens=20,
+                bucket='custom_feature',
+                account='openai',
+            )
+
+        set_call = mock_ref.set.call_args
+        update_data = set_call[0][0]
         # Primary bucket
-        assert data['custom_feature']['input_tokens'] == 10
-        assert data['custom_feature']['output_tokens'] == 20
-        assert data['custom_feature']['call_count'] == 1
+        assert 'custom_feature.input_tokens' in update_data
+        assert 'custom_feature.output_tokens' in update_data
+        assert 'custom_feature.call_count' in update_data
         # Per-account bucket
-        assert data['custom_feature_openai']['input_tokens'] == 10
-        assert data['custom_feature_openai']['output_tokens'] == 20
+        assert 'custom_feature_openai.input_tokens' in update_data
+        assert 'custom_feature_openai.output_tokens' in update_data
 
-    def test_get_total_llm_cost_custom_bucket(self, store):
+    def test_get_total_llm_cost_custom_bucket(self):
         """get_total_llm_cost with custom bucket reads from the specified bucket only."""
-        store.set(
-            'users/uid/llm_usage/2025-01-15',
-            {
-                'custom_feature': {'cost_usd': 0.5},
-                'custom_feature_openai': {'cost_usd': 0.5},  # Should NOT be double-counted
-                'desktop_chat': {'cost_usd': 1.0},  # Different bucket, should be excluded
-            },
-        )
+        mock_doc1 = MagicMock()
+        mock_doc1.to_dict.return_value = {
+            'custom_feature': {'cost_usd': 0.5},
+            'custom_feature_openai': {'cost_usd': 0.5},  # Should NOT be double-counted
+            'desktop_chat': {'cost_usd': 1.0},  # Different bucket, should be excluded
+        }
+        mock_col = MagicMock()
+        mock_col.stream.return_value = [mock_doc1]
 
-        result = llm_usage_db.get_total_llm_cost('uid', bucket='custom_feature')
+        with patch.object(llm_usage_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            result = llm_usage_db.get_total_llm_cost('uid', bucket='custom_feature')
 
         assert result == 0.5  # Only custom_feature, not custom_feature_openai or desktop_chat
 
 
 # ===========================================================================
-# 3. SCORE COMPUTATION TESTS (storage port)
+# 3. SCORE COMPUTATION TESTS (mock Firestore)
 # ===========================================================================
-
-from types import SimpleNamespace  # noqa: E402
-
-
-class _ScriptedScoreStore:
-    """Minimal DocumentStore stand-in for get_daily_score / get_scores.
-
-    Dispatches each ``query`` by the field it filters on — ``due_at`` (daily window),
-    ``created_at`` (weekly window), or no filter (overall) — to a scripted list of task dicts,
-    and records the filters so a test can assert which field/bounds the score query used.
-    """
-
-    def __init__(self, *, daily=None, weekly=None, overall=None):
-        self.daily = list(daily or [])
-        self.weekly = list(weekly or [])
-        self.overall = list(overall or [])
-        self.filters = []
-
-    def query(self, collection, *, filters=None, **kwargs):
-        filters = list(filters or [])
-        self.filters.extend(filters)
-        fields = {field for field, _op, _value in filters}
-        if 'due_at' in fields:
-            rows = self.daily
-        elif 'created_at' in fields:
-            rows = self.weekly
-        else:
-            rows = self.overall
-        return [SimpleNamespace(id=row.get('id', 'doc-1'), to_dict=(lambda row=row: dict(row))) for row in rows]
-
-    def count(self, collection, *, filters=None):
-        # Overall score now counts via ``store.count`` instead of materializing the collection.
-        # Mirror ``query``'s window routing, then apply the equality filters (completed/deleted).
-        filters = list(filters or [])
-        self.filters.extend(filters)
-        fields = {field for field, _op, _value in filters}
-        if 'due_at' in fields:
-            rows = self.daily
-        elif 'created_at' in fields:
-            rows = self.weekly
-        else:
-            rows = self.overall
-        return sum(
-            1 for row in rows if all(row.get(f) == v for f, _op, v in filters if f not in ('due_at', 'created_at'))
-        )
 
 
 class TestDailyScoreWireCompat:
     """Verify daily-score returns Swift DailyScore-compatible fields."""
 
-    def test_daily_score_uses_completed_tasks_and_total_tasks(self, monkeypatch):
+    def _make_mock_doc(self, data):
+        doc = MagicMock()
+        doc.to_dict.return_value = data
+        doc.id = data.get('id', 'doc-1')
+        return doc
+
+    def test_daily_score_uses_completed_tasks_and_total_tasks(self):
         """get_daily_score returns completed_tasks/total_tasks, not completed/total."""
-        store = _ScriptedScoreStore(daily=[{'completed': True}, {'completed': False}])
-        monkeypatch.setattr(action_items_db, '_store', lambda: store)
-        result = action_items_db.get_daily_score('test-uid', date='2025-01-15')
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_query.where.return_value = mock_query
+        mock_query.stream.return_value = [
+            self._make_mock_doc({'completed': True}),
+            self._make_mock_doc({'completed': False}),
+        ]
+        mock_col.where.return_value = mock_query
+
+        with patch.object(action_items_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            result = action_items_db.get_daily_score('test-uid', date='2025-01-15')
 
         assert 'completed_tasks' in result, f"Expected completed_tasks, got keys: {result.keys()}"
         assert 'total_tasks' in result, f"Expected total_tasks, got keys: {result.keys()}"
@@ -983,21 +1597,60 @@ class TestDailyScoreWireCompat:
 class TestScoreComputation:
     """Verify score computation logic."""
 
-    def test_weekly_uses_created_at_not_due_at(self, monkeypatch):
+    def _make_mock_doc(self, data):
+        doc = MagicMock()
+        doc.to_dict.return_value = data
+        doc.id = data.get('id', 'doc-1')
+        return doc
+
+    def test_weekly_uses_created_at_not_due_at(self):
         """get_scores weekly query uses created_at field, not due_at."""
-        store = _ScriptedScoreStore(
-            daily=[],
-            weekly=[{'completed': True, 'created_at': datetime.now(timezone.utc)}],
-            overall=[{'completed': True}],
-        )
-        monkeypatch.setattr(action_items_db, '_store', lambda: store)
-        action_items_db.get_scores('test-uid', date='2025-01-15')
+        mock_col = MagicMock()
 
-        captured_fields = [field for field, _op, _value in store.filters]
-        # Verify created_at was used in filter calls (for the weekly window).
-        assert 'created_at' in captured_fields, f"Expected created_at in filters, got: {captured_fields}"
+        # Daily query (due_at) returns empty
+        daily_query = MagicMock()
+        daily_query.where.return_value = daily_query
+        daily_query.stream.return_value = []
 
-    def test_weekly_window_spans_seven_days_ending_on_date(self, monkeypatch):
+        # Weekly query (created_at) returns 1 completed task
+        weekly_query = MagicMock()
+        weekly_query.where.return_value = weekly_query
+        weekly_doc = self._make_mock_doc({'completed': True, 'created_at': datetime.now(timezone.utc)})
+        weekly_query.stream.return_value = [weekly_doc]
+
+        # Overall stream returns same
+        mock_col.stream.return_value = [weekly_doc]
+
+        # Track which field filters are created
+        captured_filters = []
+        original_ff = action_items_db.FieldFilter
+
+        def tracking_filter(field, op, value):
+            captured_filters.append(field)
+            return original_ff(field, op, value)
+
+        call_count = [0]
+
+        def col_where(**kwargs):
+            call_count[0] += 1
+            if call_count[0] <= 1:
+                return daily_query
+            else:
+                return weekly_query
+
+        mock_col.where = col_where
+
+        with (
+            patch.object(action_items_db, 'db') as patched_db,
+            patch.object(action_items_db, 'FieldFilter', side_effect=tracking_filter),
+        ):
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+
+        # Verify created_at was used in filter calls (for weekly query)
+        assert 'created_at' in captured_filters, f"Expected created_at in filters, got: {captured_filters}"
+
+    def test_weekly_window_spans_seven_days_ending_on_date(self):
         """The weekly window is the 7 days ending on `date`, i.e. [date-6, date+1).
 
         Regression: it was [date-7, date+1) — 8 calendar days — which over-counted
@@ -1006,49 +1659,145 @@ class TestScoreComputation:
         """
         from datetime import timedelta
 
-        store = _ScriptedScoreStore()
-        monkeypatch.setattr(action_items_db, '_store', lambda: store)
-        action_items_db.get_scores('test-uid', date='2026-07-19')
+        mock_col = MagicMock()
+        empty = MagicMock()
+        empty.where.return_value = empty
+        empty.stream.return_value = []
+        mock_col.where.return_value = empty
+        mock_col.stream.return_value = []
+
+        captured = []  # (field, op, value)
+        original_ff = action_items_db.FieldFilter
+
+        def tracking_filter(field, op, value):
+            captured.append((field, op, value))
+            return original_ff(field, op, value)
+
+        with (
+            patch.object(action_items_db, 'db') as patched_db,
+            patch.object(action_items_db, 'FieldFilter', side_effect=tracking_filter),
+        ):
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            action_items_db.get_scores('test-uid', date='2026-07-19')
 
         day = datetime(2026, 7, 19, tzinfo=timezone.utc)
-        created_at_lower = [value for (field, op, value) in store.filters if field == 'created_at' and op == '>=']
-        assert created_at_lower, f"no created_at >= filter captured: {store.filters}"
+        created_at_lower = [v for (f, op, v) in captured if f == 'created_at' and op == '>=']
+        assert created_at_lower, f"no created_at >= filter captured: {captured}"
         # 7 days ending on 2026-07-19 -> lower bound is 2026-07-13 (day-6), not 2026-07-12 (day-7).
         assert created_at_lower[0] == day - timedelta(days=6), created_at_lower[0]
 
-    def test_default_tab_daily_when_highest(self, monkeypatch):
+    def test_default_tab_daily_when_highest(self):
         """default_tab is 'daily' when daily has tasks and highest score."""
-        store = _ScriptedScoreStore(
-            daily=[{'completed': True}, {'completed': True}],  # 2/2 = 100%
-            weekly=[{'completed': True}, {'completed': False}],  # 1/2 = 50%
-            overall=[{'completed': True}, {'completed': False}],  # 1/2 = 50%
-        )
-        monkeypatch.setattr(action_items_db, '_store', lambda: store)
-        result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        mock_col = MagicMock()
+
+        # Daily: 2/2 completed = 100%
+        daily_docs = [
+            self._make_mock_doc({'completed': True}),
+            self._make_mock_doc({'completed': True}),
+        ]
+        daily_query = MagicMock()
+        daily_query.where.return_value = daily_query
+        daily_query.stream.return_value = daily_docs
+
+        # Weekly: 1/2 = 50%
+        weekly_docs = [
+            self._make_mock_doc({'completed': True}),
+            self._make_mock_doc({'completed': False}),
+        ]
+        weekly_query = MagicMock()
+        weekly_query.where.return_value = weekly_query
+        weekly_query.stream.return_value = weekly_docs
+
+        # Overall: same as weekly
+        mock_col.stream.return_value = weekly_docs
+
+        call_count = [0]
+
+        def col_where(**kwargs):
+            call_count[0] += 1
+            if call_count[0] <= 1:
+                return daily_query
+            else:
+                return weekly_query
+
+        mock_col.where = col_where
+
+        with patch.object(action_items_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            result = action_items_db.get_scores('test-uid', date='2025-01-15')
 
         assert result['default_tab'] == 'daily'
 
-    def test_default_tab_weekly_when_no_daily_tasks(self, monkeypatch):
+    def test_default_tab_weekly_when_no_daily_tasks(self):
         """default_tab is 'weekly' when daily has no tasks."""
-        store = _ScriptedScoreStore(
-            daily=[],  # 0 tasks
-            weekly=[{'completed': True}],  # 1/1 = 100%
-            overall=[{'completed': True}, {'completed': False}],  # 1/2 = 50%
-        )
-        monkeypatch.setattr(action_items_db, '_store', lambda: store)
-        result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        mock_col = MagicMock()
+
+        # Daily: 0 tasks
+        daily_query = MagicMock()
+        daily_query.where.return_value = daily_query
+        daily_query.stream.return_value = []
+
+        # Weekly: 1/1 = 100%
+        weekly_doc = self._make_mock_doc({'completed': True})
+        weekly_query = MagicMock()
+        weekly_query.where.return_value = weekly_query
+        weekly_query.stream.return_value = [weekly_doc]
+
+        # Overall: 1/2 = 50%
+        overall_docs = [
+            self._make_mock_doc({'completed': True}),
+            self._make_mock_doc({'completed': False}),
+        ]
+        mock_col.stream.return_value = overall_docs
+
+        call_count = [0]
+
+        def col_where(**kwargs):
+            call_count[0] += 1
+            if call_count[0] <= 1:
+                return daily_query
+            else:
+                return weekly_query
+
+        mock_col.where = col_where
+
+        with patch.object(action_items_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            result = action_items_db.get_scores('test-uid', date='2025-01-15')
 
         assert result['default_tab'] == 'weekly'
 
-    def test_default_tab_overall_when_lowest_weekly(self, monkeypatch):
+    def test_default_tab_overall_when_lowest_weekly(self):
         """default_tab is 'overall' when overall score exceeds weekly."""
-        store = _ScriptedScoreStore(
-            daily=[],  # 0 tasks
-            weekly=[{'completed': False}],  # 0/1 = 0%
-            overall=[{'completed': True}],  # 1/1 = 100%
-        )
-        monkeypatch.setattr(action_items_db, '_store', lambda: store)
-        result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        mock_col = MagicMock()
+
+        # Daily: 0 tasks
+        daily_query = MagicMock()
+        daily_query.where.return_value = daily_query
+        daily_query.stream.return_value = []
+
+        # Weekly: 0/1 = 0%
+        weekly_query = MagicMock()
+        weekly_query.where.return_value = weekly_query
+        weekly_query.stream.return_value = [self._make_mock_doc({'completed': False})]
+
+        # Overall: 1/1 = 100%
+        mock_col.stream.return_value = [self._make_mock_doc({'completed': True})]
+
+        call_count = [0]
+
+        def col_where(**kwargs):
+            call_count[0] += 1
+            if call_count[0] <= 1:
+                return daily_query
+            else:
+                return weekly_query
+
+        mock_col.where = col_where
+
+        with patch.object(action_items_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            result = action_items_db.get_scores('test-uid', date='2025-01-15')
 
         assert result['default_tab'] == 'overall'
 
@@ -1061,58 +1810,83 @@ class TestScoreComputation:
 class TestLlmUsage:
     """Verify LLM usage dual-write and cost summation."""
 
-    def test_record_dual_writes_desktop_chat_and_account(self, store):
+    def test_record_dual_writes_desktop_chat_and_account(self):
         """record_llm_usage_bucket dual-writes both 'desktop_chat' and 'desktop_chat_{account}'."""
-        llm_usage_db.record_llm_usage_bucket(
-            'test-uid',
-            input_tokens=100,
-            output_tokens=50,
-            account='anthropic',
-        )
+        mock_ref = MagicMock()
+        with patch.object(llm_usage_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
+            llm_usage_db.record_llm_usage_bucket(
+                'test-uid',
+                input_tokens=100,
+                output_tokens=50,
+                account='anthropic',
+            )
 
-        data = store.get(f'users/test-uid/llm_usage/{_llm_usage_today_id()}').to_dict()
-        # Both desktop_chat and desktop_chat_anthropic buckets are written.
-        assert 'desktop_chat' in data
-        assert 'desktop_chat_anthropic' in data
-        # input_tokens increment is present for both buckets
-        assert data['desktop_chat']['input_tokens'] == 100
-        assert data['desktop_chat_anthropic']['input_tokens'] == 100
+        # Verify set(merge=True) was called
+        mock_ref.set.assert_called_once()
+        update_data = mock_ref.set.call_args[0][0]
+        assert mock_ref.set.call_args[1] == {'merge': True}
 
-    def test_record_default_account_omi(self, store):
+        # Must have both desktop_chat and desktop_chat_anthropic keys
+        desktop_chat_keys = [k for k in update_data if k.startswith('desktop_chat.')]
+        desktop_chat_acct_keys = [k for k in update_data if k.startswith('desktop_chat_anthropic.')]
+        assert len(desktop_chat_keys) > 0, "Missing desktop_chat.* keys"
+        assert len(desktop_chat_acct_keys) > 0, "Missing desktop_chat_anthropic.* keys"
+
+        # Verify input_tokens increment is present for both buckets
+        assert 'desktop_chat.input_tokens' in update_data
+        assert 'desktop_chat_anthropic.input_tokens' in update_data
+
+    def test_record_default_account_omi(self):
         """Default account produces desktop_chat_omi keys."""
-        llm_usage_db.record_llm_usage_bucket('test-uid', input_tokens=10, output_tokens=5)
+        mock_ref = MagicMock()
+        with patch.object(llm_usage_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
+            llm_usage_db.record_llm_usage_bucket('test-uid', input_tokens=10, output_tokens=5)
 
-        data = store.get(f'users/test-uid/llm_usage/{_llm_usage_today_id()}').to_dict()
-        assert data['desktop_chat_omi']['input_tokens'] == 10
+        update_data = mock_ref.set.call_args[0][0]
+        assert 'desktop_chat_omi.input_tokens' in update_data
 
-    def test_get_total_cost_only_sums_desktop_chat_bucket(self, store):
+    def test_get_total_cost_only_sums_desktop_chat_bucket(self):
         """get_total_llm_cost only sums the desktop_chat bucket, not desktop_chat_{account}."""
-        store.set(
-            'users/test-uid/llm_usage/day-1',
-            {
-                'desktop_chat': {'cost_usd': 0.05, 'call_count': 10},
-                'desktop_chat_anthropic': {'cost_usd': 0.05, 'call_count': 10},
-            },
-        )
-        store.set(
-            'users/test-uid/llm_usage/day-2',
-            {
-                'desktop_chat': {'cost_usd': 0.03, 'call_count': 5},
-                'desktop_chat_omi': {'cost_usd': 0.03, 'call_count': 5},
-            },
-        )
+        doc1 = MagicMock()
+        doc1.to_dict.return_value = {
+            'desktop_chat': {'cost_usd': 0.05, 'call_count': 10},
+            'desktop_chat_anthropic': {'cost_usd': 0.05, 'call_count': 10},
+        }
+        doc2 = MagicMock()
+        doc2.to_dict.return_value = {
+            'desktop_chat': {'cost_usd': 0.03, 'call_count': 5},
+            'desktop_chat_omi': {'cost_usd': 0.03, 'call_count': 5},
+        }
 
-        total = llm_usage_db.get_total_llm_cost('test-uid')
+        mock_col = MagicMock()
+        mock_col.stream.return_value = [doc1, doc2]
+
+        with patch.object(llm_usage_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            total = llm_usage_db.get_total_llm_cost('test-uid')
 
         # Should only sum desktop_chat: 0.05 + 0.03 = 0.08
         assert total == round(0.08, 6)
 
-    def test_get_total_cost_ignores_non_dict_desktop_chat(self, store):
+    def test_get_total_cost_ignores_non_dict_desktop_chat(self):
         """get_total_llm_cost handles docs where desktop_chat is not a dict."""
-        store.set('users/test-uid/llm_usage/day-1', {'desktop_chat': 'corrupted', 'other_key': 123})
-        store.set('users/test-uid/llm_usage/day-2', {'desktop_chat': {'cost_usd': 0.01}})
+        doc1 = MagicMock()
+        doc1.to_dict.return_value = {'desktop_chat': 'corrupted', 'other_key': 123}
+        doc2 = MagicMock()
+        doc2.to_dict.return_value = {'desktop_chat': {'cost_usd': 0.01}}
 
-        total = llm_usage_db.get_total_llm_cost('test-uid')
+        mock_col = MagicMock()
+        mock_col.stream.return_value = [doc1, doc2]
+
+        with patch.object(llm_usage_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            total = llm_usage_db.get_total_llm_cost('test-uid')
 
         assert total == 0.01
 
@@ -1125,15 +1899,13 @@ class TestLlmUsage:
 class TestBatchLimit:
     """Verify _commit_batch triggers commit at BATCH_LIMIT=500."""
 
-    def test_commit_at_batch_limit(self, monkeypatch):
-        """_commit_batch commits and returns a fresh port batch when count >= BATCH_LIMIT."""
+    def test_commit_at_batch_limit(self):
+        """_commit_batch commits and returns fresh batch when count >= BATCH_LIMIT."""
         mock_batch = MagicMock()
-        new_batch = object()  # sentinel: the fresh batch comes from the store port
-        store = MagicMock()
-        store.batch.return_value = new_batch
-        monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
-
-        result_batch, result_count = staged_tasks_db._commit_batch(mock_batch, 500)
+        new_batch = MagicMock()
+        with patch.object(staged_tasks_db, 'db') as patched_db:
+            patched_db.batch.return_value = new_batch
+            result_batch, result_count = staged_tasks_db._commit_batch(mock_batch, 500)
 
         mock_batch.commit.assert_called_once()
         assert result_batch is new_batch
@@ -1165,14 +1937,27 @@ class TestPromoteResponseWireCompat:
     """Verify promote endpoint returns PromoteResponse envelope expected by Swift client."""
 
     def test_promote_returns_envelope_when_task_exists(self):
-        """Router wraps promoted action_item in {promoted: true, reason: null, promoted_task: {...}}."""
+        """Router selects the first projection and builds the response envelope."""
         from routers.staged_tasks import promote_staged_task
 
         mock_action_item = {'id': 'ai-1', 'description': 'Test task', 'completed': False}
+        candidate = MagicMock(candidate_id='candidate-1')
 
-        with patch.object(staged_tasks_db, 'promote_staged_task', return_value=mock_action_item):
+        with (
+            patch.object(staged_router, '_merged_staged_projection', return_value=[{'id': 'candidate-1'}]),
+            patch.object(
+                staged_router,
+                '_control',
+                return_value=MagicMock(account_generation=7),
+            ),
+            patch.object(staged_router, '_candidate_for_public_id', return_value=candidate),
+            patch.object(staged_router, '_accept_candidate', return_value=mock_action_item) as accept_candidate,
+            patch.object(staged_router, '_retire_candidate_historical_rows') as retire_rows,
+        ):
             result = promote_staged_task(uid='test-uid')
 
+        accept_candidate.assert_called_once_with('test-uid', candidate, account_generation=7)
+        retire_rows.assert_called_once_with('test-uid', candidate)
         assert result['promoted'] is True
         assert result['reason'] is None
         assert result['promoted_task'] == mock_action_item
@@ -1181,7 +1966,7 @@ class TestPromoteResponseWireCompat:
         """Router wraps None in {promoted: false, reason: '...', promoted_task: null}."""
         from routers.staged_tasks import promote_staged_task
 
-        with patch.object(staged_tasks_db, 'promote_staged_task', return_value=None):
+        with patch.object(staged_router, '_merged_staged_projection', return_value=[]):
             result = promote_staged_task(uid='test-uid')
 
         assert result['promoted'] is False
@@ -1203,16 +1988,16 @@ class TestPromoteResponseWireCompat:
         from routers.staged_tasks import migrate_conversation_items
 
         with patch.object(
-            staged_router,
-            '_restore_all_legacy_conversation_items',
-            return_value={'restored': 3, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None},
+            staged_router.staged_tasks_db,
+            'restore_legacy_conversation_items',
+            side_effect=AssertionError('retired compatibility route must not bulk-migrate'),
         ):
             result = migrate_conversation_items(uid='test-uid', limit=50, cursor=None)
 
         assert result['status'] == 'ok'
         assert result['migrated'] == 0
         assert 'deleted' in result
-        assert result['restored'] == 3
+        assert result['restored'] == 0
 
 
 # ===========================================================================
@@ -1356,132 +2141,309 @@ class TestRatingZeroBoundary:
 class TestLegacyConversationRecovery:
     """Exercise the recovery path for rows moved by the retired migration."""
 
-    def test_restore_legacy_conversation_items_recreates_exact_marked_rows(self, monkeypatch):
-        """Recovery restores only marker rows: recreate the action item, drop the marker."""
-        store = FakeDocumentStore()
-        store.set(
-            'users/test-uid/staged_tasks/legacy-task',
-            {
-                'id': 'legacy-task',
-                'description': 'Call supplier',
-                'conversation_id': 'conversation-1',
-                'completed': False,
-                'source': 'conversation_migration',
-            },
-        )
-        store.set(
-            'users/test-uid/staged_tasks/ordinary-staged-task',
-            {
-                'id': 'ordinary-staged-task',
-                'description': 'Keep this staged task',
-                'completed': False,
-                'source': 'screenshot',
-            },
-        )
-        monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
-
-        result = staged_tasks_db.restore_legacy_conversation_items('test-uid')
-
-        assert result == {'restored': 1, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}
-        # The marker row became an action item without `id`/`source`, its staged
-        # row is gone, and the ordinary staged row is untouched.
-        assert store.get('users/test-uid/action_items/legacy-task').to_dict() == {
+    def test_restore_legacy_conversation_items_recreates_exact_marked_rows(self):
+        """Recovery removes only its marker and atomically recreates the original action item."""
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.update_time = object()
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
             'description': 'Call supplier',
             'conversation_id': 'conversation-1',
             'completed': False,
+            'source': 'conversation_migration',
         }
-        assert not store.get('users/test-uid/staged_tasks/legacy-task').exists
-        assert store.get('users/test-uid/staged_tasks/ordinary-staged-task').exists
+        ordinary_staged_snapshot = MagicMock()
+        ordinary_staged_snapshot.id = 'ordinary-staged-task'
+        ordinary_staged_snapshot.to_dict.return_value = {
+            'id': 'ordinary-staged-task',
+            'description': 'Keep this staged task',
+            'completed': False,
+            'source': 'screenshot',
+        }
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot, ordinary_staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        action_item_ref = MagicMock()
+        action_items_col.document.return_value = action_item_ref
+        staged_ref = MagicMock()
+        staged_col.document.return_value = staged_ref
+        batch = MagicMock()
+        delete_option = object()
 
-    def test_restore_legacy_conversation_items_does_not_overwrite_an_existing_task(self, monkeypatch):
-        """An identity collision preserves both copies instead of overwriting current data."""
-        store = FakeDocumentStore()
-        store.set('users/test-uid/action_items/legacy-task', {'description': 'Current authoritative task'})
-        store.set(
-            'users/test-uid/staged_tasks/legacy-task',
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        firestore_client.write_option.return_value = delete_option
+        with patch.object(staged_tasks_db, 'get_firestore_client') as get_firestore_client:
+            result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        get_firestore_client.assert_not_called()
+
+        assert result == {
+            'restored': 1,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        batch.create.assert_called_once_with(
+            action_item_ref,
             {
-                'id': 'legacy-task',
                 'description': 'Call supplier',
+                'conversation_id': 'conversation-1',
                 'completed': False,
-                'source': 'conversation_migration',
             },
         )
-        monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
+        firestore_client.write_option.assert_called_once_with(last_update_time=staged_snapshot.update_time)
+        batch.delete.assert_called_once_with(staged_ref, option=delete_option)
+        batch.commit.assert_called_once()
 
-        result = staged_tasks_db.restore_legacy_conversation_items('test-uid')
+    @pytest.mark.parametrize('conflict_error', ['already_exists', 'conflict'])
+    def test_restore_legacy_conversation_items_does_not_overwrite_an_existing_task(self, conflict_error):
+        """An identity collision preserves both copies instead of overwriting current task data."""
+        from google.api_core.exceptions import AlreadyExists, Conflict
 
-        assert result == {'restored': 0, 'skipped_existing': 1, 'has_more': False, 'next_cursor': None}
-        # The current action item wins the identity; the staged row is preserved.
-        assert store.get('users/test-uid/action_items/legacy-task').to_dict() == {
-            'description': 'Current authoritative task'
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'completed': False,
+            'source': 'conversation_migration',
         }
-        assert store.get('users/test-uid/staged_tasks/legacy-task').exists
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        batch = MagicMock()
+        batch.commit.side_effect = {
+            'already_exists': AlreadyExists('task already exists'),
+            'conflict': Conflict('task already exists'),
+        }[conflict_error]
 
-    def test_restore_legacy_conversation_items_pages_by_document_id(self, monkeypatch):
-        """Recovery bounds each request and returns an exclusive continuation cursor."""
-        store = FakeDocumentStore()
-        for index in range(3):
-            store.set(
-                f'users/test-uid/staged_tasks/legacy-{index}',
-                {
-                    'id': f'legacy-{index}',
-                    'description': f'Call supplier {index}',
-                    'completed': False,
-                    'source': 'conversation_migration',
-                },
-            )
-        monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
 
-        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', limit=2)
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
 
-        assert result == {'restored': 2, 'skipped_existing': 0, 'has_more': True, 'next_cursor': 'legacy-1'}
-        # First two ids (document-id order) restored; the third remains staged.
-        assert store.get('users/test-uid/action_items/legacy-0').exists
-        assert store.get('users/test-uid/action_items/legacy-1').exists
-        assert not store.get('users/test-uid/action_items/legacy-2').exists
-        assert store.get('users/test-uid/staged_tasks/legacy-2').exists
+        assert result == {
+            'restored': 0,
+            'skipped_existing': 1,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        batch.delete.assert_called_once()
 
-    def test_restore_legacy_conversation_items_applies_exclusive_cursor(self, monkeypatch):
-        """A continuation skips already-scanned rows instead of retrying them forever."""
-        store = FakeDocumentStore()
+    def test_restore_legacy_conversation_items_skips_stale_row_and_continues(self):
+        """A staged-row precondition race refreshes the row and retries the restore."""
+        from google.api_core.exceptions import FailedPrecondition
+
+        snapshots = []
         for index in range(2):
-            store.set(
-                f'users/test-uid/staged_tasks/legacy-{index}',
-                {
-                    'id': f'legacy-{index}',
-                    'description': f'Call supplier {index}',
-                    'completed': False,
-                    'source': 'conversation_migration',
-                },
-            )
-        monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
+            snapshot = MagicMock()
+            snapshot.id = f'legacy-task-{index}'
+            snapshot.update_time = object()
+            snapshot.to_dict.return_value = {
+                'id': snapshot.id,
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
+            }
+            snapshots.append(snapshot)
 
-        # The cursor is exclusive: legacy-0 and legacy-1 are both <= 'legacy-1'.
-        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', cursor='legacy-1')
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = snapshots
+        staged_col.where.return_value = recovery_query
+        batch = MagicMock()
+        batch.commit.side_effect = [FailedPrecondition('staged row changed'), None, None]
+        refreshed_snapshot = MagicMock()
+        refreshed_snapshot.id = snapshots[0].id
+        refreshed_snapshot.update_time = object()
+        refreshed_snapshot.exists = True
+        refreshed_snapshot.to_dict.return_value = {
+            'id': refreshed_snapshot.id,
+            'description': 'Updated supplier call',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
 
-        assert result == {'restored': 0, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}
-        assert store.get('users/test-uid/staged_tasks/legacy-0').exists
-        assert store.get('users/test-uid/staged_tasks/legacy-1').exists
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
 
-    def test_released_recovery_route_completes_every_page_before_success(self):
-        """Released single-call clients must never receive an acknowledged partial recovery."""
-        first_page = {'restored': 50, 'skipped_existing': 1, 'has_more': True, 'next_cursor': 'legacy-49'}
-        second_page = {'restored': 2, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        staged_col.document.return_value.get.return_value = refreshed_snapshot
 
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        assert result == {
+            'restored': 2,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        assert batch.commit.call_count == 3
+        assert batch.create.call_count == 3
+        assert batch.delete.call_count == 3
+        assert staged_col.document.return_value.get.call_count == 1
+
+    def test_restore_legacy_conversation_items_does_not_acknowledge_repeated_stale_rows(self):
+        """Repeated contention fails the sweep instead of marking the row recovered."""
+        from google.api_core.exceptions import FailedPrecondition
+
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.update_time = object()
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        refreshed_snapshots = []
+        for index in range(staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES):
+            refreshed = MagicMock()
+            refreshed.id = staged_snapshot.id
+            refreshed.update_time = object()
+            refreshed.exists = True
+            refreshed.to_dict.return_value = {
+                'id': staged_snapshot.id,
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
+            }
+            refreshed_snapshots.append(refreshed)
+
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        staged_ref = staged_col.document.return_value
+        staged_ref.get.side_effect = refreshed_snapshots
+        batch = MagicMock()
+        batch.commit.side_effect = [
+            FailedPrecondition(f'staged row changed {index}')
+            for index in range(staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES + 1)
+        ]
+
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+
+        with pytest.raises(FailedPrecondition):
+            staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        assert batch.commit.call_count == staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES + 1
+        assert staged_ref.get.call_count == staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES
+
+    def test_restore_legacy_conversation_items_pages_by_document_id(self):
+        """Recovery bounds each request and returns an exclusive continuation cursor."""
+        snapshots = []
+        for index in range(3):
+            snapshot = MagicMock()
+            snapshot.id = f'legacy-{index}'
+            snapshot.to_dict.return_value = {
+                'id': f'legacy-{index}',
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
+            }
+            snapshots.append(snapshot)
+
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = snapshots
+        staged_col.where.return_value = recovery_query
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
+            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        )
+        result = staged_tasks_db.restore_legacy_conversation_items(
+            'test-uid', limit=2, firestore_client=firestore_client
+        )
+
+        recovery_query.order_by.assert_called_once_with('__name__')
+        recovery_query.limit.assert_called_once_with(3)
+        assert result == {
+            'restored': 2,
+            'skipped_existing': 0,
+            'has_more': True,
+            'next_cursor': 'legacy-1',
+        }
+
+    def test_restore_legacy_conversation_items_applies_exclusive_cursor(self):
+        """A continuation skips already-scanned collisions instead of retrying them forever."""
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.start_after.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = []
+        staged_col.where.return_value = recovery_query
+        cursor_ref = MagicMock()
+        staged_col.document.return_value = cursor_ref
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
+            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        )
+        result = staged_tasks_db.restore_legacy_conversation_items(
+            'test-uid', cursor='legacy-1', firestore_client=firestore_client
+        )
+
+        recovery_query.start_after.assert_called_once_with({'__name__': cursor_ref})
+        assert result == {
+            'restored': 0,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+
+    def test_released_recovery_route_is_inert_under_universal_candidate_authority(self):
+        """Released shape stays decodable without moving historical rows to action items."""
         with patch.object(
             staged_router.staged_tasks_db,
             'restore_legacy_conversation_items',
-            side_effect=[first_page, second_page],
-        ) as restore_page:
-            result = staged_router._restore_all_legacy_conversation_items('test-uid')
+            side_effect=AssertionError('retired recovery must not bypass Candidate authority'),
+        ):
+            result = staged_router.restore_legacy_conversation_items(uid='test-uid', limit=50, cursor=None)
 
-        assert result == {'restored': 52, 'skipped_existing': 1, 'has_more': False, 'next_cursor': None}
-        assert [call.args for call in restore_page.call_args_list] == [('test-uid',), ('test-uid',)]
-        assert [call.kwargs['cursor'] for call in restore_page.call_args_list] == [None, 'legacy-49']
-        assert all(
-            call.kwargs['limit'] == staged_router.staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE
-            for call in restore_page.call_args_list
-        )
+        assert result == {
+            'status': 'ok',
+            'restored': 0,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
 
 
 # ============================================================================
@@ -1544,26 +2506,60 @@ class TestBatchScoresOverflow:
 
 
 class TestSessionScopedPrecedence:
-    """Verify session_id takes precedence over app_id in get_messages/delete_messages.
+    """Verify session_id takes precedence over app_id in get_messages/delete_messages."""
 
-    Behavioral discriminator: the seeded message belongs to session ``sess-123`` but to a
-    *different* app (``plugin_id='other-app'``). A caller passing both ``app_id='some-app'`` and
-    the session id must still see/delete it — proof the session filter wins and the app filter
-    (which would exclude it) is not applied.
-    """
+    @staticmethod
+    def _get_field_filter_fields():
+        """Extract field names from all FieldFilter() calls."""
+        from google.cloud.firestore_v1.base_query import FieldFilter
 
-    def test_get_messages_session_id_ignores_app_id(self, store):
-        _msg(store, 'uid', 'msg-1', plugin_id='other-app', chat_session_id='sess-123')
+        fields = []
+        for call in FieldFilter.call_args_list:
+            if call.args:
+                fields.append(call.args[0])
+        return fields
 
-        messages = chat_db.get_messages('uid', app_id='some-app', chat_session_id='sess-123')
+    def test_get_messages_session_id_ignores_app_id(self):
+        """When both app_id and chat_session_id are provided, only session filter is applied."""
+        from google.cloud.firestore_v1.base_query import FieldFilter
 
-        assert [m['id'] for m in messages] == ['msg-1']
+        FieldFilter.reset_mock()
 
-    def test_delete_messages_session_id_ignores_app_id(self, store):
-        _msg(store, 'uid', 'msg-1', plugin_id='other-app', chat_session_id='sess-123')
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.where.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.stream.return_value = []
 
-        assert chat_db.delete_messages('uid', app_id='some-app', session_id='sess-123') == 1
-        assert not store.exists('users/uid/messages/msg-1')
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            chat_db.get_messages('uid', app_id='some-app', chat_session_id='sess-123')
+
+        fields = self._get_field_filter_fields()
+        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
+        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id present: {fields}"
+
+    def test_delete_messages_session_id_ignores_app_id(self):
+        """When both app_id and session_id are provided, only session filter is applied."""
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        FieldFilter.reset_mock()
+
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.where.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            chat_db.delete_messages('uid', app_id='some-app', session_id='sess-123')
+
+        fields = self._get_field_filter_fields()
+        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
+        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id present: {fields}"
 
 
 # ============================================================================
@@ -1574,23 +2570,30 @@ class TestSessionScopedPrecedence:
 class TestLlmDualWritePayloadParity:
     """Verify all fields are written to both primary and per-account buckets."""
 
-    def test_all_fields_written_to_both_buckets(self, store):
-        """record_llm_usage_bucket writes all fields to both desktop_chat and desktop_chat_omi."""
-        llm_usage_db.record_llm_usage_bucket(
-            uid='uid',
-            input_tokens=100,
-            output_tokens=50,
-            cache_read_tokens=20,
-            cache_write_tokens=10,
-            total_tokens=180,
-            cost_usd=0.05,
-            bucket='desktop_chat',
-            account='omi',
-        )
+    def test_all_fields_written_to_both_buckets(self):
+        """record_llm_usage_bucket writes all fields to both desktop_chat and desktop_chat_omi in single set()."""
+        mock_ref = MagicMock()
+        with patch.object(llm_usage_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
+            llm_usage_db.record_llm_usage_bucket(
+                uid='uid',
+                input_tokens=100,
+                output_tokens=50,
+                cache_read_tokens=20,
+                cache_write_tokens=10,
+                total_tokens=180,
+                cost_usd=0.05,
+                bucket='desktop_chat',
+                account='omi',
+            )
 
-        data = store.get(f'users/uid/llm_usage/{_llm_usage_today_id()}').to_dict()
+        # Single set(merge=True) call containing both bucket prefixes
+        mock_ref.set.assert_called_once()
+        data = mock_ref.set.call_args[0][0]
 
-        # Check all fields are present under both the primary and per-account buckets.
+        # Check all fields for primary bucket
         expected_fields = [
             'input_tokens',
             'output_tokens',
@@ -1601,8 +2604,8 @@ class TestLlmDualWritePayloadParity:
             'call_count',
         ]
         for field in expected_fields:
-            assert field in data['desktop_chat'], f"Missing desktop_chat.{field}"
-            assert field in data['desktop_chat_omi'], f"Missing desktop_chat_omi.{field}"
+            assert f'desktop_chat.{field}' in data, f"Missing desktop_chat.{field}"
+            assert f'desktop_chat_omi.{field}' in data, f"Missing desktop_chat_omi.{field}"
 
         # Verify shared metadata fields
         assert 'date' in data

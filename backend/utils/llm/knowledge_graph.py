@@ -121,6 +121,7 @@ def extract_kg_from_text(
     user_name: str = "User",
     existing_nodes: Optional[List[Dict[str, Any]]] = None,
     load_existing_from_db: bool = False,
+    db_client: Any = None,
     strict_parse: bool = False,
     usage_memory_id: str = "extract",
 ) -> Optional[KnowledgeGraphExtraction]:
@@ -138,7 +139,7 @@ def extract_kg_from_text(
 
     nodes_for_prompt = existing_nodes
     if nodes_for_prompt is None and load_existing_from_db:
-        nodes_for_prompt = kg_db.get_knowledge_nodes(uid)
+        nodes_for_prompt = kg_db.get_knowledge_nodes(uid, db_client=db_client)
     if nodes_for_prompt is None:
         nodes_for_prompt = []
 
@@ -249,6 +250,8 @@ def _persist_extraction(
     extraction: KnowledgeGraphExtraction,
     memory_id: str,
     existing_nodes: List[Dict[str, Any]],
+    *,
+    db_client: Any = None,
 ) -> Dict[str, Any]:
     label_to_node_id: Dict[str, str] = {}
     for existing in existing_nodes:
@@ -273,7 +276,7 @@ def _persist_extraction(
             'memory_ids': [memory_id],
         }
 
-        saved_node = kg_db.upsert_knowledge_node(uid, node_data)
+        saved_node = kg_db.upsert_knowledge_node(uid, node_data, db_client=db_client)
         created_nodes.append(saved_node)
         label_to_node_id[node.label.lower()] = saved_node['id']
         for alias in node.aliases:
@@ -291,7 +294,7 @@ def _persist_extraction(
                 'label': edge.label,
                 'memory_ids': [memory_id],
             }
-            saved_edge = kg_db.upsert_knowledge_edge(uid, edge_data)
+            saved_edge = kg_db.upsert_knowledge_edge(uid, edge_data, db_client=db_client)
             created_edges.append(saved_edge)
 
     return {
@@ -306,21 +309,23 @@ def extract_knowledge_from_memory(
     memory_id: str,
     user_name: str = "User",
     *,
+    db_client: Any = None,
     strict_parse: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    existing_nodes = kg_db.get_knowledge_nodes(uid)
+    existing_nodes = kg_db.get_knowledge_nodes(uid, db_client=db_client)
     extraction = extract_kg_from_text(
         uid,
         memory_content,
         user_name=user_name,
         existing_nodes=existing_nodes,
+        db_client=db_client,
         strict_parse=strict_parse,
         usage_memory_id=memory_id,
     )
     if extraction is None:
         return None
     try:
-        return _persist_extraction(uid, extraction, memory_id, existing_nodes)
+        return _persist_extraction(uid, extraction, memory_id, existing_nodes, db_client=db_client)
     except Exception:
         logging.exception(f"Error extracting knowledge graph from memory_id: {memory_id}")
         return None
@@ -330,8 +335,10 @@ def rebuild_knowledge_graph(
     uid: str,
     memories: List[Dict[str, Any]],
     user_name: str = "User",
+    *,
+    db_client: Any = None,
 ) -> Dict[str, Any]:
-    kg_db.delete_knowledge_graph(uid)
+    kg_db.delete_knowledge_graph(uid, db_client=db_client)
 
     node_lock = threading.Lock()
 
@@ -341,7 +348,7 @@ def rebuild_knowledge_graph(
         if not memory_content:
             return {'nodes': [], 'edges': []}
 
-        existing_nodes = kg_db.get_knowledge_nodes(uid)
+        existing_nodes = kg_db.get_knowledge_nodes(uid, db_client=db_client)
         existing_nodes_json = _existing_nodes_prompt_json(existing_nodes)
 
         try:
@@ -367,7 +374,7 @@ def rebuild_knowledge_graph(
 
             with node_lock:
                 label_to_node_id: Dict[str, str] = {}
-                current_nodes = kg_db.get_knowledge_nodes(uid)
+                current_nodes = kg_db.get_knowledge_nodes(uid, db_client=db_client)
                 for existing in current_nodes:
                     label_to_node_id[existing['label'].lower()] = existing['id']
                     for alias in existing.get('aliases', []):
@@ -389,7 +396,7 @@ def rebuild_knowledge_graph(
                         'memory_ids': [memory_id],
                     }
 
-                    saved_node = kg_db.upsert_knowledge_node(uid, node_data)
+                    saved_node = kg_db.upsert_knowledge_node(uid, node_data, db_client=db_client)
                     created_nodes.append(saved_node)
                     label_to_node_id[node.label.lower()] = saved_node['id']
                     for alias in node.aliases:
@@ -406,7 +413,7 @@ def rebuild_knowledge_graph(
                             'label': edge.label,
                             'memory_ids': [memory_id],
                         }
-                        saved_edge = kg_db.upsert_knowledge_edge(uid, edge_data)
+                        saved_edge = kg_db.upsert_knowledge_edge(uid, edge_data, db_client=db_client)
                         created_edges.append(saved_edge)
 
             return {'nodes': created_nodes, 'edges': created_edges}
@@ -436,4 +443,4 @@ def rebuild_knowledge_graph(
         except Exception:
             logging.exception("Error in concurrent memory extraction")
 
-    return kg_db.get_knowledge_graph(uid)
+    return kg_db.get_knowledge_graph(uid, db_client=db_client)

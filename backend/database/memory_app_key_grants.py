@@ -1,20 +1,16 @@
-"""Canonical app/key memory grant reader/writer over the neutral storage port (WS-G7)."""
+"""Canonical app/key memory grant Firestore reader (WS-G7)."""
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, Optional, cast
 
-from database.store import get_document_store
-from database.store.sentinels import DELETE
+import database._client as db_client_module
+from google.cloud import firestore
 
 StatePayload = dict[str, Any]
 
 APP_KEY_MEMORY_GRANTS_COLLECTION = "memory_control"
 APP_KEY_MEMORY_GRANT_DOC_ID = "app_key_memory_grants"
 APP_KEY_MEMORY_GRANT_SUBPATH = f"{APP_KEY_MEMORY_GRANTS_COLLECTION}/{APP_KEY_MEMORY_GRANT_DOC_ID}"
-
-
-def _store():
-    return get_document_store()
 
 
 @dataclass(frozen=True)
@@ -37,24 +33,32 @@ def _looks_like_grants_contract(state: object) -> bool:
     return isinstance(state_payload.get("grants"), dict)
 
 
-def read_app_key_memory_grants_state(uid: str) -> AppKeyMemoryGrantStateRead:
+def _default_db_client(db_client: Optional[Any]) -> Any:
+    return db_client if db_client is not None else getattr(db_client_module, "db", None)
+
+
+def read_app_key_memory_grants_state(uid: str, db_client: Any) -> AppKeyMemoryGrantStateRead:
     """Read the server-owned persisted memory app/key memory grant document.
 
-    Logical path:
+    Firestore path:
       users/{uid}/memory_control/app_key_memory_grants
 
     Document shape is intentionally the same nested contract consumed by
     `authorize_app_key_scope_memory_grant(...)`:
       grants.<consumer>.apps.<app_id>.keys.<key_id>
 
-    This helper only reads server-owned state through the neutral storage port.
-    It does not accept request-body fields, and missing/malformed state is
-    surfaced so callers can fail closed through the authorization contract.
+    This helper only reads server-owned state through an explicitly supplied
+    backend/Admin SDK client. It does not accept request-body fields, and
+    missing/malformed state is surfaced so callers can fail closed through the
+    authorization contract.
     """
 
     source_path = app_key_memory_grants_document_path(uid)
-    snapshot = _store().get(source_path)
-    if not snapshot.exists:
+    client: Any = db_client
+    snapshot = (
+        client.collection(f"users/{uid}/{APP_KEY_MEMORY_GRANTS_COLLECTION}").document(APP_KEY_MEMORY_GRANT_DOC_ID).get()
+    )
+    if not getattr(snapshot, "exists", False):
         return AppKeyMemoryGrantStateRead(
             present=False,
             malformed=False,
@@ -127,66 +131,13 @@ MCP_CONSUMER = 'mcp'
 MCP_DEFAULT_APP_ID = 'mcp-api'
 
 
-def _memory_scopes(default_read: bool, write: bool) -> list[str]:
-    scopes: list[str] = []
-    if default_read:
-        scopes.append('memories.read')
-    if write:
-        scopes.append('memories.write')
-    return scopes
-
-
-def _seed_app_key_memory_grant(
-    uid: str,
-    consumer: str,
-    app_id: str,
-    key_id: str,
-    *,
-    default_read: bool,
-    write: bool,
-) -> str:
-    """Create-or-merge the single nested key grant, preserving sibling grants.
-
-    The persisted contract is a nested map keyed by consumer/app/key. Firestore
-    ``set(merge=True)`` deep-merges nested maps, but that is a backend-specific
-    guarantee — the neutral port merges a nested map by writing a *dotted-key
-    update* (honored identically across backends). A dotted-key update raises on
-    a missing document, so the create-or-merge runs inside a transaction: on an
-    existing document only the ``...keys.<key_id>`` leaf is written (siblings
-    preserved); on a missing document the full nested contract is created.
-    """
-
-    contract = build_app_key_scope_grant_contract_state(
-        consumer=consumer,
-        app_id=app_id,
-        key_id=key_id,
-        scopes=_memory_scopes(default_read, write),
-        default_read=default_read,
-        archive_read=False,
-        write=write,
-        enabled=True,
-    )
-    leaf = contract["grants"][consumer]["apps"][app_id]["keys"][key_id]
-    field_path = f"grants.{consumer}.apps.{app_id}.keys.{key_id}"
-    document_path = app_key_memory_grants_document_path(uid)
-
-    def _write(tx) -> None:
-        snapshot = tx.get(document_path)
-        if snapshot.exists:
-            tx.update(document_path, {field_path: leaf})
-        else:
-            tx.set(document_path, contract)
-
-    _store().run_transaction(_write)
-    return document_path
-
-
 def seed_developer_api_key_memory_grant(
     uid: str,
     key_id: str,
     *,
     default_read: bool = False,
     write: bool = False,
+    db_client: Optional[Any] = None,
 ) -> str:
     """Seed the server-owned app/key memory grant for a Developer API key.
 
@@ -197,16 +148,29 @@ def seed_developer_api_key_memory_grant(
     reject a freshly created key with ``missing_app_key_scope_grant``.
 
     This performs a merge write so existing grants for other keys are preserved.
-    Returns the document path written.
+    Returns the Firestore document path written.
     """
-    return _seed_app_key_memory_grant(
-        uid,
-        DEVELOPER_API_CONSUMER,
-        DEVELOPER_API_DEFAULT_APP_ID,
-        key_id,
+    client = _default_db_client(db_client)
+
+    scopes: list[str] = []
+    if default_read:
+        scopes.append('memories.read')
+    if write:
+        scopes.append('memories.write')
+
+    contract = build_app_key_scope_grant_contract_state(
+        consumer=DEVELOPER_API_CONSUMER,
+        app_id=DEVELOPER_API_DEFAULT_APP_ID,
+        key_id=key_id,
+        scopes=scopes,
         default_read=default_read,
+        archive_read=False,
         write=write,
+        enabled=True,
     )
+    document_path = app_key_memory_grants_document_path(uid)
+    client.document(document_path).set(contract, merge=True)
+    return document_path
 
 
 def seed_mcp_api_key_memory_grant(
@@ -215,38 +179,71 @@ def seed_mcp_api_key_memory_grant(
     *,
     default_read: bool = False,
     write: bool = False,
+    db_client: Optional[Any] = None,
 ) -> str:
     """Seed the server-owned app/key memory grant for a hosted MCP key."""
-    return _seed_app_key_memory_grant(
-        uid,
-        MCP_CONSUMER,
-        MCP_DEFAULT_APP_ID,
-        key_id,
+    client = _default_db_client(db_client)
+
+    scopes: list[str] = []
+    if default_read:
+        scopes.append('memories.read')
+    if write:
+        scopes.append('memories.write')
+
+    contract = build_app_key_scope_grant_contract_state(
+        consumer=MCP_CONSUMER,
+        app_id=MCP_DEFAULT_APP_ID,
+        key_id=key_id,
+        scopes=scopes,
         default_read=default_read,
+        archive_read=False,
         write=write,
+        enabled=True,
     )
+    document_path = app_key_memory_grants_document_path(uid)
+    client.document(document_path).set(contract, merge=True)
+    return document_path
 
 
-def remove_developer_api_key_memory_grant(uid: str, key_id: str) -> None:
+def remove_developer_api_key_memory_grant(
+    uid: str,
+    key_id: str,
+    *,
+    db_client: Optional[Any] = None,
+) -> None:
     """Remove the persisted app/key memory grant for a deleted Developer API key.
 
-    Deletes only the nested key entry via a dotted field-path deletion,
-    preserving grants for other keys under the same document.
+    Deletes only the nested key entry via field-path deletion, preserving grants
+    for other keys under the same document.
     """
+    client = _default_db_client(db_client)
+
     document_path = app_key_memory_grants_document_path(uid)
-    store = _store()
+    doc_ref: Any = client.document(document_path)
 
     # Guard against legacy keys that were created without memory scopes or
-    # predate grant seeding: a dotted-key ``update`` on a missing document raises
-    # NotFound, which would turn a successful key deletion into a 500. If the
-    # grant document does not exist, there is nothing to remove.
-    if not store.exists(document_path):
+    # predate grant seeding: Firestore ``update()`` raises ``NotFound`` on a
+    # missing document, which would turn a successful key deletion into a 500.
+    # If the grant document does not exist, there is nothing to remove.
+    if not doc_ref.get().exists:
         return
 
-    # UUID key ids contain hyphens; the neutral port splits a dotted key on '.'
-    # only, so the hyphenated leaf is targeted unambiguously without escaping.
-    field_path = f"grants.{DEVELOPER_API_CONSUMER}.apps.{DEVELOPER_API_DEFAULT_APP_ID}.keys.{key_id}"
-    store.update(document_path, {field_path: DELETE})
+    # Imported here, not at module scope: several suites stub google.cloud.firestore_v1
+    # with a plain module, which makes a top-level submodule import fail at collection.
+    from google.cloud.firestore_v1.field_path import FieldPath
+
+    # UUID key ids contain hyphens, so the nested path is escaped through FieldPath
+    # before being passed as an update key. ``update()`` only accepts string keys —
+    # a FieldPath instance raises — so the escaped API representation is used.
+    field_path = FieldPath(
+        "grants",
+        DEVELOPER_API_CONSUMER,
+        "apps",
+        DEVELOPER_API_DEFAULT_APP_ID,
+        "keys",
+        key_id,
+    ).to_api_repr()
+    doc_ref.update({field_path: firestore.DELETE_FIELD})
 
 
 __all__ = [

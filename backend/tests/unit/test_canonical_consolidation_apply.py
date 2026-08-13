@@ -10,9 +10,6 @@ from typing import Optional
 
 import pytest
 
-from database import document_store
-from tests.store_fakes import FakeDocumentStore
-
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -60,18 +57,82 @@ NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
 UID = "uid-canonical"
 
 
+class _FakeSnapshot:
+    def __init__(self, data, exists=True):
+        self._data = data
+        self.exists = exists
+
+    def to_dict(self):
+        return self._data
+
+
+class _FakeDocumentRef:
+    def __init__(self, path, db):
+        self.path = path
+        self._db = db
+
+    def get(self, transaction=None):
+        if self.path not in self._db.docs:
+            return _FakeSnapshot(None, exists=False)
+        return _FakeSnapshot(self._db.docs[self.path], exists=True)
+
+    def set(self, data, merge=False):
+        if merge and self.path in self._db.docs:
+            merged = dict(self._db.docs[self.path])
+            merged.update(data)
+            self._db.docs[self.path] = merged
+        else:
+            self._db.docs[self.path] = data
+
+
+class _FakeTransaction:
+    def __init__(self, db):
+        self._db = db
+        self.sets = []
+        self.deletes = []
+        self.fail_after_sets: Optional[int] = None
+        self._id = None
+        self._read_only = False
+        self._max_attempts = 5
+
+    def set(self, ref, data):
+        self.sets.append((ref.path, data))
+        if self.fail_after_sets is not None and len(self.sets) > self.fail_after_sets:
+            raise RuntimeError("injected transaction set failure")
+
+    def delete(self, ref):
+        self.deletes.append(ref.path)
+
+    def _clean_up(self):
+        self._id = None
+
+    def _begin(self, retry_id=None):
+        self._id = retry_id or "txn-1"
+        self.sets = []
+        self.deletes = []
+
+    def _commit(self):
+        for path, data in self.sets:
+            self._db.docs[path] = data
+        for path in self.deletes:
+            self._db.docs.pop(path, None)
+
+    def _rollback(self):
+        self._id = None
+        self.sets = []
+        self.deletes = []
+
+
 class _FakeDb:
-    """Holds one test's seeded ``.docs`` dict and tracks the latest instance so the
-    ``document_store`` port seam (patched in ``_canonical_runtime``) can resolve the current
-    test's backing store lazily. Post-ADR-0028 the apply path takes no injected ``db_client``;
-    persistence flows through the neutral store, and sharing this ``.docs`` dict keeps seeded
-    data and assertions consistent with what the service writes."""
-
-    _latest: Optional["_FakeDb"] = None
-
     def __init__(self, docs):
         self.docs = docs
-        _FakeDb._latest = self
+        self.transaction_obj = _FakeTransaction(self)
+
+    def transaction(self):
+        return self.transaction_obj
+
+    def document(self, path):
+        return _FakeDocumentRef(path, self)
 
 
 def _evidence(evidence_id: str, *, source_id: str = "conv-1") -> MemoryEvidence:
@@ -164,25 +225,6 @@ def _promote_decision(
 
 @pytest.fixture(autouse=True)
 def _canonical_runtime(monkeypatch):
-    # Point ``document_store`` (and the module's directly-imported ``get_document_store`` handle) at
-    # a ``FakeDocumentStore`` sharing the current test's ``.docs`` dict: post-ADR-0028 the apply path
-    # persists through the neutral store, not an injected db_client, so this seam keeps its
-    # reads/writes consistent with the dict the assertions inspect.
-    monkeypatch.setattr(
-        document_store,
-        "_store",
-        lambda: FakeDocumentStore(backing=_FakeDb._latest.docs),
-    )
-    monkeypatch.setattr(
-        "utils.memory.canonical_consolidation.get_document_store",
-        lambda: FakeDocumentStore(backing=_FakeDb._latest.docs),
-    )
-    # The apply path settles long-term patches through ``apply_long_term_patch_firestore``, which
-    # resolves its own ``_store`` seam; point it at the same shared backing dict.
-    monkeypatch.setattr(
-        "database.memory_apply_store._store",
-        lambda: FakeDocumentStore(backing=_FakeDb._latest.docs),
-    )
     monkeypatch.setattr(
         "utils.memory.canonical_consolidation.resolve_memory_system",
         lambda uid, db_client=None: MemorySystem.CANONICAL,
@@ -198,6 +240,7 @@ def _apply(source: MemoryItem, decision, db: _FakeDb, *, quarantine: bool = Fals
         control=control,
         run_id="run-route",
         now=NOW,
+        db_client=db,
         quarantine=quarantine,
     )
 

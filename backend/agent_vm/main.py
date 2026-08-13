@@ -596,8 +596,7 @@ def database_schema() -> str:
 
 
 def system_prompt() -> str:
-    return (
-        """You are an AI assistant with access to the user's OMI desktop database and connected services.
+    return """You are an AI assistant with access to the user's OMI desktop database and connected services.
 This database contains their screen history, tasks, transcriptions, memories, and focus sessions.
 
 DATABASE SCHEMA:
@@ -613,9 +612,7 @@ GUIDELINES:
 - For activity summaries, use get_daily_recap before issuing multiple SQL queries.
 - For time-filtered screenshots, use timestamp range comparisons instead of date() or strftime() in WHERE clauses.
 - Key tables include screenshots, action_items, memories, transcription_sessions, transcription_segments, focus_sessions, observations, and staged_tasks.
-- Be concise and helpful. Format results clearly."""
-        % database_schema()
-    )
+- Be concise and helpful. Format results clearly.""" % database_schema()
 
 
 def message_payload(message: Any) -> dict[str, Any]:

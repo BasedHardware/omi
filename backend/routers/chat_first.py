@@ -13,6 +13,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import ValidationError
 
 import database.action_items as action_items_db
+import database._client as db_client_module
 import database.chat_first_intents as chat_first_intents_db
 import database.conversations as conversations_db
 import database.goals as goals_db
@@ -175,7 +176,7 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
         )
     if isinstance(block, MemoryLinkSpec):
         try:
-            return bool(fetch_memory_dict(uid, block.memory_id))
+            return bool(fetch_memory_dict(uid, block.memory_id, db_client=getattr(db_client_module, 'db', None)))
         except HTTPException:
             return False
     subject = block.subject

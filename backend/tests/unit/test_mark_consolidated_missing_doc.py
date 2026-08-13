@@ -13,21 +13,30 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 
+from unittest.mock import MagicMock
+
 import database.short_term_memories as stm
-from tests.store_fakes import FakeDocumentStore
+
+
+def _fake_db(doc_ref):
+    fake = MagicMock()
+    fake.collection.return_value.document.return_value.collection.return_value.document.return_value = doc_ref
+    return fake
 
 
 def test_noop_when_doc_absent(monkeypatch):
-    store = FakeDocumentStore()
-    monkeypatch.setattr(stm, '_store', lambda: store)
+    doc_ref = MagicMock()
+    doc_ref.get.return_value.exists = False
+    monkeypatch.setattr(stm, 'db', _fake_db(doc_ref))
     stm.mark_consolidated('u1', 'st1', 'commit-1')  # must not raise
-    assert not store.exists('users/u1/short_term/st1')  # no doc created
+    doc_ref.update.assert_not_called()
 
 
 def test_updates_when_doc_exists(monkeypatch):
-    store = FakeDocumentStore()
-    store.set('users/u1/short_term/st1', {'status': 'pending'})
-    monkeypatch.setattr(stm, '_store', lambda: store)
+    doc_ref = MagicMock()
+    doc_ref.get.return_value.exists = True
+    monkeypatch.setattr(stm, 'db', _fake_db(doc_ref))
     stm.mark_consolidated('u1', 'st1', 'commit-1')
-    written = store.get('users/u1/short_term/st1').to_dict()
+    doc_ref.update.assert_called_once()
+    written = doc_ref.update.call_args.args[0]
     assert written['status'] == 'consolidated' and written['consolidated_commit_id'] == 'commit-1'

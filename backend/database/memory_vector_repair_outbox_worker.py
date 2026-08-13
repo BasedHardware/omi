@@ -6,12 +6,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, cast
 
+from google.cloud import firestore
+
 from database.memory_collections import MemoryCollections
 from database.memory_vector_repair_outbox_telemetry import (
     VectorRepairOutboxTelemetryConfig,
     emit_vector_repair_outbox_worker_telemetry,
 )
-from database.store import get_document_store
 from models.memory_evidence import SourceState
 from models.product_memory import MemoryItemStatus
 
@@ -26,8 +27,9 @@ _TOMBSTONE_STATUSES = {"deleted", "tombstoned", "purged", MemoryItemStatus.tombs
 _TOMBSTONE_SOURCE_STATES = {SourceState.missing.value, SourceState.tombstoned.value, SourceState.purged.value}
 
 
-def _store():
-    return get_document_store()
+def _typed_transactional(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Typed shim around firestore.transactional (SDK stub gap)."""
+    return firestore.transactional(func)  # type: ignore[reportUnknownMemberType]  # firestore transactional decorator is untyped
 
 
 @dataclass(frozen=True)
@@ -48,6 +50,7 @@ class VectorRepairOutboxWorkerTickConfig:
 
 def run_vector_repair_outbox_worker_tick(
     *,
+    db_client: Any,
     uid: str,
     config: VectorRepairOutboxWorkerTickConfig,
     authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]],
@@ -59,13 +62,13 @@ def run_vector_repair_outbox_worker_tick(
     backlog: Optional[Dict[str, Any]] = None,
     duration_ms: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Run one explicit lease/process/ack worker tick against the storage port.
+    """Run one explicit, fake-injectable lease/process/ack worker tick.
 
     This is the Cloud Run/Tasks/scheduler execution contract seam for memory vector
     repair outbox work: a caller with server-owned config invokes one bounded
     tick for one uid, leases due pending records, processes them through injected
     authoritative loader and vector adapter functions, and applies ack/retry/
-    dead-letter patches through the outbox ack writer. It is disabled by
+    dead-letter patches through the Firestore ack writer. It is disabled by
     default and does not register a production scheduler.
     """
     _validate_worker_tick_inputs(uid=uid, config=config)
@@ -81,6 +84,7 @@ def run_vector_repair_outbox_worker_tick(
 
     try:
         leased = lease_vector_repair_purge_outbox_records(
+            db_client=db_client,
             uid=uid,
             worker_id=config.worker_id,
             limit=config.limit,
@@ -101,7 +105,7 @@ def run_vector_repair_outbox_worker_tick(
 
     def ack_record(record: Dict[str, Any], patch: Dict[str, Any]) -> None:
         try:
-            ack_vector_repair_purge_outbox_record(record=record, patch=patch, now=now)
+            ack_vector_repair_purge_outbox_record(db_client=db_client, record=record, patch=patch, now=now)
         except Exception as exc:
             summary["ack_failed_count"] += 1
             summary["errors"].append(
@@ -187,6 +191,7 @@ def _empty_worker_tick_summary(*, uid: str, config: VectorRepairOutboxWorkerTick
 
 def lease_vector_repair_purge_outbox_records(
     *,
+    db_client: Any,
     uid: str,
     worker_id: str,
     limit: int = 25,
@@ -195,13 +200,13 @@ def lease_vector_repair_purge_outbox_records(
 ) -> List[Dict[str, Any]]:
     """Select and claim pending memory vector repair/purge outbox records.
 
-    This is a narrow storage-port seam for ``users/{uid}/memory_outbox/*``. It
-    intentionally does not start a production worker. The concurrency contract is:
-    query pending/available records, then re-read each document inside a
-    transaction before claiming and update only if it is still pending and still
-    available. The read/check/update runs through the port's ``run_transaction``
-    so real backends serialize competing claims while production concurrency/IAM
-    validation remains a gate.
+    This is a narrow Firestore/fake-friendly seam for
+    `users/{uid}/memory_outbox/*`. It intentionally does not start a production
+    worker. The concurrency contract is: query pending/available records, then
+    re-read each document before claiming and update only if it is still pending
+    and still available. Real Firestore deployments should run this read/check/
+    update in a transaction; this helper keeps the contract injectable and
+    emulator-testable while production concurrency/IAM validation remains a gate.
 
     Returned records preserve the original pending status so they can be passed
     to `process_vector_repair_purge_outbox_records(...)`; the stored document
@@ -220,36 +225,33 @@ def lease_vector_repair_purge_outbox_records(
     now_iso = observed_now.isoformat()
     lease_expires_at = (observed_now + timedelta(seconds=lease_seconds)).isoformat()
     collection_path = MemoryCollections(uid=uid).memory_outbox
-    pending_rows = _store().query(
-        collection_path,
-        filters=[
-            ("event_type", "==", VECTOR_REPAIR_PURGE_EVENT_TYPE),
-            ("status", "==", VECTOR_REPAIR_OUTBOX_PENDING_STATUS),
-            ("available_at", "<=", now_iso),
-        ],
-        limit=limit,
+    pending_query = (
+        db_client.collection(collection_path)
+        .where("event_type", "==", VECTOR_REPAIR_PURGE_EVENT_TYPE)
+        .where("status", "==", VECTOR_REPAIR_OUTBOX_PENDING_STATUS)
+        .where("available_at", "<=", now_iso)
+        .limit(limit)
     )
-    expired_rows = _store().query(
-        collection_path,
-        filters=[
-            ("event_type", "==", VECTOR_REPAIR_PURGE_EVENT_TYPE),
-            ("status", "==", VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS),
-            ("lease_expires_at", "<=", now_iso),
-        ],
-        limit=limit,
+    expired_lease_query = (
+        db_client.collection(collection_path)
+        .where("event_type", "==", VECTOR_REPAIR_PURGE_EVENT_TYPE)
+        .where("status", "==", VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS)
+        .where("lease_expires_at", "<=", now_iso)
+        .limit(limit)
     )
 
     leased: List[Dict[str, Any]] = []
     seen_paths: set[str] = set()
-    for rows in (pending_rows, expired_rows):
-        for snapshot in rows:
+    for query in (pending_query, expired_lease_query):
+        for snapshot in query.stream():
             if len(leased) >= limit:
                 return leased
-            path = snapshot.path
+            path = getattr(getattr(snapshot, "reference", None), "path", f"{collection_path}/{snapshot.id}")
             if path in seen_paths:
                 continue
             seen_paths.add(path)
             claimed = _claim_vector_repair_purge_outbox_snapshot(
+                db_client=db_client,
                 path=path,
                 worker_id=worker_id,
                 now_iso=now_iso,
@@ -262,6 +264,7 @@ def lease_vector_repair_purge_outbox_records(
 
 def ack_vector_repair_purge_outbox_record(
     *,
+    db_client: Any,
     record: Dict[str, Any],
     patch: Dict[str, Any],
     now: Optional[datetime] = None,
@@ -283,36 +286,109 @@ def ack_vector_repair_purge_outbox_record(
         path = f"{MemoryCollections(uid=uid).memory_outbox}/{record_id}"
     ack_patch = dict(patch)
     ack_patch["updated_at"] = _iso_now(now)
-    _store().update(path, ack_patch)
+    db_client.document(path).update(ack_patch)
     return ack_patch
 
 
 def _claim_vector_repair_purge_outbox_snapshot(
     *,
+    db_client: Any,
     path: str,
     worker_id: str,
     now_iso: str,
     lease_expires_at: str,
 ) -> Optional[Dict[str, Any]]:
-    """Claim one outbox document transactionally: re-read, check, then lease.
+    transaction_factory = getattr(db_client, "transaction", None)
+    if callable(transaction_factory):
+        transaction = transaction_factory()
+        if transaction.__class__.__module__.startswith("google.cloud.firestore"):
+            return _claim_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
+                transaction,
+                db_client=db_client,
+                path=path,
+                worker_id=worker_id,
+                now_iso=now_iso,
+                lease_expires_at=lease_expires_at,
+            )
+        return _claim_vector_repair_purge_outbox_snapshot_in_transaction(
+            transaction=transaction,
+            db_client=db_client,
+            path=path,
+            worker_id=worker_id,
+            now_iso=now_iso,
+            lease_expires_at=lease_expires_at,
+        )
 
-    All reads happen before the write so competing workers serialize on the same
-    pending record and at most one claims it.
-    """
+    return _claim_vector_repair_purge_outbox_snapshot_without_transaction(
+        db_client=db_client,
+        path=path,
+        worker_id=worker_id,
+        now_iso=now_iso,
+        lease_expires_at=lease_expires_at,
+    )
 
-    def _claim(tx) -> Optional[Dict[str, Any]]:
-        snapshot = tx.get(path)
-        if not snapshot.exists:
-            return None
-        record: Dict[str, Any] = cast(Dict[str, Any], snapshot.to_dict() or {})
-        if not _is_claimable_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
-            return None
-        record["outbox_path"] = path
-        record["status"] = VECTOR_REPAIR_OUTBOX_PENDING_STATUS
-        tx.update(path, _lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
-        return record
 
-    return _store().run_transaction(_claim)
+@_typed_transactional
+def _claim_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
+    transaction: Any,
+    *,
+    db_client: Any,
+    path: str,
+    worker_id: str,
+    now_iso: str,
+    lease_expires_at: str,
+) -> Optional[Dict[str, Any]]:
+    return _claim_vector_repair_purge_outbox_snapshot_in_transaction(
+        transaction=transaction,
+        db_client=db_client,
+        path=path,
+        worker_id=worker_id,
+        now_iso=now_iso,
+        lease_expires_at=lease_expires_at,
+    )
+
+
+def _claim_vector_repair_purge_outbox_snapshot_in_transaction(
+    *,
+    transaction: Any,
+    db_client: Any,
+    path: str,
+    worker_id: str,
+    now_iso: str,
+    lease_expires_at: str,
+) -> Optional[Dict[str, Any]]:
+    doc_ref = db_client.document(path)
+    snapshot = doc_ref.get(transaction=transaction)
+    if not getattr(snapshot, "exists", False):
+        return None
+    record: Dict[str, Any] = cast(Dict[str, Any], snapshot.to_dict() or {})
+    if not _is_claimable_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
+        return None
+    record["outbox_path"] = path
+    record["status"] = VECTOR_REPAIR_OUTBOX_PENDING_STATUS
+    transaction.update(doc_ref, _lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
+    return record
+
+
+def _claim_vector_repair_purge_outbox_snapshot_without_transaction(
+    *,
+    db_client: Any,
+    path: str,
+    worker_id: str,
+    now_iso: str,
+    lease_expires_at: str,
+) -> Optional[Dict[str, Any]]:
+    doc_ref = db_client.document(path)
+    snapshot = doc_ref.get()
+    if not getattr(snapshot, "exists", False):
+        return None
+    record: Dict[str, Any] = cast(Dict[str, Any], snapshot.to_dict() or {})
+    if not _is_claimable_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
+        return None
+    record["outbox_path"] = path
+    record["status"] = VECTOR_REPAIR_OUTBOX_PENDING_STATUS
+    doc_ref.update(_lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
+    return record
 
 
 def _is_claimable_vector_repair_purge_outbox_record(*, record: Dict[str, Any], now_iso: str) -> bool:

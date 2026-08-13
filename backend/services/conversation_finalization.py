@@ -9,11 +9,12 @@ presents its request-scoped keys.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from google.api_core.exceptions import InvalidArgument
 
 from database import conversation_finalization_jobs as jobs_db
-from database.firestore_errors import is_document_size_limit_error
+from database._client import is_document_size_limit_error
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
@@ -36,19 +37,19 @@ from utils.observability.journeys import (
 logger = logging.getLogger(__name__)
 
 
-def reconcile_listen_finalization_jobs(limit: int = 100) -> dict[str, int | float]:
+def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int | float]:
     """Replay stale queued/leased platform-key jobs and publish backlog signals."""
     result: dict[str, int | float] = {'requeued': 0, 'skipped': 0, 'enqueue_failed': 0}
     if not is_listen_finalization_dispatch_enabled():
-        _publish_job_metrics()
+        _publish_job_metrics(firestore_client=firestore_client)
         return result
 
     stale_after = jobs_db.get_finalization_reconcile_stale_after()
     try:
-        candidates = jobs_db.get_finalization_replay_candidates(limit=limit)
+        candidates = jobs_db.get_finalization_replay_candidates(limit=limit, firestore_client=firestore_client)
     except Exception:
         logger.exception('listen finalization reconciliation query failed')
-        _publish_job_metrics()
+        _publish_job_metrics(firestore_client=firestore_client)
         return result | {'error': 1}
 
     for candidate in candidates:
@@ -60,6 +61,7 @@ def reconcile_listen_finalization_jobs(limit: int = 100) -> dict[str, int | floa
             claimed = jobs_db.claim_finalization_replay(
                 job_id,
                 stale_after=stale_after,
+                firestore_client=firestore_client,
             )
         except Exception:
             logger.exception('listen finalization reconciliation claim failed job=%s', job_id)
@@ -87,11 +89,11 @@ def reconcile_listen_finalization_jobs(limit: int = 100) -> dict[str, int | floa
         record_capture_finalization_reconciliation('requeued')
         LISTEN_FINALIZATION_RETRIES_TOTAL.inc()
 
-    _publish_job_metrics()
+    _publish_job_metrics(firestore_client=firestore_client)
     return result
 
 
-def reconcile_stale_processing_conversations(limit: int = 100) -> dict[str, int]:
+def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int]:
     """Close bare-`processing` conversations stranded by a synchronous-route crash.
 
     The durable replay sweep (``reconcile_listen_finalization_jobs``) only covers
@@ -125,7 +127,7 @@ def reconcile_stale_processing_conversations(limit: int = 100) -> dict[str, int]
     result: dict[str, int] = {'completed': 0, 'migrated': 0, 'skipped': 0, 'error': 0}
     stale_after = jobs_db.get_stale_processing_orphan_after()
     try:
-        cursor = jobs_db.get_stale_processing_sweep_cursor()
+        cursor = jobs_db.get_stale_processing_sweep_cursor(firestore_client=firestore_client)
     except Exception:
         logger.exception('stale processing sweep cursor read failed; sweeping from the top')
         cursor = {'resume_after_path': None, 'generation': 0}
@@ -134,7 +136,7 @@ def reconcile_stale_processing_conversations(limit: int = 100) -> dict[str, int]
     expected_generation: int = int(cursor.get('generation') or 0)
     try:
         sweep = jobs_db.get_stale_processing_orphan_candidates(
-            stale_after=stale_after, limit=limit, resume_after_path=resume_after_path
+            stale_after=stale_after, limit=limit, resume_after_path=resume_after_path, firestore_client=firestore_client
         )
     except Exception:
         logger.exception('stale processing conversation reconciliation query failed')
@@ -142,7 +144,9 @@ def reconcile_stale_processing_conversations(limit: int = 100) -> dict[str, int]
         return result | {'error': 1}
     next_cursor = None if sweep['exhausted'] else sweep['resume_after_path']
     try:
-        jobs_db.advance_stale_processing_sweep_cursor(expected_generation, next_cursor)
+        jobs_db.advance_stale_processing_sweep_cursor(
+            expected_generation, next_cursor, firestore_client=firestore_client
+        )
     except Exception:
         logger.exception('stale processing sweep cursor advance failed; coverage is still guaranteed')
     for candidate in sweep['candidates']:
@@ -160,7 +164,9 @@ def reconcile_stale_processing_conversations(limit: int = 100) -> dict[str, int]
                 # ``migrated``; a CAS loss (already stamped / status changed /
                 # absent) is an expected ``skipped`` fencing, never a migration.
                 try:
-                    stamped = jobs_db.stamp_processing_admission_if_absent(uid, conversation_id)
+                    stamped = jobs_db.stamp_processing_admission_if_absent(
+                        uid, conversation_id, firestore_client=firestore_client
+                    )
                 except InvalidArgument as error:
                     if not is_document_size_limit_error(error):
                         raise
@@ -179,7 +185,7 @@ def reconcile_stale_processing_conversations(limit: int = 100) -> dict[str, int]
                         log=logger,
                     )
                     if jobs_db.complete_unstampable_orphan_conversation(
-                        uid, conversation_id, stale_after=stale_after
+                        uid, conversation_id, stale_after=stale_after, firestore_client=firestore_client
                     ):
                         result['completed'] += 1
                         LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='completed').inc()
@@ -198,6 +204,7 @@ def reconcile_stale_processing_conversations(limit: int = 100) -> dict[str, int]
                 uid,
                 conversation_id,
                 expected_admitted_at=candidate.get('processing_admitted_at'),
+                firestore_client=firestore_client,
             )
         except Exception:
             # An unexpected per-row failure (e.g. Firestore unavailable) is an
@@ -217,17 +224,20 @@ def reconcile_stale_processing_conversations(limit: int = 100) -> dict[str, int]
     return result
 
 
-def final_attempt_failed(job_id: str, dispatch_generation: int, lease_epoch: int, retry_count: int) -> bool:
+def final_attempt_failed(
+    job_id: str, dispatch_generation: int, lease_epoch: int, retry_count: int, *, firestore_client: Any = None
+) -> bool:
     marked = jobs_db.mark_finalization_dead_letter(
         job_id,
         dispatch_generation,
         lease_epoch,
         retry_count,
+        firestore_client=firestore_client,
     )
     if marked:
         LISTEN_FINALIZATION_DEAD_LETTER_TOTAL.inc()
         try:
-            job = jobs_db.get_finalization_job(job_id)
+            job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
             accepted_at = job.get('created_at') if job else None
             record_capture_finalization_terminal('failure', accepted_at)
         except Exception:
@@ -241,9 +251,9 @@ def get_listen_finalization_tasks_max_attempts_for_worker() -> int:
     return get_listen_finalization_tasks_max_attempts()
 
 
-def _publish_job_metrics() -> None:
+def _publish_job_metrics(*, firestore_client: Any = None) -> None:
     try:
-        summary = jobs_db.get_finalization_job_summary()
+        summary = jobs_db.get_finalization_job_summary(firestore_client=firestore_client)
     except Exception:
         logger.exception('listen finalization metrics query failed')
         return

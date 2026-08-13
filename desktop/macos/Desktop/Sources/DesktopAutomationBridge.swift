@@ -152,9 +152,9 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var homeMode: String?
   /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
   var shellVariant: String?
-  /// Stable typed route for the cohort shell. Nil for the legacy shell.
+  /// Stable typed route for the Chat-first shell. Nil for the legacy shell.
   var chatFirstRoute: String?
-  /// Set only by the mounted cohort destination after it has appeared. This
+  /// Set only by the mounted Chat-first destination after it has appeared. This
   /// keeps a successful navigation response equivalent to the target being
   /// visible, rather than merely accepted by the root reducer.
   var visibleChatFirstRoute: String?
@@ -1012,7 +1012,12 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "probe_suggestion_nudge",
       summary: "Run the real suggestion grounding/evaluation/delivery path on the latest frame",
-      params: ["app", "window_title"]
+      params: ["app", "window_title"],
+      safety: "network_or_model",
+      sideEffects: [
+        "may call model/backend services",
+        "may deliver a user-visible suggestion during the configured active period",
+      ]
     ) { params in
       let app = params["app"].flatMap { $0.isEmpty ? nil : $0 }
       let title = params["window_title"].flatMap { $0.isEmpty ? nil : $0 }
@@ -1068,7 +1073,7 @@ final class DesktopAutomationActionRegistry {
       else {
         throw DesktopAutomationActionError.invalidParams("context event could not be normalized")
       }
-      let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      let matched = await ContextSubjectBindingService.shared.resolve(event)
       let referenceHash = matched.referenceHash
       await TaskContextualResurfacingService.shared.observe(matched)
       let shouldFlush = boolParam(params["flush"], default: true)
@@ -3417,12 +3422,34 @@ final class DesktopAutomationActionRegistry {
       let appState = await MainActor.run { AppState.current }
       let hasPermission = appState?.hasNotificationPermission ?? false
       let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
+      let activePeriod = await MainActor.run { NotificationService.currentActivePeriod() }
       return [
         "enabled": settings.enabled ? "true" : "false",
         "frequency": "\(settings.frequency)",
         "frequency_label": settings.frequencyDescription,
         "has_permission": hasPermission ? "true" : "false",
         "banners_disabled": bannersDisabled ? "true" : "false",
+        "active_start_minute": "\(activePeriod.startMinute)",
+        "active_end_minute": "\(activePeriod.endMinute)",
+      ]
+    }
+
+    register(
+      name: "set_notification_active_period",
+      summary: "Set the device-local proactive notification active period",
+      params: ["start_minute", "end_minute"]
+    ) { params in
+      let current = await MainActor.run { NotificationService.currentActivePeriod() }
+      let startMinute = intParam(params["start_minute"], default: current.startMinute)
+      let endMinute = intParam(params["end_minute"], default: current.endMinute)
+      let saved = await MainActor.run { () -> NotificationActivePeriod in
+        NotificationService.updateActivePeriod(startMinute: startMinute, endMinute: endMinute)
+        return NotificationService.currentActivePeriod()
+      }
+      return [
+        "saved": "true",
+        "active_start_minute": "\(saved.startMinute)",
+        "active_end_minute": "\(saved.endMinute)",
       ]
     }
 
@@ -3437,6 +3464,12 @@ final class DesktopAutomationActionRegistry {
         enabled: enabled,
         frequency: frequency
       )
+      UserDefaults.standard.set(
+        response.enabled,
+        forKey: NotificationService.masterEnabledDefaultsKey)
+      UserDefaults.standard.set(
+        response.frequency,
+        forKey: NotificationService.frequencyDefaultsKey)
       return [
         "saved": "true",
         "enabled": response.enabled ? "true" : "false",

@@ -6,35 +6,21 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional, cast
 
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
+from google.cloud import firestore, firestore_v1
+from google.cloud.firestore_v1 import FieldFilter
+
 from models.chat import Message
 from utils import encryption
-from database.store import Filter, get_document_store
-from database.store.errors import AlreadyExists
-from database.store.sentinels import ArrayRemove, ArrayUnion, Increment
+from ._client import db
 from .helpers import prepare_for_read, prepare_for_write, set_data_protection_level
 from database.read_boundary import parse_snapshot_or_none
-
-
-def _store():
-    """The configured document store (``STORAGE_BACKEND`` seam, ADR-0002/0004). Tests patch this."""
-    return get_document_store()
-
-
-def _messages_path(uid: str) -> str:
-    return f'users/{uid}/messages'
-
-
-def _sessions_path(uid: str) -> str:
-    return f'users/{uid}/chat_sessions'
-
-
-def _files_path(uid: str) -> str:
-    return f'users/{uid}/files'
 
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
 DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write per deleted message.
+DELETE_MESSAGES_CONFLICT_RETRIES = 3
 CHAT_HISTORY_BASE_VISIBLE_MESSAGES = 10
 CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
 # Maximum number of reported (hidden) rows to over-fetch per raw Firestore
@@ -110,9 +96,8 @@ def _prepare_message_for_read(message_data: Dict[str, Any], uid: str) -> Dict[st
 @prepare_for_write(data_arg_name='message_data', prepare_func=_prepare_data_for_write)
 def add_message(uid: str, message_data: Dict[str, Any]) -> Dict[str, Any]:
     del message_data['memories']
-    # Firestore .add() stored messages under an auto-generated doc id (independent of the logical
-    # message id); preserve that with a fresh doc id.
-    _store().set(f'{_messages_path(uid)}/{str(uuid.uuid4())}', message_data)
+    user_ref = db.collection('users').document(uid)
+    user_ref.collection('messages').add(message_data)
     return message_data
 
 
@@ -181,15 +166,19 @@ def add_summary_message(text: str, uid: str) -> Message:
 def get_app_messages(
     uid: str, app_id: str, limit: int = 20, offset: int = 0, include_conversations: bool = False
 ) -> List[Dict[str, Any]]:
-    store = _store()
+    user_ref = db.collection('users').document(uid)
+    messages_ref = (
+        user_ref.collection('messages')
+        .where(filter=FieldFilter('plugin_id', '==', app_id))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(limit)
+        .offset(offset)
+    )
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
 
     # Fetch messages and collect conversation IDs
-    for doc in store.query(
-        _messages_path(uid), filters=[('plugin_id', '==', app_id)],
-        order_by='created_at', direction='desc', limit=limit, offset=offset,
-    ):
+    for doc in messages_ref.stream():
         message: Dict[str, Any] = _typed_doc(doc)
         if message.get('reported') is True:
             continue
@@ -201,9 +190,13 @@ def get_app_messages(
 
     # Fetch all conversations at once
     conversations: Dict[str, Any] = {}
-    for doc in store.get_many(f'users/{uid}/conversations', [str(cid) for cid in conversations_id]):
-        conversation: Dict[str, Any] = _typed_doc(doc)
-        conversations[conversation['id']] = conversation
+    conversations_ref = user_ref.collection('conversations')
+    doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversations_id]
+    docs = db.get_all(doc_refs)
+    for doc in docs:
+        if doc.exists:
+            conversation: Dict[str, Any] = _typed_doc(doc)
+            conversations[conversation['id']] = conversation
 
     # Attach conversations to messages
     for message in messages:
@@ -226,24 +219,24 @@ def get_messages(
     chat_session_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     logger.info(f'get_messages {uid} {limit} {offset} {app_id} {include_conversations}')
-    store = _store()
+    user_ref = db.collection('users').document(uid)
+    messages_ref = user_ref.collection('messages')
     if chat_session_id:
         # Session-scoped query: filter by session only, skip plugin_id filter
         # because the session already determines which app the messages belong to.
-        message_filters: List[Filter] = [('chat_session_id', '==', chat_session_id)]
+        messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     else:
         # App-scoped query: filter by plugin_id (None = main chat)
-        message_filters = [('plugin_id', '==', app_id)]
+        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
 
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
     files_id: set[str] = set()
 
     # Fetch messages and collect conversation IDs
-    for doc in store.query(
-        _messages_path(uid), filters=message_filters,
-        order_by='created_at', direction='desc', limit=limit, offset=offset,
-    ):
+    for doc in messages_ref.stream():
         message: Dict[str, Any] = _typed_doc(doc)
         if message.get('reported') is True:
             continue
@@ -256,9 +249,13 @@ def get_messages(
 
     # Fetch all conversations at once
     conversations: Dict[str, Any] = {}
-    for doc in store.get_many(f'users/{uid}/conversations', [str(cid) for cid in conversations_id]):
-        conversation: Dict[str, Any] = _typed_doc(doc)
-        conversations[conversation['id']] = conversation
+    conversations_ref = user_ref.collection('conversations')
+    doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversations_id]
+    docs = db.get_all(doc_refs)
+    for doc in docs:
+        if doc.exists:
+            conversation: Dict[str, Any] = _typed_doc(doc)
+            conversations[conversation['id']] = conversation
 
     # Attach conversations to messages
     for message in messages:
@@ -270,9 +267,13 @@ def get_messages(
 
     # Fetch file chat
     files: Dict[str, Any] = {}
-    for doc in store.get_many(_files_path(uid), [str(file_id) for file_id in files_id]):
-        file: Dict[str, Any] = _typed_doc(doc)
-        files[file['id']] = file
+    files_ref = user_ref.collection('files')
+    files_ref = [files_ref.document(str(file_id)) for file_id in files_id]
+    doc_files = db.get_all(files_ref)
+    for doc in doc_files:
+        if doc.exists:
+            file: Dict[str, Any] = _typed_doc(doc)
+            files[file['id']] = file
 
     # Attach files to messages
     for message in messages:
@@ -311,12 +312,17 @@ def get_cache_aligned_messages(
     by the scoped reported count guarantees the target number of visible messages
     even when hidden records fall inside the selected raw Firestore page.
     """
-    store = _store()
-    scope_filters: List[Filter] = (
-        [('chat_session_id', '==', chat_session_id)] if chat_session_id else [('plugin_id', '==', app_id)]
-    )
-    total = store.count(_messages_path(uid), filters=scope_filters)
-    reported = store.count(_messages_path(uid), filters=scope_filters + [('reported', '==', True)])
+    user_ref = db.collection('users').document(uid)
+    scoped_ref = user_ref.collection('messages')
+    if chat_session_id:
+        scoped_ref = scoped_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+    else:
+        scoped_ref = scoped_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    total_result = scoped_ref.count().get()
+    total = int(total_result[0][0].value) if total_result and total_result[0] else 0
+    reported_result = scoped_ref.where(filter=FieldFilter('reported', '==', True)).count().get()
+    reported = int(reported_result[0][0].value) if reported_result and reported_result[0] else 0
     visible_total = max(0, total - reported)
     visible_limit = cache_aligned_history_limit(visible_total)
     if visible_limit == 0:
@@ -356,28 +362,28 @@ def get_messages_reconcile_page(
     if limit < 1 or limit > 100:
         raise ValueError('reconcile page limit must be between 1 and 100')
 
-    store = _store()
-    base_filters: List[Filter] = (
-        [('chat_session_id', '==', chat_session_id)] if chat_session_id else [('plugin_id', '==', app_id)]
-    )
+    user_ref = db.collection('users').document(uid)
+    messages_collection = user_ref.collection('messages')
+    query: Any = messages_collection
+    if chat_session_id:
+        query = query.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+    else:
+        query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
+    query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    # Keyset cursor over (created_at, doc-id) via the port's tie-safe start_after (ADR-0018): a page
-    # boundary never skips or duplicates rows that share a created_at.
-    cursor: Optional[Dict[str, Any]] = None
+    cursor_snapshot: Any = None
     if cursor_message_id:
-        cursor_doc = store.get(f'{_messages_path(uid)}/{cursor_message_id}')
-        if not cursor_doc.exists:
+        cursor_snapshot = messages_collection.document(cursor_message_id).get()
+        if not cursor_snapshot.exists:
             raise MessageReconcileCursorError('message cursor does not exist')
-        cursor_payload = cursor_doc.to_dict() or {}
+        cursor_payload = _typed_doc(cursor_snapshot)
         cursor_in_scope = (
             cursor_payload.get('chat_session_id') == chat_session_id
             if chat_session_id
             else cursor_payload.get('plugin_id') == app_id
         )
-        cursor_created_at = cursor_payload.get('created_at')
-        if not cursor_in_scope or cursor_created_at is None:
+        if not cursor_in_scope or cursor_payload.get('created_at') is None:
             raise MessageReconcileCursorError('message cursor is outside the requested scope')
-        cursor = {'value': cursor_created_at, 'id': cursor_message_id}
 
     # Four pages of reported rows may be traversed per request. The returned
     # cursor lets a caller resume if the bounded budget is exhausted.
@@ -389,10 +395,8 @@ def get_messages_reconcile_page(
 
     while scanned < scan_budget and len(messages) < limit:
         batch_limit = min(100, scan_budget - scanned)
-        documents = store.query(
-            _messages_path(uid), filters=base_filters, order_by='created_at', direction='desc',
-            limit=batch_limit, start_after=cursor,
-        )
+        page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
+        documents = list(page_query.limit(batch_limit).stream())
         if not documents:
             has_more = False
             break
@@ -400,9 +404,9 @@ def get_messages_reconcile_page(
         reached_return_limit = False
         for document in documents:
             scanned += 1
-            message = _typed_doc(document)
-            cursor = {'value': message.get('created_at'), 'id': str(document.id)}
+            cursor_snapshot = document
             next_cursor = str(document.id)
+            message = _typed_doc(document)
             if message.get('reported') is not True:
                 messages.append(message)
                 if len(messages) == limit:
@@ -435,22 +439,23 @@ def get_message_count(uid: str) -> int:
     reported subset) rather than streaming every message. A ``reported == False`` count would be
     wrong because legacy messages may omit the field.
     """
-    store = _store()
-    total = store.count(_messages_path(uid))
-    reported = store.count(_messages_path(uid), filters=[('reported', '==', True)])
+    messages_ref = db.collection('users').document(uid).collection('messages')
+    total_res = messages_ref.count().get()
+    total = int(total_res[0][0].value) if total_res and total_res[0] else 0
+    reported_res = messages_ref.where(filter=FieldFilter('reported', '==', True)).count().get()
+    reported = int(reported_res[0][0].value) if reported_res and reported_res[0] else 0
     return max(0, total - reported)
 
 
 def iter_all_messages(uid: str, batch_size: int = 1000) -> Iterator[Dict[str, Any]]:
     """Yield all chat messages for a user, decrypted, in batches. Used for streaming data export."""
-    store = _store()
+    user_ref = db.collection('users').document(uid)
+    msgs_ref = user_ref.collection('messages').order_by('created_at', direction=firestore.Query.DESCENDING)
     offset = 0
     while True:
-        docs = store.query(
-            _messages_path(uid), order_by='created_at', direction='desc', limit=batch_size, offset=offset
-        )
+        batch_ref = msgs_ref.limit(batch_size).offset(offset)
         batch: List[Dict[str, Any]] = []
-        for doc in docs:
+        for doc in batch_ref.stream():
             msg: Dict[str, Any] = _typed_doc(doc)
             msg['id'] = doc.id
             msg = _prepare_message_for_read(msg, uid) or msg
@@ -462,10 +467,11 @@ def iter_all_messages(uid: str, batch_size: int = 1000) -> Iterator[Dict[str, An
 
 
 def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
-    docs = _store().query(_messages_path(uid), filters=[('id', '==', message_id)], limit=1)
-    if not docs:
+    user_ref = db.collection('users').document(uid)
+    message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
+    message_doc = next(message_ref, None)
+    if not message_doc:
         return None
-    message_doc = docs[0]
 
     message = parse_snapshot_or_none(
         Message,
@@ -479,8 +485,10 @@ def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
 
 
 def report_message(uid: str, msg_doc_id: str) -> Dict[str, str]:
+    user_ref = db.collection('users').document(uid)
+    message_ref = user_ref.collection('messages').document(msg_doc_id)
     try:
-        _store().update(f'{_messages_path(uid)}/{msg_doc_id}', {'reported': True})
+        message_ref.update({'reported': True})
         return {"message": "Message reported"}
     except Exception as e:
         logger.error(f"Update failed: {e}")
@@ -496,14 +504,15 @@ def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> b
         message_id: Message ID (not doc ID)
         rating: Rating value (1 = thumbs up, -1 = thumbs down, None = no rating)
     """
-    store = _store()
-    docs = store.query(_messages_path(uid), filters=[('id', '==', message_id)], limit=1)
-    if not docs:
+    user_ref = db.collection('users').document(uid)
+    message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
+    message_doc = next(message_ref, None)
+    if not message_doc:
         logger.warning(f"⚠️ Message {message_id} not found for user {uid}")
         return False
 
     try:
-        store.update(f'{_messages_path(uid)}/{docs[0].id}', {'rating': rating})
+        user_ref.collection('messages').document(message_doc.id).update({'rating': rating})
         logger.info(f"✅ Updated message {message_id} rating to {rating}")
         return True
     except Exception as e:
@@ -512,23 +521,25 @@ def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> b
 
 
 def batch_delete_messages(
-    uid: str, batch_size: int = 450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
+    parent_doc_ref: Any, batch_size: int = 450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
 ) -> None:
-    store = _store()
-    filters: List[Filter] = [('plugin_id', '==', app_id)]
+    messages_ref = parent_doc_ref.collection('messages')
+    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
-        filters.append(('chat_session_id', '==', chat_session_id))
+        messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     logger.info(f'batch_delete_messages {app_id}')
 
     while True:
-        docs_list = store.query(_messages_path(uid), filters=filters, limit=batch_size)
+        docs_stream = messages_ref.limit(batch_size).stream()
+        docs_list: List[Any] = list(docs_stream)
+
         if not docs_list:
             logger.info("No more messages to delete")
             break
 
-        batch = store.batch()
+        batch = db.batch()
         for doc in docs_list:
-            batch.delete(doc.path)
+            batch.delete(doc.reference)
         batch.commit()
 
         logger.info(f'Deleted {len(docs_list)} messages')
@@ -542,63 +553,80 @@ def clear_chat(
     uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
 ) -> Optional[Dict[str, str]]:
     try:
+        user_ref = db.collection('users').document(uid)
         logger.info(f"Deleting messages for user: {uid}")
-        if not _store().exists(f'users/{uid}'):
+        if not user_ref.get().exists:
             return {"message": "User not found"}
-        batch_delete_messages(uid, app_id=app_id, chat_session_id=chat_session_id)
+        batch_delete_messages(user_ref, app_id=app_id, chat_session_id=chat_session_id)
         return None
     except Exception as e:
         return {"message": str(e)}
 
 
 def add_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
-    batch = _store().batch()
+    batch = db.batch()
+    user_ref = db.collection('users').document(uid)
+
     for file_data in files_data:
-        batch.set(f"{_files_path(uid)}/{file_data['id']}", file_data)
+        file_ref = user_ref.collection('files').document(file_data['id'])
+        batch.set(file_ref, file_data)
+
     batch.commit()
 
 
 def get_chat_files(uid: str, files_id: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-    store = _store()
+    files_ref = db.collection('users').document(uid).collection('files')
+
     if files_id is None:
         files_id = []
 
     # If no specific files requested, return all
     if len(files_id) == 0:
-        return [_typed_doc(doc) for doc in store.query(_files_path(uid))]
+        return [_typed_doc(doc) for doc in files_ref.stream()]
 
-    # Firestore's IN operator caps at 30 values; chunk the queries (harmless on Mongo).
+    # Firestore IN operator supports max 30 values, so chunk the queries
+    if len(files_id) <= 30:
+        files_ref = files_ref.where(filter=FieldFilter('id', 'in', files_id))
+        return [_typed_doc(doc) for doc in files_ref.stream()]
+
+    # Chunk into batches of 30
     results: List[Dict[str, Any]] = []
     for i in range(0, len(files_id), 30):
         chunk = files_id[i : i + 30]
-        results.extend([_typed_doc(doc) for doc in store.query(_files_path(uid), filters=[('id', 'in', chunk)])])
+        chunk_ref = db.collection('users').document(uid).collection('files')
+        chunk_ref = chunk_ref.where(filter=FieldFilter('id', 'in', chunk))
+        results.extend([_typed_doc(doc) for doc in chunk_ref.stream()])
 
     return results
 
 
 def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: int = 10) -> List[Dict[str, Any]]:
     """Get the most recent chat files ordered by created_at descending, optionally filtered by file IDs"""
-    store = _store()
+    files_ref = db.collection('users').document(uid).collection('files')
+
     if files_id is None:
         files_id = []
 
     # If no specific files requested, return most recent files
     if len(files_id) == 0:
-        return [
-            _typed_doc(doc)
-            for doc in store.query(_files_path(uid), order_by='created_at', direction='desc', limit=limit)
-        ]
+        files_ref = files_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
+        return [_typed_doc(doc) for doc in files_ref.stream()]
 
-    # Firestore's IN operator caps at 30 values; chunk the queries (harmless on Mongo).
+    # If specific files requested, filter by them first
+    # Firestore IN operator supports max 30 values
+    if len(files_id) <= 30:
+        files_ref = files_ref.where(filter=FieldFilter('id', 'in', files_id))
+        files_ref = files_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
+        return [_typed_doc(doc) for doc in files_ref.stream()]
+
+    # Chunk into batches of 30 if more than 30 files
     results: List[Dict[str, Any]] = []
     for i in range(0, len(files_id), 30):
         chunk = files_id[i : i + 30]
-        results.extend(
-            _typed_doc(doc)
-            for doc in store.query(
-                _files_path(uid), filters=[('id', 'in', chunk)], order_by='created_at', direction='desc', limit=limit
-            )
-        )
+        chunk_ref = db.collection('users').document(uid).collection('files')
+        chunk_ref = chunk_ref.where(filter=FieldFilter('id', 'in', chunk))
+        chunk_ref = chunk_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+        results.extend([_typed_doc(doc) for doc in chunk_ref.stream()])
 
     # Sort all results by created_at and limit. Use a tz-aware sentinel for a missing created_at so it
     # never TypeError-compares against the tz-aware Firestore datetimes and sinks to the bottom of the
@@ -608,25 +636,43 @@ def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: i
 
 
 def delete_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
-    batch = _store().batch()
+    batch = db.batch()
+    user_ref = db.collection('users').document(uid)
+
     for file_data in files_data:
-        batch.delete(f"{_files_path(uid)}/{file_data['id']}")
+        file_ref = user_ref.collection('files').document(file_data["id"])
+        batch.delete(file_ref)
+
     batch.commit()
 
 
 def add_chat_session(uid: str, chat_session_data: Dict[str, Any]) -> Dict[str, Any]:
-    _store().set(f"{_sessions_path(uid)}/{chat_session_data['id']}", chat_session_data)
+    user_ref = db.collection('users').document(uid)
+    user_ref.collection('chat_sessions').document(chat_session_data['id']).set(chat_session_data)
     return chat_session_data
 
 
 def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    docs = _store().query(_sessions_path(uid), filters=[('plugin_id', '==', app_id)], limit=1)
-    return _typed_doc(docs[0]) if docs else None
+    session_ref = (
+        db.collection('users')
+        .document(uid)
+        .collection('chat_sessions')
+        .where(filter=FieldFilter('plugin_id', '==', app_id))
+        .limit(1)
+    )
+
+    sessions = session_ref.stream()
+    for session in sessions:
+        return _typed_doc(session)
+
+    return None
 
 
 def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[Dict[str, Any]]:
     """Get a specific chat session by its ID"""
-    session_doc = _store().get(f'{_sessions_path(uid)}/{chat_session_id}')
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_doc = session_ref.get()
 
     if session_doc.exists:
         data = session_doc.to_dict()
@@ -637,38 +683,47 @@ def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[Dict[str,
 
 
 def delete_chat_session(uid: str, chat_session_id: str, cascade_messages: bool = False) -> Optional[bool]:
-    store = _store()
-    session_path = f'{_sessions_path(uid)}/{chat_session_id}'
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
 
     if cascade_messages:
-        if not store.exists(session_path):
+        if not session_ref.get().exists:
             return False
+        msg_col = user_ref.collection('messages')
+        query = msg_col.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
         while True:
-            docs = store.query(_messages_path(uid), filters=[('chat_session_id', '==', chat_session_id)], limit=BATCH_LIMIT)
+            docs: List[Any] = list(query.limit(BATCH_LIMIT).stream())
             if not docs:
                 break
-            batch = store.batch()
+            batch = db.batch()
             for doc in docs:
-                batch.delete(doc.path)
+                batch.delete(msg_col.document(doc.id))
             batch.commit()
 
-    store.delete(session_path)
+    session_ref.delete()
     return None
 
 
 def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str) -> None:
-    _store().update(f'{_sessions_path(uid)}/{chat_session_id}', {"message_ids": ArrayUnion([message_id])})
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update({"message_ids": firestore.ArrayUnion([message_id])})
 
 
 def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str]) -> None:
     if not file_ids:
         return
 
-    _store().update(f'{_sessions_path(uid)}/{chat_session_id}', {"file_ids": ArrayUnion(file_ids)})
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update({"file_ids": firestore.ArrayUnion(file_ids)})
 
 
 def update_chat_session_openai_ids(uid: str, chat_session_id: str, thread_id: str, assistant_id: str) -> None:
     """Update OpenAI thread and assistant IDs for a chat session"""
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+
     update_data: Dict[str, str] = {}
     if thread_id:
         update_data['openai_thread_id'] = thread_id
@@ -676,7 +731,7 @@ def update_chat_session_openai_ids(uid: str, chat_session_id: str, thread_id: st
         update_data['openai_assistant_id'] = assistant_id
 
     if update_data:
-        _store().update(f'{_sessions_path(uid)}/{chat_session_id}', update_data)
+        session_ref.update(update_data)
         logger.info(f"Updated session {chat_session_id} with thread {thread_id} and assistant {assistant_id}")
 
 
@@ -691,7 +746,8 @@ def get_chats_to_migrate(uid: str, target_level: str) -> List[Dict[str, Any]]:
     and filtering them in memory. This simplifies the code but may be less performant for
     users with a very large number of documents.
     """
-    all_messages = _store().query(_messages_path(uid), fields=['data_protection_level'])
+    messages_ref = db.collection('users').document(uid).collection('messages')
+    all_messages = messages_ref.select(['data_protection_level']).stream()
 
     to_migrate: List[Dict[str, Any]] = []
     for doc in all_messages:
@@ -707,9 +763,16 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
     """
     Migrates a batch of chat messages to the target protection level.
     """
-    store = _store()
-    batch = store.batch()
-    for doc_snapshot in store.get_many(_messages_path(uid), message_doc_ids):
+    batch = db.batch()
+    messages_ref = db.collection('users').document(uid).collection('messages')
+    doc_refs = [messages_ref.document(msg_id) for msg_id in message_doc_ids]
+    doc_snapshots = db.get_all(doc_refs)
+
+    for doc_snapshot in doc_snapshots:
+        if not doc_snapshot.exists:
+            logger.warning(f"Message {doc_snapshot.id} not found, skipping.")
+            continue
+
         message_data: Dict[str, Any] = _typed_doc(doc_snapshot)
         current_level = message_data.get('data_protection_level', 'standard')
 
@@ -724,7 +787,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
                 migrated_text = encryption.encrypt(plain_text, uid)
 
         update_data: Dict[str, Any] = {'data_protection_level': target_level, 'text': migrated_text}
-        batch.update(doc_snapshot.path, update_data)
+        batch.update(doc_snapshot.reference, update_data)
 
     batch.commit()
 
@@ -777,7 +840,7 @@ def create_chat_session(uid: str, title: Optional[str] = None, app_id: Optional[
         'message_count': 0,
         'starred': False,
     }
-    _store().set(f'{_sessions_path(uid)}/{session_id}', doc)
+    db.collection('users').document(uid).collection('chat_sessions').document(session_id).set(doc)
     return doc
 
 
@@ -787,7 +850,9 @@ def acquire_chat_session(uid: str, app_id: Optional[str] = None) -> str:
     Queries by plugin_id to match both Python chat.py and Rust backend behavior.
     For main chat (app_id=None), matches sessions where plugin_id is None.
     """
-    docs = _store().query(_sessions_path(uid), filters=[('plugin_id', '==', app_id)], limit=1)
+    col = db.collection('users').document(uid).collection('chat_sessions')
+    query = col.where(filter=FieldFilter('plugin_id', '==', app_id)).limit(1)
+    docs = list(query.stream())
     if docs:
         return docs[0].id
     session = create_chat_session(uid, app_id=app_id)
@@ -801,17 +866,20 @@ def get_chat_sessions(
     offset: int = 0,
     starred: Optional[bool] = None,
 ) -> List[Dict[str, Any]]:
-    # Order by updated_at — v2 sessions always have this field. Legacy v1 sessions (missing
-    # updated_at) are excluded, which is correct since this endpoint serves v2 clients only.
-    # Always filter — when app_id is None this returns only default-chat sessions.
-    filters: List[Filter] = [('plugin_id', '==', app_id)]
-    if starred is not None:
-        filters.append(('starred', '==', starred))
+    col = db.collection('users').document(uid).collection('chat_sessions')
+    # Order by updated_at — v2 sessions always have this field.
+    # Legacy v1 sessions (missing updated_at) are excluded by Firestore,
+    # which is correct since this endpoint serves v2 clients only.
+    query = col.order_by('updated_at', direction=firestore.Query.DESCENDING)
 
+    # Always filter — when app_id is None this returns only default-chat sessions
+    query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
+    if starred is not None:
+        query = query.where(filter=FieldFilter('starred', '==', starred))
+
+    query = query.offset(offset).limit(limit)
     items: List[Dict[str, Any]] = []
-    for doc in _store().query(
-        _sessions_path(uid), filters=filters, order_by='updated_at', direction='desc', offset=offset, limit=limit
-    ):
+    for doc in query.stream():
         data: Dict[str, Any] = _typed_doc(doc)
         data['id'] = doc.id
         normalized = _normalize_chat_session(data)
@@ -826,17 +894,16 @@ def update_chat_session(
     title: Optional[str] = None,
     starred: Optional[bool] = None,
 ) -> Optional[Dict[str, Any]]:
-    store = _store()
-    path = f'{_sessions_path(uid)}/{session_id}'
-    if not store.exists(path):
+    ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
+    if not ref.get().exists:
         return None
     updates: Dict[str, Any] = {'updated_at': datetime.now(timezone.utc)}
     if title is not None:
         updates['title'] = title
     if starred is not None:
         updates['starred'] = starred
-    store.update(path, updates)
-    result: Dict[str, Any] = _typed_doc(store.get(path))
+    ref.update(updates)
+    result: Dict[str, Any] = _typed_doc(ref.get())
     result['id'] = session_id
     return _normalize_chat_session(result)
 
@@ -880,12 +947,12 @@ def save_message(
         message_source=message_source,
     )
 
-    store = _store()
-    message_path = f'{_messages_path(uid)}/{msg_id}'
+    message_ref = db.collection('users').document(uid).collection('messages').document(msg_id)
     if client_message_id:
-        if store.exists(message_path):
+        existing_message = message_ref.get()
+        if existing_message.exists:
             existing_result = _apply_existing_message_revision(
-                message_path,
+                message_ref,
                 text=text,
                 sender=sender,
                 app_id=app_id,
@@ -927,10 +994,10 @@ def save_message(
     created = True
     if client_message_id:
         try:
-            store.create(message_path, doc)
-        except AlreadyExists:
+            message_ref.create(doc)
+        except (AlreadyExists, Conflict):
             existing_result = _apply_existing_message_revision(
-                message_path,
+                message_ref,
                 text=text,
                 sender=sender,
                 app_id=app_id,
@@ -944,20 +1011,19 @@ def save_message(
                 raise ClientMessageIdPayloadConflict('client_message_id disappeared during revision arbitration')
             return _message_revision_response(msg_id, existing_result, now)
     else:
-        store.set(message_path, doc)
+        message_ref.set(doc)
 
     # Update session message_count and preview (skip if session was deleted).
     # Retried client_message_id saves are idempotent and must not bump counters.
     if session_id and created:
-        session_path = f'{_sessions_path(uid)}/{session_id}'
-        if store.exists(session_path):
-            store.update(
-                session_path,
+        session_ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
+        if session_ref.get().exists:
+            session_ref.update(
                 {
                     'updated_at': now,
-                    'message_count': Increment(1),
+                    'message_count': firestore.Increment(1),
                     'preview': text[:100] if text else None,
-                },
+                }
             )
 
     return {
@@ -971,7 +1037,7 @@ def save_message(
 
 
 def _apply_existing_message_revision(
-    message_path: str,
+    message_ref: Any,
     *,
     text: str,
     sender: str,
@@ -983,9 +1049,11 @@ def _apply_existing_message_revision(
     journal_revision: Optional[int],
 ) -> Optional[Dict[str, Any]]:
     """Atomically arbitrate an idempotent retry or monotonic journal enrichment."""
+    transaction = db.transaction()
 
+    @firestore_v1.transactional
     def apply(write_transaction: Any) -> Optional[Dict[str, Any]]:
-        snapshot = write_transaction.get(message_path)
+        snapshot = message_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             return None
         existing = _typed_doc(snapshot)
@@ -1033,12 +1101,12 @@ def _apply_existing_message_revision(
             'client_message_payload_hash': payload_hash,
             'journal_revision': journal_revision,
         }
-        write_transaction.update(message_path, patch)
+        write_transaction.update(message_ref, patch)
         existing.update(patch)
         existing['_revision_updated'] = True
         return existing
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def _assert_message_identity(
@@ -1138,29 +1206,27 @@ def _message_idempotency_payload_hash(
 
 
 def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional[str] = None) -> int:
-    """Delete messages and apply inverse session metadata updates atomically.
-
-    Each batch runs in a storage-port transaction: the session docs are read and updated together
-    with the message deletes, so the counters stay consistent, and the transaction's contention
-    retry replaces the Firestore ``last_update_time`` preconditions the raw path used (WP2, ADR-0002).
-    """
-    store = _store()
-    filters: List[Filter] = (
-        [('chat_session_id', '==', session_id)] if session_id else [('plugin_id', '==', app_id)]
-    )
+    """Delete messages and apply inverse session metadata updates atomically."""
+    user_ref = db.collection('users').document(uid)
+    col = user_ref.collection('messages')
+    if session_id:
+        # Session-scoped delete: filter by session only (same logic as get_messages)
+        query = col.where(filter=FieldFilter('chat_session_id', '==', session_id))
+    else:
+        # App-scoped delete: filter by plugin_id (None = main chat)
+        query = col.where(filter=FieldFilter('plugin_id', '==', app_id))
 
     deleted = 0
+    consecutive_conflicts = 0
     while True:
-        docs = store.query(_messages_path(uid), filters=filters, limit=DELETE_MESSAGES_BATCH_LIMIT)
+        docs: List[Any] = list(query.limit(DELETE_MESSAGES_BATCH_LIMIT).stream())
         if not docs:
             break
 
         deleted_by_session: Dict[str, int] = {}
         deleted_message_ids_by_session: Dict[str, List[str]] = {}
         deleted_previews_by_session: Dict[str, set[str]] = {}
-        message_paths: List[str] = []
         for doc in docs:
-            message_paths.append(doc.path)
             data = _typed_doc(doc)
             message_session_id = data.get('chat_session_id') or data.get('session_id')
             if isinstance(message_session_id, str) and message_session_id:
@@ -1173,41 +1239,50 @@ def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional
                 if isinstance(text, str) and text:
                     deleted_previews_by_session.setdefault(message_session_id, set()).add(text[:100])
 
-        def _apply(tx) -> None:
-            # Reads first (transactions require all reads before writes on Firestore).
-            session_data_by_id: Dict[str, Dict[str, Any]] = {}
-            for message_session_id in deleted_by_session:
-                snapshot = tx.get(f'{_sessions_path(uid)}/{message_session_id}')
-                if snapshot.exists:
-                    session_data_by_id[message_session_id] = snapshot.to_dict() or {}
-            # Read the target messages into the transaction read-set too, so a concurrent update or
-            # recreation of any of them aborts+retries this cleanup instead of silently deleting a
-            # message a concurrent writer just changed (restores the removed last_update_time guard).
-            for path in message_paths:
-                tx.get(path)
-            # Writes: delete the messages, then apply the inverse session-metadata updates.
-            for path in message_paths:
-                tx.delete(path)
-            for message_session_id, deleted_from_session in deleted_by_session.items():
-                session_data = session_data_by_id.get(message_session_id)
-                if session_data is None:
-                    continue
-                stored_count = session_data.get('message_count')
-                updates: Dict[str, Any] = {}
-                if isinstance(session_data.get('message_ids'), list):
-                    updates['message_ids'] = ArrayRemove(deleted_message_ids_by_session[message_session_id])
-                if isinstance(stored_count, int) and stored_count > 0:
-                    decrement = min(stored_count, deleted_from_session)
-                    updates['message_count'] = Increment(-decrement)
-                current_preview = session_data.get('preview')
-                if isinstance(current_preview, str) and current_preview in deleted_previews_by_session.get(
-                    message_session_id, set()
-                ):
-                    updates['preview'] = None
-                if updates:
-                    tx.update(f'{_sessions_path(uid)}/{message_session_id}', updates)
+        session_snapshots: Dict[str, Any] = {}
+        for message_session_id in deleted_by_session:
+            session_snapshots[message_session_id] = (
+                user_ref.collection('chat_sessions').document(message_session_id).get()
+            )
 
-        store.run_transaction(_apply)
+        batch = db.batch()
+        for doc in docs:
+            delete_option = db.write_option(last_update_time=doc.update_time)
+            batch.delete(col.document(doc.id), option=delete_option)
+
+        for message_session_id, deleted_from_session in deleted_by_session.items():
+            session_snapshot = session_snapshots[message_session_id]
+            if not session_snapshot.exists:
+                continue
+            session_data = _typed_doc(session_snapshot)
+            stored_count = session_data.get('message_count')
+            updates: Dict[str, Any] = {}
+            if isinstance(session_data.get('message_ids'), list):
+                updates['message_ids'] = firestore.ArrayRemove(deleted_message_ids_by_session[message_session_id])
+            if isinstance(stored_count, int) and stored_count > 0:
+                decrement = min(stored_count, deleted_from_session)
+                updates['message_count'] = firestore.Increment(-decrement)
+            current_preview = session_data.get('preview')
+            if isinstance(current_preview, str) and current_preview in deleted_previews_by_session.get(
+                message_session_id, set()
+            ):
+                updates['preview'] = None
+            if not updates:
+                continue
+            session_ref = user_ref.collection('chat_sessions').document(message_session_id)
+            option = db.write_option(last_update_time=session_snapshot.update_time)
+            batch.update(session_ref, updates, option=option)
+
+        try:
+            batch.commit()
+        except FailedPrecondition:
+            # Another clear or a concurrent session mutation won the race.
+            # The batch is atomic, so re-query before applying any decrement.
+            consecutive_conflicts += 1
+            if consecutive_conflicts >= DELETE_MESSAGES_CONFLICT_RETRIES:
+                raise
+            continue
         deleted += len(docs)
+        consecutive_conflicts = 0
 
     return deleted

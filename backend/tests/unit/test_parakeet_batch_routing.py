@@ -14,34 +14,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
 os.environ["PARAKEET_STREAM_MODEL"] = ""
 
-import transcribe as _transcribe_mod  # noqa: E402
 from transcribe import (  # noqa: E402
     _transcribe_from_gpu_result,
     _transcribe_via_gpu_worker,
-    _validate_stream_model,
     set_gpu_worker,
     transcribe_file,
     transcribe_file_v2,
 )
-
-
-class TestStreamModelValidation:
-    """The serving pod must reject an unapproved PARAKEET_STREAM_MODEL (fail fast).
-
-    Otherwise the pod attempts a nonexistent model while routing still claims the English-only
-    default is served — a silent divergence to an unavailable backend.
-    """
-
-    def test_unapproved_stream_model_fails_fast(self):
-        with pytest.raises(ValueError, match="is not an approved streaming model"):
-            _validate_stream_model("nvidia/not-a-real-model")
-
-    @pytest.mark.parametrize(
-        "model", ["nvidia/parakeet-rnnt-1.1b", "nvidia/parakeet-1-1b-rnnt-multilingual"]
-    )
-    def test_approved_stream_models_pass(self, model):
-        assert _validate_stream_model(model) is None
-        assert model in _transcribe_mod.APPROVED_STREAM_MODELS
 
 
 class TestTranscribeFromGpuResult:

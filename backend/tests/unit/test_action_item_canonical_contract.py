@@ -15,7 +15,6 @@ from models.action_item import (
     CanonicalTaskUpdate,
 )
 import routers.action_items as action_items_router
-from tests.store_fakes import FakeDocumentStore
 from utils.task_intelligence import task_links
 
 
@@ -139,18 +138,16 @@ def test_database_write_projection_defaults_canonical_fields_without_losing_comp
 
 
 def test_apple_sync_batch_preserves_omitted_canonical_fields(monkeypatch):
-    class _RecordingStore(FakeDocumentStore):
-        def __init__(self):
-            super().__init__()
-            self.updates = []
-
-        def update(self, path, data):
-            self.updates.append((path, dict(data)))
-            super().update(path, data)
-
-    store = _RecordingStore()
-    store._docs['users/user-1/action_items/task-1'] = {'description': 'existing'}
-    monkeypatch.setattr(action_items_db, '_store', lambda: store)
+    document_ref = MagicMock()
+    action_items = MagicMock()
+    action_items.document.return_value = document_ref
+    user_ref = MagicMock()
+    user_ref.collection.return_value = action_items
+    users = MagicMock()
+    users.document.return_value = user_ref
+    fake_db = MagicMock()
+    fake_db.collection.return_value = users
+    monkeypatch.setattr(action_items_db, 'db', fake_db)
 
     result = action_items_db.batch_sync_update_action_items(
         'user-1',
@@ -166,9 +163,8 @@ def test_apple_sync_batch_preserves_omitted_canonical_fields(monkeypatch):
         ],
     )
 
-    assert len(store.updates) == 1
-    path, patch = store.updates[0]
-    assert path == 'users/user-1/action_items/task-1'
+    document_ref.update.assert_called_once()
+    patch = document_ref.update.call_args.args[0]
     assert isinstance(patch['updated_at'], datetime)
     assert {key: value for key, value in patch.items() if key != 'updated_at'} == {
         'exported': True,
@@ -176,16 +172,27 @@ def test_apple_sync_batch_preserves_omitted_canonical_fields(monkeypatch):
         'apple_reminder_id': 'reminder-1',
         'sync_requested': False,
     }, 'an Apple sync patch must not replace omitted canonical task fields with create defaults'
-    # A partial update, not a full replace: the omitted field survives.
-    assert store._docs['users/user-1/action_items/task-1']['description'] == 'existing'
     assert result.updated_ids == ['task-1']
 
 
 def test_write_mode_reprocessing_soft_retires_removed_tasks_and_preserves_receipt_targets(monkeypatch):
-    store = FakeDocumentStore()
-    store._docs['users/user-1/action_items/task-active'] = {'conversation_id': 'conversation-1'}
-    store._docs['users/user-1/action_items/task-removed'] = {'conversation_id': 'conversation-1'}
-    monkeypatch.setattr(action_items_db, '_store', lambda: store)
+    active = MagicMock(id='task-active')
+    removed = MagicMock(id='task-removed')
+    active.reference = MagicMock()
+    removed.reference = MagicMock()
+    query = MagicMock()
+    query.stream.return_value = [active, removed]
+    collection = MagicMock()
+    collection.where.return_value = query
+    user_ref = MagicMock()
+    user_ref.collection.return_value = collection
+    users = MagicMock()
+    users.document.return_value = user_ref
+    batch = MagicMock()
+    fake_db = MagicMock()
+    fake_db.collection.return_value = users
+    fake_db.batch.return_value = batch
+    monkeypatch.setattr(action_items_db, 'db', fake_db)
 
     count = action_items_db.retire_action_items_for_conversation(
         'user-1',
@@ -195,27 +202,41 @@ def test_write_mode_reprocessing_soft_retires_removed_tasks_and_preserves_receip
     )
 
     assert count == 1
-    removed = store._docs['users/user-1/action_items/task-removed']
-    assert removed['deleted'] is True
-    assert removed['status'] == 'superseded'
-    assert removed['superseded_by'] == 'task-replacement'
-    # The still-active task keeps its target (never soft-retired).
-    assert 'deleted' not in store._docs['users/user-1/action_items/task-active']
+    batch.update.assert_called_once()
+    assert batch.update.call_args.args[0] is removed.reference
+    patch = batch.update.call_args.args[1]
+    assert patch['deleted'] is True
+    assert patch['status'] == 'superseded'
+    assert patch['superseded_by'] == 'task-replacement'
+    batch.commit.assert_called_once()
 
 
 def test_action_item_lists_hide_soft_retired_rows_before_pagination(monkeypatch):
-    store = FakeDocumentStore()
-    store._docs['users/user-1/action_items/task-active'] = {
+    active = MagicMock(id='task-active')
+    active.to_dict.return_value = {
         'description': 'Active task',
         'created_at': datetime(2026, 7, 9, tzinfo=timezone.utc),
         'deleted': False,
     }
-    store._docs['users/user-1/action_items/task-retired'] = {
+    retired = MagicMock(id='task-retired')
+    retired.to_dict.return_value = {
         'description': 'Retired task',
         'created_at': datetime(2026, 7, 10, tzinfo=timezone.utc),
         'deleted': True,
     }
-    monkeypatch.setattr(action_items_db, '_store', lambda: store)
+    query = MagicMock()
+    query.order_by.return_value = query
+    query.stream.return_value = [retired, active]
+    collection = MagicMock()
+    collection.where.return_value = query
+    collection.order_by.return_value = query
+    user_ref = MagicMock()
+    user_ref.collection.return_value = collection
+    users = MagicMock()
+    users.document.return_value = user_ref
+    fake_db = MagicMock()
+    fake_db.collection.return_value = users
+    monkeypatch.setattr(action_items_db, 'db', fake_db)
 
     rows = action_items_db.get_action_items('user-1', limit=1)
 

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from unittest.mock import MagicMock
 
+from google.cloud import firestore
 import pytest
 
 os.environ.setdefault(
@@ -22,55 +23,124 @@ from database.api_key_metadata import (
     ApiKeyRevocationUnavailableError,
     ApiKeyValidationError,
 )
-from tests.store_fakes import FakeDocumentStore
 
 
-def _dev_store(seed=()):
-    """Build a FakeDocumentStore for the (migrated) dev_api_key module over ``dev_api_keys``.
-
-    ``seed`` is an iterable of ``(doc_id, data, create_time)``. ``create_time`` maps to the
-    neutral last-write revision (``StoredDocument.updated_at``) the migrated module reads as the
-    legacy ``created_at`` fallback; pass ``None`` to leave a doc without a revision (→ epoch
-    fallback). Docs are placed directly in the backing dict so pre-seeded revisions are exactly
-    what the test asked for, not a write timestamp.
-    """
-    docs: dict[str, Any] = {}
-    updated: dict[str, Any] = {}
-    for doc_id, data, create_time in seed:
-        path = f"dev_api_keys/{doc_id}"
-        docs[path] = dict(data)
-        if create_time is not None:
-            updated[path] = create_time
-    store = FakeDocumentStore(backing=docs)
-    store._updated.update(updated)
-    return store
+def _deep_merge(target: dict[str, Any], patch: dict[str, Any]) -> None:
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(target.get(key), dict):
+            _deep_merge(target[key], value)
+        else:
+            target[key] = value
 
 
-def _mcp_store(seed=()):
-    """Build a FakeDocumentStore for the (migrated) mcp_api_key module over ``mcp_api_keys``.
+class _DocumentSnapshot:
+    def __init__(self, reference: "_DocumentReference", data: Optional[dict[str, Any]], create_time: object = None):
+        self.reference = reference
+        self.id = reference.id
+        self._data = data
+        self.exists = data is not None
+        self.create_time = create_time
 
-    Same contract as ``_dev_store`` but scoped to the ``mcp_api_keys`` collection. ``create_time``
-    maps to ``StoredDocument.updated_at`` — the neutral revision the migrated module reads as the
-    legacy ``created_at`` fallback — and is seeded directly into the backing so a pre-seeded
-    revision stays exact rather than becoming a write timestamp.
-    """
-    docs: dict[str, Any] = {}
-    updated: dict[str, Any] = {}
-    for doc_id, data, create_time in seed:
-        path = f"mcp_api_keys/{doc_id}"
-        docs[path] = dict(data)
-        if create_time is not None:
-            updated[path] = create_time
-    store = FakeDocumentStore(backing=docs)
-    store._updated.update(updated)
-    return store
+    def to_dict(self) -> dict[str, Any]:
+        return dict(self._data or {})
 
 
-def _mcp_grant_path(user_id: str) -> str:
-    return (
-        f"users/{user_id}/{mcp_api_key_db.MCP_MEMORY_CONTROL_COLLECTION}"
-        f"/{mcp_api_key_db.MCP_APP_KEY_MEMORY_GRANTS_DOC_ID}"
-    )
+class _DocumentReference:
+    def __init__(self, collection: "_Collection", doc_id: str):
+        self._collection = collection
+        self.id = doc_id
+
+    def collection(self, name: str) -> "_Collection":
+        return self._collection._db.collection(f"{self._collection.name}/{self.id}/{name}")
+
+    def get(self) -> _DocumentSnapshot:
+        record = self._collection._records.get(self.id)
+        return _DocumentSnapshot(
+            self,
+            dict(record["data"]) if record else None,
+            record.get("create_time") if record else None,
+        )
+
+    def set(self, data: dict[str, Any], merge: bool = False) -> None:
+        record = self._collection._records.get(self.id)
+        if merge and record:
+            _deep_merge(record["data"], dict(data))
+            return
+        self._collection._records[self.id] = {"data": dict(data), "create_time": None}
+
+    def update(self, data: dict[str, Any]) -> None:
+        record = self._collection._records.setdefault(self.id, {"data": {}, "create_time": None})
+        target = record["data"]
+        for path, value in data.items():
+            parts = path.split(".")
+            parent = target
+            for part in parts[:-1]:
+                parent = parent.setdefault(part, {})
+            if value is firestore.DELETE_FIELD:
+                parent.pop(parts[-1], None)
+            else:
+                parent[parts[-1]] = value
+
+    def delete(self) -> None:
+        self._collection._records.pop(self.id, None)
+
+
+class _Query:
+    def __init__(self, collection: "_Collection", conditions: tuple[tuple[str, object], ...] = (), limit: int = 0):
+        self._collection = collection
+        self._conditions = conditions
+        self._limit = limit
+
+    def where(self, field: str, operator: str, expected: object) -> "_Query":
+        assert operator == "=="
+        return _Query(self._collection, (*self._conditions, (field, expected)), self._limit)
+
+    def limit(self, limit: int) -> "_Query":
+        return _Query(self._collection, self._conditions, limit)
+
+    def stream(self) -> list[_DocumentSnapshot]:
+        docs = []
+        for doc_id, record in self._collection._records.items():
+            data = record["data"]
+            if all(data.get(field) == expected for field, expected in self._conditions):
+                reference = _DocumentReference(self._collection, doc_id)
+                docs.append(_DocumentSnapshot(reference, dict(data), record.get("create_time")))
+        return docs[: self._limit] if self._limit else docs
+
+
+class _Collection:
+    def __init__(self, db: "_Firestore", name: str):
+        self._db = db
+        self.name = name
+        self._records: dict[str, dict[str, Any]] = {}
+
+    def document(self, doc_id: str) -> _DocumentReference:
+        return _DocumentReference(self, doc_id)
+
+    def where(self, field: str, operator: str, expected: object) -> _Query:
+        return _Query(self).where(field, operator, expected)
+
+
+class _Firestore:
+    def __init__(self):
+        self._collections: dict[str, _Collection] = {}
+
+    def collection(self, name: str) -> _Collection:
+        self._collections.setdefault(name, _Collection(self, name))
+        return self._collections[name]
+
+    def seed(
+        self,
+        collection: str,
+        doc_id: str,
+        data: dict[str, Any],
+        *,
+        create_time: object = None,
+    ) -> None:
+        self.collection(collection)._records[doc_id] = {
+            "data": dict(data),
+            "create_time": create_time,
+        }
 
 
 class _Redis:
@@ -176,30 +246,35 @@ class _DeleteFailingRedisKeyValueStore(_RedisKeyValueStore):
         raise RuntimeError("redis delete unavailable")
 
 
-def _mcp_grant_keys(store: FakeDocumentStore, user_id: str) -> dict[str, Any]:
-    grant = store.get(_mcp_grant_path(user_id)).to_dict()
+def _mcp_grant_keys(db: _Firestore, user_id: str) -> dict[str, Any]:
+    grant = (
+        db.collection("users")
+        .document(user_id)
+        .collection(mcp_api_key_db.MCP_MEMORY_CONTROL_COLLECTION)
+        .document(mcp_api_key_db.MCP_APP_KEY_MEMORY_GRANTS_DOC_ID)
+        .get()
+        .to_dict()
+    )
     return grant["grants"]["mcp"]["apps"][mcp_api_key_db.MCP_DEFAULT_APP_ID]["keys"]
 
 
 def test_mcp_key_authentication_metadata_projection_and_revocation_share_document_identity(monkeypatch):
     raw_token = "omi_mcp_0123456789abcdef0123456789abcdef"
-    store = _mcp_store(
-        [
-            (
-                "canonical-mcp-id",
-                {
-                    "id": "embedded-wrong-id",
-                    "user_id": "user-1",
-                    "hashed_key": mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_")),
-                    "name": raw_token,
-                    "key_prefix": raw_token,
-                    "created_at": "not-a-time",
-                    "last_used_at": "not-a-time",
-                    "scopes": "memories.read",
-                },
-                datetime(2024, 1, 2),
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "mcp_api_keys",
+        "canonical-mcp-id",
+        {
+            "id": "embedded-wrong-id",
+            "user_id": "user-1",
+            "hashed_key": mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_")),
+            "name": raw_token,
+            "key_prefix": raw_token,
+            "created_at": "not-a-time",
+            "last_used_at": "not-a-time",
+            "scopes": "memories.read",
+        },
+        create_time=datetime(2024, 1, 2),
     )
     redis = _Redis()
     redis.mcp_context = {
@@ -208,7 +283,7 @@ def test_mcp_key_authentication_metadata_projection_and_revocation_share_documen
         "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
         "scopes": mcp_api_key_db.MCP_FULL_ACCESS_SCOPES,
     }
-    monkeypatch.setattr(mcp_api_key_db, "_store", lambda: store)
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
 
     auth_result = mcp_api_key_db.get_api_key_auth_result(raw_token)
@@ -228,17 +303,14 @@ def test_mcp_key_authentication_metadata_projection_and_revocation_share_documen
     }
     assert redis.mcp_context["auth_context_version"] == mcp_api_key_db.MCP_API_KEY_AUTH_CONTEXT_VERSION
     assert redis.mcp_context["key_id"] == "canonical-mcp-id"
-    assert set(_mcp_grant_keys(store, "user-1")) == {"canonical-mcp-id"}
+    assert set(_mcp_grant_keys(db, "user-1")) == {"canonical-mcp-id"}
 
     listed, repairs = mcp_api_key_db.get_mcp_keys_for_user_with_repair_info("user-1")
 
     assert [key.id for key in listed] == ["canonical-mcp-id"]
     assert listed[0].name == "Legacy MCP API key"
     assert listed[0].key_prefix == "omi_mcp_legacy"
-    # Corrupt stored created_at falls back to the document's neutral last-write revision; the auth
-    # call above rewrote the document, so that revision is now the current write, not the seeded one.
-    assert listed[0].created_at == store.get("mcp_api_keys/canonical-mcp-id").updated_at
-    assert listed[0].created_at.tzinfo == timezone.utc
+    assert listed[0].created_at == datetime(2024, 1, 2, tzinfo=timezone.utc)
     assert raw_token not in json.dumps([key.model_dump(mode="json") for key in listed])
     assert repairs == {
         ApiKeyMetadataRepair.NAME,
@@ -248,30 +320,28 @@ def test_mcp_key_authentication_metadata_projection_and_revocation_share_documen
 
     mcp_api_key_db.delete_mcp_key("user-1", listed[0].id)
 
-    assert _mcp_grant_keys(store, "user-1") == {}
+    assert _mcp_grant_keys(db, "user-1") == {}
     assert mcp_api_key_db.get_user_and_scopes_by_api_key(raw_token) is None
 
 
 def test_developer_key_authentication_metadata_projection_and_revocation_share_document_identity(monkeypatch):
     raw_token = "omi_dev_0123456789abcdef0123456789abcdef"
-    store = _dev_store(
-        [
-            (
-                "canonical-dev-id",
-                {
-                    "id": "embedded-wrong-id",
-                    "user_id": "user-1",
-                    "hashed_key": dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_")),
-                    "name": raw_token,
-                    "key_prefix": raw_token,
-                    "created_at": None,
-                    "last_used_at": {"invalid": True},
-                    "app_id": raw_token,
-                    "scopes": ["memories:read", "unknown", 7],
-                },
-                datetime(2024, 2, 3, tzinfo=timezone.utc),
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "dev_api_keys",
+        "canonical-dev-id",
+        {
+            "id": "embedded-wrong-id",
+            "user_id": "user-1",
+            "hashed_key": dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_")),
+            "name": raw_token,
+            "key_prefix": raw_token,
+            "created_at": None,
+            "last_used_at": {"invalid": True},
+            "app_id": raw_token,
+            "scopes": ["memories:read", "unknown", 7],
+        },
+        create_time=datetime(2024, 2, 3, tzinfo=timezone.utc),
     )
     redis = _Redis()
     redis.dev_context = {
@@ -281,7 +351,7 @@ def test_developer_key_authentication_metadata_projection_and_revocation_share_d
         "scopes": ["memories:write"],
     }
     removed_grants: list[tuple[str, str]] = []
-    monkeypatch.setattr(dev_api_key_db, "_store", lambda: store)
+    monkeypatch.setattr(dev_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(dev_api_key_db, "redis_db", redis)
     monkeypatch.setattr(
         dev_api_key_db,
@@ -292,9 +362,6 @@ def test_developer_key_authentication_metadata_projection_and_revocation_share_d
     initial_list, initial_repairs = dev_api_key_db.get_dev_keys_for_user_with_repair_info("user-1")
 
     assert initial_repairs == set(ApiKeyMetadataRepair)
-    # Corrupt stored created_at falls back to the document's neutral last-write revision; before any
-    # write that revision is exactly the seeded one.
-    assert initial_list[0].created_at == datetime(2024, 2, 3, tzinfo=timezone.utc)
     assert raw_token not in json.dumps([key.model_dump(mode="json") for key in initial_list])
 
     auth_result = dev_api_key_db.get_api_key_auth_result(raw_token)
@@ -319,10 +386,7 @@ def test_developer_key_authentication_metadata_projection_and_revocation_share_d
     assert [key.id for key in listed] == ["canonical-dev-id"]
     assert listed[0].name == "Legacy Developer API key"
     assert listed[0].key_prefix == "omi_dev_legacy"
-    # The auth call above rewrote the document, so the corrupt-created_at fallback now tracks the
-    # document's current neutral revision (a valid UTC datetime), not the original seeded time.
-    assert listed[0].created_at == store.get("dev_api_keys/canonical-dev-id").updated_at
-    assert listed[0].created_at.tzinfo == timezone.utc
+    assert listed[0].created_at == datetime(2024, 2, 3, tzinfo=timezone.utc)
     assert listed[0].scopes == ["memories:read"]
     assert raw_token not in json.dumps([key.model_dump(mode="json") for key in listed])
 
@@ -335,26 +399,23 @@ def test_developer_key_authentication_metadata_projection_and_revocation_share_d
 def test_mcp_present_poisoned_app_identity_fails_auth_but_remains_safely_listable(monkeypatch):
     raw_token = "omi_mcp_fedcba9876543210fedcba9876543210"
     overflowing_datetime = datetime.max.replace(tzinfo=timezone(-timedelta(hours=23)))
-    store = _mcp_store(
-        [
-            (
-                "poisoned-mcp-id",
-                {
-                    "user_id": "user-1",
-                    "hashed_key": mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_")),
-                    "name": f"Unsafe {raw_token}",
-                    "key_prefix": raw_token,
-                    "created_at": overflowing_datetime,
-                    "last_used_at": raw_token,
-                    "app_id": raw_token,
-                    "scopes": [raw_token],
-                },
-                None,
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "mcp_api_keys",
+        "poisoned-mcp-id",
+        {
+            "user_id": "user-1",
+            "hashed_key": mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_")),
+            "name": f"Unsafe {raw_token}",
+            "key_prefix": raw_token,
+            "created_at": overflowing_datetime,
+            "last_used_at": raw_token,
+            "app_id": raw_token,
+            "scopes": [raw_token],
+        },
     )
     redis = _Redis()
-    monkeypatch.setattr(mcp_api_key_db, "_store", lambda: store)
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
 
     listed, repairs = mcp_api_key_db.get_mcp_keys_for_user_with_repair_info("user-1")
@@ -369,32 +430,21 @@ def test_mcp_present_poisoned_app_identity_fails_auth_but_remains_safely_listabl
 
 
 def test_missing_created_at_uses_snapshot_time_then_epoch_with_deterministic_ties(monkeypatch):
-    mcp_store = _mcp_store(
-        (
-            doc_id,
-            {"user_id": "user-1", "created_at": "invalid", "key_prefix": "omi_mcp_raw-secret"},
-            create_time,
-        )
+    db = _Firestore()
+    for collection, prefix in (("mcp_api_keys", "mcp"), ("dev_api_keys", "dev")):
         for doc_id, create_time in (
-            ("mcp-b-epoch", None),
-            ("mcp-newer", datetime(2025, 1, 1, tzinfo=timezone.utc)),
-            ("mcp-a-epoch", None),
-        )
-    )
-    store = _dev_store(
-        (
-            doc_id,
-            {"user_id": "user-1", "created_at": "invalid", "key_prefix": "omi_dev_raw-secret"},
-            create_time,
-        )
-        for doc_id, create_time in (
-            ("dev-b-epoch", None),
-            ("dev-newer", datetime(2025, 1, 1, tzinfo=timezone.utc)),
-            ("dev-a-epoch", None),
-        )
-    )
-    monkeypatch.setattr(mcp_api_key_db, "_store", lambda: mcp_store)
-    monkeypatch.setattr(dev_api_key_db, "_store", lambda: store)
+            (f"{prefix}-b-epoch", None),
+            (f"{prefix}-newer", datetime(2025, 1, 1, tzinfo=timezone.utc)),
+            (f"{prefix}-a-epoch", None),
+        ):
+            db.seed(
+                collection,
+                doc_id,
+                {"user_id": "user-1", "created_at": "invalid", "key_prefix": f"omi_{prefix}_raw-secret"},
+                create_time=create_time,
+            )
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
+    monkeypatch.setattr(dev_api_key_db, "get_firestore_client", lambda: db)
 
     mcp_keys = mcp_api_key_db.get_mcp_keys_for_user("user-1")
     dev_keys = dev_api_key_db.get_dev_keys_for_user("user-1")
@@ -407,48 +457,41 @@ def test_missing_created_at_uses_snapshot_time_then_epoch_with_deterministic_tie
 
 
 def test_equivalent_reordered_scope_lists_keep_canonical_order_without_repairs(monkeypatch):
+    db = _Firestore()
     mcp_token = "omi_mcp_11111111111111111111111111111111"
     dev_token = "omi_dev_22222222222222222222222222222222"
     mcp_scopes = sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES)
     dev_scopes = ["conversations:read", "memories:read"]
-    mcp_store = _mcp_store(
-        [
-            (
-                "mcp-key",
-                {
-                    "id": "mcp-key",
-                    "user_id": "user-1",
-                    "hashed_key": mcp_api_key_db.hash_api_key(mcp_token.removeprefix("omi_mcp_")),
-                    "name": "MCP key",
-                    "key_prefix": "omi_mcp_abcd...1234",
-                    "created_at": datetime(2025, 1, 1, tzinfo=timezone.utc),
-                    "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
-                    "scopes": list(reversed(mcp_scopes)),
-                },
-                None,
-            )
-        ]
+    db.seed(
+        "mcp_api_keys",
+        "mcp-key",
+        {
+            "id": "mcp-key",
+            "user_id": "user-1",
+            "hashed_key": mcp_api_key_db.hash_api_key(mcp_token.removeprefix("omi_mcp_")),
+            "name": "MCP key",
+            "key_prefix": "omi_mcp_abcd...1234",
+            "created_at": datetime(2025, 1, 1, tzinfo=timezone.utc),
+            "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
+            "scopes": list(reversed(mcp_scopes)),
+        },
     )
-    store = _dev_store(
-        [
-            (
-                "dev-key",
-                {
-                    "id": "dev-key",
-                    "user_id": "user-1",
-                    "hashed_key": dev_api_key_db.hash_dev_api_key(dev_token.removeprefix("omi_dev_")),
-                    "name": "Developer key",
-                    "key_prefix": "omi_dev_abcd...1234",
-                    "created_at": datetime(2025, 1, 1, tzinfo=timezone.utc),
-                    "app_id": dev_api_key_db.DEV_API_KEY_APP_ID,
-                    "scopes": list(reversed(dev_scopes)),
-                },
-                None,
-            )
-        ]
+    db.seed(
+        "dev_api_keys",
+        "dev-key",
+        {
+            "id": "dev-key",
+            "user_id": "user-1",
+            "hashed_key": dev_api_key_db.hash_dev_api_key(dev_token.removeprefix("omi_dev_")),
+            "name": "Developer key",
+            "key_prefix": "omi_dev_abcd...1234",
+            "created_at": datetime(2025, 1, 1, tzinfo=timezone.utc),
+            "app_id": dev_api_key_db.DEV_API_KEY_APP_ID,
+            "scopes": list(reversed(dev_scopes)),
+        },
     )
-    monkeypatch.setattr(mcp_api_key_db, "_store", lambda: mcp_store)
-    monkeypatch.setattr(dev_api_key_db, "_store", lambda: store)
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
+    monkeypatch.setattr(dev_api_key_db, "get_firestore_client", lambda: db)
     redis = _Redis()
     monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
     monkeypatch.setattr(dev_api_key_db, "redis_db", redis)
@@ -471,33 +514,26 @@ def test_equivalent_reordered_scope_lists_keep_canonical_order_without_repairs(m
 def test_authentication_fails_when_auth_critical_user_identity_is_whitespace(monkeypatch):
     mcp_token = "omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     dev_token = "omi_dev_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    mcp_store = _mcp_store(
-        [
-            (
-                "mcp-whitespace-user",
-                {
-                    "hashed_key": mcp_api_key_db.hash_api_key(mcp_token.removeprefix("omi_mcp_")),
-                    "user_id": "   ",
-                },
-                None,
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "mcp_api_keys",
+        "mcp-whitespace-user",
+        {
+            "hashed_key": mcp_api_key_db.hash_api_key(mcp_token.removeprefix("omi_mcp_")),
+            "user_id": "   ",
+        },
     )
-    store = _dev_store(
-        [
-            (
-                "dev-whitespace-user",
-                {
-                    "hashed_key": dev_api_key_db.hash_dev_api_key(dev_token.removeprefix("omi_dev_")),
-                    "user_id": "\t",
-                },
-                None,
-            )
-        ]
+    db.seed(
+        "dev_api_keys",
+        "dev-whitespace-user",
+        {
+            "hashed_key": dev_api_key_db.hash_dev_api_key(dev_token.removeprefix("omi_dev_")),
+            "user_id": "\t",
+        },
     )
     redis = _Redis()
-    monkeypatch.setattr(mcp_api_key_db, "_store", lambda: mcp_store)
-    monkeypatch.setattr(dev_api_key_db, "_store", lambda: store)
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
+    monkeypatch.setattr(dev_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
     monkeypatch.setattr(dev_api_key_db, "redis_db", redis)
 
@@ -507,20 +543,17 @@ def test_authentication_fails_when_auth_critical_user_identity_is_whitespace(mon
 
 def test_developer_auth_survives_redis_cache_write_failure(monkeypatch):
     raw_token = "omi_dev_cccccccccccccccccccccccccccccccc"
-    store = _dev_store(
-        [
-            (
-                "dev-cache-failure",
-                {
-                    "hashed_key": dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_")),
-                    "user_id": "user-1",
-                    "scopes": ["memories:read"],
-                },
-                None,
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "dev_api_keys",
+        "dev-cache-failure",
+        {
+            "hashed_key": dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_")),
+            "user_id": "user-1",
+            "scopes": ["memories:read"],
+        },
     )
-    monkeypatch.setattr(dev_api_key_db, "_store", lambda: store)
+    monkeypatch.setattr(dev_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(redis_db, "r", _FailingRedisKeyValueStore())
 
     auth_result = dev_api_key_db.get_api_key_auth_result(raw_token)
@@ -537,30 +570,27 @@ def test_developer_auth_survives_redis_cache_write_failure(monkeypatch):
         ApiKeyAuthRepair.APP_ID,
         ApiKeyAuthRepair.CACHE_WRITE,
     }
-    repaired = store.get("dev_api_keys/dev-cache-failure").to_dict()
+    repaired = db.collection("dev_api_keys").document("dev-cache-failure").get().to_dict()
     assert repaired["last_used_at"] is not None
 
 
 def test_mcp_auth_reports_redis_cache_write_failure_after_full_recovery(monkeypatch):
     raw_token = "omi_mcp_33333333333333333333333333333333"
     hashed_key = mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_"))
-    store = _mcp_store(
-        [
-            (
-                "mcp-cache-failure",
-                {
-                    "id": "mcp-cache-failure",
-                    "user_id": "user-1",
-                    "hashed_key": hashed_key,
-                    "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
-                    "scopes": sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
-                },
-                None,
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "mcp_api_keys",
+        "mcp-cache-failure",
+        {
+            "id": "mcp-cache-failure",
+            "user_id": "user-1",
+            "hashed_key": hashed_key,
+            "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
+            "scopes": sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
+        },
     )
-    monkeypatch.setattr(mcp_api_key_db, "_store", lambda: store)
-    mcp_api_key_db._seed_mcp_memory_grant("user-1", "mcp-cache-failure")
+    mcp_api_key_db._seed_mcp_memory_grant("user-1", "mcp-cache-failure", firestore_client=db)
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(redis_db, "r", _FailingRedisKeyValueStore())
 
     auth_result = mcp_api_key_db.get_api_key_auth_result(raw_token)
@@ -573,23 +603,20 @@ def test_mcp_auth_reports_redis_cache_write_failure_after_full_recovery(monkeypa
 def test_mcp_auth_reports_cache_read_error_after_firestore_recovery(monkeypatch):
     raw_token = "omi_mcp_44444444444444444444444444444444"
     hashed_key = mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_"))
-    store = _mcp_store(
-        [
-            (
-                "mcp-cache-read-failure",
-                {
-                    "id": "mcp-cache-read-failure",
-                    "user_id": "user-1",
-                    "hashed_key": hashed_key,
-                    "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
-                    "scopes": sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
-                },
-                None,
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "mcp_api_keys",
+        "mcp-cache-read-failure",
+        {
+            "id": "mcp-cache-read-failure",
+            "user_id": "user-1",
+            "hashed_key": hashed_key,
+            "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
+            "scopes": sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
+        },
     )
-    monkeypatch.setattr(mcp_api_key_db, "_store", lambda: store)
-    mcp_api_key_db._seed_mcp_memory_grant("user-1", "mcp-cache-read-failure")
+    mcp_api_key_db._seed_mcp_memory_grant("user-1", "mcp-cache-read-failure", firestore_client=db)
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(redis_db, "r", _ReadFailingRedisKeyValueStore())
 
     auth_result = mcp_api_key_db.get_api_key_auth_result(raw_token)
@@ -602,22 +629,19 @@ def test_mcp_auth_reports_cache_read_error_after_firestore_recovery(monkeypatch)
 def test_developer_auth_reports_cache_read_error_after_firestore_recovery(monkeypatch):
     raw_token = "omi_dev_55555555555555555555555555555555"
     hashed_key = dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_"))
-    store = _dev_store(
-        [
-            (
-                "dev-cache-read-failure",
-                {
-                    "id": "dev-cache-read-failure",
-                    "user_id": "user-1",
-                    "hashed_key": hashed_key,
-                    "app_id": dev_api_key_db.DEV_API_KEY_APP_ID,
-                    "scopes": ["memories:read"],
-                },
-                None,
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "dev_api_keys",
+        "dev-cache-read-failure",
+        {
+            "id": "dev-cache-read-failure",
+            "user_id": "user-1",
+            "hashed_key": hashed_key,
+            "app_id": dev_api_key_db.DEV_API_KEY_APP_ID,
+            "scopes": ["memories:read"],
+        },
     )
-    monkeypatch.setattr(dev_api_key_db, "_store", lambda: store)
+    monkeypatch.setattr(dev_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(redis_db, "r", _ReadFailingRedisKeyValueStore())
 
     auth_result = dev_api_key_db.get_api_key_auth_result(raw_token)
@@ -630,25 +654,26 @@ def test_developer_auth_reports_cache_read_error_after_firestore_recovery(monkey
 def test_cache_delete_failure_preserves_mcp_document_grant_and_current_auth(monkeypatch):
     raw_token = "omi_mcp_dddddddddddddddddddddddddddddddd"
     hashed_key = mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_"))
-    doc_store = _mcp_store(
-        [
-            (
-                "mcp-revoke-failure",
-                {
-                    "id": "mcp-revoke-failure",
-                    "user_id": "user-1",
-                    "hashed_key": hashed_key,
-                    "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
-                    "scopes": sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
-                },
-                None,
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "mcp_api_keys",
+        "mcp-revoke-failure",
+        {
+            "id": "mcp-revoke-failure",
+            "user_id": "user-1",
+            "hashed_key": hashed_key,
+            "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
+            "scopes": sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
+        },
     )
-    monkeypatch.setattr(mcp_api_key_db, "_store", lambda: doc_store)
-    mcp_api_key_db._seed_mcp_memory_grant("user-1", "mcp-revoke-failure")
+    mcp_api_key_db._seed_mcp_memory_grant(
+        "user-1",
+        "mcp-revoke-failure",
+        firestore_client=db,
+    )
     store = _DeleteFailingRedisKeyValueStore()
     monkeypatch.setattr(redis_db, "r", store)
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
     assert redis_db.cache_mcp_api_key_auth_context(
         hashed_key,
         "user-1",
@@ -663,33 +688,30 @@ def test_cache_delete_failure_preserves_mcp_document_grant_and_current_auth(monk
     assert store.delete_calls == [
         (f"mcp_api_key:{hashed_key}", f"mcp_api_key_auth:{hashed_key}"),
     ]
-    assert doc_store.exists("mcp_api_keys/mcp-revoke-failure") is True
-    assert set(_mcp_grant_keys(doc_store, "user-1")) == {"mcp-revoke-failure"}
+    assert db.collection("mcp_api_keys").document("mcp-revoke-failure").get().exists is True
+    assert set(_mcp_grant_keys(db, "user-1")) == {"mcp-revoke-failure"}
     assert mcp_api_key_db.get_user_and_scopes_by_api_key(raw_token)["key_id"] == "mcp-revoke-failure"
 
 
 def test_cache_delete_failure_preserves_developer_document_and_current_auth(monkeypatch):
     raw_token = "omi_dev_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     hashed_key = dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_"))
-    doc_store = _dev_store(
-        [
-            (
-                "dev-revoke-failure",
-                {
-                    "id": "dev-revoke-failure",
-                    "user_id": "user-1",
-                    "hashed_key": hashed_key,
-                    "app_id": dev_api_key_db.DEV_API_KEY_APP_ID,
-                    "scopes": ["memories:read"],
-                },
-                None,
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "dev_api_keys",
+        "dev-revoke-failure",
+        {
+            "id": "dev-revoke-failure",
+            "user_id": "user-1",
+            "hashed_key": hashed_key,
+            "app_id": dev_api_key_db.DEV_API_KEY_APP_ID,
+            "scopes": ["memories:read"],
+        },
     )
     store = _DeleteFailingRedisKeyValueStore()
     remove_grant = MagicMock()
     monkeypatch.setattr(redis_db, "r", store)
-    monkeypatch.setattr(dev_api_key_db, "_store", lambda: doc_store)
+    monkeypatch.setattr(dev_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(dev_api_key_db, "remove_developer_api_key_memory_grant", remove_grant)
     assert redis_db.cache_dev_api_key(
         hashed_key,
@@ -703,7 +725,7 @@ def test_cache_delete_failure_preserves_developer_document_and_current_auth(monk
         dev_api_key_db.delete_dev_key("user-1", "dev-revoke-failure")
 
     assert store.delete_calls == [(f"dev_api_key:{hashed_key}",)]
-    assert doc_store.exists("dev_api_keys/dev-revoke-failure") is True
+    assert db.collection("dev_api_keys").document("dev-revoke-failure").get().exists is True
     remove_grant.assert_not_called()
     assert dev_api_key_db.get_user_and_scopes_by_api_key(raw_token)["key_id"] == "dev-revoke-failure"
 
@@ -712,25 +734,22 @@ def test_cache_delete_failure_preserves_developer_document_and_current_auth(monk
 def test_corrupt_hash_blocks_mcp_revocation_before_document_grant_or_current_cache_mutation(monkeypatch, corrupt_hash):
     raw_token = "omi_mcp_66666666666666666666666666666666"
     hashed_key = mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_"))
-    doc_store = _mcp_store(
-        [
-            (
-                "mcp-corrupt-hash",
-                {
-                    "id": "mcp-corrupt-hash",
-                    "user_id": "user-1",
-                    "hashed_key": corrupt_hash,
-                    "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
-                    "scopes": sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
-                },
-                None,
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "mcp_api_keys",
+        "mcp-corrupt-hash",
+        {
+            "id": "mcp-corrupt-hash",
+            "user_id": "user-1",
+            "hashed_key": corrupt_hash,
+            "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
+            "scopes": sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
+        },
     )
-    monkeypatch.setattr(mcp_api_key_db, "_store", lambda: doc_store)
-    mcp_api_key_db._seed_mcp_memory_grant("user-1", "mcp-corrupt-hash")
+    mcp_api_key_db._seed_mcp_memory_grant("user-1", "mcp-corrupt-hash", firestore_client=db)
     store = _RedisKeyValueStore()
     monkeypatch.setattr(redis_db, "r", store)
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
     assert redis_db.cache_mcp_api_key_auth_context(
         hashed_key,
         "user-1",
@@ -744,8 +763,8 @@ def test_corrupt_hash_blocks_mcp_revocation_before_document_grant_or_current_cac
         mcp_api_key_db.delete_mcp_key("user-1", "mcp-corrupt-hash")
 
     assert store.values == cached_before
-    assert doc_store.exists("mcp_api_keys/mcp-corrupt-hash") is True
-    assert set(_mcp_grant_keys(doc_store, "user-1")) == {"mcp-corrupt-hash"}
+    assert db.collection("mcp_api_keys").document("mcp-corrupt-hash").get().exists is True
+    assert set(_mcp_grant_keys(db, "user-1")) == {"mcp-corrupt-hash"}
     assert mcp_api_key_db.get_user_and_scopes_by_api_key(raw_token)["key_id"] == "mcp-corrupt-hash"
 
 
@@ -755,25 +774,22 @@ def test_corrupt_hash_blocks_developer_revocation_before_document_grant_or_curre
 ):
     raw_token = "omi_dev_77777777777777777777777777777777"
     hashed_key = dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_"))
-    doc_store = _dev_store(
-        [
-            (
-                "dev-corrupt-hash",
-                {
-                    "id": "dev-corrupt-hash",
-                    "user_id": "user-1",
-                    "hashed_key": corrupt_hash,
-                    "app_id": dev_api_key_db.DEV_API_KEY_APP_ID,
-                    "scopes": ["memories:read"],
-                },
-                None,
-            )
-        ]
+    db = _Firestore()
+    db.seed(
+        "dev_api_keys",
+        "dev-corrupt-hash",
+        {
+            "id": "dev-corrupt-hash",
+            "user_id": "user-1",
+            "hashed_key": corrupt_hash,
+            "app_id": dev_api_key_db.DEV_API_KEY_APP_ID,
+            "scopes": ["memories:read"],
+        },
     )
     store = _RedisKeyValueStore()
     remove_grant = MagicMock()
     monkeypatch.setattr(redis_db, "r", store)
-    monkeypatch.setattr(dev_api_key_db, "_store", lambda: doc_store)
+    monkeypatch.setattr(dev_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(dev_api_key_db, "remove_developer_api_key_memory_grant", remove_grant)
     assert redis_db.cache_dev_api_key(
         hashed_key,
@@ -788,18 +804,17 @@ def test_corrupt_hash_blocks_developer_revocation_before_document_grant_or_curre
         dev_api_key_db.delete_dev_key("user-1", "dev-corrupt-hash")
 
     assert store.values == cached_before
-    assert doc_store.exists("dev_api_keys/dev-corrupt-hash") is True
+    assert db.collection("dev_api_keys").document("dev-corrupt-hash").get().exists is True
     remove_grant.assert_not_called()
     assert dev_api_key_db.get_user_and_scopes_by_api_key(raw_token)["key_id"] == "dev-corrupt-hash"
 
 
 def test_raw_token_names_are_rejected_before_generation_or_write(monkeypatch):
-    mcp_store = _mcp_store()
-    store = _dev_store()
+    db = _Firestore()
     mcp_generate = MagicMock()
     dev_generate = MagicMock()
-    monkeypatch.setattr(mcp_api_key_db, "_store", lambda: mcp_store)
-    monkeypatch.setattr(dev_api_key_db, "_store", lambda: store)
+    monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
+    monkeypatch.setattr(dev_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(mcp_api_key_db, "generate_api_key", mcp_generate)
     monkeypatch.setattr(dev_api_key_db, "generate_dev_api_key", dev_generate)
 
@@ -810,8 +825,8 @@ def test_raw_token_names_are_rejected_before_generation_or_write(monkeypatch):
 
     mcp_generate.assert_not_called()
     dev_generate.assert_not_called()
-    assert mcp_store.query("mcp_api_keys") == []
-    assert store.query("dev_api_keys") == []
+    assert db.collection("mcp_api_keys")._records == {}
+    assert db.collection("dev_api_keys")._records == {}
 
 
 def test_redis_auth_context_adapters_persist_current_schema_versions(monkeypatch):

@@ -1,12 +1,64 @@
-"""Shared Firestore fakes for non-active route unit tests.
-
-The route-store persistence path now runs through the neutral storage port (ADR-0002); its
-tests use ``tests.store_fakes.FakeDocumentStore`` instead of a Firestore-shaped transactional
-fake. The query fakes below remain for the audit-report reader tests that still exercise a
-Firestore ``db_client`` seam.
-"""
+"""Shared Firestore fakes for non-active route unit tests."""
 
 from __future__ import annotations
+
+
+class FakeSnapshot:
+    def __init__(self, data, exists=True):
+        self._data = data
+        self.exists = exists
+
+    def to_dict(self):
+        return self._data
+
+
+class TransactionalDocumentRef:
+    def __init__(self, path, db):
+        self.path = path
+        self._db = db
+
+    def get(self, transaction=None):
+        if self.path not in self._db.docs:
+            return FakeSnapshot(None, exists=False)
+        return FakeSnapshot(self._db.docs[self.path], exists=True)
+
+
+class FakeTransaction:
+    def __init__(self, db):
+        self._db = db
+        self.sets = []
+        self._read_only = False
+        self._max_attempts = 1
+        self._id = None
+
+    def set(self, ref, data):
+        self.sets.append((ref.path, data))
+
+    def _clean_up(self):
+        self._id = None
+
+    def _begin(self, retry_id=None):
+        self._id = retry_id or "txn-1"
+        self.sets = []
+
+    def _commit(self):
+        for path, data in self.sets:
+            self._db.docs[path] = data
+
+    def _rollback(self):
+        self._id = None
+
+
+class TransactionalFakeDb:
+    def __init__(self, docs=None):
+        self.docs = docs or {}
+        self.transaction_obj = FakeTransaction(self)
+
+    def transaction(self):
+        return self.transaction_obj
+
+    def document(self, path):
+        return TransactionalDocumentRef(path, self)
 
 
 class QuerySnapshot:

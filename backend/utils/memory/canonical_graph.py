@@ -7,8 +7,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from database import document_store
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
+
 from database import knowledge_graph as kg_db
+from database._client import get_firestore_client
+from database.firestore_index_registry import CANONICAL_MEMORY_ATLAS_READ_QUERY
 from database.memory_collections import MemoryCollections
 from models.memory_promotion import MemoryGraphAssertion
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
@@ -76,8 +80,12 @@ def _enum_value(value: Any) -> Any:
     return getattr(value, 'value', value)
 
 
-def _read_canonical_graph_revision(uid: str) -> _CanonicalGraphRevision:
-    trusted = read_memory_v3_trusted_account_generation(uid=uid)
+def _firestore_client(db_client: Any = None) -> Any:
+    return db_client if db_client is not None else get_firestore_client()
+
+
+def _read_canonical_graph_revision(uid: str, *, db_client: Any) -> _CanonicalGraphRevision:
+    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
     if trusted.read_error_reason is not None:
         raise CanonicalGraphReadUnavailable(trusted.read_error_reason.value)
     if (
@@ -227,6 +235,7 @@ def _canonical_graph_query_item_is_eligible(
         and _enum_value(item.get('processing_state')) == 'processed'
         and _enum_value(item.get('source_state')) == 'active'
         and not set(sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
+        and promotion.get('is_locked') is not True
         and promotion.get('user_review') is not False
     )
 
@@ -268,33 +277,36 @@ def _canonical_graph_cursor_boundary_from_snapshot(snapshot: Any) -> _CanonicalG
     )
 
 
-def _query_canonical_graph_items(
+def _build_canonical_graph_items_query(
+    client: Any,
     uid: str,
     revision: _CanonicalGraphRevision,
     *,
     cursor_boundary: Optional[Tuple[datetime, str]],
-    limit: int,
-) -> List[Any]:
-    # Neutral store query: the same equality fences upstream declares in its atlas composite index
-    # (CANONICAL_MEMORY_ATLAS_READ_QUERY — no ``graph_ready`` gate now, so unlinked canonical memories
-    # are included), ordered ``updated_at DESC`` then document-id (``__name__``) DESC. The explicit
-    # ``__name__`` order is a total order for the keyset cursor and matches upstream's tiebreak on
-    # both the first and paginated pages (the store's ``start_after`` keys on ``(value, id)``).
-    start_after = (
-        {'value': cursor_boundary[0], 'id': cursor_boundary[1]} if cursor_boundary is not None else None
+):
+    items_ref = client.collection(MemoryCollections(uid=uid).memory_items)
+    query = CANONICAL_MEMORY_ATLAS_READ_QUERY.build(
+        items_ref,
+        {
+            'account_generation': revision.account_generation,
+            'tier': 'long_term',
+            'status': 'active',
+            'processing_state': 'processed',
+        },
+        field_filter_factory=FieldFilter,
     )
-    return document_store.query_collection(
-        MemoryCollections(uid=uid).memory_items,
-        filters=[
-            ('account_generation', '==', revision.account_generation),
-            ('tier', '==', 'long_term'),
-            ('status', '==', 'active'),
-            ('processing_state', '==', 'processed'),
-        ],
-        order_by=[('updated_at', 'desc'), (KNOWLEDGE_GRAPH_DOCUMENT_ORDER, 'desc')],
-        limit=limit,
-        start_after=start_after,
+    query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by(
+        KNOWLEDGE_GRAPH_DOCUMENT_ORDER,
+        direction=firestore.Query.DESCENDING,
     )
+    if cursor_boundary is not None:
+        query = query.start_after(
+            {
+                'updated_at': cursor_boundary[0],
+                KNOWLEDGE_GRAPH_DOCUMENT_ORDER: items_ref.document(cursor_boundary[1]),
+            }
+        )
+    return query
 
 
 def _canonical_memory_catalog_node(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -330,11 +342,13 @@ def _canonical_memory_catalog_node(item: Dict[str, Any]) -> Optional[Dict[str, A
 def _read_canonical_graph_page_once(
     uid: str,
     *,
+    db_client: Any,
     limit: int,
     cursor: Optional[str],
 ) -> CanonicalKnowledgeGraphPage:
+    client = _firestore_client(db_client)
     secret = _canonical_graph_cursor_secret()
-    revision = _read_canonical_graph_revision(uid)
+    revision = _read_canonical_graph_revision(uid, db_client=client)
     cursor_boundary: Optional[Tuple[datetime, str]] = None
     if cursor is not None:
         cursor_boundary = _canonical_graph_decode_cursor(
@@ -355,12 +369,13 @@ def _read_canonical_graph_page_once(
     while True:
         while len(visible_memory_ids) < limit:
             if not pending_snapshots:
-                snapshots = _query_canonical_graph_items(
+                query = _build_canonical_graph_items_query(
+                    client,
                     uid,
                     revision,
                     cursor_boundary=query_boundary,
-                    limit=limit + 1,
                 )
+                snapshots = list(query.limit(limit + 1).stream())
                 if not snapshots:
                     pending_window_has_more = False
                     break
@@ -390,6 +405,7 @@ def _read_canonical_graph_page_once(
                     uid,
                     memory_ids,
                     account_generation=revision.account_generation,
+                    db_client=client,
                 )
                 for assertion in loaded_assertions:
                     accepted_assertions.append(assertion)
@@ -419,14 +435,13 @@ def _read_canonical_graph_page_once(
             if last_consumed_snapshot is None:
                 raise CanonicalGraphReadUnavailable('missing_cursor_boundary')
             boundary = _canonical_graph_cursor_boundary_from_snapshot(last_consumed_snapshot)
-            has_more = bool(
-                _query_canonical_graph_items(
-                    uid,
-                    revision,
-                    cursor_boundary=(boundary.updated_at, boundary.memory_id),
-                    limit=1,
-                )
+            probe_query = _build_canonical_graph_items_query(
+                client,
+                uid,
+                revision,
+                cursor_boundary=(boundary.updated_at, boundary.memory_id),
             )
+            has_more = bool(list(probe_query.limit(1).stream()))
         else:
             has_more = False
 
@@ -442,7 +457,7 @@ def _read_canonical_graph_page_once(
     # Refuse to return a page assembled across two canonical revisions. The
     # second head read is bounded and makes the signed cursor's revision fence
     # meaningful even when writes race this request.
-    ending_revision = _read_canonical_graph_revision(uid)
+    ending_revision = _read_canonical_graph_revision(uid, db_client=client)
     if ending_revision != revision:
         raise CanonicalGraphReadUnavailable('canonical_revision_changed_during_read')
 
@@ -475,6 +490,7 @@ def _read_canonical_graph_page_once(
 def get_canonical_knowledge_graph(
     uid: str,
     *,
+    db_client: Any = None,
     limit: int = DEFAULT_CANONICAL_GRAPH_PAGE_LIMIT,
     cursor: Optional[str] = None,
 ) -> CanonicalKnowledgeGraphPage:
@@ -488,6 +504,7 @@ def get_canonical_knowledge_graph(
         try:
             return _read_canonical_graph_page_once(
                 uid,
+                db_client=db_client,
                 limit=limit,
                 cursor=cursor,
             )

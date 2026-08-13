@@ -16,41 +16,78 @@ from models.memory_promotion import (
     build_memory_graph_assertion,
     canonical_graph_entity_id,
 )
-from tests.store_fakes import FakeDocumentStore
 from utils.memory import kg_graph_traversal
 
 UID = "uid-memory-graph-read"
 NOW = datetime(2026, 7, 27, 12, 0, tzinfo=timezone.utc)
 
 
-class _RecordingStore(FakeDocumentStore):
-    """Neutral in-memory store (ADR-0028) that records the bounded ``limit`` probes.
+class _Snapshot:
+    def __init__(self, db: "_FakeDb", path: str, *, exists: bool):
+        self._db = db
+        self._path = path
+        self.id = path.rsplit("/", 1)[-1]
+        self.exists = exists
 
-    The read side no longer takes an injected Firestore client; it talks to the storage port
-    (``kg_db._store()``). This fake seeds documents by logical path and captures each
-    ``query(collection, limit=...)`` so the bounded-probe test can still assert the read stays
-    capped, without reintroducing a raw client seam.
-    """
+    def to_dict(self):
+        return self._db.docs.get(self._path)
 
-    def __init__(self, backing=None):
-        super().__init__(backing=backing)
-        self.limit_calls: list[tuple[str, int]] = []
 
-    def seed(self, docs) -> "_RecordingStore":
-        self._docs.update(docs)
+class _DocRef:
+    def __init__(self, db: "_FakeDb", path: str):
+        self._db = db
+        self.path = path
+        self.id = path.rsplit("/", 1)[-1]
+
+    def get(self):
+        return _Snapshot(self._db, self.path, exists=self.path in self._db.docs)
+
+    def collection(self, name: str):
+        return _CollectionRef(self._db, f"{self.path}/{name}")
+
+
+class _CollectionRef:
+    def __init__(self, db: "_FakeDb", path: str):
+        self._db = db
+        self.path = path
+        self._limit = None
+
+    def document(self, doc_id: str):
+        return _DocRef(self._db, f"{self.path}/{doc_id}")
+
+    def limit(self, count: int):
+        self._db.limit_calls.append((self.path, count))
+        self._limit = count
         return self
 
-    def query(self, collection, *, limit=None, **kwargs):
-        if limit is not None:
-            self.limit_calls.append((collection, limit))
-        return super().query(collection, limit=limit, **kwargs)
+    def order_by(self, _field_path: str, *_args, **_kwargs):
+        return self
+
+    def stream(self):
+        prefix = f"{self.path}/"
+        depth = self.path.count("/")
+        emitted = 0
+        for path in sorted(self._db.docs):
+            if path.startswith(prefix) and path.count("/") == depth + 1:
+                yield _Snapshot(self._db, path, exists=True)
+                emitted += 1
+                if self._limit is not None and emitted >= self._limit:
+                    break
 
 
-@pytest.fixture
-def graph_store(monkeypatch) -> _RecordingStore:
-    store = _RecordingStore()
-    monkeypatch.setattr(kg_db, "_store", lambda: store)
-    return store
+class _FakeDb:
+    def __init__(self, docs=None):
+        self.docs = dict(docs or {})
+        self.limit_calls: list[tuple[str, int]] = []
+        self.get_all_batch_sizes: list[int] = []
+
+    def collection(self, name: str):
+        return _CollectionRef(self, name)
+
+    def get_all(self, refs):
+        refs = list(refs)
+        self.get_all_batch_sizes.append(len(refs))
+        return [ref.get() for ref in refs]
 
 
 def _assertion(
@@ -151,11 +188,11 @@ def _legacy_graph_docs() -> dict[str, dict[str, Any]]:
     }
 
 
-def test_get_knowledge_graph_merges_current_assertion_and_replaces_its_stale_legacy_records(graph_store):
+def test_get_knowledge_graph_merges_current_assertion_and_replaces_its_stale_legacy_records():
     assertion = _assertion()
-    graph_store.seed({**_legacy_graph_docs(), **_docs_for(assertion, _active_item(assertion))})
+    db = _FakeDb({**_legacy_graph_docs(), **_docs_for(assertion, _active_item(assertion))})
 
-    graph = kg_db.get_knowledge_graph(UID)
+    graph = kg_db.get_knowledge_graph(UID, db_client=db)
 
     assert graph["truncated"] is False
     nodes = {node["id"]: node for node in graph["nodes"]}
@@ -253,7 +290,7 @@ def test_v2_qualifiers_never_project_as_nodes_or_edges():
     ]
 
 
-def test_v2_assertion_remains_readable_when_item_retains_legacy_arguments(graph_store):
+def test_v2_assertion_remains_readable_when_item_retains_legacy_arguments():
     subject = canonical_graph_entity_id("Alpha")
     object_id = canonical_graph_entity_id("Beta")
     assertion = build_memory_graph_assertion(
@@ -274,16 +311,16 @@ def test_v2_assertion_remains_readable_when_item_retains_legacy_arguments(graph_
         commit_sequence=1,
         created_at=NOW,
     )
-    graph_store.seed(_docs_for(assertion, _active_item(assertion, arguments={"location": "Seattle"})))
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, arguments={"location": "Seattle"})))
 
-    assert kg_db.get_active_memory_graph_assertions(UID) == [assertion]
+    assert kg_db.get_active_memory_graph_assertions(UID, db_client=db) == [assertion]
 
 
-def test_v1_assertion_still_requires_matching_item_arguments(graph_store):
+def test_v1_assertion_still_requires_matching_item_arguments():
     assertion = _assertion()
-    graph_store.seed(_docs_for(assertion, _active_item(assertion, arguments={"location": "Portland"})))
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, arguments={"location": "Portland"})))
 
-    assert kg_db.get_active_memory_graph_assertions(UID) == []
+    assert kg_db.get_active_memory_graph_assertions(UID, db_client=db) == []
 
 
 @pytest.mark.parametrize(
@@ -297,12 +334,12 @@ def test_v1_assertion_still_requires_matching_item_arguments(graph_store):
         {"sensitivity_labels": ["HeAlTh"]},
     ],
 )
-def test_loader_excludes_assertions_not_fenced_to_an_active_current_item(item_override, graph_store):
+def test_loader_excludes_assertions_not_fenced_to_an_active_current_item(item_override):
     assertion = _assertion()
-    graph_store.seed(_docs_for(assertion, _active_item(assertion, **item_override)))
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, **item_override)))
 
-    assert kg_db.get_active_memory_graph_assertions(UID) == []
-    assert kg_db.get_knowledge_graph(UID) == {
+    assert kg_db.get_active_memory_graph_assertions(UID, db_client=db) == []
+    assert kg_db.get_knowledge_graph(UID, db_client=db) == {
         "nodes": [],
         "edges": [],
         "truncated": False,
@@ -313,16 +350,16 @@ def test_loader_excludes_assertions_not_fenced_to_an_active_current_item(item_ov
     }
 
 
-def test_loader_keeps_active_item_when_original_source_is_missing_but_evidence_was_preserved(graph_store):
+def test_loader_keeps_active_item_when_original_source_is_missing_but_evidence_was_preserved():
     assertion = _assertion()
-    graph_store.seed(_docs_for(assertion, _active_item(assertion, source_state="missing")))
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, source_state="missing")))
 
-    assert kg_db.get_active_memory_graph_assertions(UID) == [assertion]
+    assert kg_db.get_active_memory_graph_assertions(UID, db_client=db) == [assertion]
 
 
-def test_tombstoned_canonical_item_fences_legacy_graph_before_projection_prune(graph_store):
+def test_tombstoned_canonical_item_fences_legacy_graph_before_projection_prune():
     memory_id = "mem-deleted-before-kg-prune"
-    graph_store.seed(
+    db = _FakeDb(
         {
             f"users/{UID}/memory_state/apply_control": {
                 "uid": UID,
@@ -345,7 +382,7 @@ def test_tombstoned_canonical_item_fences_legacy_graph_before_projection_prune(g
         }
     )
 
-    assert kg_db.get_knowledge_graph(UID) == {
+    assert kg_db.get_knowledge_graph(UID, db_client=db) == {
         "nodes": [],
         "edges": [],
         "truncated": False,
@@ -356,20 +393,20 @@ def test_tombstoned_canonical_item_fences_legacy_graph_before_projection_prune(g
     }
 
 
-def test_stored_assertion_presence_probe_is_bounded_and_does_not_require_a_valid_assertion(graph_store):
+def test_stored_assertion_presence_probe_is_bounded_and_does_not_require_a_valid_assertion():
     assertions_path = f"users/{UID}/memory_graph_assertions"
-    graph_store.seed(
+    db = _FakeDb(
         {
             f"{assertions_path}/retained-malformed": {"unexpected": "payload"},
             f"{assertions_path}/retained-second": {"unexpected": "payload"},
         }
     )
 
-    assert kg_db.has_stored_memory_graph_assertions(UID) is True
-    assert graph_store.limit_calls == [(assertions_path, 1)]
+    assert kg_db.has_stored_memory_graph_assertions(UID, db_client=db) is True
+    assert db.limit_calls == [(assertions_path, 1)]
 
 
-def test_loader_ignores_malformed_assertion_without_exposing_partial_graph(monkeypatch, graph_store):
+def test_loader_ignores_malformed_assertion_without_exposing_partial_graph(monkeypatch):
     assertion = _assertion()
     malformed = assertion.model_dump(mode="json")
     malformed["graph_plan_hash"] = "wrong"
@@ -378,14 +415,14 @@ def test_loader_ignores_malformed_assertion_without_exposing_partial_graph(monke
         "database.read_boundary.record_fallback",
         lambda **fields: recorded_fallbacks.append(fields),
     )
-    graph_store.seed(
+    db = _FakeDb(
         {
             f"users/{UID}/memory_graph_assertions/{assertion.memory_id}": malformed,
             f"users/{UID}/memory_items/{assertion.memory_id}": _active_item(assertion),
         }
     )
 
-    assert kg_db.get_active_memory_graph_assertions(UID) == []
+    assert kg_db.get_active_memory_graph_assertions(UID, db_client=db) == []
     expected_fallback = {
         "component": "firestore_read",
         "from_mode": "firestore_document",
@@ -420,7 +457,7 @@ def test_merge_is_deterministic_and_structurally_deduplicates_assertion_edges():
     assert current_edges[0]["memory_ids"] == ["mem-a", "mem-b", "mem-canonical", "mem-legacy"]
 
 
-def test_bounded_graph_read_returns_only_edges_closed_over_the_node_page(monkeypatch, graph_store):
+def test_bounded_graph_read_returns_only_edges_closed_over_the_node_page(monkeypatch):
     monkeypatch.setattr(kg_db, "MAX_KNOWLEDGE_GRAPH_NODES", 4)
     monkeypatch.setattr(kg_db, "MAX_KNOWLEDGE_GRAPH_EDGES", 10)
     monkeypatch.setattr(kg_db, "MAX_KNOWLEDGE_GRAPH_ASSERTIONS", 3)
@@ -437,8 +474,7 @@ def test_bounded_graph_read_returns_only_edges_closed_over_the_node_page(monkeyp
     for assertion in assertions:
         docs.update(_docs_for(assertion, _active_item(assertion)))
 
-    graph_store.seed(docs)
-    graph = kg_db.get_knowledge_graph(UID)
+    graph = kg_db.get_knowledge_graph(UID, db_client=_FakeDb(docs))
 
     node_ids = {node["id"] for node in graph["nodes"]}
     assert len(node_ids) == 4
@@ -481,87 +517,90 @@ def test_existing_graph_traversal_sees_atomic_assertion_without_an_llm_call(monk
     ]
 
 
-def test_load_fenced_assertions_preserves_caller_order_and_skips_missing(graph_store):
+def test_load_fenced_assertions_preserves_caller_order_and_skips_missing():
     first = _assertion("mem-first", commit_sequence=2)
     third = _assertion("mem-third", commit_sequence=4)
-    graph_store.seed(
-        {
-            **_docs_for(first, _active_item(first)),
-            **_docs_for(third, _active_item(third)),
-        }
-    )
+    docs = {
+        **_docs_for(first, _active_item(first)),
+        **_docs_for(third, _active_item(third)),
+    }
+    db = _FakeDb(docs)
 
     loaded = kg_db.load_fenced_assertions_for_memory_items(
         UID,
         ["mem-second", "mem-first", "mem-missing", "mem-third"],
         account_generation=4,
+        db_client=db,
     )
 
     assert [assertion.memory_id for assertion in loaded] == ["mem-first", "mem-third"]
 
 
-def test_load_fenced_assertions_reads_every_memory_id_regardless_of_batch_size(graph_store):
+def test_load_fenced_assertions_batches_assertion_and_item_reads():
     assertions = [_assertion(f"mem-{index:03d}", commit_sequence=index + 1) for index in range(205)]
     docs: dict[str, dict[str, Any]] = {}
     for assertion in assertions:
         docs.update(_docs_for(assertion, _active_item(assertion)))
-    graph_store.seed(docs)
+    db = _FakeDb(docs)
     memory_ids = [assertion.memory_id for assertion in assertions]
 
     loaded = kg_db.load_fenced_assertions_for_memory_items(
         UID,
         memory_ids,
         account_generation=4,
+        db_client=db,
     )
 
-    # The port loads all 205 ids through ``_store().get_many`` regardless of how the
-    # adapter internally chunks the reads (chunking is an adapter concern, not a
-    # contract the read side exposes — hence no raw batch-size assertion here).
-    assert [assertion.memory_id for assertion in loaded] == memory_ids
+    assert len(loaded) == 205
+    assert max(db.get_all_batch_sizes) <= kg_db.MEMORY_GRAPH_ASSERTION_BATCH_SIZE
+    assert db.get_all_batch_sizes == [100, 100, 5, 100, 100, 5]
 
 
-def test_load_fenced_assertions_excludes_wrong_account_generation(graph_store):
+def test_load_fenced_assertions_excludes_wrong_account_generation():
     assertion = _assertion("mem-stale-generation")
-    graph_store.seed(_docs_for(assertion, _active_item(assertion, account_generation=3)))
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, account_generation=3)))
 
     assert (
         kg_db.load_fenced_assertions_for_memory_items(
             UID,
             [assertion.memory_id],
             account_generation=4,
+            db_client=db,
         )
         == []
     )
 
 
-def test_load_fenced_assertions_excludes_restricted_sensitivity_labels(graph_store):
+def test_load_fenced_assertions_excludes_restricted_sensitivity_labels():
     assertion = _assertion("mem-restricted")
-    graph_store.seed(_docs_for(assertion, _active_item(assertion, sensitivity_labels=["HeAlTh"])))
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, sensitivity_labels=["HeAlTh"])))
 
     assert (
         kg_db.load_fenced_assertions_for_memory_items(
             UID,
             [assertion.memory_id],
             account_generation=4,
+            db_client=db,
         )
         == []
     )
 
 
-def test_load_fenced_assertions_ignores_miskeyed_memory_item_documents(graph_store):
+def test_load_fenced_assertions_ignores_miskeyed_memory_item_documents():
     assertion = _assertion("mem-authoritative")
     docs = _docs_for(assertion, _active_item(assertion))
     item_path = f"users/{UID}/memory_items/{assertion.memory_id}"
     miskeyed_item = dict(docs[item_path])
     miskeyed_item["memory_id"] = "mem-payload-alias"
     docs[item_path] = miskeyed_item
-    graph_store.seed(docs)
+    db = _FakeDb(docs)
 
     assert (
         kg_db.load_fenced_assertions_for_memory_items(
             UID,
             [assertion.memory_id],
             account_generation=4,
+            db_client=db,
         )
         == []
     )

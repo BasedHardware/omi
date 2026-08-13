@@ -16,6 +16,9 @@ os.environ.setdefault(
     'ENCRYPTION_SECRET',
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
+# Product tests exercise the normal universal write-enabled deployment. Tests
+# for the global incident fence override this explicitly to ``off``/``shadow``.
+os.environ.setdefault('MEMORY_MODE', 'read')
 
 # Some unit tests exercise canonical-memory LLM call paths. Provide a fake key
 # so client construction remains hermetic when those tests invoke it.
@@ -42,20 +45,6 @@ _UNIT_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'routers',
 )
 _FAST_UNIT_ALLOWLIST = BACKEND_DIR / 'tests' / 'fast_unit_duration_allowlist.txt'
-
-
-@pytest.fixture(autouse=True)
-def _reset_auth_provider_singleton():
-    """Each test starts with a fresh auth-provider (ADR-0034). The get_auth_provider() singleton must
-    not leak across files that stub firebase differently within one pytest process (CI runs many files
-    per process), mirroring how stub_modules gives each file a fresh module environment."""
-    try:
-        from utils.auth.factory import reset_auth_provider_for_tests
-
-        reset_auth_provider_for_tests()
-    except Exception:
-        pass
-    yield
 
 
 def _env_enabled(name, default='1'):

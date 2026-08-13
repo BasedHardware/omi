@@ -3,70 +3,110 @@
 import copy
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from typing import Any
 
 import pytest
+from google.api_core.exceptions import AlreadyExists
 
 import database.conversations as conversations_db
 from database import conversation_finalization_jobs as jobs_db
 from models.conversation_enums import ConversationStatus
-from tests.store_fakes import FakeDocumentStore
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.merge_conversations import validate_merge_compatibility
 
 
-class _LifecycleStore(FakeDocumentStore):
-    """FakeDocumentStore (WP2 port) plus the conveniences the old raw-Firestore fake exposed.
-
-    Transactions are serialized under a lock so the concurrency contract (exactly one admission
-    wins) holds — mirroring the atomicity the real backend transaction provides, which the direct
-    ``run_transaction`` of the base fake does not. Writes are logged and documents are addressable
-    by tuple path for the assertions below.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self._txn_lock = threading.Lock()
-        self.write_log = []
-
-    @staticmethod
-    def _path(uid, conversation_id):
-        return f'users/{uid}/conversations/{conversation_id}'
-
-    def run_transaction(self, fn, *, attempts=3):
-        with self._txn_lock:
-            return super().run_transaction(fn)
-
-    def set(self, path, data, *, merge=False):
-        super().set(path, data, merge=merge)
-        self.write_log.append((tuple(path.split('/')), copy.deepcopy(data)))
-
-    def update(self, path, data):
-        super().update(path, data)
-        self.write_log.append((tuple(path.split('/')), copy.deepcopy(data)))
-
-    def create(self, path, data):
-        super().create(path, data)
-        self.write_log.append((tuple(path.split('/')), copy.deepcopy(data)))
-
-    # --- test conveniences (mirror the old fake's helpers) ---------------------------------
-    def put_conversation(self, uid, conversation_id, **data):
-        # Seed directly (no write_log entry) so write_log reflects only the code under test.
-        path = self._path(uid, conversation_id)
-        self._docs[path] = copy.deepcopy(data)
-        self._stamp(path)
-
-    def conversation(self, uid, conversation_id):
-        return self.get(self._path(uid, conversation_id)).to_dict()
+@dataclass
+class _Snapshot:
+    data: dict[str, Any] | None
 
     @property
-    def documents(self):
-        return {tuple(p.split('/')): self.get(p).to_dict() for p in self._docs}
+    def exists(self) -> bool:
+        return self.data is not None
+
+    def to_dict(self) -> dict[str, Any] | None:
+        return copy.deepcopy(self.data)
+
+
+@dataclass
+class _DocumentRef:
+    firestore: '_FakeFirestore'
+    path: tuple[str, ...]
+
+    def get(self, transaction: object = None) -> _Snapshot:
+        del transaction
+        return _Snapshot(self.firestore.documents.get(self.path))
+
+    def update(self, updates: dict[str, Any]) -> None:
+        self.firestore.documents[self.path].update(copy.deepcopy(updates))
+        self.firestore.write_log.append((self.path, copy.deepcopy(updates)))
+
+    def create(self, data: dict[str, Any]) -> None:
+        if self.path in self.firestore.documents:
+            raise AlreadyExists('already exists')
+        self.firestore.documents[self.path] = copy.deepcopy(data)
+        self.firestore.write_log.append((self.path, copy.deepcopy(data)))
+
+    def collection(self, name: str) -> '_CollectionRef':
+        return _CollectionRef(self.firestore, self.path + (name,))
+
+
+@dataclass
+class _CollectionRef:
+    firestore: '_FakeFirestore'
+    path: tuple[str, ...]
+
+    def document(self, document_id: str) -> _DocumentRef:
+        return _DocumentRef(self.firestore, self.path + (document_id,))
+
+
+@dataclass
+class _Transaction:
+    firestore: '_FakeFirestore'
+
+    def update(self, document: _DocumentRef, updates: dict[str, Any]) -> None:
+        document.update(updates)
+
+    def set(self, document: _DocumentRef, data: dict[str, Any], merge: bool = False) -> None:
+        if merge and document.path in self.firestore.documents:
+            self.firestore.documents[document.path].update(copy.deepcopy(data))
+        else:
+            self.firestore.documents[document.path] = copy.deepcopy(data)
+        self.firestore.write_log.append((document.path, copy.deepcopy(data)))
+
+
+@dataclass
+class _FakeFirestore:
+    documents: dict[tuple[str, ...], dict[str, Any]] = field(default_factory=dict)
+    write_log: list[tuple[tuple[str, ...], dict[str, Any]]] = field(default_factory=list)
+    transaction_lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def collection(self, name: str) -> _CollectionRef:
+        return _CollectionRef(self, (name,))
+
+    def transaction(self) -> _Transaction:
+        return _Transaction(self)
+
+    def put_conversation(self, uid: str, conversation_id: str, **data: Any) -> None:
+        self.documents[('users', uid, 'conversations', conversation_id)] = copy.deepcopy(data)
+
+    def conversation(self, uid: str, conversation_id: str) -> dict[str, Any]:
+        return self.documents[('users', uid, 'conversations', conversation_id)]
 
 
 @pytest.fixture
 def lifecycle_store(monkeypatch):
-    store = _LifecycleStore()
-    monkeypatch.setattr(conversations_db, '_store', lambda: store)
+    store = _FakeFirestore()
+
+    def transactional(func):
+        def locked(transaction, *args, **kwargs):
+            with transaction.firestore.transaction_lock:
+                return func(transaction, *args, **kwargs)
+
+        return locked
+
+    monkeypatch.setattr(conversations_db, 'db', store)
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', transactional)
     return store
 
 

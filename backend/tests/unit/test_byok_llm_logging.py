@@ -273,7 +273,7 @@ def test_openai_embeddings_proxy_notifies_on_sync_byok_failure():
 
         default = MagicMock()
         default.embed_query.return_value = [0.1, 0.2]
-        proxy = _OpenAIEmbeddingsProxy(lambda: 'text-embedding-3-small', default, lambda: {})
+        proxy = _OpenAIEmbeddingsProxy('text-embedding-3-small', default, {})
 
         byok_inst = MagicMock()
         byok_inst.embed_query.side_effect = _HTTPError('invalid_api_key', 401)
@@ -344,7 +344,7 @@ def test_openai_embeddings_proxy_async_falls_back_on_byok_failure():
 
         default = MagicMock()
         default.aembed_query = AsyncMock(return_value=[0.3, 0.4])
-        proxy = _OpenAIEmbeddingsProxy(lambda: 'text-embedding-3-small', default, lambda: {})
+        proxy = _OpenAIEmbeddingsProxy('text-embedding-3-small', default, {})
 
         byok_inst = MagicMock()
         byok_inst.aembed_query = AsyncMock(side_effect=_HTTPError('invalid_api_key', 401))

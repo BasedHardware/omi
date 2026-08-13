@@ -1,81 +1,93 @@
-"""Behavioral contract tests for the durable listen finalization job state machine.
-
-Reshaped onto the neutral storage port (WP2): every test drives the public API against a
-``FakeDocumentStore`` seeded at the module's real logical paths, so the transactions run through
-``FakeDocumentStore.run_transaction`` exactly as production runs them through the store adapter.
-"""
+"""Behavioral contract tests for the durable listen finalization job state machine."""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
-import pytest
+from google.api_core.exceptions import Aborted
 
 from database import conversation_finalization_jobs as jobs
-from tests.store_fakes import FakeDocumentStore
-
-_GEN = jobs.FINALIZATION_PROJECTION_GENERATION
+from database import firestore_transaction_retry
 
 
-@pytest.fixture
-def store(monkeypatch) -> FakeDocumentStore:
-    fake = FakeDocumentStore()
-    monkeypatch.setattr(jobs, 'get_document_store', lambda: fake)
-    return fake
+class _PhotoCollection:
+    def __init__(self, has_photo: bool):
+        self.has_photo = has_photo
+
+    def limit(self, count: int):
+        assert count == 1
+        return self
+
+    def stream(self, transaction=None):
+        del transaction
+        return iter([SimpleNamespace()] if self.has_photo else [])
 
 
-@pytest.fixture
-def now(monkeypatch) -> datetime:
-    fixed = datetime(2026, 7, 13, tzinfo=timezone.utc)
-    monkeypatch.setattr(jobs, '_now', lambda: fixed)
-    return fixed
+class _Ref:
+    def __init__(self, doc_id: str, data: dict | None, *, has_legacy_photo: bool = False):
+        self.id = doc_id
+        self.data = data
+        self.has_legacy_photo = has_legacy_photo
+
+    def get(self, transaction=None):
+        del transaction
+        return SimpleNamespace(exists=self.data is not None, id=self.id, to_dict=lambda: self.data)
+
+    def to_dict(self):
+        return self.data
+
+    def collection(self, name: str):
+        assert name == 'photos'
+        return _PhotoCollection(self.has_legacy_photo)
 
 
-# --- path + seed helpers (mirror the module's logical addressing) ---
+class _Collection:
+    def __init__(self, refs: dict[str, _Ref]):
+        self.refs = refs
+
+    def document(self, doc_id: str):
+        return self.refs.setdefault(doc_id, _Ref(doc_id, None))
 
 
-def _conv_path(uid: str, cid: str) -> str:
-    return f'users/{uid}/conversations/{cid}'
+class _Transaction:
+    def __init__(self):
+        self.updates: list[tuple[_Ref, dict]] = []
+        self.sets: list[tuple[_Ref, dict]] = []
+
+    def update(self, ref, data):
+        self.updates.append((ref, data))
+
+    def set(self, ref, data, **_kwargs):
+        self.sets.append((ref, data))
 
 
-def _job_path(job_id: str) -> str:
-    return f'conversation_finalization_jobs/{job_id}'
+def _now() -> datetime:
+    return datetime(2026, 7, 13, tzinfo=timezone.utc)
 
 
-def _shard_path(shard: int) -> str:
-    return f'conversation_finalization_projection_shards/{jobs._projection_shard_id(_GEN, shard)}'
+def _conversation(data: dict | None = None, *, has_legacy_photo: bool = False) -> _Ref:
+    return _Ref(
+        'conversation-1',
+        {
+            'status': 'in_progress',
+            'transcript_segments': [{'text': 'persisted'}],
+            **(data or {}),
+        },
+        has_legacy_photo=has_legacy_photo,
+    )
 
 
-def _cursor_path() -> str:
-    return f'{jobs.STALE_PROCESSING_SWEEP_STATE_COLLECTION}/{jobs.STALE_PROCESSING_SWEEP_STATE_DOC}'
-
-
-def _seed_conversation(store, uid: str, cid: str, data: dict | None = None, *, has_legacy_photo: bool = False) -> None:
-    base = {'status': 'in_progress', 'transcript_segments': [{'text': 'persisted'}]}
-    base.update(data or {})
-    store.set(_conv_path(uid, cid), base)
-    if has_legacy_photo:
-        store.set(f'{_conv_path(uid, cid)}/photos/p1', {'id': 'p1'})
-
-
-def _seed_processing(
-    store,
-    uid: str,
-    cid: str,
-    *,
-    admitted_at: datetime | None,
-    deferred: bool = False,
-    finalization_job_id: str | None = None,
-    created_at: datetime | None = None,
-) -> None:
-    data: dict = {'status': 'processing', 'created_at': created_at or admitted_at}
-    if admitted_at is not None:
-        data['processing_admitted_at'] = admitted_at
-    if deferred:
-        data['deferred'] = True
-    if finalization_job_id:
-        data['finalization_job_id'] = finalization_job_id
-    store.set(_conv_path(uid, cid), data)
+def _completed_finalization_conversation(job_id: str = 'job-1', revision: int = 1, data: dict | None = None) -> _Ref:
+    return _conversation(
+        {
+            'status': 'completed',
+            'discarded': False,
+            'finalization_job_id': job_id,
+            'finalization_revision': revision,
+            **(data or {}),
+        }
+    )
 
 
 def _admit_finalization(_conversation_data: dict) -> jobs.FinalizationAdmission:
@@ -87,19 +99,26 @@ def _admit_finalization(_conversation_data: dict) -> jobs.FinalizationAdmission:
     }
 
 
-# --- create-or-get finalization intent (outbox admission) ---
+def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material():
+    transaction = _Transaction()
+    conversation_ref = _conversation()
+    collection = _Collection({})
 
-
-def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(store):
-    _seed_conversation(store, 'uid-1', 'conversation-1')
-
-    intent = jobs.create_or_get_finalization_intent(
-        'uid-1', 'conversation-1', requires_byok=False, finalization_admission=_admit_finalization
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
+        'uid-1',
+        'conversation-1',
+        False,
+        _admit_finalization,
+        _now(),
     )
 
     assert intent['status'] == 'queued'
     assert intent['job_id']
-    job = store.get(_job_path(intent['job_id'])).to_dict()
+    assert len(transaction.sets) == 1
+    job = transaction.sets[0][1]
     assert job['uid'] == 'uid-1'
     assert job['conversation_id'] == 'conversation-1'
     assert job['dispatch_generation'] == 1
@@ -108,198 +127,307 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
     assert job['fanout_status'] == 'pending'
     forbidden = {'byok_keys', 'transcript', 'transcript_segments', 'authorization', 'raw_error'}
     assert forbidden.isdisjoint(job)
-    conversation = store.get(_conv_path('uid-1', 'conversation-1')).to_dict()
-    assert conversation['status'] == 'processing'
-    assert conversation['finalization_job_id'] == intent['job_id']
+    assert transaction.updates[0][1]['status'] == 'processing'
+    assert transaction.updates[0][1]['finalization_job_id'] == intent['job_id']
 
 
-def test_rest_intent_persists_its_force_mode_and_calendar_context_atomically(store):
-    _seed_conversation(store, 'uid-1', 'conversation-1')
+def test_rest_intent_persists_its_force_mode_and_calendar_context_atomically():
+    transaction = _Transaction()
+    conversation_ref = _conversation()
+    collection = _Collection({})
+
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
+        'uid-1',
+        'conversation-1',
+        False,
+        _admit_finalization,
+        _now(),
+        force_process=True,
+        extra_updates={'external_data': {'calendar_meeting_context': {'event_id': 'event-1'}}},
+    )
+
+    assert transaction.sets[0][1]['force_process'] is True
+    assert transaction.updates == [
+        (
+            conversation_ref,
+            {
+                'external_data': {'calendar_meeting_context': {'event_id': 'event-1'}},
+                'status': 'processing',
+                'finalization_job_id': intent['job_id'],
+                'finalization_revision': 1,
+                'finalization_status': 'queued',
+            },
+        )
+    ]
+
+
+def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(monkeypatch):
+    """Concurrent REST finalizers must recover a read-time Firestore abort."""
+
+    conversation_ref = _conversation()
+    jobs_collection = _Collection({})
+    projection_collection = _Collection({})
+    transactions: list[_Transaction] = []
+
+    class _Client:
+        def transaction(self):
+            transaction = _Transaction()
+            transactions.append(transaction)
+            return transaction
+
+        def collection(self, name: str):
+            if name == jobs.FINALIZATION_JOBS_COLLECTION:
+                return jobs_collection
+            assert name == jobs.FINALIZATION_PROJECTION_COLLECTION
+            return projection_collection
+
+    transactional_calls = 0
+
+    def transaction_wrapper(function):
+        def invoke(transaction, *args, **kwargs):
+            nonlocal transactional_calls
+            transactional_calls += 1
+            if transactional_calls == 1:
+                raise Aborted('read contention')
+            return function(transaction, *args, **kwargs)
+
+        return invoke
+
+    def fast_contention_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(jobs, '_conversation_ref', lambda *_args: conversation_ref)
+    monkeypatch.setattr(jobs.firestore, 'transactional', transaction_wrapper)
+    monkeypatch.setattr(jobs, 'run_with_transaction_contention_retry', fast_contention_retry)
 
     intent = jobs.create_or_get_finalization_intent(
         'uid-1',
         'conversation-1',
         requires_byok=False,
         finalization_admission=_admit_finalization,
-        force_process=True,
-        extra_updates={'external_data': {'calendar_meeting_context': {'event_id': 'event-1'}}},
+        firestore_client=_Client(),
     )
 
-    assert store.get(_job_path(intent['job_id'])).to_dict()['force_process'] is True
-    conversation = store.get(_conv_path('uid-1', 'conversation-1')).to_dict()
-    assert conversation['external_data'] == {'calendar_meeting_context': {'event_id': 'event-1'}}
-    assert conversation['status'] == 'processing'
-    assert conversation['finalization_job_id'] == intent['job_id']
-    assert conversation['finalization_revision'] == 1
-    assert conversation['finalization_status'] == 'queued'
-
-
-def test_create_or_get_intent_is_idempotent_and_counts_acceptance_once(store):
-    """A reconnect/retry reuses the same durable job and never double-counts acceptance.
-
-    The store owns the transaction retry that the retired
-    ``run_with_transaction_contention_retry`` used to provide; this pins the
-    idempotency guarantee that a replayed admission commits exactly one job and
-    one accepted projection delta.
-    """
-    _seed_conversation(store, 'uid-1', 'conversation-1')
-
-    first = jobs.create_or_get_finalization_intent(
-        'uid-1', 'conversation-1', requires_byok=False, finalization_admission=_admit_finalization
-    )
-    assert first['created'] is True
-
-    second = jobs.create_or_get_finalization_intent(
-        'uid-1', 'conversation-1', requires_byok=False, finalization_admission=_admit_finalization
-    )
-    assert second['job_id'] == first['job_id']
-    assert second['created'] is False
-
-    assert list(store.list_ids('conversation_finalization_jobs')) == [first['job_id']]
-    shard = jobs._projection_shard(first['job_id'])
-    shard_doc = store.get(_shard_path(shard)).to_dict()
-    assert shard_doc['accepted'] == 1
-    assert shard_doc['queued'] == 1
-
-
-def test_photo_only_conversation_with_durable_content_marker_is_admitted(store):
-    _seed_conversation(store, 'uid-1', 'conversation-1', {'transcript_segments': [], 'has_content': True})
-
-    intent = jobs.create_or_get_finalization_intent(
-        'uid-1', 'conversation-1', requires_byok=False, finalization_admission=_admit_finalization
-    )
-
+    assert transactional_calls == 2
+    assert len(transactions) == 2
+    assert transactions[0] is not transactions[1]
+    assert transactions[0].sets == []
     assert intent['status'] == 'queued'
-    assert store.get(_conv_path('uid-1', 'conversation-1')).to_dict()['status'] == 'processing'
-    assert store.exists(_job_path(intent['job_id']))
-
-
-def test_legacy_photo_only_conversation_is_admitted_from_its_child_document(store):
-    _seed_conversation(
-        store, 'uid-1', 'conversation-1', {'transcript_segments': [], 'has_content': False}, has_legacy_photo=True
+    # The retry's committed transaction creates exactly one job and one shard
+    # delta; the aborted attempt never contributes a second accepted count.
+    assert len(transactions[1].sets) == 2
+    assert transactions[1].sets[1][0].id == jobs._projection_shard_id(
+        jobs.FINALIZATION_PROJECTION_GENERATION,
+        transactions[1].sets[0][1]['projection_shard'],
     )
 
-    intent = jobs.create_or_get_finalization_intent(
-        'uid-1', 'conversation-1', requires_byok=False, finalization_admission=_admit_finalization
-    )
 
-    assert intent['status'] == 'queued'
-    assert store.get(_conv_path('uid-1', 'conversation-1')).to_dict()['status'] == 'processing'
+def test_photo_only_conversation_with_durable_content_marker_is_admitted():
+    transaction = _Transaction()
+    conversation_ref = _conversation({'transcript_segments': [], 'has_content': True})
+    collection = _Collection({})
 
-
-def test_photo_only_conversation_without_content_or_photos_is_not_admitted(store):
-    _seed_conversation(store, 'uid-1', 'conversation-1', {'transcript_segments': [], 'has_content': False})
-
-    intent = jobs.create_or_get_finalization_intent(
-        'uid-1', 'conversation-1', requires_byok=False, finalization_admission=_admit_finalization
-    )
-
-    assert intent['status'] == 'no_content'
-    assert intent['job_id'] is None
-    assert list(store.list_ids('conversation_finalization_jobs')) == []
-
-
-def test_duplicate_reconnect_reuses_the_same_outbox_job(store):
-    _seed_conversation(
-        store,
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
         'uid-1',
         'conversation-1',
-        {'status': 'processing', 'finalization_job_id': 'job-1', 'finalization_revision': 1},
+        False,
+        _admit_finalization,
+        _now(),
     )
-    store.set(_job_path('job-1'), {'status': 'queued', 'dispatch_generation': 1, 'requires_byok': False})
-    before = store.get(_conv_path('uid-1', 'conversation-1')).to_dict()
 
-    intent = jobs.create_or_get_finalization_intent(
-        'uid-1', 'conversation-1', requires_byok=False, finalization_admission=_admit_finalization
+    assert intent['status'] == 'queued'
+    assert len(transaction.sets) == 1
+    assert transaction.updates[0][1]['status'] == 'processing'
+
+
+def test_legacy_photo_only_conversation_is_admitted_from_its_child_document():
+    transaction = _Transaction()
+    conversation_ref = _conversation({'transcript_segments': [], 'has_content': False}, has_legacy_photo=True)
+    collection = _Collection({})
+
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
+        'uid-1',
+        'conversation-1',
+        False,
+        _admit_finalization,
+        _now(),
+    )
+
+    assert intent['status'] == 'queued'
+    assert transaction.updates[0][1]['status'] == 'processing'
+
+
+def test_duplicate_reconnect_reuses_the_same_outbox_job():
+    job_id = 'job-1'
+    transaction = _Transaction()
+    conversation_ref = _conversation(
+        {'status': 'processing', 'finalization_job_id': job_id, 'finalization_revision': 1}
+    )
+    collection = _Collection(
+        {
+            job_id: _Ref(
+                job_id,
+                {'status': 'queued', 'dispatch_generation': 1, 'requires_byok': False},
+            )
+        }
+    )
+
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
+        'uid-1',
+        'conversation-1',
+        False,
+        _admit_finalization,
+        _now(),
     )
 
     assert intent == {
-        'job_id': 'job-1',
+        'job_id': job_id,
         'status': 'queued',
         'dispatch_generation': 1,
         'requires_byok': False,
         'fanout_key': None,
         'created': False,
     }
-    # No second job, no conversation mutation, no projection write.
-    assert list(store.list_ids('conversation_finalization_jobs')) == ['job-1']
-    assert store.get(_conv_path('uid-1', 'conversation-1')).to_dict() == before
-    assert list(store.list_ids('conversation_finalization_projection_shards')) == []
+    assert transaction.sets == []
+    assert transaction.updates == []
 
 
-def test_duplicate_finalization_intent_keeps_the_same_processing_admission(store):
+def test_duplicate_finalization_intent_keeps_the_same_processing_admission():
     """Characterize #2d67863cad: a disconnect/reconnect never starts a second job.
 
     The first finalization transaction already moved the conversation to
     ``processing``.  A later finalizer must reuse that durable identity without
-    another conversation write, so a future service migration cannot re-open the
-    disconnect race while rearranging the handoff.
+    another conversation write, so a future service migration cannot re-open
+    the disconnect race while rearranging the handoff.
     """
-    _seed_conversation(
-        store,
+    job_id = 'job-1'
+    transaction = _Transaction()
+    conversation_ref = _conversation(
+        {
+            'status': 'processing',
+            'finalization_job_id': job_id,
+            'finalization_revision': 1,
+        }
+    )
+    collection = _Collection(
+        {
+            job_id: _Ref(
+                job_id,
+                {
+                    'status': 'queued',
+                    'dispatch_generation': 1,
+                    'requires_byok': False,
+                },
+            )
+        }
+    )
+
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
         'uid-1',
         'conversation-1',
-        {'status': 'processing', 'finalization_job_id': 'job-1', 'finalization_revision': 1},
-    )
-    store.set(_job_path('job-1'), {'status': 'queued', 'dispatch_generation': 1, 'requires_byok': False})
-    before = store.get(_conv_path('uid-1', 'conversation-1')).to_dict()
-
-    intent = jobs.create_or_get_finalization_intent(
-        'uid-1', 'conversation-1', requires_byok=False, finalization_admission=_admit_finalization
+        False,
+        _admit_finalization,
+        _now(),
     )
 
-    assert intent['job_id'] == 'job-1'
+    assert intent['job_id'] == job_id
     assert intent['dispatch_generation'] == 1
-    assert store.get(_conv_path('uid-1', 'conversation-1')).to_dict() == before
+    assert transaction.updates == []
+    assert transaction.sets == []
 
 
-def test_byok_job_is_explicitly_blocked_without_persisting_a_key(store):
-    _seed_conversation(store, 'uid-1', 'conversation-1')
+def test_byok_job_is_explicitly_blocked_without_persisting_a_key():
+    transaction = _Transaction()
+    collection = _Collection({})
 
-    intent = jobs.create_or_get_finalization_intent(
-        'uid-1', 'conversation-1', requires_byok=True, finalization_admission=_admit_finalization
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        _conversation(),
+        collection,
+        'uid-1',
+        'conversation-1',
+        True,
+        _admit_finalization,
+        _now(),
     )
 
     assert intent['status'] == 'blocked_byok'
-    persisted = store.get(_job_path(intent['job_id'])).to_dict()
+    persisted = transaction.sets[0][1]
     assert persisted['requires_byok'] is True
     assert set(persisted).isdisjoint({'byok_keys', 'openai', 'anthropic', 'gemini', 'deepgram'})
 
 
-def test_atomic_admission_rejects_terminal_snapshot_before_any_outbox_write(store):
-    _seed_conversation(store, 'uid-1', 'conversation-1', {'status': 'failed'})
+def test_atomic_admission_rejects_terminal_snapshot_before_any_outbox_write():
+    transaction = _Transaction()
+    conversation_ref = _conversation({'status': 'failed'})
+    collection = _Collection({})
 
     def terminal(_conversation_data: dict) -> jobs.FinalizationAdmission:
         return {'accepted': False, 'terminal': True, 'reason': 'terminal', 'fanout_key': None}
 
-    intent = jobs.create_or_get_finalization_intent(
-        'uid-1', 'conversation-1', requires_byok=False, finalization_admission=terminal
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
+        'uid-1',
+        'conversation-1',
+        False,
+        terminal,
+        _now(),
     )
 
     assert intent['status'] == 'terminal'
-    assert list(store.list_ids('conversation_finalization_jobs')) == []
-    assert store.get(_conv_path('uid-1', 'conversation-1')).to_dict()['status'] == 'failed'
+    assert transaction.sets == []
+    assert transaction.updates == []
 
 
-# --- claim / lease ---
+def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
+    now = _now()
+    ref = _Ref('job-1', {'status': 'queued', 'dispatch_generation': 2, 'attempt_count': 0})
+    first = _Transaction()
 
-
-def test_duplicate_task_delivery_claims_only_once_until_lease_expires(store, now):
-    store.set(_job_path('job-1'), {'status': 'queued', 'dispatch_generation': 2, 'attempt_count': 0})
-
-    claim = jobs.claim_finalization_job('job-1', 2)
+    claim = jobs._claim_finalization_job_txn(first, ref, 2, False, 1500, now)
     assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 1, 'created_at': None}
-    job = store.get(_job_path('job-1')).to_dict()
-    assert job['status'] == 'leased'
-    assert job['attempt_count'] == 1
+    claim_update = first.updates[0][1]
+    assert claim_update['status'] == 'leased'
+    assert claim_update['attempt_count'] == 1
 
-    duplicate = jobs.claim_finalization_job('job-1', 2)
-    assert duplicate == {'status': 'leased', 'lease_epoch': None, 'attempt_count': 0, 'created_at': None}
+    ref.data = ref.data | claim_update
+    duplicate = _Transaction()
+    assert jobs._claim_finalization_job_txn(duplicate, ref, 2, False, 1500, now + timedelta(seconds=1)) == {
+        'status': 'leased',
+        'lease_epoch': None,
+        'attempt_count': 0,
+        'created_at': None,
+    }
+    assert duplicate.updates == []
 
 
-def test_expired_worker_lease_can_be_safely_reclaimed(store, now):
-    store.set(
-        _job_path('job-1'),
+def test_expired_worker_lease_can_be_safely_reclaimed():
+    now = _now()
+    ref = _Ref(
+        'job-1',
         {
             'status': 'leased',
             'dispatch_generation': 2,
@@ -307,59 +435,18 @@ def test_expired_worker_lease_can_be_safely_reclaimed(store, now):
             'lease_expires_at': now - timedelta(seconds=1),
         },
     )
+    transaction = _Transaction()
 
-    claim = jobs.claim_finalization_job('job-1', 2)
+    claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
     assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 2, 'created_at': None}
-    job = store.get(_job_path('job-1')).to_dict()
-    assert job['attempt_count'] == 2
-    assert job['lease_epoch'] == 1
+    assert transaction.updates[0][1]['attempt_count'] == 2
+    assert transaction.updates[0][1]['lease_epoch'] == 1
 
 
-def test_live_pusher_claim_cannot_use_another_conversations_job(store, now):
-    store.set(
-        _job_path('job-1'),
-        {'status': 'queued', 'dispatch_generation': 1, 'uid': 'owner-uid', 'conversation_id': 'owner-conversation'},
-    )
-    before = store.get(_job_path('job-1')).to_dict()
-
-    status = jobs.claim_finalization_job(
-        'job-1', 1, expected_uid='other-uid', expected_conversation_id='other-conversation'
-    )
-
-    assert status == {'status': 'identity_mismatch', 'lease_epoch': None, 'attempt_count': 0, 'created_at': None}
-    assert store.get(_job_path('job-1')).to_dict() == before
-
-
-def test_completed_and_dead_letter_jobs_never_execute_again(store, now):
-    for status in ('completed', 'dead_letter'):
-        store.set(_job_path('job-1'), {'status': status, 'dispatch_generation': 1})
-        before = store.get(_job_path('job-1')).to_dict()
-        assert jobs.claim_finalization_job('job-1', 1) == {
-            'status': status,
-            'lease_epoch': None,
-            'attempt_count': 0,
-            'created_at': None,
-        }
-        assert store.get(_job_path('job-1')).to_dict() == before
-
-
-def test_completed_fenced_job_replays_as_a_fenced_result(store, now):
-    store.set(
-        _job_path('job-1'),
-        {'status': 'completed', 'finalization_outcome': 'fenced', 'dispatch_generation': 1},
-    )
-
-    claim = jobs.claim_finalization_job('job-1', 1)
-
-    assert claim == {'status': 'fenced', 'lease_epoch': None, 'attempt_count': 0, 'created_at': None}
-
-
-# --- completion / fanout ownership ---
-
-
-def test_finalization_completion_requires_durable_fanout_completion(store, now):
-    store.set(
-        _job_path('job-1'),
+def test_finalization_completion_requires_durable_fanout_completion():
+    now = _now()
+    ref = _Ref(
+        'job-1',
         {
             'status': 'leased',
             'dispatch_generation': 1,
@@ -370,92 +457,99 @@ def test_finalization_completion_requires_durable_fanout_completion(store, now):
             'finalization_revision': 1,
         },
     )
-    store.set(
-        _conv_path('uid-1', 'conversation-1'),
-        {
-            'status': 'completed',
-            'discarded': False,
-            'finalization_job_id': 'job-1',
-            'finalization_revision': 1,
-            'transcript_segments': [{'text': 'x'}],
-        },
-    )
 
-    assert jobs.mark_finalization_completed('job-1', 1, 4) is False
+    blocked = _Transaction()
+    assert jobs._mark_finalization_completed_txn(blocked, ref, 1, 4, now) is False
+    assert blocked.updates == []
 
-    claim = jobs.claim_finalization_fanout('job-1', 1, 4)
+    fanout = _Transaction()
+    conversation_ref = _completed_finalization_conversation()
+    claim = jobs._claim_finalization_fanout_txn(fanout, ref, 1, 4, now, lambda *_: conversation_ref)
     assert claim == {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization:1'}
+    ref.data = ref.data | fanout.updates[0][1]
 
-    assert jobs.mark_finalization_fanout_completed('job-1', 1, 4) is True
-    assert jobs.mark_finalization_completed('job-1', 1, 4) is True
-    assert store.get(_job_path('job-1')).to_dict()['terminal_outcome'] == 'success'
+    completed_fanout = _Transaction()
+    assert jobs._mark_finalization_fanout_completed_txn(completed_fanout, ref, 1, 4, now) is True
+    ref.data = ref.data | completed_fanout.updates[0][1]
+
+    completed = _Transaction()
+    assert jobs._mark_finalization_completed_txn(completed, ref, 1, 4, now) is True
+    assert completed.updates[0][1]['terminal_outcome'] == 'success'
 
 
-def test_admitted_terminal_replay_updates_its_shard_once(store, now):
-    shard = jobs._projection_shard('job-1')
-    store.set(
-        _job_path('job-1'),
+def test_admitted_terminal_replay_updates_its_shard_once():
+    now = _now()
+    ref = _Ref(
+        'job-1',
         {
             'status': 'leased',
             'dispatch_generation': 1,
             'lease_epoch': 4,
             'fanout_status': 'completed',
-            'projection_generation': _GEN,
-            'projection_shard': shard,
+            'projection_generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+            'projection_shard': jobs._projection_shard('job-1'),
         },
     )
+    projection = _Collection({})
 
-    assert jobs.mark_finalization_completed('job-1', 1, 4) is True
-    shard_doc = store.get(_shard_path(shard)).to_dict()
-    assert shard_doc['generation'] == _GEN and shard_doc['shard'] == shard
-    assert shard_doc['completed'] == 1 and shard_doc['success'] == 1 and shard_doc['leased'] == -1
-
-    # A store retry observes the committed terminal snapshot and performs no
-    # second aggregate write, even though the API remains idempotently true.
-    assert jobs.mark_finalization_completed('job-1', 1, 4) is True
-    assert store.get(_shard_path(shard)).to_dict() == shard_doc
-
-
-def test_pre_projection_terminal_keeps_its_outcome_without_moving_the_new_denominator(store, now):
-    store.set(
-        _job_path('legacy-job'),
-        {'status': 'leased', 'dispatch_generation': 1, 'lease_epoch': 1, 'fanout_status': 'completed'},
+    first = _Transaction()
+    assert jobs._mark_finalization_completed_txn(first, ref, 1, 4, now, projection) is True
+    assert len(first.sets) == 1
+    assert first.sets[0][0].id == jobs._projection_shard_id(
+        jobs.FINALIZATION_PROJECTION_GENERATION, jobs._projection_shard('job-1')
     )
 
-    assert jobs.mark_finalization_completed('legacy-job', 1, 1) is True
-    assert store.get(_job_path('legacy-job')).to_dict()['terminal_outcome'] == 'success'
-    assert list(store.list_ids('conversation_finalization_projection_shards')) == []
+    # A Firestore retry observes the committed terminal snapshot and performs
+    # no second aggregate write, even though the API remains idempotently true.
+    ref.data = ref.data | first.updates[0][1]
+    replay = _Transaction()
+    assert jobs._mark_finalization_completed_txn(replay, ref, 1, 4, now, projection) is True
+    assert replay.updates == []
+    assert replay.sets == []
 
 
-def test_byok_resume_moves_only_its_admitted_projection_state(store, now):
-    store.set(
-        _job_path('job-1'),
+def test_pre_projection_terminal_keeps_its_outcome_without_moving_the_new_denominator():
+    ref = _Ref(
+        'legacy-job',
+        {'status': 'leased', 'dispatch_generation': 1, 'lease_epoch': 1, 'fanout_status': 'completed'},
+    )
+    transaction = _Transaction()
+
+    assert jobs._mark_finalization_completed_txn(transaction, ref, 1, 1, _now(), _Collection({})) is True
+    assert transaction.updates[0][1]['terminal_outcome'] == 'success'
+    assert transaction.sets == []
+
+
+def test_byok_resume_moves_only_its_admitted_projection_state():
+    ref = _Ref(
+        'job-1',
         {
             'status': 'blocked_byok',
             'requires_byok': True,
-            'projection_generation': _GEN,
+            'projection_generation': jobs.FINALIZATION_PROJECTION_GENERATION,
             'projection_shard': 3,
         },
     )
+    transaction = _Transaction()
 
-    intent = jobs.resume_blocked_byok_job_for_live_session('job-1')
+    intent = jobs._resume_blocked_byok_job_txn(transaction, ref, _now(), _Collection({}))
 
     assert intent['status'] == 'queued'
-    assert store.get(_job_path('job-1')).to_dict()['status'] == 'queued'
-    shard_doc = store.get(_shard_path(3)).to_dict()
-    assert shard_doc['blocked_byok'] == -1 and shard_doc['queued'] == 1
+    assert transaction.updates[0][1]['status'] == 'queued'
+    assert transaction.sets[0][0].id == jobs._projection_shard_id(jobs.FINALIZATION_PROJECTION_GENERATION, 3)
 
 
-def test_fanout_claim_terminally_fences_a_discard_that_wins_before_its_transaction(store, now):
+def test_fanout_claim_terminally_fences_a_discard_that_wins_before_its_transaction():
     """A processor may finish while a disconnect discard wins the fanout race.
 
-    The store retries this transaction if the conversation changes after its
+    Firestore retries this transaction if the conversation changes after its
     read. This fixture represents the retried transaction snapshot after that
     discard, which must both reject integrations and close the job rather than
     make it retryable or eligible for a dead letter.
     """
-    store.set(
-        _job_path('job-1'),
+    now = _now()
+    ref = _Ref(
+        'job-1',
         {
             'status': 'leased',
             'dispatch_generation': 1,
@@ -466,29 +560,26 @@ def test_fanout_claim_terminally_fences_a_discard_that_wins_before_its_transacti
             'finalization_revision': 1,
         },
     )
-    store.set(
-        _conv_path('uid-1', 'conversation-1'),
-        {
-            'status': 'completed',
-            'discarded': True,
-            'finalization_job_id': 'job-1',
-            'finalization_revision': 1,
-        },
+    discarded_conversation = _completed_finalization_conversation(data={'discarded': True})
+    transaction = _Transaction()
+
+    claim = jobs._claim_finalization_fanout_txn(
+        transaction,
+        ref,
+        1,
+        4,
+        now,
+        lambda *_: discarded_conversation,
     )
 
-    claim = jobs.claim_finalization_fanout('job-1', 1, 4)
-
     assert claim == {'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization:1'}
-    job = store.get(_job_path('job-1')).to_dict()
-    assert job['status'] == 'completed'
-    assert job['finalization_outcome'] == 'fenced'
-    assert job['terminal_outcome'] == 'stale'
-    assert job['fanout_status'] == 'fenced'
+    assert transaction.updates == [(ref, jobs._fenced_finalization_update(now))]
 
 
-def test_fanout_claim_terminally_fences_a_superseded_finalization_binding(store, now):
-    store.set(
-        _job_path('job-1'),
+def test_fanout_claim_terminally_fences_a_superseded_finalization_binding():
+    now = _now()
+    ref = _Ref(
+        'job-1',
         {
             'status': 'leased',
             'dispatch_generation': 1,
@@ -499,45 +590,103 @@ def test_fanout_claim_terminally_fences_a_superseded_finalization_binding(store,
             'finalization_revision': 1,
         },
     )
-    # The conversation is now owned by a newer finalization generation (job-2 / rev 2).
-    store.set(
-        _conv_path('uid-1', 'conversation-1'),
+    newer_conversation = _completed_finalization_conversation(job_id='job-2', revision=2)
+    transaction = _Transaction()
+
+    claim = jobs._claim_finalization_fanout_txn(
+        transaction,
+        ref,
+        1,
+        4,
+        now,
+        lambda *_: newer_conversation,
+    )
+
+    assert claim == {'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization:1'}
+    assert transaction.updates == [(ref, jobs._fenced_finalization_update(now))]
+
+
+def test_fenced_finalization_is_a_terminal_no_fanout_outcome():
+    now = _now()
+    ref = _Ref(
+        'job-1',
         {
-            'status': 'completed',
-            'discarded': False,
-            'finalization_job_id': 'job-2',
-            'finalization_revision': 2,
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+            'fanout_status': 'pending',
         },
     )
 
-    claim = jobs.claim_finalization_fanout('job-1', 1, 4)
+    transaction = _Transaction()
+    assert jobs._mark_finalization_fenced_txn(transaction, ref, 1, 4, now) is True
+    update = transaction.updates[0][1]
+    assert update['status'] == 'completed'
+    assert update['finalization_outcome'] == 'fenced'
+    assert update['terminal_outcome'] == 'stale'
+    assert update['fanout_status'] == 'fenced'
 
-    assert claim == {'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization:1'}
-    job = store.get(_job_path('job-1')).to_dict()
-    assert job['fanout_status'] == 'fenced'
-    assert job['finalization_outcome'] == 'fenced'
 
-
-def test_fenced_finalization_is_a_terminal_no_fanout_outcome(store, now):
-    store.set(
-        _job_path('job-1'),
-        {'status': 'leased', 'dispatch_generation': 1, 'lease_epoch': 4, 'fanout_status': 'pending'},
+def test_completed_fenced_job_replays_as_a_fenced_result():
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'completed',
+            'finalization_outcome': 'fenced',
+            'dispatch_generation': 1,
+        },
     )
 
-    assert jobs.mark_finalization_fenced('job-1', 1, 4) is True
-    job = store.get(_job_path('job-1')).to_dict()
-    assert job['status'] == 'completed'
-    assert job['finalization_outcome'] == 'fenced'
-    assert job['terminal_outcome'] == 'stale'
-    assert job['fanout_status'] == 'fenced'
+    claim = jobs._claim_finalization_job_txn(_Transaction(), ref, 1, False, 1500, _now())
+
+    assert claim == {'status': 'fenced', 'lease_epoch': None, 'attempt_count': 0, 'created_at': None}
 
 
-# --- replay / dead-letter ---
+def test_live_pusher_claim_cannot_use_another_conversations_job():
+    transaction = _Transaction()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 1,
+            'uid': 'owner-uid',
+            'conversation_id': 'owner-conversation',
+        },
+    )
+
+    status = jobs._claim_finalization_job_txn(
+        transaction,
+        ref,
+        1,
+        False,
+        1500,
+        _now(),
+        expected_uid='other-uid',
+        expected_conversation_id='other-conversation',
+    )
+
+    assert status == {'status': 'identity_mismatch', 'lease_epoch': None, 'attempt_count': 0, 'created_at': None}
+    assert transaction.updates == []
 
 
-def test_reconciler_replaces_stale_generation_after_worker_crash(store, now):
-    store.set(
-        _job_path('job-1'),
+def test_completed_and_dead_letter_jobs_never_execute_again():
+    for status in ('completed', 'dead_letter'):
+        transaction = _Transaction()
+        ref = _Ref('job-1', {'status': status, 'dispatch_generation': 1})
+        assert jobs._claim_finalization_job_txn(transaction, ref, 1, False, 1500, _now()) == {
+            'status': status,
+            'lease_epoch': None,
+            'attempt_count': 0,
+            'created_at': None,
+        }
+        assert transaction.updates == []
+
+
+def test_reconciler_replaces_stale_generation_after_worker_crash():
+    now = _now()
+    transaction = _Transaction()
+    ref = _Ref(
+        'job-1',
         {
             'status': 'leased',
             'dispatch_generation': 4,
@@ -546,16 +695,17 @@ def test_reconciler_replaces_stale_generation_after_worker_crash(store, now):
         },
     )
 
-    intent = jobs.claim_finalization_replay('job-1', stale_after=timedelta(minutes=5))
+    intent = jobs._claim_finalization_replay_txn(transaction, ref, timedelta(minutes=5), now)
 
     assert intent['status'] == 'queued'
     assert intent['dispatch_generation'] == 5
-    assert store.get(_job_path('job-1')).to_dict()['dispatch_generation'] == 5
+    assert transaction.updates[0][1]['dispatch_generation'] == 5
 
 
-def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write(store, now):
-    store.set(
-        _job_path('job-1'),
+def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
+    now = _now()
+    ref = _Ref(
+        'job-1',
         {
             'status': 'leased',
             'dispatch_generation': 3,
@@ -565,28 +715,35 @@ def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write(store, now):
         },
     )
 
-    new_claim = jobs.claim_finalization_job('job-1', 3)
+    reclaim = _Transaction()
+    new_claim = jobs._claim_finalization_job_txn(reclaim, ref, 3, False, 1500, now)
     assert new_claim == {'status': 'claimed', 'lease_epoch': 5, 'attempt_count': 1, 'created_at': None}
+    ref.data = ref.data | reclaim.updates[0][1]
 
-    # The stale worker's terminal write (epoch 4) is fenced; only the current epoch (5) commits.
-    assert jobs.mark_finalization_completed('job-1', 3, 4) is False
-    assert jobs.mark_finalization_completed('job-1', 3, 5) is True
+    stale_completion = _Transaction()
+    assert jobs._mark_finalization_completed_txn(stale_completion, ref, 3, 4, now) is False
+    assert stale_completion.updates == []
 
-
-def test_final_attempt_sets_visible_dead_letter_instead_of_completed(store, now):
-    store.set(_job_path('job-1'), {'status': 'leased', 'dispatch_generation': 3, 'lease_epoch': 1})
-
-    assert jobs.mark_finalization_dead_letter('job-1', 3, 1, 5) is True
-    job = store.get(_job_path('job-1')).to_dict()
-    assert job['status'] == 'dead_letter'
-    assert job['terminal_outcome'] == 'failure'
-    assert job['task_retry_count'] == 5
-    assert 'completed_at' not in job
+    current_completion = _Transaction()
+    assert jobs._mark_finalization_completed_txn(current_completion, ref, 3, 5, now) is True
 
 
-def test_final_attempt_atomically_closes_its_bound_processing_conversation(store, now):
-    store.set(
-        _job_path('job-1'),
+def test_final_attempt_sets_visible_dead_letter_instead_of_completed():
+    transaction = _Transaction()
+    ref = _Ref('job-1', {'status': 'leased', 'dispatch_generation': 3, 'lease_epoch': 1})
+
+    assert jobs._mark_finalization_dead_letter_txn(transaction, ref, 3, 1, 5, _now()) is True
+    update = transaction.updates[0][1]
+    assert update['status'] == 'dead_letter'
+    assert update['terminal_outcome'] == 'failure'
+    assert update['task_retry_count'] == 5
+    assert 'completed_at' not in update
+
+
+def test_final_attempt_atomically_closes_its_bound_processing_conversation():
+    transaction = _Transaction()
+    job_ref = _Ref(
+        'job-1',
         {
             'status': 'leased',
             'uid': 'uid-1',
@@ -596,56 +753,117 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation(store
             'lease_epoch': 1,
         },
     )
-    store.set(
-        _conv_path('uid-1', 'conversation-1'),
+    conversation_ref = _conversation(
         {
             'status': 'processing',
             'discarded': False,
             'finalization_job_id': 'job-1',
             'finalization_revision': 3,
-            'transcript_segments': [{'text': 'x'}],
-        },
+        }
     )
 
-    assert jobs.mark_finalization_dead_letter('job-1', 3, 1, 5) is True
-
-    job = store.get(_job_path('job-1')).to_dict()
-    assert job['status'] == 'dead_letter'
-    assert job['terminal_outcome'] == 'failure'
-    assert job['task_retry_count'] == 5
-    assert 'reconcile_after_at' not in job  # DELETE sentinel removed the field
-    conversation = store.get(_conv_path('uid-1', 'conversation-1')).to_dict()
-    assert conversation['status'] == 'failed'
-    assert conversation['discarded'] is True
-    assert conversation['finalization_status'] == 'dead_letter'
-
-
-# --- metrics / bounded queries ---
-
-
-def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregations(store, now):
-    # Totals derive ONLY from the fixed projection generation shards; the jobs
-    # collection is never aggregated (a seeded job must not move any total).
-    store.set(
-        _shard_path(0),
-        {
-            'generation': _GEN,
-            'shard': 0,
-            'accepted': 8,
-            'queued': 2,
-            'leased': 1,
-            'blocked_byok': 2,
-            'completed': 2,
-            'dead_letter': 1,
-            'success': 1,
-            'stale': 1,
-            'failure': 1,
-        },
+    assert (
+        jobs._mark_finalization_dead_letter_txn(
+            transaction,
+            job_ref,
+            3,
+            1,
+            5,
+            _now(),
+            lambda uid, conversation_id: conversation_ref,
+        )
+        is True
     )
-    store.set(_job_path('ignored'), {'status': 'completed', 'terminal_outcome': 'success'})
 
-    summary = jobs.get_finalization_job_summary()
+    assert transaction.updates == [
+        (
+            job_ref,
+            {
+                'status': 'dead_letter',
+                'updated_at': _now(),
+                'terminal_at': _now(),
+                'terminal_outcome': 'failure',
+                'lease_expires_at': _now(),
+                'reconcile_after_at': jobs.firestore.DELETE_FIELD,
+                'task_retry_count': 5,
+                'last_failure_code': 'final_attempt_failed',
+            },
+        ),
+        (
+            conversation_ref,
+            {
+                'status': 'failed',
+                'discarded': True,
+                'finalization_status': 'dead_letter',
+            },
+        ),
+    ]
 
+
+def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregations():
+    class Snapshot:
+        def __init__(self, data):
+            self.exists = data is not None
+            self._data = data
+
+        def to_dict(self):
+            return self._data
+
+    class Projection:
+        def __init__(self):
+            self.read_ids: list[str] = []
+
+        def document(self, doc_id):
+            projection = self
+
+            class Ref:
+                def get(self):
+                    projection.read_ids.append(doc_id)
+                    shard = int(doc_id.rsplit('-', 1)[1])
+                    if shard != 0:
+                        return Snapshot(None)
+                    return Snapshot(
+                        {
+                            'generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+                            'shard': 0,
+                            'accepted': 8,
+                            'queued': 2,
+                            'leased': 1,
+                            'blocked_byok': 2,
+                            'completed': 2,
+                            'dead_letter': 1,
+                            'success': 1,
+                            'stale': 1,
+                            'failure': 1,
+                        }
+                    )
+
+            return Ref()
+
+    class JobQuery:
+        def where(self, field, operator, _value):
+            assert (field, operator) == ('reconcile_after_at', '<=')
+            return self
+
+        def limit(self, value):
+            assert value == 100
+            return self
+
+        def stream(self):
+            return iter(())
+
+    projection = Projection()
+
+    class Client:
+        def collection(self, name):
+            if name == jobs.FINALIZATION_PROJECTION_COLLECTION:
+                return projection
+            assert name == jobs.FINALIZATION_JOBS_COLLECTION
+            return JobQuery()
+
+    summary = jobs.get_finalization_job_summary(firestore_client=Client())
+
+    assert len(projection.read_ids) == jobs.FINALIZATION_PROJECTION_SHARD_COUNT
     assert summary == {
         'accepted': 8,
         'success': 1,
@@ -662,23 +880,177 @@ def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregat
     }
 
 
-def test_replay_candidates_use_a_server_side_bounded_due_query(store, now):
-    # A terminal due row is excluded; the server-side page is clamped to 100.
-    for i in range(105):
-        store.set(_job_path(f'q{i:03d}'), {'status': 'queued', 'reconcile_after_at': now - timedelta(seconds=1)})
-    store.set(_job_path('terminal'), {'status': 'completed', 'reconcile_after_at': now - timedelta(seconds=1)})
+class _BoundedReplayCollection:
+    def __init__(self):
+        self.where_calls: list[tuple[str, str]] = []
+        self.limit_value: int | None = None
+        self.refs = [
+            _Ref('queued-job', {'status': 'queued'}),
+            _Ref('terminal-job', {'status': 'completed'}),
+        ]
 
-    candidates = jobs.get_finalization_replay_candidates(limit=1000)
+    def where(self, field, operator, _value):
+        self.where_calls.append((field, operator))
+        return self
 
-    assert len(candidates) == 100
-    assert all(candidate['status'] == 'queued' for candidate in candidates)
-    assert all('job_id' in candidate for candidate in candidates)
+    def limit(self, value):
+        self.limit_value = value
+        return self
+
+    def stream(self):
+        return self.refs[: self.limit_value]
+
+
+def test_replay_candidates_use_a_server_side_bounded_due_query():
+    collection = _BoundedReplayCollection()
+    client = SimpleNamespace(collection=lambda _name: collection)
+
+    candidates = jobs.get_finalization_replay_candidates(limit=1000, firestore_client=client)
+
+    assert collection.where_calls == [('reconcile_after_at', '<=')]
+    assert collection.limit_value == 100
+    assert candidates == [{'status': 'queued', 'job_id': 'queued-job'}]
 
 
 # ---------------------------------------------------------------------------
 # Stale bare-processing orphan recovery (#10461 revision): authoritative
 # server-owned admission fence, bounded cursor pagination, and legacy migration.
 # ---------------------------------------------------------------------------
+
+
+class _OrphanSnapshot:
+    def __init__(self, uid: str, conversation_id: str, data: dict):
+        self.id = conversation_id
+        self.exists = True
+        self._data = dict(data)
+        self.reference = SimpleNamespace(path=f'users/{uid}/conversations/{conversation_id}')
+
+    def to_dict(self) -> dict:
+        return dict(self._data)
+
+
+class _MissingSnapshot:
+    """A fetched cursor document that no longer exists: the sweep wraps to the top."""
+
+    def __init__(self, path: str):
+        self.exists = False
+        self.reference = SimpleNamespace(path=path)
+
+    def to_dict(self) -> dict:
+        return {}
+
+
+class _OrphanDocRef:
+    def __init__(self, client: '_OrphanClient', path: str):
+        self._client = client
+        self.path = path
+
+    def get(self):
+        for snapshot in self._client._snapshots:
+            if snapshot.reference.path == self.path:
+                return snapshot
+        return _MissingSnapshot(self.path)
+
+
+def _processing_snapshot(
+    uid: str,
+    conversation_id: str,
+    *,
+    admitted_at: datetime | None,
+    deferred: bool = False,
+    finalization_job_id: str | None = None,
+    created_at: datetime | None = None,
+) -> _OrphanSnapshot:
+    data: dict = {'status': 'processing', 'created_at': created_at or admitted_at}
+    if admitted_at is not None:
+        data['processing_admitted_at'] = admitted_at
+    if deferred:
+        data['deferred'] = True
+    if finalization_job_id:
+        data['finalization_job_id'] = finalization_job_id
+    return _OrphanSnapshot(uid, conversation_id, data)
+
+
+class _OrphanQuery:
+    """Fake collection-group query: single equality + cursor pagination."""
+
+    def __init__(self, snapshots: list[_OrphanSnapshot]):
+        self._all = snapshots
+        self.where_count = 0
+        self.where_filters: list[Any] = []
+        self.order_by_count = 0
+        self.limit_calls: list[int] = []
+        self.start_after_calls: list[_OrphanSnapshot] = []
+        self._limit: int | None = None
+        self._after: _OrphanSnapshot | None = None
+
+    def where(self, *args, filter=None, **kwargs):
+        self.where_count += 1
+        self.where_filters.append(filter)
+        return self
+
+    def order_by(self, *args, **kwargs):
+        self.order_by_count += 1
+        return self
+
+    def limit(self, value: int):
+        self.limit_calls.append(value)
+        self._limit = value
+        return self
+
+    def start_after(self, snapshot):
+        self.start_after_calls.append(snapshot)
+        self._after = snapshot
+        return self
+
+    def stream(self):
+        rows = self._all
+        if self._after is not None:
+            idx = rows.index(self._after)
+            rows = rows[idx + 1 :]
+        if self._limit is not None:
+            rows = rows[: self._limit]
+        return list(rows)
+
+
+class _OrphanClient:
+    def __init__(self, snapshots: list[_OrphanSnapshot]):
+        self._snapshots = snapshots
+        self.queries: list[_OrphanQuery] = []
+        self.collection_group_calls: list[str] = []
+        self.collection_calls: list[str] = []
+        self.document_calls: list[str] = []
+
+    def collection_group(self, name: str) -> _OrphanQuery:
+        self.collection_group_calls.append(name)
+        query = _OrphanQuery(self._snapshots)
+        self.queries.append(query)
+        return query
+
+    def collection(self, name: str):
+        self.collection_calls.append(name)
+        raise AssertionError('stale orphan sweep must not use a collection-scoped query')
+
+    def document(self, path: str) -> _OrphanDocRef:
+        # The persisted sweep cursor resumes a collection-group scan by fetching
+        # the last-examined conversation document by path.
+        self.document_calls.append(path)
+        return _OrphanDocRef(self, path)
+
+
+def test_stale_orphan_query_is_a_single_field_collection_group_equality():
+    """A single-equality collection-group query rides Firestore's automatic
+    single-field index: no composite index, no collection-scoped entry."""
+    now = _now()
+    client = _OrphanClient([_processing_snapshot('uid', 'eligible', admitted_at=now - timedelta(hours=1))])
+
+    jobs.get_stale_processing_orphan_candidates(stale_after=timedelta(seconds=900), firestore_client=client)
+
+    assert client.collection_group_calls == ['conversations']
+    assert client.collection_calls == []
+    assert len(client.queries) >= 1
+    assert all(query.where_count == 1 for query in client.queries)
+    assert all(query.order_by_count == 0 for query in client.queries)
 
 
 def test_orphan_stale_after_is_clamped_to_a_safe_floor_and_ceiling(monkeypatch):
@@ -693,39 +1065,36 @@ def test_orphan_stale_after_is_clamped_to_a_safe_floor_and_ceiling(monkeypatch):
     assert jobs.get_stale_processing_orphan_after() == timedelta(seconds=900)
 
 
-def test_stale_orphan_sweep_is_cross_parent_on_processing_status(store, now):
-    """A collection-group ``status == 'processing'`` sweep spans every parent uid."""
-    aged = now - timedelta(hours=1)
-    _seed_processing(store, 'uid-a', 'c1', admitted_at=aged)
-    _seed_processing(store, 'uid-b', 'c2', admitted_at=aged)
-    # A non-processing row under a third parent must be excluded by the equality filter.
-    store.set(_conv_path('uid-c', 'c3'), {'status': 'completed', 'processing_admitted_at': aged})
-
-    result = jobs.get_stale_processing_orphan_candidates(stale_after=timedelta(seconds=900))
-
-    got = {(candidate['uid'], candidate['conversation_id']) for candidate in result['candidates']}
-    assert got == {('uid-a', 'c1'), ('uid-b', 'c2')}
-
-
-def test_stale_orphan_age_authority_is_processing_admitted_at_not_created_at(store, now):
+def test_stale_orphan_age_authority_is_processing_admitted_at_not_created_at(monkeypatch):
     """Only the server-owned admission stamp bounds age; caller-controlled
     created_at is never the authority, and legacy rows migrate rather than
     complete."""
+    now = _now()
+    monkeypatch.setattr(jobs, '_now', lambda: now)
     stale_after = timedelta(seconds=900)
-    # Fresh admission, ancient caller-controlled created_at: must NOT act.
-    _seed_processing(
-        store, 'uid', 'fresh-admit-old-create', admitted_at=now - timedelta(seconds=10),
-        created_at=now - timedelta(days=30),
-    )
-    # Aged admission, fresh created_at: the genuine orphan — must act.
-    _seed_processing(
-        store, 'uid', 'aged-admit-fresh-create', admitted_at=now - timedelta(seconds=1000),
-        created_at=now - timedelta(seconds=5),
-    )
-    # Legacy row with no admission stamp: migrate, never complete on sight.
-    _seed_processing(store, 'uid', 'legacy-no-admit', admitted_at=None, created_at=now - timedelta(days=30))
+    snapshots = [
+        # Fresh admission, ancient caller-controlled created_at: must NOT act.
+        _processing_snapshot(
+            'uid',
+            'fresh-admit-old-create',
+            admitted_at=now - timedelta(seconds=10),
+            created_at=now - timedelta(days=30),
+        ),
+        # Aged admission, fresh created_at: the genuine orphan — must act.
+        _processing_snapshot(
+            'uid',
+            'aged-admit-fresh-create',
+            admitted_at=now - timedelta(seconds=1000),
+            created_at=now - timedelta(seconds=5),
+        ),
+        # Legacy row with no admission stamp: migrate, never complete on sight.
+        _processing_snapshot('uid', 'legacy-no-admit', admitted_at=None, created_at=now - timedelta(days=30)),
+    ]
+    client = _OrphanClient(snapshots)
 
-    candidates = jobs.get_stale_processing_orphan_candidates(stale_after=stale_after)['candidates']
+    candidates = jobs.get_stale_processing_orphan_candidates(stale_after=stale_after, firestore_client=client)[
+        'candidates'
+    ]
 
     by_id = {candidate['conversation_id']: candidate for candidate in candidates}
     assert 'fresh-admit-old-create' not in by_id
@@ -737,60 +1106,64 @@ def test_stale_orphan_age_authority_is_processing_admitted_at_not_created_at(sto
     assert legacy['processing_admitted_at'] is None
 
 
-def test_stale_orphan_candidates_exclude_deferred_and_durable_job_rows(store, now):
+def test_stale_orphan_candidates_exclude_deferred_and_durable_job_rows():
+    now = _now()
     aged = now - timedelta(seconds=1000)
-    _seed_processing(store, 'uid', 'deferred', admitted_at=aged, deferred=True)
-    _seed_processing(store, 'uid', 'durable', admitted_at=aged, finalization_job_id='job-x')
-    _seed_processing(store, 'uid', 'orphan', admitted_at=aged)
+    snapshots = [
+        _processing_snapshot('uid', 'deferred', admitted_at=aged, deferred=True),
+        _processing_snapshot('uid', 'durable', admitted_at=aged, finalization_job_id='job-x'),
+        _processing_snapshot('uid', 'orphan', admitted_at=aged),
+    ]
+    client = _OrphanClient(snapshots)
 
-    candidates = jobs.get_stale_processing_orphan_candidates(stale_after=timedelta(seconds=900))['candidates']
+    candidates = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), firestore_client=client
+    )['candidates']
 
     assert [candidate['conversation_id'] for candidate in candidates] == ['orphan']
 
 
-def test_stale_orphan_candidates_page_past_excluded_rows_to_reach_a_later_orphan(store, now, monkeypatch):
+def test_stale_orphan_candidates_page_past_excluded_rows_to_reach_a_later_orphan():
     """A stable first page of excluded rows cannot hide a later eligible orphan."""
+    now = _now()
     aged = now - timedelta(seconds=1000)
-    for i in range(120):
-        _seed_processing(store, 'uid', f'deferred-{i:03d}', admitted_at=aged, deferred=True)
-    # 'later-orphan' sorts after every 'deferred-*' path, so it can only be reached on a later page.
-    _seed_processing(store, 'uid', 'later-orphan', admitted_at=aged)
+    snapshots = [_processing_snapshot('uid', f'deferred-{i}', admitted_at=aged, deferred=True) for i in range(120)]
+    snapshots.append(_processing_snapshot('uid', 'later-orphan', admitted_at=aged))
+    client = _OrphanClient(snapshots)
 
-    pages: list[str | None] = []
-    original = store.query_group
-
-    def spy(*args, **kwargs):
-        pages.append(kwargs.get('start_after'))
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(store, 'query_group', spy)
-
-    candidates = jobs.get_stale_processing_orphan_candidates(stale_after=timedelta(seconds=900))['candidates']
+    candidates = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), firestore_client=client
+    )['candidates']
 
     assert [candidate['conversation_id'] for candidate in candidates] == ['later-orphan']
-    # The first page was entirely excluded, so at least two query pages with a cursor were issued.
-    assert len(pages) >= 2
-    assert any(cursor is not None for cursor in pages[1:])
+    # The first page was entirely excluded, so at least two query pages were issued.
+    assert len(client.queries) >= 2
+    assert client.queries[1].start_after_calls
 
 
-def test_stale_orphan_candidates_bound_total_scan(store, now):
+def test_stale_orphan_candidates_bound_total_scan():
     """The per-sweep scan bound prevents an unbounded walk under backlog."""
+    now = _now()
     aged = now - timedelta(seconds=1000)
-    for i in range(50):
-        _seed_processing(store, 'uid', f'deferred-{i:02d}', admitted_at=aged, deferred=True)
-    _seed_processing(store, 'uid', 'later-orphan', admitted_at=aged)
+    snapshots = [_processing_snapshot('uid', f'deferred-{i}', admitted_at=aged, deferred=True) for i in range(50)]
+    snapshots.append(_processing_snapshot('uid', 'later-orphan', admitted_at=aged))
 
-    bounded = jobs.get_stale_processing_orphan_candidates(stale_after=timedelta(seconds=900), max_scan=10)['candidates']
-    # The bound stops scanning before the orphan (which sorts last) is reached.
-    assert bounded == []
-
-    recovered = jobs.get_stale_processing_orphan_candidates(
-        stale_after=timedelta(seconds=900), max_scan=10_000
+    bounded = _OrphanClient(snapshots)
+    candidates = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), max_scan=10, firestore_client=bounded
     )['candidates']
+    # The bound stops scanning before the orphan at index 50 is reached.
+    assert candidates == []
+
+    unbounded = _OrphanClient(snapshots)
+    recovered = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), max_scan=10_000, firestore_client=unbounded
+    )['candidates']
+    # The same population recovers the orphan once the bound is lifted.
     assert [candidate['conversation_id'] for candidate in recovered] == ['later-orphan']
 
 
-def test_persisted_cursor_reaches_a_later_orphan_beyond_any_per_invocation_bound(store, now):
+def test_persisted_cursor_reaches_a_later_orphan_beyond_any_per_invocation_bound():
     """A rotated wraparound cursor guarantees eventual discovery.
 
     A stable excluded prefix larger than every per-invocation ``max_scan`` would
@@ -798,158 +1171,180 @@ def test_persisted_cursor_reaches_a_later_orphan_beyond_any_per_invocation_bound
     sweep instead resumes from a persisted cursor and wraps to the top once the
     collection is exhausted, so repeated bounded sweeps reach the orphan.
     """
+    now = _now()
     aged = now - timedelta(seconds=1000)
     # An excluded prefix far larger than the per-invocation bound, then one orphan.
-    for i in range(2500):
-        _seed_processing(store, 'uid', f'deferred-{i:04d}', admitted_at=aged, deferred=True)
-    _seed_processing(store, 'uid', 'later-orphan', admitted_at=aged)
+    snapshots = [_processing_snapshot('uid', f'deferred-{i:04d}', admitted_at=aged, deferred=True) for i in range(2500)]
+    snapshots.append(_processing_snapshot('uid', 'later-orphan', admitted_at=aged))
+    client = _OrphanClient(snapshots)
 
     recovered: list[dict] = []
     resume_after_path = None
-    sweeps = 0
     for _ in range(10):
-        sweeps += 1
         result = jobs.get_stale_processing_orphan_candidates(
-            stale_after=timedelta(seconds=900), max_scan=1000, resume_after_path=resume_after_path
+            stale_after=timedelta(seconds=900),
+            max_scan=1000,
+            resume_after_path=resume_after_path,
+            firestore_client=client,
         )
         recovered.extend(result['candidates'])
+        # The persisted cursor advances each sweep and wraps (None) on exhaustion.
         resume_after_path = None if result['exhausted'] else result['resume_after_path']
         if any(candidate['conversation_id'] == 'later-orphan' for candidate in recovered):
             break
 
     assert [candidate['conversation_id'] for candidate in recovered] == ['later-orphan']
     # More than one bounded sweep was required: the orphan sits beyond max_scan.
-    assert sweeps >= 2
+    assert resume_after_path is None or len(client.document_calls) >= 2
 
 
-def test_persisted_cursor_wraps_to_the_top_when_the_resume_document_is_gone(store, now):
+def test_persisted_cursor_wraps_to_the_top_when_the_resume_document_is_gone():
     """A deleted cursor document must not strand the sweep: it resumes from the top."""
+    now = _now()
     aged = now - timedelta(seconds=1000)
-    _seed_processing(store, 'uid', 'orphan', admitted_at=aged)
+    snapshots = [_processing_snapshot('uid', 'orphan', admitted_at=aged)]
+    client = _OrphanClient(snapshots)
 
     result = jobs.get_stale_processing_orphan_candidates(
-        stale_after=timedelta(seconds=900), resume_after_path='users/uid/conversations/does-not-exist'
+        stale_after=timedelta(seconds=900),
+        resume_after_path='users/uid/conversations/does-not-exist',
+        firestore_client=client,
     )
 
     assert [candidate['conversation_id'] for candidate in result['candidates']] == ['orphan']
     assert result['exhausted'] is True
 
 
-def test_stamp_processing_admission_if_absent_only_stamps_a_legacy_processing_row(store, now):
-    store.set(_conv_path('uid', 'legacy'), {'status': 'processing', 'created_at': now - timedelta(days=1)})
+def test_stamp_processing_admission_if_absent_only_stamps_a_legacy_processing_row():
+    transaction = _Transaction()
+    now = _now()
+    legacy = _Ref('legacy', {'status': 'processing', 'created_at': now - timedelta(days=1)})
 
-    assert jobs.stamp_processing_admission_if_absent('uid', 'legacy') is True
-    assert store.get(_conv_path('uid', 'legacy')).to_dict()['processing_admitted_at'] == now
+    stamped = jobs._stamp_processing_admission_if_absent_txn(transaction, legacy, now)
+
+    assert stamped is True
+    assert transaction.updates == [(legacy, {'processing_admitted_at': now})]
 
 
-def test_stamp_processing_admission_if_absent_is_idempotent_and_fences_non_processing(store, now):
-    store.set(
-        _conv_path('uid', 'already'),
-        {'status': 'processing', 'processing_admitted_at': now - timedelta(hours=2)},
-    )
-    store.set(_conv_path('uid', 'terminal'), {'status': 'completed'})
+def test_stamp_processing_admission_if_absent_is_idempotent_and_fences_non_processing():
+    transaction = _Transaction()
+    now = _now()
+    already = _Ref('already', {'status': 'processing', 'processing_admitted_at': now - timedelta(hours=2)})
+    terminal = _Ref('terminal', {'status': 'completed'})
 
-    assert jobs.stamp_processing_admission_if_absent('uid', 'already') is False
-    assert jobs.stamp_processing_admission_if_absent('uid', 'terminal') is False
-    assert store.get(_conv_path('uid', 'already')).to_dict()['processing_admitted_at'] == now - timedelta(hours=2)
+    assert jobs._stamp_processing_admission_if_absent_txn(transaction, already, now) is False
+    assert jobs._stamp_processing_admission_if_absent_txn(transaction, terminal, now) is False
+    assert transaction.updates == []
 
 
 # ---------------------------------------------------------------------------
 # Ownership fence (#10461 revision 2): the recovery transaction verifies the
-# exact orphan generation/ownership immediately before terminalization.
+# exact orphan generation/ownership immediately before terminalization, so a live
+# synchronous processor (lease renewed), a finalizer that attached a durable job
+# after discovery, a deferred desktop row, or an already-terminal row can never
+# be terminalized by the sweep.
 # ---------------------------------------------------------------------------
 
 
-def test_complete_orphan_completes_only_an_unchanged_orphan_generation(store, now):
+def test_complete_orphan_completes_only_an_unchanged_orphan_generation():
+    transaction = _Transaction()
+    now = _now()
     admitted = now - timedelta(seconds=1000)
-    store.set(_conv_path('uid', 'orphan'), {'status': 'processing', 'processing_admitted_at': admitted})
+    orphan = _Ref('orphan', {'status': 'processing', 'processing_admitted_at': admitted})
 
-    assert jobs.complete_orphan_conversation('uid', 'orphan', expected_admitted_at=admitted) is True
-    assert store.get(_conv_path('uid', 'orphan')).to_dict()['status'] == 'completed'
+    completed = jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, now)
+
+    assert completed is True
+    assert transaction.updates == [(orphan, {'status': 'completed'})]
 
 
-def test_complete_orphan_fences_a_row_a_finalizer_claimed_after_discovery(store, now):
+def test_complete_orphan_fences_a_row_a_finalizer_claimed_after_discovery():
+    transaction = _Transaction()
+    now = _now()
     admitted = now - timedelta(seconds=1000)
     # Between discovery (job-less) and terminalization, a finalizer attached durable ownership.
-    store.set(
-        _conv_path('uid', 'claimed'),
-        {'status': 'processing', 'processing_admitted_at': admitted, 'finalization_job_id': 'job-1'},
+    claimed = _Ref(
+        'claimed', {'status': 'processing', 'processing_admitted_at': admitted, 'finalization_job_id': 'job-1'}
     )
 
-    assert jobs.complete_orphan_conversation('uid', 'claimed', expected_admitted_at=admitted) is False
-    assert store.get(_conv_path('uid', 'claimed')).to_dict()['status'] == 'processing'
+    assert jobs._complete_orphan_conversation_txn(transaction, claimed, admitted, now) is False
+    assert transaction.updates == []
 
 
-def test_complete_orphan_fences_a_live_processor_that_renewed_its_lease(store, now):
+def test_complete_orphan_fences_a_live_processor_that_renewed_its_lease():
+    transaction = _Transaction()
+    now = _now()
     scanned = now - timedelta(seconds=1000)
     # A live processor renewed its lease after discovery, advancing the generation.
-    store.set(
-        _conv_path('uid', 'renewed'),
-        {'status': 'processing', 'processing_admitted_at': now - timedelta(seconds=5)},
-    )
+    renewed = _Ref('renewed', {'status': 'processing', 'processing_admitted_at': now - timedelta(seconds=5)})
 
-    assert jobs.complete_orphan_conversation('uid', 'renewed', expected_admitted_at=scanned) is False
-    assert store.get(_conv_path('uid', 'renewed')).to_dict()['status'] == 'processing'
+    assert jobs._complete_orphan_conversation_txn(transaction, renewed, scanned, now) is False
+    assert transaction.updates == []
 
 
-def test_complete_orphan_fences_deferred_and_terminal_and_discarded_rows(store, now):
+def test_complete_orphan_fences_deferred_and_terminal_and_discarded_rows():
+    transaction = _Transaction()
+    now = _now()
     admitted = now - timedelta(seconds=1000)
-    store.set(
-        _conv_path('uid', 'deferred'),
-        {'status': 'processing', 'processing_admitted_at': admitted, 'deferred': True},
-    )
-    store.set(_conv_path('uid', 'terminal'), {'status': 'completed', 'processing_admitted_at': admitted})
-    store.set(
-        _conv_path('uid', 'discarded'),
-        {'status': 'processing', 'processing_admitted_at': admitted, 'discarded': True},
-    )
+    deferred = _Ref('deferred', {'status': 'processing', 'processing_admitted_at': admitted, 'deferred': True})
+    terminal = _Ref('terminal', {'status': 'completed', 'processing_admitted_at': admitted})
+    discarded = _Ref('discarded', {'status': 'processing', 'processing_admitted_at': admitted, 'discarded': True})
 
-    assert jobs.complete_orphan_conversation('uid', 'deferred', expected_admitted_at=admitted) is False
-    assert jobs.complete_orphan_conversation('uid', 'terminal', expected_admitted_at=admitted) is False
-    assert jobs.complete_orphan_conversation('uid', 'discarded', expected_admitted_at=admitted) is False
+    assert jobs._complete_orphan_conversation_txn(transaction, deferred, admitted, now) is False
+    assert jobs._complete_orphan_conversation_txn(transaction, terminal, admitted, now) is False
+    assert jobs._complete_orphan_conversation_txn(transaction, discarded, admitted, now) is False
+    assert transaction.updates == []
 
 
-def test_renew_processing_lease_refreshes_only_a_live_processing_row(store, now):
-    store.set(
-        _conv_path('uid', 'processing'),
-        {'status': 'processing', 'processing_admitted_at': now - timedelta(seconds=120)},
-    )
-    store.set(_conv_path('uid', 'completed'), {'status': 'completed'})
-    store.set(_conv_path('uid', 'discarded'), {'status': 'processing', 'discarded': True})
+def test_renew_processing_lease_refreshes_only_a_live_processing_row():
+    transaction = _Transaction()
+    now = _now()
+    processing = _Ref('processing', {'status': 'processing', 'processing_admitted_at': now - timedelta(seconds=120)})
+    completed = _Ref('completed', {'status': 'completed'})
+    discarded = _Ref('discarded', {'status': 'processing', 'discarded': True})
 
-    assert jobs.renew_processing_lease('uid', 'processing') is True
-    assert store.get(_conv_path('uid', 'processing')).to_dict()['processing_admitted_at'] == now
-    assert jobs.renew_processing_lease('uid', 'completed') is False
-    assert jobs.renew_processing_lease('uid', 'discarded') is False
-
-
-# --- CAS sweep cursor ---
+    assert jobs._renew_processing_lease_txn(transaction, processing, now) is True
+    assert transaction.updates == [(processing, {'processing_admitted_at': now})]
+    assert jobs._renew_processing_lease_txn(transaction, completed, now) is False
+    assert jobs._renew_processing_lease_txn(transaction, discarded, now) is False
+    # Only the still-processing, non-discarded row was refreshed.
+    assert transaction.updates == [(processing, {'processing_admitted_at': now})]
 
 
-def test_advance_cursor_succeeds_when_generation_matches(store, now):
+def test_advance_cursor_succeeds_when_generation_matches():
     """CAS cursor advance: a writer holding the current generation commits and bumps it."""
-    store.set(_cursor_path(), {'resume_after_path': 'users/u/c/a', 'generation': 3})
+    transaction = _Transaction()
+    ref = _Ref('cursor', {'resume_after_path': 'users/u/c/a', 'generation': 3})
+    now = _now()
 
-    assert jobs.advance_stale_processing_sweep_cursor(3, 'users/u/c/b') is True
-    cursor = store.get(_cursor_path()).to_dict()
-    assert cursor['resume_after_path'] == 'users/u/c/b'
-    assert cursor['generation'] == 4
-    assert cursor['updated_at'] == now
+    result = jobs._advance_stale_processing_sweep_cursor_txn(transaction, ref, 3, 'users/u/c/b', now)
+
+    assert result is True
+    assert len(transaction.sets) == 1
+    assert transaction.sets[0][1]['resume_after_path'] == 'users/u/c/b'
+    assert transaction.sets[0][1]['generation'] == 4
+    assert transaction.sets[0][1]['updated_at'] == now
 
 
-def test_advance_cursor_fails_when_generation_changed(store, now):
+def test_advance_cursor_fails_when_generation_changed():
     """CAS cursor advance: a writer with a stale generation is fenced out — no rewind."""
-    store.set(_cursor_path(), {'resume_after_path': 'users/u/c/x', 'generation': 5})
+    transaction = _Transaction()
+    # Another pod already advanced the cursor to generation 5.
+    ref = _Ref('cursor', {'resume_after_path': 'users/u/c/x', 'generation': 5})
 
-    assert jobs.advance_stale_processing_sweep_cursor(3, 'users/u/c/b') is False
-    cursor = store.get(_cursor_path()).to_dict()
-    assert cursor['resume_after_path'] == 'users/u/c/x'
-    assert cursor['generation'] == 5
+    result = jobs._advance_stale_processing_sweep_cursor_txn(transaction, ref, 3, 'users/u/c/b', _now())
+
+    assert result is False
+    assert transaction.sets == []
 
 
-def test_advance_cursor_succeeds_on_first_write_when_doc_absent(store, now):
+def test_advance_cursor_succeeds_on_first_write_when_doc_absent():
     """First-ever cursor advance: absent doc is generation 0, expected 0 succeeds."""
-    assert jobs.advance_stale_processing_sweep_cursor(0, 'users/u/c/first') is True
-    cursor = store.get(_cursor_path()).to_dict()
-    assert cursor['generation'] == 1
-    assert cursor['resume_after_path'] == 'users/u/c/first'
+    transaction = _Transaction()
+    ref = _Ref('cursor', None)  # doc does not exist
+
+    result = jobs._advance_stale_processing_sweep_cursor_txn(transaction, ref, 0, 'users/u/c/first', _now())
+
+    assert result is True
+    assert transaction.sets[0][1]['generation'] == 1
+    assert transaction.sets[0][1]['resume_after_path'] == 'users/u/c/first'

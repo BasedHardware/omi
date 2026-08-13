@@ -1,24 +1,19 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, cast
 
+from firebase_admin import firestore
+from google.api_core.retry import Retry
+
 from models.trend import Trend, valid_items
-from database.document_ids import document_id_from_seed
-from database.store import get_document_store
-from database.store.sentinels import ArrayUnion
+from ._client import db, document_id_from_seed
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def _store():
-    return get_document_store()
-
-
-trends_collection = 'trends'
-
-
 def get_trends_data() -> List[Dict[str, Any]]:
-    trends_docs = _store().query(trends_collection)
+    trends_ref = db.collection('trends')
+    trends_docs = [doc for doc in trends_ref.stream(retry=Retry())]
     trends_data: List[Dict[str, Any]] = []
     for category in trends_docs:
         try:
@@ -33,14 +28,15 @@ def get_trends_data() -> List[Dict[str, Any]]:
             ]:
                 continue
 
+            category_topics_ref = trends_ref.document(category_data['id']).collection('topics')
             topics_docs: List[Dict[str, Any]] = []
-            for topic in _store().query(f'{trends_collection}/{category_data["id"]}/topics'):
+            for topic in category_topics_ref.stream(retry=Retry()):
                 raw_topic: object = topic.to_dict()
                 if isinstance(raw_topic, dict):
                     topics_docs.append(cast(Dict[str, Any], raw_topic))
             cleaned_topics: List[Dict[str, Any]] = []
             # A topic doc can be missing 'memory_ids'. save_trends writes the doc and its
-            # memory_ids in two separate calls (set, then update with ArrayUnion),
+            # memory_ids in two separate Firestore calls (set, then update with ArrayUnion),
             # so an interrupted or failed second write leaves a topic with no memory_ids field.
             # Treat a missing/empty value as a count of 0 so one such topic cannot raise
             # KeyError and drop the entire category from the public /v1/trends response.
@@ -65,24 +61,25 @@ def get_trends_data() -> List[Dict[str, Any]]:
 
 
 def save_trends(memory_id: str, trends: List[Trend]) -> None:
-    store = _store()
+    trends_coll_ref = db.collection('trends')
 
     for trend in trends:
         category = trend.category.value
         topics = trend.topics
         trend_type = trend.type.value
         category_id = document_id_from_seed(category + trend_type)
-        category_path = f'{trends_collection}/{category_id}'
+        category_doc_ref = trends_coll_ref.document(category_id)
 
-        store.set(
-            category_path,
+        category_doc_ref.set(
             {"id": category_id, "category": category, "type": trend_type, "created_at": datetime.now(timezone.utc)},
             merge=True,
         )
 
+        topics_coll_ref = category_doc_ref.collection('topics')
+
         for topic in topics:
             topic_id = document_id_from_seed(topic)
-            topic_path = f'{category_path}/topics/{topic_id}'
+            topic_doc_ref = topics_coll_ref.document(topic_id)
 
-            store.set(topic_path, {"id": topic_id, "topic": topic}, merge=True)
-            store.update(topic_path, {'memory_ids': ArrayUnion([memory_id])})
+            topic_doc_ref.set({"id": topic_id, "topic": topic}, merge=True)
+            topic_doc_ref.update({'memory_ids': firestore.firestore.ArrayUnion([memory_id])})

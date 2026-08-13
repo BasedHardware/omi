@@ -5155,6 +5155,49 @@
         "title": "CandidateAction",
         "type": "string"
       },
+      "CandidateCompatibilityMetadata": {
+        "additionalProperties": false,
+        "description": "Released-client annotations retained outside the canonical task payload.\n\nStaged-task clients historically supplied these fields for presentation and\nordering. They are carried on the Candidate envelope so the compatibility\nprojection remains lossless without weakening the strict task contract.",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "relevance_score": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Score"
+          }
+        },
+        "title": "CandidateCompatibilityMetadata",
+        "type": "object"
+      },
       "CandidateCreate": {
         "description": "Strict request union; each wire arm contains only fields valid for that action.",
         "discriminator": {
@@ -5515,6 +5558,16 @@
             "minimum": 0.0,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "created_at": {
             "format": "date-time",
@@ -14539,9 +14592,19 @@
             "title": "Is Baseline",
             "type": "boolean"
           },
+          "is_dismissed": {
+            "default": false,
+            "title": "Is Dismissed",
+            "type": "boolean"
+          },
           "is_locked": {
             "default": false,
             "title": "Is Locked",
+            "type": "boolean"
+          },
+          "is_read": {
+            "default": false,
+            "title": "Is Read",
             "type": "boolean"
           },
           "kg_extracted": {
@@ -14803,6 +14866,36 @@
           "status"
         ],
         "title": "MemoryMutationResponse",
+        "type": "object"
+      },
+      "MemoryReadStatusRequest": {
+        "additionalProperties": false,
+        "description": "Durable UI read/dismiss mutation for a single memory.",
+        "properties": {
+          "is_dismissed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Dismissed"
+          },
+          "is_read": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Read"
+          }
+        },
+        "title": "MemoryReadStatusRequest",
         "type": "object"
       },
       "MemoryReviewItemResponse": {
@@ -20276,6 +20369,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -20534,6 +20637,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -20624,6 +20737,16 @@
             "minimum": 0.0,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "evidence_refs": {
             "items": {
@@ -21210,6 +21333,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -21301,6 +21434,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -21385,7 +21528,7 @@
       },
       "TaskWorkflowControl": {
         "additionalProperties": false,
-        "description": "Persisted workflow metadata plus the derived Chat-first capability.\n\n``workflow_mode`` remains readable for legacy records and operational\nhistory. It is not an entitlement. ``chat_first_ui`` is derived only from\nthe canonical-memory selector; persistence excludes it so clients cannot\nturn a sampled response into later authority.",
+        "description": "Persisted workflow metadata plus the derived Chat-first capability.\n\n``workflow_mode`` remains readable for legacy records and operational\nhistory. It is not an entitlement. ``chat_first_ui`` is derived from the\nuniversal task decision; persistence excludes it so clients cannot turn a\nsampled response into later authority.",
         "properties": {
           "account_generation": {
             "default": 0,
@@ -23774,6 +23917,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -25273,7 +25426,6 @@
     },
     "/v1/action-items/restore-legacy-conversation-items": {
       "post": {
-        "description": "Safely restore rows moved by the now-retired desktop migration.",
         "operationId": "restore_legacy_conversation_items_v1_action_items_restore_legacy_conversation_items_post",
         "parameters": [
           {
@@ -37838,7 +37990,7 @@
     },
     "/v1/dev/user/memories/vector/search": {
       "get": {
-        "description": "Search developer-readable default memory memory through hydrated vector candidates.\n\nThis narrow developer API vector endpoint fails closed unless the authenticated\nDeveloper API app/key has a verified memories.read scope, a persisted app/key\ndefault-read grant, and the server-owned rollout state enables developer_api\nmemory default-memory reads. Vector hits are hydrated from authoritative\n`users/{uid}/memory_items` before returning results, so stale Short-term and\nArchive remain unavailable by default.",
+        "description": "Search developer-readable default memory memory through hydrated vector candidates.\n\nThis narrow developer API vector endpoint fails closed unless the authenticated\nDeveloper API app/key has a verified memories.read scope and a persisted app/key\ndefault-read grant. Vector hits are hydrated through the universal repository\nagainst authoritative\n`users/{uid}/memory_items` before returning results, so stale Short-term and\nArchive remain unavailable by default.",
         "operationId": "search_memories_vector_v1_dev_user_memories_vector_search_get",
         "parameters": [
           {
@@ -39368,7 +39520,7 @@
     },
     "/v1/goals/canonical/list": {
       "get": {
-        "description": "List goals for enrolled canonical-memory task-system clients only.",
+        "description": "List goals through the generation-fenced universal task system.",
         "operationId": "get_canonical_goals_v1_goals_canonical_list_get",
         "parameters": [
           {
@@ -57815,6 +57967,18 @@
             }
           },
           {
+            "description": "When true, include Archive-tier memories that are otherwise excluded from default reads.",
+            "in": "query",
+            "name": "include_archive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "When true, include Archive-tier memories that are otherwise excluded from default reads.",
+              "title": "Include Archive",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "query",
             "name": "device_scope",
             "required": false,
@@ -58680,7 +58844,7 @@
     },
     "/v3/memories/{memory_id}/baseline": {
       "patch": {
-        "description": "Toggle the baseline flag for a memory.\n\nBaseline memories are always injected first into the AI context window.\nNot supported for canonical-path users: MemoryItem has no is_baseline field,\nso writing to the legacy store would silently have no effect for canonical readers.\nCanonical users receive 503 explicitly rather than a silent wrong-store write.",
+        "description": "Preserve the released baseline flag through universal memory authority.",
         "operationId": "update_memory_baseline_v3_memories__memory_id__baseline_patch",
         "parameters": [
           {
@@ -58772,6 +58936,106 @@
           }
         ],
         "summary": "Update Memory Baseline",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/v3/memories/{memory_id}/read": {
+      "patch": {
+        "description": "Persist durable insight/memory read and dismiss state for desktop clients.",
+        "operationId": "update_memory_read_status_v3_memories__memory_id__read_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryReadStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryDB"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Memory Read Status",
         "tags": [
           "memories"
         ]

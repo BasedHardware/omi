@@ -13,12 +13,12 @@ from typing import Any
 
 from config.chat_first_e2e_fixture import (
     CHAT_FIRST_E2E_ENABLED_PRINCIPAL,
-    CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL,
+    CHAT_FIRST_E2E_DISABLED_PRINCIPAL,
     fixture_uid_for_principal,
     is_chat_first_e2e_fixture_uid,
     is_chat_first_e2e_harness_runtime,
 )
-from database.store import get_document_store
+from database._client import get_firestore_client
 import database.chat_first_intents as intents_db
 from models.chat_first import (
     ChatFirstSubject,
@@ -48,10 +48,6 @@ _QUESTION_CONTINUITY_KEY = 'chat-first-e2e-question-v1'
 _COLD_START_CONTINUITY_KEY = 'cold-start:1'
 
 
-def _store():
-    return get_document_store()
-
-
 class ChatFirstE2EFixtureUnavailable(RuntimeError):
     """The fixture route is unavailable outside its local/offline boundary."""
 
@@ -74,21 +70,21 @@ def _require_harness(uid: str) -> None:
 def fixture_uid_for_case(fixture_case: ChatFirstE2EFixtureCase) -> str | None:
     """Resolve a case to the only account it may mutate."""
 
-    if fixture_case is ChatFirstE2EFixtureCase.out_of_cohort:
-        return fixture_uid_for_principal(CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL)
+    if fixture_case is ChatFirstE2EFixtureCase.disabled_control:
+        return fixture_uid_for_principal(CHAT_FIRST_E2E_DISABLED_PRINCIPAL)
     return fixture_uid_for_principal(CHAT_FIRST_E2E_ENABLED_PRINCIPAL)
 
 
-def _state_path(uid: str) -> str:
-    return f'users/{uid}/{_STATE_COLLECTION}/{_STATE_DOCUMENT}'
+def _state_ref(uid: str, *, firestore_client: Any):
+    return firestore_client.collection('users').document(uid).collection(_STATE_COLLECTION).document(_STATE_DOCUMENT)
 
 
-def _user_path(uid: str) -> str:
-    return f'users/{uid}'
+def _user_ref(uid: str, *, firestore_client: Any):
+    return firestore_client.collection('users').document(uid)
 
 
-def _entity_paths(uid: str) -> dict[str, str]:
-    user_path = _user_path(uid)
+def _entity_refs(uid: str, *, firestore_client: Any) -> dict[str, Any]:
+    user_ref = _user_ref(uid, firestore_client=firestore_client)
     question_intent_id = intents_db.proactive_intent_id(
         uid,
         account_generation=1,
@@ -113,39 +109,45 @@ def _entity_paths(uid: str) -> dict[str, str]:
         continuity_key=_QUESTION_CONTINUITY_KEY,
     )
     return {
-        'control': f'{user_path}/task_intelligence_control/state',
-        'goal': f'{user_path}/goals/{_GOAL_ID}',
-        'secondary_goal': f'{user_path}/goals/{_SECONDARY_GOAL_ID}',
-        'task': f'{user_path}/action_items/{_TASK_ID}',
-        'capture': f'{user_path}/conversations/{_CAPTURE_ID}',
-        'question_intent': f'{user_path}/{intents_db.INTENTS_COLLECTION}/{question_intent_id}',
-        'cold_start_intent': f'{user_path}/{intents_db.INTENTS_COLLECTION}/{cold_start_intent_id}',
-        'daily_opener_intent': f'{user_path}/{intents_db.INTENTS_COLLECTION}/{daily_opener_intent_id}',
-        'question_deferral': f'{user_path}/{intents_db.DEFERRALS_COLLECTION}/{question_deferral_id}',
-        'budget': f'{user_path}/{intents_db.STATE_COLLECTION}/{intents_db.BUDGET_DOCUMENT}',
-        'state': _state_path(uid),
+        'control': user_ref.collection('task_intelligence_control').document('state'),
+        'goal': user_ref.collection('goals').document(_GOAL_ID),
+        'secondary_goal': user_ref.collection('goals').document(_SECONDARY_GOAL_ID),
+        'task': user_ref.collection('action_items').document(_TASK_ID),
+        'capture': user_ref.collection('conversations').document(_CAPTURE_ID),
+        'question_intent': user_ref.collection(intents_db.INTENTS_COLLECTION).document(question_intent_id),
+        'cold_start_intent': user_ref.collection(intents_db.INTENTS_COLLECTION).document(cold_start_intent_id),
+        'daily_opener_intent': user_ref.collection(intents_db.INTENTS_COLLECTION).document(daily_opener_intent_id),
+        'question_deferral': user_ref.collection(intents_db.DEFERRALS_COLLECTION).document(question_deferral_id),
+        'budget': user_ref.collection(intents_db.STATE_COLLECTION).document(intents_db.BUDGET_DOCUMENT),
+        'state': _state_ref(uid, firestore_client=firestore_client),
     }
 
 
-def _existing_feature_paths(uid: str) -> list[str]:
+def _existing_feature_refs(uid: str, *, firestore_client: Any) -> list[Any]:
     """List only the fixture account's replaceable proactive rows before reset."""
 
-    user_path = _user_path(uid)
-    paths: list[str] = []
+    user_ref = _user_ref(uid, firestore_client=firestore_client)
+    refs: list[Any] = []
     for collection_name in (intents_db.INTENTS_COLLECTION, intents_db.DEFERRALS_COLLECTION):
-        paths.extend(document.path for document in _store().query(f'{user_path}/{collection_name}'))
-    return paths
+        refs.extend(document.reference for document in user_ref.collection(collection_name).stream())
+    return refs
 
 
-def _unique_paths(paths: list[str]) -> list[str]:
+def _unique_document_refs(refs: list[Any]) -> list[Any]:
     """Avoid sending duplicate deletes for deterministic rows in one commit."""
 
-    unique: list[str] = []
-    seen: set[str] = set()
-    for path in paths:
-        if path not in seen:
-            seen.add(path)
-            unique.append(path)
+    unique: list[Any] = []
+    seen_paths: set[str] = set()
+    for ref in refs:
+        path = getattr(ref, 'path', None)
+        if not isinstance(path, str):
+            # Firestore document references expose ``path``.  The fallback
+            # keeps the helper usable with minimal hermetic fakes.
+            unique.append(ref)
+            continue
+        if path not in seen_paths:
+            seen_paths.add(path)
+            unique.append(ref)
     return unique
 
 
@@ -203,8 +205,8 @@ def _task_payload(*, now: datetime) -> dict[str, Any]:
         'status': 'active',
         'completed': False,
         'owner': 'user',
-        # This is deliberately the one task provenance which the cohort
-        # archive can resolve. The resulting task-card badge exercises
+        # This is deliberately the one task provenance which the historical
+        # compatibility reader can resolve. The resulting task-card badge exercises
         # the production fail-closed capture-link policy instead of
         # merely asserting its helper against a synthetic Swift value.
         'source': 'transcription:omi',
@@ -357,10 +359,11 @@ def _completed_rich_cold_start_intent(uid: str, *, now: datetime) -> ProactiveIn
 def _snapshot_from_rows(
     uid: str,
     *,
+    firestore_client: Any,
     prepared_state: dict[str, Any] | None = None,
 ) -> ChatFirstE2EFixtureSnapshot:
-    paths = _entity_paths(uid)
-    state = prepared_state if prepared_state is not None else _store().get(paths['state']).to_dict()
+    refs = _entity_refs(uid, firestore_client=firestore_client)
+    state = prepared_state if prepared_state is not None else refs['state'].get().to_dict()
     if not isinstance(state, dict):
         raise ChatFirstE2EFixtureNotPrepared('chat-first E2E fixture is not prepared')
     try:
@@ -371,12 +374,16 @@ def _snapshot_from_rows(
         raise ChatFirstE2EFixtureNotPrepared('chat-first E2E fixture state is invalid') from exc
 
     intents = []
-    for document in _store().query(f'{_user_path(uid)}/{intents_db.INTENTS_COLLECTION}'):
+    for document in (
+        _user_ref(uid, firestore_client=firestore_client).collection(intents_db.INTENTS_COLLECTION).stream()
+    ):
         data = document.to_dict()
         if isinstance(data, dict) and data.get('account_generation') == 1:
             intents.append(ProactiveIntent.model_validate(data))
     pending_deferral_count = 0
-    for document in _store().query(f'{_user_path(uid)}/{intents_db.DEFERRALS_COLLECTION}'):
+    for document in (
+        _user_ref(uid, firestore_client=firestore_client).collection(intents_db.DEFERRALS_COLLECTION).stream()
+    ):
         data = document.to_dict()
         if isinstance(data, dict) and data.get('account_generation') == 1 and data.get('state') == 'pending':
             pending_deferral_count += 1
@@ -397,6 +404,7 @@ def prepare_fixture(
     uid: str,
     *,
     fixture_case: ChatFirstE2EFixtureCase,
+    firestore_client: Any = None,
 ) -> ChatFirstE2EFixtureSnapshot:
     """Atomically reset the fixed fixture rows and write one coherent scenario."""
 
@@ -404,66 +412,67 @@ def prepare_fixture(
     expected_uid = fixture_uid_for_case(fixture_case)
     if expected_uid is None or uid != expected_uid:
         raise ChatFirstE2EFixtureIdentityError('fixture case must use its isolated account')
-    store = _store()
-    paths = _entity_paths(uid)
+    client = firestore_client or get_firestore_client()
+    refs = _entity_refs(uid, firestore_client=client)
     now = datetime.now(timezone.utc)
-    prior_feature_paths = _existing_feature_paths(uid)
-    # Read the fixture revision before opening its write batch, so the read
-    # does not depend on any pending batched write.
-    state_snapshot = store.get(paths['state'])
+    prior_feature_refs = _existing_feature_refs(uid, firestore_client=client)
+    # Read the fixture revision before opening its write batch.  This avoids
+    # passing an inactive Firestore transaction to DocumentReference.get().
+    state_snapshot = refs['state'].get()
     existing_state = state_snapshot.to_dict() if state_snapshot.exists else {}
     revision = int(existing_state.get('fixture_revision', 0)) + 1 if isinstance(existing_state, dict) else 1
-    batch = store.batch()
+    batch = client.batch()
 
     # All fixture-owned surfaces are deterministic document IDs.  The same
     # batch removes their prior contents before exposing the next case.
-    reset_paths = prior_feature_paths + [
-        paths[path_name]
-        for path_name in ('question_intent', 'cold_start_intent', 'daily_opener_intent', 'question_deferral', 'budget')
+    reset_refs = prior_feature_refs + [
+        refs[ref_name]
+        for ref_name in ('question_intent', 'cold_start_intent', 'daily_opener_intent', 'question_deferral', 'budget')
     ]
-    for path in _unique_paths(reset_paths):
-        batch.delete(path)
-    batch.set(paths['control'], _control_for_case(fixture_case).persisted_payload())
+    for ref in _unique_document_refs(reset_refs):
+        batch.delete(ref)
+    batch.set(refs['control'], _control_for_case(fixture_case).persisted_payload())
     batch.set(
-        paths['goal'],
+        refs['goal'],
         _goal_payload(goal_id=_GOAL_ID, title='E2E fixture goal', focused=True, now=now),
     )
     batch.set(
-        paths['secondary_goal'],
+        refs['secondary_goal'],
         _goal_payload(goal_id=_SECONDARY_GOAL_ID, title='E2E fixture next goal', focused=False, now=now),
     )
-    batch.set(paths['task'], _task_payload(now=now))
-    batch.set(paths['capture'], _capture_payload(now=now))
+    batch.set(refs['task'], _task_payload(now=now))
+    batch.set(refs['capture'], _capture_payload(now=now))
     if fixture_case is ChatFirstE2EFixtureCase.cold_start:
-        batch.set(paths['cold_start_intent'], _cold_start_intent(uid, now=now).model_dump(mode='python'))
+        batch.set(refs['cold_start_intent'], _cold_start_intent(uid, now=now).model_dump(mode='python'))
     elif fixture_case is ChatFirstE2EFixtureCase.question:
         batch.set(
-            paths['cold_start_intent'],
+            refs['cold_start_intent'],
             _completed_rich_cold_start_intent(uid, now=now).model_dump(mode='python'),
         )
-        batch.set(paths['question_intent'], _question_intent(uid, now=now).model_dump(mode='python'))
+        batch.set(refs['question_intent'], _question_intent(uid, now=now).model_dump(mode='python'))
     elif fixture_case is ChatFirstE2EFixtureCase.enabled:
         batch.set(
-            paths['daily_opener_intent'],
+            refs['daily_opener_intent'],
             _daily_opener_intent(uid, now=now).model_dump(mode='python'),
         )
     elif fixture_case is ChatFirstE2EFixtureCase.unreachable_control:
-        batch.set(paths['question_intent'], _question_intent(uid, now=now).model_dump(mode='python'))
+        batch.set(refs['question_intent'], _question_intent(uid, now=now).model_dump(mode='python'))
     state = {
         'fixture_case': fixture_case.value,
         'fixture_revision': revision,
         'advanced_seconds': 0,
         'prepared_at': now,
     }
-    batch.set(paths['state'], state)
+    batch.set(refs['state'], state)
     batch.commit()
-    return _snapshot_from_rows(uid, prepared_state=state)
+    return _snapshot_from_rows(uid, firestore_client=client, prepared_state=state)
 
 
 def advance_fixture_clock(
     uid: str,
     *,
     seconds: int,
+    firestore_client: Any = None,
 ) -> ChatFirstE2EFixtureSnapshot:
     """Advance fixture deferrals without adding a clock branch to normal Chat.
 
@@ -473,36 +482,37 @@ def advance_fixture_clock(
     """
 
     _require_harness(uid)
-    store = _store()
-    paths = _entity_paths(uid)
-    state_snapshot = store.get(paths['state'])
+    client = firestore_client or get_firestore_client()
+    refs = _entity_refs(uid, firestore_client=client)
+    state_snapshot = refs['state'].get()
     state = state_snapshot.to_dict() if state_snapshot.exists else None
     if not isinstance(state, dict):
         raise ChatFirstE2EFixtureNotPrepared('chat-first E2E fixture is not prepared')
     now = datetime.now(timezone.utc)
-    pending_paths = []
-    for document in store.query(f'{_user_path(uid)}/{intents_db.DEFERRALS_COLLECTION}'):
+    pending_refs = []
+    for document in _user_ref(uid, firestore_client=client).collection(intents_db.DEFERRALS_COLLECTION).stream():
         data = document.to_dict()
         if isinstance(data, dict) and data.get('account_generation') == 1 and data.get('state') == 'pending':
-            pending_paths.append(document.path)
-    batch = store.batch()
-    for path in pending_paths:
-        batch.update(path, {'due_at': now - timedelta(seconds=1)})
+            pending_refs.append(document.reference)
+    batch = client.batch()
+    for ref in pending_refs:
+        batch.update(ref, {'due_at': now - timedelta(seconds=1)})
     advanced_state = deepcopy(state)
     advanced_state['advanced_seconds'] = int(advanced_state.get('advanced_seconds', 0)) + seconds
-    batch.set(paths['state'], advanced_state)
+    batch.set(refs['state'], advanced_state)
     batch.commit()
-    return _snapshot_from_rows(uid, prepared_state=advanced_state)
+    return _snapshot_from_rows(uid, firestore_client=client, prepared_state=advanced_state)
 
 
-def snapshot_fixture(uid: str) -> ChatFirstE2EFixtureSnapshot:
+def snapshot_fixture(uid: str, *, firestore_client: Any = None) -> ChatFirstE2EFixtureSnapshot:
     """Read the harness's bounded outcomes without exposing fixture content."""
 
     _require_harness(uid)
-    return _snapshot_from_rows(uid)
+    client = firestore_client or get_firestore_client()
+    return _snapshot_from_rows(uid, firestore_client=client)
 
 
-def is_control_unreachable(uid: str) -> bool:
+def is_control_unreachable(uid: str, *, firestore_client: Any = None) -> bool:
     """Return whether the real control route must simulate a local outage.
 
     This is intentionally an input to the normal control endpoint only for a
@@ -512,7 +522,8 @@ def is_control_unreachable(uid: str) -> bool:
 
     if not is_chat_first_e2e_fixture_uid(uid):
         return False
-    snapshot = _store().get(_state_path(uid))
+    client = firestore_client or get_firestore_client()
+    snapshot = _state_ref(uid, firestore_client=client).get()
     state = snapshot.to_dict() if snapshot.exists else None
     return isinstance(state, dict) and state.get('fixture_case') == ChatFirstE2EFixtureCase.unreachable_control.value
 

@@ -421,32 +421,30 @@ class TestDisableAppInFirestore:
     """Test Firestore disable function."""
 
     def test_disable_updates_firestore(self):
-        from database import webhook_health
-        from tests.store_fakes import FakeDocumentStore
+        from database.webhook_health import disable_app_in_firestore
 
-        store = FakeDocumentStore()
-        # The app's plugins_data doc exists in production (update requires it — a missing doc raises
-        # NotFound on every backend, which disable_app_in_firestore catches and logs as a failure).
-        store.set("plugins_data/app-1", {"name": "App One"})
-        with patch.object(webhook_health, "_store", lambda: store):
-            webhook_health.disable_app_in_firestore("app-1", "HTTP 500", 72)
+        mock_db = MagicMock()
+        mock_ref = MagicMock()
+        mock_db.collection.return_value.document.return_value = mock_ref
 
-        doc = store.get("plugins_data/app-1")
-        assert doc.exists
-        update_data = doc.to_dict()
+        with patch("database.webhook_health.db", mock_db):
+            disable_app_in_firestore("app-1", "HTTP 500", 72)
+
+        mock_ref.update.assert_called_once()
+        update_data = mock_ref.update.call_args[0][0]
         assert update_data['disabled'] is True
         assert update_data['disabled_reason'] == 'webhook_failures'
         assert update_data['disabled_error'] == 'HTTP 500'
         assert update_data['disabled_failure_duration_hours'] == 72
 
     def test_disable_firestore_error_does_not_raise(self):
-        from database import webhook_health
+        from database.webhook_health import disable_app_in_firestore
 
-        def _boom():
-            raise Exception("Firestore unavailable")
+        mock_db = MagicMock()
+        mock_db.collection.side_effect = Exception("Firestore unavailable")
 
-        with patch.object(webhook_health, "_store", _boom):
-            webhook_health.disable_app_in_firestore("app-1", "error", 72)
+        with patch("database.webhook_health.db", mock_db):
+            disable_app_in_firestore("app-1", "error", 72)
 
 
 class TestGetAppWebhookHealth:
@@ -1459,12 +1457,10 @@ class TestDisabledCacheInMemory:
         assert self.wh._disabled_cache["app-cache-5"][0] is False
 
     def test_disable_in_firestore_sets_cache_true(self):
-        from tests.store_fakes import FakeDocumentStore
-
         mock_r = MagicMock()
         mock_r.get.return_value = b'0'
-        store = FakeDocumentStore()
-        with patch.object(self.wh, 'r', mock_r), patch.object(self.wh, '_store', lambda: store):
+        mock_db = MagicMock()
+        with patch.object(self.wh, 'r', mock_r), patch.object(self.wh, 'db', mock_db):
             self.wh.is_app_webhook_disabled("app-cache-6")
             assert self.wh._disabled_cache["app-cache-6"][0] is False
             self.wh.disable_app_in_firestore("app-cache-6", "test error", 72)

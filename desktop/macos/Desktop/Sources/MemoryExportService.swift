@@ -1282,8 +1282,15 @@ actor MemoryExportService {
   }
 
   func fetchMemories(limit: Int) async throws -> [ServerMemory] {
+    let pageSize = max(1, min(limit, 500))
     do {
-      let remoteMemories = try await APIClient.shared.getMemories(limit: limit)
+      let remoteMemories: [ServerMemory] = try await Self.fetchAllCursorPages(pageSize: pageSize) {
+        pageLimit, cursor in
+        try await APIClient.shared.getMemoriesPage(
+          limit: pageLimit,
+          cursor: cursor,
+          includeArchive: true)
+      }
       if !remoteMemories.isEmpty {
         return remoteMemories
       }
@@ -1291,12 +1298,58 @@ actor MemoryExportService {
       log("MemoryExportService: Remote memory fetch failed, falling back to local cache: \(error)")
     }
 
-    let localMemories = try await MemoryStorage.shared.getLocalMemories(limit: limit)
+    let localMemories: [ServerMemory] = try await Self.fetchAllPages(pageSize: pageSize) {
+      pageLimit, offset in
+      try await MemoryStorage.shared.getLocalMemories(limit: pageLimit, offset: offset)
+    }
     if !localMemories.isEmpty {
       return localMemories
     }
 
     throw MemoryExportError.noMemories
+  }
+
+  /// Fetch a complete export without silently treating a UI page size as a
+  /// total-account cap. Advancing by the count returned also avoids gaps when a
+  /// backend clamps the requested page size.
+  static func fetchAllPages<Element>(
+    pageSize: Int,
+    fetch: (_ limit: Int, _ offset: Int) async throws -> [Element]
+  ) async throws -> [Element] {
+    let boundedPageSize = max(1, min(pageSize, 500))
+    var offset = 0
+    var result: [Element] = []
+    while true {
+      let page = try await fetch(boundedPageSize, offset)
+      result.append(contentsOf: page)
+      guard page.count == boundedPageSize else { return result }
+      offset += page.count
+    }
+  }
+
+  /// Page a remote memory list until the backend omits ``X-Omi-Memory-Next-Cursor``.
+  static func fetchAllCursorPages(
+    pageSize: Int,
+    fetch: (_ limit: Int, _ cursor: String?) async throws -> APIClient.MemoryListPage
+  ) async throws -> [ServerMemory] {
+    let boundedPageSize = max(1, min(pageSize, 500))
+    var cursor: String? = nil
+    var result: [ServerMemory] = []
+    var seenCursors = Set<String>()
+    while true {
+      let page = try await fetch(boundedPageSize, cursor)
+      result.append(contentsOf: page.memories)
+      guard let nextCursor = page.nextCursor, !nextCursor.isEmpty else {
+        return result
+      }
+      // Fail closed on a repeated continuation token so a buggy backend cannot
+      // pin export in an infinite loop.
+      if !seenCursors.insert(nextCursor).inserted {
+        throw MemoryExportError.requestFailed(
+          "Memory export stopped because the server repeated a continuation token.")
+      }
+      cursor = nextCursor
+    }
   }
 
   func buildMarkdownPack(

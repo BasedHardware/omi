@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from database import document_store
-
 """Canonical vector search service module (WS-G8a).
 
 Neutral ``vector_search_service`` is the source of truth. Canonical vector search service.
@@ -38,6 +36,7 @@ def fetch_default_vector_memory_search(
     uid: str,
     query: str,
     *,
+    db_client: Any,
     policy: MemoryAccessPolicy,
     vector_query: Optional[Callable[..., Any]] = None,
     repair_purge_callback: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
@@ -116,6 +115,7 @@ def fetch_default_vector_memory_search(
         all_hits = list(candidate_result.hits)[:candidate_budget]
         hydration_result = _hydrate_vector_candidate_items_by_id(
             uid=uid,
+            db_client=db_client,
             hits=all_hits,
             hydrated_items=hydrated_items,
             missing_authoritative_memory_ids=missing_authoritative_memory_ids,
@@ -305,6 +305,7 @@ def _validate_freshness_fence(*, required_projection_commit_id: Any, required_ac
 def _hydrate_vector_candidate_items_by_id(
     *,
     uid: str,
+    db_client: Any,
     hits: List[SearchVectorHit],
     hydrated_items: Dict[str, MemoryItem],
     missing_authoritative_memory_ids: Set[str],
@@ -324,7 +325,7 @@ def _hydrate_vector_candidate_items_by_id(
         if candidate_hydration_read_count >= max_candidate_hydration_reads:
             hydration_read_budget_exhausted = True
             break
-        snapshot = document_store.get_document(f'users/{uid}/memory_items/{hit.memory_id}')
+        snapshot = db_client.document(f'users/{uid}/memory_items/{hit.memory_id}').get()
         candidate_hydration_read_count += 1
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}

@@ -67,7 +67,7 @@ def _prompt_nodes(prompt: str) -> list[dict]:
 
 
 def test_prompt_node_listing_is_capped_for_large_graphs(monkeypatch, captured_prompt):
-    monkeypatch.setattr(kg.kg_db, 'get_knowledge_nodes', lambda uid: _nodes(5788))
+    monkeypatch.setattr(kg.kg_db, 'get_knowledge_nodes', lambda uid, db_client=None: _nodes(5788))
 
     kg.extract_knowledge_from_memory('uid-1', 'user likes coffee', 'memory-1')
 
@@ -80,7 +80,7 @@ def test_prompt_node_listing_is_capped_for_large_graphs(monkeypatch, captured_pr
 
 
 def test_small_graphs_are_listed_in_full(monkeypatch, captured_prompt):
-    monkeypatch.setattr(kg.kg_db, 'get_knowledge_nodes', lambda uid: _nodes(12))
+    monkeypatch.setattr(kg.kg_db, 'get_knowledge_nodes', lambda uid, db_client=None: _nodes(12))
 
     kg.extract_knowledge_from_memory('uid-1', 'user likes coffee', 'memory-1')
 
@@ -91,13 +91,13 @@ def test_node_omitted_from_prompt_still_merges_into_its_existing_id(monkeypatch)
     """Capping the listing must not create duplicates for the nodes it left out."""
     existing = _nodes(5788)
     oldest = existing[-1]
-    monkeypatch.setattr(kg.kg_db, 'get_knowledge_nodes', lambda uid: existing)
+    monkeypatch.setattr(kg.kg_db, 'get_knowledge_nodes', lambda uid, db_client=None: existing)
 
     upserts: list[dict] = []
     monkeypatch.setattr(
         kg.kg_db,
         'upsert_knowledge_node',
-        lambda uid, node_data: upserts.append(node_data) or node_data,
+        lambda uid, node_data, db_client=None: upserts.append(node_data) or node_data,
     )
     monkeypatch.setattr(kg, 'track_usage', lambda *args, **kwargs: nullcontext())
 

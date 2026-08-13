@@ -60,12 +60,14 @@ def _load_module_from_file(module_name, file_path):
 for _p in ["google", "google.cloud", "database", "models", "langchain_core", "utils", "utils.llm"]:
     _pkg(_p)
 
-# Stubs for database/folders.py imports. folders.py now talks to the neutral storage port
-# (database.store) instead of the raw Firestore client (WP2, ADR-0002); these tests only
-# exercise its pure functions (resolve_category_folder_id, ...), so a stub store that is never
-# called suffices.
-_store_mod = _mod("database.store")
-_store_mod.get_document_store = MagicMock()
+# Stubs for database/folders.py imports.
+_firestore = _mod("google.cloud.firestore")
+sys.modules["google.cloud"].firestore = _firestore
+_firestore_v1 = _mod("google.cloud.firestore_v1")
+_firestore_v1.FieldFilter = MagicMock()
+sys.modules["google.cloud"].firestore_v1 = _firestore_v1
+_dbc = _mod("database._client")
+_dbc.db = MagicMock()
 _ddi = _mod("database.document_ids")
 _ddi.system_folder_doc_id = MagicMock()
 _mf = _mod("models.folder")

@@ -49,9 +49,7 @@ class _App:
 def _loaded_oauth_router() -> Iterator[tuple[ModuleType, ModuleType, ModuleType]]:
     firebase_auth = _module(
         'firebase_admin.auth',
-        # Accept **kwargs: the neutral FirebaseAuthProvider calls verify_id_token(bearer,
-        # check_revoked=...) (ADR-0034), so a single-arg stub raises TypeError -> InvalidToken -> 401.
-        verify_id_token=lambda _token, **_kwargs: {'uid': 'user-1'},
+        verify_id_token=lambda _token: {'uid': 'user-1'},
         InvalidIdTokenError=_InvalidIdTokenError,
     )
     firebase_admin = _module('firebase_admin', auth=firebase_auth)
@@ -138,19 +136,11 @@ def test_oauth_token_routes_auth_and_app_reads_to_owned_executors() -> None:
             'redirect_url': 'https://app.test/complete',
             'state': 'opaque',
         }
-        # Auth verification is offloaded to the critical executor — now the neutral port's verify_token
-        # (oauth.py goes through utils.auth, ADR-0034), not the raw firebase SDK function. Then account
-        # -deletion access enforcement (upstream) on the db executor. Compare by function name so the
-        # assertion is identity-agnostic while still pinning each executor boundary.
-        # verify_token: the port method's identity varies -> compare by name. enforce may be a stubbed
-        # lambda, and the app reads are module functions -> compare those by identity.
-        assert calls[0][0] is oauth.critical_executor
-        assert getattr(calls[0][1], '__name__', '') == 'verify_token'
-        assert [(executor, func) for executor, func, _args in calls[1:]] == [
+        assert [(executor, func) for executor, func, _args in calls] == [
+            (oauth.critical_executor, firebase_auth.verify_id_token),
             (oauth.db_executor, oauth.enforce_account_deletion_http_access),
             (oauth.db_executor, apps_db.get_app_by_id_db),
             (oauth.db_executor, oauth.is_user_app_enabled),
-
         ]
 
 
@@ -162,8 +152,7 @@ def test_oauth_token_verification_keeps_the_event_loop_responsive() -> None:
             release = threading.Event()
             loop = asyncio.get_running_loop()
 
-            def blocking_verify(_token: str, **_kwargs) -> dict[str, str]:
-                # **_kwargs: the neutral port passes check_revoked= through to the firebase SDK call.
+            def blocking_verify(_token: str) -> dict[str, str]:
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
                 return {'uid': 'user-1'}
@@ -206,4 +195,4 @@ def test_oauth_token_preserves_invalid_token_status() -> None:
             )
 
         assert exc.value.status_code == 401
-        assert 'Invalid sign-in token' in exc.value.detail
+        assert 'Invalid Firebase ID token' in exc.value.detail

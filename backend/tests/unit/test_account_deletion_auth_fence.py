@@ -7,7 +7,6 @@ from fastapi import HTTPException, WebSocketException
 
 from utils.other import endpoints
 from database import users
-from tests.store_fakes import FakeDocumentStore
 
 
 @pytest.fixture(autouse=True)
@@ -73,12 +72,11 @@ def test_websocket_auth_uses_typed_account_deletion_close(monkeypatch):
     assert error.value.reason == "Account deletion in progress"
 
 
-def test_deletion_status_reads_the_account_deletions_marker(monkeypatch):
-    # get_user_deletion_wipe_status reads the marker through the neutral store seam (_store(),
-    # ADR-0028) at account_deletions/{uid} — not an injected firestore_client. Seed the marker in a
-    # FakeDocumentStore and route the module's _store; the status read is the behavioral check.
-    store = FakeDocumentStore()
-    store.set("account_deletions/old-uid", {"wipe_status": "running"})
-    monkeypatch.setattr(users, "_store", lambda: store)
+def test_deletion_status_reads_the_injected_firestore_client():
+    snapshot = MagicMock(exists=True)
+    snapshot.to_dict.return_value = {"wipe_status": "running"}
+    client = MagicMock()
+    client.collection.return_value.document.return_value.get.return_value = snapshot
 
-    assert users.get_user_deletion_wipe_status("old-uid") == "running"
+    assert users.get_user_deletion_wipe_status("old-uid", firestore_client=client) == "running"
+    client.collection.assert_called_once_with("account_deletions")

@@ -13,19 +13,6 @@ class FcmTokenResponse(BaseModel):
     status: str
 
 
-class SaveUnifiedPushEndpointRequest(BaseModel):
-    endpoint: str
-    time_zone: str
-    # WebPush key set (RFC 8291), base64url, registered by the UnifiedPush connector so the backend
-    # can encrypt notification bodies. Optional for pre-encryption clients (send falls back to plaintext).
-    p256dh: Optional[str] = None
-    auth: Optional[str] = None
-
-
-class UnifiedPushEndpointResponse(BaseModel):
-    status: str
-
-
 class SendNotificationRequest(BaseModel):
     uid: str
     title: str

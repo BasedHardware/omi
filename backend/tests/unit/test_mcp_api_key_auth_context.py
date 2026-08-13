@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 import asyncio
 import sys
 from pathlib import Path
@@ -42,16 +43,86 @@ from fastapi import HTTPException
 
 import database.mcp_api_key as mcp_api_key_db
 from dependencies import get_mcp_api_key_auth, get_mcp_memory_default_memory_read_context
-from tests.store_fakes import FakeDocumentStore
 from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
 from utils.memory.product_authorization import authorize_memory_external_default_memory_read
 
 
-def _grant_path(user_id: str) -> str:
-    return (
-        f"users/{user_id}/{mcp_api_key_db.MCP_MEMORY_CONTROL_COLLECTION}"
-        f"/{mcp_api_key_db.MCP_APP_KEY_MEMORY_GRANTS_DOC_ID}"
-    )
+class _FakeDoc:
+    def __init__(self, data, doc_id='doc-key-id'):
+        self._data = data
+        self.id = doc_id
+        self.reference = SimpleNamespace(updated=[])
+        self.reference.update = lambda payload: self.reference.updated.append(payload)
+
+    def to_dict(self):
+        return dict(self._data)
+
+
+class _FakeQuery:
+    def __init__(self, docs):
+        self._docs = docs
+
+    def where(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, _limit):
+        return self
+
+    def stream(self):
+        return list(self._docs)
+
+
+class _FakeDB:
+    def __init__(self, docs):
+        self._docs = docs
+        self.grant_sets = []
+
+    def collection(self, name):
+        if name == 'users':
+            return _FakeUsersCollection(self)
+        assert name == 'mcp_api_keys'
+        return _FakeQuery(self._docs)
+
+
+class _FakeUsersCollection:
+    def __init__(self, parent):
+        self.parent = parent
+
+    def document(self, user_id):
+        return _FakeUserDoc(self.parent, user_id)
+
+
+class _FakeUserDoc:
+    def __init__(self, parent, user_id):
+        self.parent = parent
+        self.user_id = user_id
+
+    def collection(self, name):
+        return _FakeGrantCollection(self.parent, self.user_id, name)
+
+
+class _FakeGrantCollection:
+    def __init__(self, parent, user_id, collection_name):
+        self.parent = parent
+        self.user_id = user_id
+        self.collection_name = collection_name
+
+    def document(self, doc_id):
+        return _FakeGrantDoc(self.parent, self.user_id, self.collection_name, doc_id)
+
+
+class _FakeGrantDoc:
+    def __init__(self, parent, user_id, collection_name, doc_id):
+        self.parent = parent
+        self.user_id = user_id
+        self.collection_name = collection_name
+        self.doc_id = doc_id
+
+    def set(self, payload, merge=False):
+        self.parent.grant_sets.append((self.user_id, self.collection_name, self.doc_id, payload, merge))
+
+    def get(self):
+        return SimpleNamespace(exists=False, to_dict=lambda: {})
 
 
 class _FakeRedis:
@@ -101,8 +172,9 @@ class _GrantStateRead:
         self.source_path = 'users/u1/memory_control/app_key_memory_grants'
 
 
-def _grant_reader(*, uid):
+def _grant_reader(*, uid, db_client):
     assert uid == 'u1'
+    assert db_client == 'fake-db'
     return _GrantStateRead(
         {
             'grants': {
@@ -127,14 +199,14 @@ def _grant_reader(*, uid):
 
 
 def test_old_mcp_key_doc_still_authenticates_uid_only_and_has_no_verified_scopes(monkeypatch):
-    store = FakeDocumentStore()
-    store.set(
-        'mcp_api_keys/legacy-key',
+    fake_doc = _FakeDoc(
         {'id': 'legacy-key', 'user_id': 'u1', 'hashed_key': 'hashed', 'name': 'legacy'},
+        doc_id='legacy-key',
     )
     fake_redis = _FakeRedis()
+    fake_db = _FakeDB([fake_doc])
     monkeypatch.setattr(mcp_api_key_db, 'hash_api_key', lambda secret: 'hashed')
-    monkeypatch.setattr(mcp_api_key_db, '_store', lambda: store)
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
     monkeypatch.setattr(mcp_api_key_db, 'redis_db', fake_redis)
 
     assert mcp_api_key_db.get_user_id_by_api_key('omi_mcp_secret') == 'u1'
@@ -145,9 +217,7 @@ def test_old_mcp_key_doc_still_authenticates_uid_only_and_has_no_verified_scopes
     assert auth['app_id'] == 'mcp-api'
     assert 'memories.read' in auth['scopes']
     assert 'memories.write' in auth['scopes']
-    # The lazy repair persisted a memory grant for this key.
-    grant = store.get(_grant_path('u1')).to_dict()
-    assert grant['grants']['mcp']['apps']['mcp-api']['keys']['legacy-key']['enabled'] is True
+    assert fake_db.grant_sets
     assert fake_redis.cached_writes[-1]['key_id'] == 'legacy-key'
     assert fake_redis.cached_writes[-1]['app_id'] == 'mcp-api'
 
@@ -157,16 +227,14 @@ def test_old_mcp_key_doc_still_authenticates_uid_only_and_has_no_verified_scopes
         )
     )
     decision = authorize_memory_external_default_memory_read(
-        context, read_app_key_grants_state=_grant_reader
+        context, db_client='fake-db', read_app_key_grants_state=_grant_reader
     )
     assert decision.allowed is False
     assert decision.reason == 'missing_app_key_scope_grant'
 
 
 def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_archive(monkeypatch):
-    store = FakeDocumentStore()
-    store.set(
-        'mcp_api_keys/key-1',
+    fake_doc = _FakeDoc(
         {
             'id': 'key-1',
             'user_id': 'u1',
@@ -174,9 +242,11 @@ def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_arch
             'app_id': 'mcp-api',
             'scopes': ['memories.read', 'goals.read'],
         },
+        doc_id='key-1',
     )
+    fake_db = _FakeDB([fake_doc])
     monkeypatch.setattr(mcp_api_key_db, 'hash_api_key', lambda secret: 'hashed')
-    monkeypatch.setattr(mcp_api_key_db, '_store', lambda: store)
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
     monkeypatch.setattr(mcp_api_key_db, 'redis_db', _FakeRedis())
 
     auth = mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_secret')
@@ -190,7 +260,7 @@ def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_arch
         McpVerifiedAuth(uid=auth['user_id'], app_id=auth['app_id'], key_id=auth['key_id'], scopes=tuple(auth['scopes']))
     )
     decision = authorize_memory_external_default_memory_read(
-        context, read_app_key_grants_state=_grant_reader
+        context, db_client='fake-db', read_app_key_grants_state=_grant_reader
     )
 
     assert decision.allowed is True
@@ -242,11 +312,54 @@ def test_mcp_memory_dependency_fails_closed_without_persisted_memories_read_scop
     assert 'memories.read' in exc.value.detail
 
 
+class _CreateDB:
+    """Minimal Firestore stub for create_mcp_key: records the persisted doc."""
+
+    def __init__(self):
+        self.set_calls = []
+        self.document_calls = []
+        self.grant_sets = []
+
+    def collection(self, name):
+        if name == 'users':
+            return _FakeUsersCollection(self)
+        assert name == 'mcp_api_keys'
+        return _CreateCollection(self)
+
+    def document(self, path):
+        return _CreateGrantDoc(self, path)
+
+
+class _CreateCollection:
+    def __init__(self, parent):
+        self.parent = parent
+
+    def document(self, _doc_id):
+        return _CreateDoc(self.parent)
+
+
+class _CreateDoc:
+    def __init__(self, parent):
+        self.parent = parent
+
+    def set(self, doc):
+        self.parent.set_calls.append(doc)
+
+
+class _CreateGrantDoc:
+    def __init__(self, parent, path):
+        self.parent = parent
+        self.path = path
+
+    def set(self, doc, merge=False):
+        self.parent.document_calls.append((self.path, doc, merge))
+
+
 def test_create_mcp_key_seeds_default_memory_scopes(monkeypatch):
     """Newly minted MCP keys must seed scopes and the matching grant."""
     monkeypatch.setattr(mcp_api_key_db, 'generate_api_key', lambda: ('raw', 'hashed', 'omi_mcp_xxxx'))
-    store = FakeDocumentStore()
-    monkeypatch.setattr(mcp_api_key_db, '_store', lambda: store)
+    fake_db = _CreateDB()
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
 
     raw_key, api_key_data = mcp_api_key_db.create_mcp_key('u1', 'desktop-key')
 
@@ -254,25 +367,27 @@ def test_create_mcp_key_seeds_default_memory_scopes(monkeypatch):
     assert 'memories.read' in api_key_data.scopes
     assert 'memories.write' in api_key_data.scopes
     assert api_key_data.app_id == 'mcp-api'
-    persisted = store.get(f'mcp_api_keys/{api_key_data.id}').to_dict()
+    persisted = fake_db.set_calls[0]
     assert 'memories.read' in persisted['scopes']
     assert 'memories.write' in persisted['scopes']
     assert persisted['app_id'] == 'mcp-api'
-    grant_doc = store.get(_grant_path('u1')).to_dict()
+    assert fake_db.grant_sets[0][0:3] == ('u1', 'memory_control', 'app_key_memory_grants')
+    grant_doc = fake_db.grant_sets[0][3]
     seeded_grant = grant_doc['grants']['mcp']['apps']['mcp-api']['keys'][api_key_data.id]
     assert seeded_grant['scopes'] == ['memories.read', 'memories.write']
     assert seeded_grant['default_read'] is True
     assert seeded_grant['write'] is True
+    assert fake_db.grant_sets[0][4] is True
 
 
 def test_create_mcp_key_explicit_none_scopes_mints_legacy_key(monkeypatch):
     """Explicit scopes=None still mints a full-access MCP key."""
     monkeypatch.setattr(mcp_api_key_db, 'generate_api_key', lambda: ('raw', 'hashed', 'omi_mcp_xxxx'))
-    store = FakeDocumentStore()
-    monkeypatch.setattr(mcp_api_key_db, '_store', lambda: store)
+    fake_db = _CreateDB()
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
 
     _raw_key, api_key_data = mcp_api_key_db.create_mcp_key('u1', 'legacy-key', scopes=None)
 
     assert 'memories.read' in api_key_data.scopes
-    assert store.get(f'mcp_api_keys/{api_key_data.id}').to_dict()['scopes'] == api_key_data.scopes
-    assert store.exists(_grant_path('u1'))
+    assert fake_db.set_calls[0]['scopes'] == api_key_data.scopes
+    assert fake_db.grant_sets

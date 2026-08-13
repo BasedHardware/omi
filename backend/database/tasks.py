@@ -1,25 +1,29 @@
 from typing import Any
 
-from database.store import Filter, get_document_store
+from google.cloud.firestore_v1 import FieldFilter
 
-
-def _store():
-    return get_document_store()
+from ._client import db
 
 
 def create(task_data: dict[str, Any]) -> None:
     task_id = task_data['id']
-    _store().set(f'tasks/{task_id}', task_data)
+    task_ref = db.collection('tasks').document(task_id)
+    task_ref.set(task_data)
 
 
 def update(task_id: str, task_data: dict[str, Any]) -> None:
-    _store().update(f'tasks/{task_id}', task_data)
+    task_ref = db.collection('tasks').document(task_id)
+    task_ref.update(task_data)
 
 
 def get_task_by_action_request(action: str, request_id: str) -> dict[str, Any] | None:
-    filters: list[Filter] = [('action', '==', action), ('request_id', '==', request_id)]
-    docs = _store().query('tasks', filters=filters, limit=1)
-    tasks: list[dict[str, Any]] = [item.to_dict() for item in docs]
+    query = (
+        db.collection('tasks')
+        .where(filter=FieldFilter('action', '==', action))
+        .where(filter=FieldFilter('request_id', '==', request_id))
+        .limit(1)
+    )
+    tasks: list[dict[str, Any]] = [item.to_dict() for item in query.stream()]
     if len(tasks) > 0:
         return tasks[0]
 

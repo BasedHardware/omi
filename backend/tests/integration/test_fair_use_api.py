@@ -92,19 +92,7 @@ def cleanup(monkeypatch):
         _fair_use_db_module, 'reset_fair_use_state', lambda uid, admin_uid='': _state_store.pop(uid, None)
     )
     monkeypatch.setattr(_fair_use_db_module, 'get_flagged_users', lambda stage_filter=None, limit=50: [])
-
-    # Case-reference lookup moved off the router-level ``db`` seam onto the
-    # ``database.fair_use.lookup_fair_use_event_by_case_ref`` persistence boundary. Stub that
-    # instead, reading the in-memory ``_events`` the tests seed (each event already carries uid).
-    def _lookup_fair_use_event_by_case_ref(case_ref):
-        for event in _events:
-            if event.get('case_ref') == case_ref:
-                return dict(event)
-        return None
-
-    monkeypatch.setattr(
-        _fair_use_db_module, 'lookup_fair_use_event_by_case_ref', _lookup_fair_use_event_by_case_ref
-    )
+    monkeypatch.setattr(_admin_module, 'db', _fake_db)
 
     _cleanup()
     yield

@@ -17,17 +17,12 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 from scripts.admin.reset_transcription_usage import (  # noqa: E402
     aggregate_monthly_usage,
-    apply_reset,
     build_audit_record,
     build_reset_plan,
-    fetch_monthly_hourly_docs,
     month_label,
     seconds_to_minutes,
-    update_audit,
-    write_audit,
     _sanitized_audit_payload,
 )
-from tests.store_fakes import FakeDocumentStore  # noqa: E402
 
 NOW = datetime(2026, 7, 27, 13, 30, tzinfo=timezone.utc)
 
@@ -287,128 +282,3 @@ def test_pending_audit_record_marks_applied_false_and_sentinel_after() -> None:
 
     assert pending.applied is False
     assert pending.after_seconds == -1  # sentinel: not yet finalized
-
-
-# ---------------------------------------------------------------------------
-# I/O against the neutral document store (Firestore | Mongo), exercised with an
-# in-memory FakeDocumentStore. Same behavior an on-prem operator gets on Mongo.
-# ---------------------------------------------------------------------------
-
-
-def _seed_month(fake: FakeDocumentStore, uid: str, buckets: dict[str, int], *, year=2026, month=7) -> None:
-    for doc_id, seconds in buckets.items():
-        fake.set(
-            f"users/{uid}/hourly_usage/{doc_id}",
-            {"transcription_seconds": seconds, "year": year, "month": month},
-        )
-
-
-def test_fetch_monthly_hourly_docs_filters_by_year_and_month() -> None:
-    fake = FakeDocumentStore()
-    _seed_month(fake, "u1", {"2026-07-27-10": 120, "2026-07-27-11": 60})
-    # A doc from another month must be excluded by the year/month filter.
-    fake.set("users/u1/hourly_usage/2026-06-30-23", {"transcription_seconds": 999, "year": 2026, "month": 6})
-    # A doc for a different user must not leak into u1's collection scope.
-    fake.set("users/u2/hourly_usage/2026-07-27-10", {"transcription_seconds": 5, "year": 2026, "month": 7})
-
-    docs = fetch_monthly_hourly_docs(fake, "u1", 2026, 7)
-
-    got = {doc_id: data["transcription_seconds"] for doc_id, data in docs}
-    assert got == {"2026-07-27-10": 120, "2026-07-27-11": 60}
-    # aggregate on the fetched docs matches the seeded month total
-    assert aggregate_monthly_usage(docs).used_seconds == 180
-
-
-def test_apply_reset_zeroes_only_planned_docs_and_merges() -> None:
-    fake = FakeDocumentStore()
-    _seed_month(fake, "u1", {"2026-07-27-10": 120, "2026-07-27-11": 60, "2026-07-27-12": 0})
-
-    docs = fetch_monthly_hourly_docs(fake, "u1", 2026, 7)
-    plan = build_reset_plan(docs)
-    apply_reset(fake, "u1", plan)
-
-    # Touched docs land at zero, and the merge preserves the sibling year/month fields.
-    for doc_id in ("2026-07-27-10", "2026-07-27-11"):
-        data = fake.get(f"users/u1/hourly_usage/{doc_id}").to_dict()
-        assert data["transcription_seconds"] == 0
-        assert data["year"] == 2026 and data["month"] == 7
-    # The already-zero bucket was never in the plan, so it is untouched.
-    assert "2026-07-27-12" not in plan.doc_ids
-
-    # Re-fetch: the whole month now aggregates to zero.
-    assert aggregate_monthly_usage(fetch_monthly_hourly_docs(fake, "u1", 2026, 7)).used_seconds == 0
-
-
-def test_apply_reset_noop_when_plan_empty() -> None:
-    fake = FakeDocumentStore()
-    _seed_month(fake, "u1", {"2026-07-27-10": 0})
-
-    plan = build_reset_plan(fetch_monthly_hourly_docs(fake, "u1", 2026, 7))
-    apply_reset(fake, "u1", plan)  # must not raise, must not write
-
-    assert plan.doc_ids == ()
-    assert fake.get("users/u1/hourly_usage/2026-07-27-10").to_dict()["transcription_seconds"] == 0
-
-
-def test_write_audit_persists_record_and_returns_id() -> None:
-    fake = FakeDocumentStore()
-    record = build_audit_record(
-        uid="abc123",
-        email="user@example.com",
-        plan="basic",
-        month="2026-07",
-        reason="goodwill",
-        operator="ops",
-        applied=False,
-        before_seconds=300,
-        after_seconds=-1,  # pending sentinel
-        docs_touched=2,
-        now=NOW,
-    )
-
-    audit_id = write_audit(fake, record)
-
-    assert audit_id  # a non-empty generated id
-    stored = fake.get(f"admin_audit_log/{audit_id}").to_dict()
-    assert stored == record.to_dict()
-    assert stored["applied"] is False
-    assert stored["after_seconds"] == -1
-
-
-def test_update_audit_finalizes_the_same_document() -> None:
-    fake = FakeDocumentStore()
-    pending = build_audit_record(
-        uid="abc123",
-        email=None,
-        plan="basic",
-        month="2026-07",
-        reason="goodwill",
-        operator="ops",
-        applied=False,
-        before_seconds=300,
-        after_seconds=-1,
-        docs_touched=2,
-        now=NOW,
-    )
-    audit_id = write_audit(fake, pending)
-
-    final = build_audit_record(
-        uid="abc123",
-        email=None,
-        plan="basic",
-        month="2026-07",
-        reason="goodwill",
-        operator="ops",
-        applied=True,
-        before_seconds=300,
-        after_seconds=0,
-        docs_touched=2,
-        now=NOW,
-    )
-    update_audit(fake, audit_id, final)
-
-    # Same doc id is overwritten with the finalized outcome (no orphan record).
-    stored = fake.get(f"admin_audit_log/{audit_id}").to_dict()
-    assert stored["applied"] is True
-    assert stored["after_seconds"] == 0
-    assert len(fake.list_ids("admin_audit_log")) == 1

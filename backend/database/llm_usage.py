@@ -1,7 +1,7 @@
 """
 LLM Usage Database Operations.
 
-Stores and queries LLM token usage by feature through the neutral storage port (WP2, ADR-0002).
+Stores and queries LLM token usage by feature in Firestore.
 Schema: users/{uid}/llm_usage/{date} -> {feature -> {model -> {input_tokens, output_tokens}}}
 """
 
@@ -9,12 +9,11 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, cast
 
-from database.store import get_document_store
-from database.store.sentinels import Increment
+from google.cloud import firestore
 
+from ._client import db
 
-def _store():
-    return get_document_store()
+transactional = getattr(firestore, 'transactional', lambda fn: fn)  # pyright: ignore[reportUnknownMemberType]
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -32,7 +31,7 @@ def record_llm_usage(
     """
     Record LLM token usage for a user and feature.
 
-    Uses atomic increments for safe concurrent updates.
+    Uses Firestore atomic increments for safe concurrent updates.
 
     Args:
         uid: User ID
@@ -46,6 +45,9 @@ def record_llm_usage(
 
     now = datetime.now(timezone.utc)
     doc_id = f"{now.year}-{now.month:02d}-{now.day:02d}"
+
+    user_ref = db.collection("users").document(uid)
+    usage_ref = user_ref.collection("llm_usage").document(doc_id)
 
     # Use nested field paths for atomic increments
     # Structure: {feature}.{model}.{input_tokens|output_tokens}
@@ -64,14 +66,40 @@ def record_llm_usage(
     )
 
     update_data: Dict[str, Any] = {
-        f"{feature}.{safe_model}.input_tokens": Increment(input_tokens),
-        f"{feature}.{safe_model}.output_tokens": Increment(output_tokens),
-        f"{feature}.{safe_model}.call_count": Increment(1),
+        f"{feature}.{safe_model}.input_tokens": firestore.Increment(input_tokens),
+        f"{feature}.{safe_model}.output_tokens": firestore.Increment(output_tokens),
+        f"{feature}.{safe_model}.call_count": firestore.Increment(1),
         "date": doc_id,  # Store date as a field for collection-group queries
         "last_updated": datetime.now(timezone.utc),
     }
 
-    _store().set(f"users/{uid}/llm_usage/{doc_id}", update_data, merge=True)
+    usage_ref.set(update_data, merge=True)
+
+
+@transactional  # pyright: ignore[reportUntypedFunctionDecorator]
+def _record_chat_quota_question_transaction(
+    transaction: Any,
+    usage_ref: Any,
+    event_ref: Any,
+    event_data: Dict[str, Any],
+    doc_id: str,
+) -> bool:
+    event_snapshot = event_ref.get(transaction=transaction)
+    if getattr(event_snapshot, "exists", False):
+        return False
+
+    now = datetime.now(timezone.utc)
+    transaction.set(event_ref, event_data)
+    transaction.set(
+        usage_ref,
+        {
+            'backend_chat.quota_questions': firestore.Increment(1),
+            'date': doc_id,
+            'last_updated': now,
+        },
+        merge=True,
+    )
+    return True
 
 
 def record_chat_quota_question(
@@ -95,8 +123,9 @@ def record_chat_quota_question(
     doc_id = now.strftime('%Y-%m-%d')
     event_id = hashlib.sha256(f'{uid}:{idempotency_key}'.encode('utf-8')).hexdigest()
 
-    usage_path = f'users/{uid}/llm_usage/{doc_id}'
-    event_path = f'users/{uid}/chat_quota_events/{event_id}'
+    user_ref = db.collection('users').document(uid)
+    usage_ref = user_ref.collection('llm_usage').document(doc_id)
+    event_ref = user_ref.collection('chat_quota_events').document(event_id)
     event_data: Dict[str, Any] = {
         'idempotency_key': idempotency_key,
         'source': source,
@@ -107,25 +136,8 @@ def record_chat_quota_question(
         'date': doc_id,
     }
 
-    def _record(tx) -> bool:
-        # Read before write (Firestore forbids read-after-write in a transaction).
-        event_snapshot = tx.get(event_path)
-        if event_snapshot.exists:
-            return False
-
-        tx.set(event_path, event_data)
-        tx.set(
-            usage_path,
-            {
-                'backend_chat.quota_questions': Increment(1),
-                'date': doc_id,
-                'last_updated': datetime.now(timezone.utc),
-            },
-            merge=True,
-        )
-        return True
-
-    return _store().run_transaction(_record)
+    transaction = db.transaction()
+    return _record_chat_quota_question_transaction(transaction, usage_ref, event_ref, event_data, doc_id)
 
 
 def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict[str, Any]:
@@ -143,9 +155,11 @@ def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict[str, Any]
         date = datetime.now(timezone.utc)
 
     doc_id = f"{date.year}-{date.month:02d}-{date.day:02d}"
+    user_ref = db.collection("users").document(uid)
+    usage_ref = user_ref.collection("llm_usage").document(doc_id)
 
-    doc = _store().get(f"users/{uid}/llm_usage/{doc_id}")
-    if doc.exists:
+    doc = usage_ref.get()
+    if getattr(doc, "exists", False):
         return _typed_doc(doc)
     return {}
 
@@ -182,13 +196,14 @@ def get_usage_summary(uid: str, days: int = 30) -> Dict[str, Dict[str, int]]:
     Returns:
         Dict with total usage by feature
     """
-    # Query last N days. Filter on the ``date`` field (equal to the doc id for every document this
-    # module writes) rather than the Firestore-specific ``__name__`` document id, which is not a
-    # backend-neutral concept.
+    user_ref = db.collection("users").document(uid)
+    usage_collection = user_ref.collection("llm_usage")
+
+    # Query last N days
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     cutoff_id = f"{cutoff.year}-{cutoff.month:02d}-{cutoff.day:02d}"
 
-    docs = _store().query(f"users/{uid}/llm_usage", filters=[("date", ">=", cutoff_id)])
+    docs = usage_collection.where("__name__", ">=", cutoff_id).stream()
 
     # Aggregate by feature
     summary: Dict[str, Dict[str, int]] = {}
@@ -254,13 +269,14 @@ def get_global_top_features(days: int = 30, limit: int = 3) -> List[Dict[str, An
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     cutoff_id = f"{cutoff.year}-{cutoff.month:02d}-{cutoff.day:02d}"
 
-    # Query all users' llm_usage subcollections via a collection-group query, filtering on the
-    # 'date' field (collection-group queries can't rely on the document id).
-    docs = _store().query_group("llm_usage", filters=[("date", ">=", cutoff_id)])
+    # Query all users' llm_usage subcollections
+    # Note: This is a collection group query; use 'date' field instead of __name__
+    # since __name__ comparisons don't work reliably for collection-group queries
+    usage_query = db.collection_group("llm_usage").where("date", ">=", cutoff_id)
 
     global_summary: Dict[str, Dict[str, int]] = {}
 
-    for doc in docs:
+    for doc in usage_query.stream():
         data = _typed_doc(doc)
         partial = _aggregate_summary(data)
         for feature, tokens in partial.items():
@@ -281,7 +297,7 @@ def get_global_top_features(days: int = 30, limit: int = 3) -> List[Dict[str, An
 # total_tokens, cost_usd, call_count.
 #
 # This differs from the {feature}.{model} nesting above.  Both schemas
-# coexist in the same date-keyed documents using a schemaless design.
+# coexist in the same date-keyed documents using Firestore's schemaless design.
 # ============================================================================
 
 
@@ -302,27 +318,28 @@ def record_llm_usage_bucket(
     (``{bucket}_{account}``) for per-account breakdown.
     """
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    ref = db.collection("users").document(uid).collection("llm_usage").document(today)
 
     acct_key = f'{bucket}_{account}'
     update: Dict[str, Any] = {
-        f'{bucket}.input_tokens': Increment(input_tokens),
-        f'{bucket}.output_tokens': Increment(output_tokens),
-        f'{bucket}.cache_read_tokens': Increment(cache_read_tokens),
-        f'{bucket}.cache_write_tokens': Increment(cache_write_tokens),
-        f'{bucket}.total_tokens': Increment(total_tokens),
-        f'{bucket}.cost_usd': Increment(cost_usd),
-        f'{bucket}.call_count': Increment(1),
-        f'{acct_key}.input_tokens': Increment(input_tokens),
-        f'{acct_key}.output_tokens': Increment(output_tokens),
-        f'{acct_key}.cache_read_tokens': Increment(cache_read_tokens),
-        f'{acct_key}.cache_write_tokens': Increment(cache_write_tokens),
-        f'{acct_key}.total_tokens': Increment(total_tokens),
-        f'{acct_key}.cost_usd': Increment(cost_usd),
-        f'{acct_key}.call_count': Increment(1),
+        f'{bucket}.input_tokens': firestore.Increment(input_tokens),
+        f'{bucket}.output_tokens': firestore.Increment(output_tokens),
+        f'{bucket}.cache_read_tokens': firestore.Increment(cache_read_tokens),
+        f'{bucket}.cache_write_tokens': firestore.Increment(cache_write_tokens),
+        f'{bucket}.total_tokens': firestore.Increment(total_tokens),
+        f'{bucket}.cost_usd': firestore.Increment(cost_usd),
+        f'{bucket}.call_count': firestore.Increment(1),
+        f'{acct_key}.input_tokens': firestore.Increment(input_tokens),
+        f'{acct_key}.output_tokens': firestore.Increment(output_tokens),
+        f'{acct_key}.cache_read_tokens': firestore.Increment(cache_read_tokens),
+        f'{acct_key}.cache_write_tokens': firestore.Increment(cache_write_tokens),
+        f'{acct_key}.total_tokens': firestore.Increment(total_tokens),
+        f'{acct_key}.cost_usd': firestore.Increment(cost_usd),
+        f'{acct_key}.call_count': firestore.Increment(1),
         'date': today,
         'last_updated': datetime.now(timezone.utc),
     }
-    _store().set(f"users/{uid}/llm_usage/{today}", update, merge=True)
+    ref.set(update, merge=True)
 
 
 def get_total_llm_cost(uid: str, bucket: str = 'desktop_chat') -> float:
@@ -331,8 +348,9 @@ def get_total_llm_cost(uid: str, bucket: str = 'desktop_chat') -> float:
     When the bucket dual-writes to both ``{bucket}`` and ``{bucket}_{account}``,
     this reads only the primary bucket to avoid double-counting.
     """
+    col = db.collection("users").document(uid).collection("llm_usage")
     total = 0.0
-    for doc in _store().query(f"users/{uid}/llm_usage"):
+    for doc in col.stream():
         data = _typed_doc(doc)
         dc = data.get(bucket)
         if isinstance(dc, dict):

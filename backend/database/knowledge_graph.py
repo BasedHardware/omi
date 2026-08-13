@@ -2,12 +2,13 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, cast
 import uuid
 
-from database.store import get_document_store
+from google.cloud.firestore_v1 import FieldFilter
 
 from models.memory_contracts import deterministic_contract_id
 from models.memory_promotion import PROMOTION_GRAPH_ASSERTION_V2_VERSION, MemoryGraphAssertion
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
 
+from ._client import db
 from .read_boundary import parse_snapshot_or_none
 
 users_collection = 'users'
@@ -27,15 +28,16 @@ MEMORY_GRAPH_ASSERTION_BATCH_SIZE = 100
 KNOWLEDGE_GRAPH_DOCUMENT_ORDER = '__name__'
 
 
-def _store():
-    return get_document_store()
+def _firestore_client(db_client: Any = None) -> Any:
+    return db_client if db_client is not None else db
 
 
-def delete_memory_graph_assertion(uid: str, memory_id: str) -> None:
+def delete_memory_graph_assertion(uid: str, memory_id: str, *, db_client: Any = None) -> None:
     """Delete one derived assertion after its authoritative memory is fenced."""
     if not uid.strip() or not memory_id.strip():
         raise ValueError("uid and memory_id are required")
-    _store().delete(f"{users_collection}/{uid}/{memory_graph_assertions_collection}/{memory_id}")
+    client = _firestore_client(db_client)
+    client.document(f"{users_collection}/{uid}/{memory_graph_assertions_collection}/{memory_id}").delete()
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -152,29 +154,38 @@ class KnowledgeEdge:
 def get_knowledge_nodes(
     uid: str,
     *,
+    db_client: Any = None,
     limit: int = MAX_KNOWLEDGE_GRAPH_NODES,
 ) -> List[Dict[str, Any]]:
-    nodes_collection = f'{users_collection}/{uid}/{knowledge_nodes_collection}'
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    nodes_ref = user_ref.collection(knowledge_nodes_collection)
     # Allow callers (get_knowledge_graph) to request one past the public cap for truncation probes.
     capped = max(0, min(int(limit), MAX_KNOWLEDGE_GRAPH_NODES + 1))
     if capped == 0:
         return []
-    return [_typed_doc(doc) for doc in _store().query(nodes_collection, order_by=KNOWLEDGE_GRAPH_DOCUMENT_ORDER, limit=capped)]
+    query = nodes_ref.order_by(KNOWLEDGE_GRAPH_DOCUMENT_ORDER).limit(capped)
+    return [_typed_doc(doc) for doc in query.stream()]
 
 
-def get_knowledge_node(uid: str, node_id: str) -> Optional[Dict[str, Any]]:
-    doc = _store().get(f'{users_collection}/{uid}/{knowledge_nodes_collection}/{node_id}')
+def get_knowledge_node(uid: str, node_id: str, *, db_client: Any = None) -> Optional[Dict[str, Any]]:
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    node_ref = user_ref.collection(knowledge_nodes_collection).document(node_id)
+    doc = node_ref.get()
     if not doc.exists:
         return None
     return _typed_doc(doc)
 
 
-def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]:
-    nodes_collection = f'{users_collection}/{uid}/{knowledge_nodes_collection}'
+def upsert_knowledge_node(uid: str, node_data: Dict[str, Any], *, db_client: Any = None) -> Dict[str, Any]:
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    nodes_ref = user_ref.collection(knowledge_nodes_collection)
 
     node_id = node_data.get('id')
     if not node_id:
-        existing_node = find_node_by_label_or_alias(uid, node_data.get('label', ''))
+        existing_node = find_node_by_label_or_alias(uid, node_data.get('label', ''), db_client=client)
         if existing_node:
             node_id = existing_node['id']
             node_data['id'] = node_id
@@ -182,14 +193,16 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
             node_id = str(uuid.uuid4())
         node_data['id'] = node_id
 
-    existing = _store().get(f'{nodes_collection}/{node_id}')
+    node_ref = nodes_ref.document(node_id)
+    existing = node_ref.get()
 
     if not existing.exists:
-        existing_node_by_label = find_node_by_label_or_alias(uid, node_data.get('label', ''))
+        existing_node_by_label = find_node_by_label_or_alias(uid, node_data.get('label', ''), db_client=client)
         if existing_node_by_label:
             node_id = existing_node_by_label['id']
             node_data['id'] = node_id
-            existing = _store().get(f'{nodes_collection}/{node_id}')
+            node_ref = nodes_ref.document(node_id)
+            existing = node_ref.get()
 
     if existing.exists:
         existing_data: KnowledgeNodeDoc = cast(KnowledgeNodeDoc, _typed_doc(existing))
@@ -213,22 +226,25 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
         node_data['label_lower'] = node_data.get('label', '').lower()
         node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
 
-    _store().set(f'{nodes_collection}/{node_id}', node_data)
+    node_ref.set(node_data)
     return node_data
 
 
-def find_node_by_label_or_alias(uid: str, label: str) -> Optional[Dict[str, Any]]:
+def find_node_by_label_or_alias(uid: str, label: str, *, db_client: Any = None) -> Optional[Dict[str, Any]]:
     if not label:
         return None
 
-    nodes_collection = f'{users_collection}/{uid}/{knowledge_nodes_collection}'
+    client = _firestore_client(db_client)
+    nodes_ref = client.collection(users_collection).document(uid).collection(knowledge_nodes_collection)
     label_lower = label.lower()
 
-    results = _store().query(nodes_collection, filters=[('label_lower', '==', label_lower)], limit=1)
+    query = nodes_ref.where(filter=FieldFilter('label_lower', '==', label_lower)).limit(1)
+    results = list(query.stream())
     if results:
         return _typed_doc(results[0])
 
-    results = _store().query(nodes_collection, filters=[('aliases_lower', 'array_contains', label_lower)], limit=1)
+    query = nodes_ref.where(filter=FieldFilter('aliases_lower', 'array_contains', label_lower)).limit(1)
+    results = list(query.stream())
     if results:
         return _typed_doc(results[0])
 
@@ -238,17 +254,23 @@ def find_node_by_label_or_alias(uid: str, label: str) -> Optional[Dict[str, Any]
 def get_knowledge_edges(
     uid: str,
     *,
+    db_client: Any = None,
     limit: int = MAX_KNOWLEDGE_GRAPH_EDGES,
 ) -> List[Dict[str, Any]]:
-    edges_collection = f'{users_collection}/{uid}/{knowledge_edges_collection}'
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    edges_ref = user_ref.collection(knowledge_edges_collection)
     capped = max(0, min(int(limit), MAX_KNOWLEDGE_GRAPH_EDGES + 1))
     if capped == 0:
         return []
-    return [_typed_doc(doc) for doc in _store().query(edges_collection, order_by=KNOWLEDGE_GRAPH_DOCUMENT_ORDER, limit=capped)]
+    query = edges_ref.order_by(KNOWLEDGE_GRAPH_DOCUMENT_ORDER).limit(capped)
+    return [_typed_doc(doc) for doc in query.stream()]
 
 
-def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]:
-    edges_collection = f'{users_collection}/{uid}/{knowledge_edges_collection}'
+def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any = None) -> Dict[str, Any]:
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    edges_ref = user_ref.collection(knowledge_edges_collection)
 
     edge_id = edge_data.get('id')
     if not edge_id:
@@ -256,7 +278,8 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]
     edge_id = edge_id.replace('/', '_')
     edge_data['id'] = edge_id
 
-    existing = _store().get(f'{edges_collection}/{edge_id}')
+    edge_ref = edges_ref.document(edge_id)
+    existing = edge_ref.get()
 
     if existing.exists:
         existing_data: KnowledgeEdgeDoc = cast(KnowledgeEdgeDoc, _typed_doc(existing))
@@ -269,7 +292,7 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]
     else:
         edge_data['created_at'] = datetime.now(timezone.utc)
 
-    _store().set(f'{edges_collection}/{edge_id}', edge_data)
+    edge_ref.set(edge_data)
     return edge_data
 
 
@@ -359,15 +382,26 @@ def _parse_assertion_snapshot(uid: str, snapshot: Any) -> Optional[MemoryGraphAs
     return assertion
 
 
+def _chunked_get_all(client: Any, refs: List[Any], *, batch_size: int) -> Iterable[Any]:
+    for start in range(0, len(refs), batch_size):
+        yield from client.get_all(refs[start : start + batch_size])
+
+
 def _load_assertions_by_memory_ids(
     uid: str,
     memory_ids: List[str],
+    *,
+    db_client: Any,
 ) -> Dict[str, MemoryGraphAssertion]:
     if not memory_ids:
         return {}
-    assertions_collection = f'{users_collection}/{uid}/{memory_graph_assertions_collection}'
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    assertion_refs = [
+        user_ref.collection(memory_graph_assertions_collection).document(memory_id) for memory_id in memory_ids
+    ]
     assertions_by_id: Dict[str, MemoryGraphAssertion] = {}
-    for snapshot in _store().get_many(assertions_collection, list(memory_ids)):
+    for snapshot in _chunked_get_all(client, assertion_refs, batch_size=MEMORY_GRAPH_ASSERTION_BATCH_SIZE):
         assertion = _parse_assertion_snapshot(uid, snapshot)
         if assertion is not None:
             assertions_by_id[assertion.memory_id] = assertion
@@ -377,12 +411,16 @@ def _load_assertions_by_memory_ids(
 def _load_memory_items_by_ids(
     uid: str,
     memory_ids: List[str],
+    *,
+    db_client: Any,
 ) -> Dict[str, Dict[str, Any]]:
     if not memory_ids:
         return {}
-    items_collection = f'{users_collection}/{uid}/{memory_items_collection}'
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    item_refs = [user_ref.collection(memory_items_collection).document(memory_id) for memory_id in memory_ids]
     items_by_id: Dict[str, Dict[str, Any]] = {}
-    for snapshot in _store().get_many(items_collection, list(memory_ids)):
+    for snapshot in _chunked_get_all(client, item_refs, batch_size=MEMORY_GRAPH_ASSERTION_BATCH_SIZE):
         if not getattr(snapshot, 'exists', False):
             continue
         snapshot_id = getattr(snapshot, 'id', None)
@@ -399,6 +437,7 @@ def load_fenced_assertions_for_memory_items(
     memory_ids: Iterable[str],
     *,
     account_generation: int,
+    db_client: Any = None,
 ) -> List[MemoryGraphAssertion]:
     """Load assertions fenced to active memory items for explicit memory IDs.
 
@@ -409,8 +448,9 @@ def load_fenced_assertions_for_memory_items(
     if not ordered_ids:
         return []
     unique_ids = list(dict.fromkeys(ordered_ids))
-    assertions_by_id = _load_assertions_by_memory_ids(uid, unique_ids)
-    items_by_id = _load_memory_items_by_ids(uid, unique_ids)
+    client = _firestore_client(db_client)
+    assertions_by_id = _load_assertions_by_memory_ids(uid, unique_ids, db_client=client)
+    items_by_id = _load_memory_items_by_ids(uid, unique_ids, db_client=client)
     return [
         assertion
         for memory_id in ordered_ids
@@ -423,18 +463,22 @@ def load_fenced_assertions_for_memory_items(
 def _load_active_memory_graph_assertions(
     uid: str,
     *,
+    db_client: Any = None,
     scan_limit: Optional[int] = None,
 ) -> Tuple[List[MemoryGraphAssertion], bool]:
-    """Load fenced assertions with an optional bounded scan."""
-    assertions_collection = f'{users_collection}/{uid}/{memory_graph_assertions_collection}'
+    """Load fenced assertions with an optional bounded Firestore scan."""
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    assertions_ref = user_ref.collection(memory_graph_assertions_collection)
     candidates: Dict[str, MemoryGraphAssertion] = {}
 
     if scan_limit is None:
-        snapshots = _store().query(assertions_collection)
+        snapshots = list(assertions_ref.stream())
         truncated = False
     else:
         bounded_limit = max(0, int(scan_limit))
-        snapshots = _store().query(assertions_collection, order_by=KNOWLEDGE_GRAPH_DOCUMENT_ORDER, limit=bounded_limit + 1)
+        query = assertions_ref.order_by(KNOWLEDGE_GRAPH_DOCUMENT_ORDER).limit(bounded_limit + 1)
+        snapshots = list(query.stream())
         truncated = len(snapshots) > bounded_limit
         snapshots = snapshots[:bounded_limit]
 
@@ -457,7 +501,7 @@ def _load_active_memory_graph_assertions(
     if not candidates:
         return [], truncated
 
-    items_by_id = _load_memory_items_by_ids(uid, sorted(candidates))
+    items_by_id = _load_memory_items_by_ids(uid, sorted(candidates), db_client=client)
 
     return (
         [
@@ -471,9 +515,11 @@ def _load_active_memory_graph_assertions(
 
 def get_active_memory_graph_assertions(
     uid: str,
+    *,
+    db_client: Any = None,
 ) -> List[MemoryGraphAssertion]:
     """Load only assertions fenced to their current active Long-term memory item."""
-    assertions, _ = _load_active_memory_graph_assertions(uid)
+    assertions, _ = _load_active_memory_graph_assertions(uid, db_client=db_client)
     return assertions
 
 
@@ -482,6 +528,7 @@ def _authoritative_legacy_citation_ids(
     *,
     legacy_nodes: Iterable[Dict[str, Any]],
     legacy_edges: Iterable[Dict[str, Any]],
+    db_client: Any,
 ) -> Tuple[set[str], bool]:
     """Fence legacy citations that already belong to canonical item state.
 
@@ -501,8 +548,9 @@ def _authoritative_legacy_citation_ids(
     if not cited_ids:
         return set(), False
 
-    control_snapshot = _store().get(f'{users_collection}/{uid}/memory_state/apply_control')
-    if not control_snapshot.exists:
+    user_ref = db_client.collection(users_collection).document(uid)
+    control_snapshot = user_ref.collection('memory_state').document('apply_control').get()
+    if not getattr(control_snapshot, 'exists', False):
         return set(), False
 
     bounded_ids = cited_ids[:MAX_KNOWLEDGE_GRAPH_CITATION_FENCES]
@@ -512,19 +560,20 @@ def _authoritative_legacy_citation_ids(
     authoritative_ids = set(cited_ids[MAX_KNOWLEDGE_GRAPH_CITATION_FENCES:])
     if not bounded_ids:
         return authoritative_ids, bool(authoritative_ids)
-    items_collection = f'{users_collection}/{uid}/{memory_items_collection}'
-    for snapshot in _store().get_many(items_collection, bounded_ids):
-        if snapshot.exists:
-            snapshot_id = snapshot.id
+    item_refs = [user_ref.collection(memory_items_collection).document(memory_id) for memory_id in bounded_ids]
+    for snapshot in db_client.get_all(item_refs):
+        if getattr(snapshot, 'exists', False):
+            snapshot_id = getattr(snapshot, 'id', None)
             if isinstance(snapshot_id, str) and snapshot_id:
                 authoritative_ids.add(snapshot_id)
     return authoritative_ids, len(cited_ids) > len(bounded_ids)
 
 
-def has_stored_memory_graph_assertions(uid: str) -> bool:
+def has_stored_memory_graph_assertions(uid: str, *, db_client: Any = None) -> bool:
     """Return whether any assertion document exists using a one-document probe."""
-    assertions_collection = f'{users_collection}/{uid}/{memory_graph_assertions_collection}'
-    return len(_store().query(assertions_collection, limit=1)) > 0
+    client = _firestore_client(db_client)
+    assertions_ref = client.collection(users_collection).document(uid).collection(memory_graph_assertions_collection)
+    return next(iter(assertions_ref.limit(1).stream()), None) is not None
 
 
 def _node_terms(node: Dict[str, Any]) -> List[str]:
@@ -722,18 +771,20 @@ def merge_knowledge_graph_records(
     return {'nodes': nodes, 'edges': edges}
 
 
-def get_knowledge_graph(uid: str) -> Dict[str, Any]:
+def get_knowledge_graph(uid: str, *, db_client: Any = None) -> Dict[str, Any]:
     """Return a bounded graph snapshot for GET /v1/knowledge-graph.
 
     Full-collection streams of nodes+edges previously unbounded-read large accounts
     into the 30s GET timeout. Caps keep the response bounded; `truncated` signals
     that denser graphs need a follow-up pagination/summarization API.
     """
+    client = _firestore_client(db_client)
     # Fetch one extra row past the cap to detect truncation without a count() round-trip.
-    legacy_nodes = get_knowledge_nodes(uid, limit=MAX_KNOWLEDGE_GRAPH_NODES + 1)
-    legacy_edges = get_knowledge_edges(uid, limit=MAX_KNOWLEDGE_GRAPH_EDGES + 1)
+    legacy_nodes = get_knowledge_nodes(uid, db_client=client, limit=MAX_KNOWLEDGE_GRAPH_NODES + 1)
+    legacy_edges = get_knowledge_edges(uid, db_client=client, limit=MAX_KNOWLEDGE_GRAPH_EDGES + 1)
     assertions, assertions_truncated = _load_active_memory_graph_assertions(
         uid,
+        db_client=client,
         scan_limit=MAX_KNOWLEDGE_GRAPH_ASSERTIONS,
     )
     legacy_node_page = legacy_nodes[:MAX_KNOWLEDGE_GRAPH_NODES]
@@ -742,6 +793,7 @@ def get_knowledge_graph(uid: str) -> Dict[str, Any]:
         uid,
         legacy_nodes=legacy_node_page,
         legacy_edges=legacy_edge_page,
+        db_client=client,
     )
     merged = merge_knowledge_graph_records(
         {
@@ -788,52 +840,60 @@ def get_knowledge_graph(uid: str) -> Dict[str, Any]:
     }
 
 
-def delete_knowledge_graph(uid: str) -> None:
-    def _batch_delete(collection: str) -> None:
+def delete_knowledge_graph(uid: str, *, db_client: Any = None) -> None:
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+
+    def _batch_delete(coll_ref: Any) -> None:
         while True:
-            docs = _store().query(collection, limit=500)
+            docs: List[Any] = list(coll_ref.limit(500).stream())
             if not docs:
                 break
-            batch = _store().batch()
+            batch: Any = client.batch()
             for doc in docs:
-                batch.delete(doc.path)
+                batch.delete(doc.reference)
             batch.commit()
 
-    _batch_delete(f'{users_collection}/{uid}/{knowledge_nodes_collection}')
-    _batch_delete(f'{users_collection}/{uid}/{knowledge_edges_collection}')
+    nodes_ref = user_ref.collection(knowledge_nodes_collection)
+    _batch_delete(nodes_ref)
+
+    edges_ref = user_ref.collection(knowledge_edges_collection)
+    _batch_delete(edges_ref)
 
 
-def prune_memory_citations_from_kg(uid: str, memory_ids: List[str]) -> int:
+def prune_memory_citations_from_kg(uid: str, memory_ids: List[str], *, db_client: Any = None) -> int:
     """Remove memory_ids from KG nodes/edges; delete entities with no remaining citations."""
     if not memory_ids:
         return 0
     retracted = set(memory_ids)
-    nodes_collection = f'{users_collection}/{uid}/{knowledge_nodes_collection}'
-    edges_collection = f'{users_collection}/{uid}/{knowledge_edges_collection}'
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    nodes_ref = user_ref.collection(knowledge_nodes_collection)
+    edges_ref = user_ref.collection(knowledge_edges_collection)
     pruned = 0
 
-    for doc in _store().query(nodes_collection):
+    for doc in nodes_ref.stream():
         node_doc: KnowledgeNodeDoc = cast(KnowledgeNodeDoc, _typed_doc(doc))
         existing_ids = set(node_doc.get("memory_ids") or [])
         if not existing_ids.intersection(retracted):
             continue
         remaining = sorted(existing_ids - retracted)
         if remaining:
-            _store().set(
-                doc.path, {**node_doc, "memory_ids": remaining, "updated_at": datetime.now(timezone.utc)}, merge=True
+            doc.reference.set(
+                {**node_doc, "memory_ids": remaining, "updated_at": datetime.now(timezone.utc)}, merge=True
             )
         else:
-            _store().delete(doc.path)
+            doc.reference.delete()
         pruned += 1
 
-    surviving_node_ids: set[str] = set(_store().list_ids(nodes_collection))
+    surviving_node_ids: set[str] = {cast(str, doc.id) for doc in nodes_ref.stream()}
 
-    for doc in _store().query(edges_collection):
+    for doc in edges_ref.stream():
         edge_doc: KnowledgeEdgeDoc = cast(KnowledgeEdgeDoc, _typed_doc(doc))
         source_id = edge_doc.get("source_id")
         target_id = edge_doc.get("target_id")
         if source_id not in surviving_node_ids or target_id not in surviving_node_ids:
-            _store().delete(doc.path)
+            doc.reference.delete()
             pruned += 1
             continue
         existing_ids = set(edge_doc.get("memory_ids") or [])
@@ -841,9 +901,9 @@ def prune_memory_citations_from_kg(uid: str, memory_ids: List[str]) -> int:
             continue
         remaining = sorted(existing_ids - retracted)
         if remaining:
-            _store().set(doc.path, {**edge_doc, "memory_ids": remaining}, merge=True)
+            doc.reference.set({**edge_doc, "memory_ids": remaining}, merge=True)
         else:
-            _store().delete(doc.path)
+            doc.reference.delete()
         pruned += 1
 
     return pruned

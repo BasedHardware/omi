@@ -8,11 +8,9 @@ Regression tests for #5423 (Person model validation) and #5424 (conversations re
 """
 
 from datetime import datetime, timezone
-
-import pytest
+from unittest.mock import MagicMock
 
 from models.other import Person
-from tests.store_fakes import FakeDocumentStore
 
 
 class TestPersonModelResilience:
@@ -56,77 +54,101 @@ class TestPersonModelResilience:
 
 
 class TestGetPeopleDocIdInjection:
-    """#5423: get_people/get_person should inject the stored document ID (WP2: via the port)."""
+    """#5423: get_people/get_person should inject Firestore doc ID."""
 
-    @pytest.fixture
-    def store(self, monkeypatch):
+    def _make_mock_doc(self, doc_id, data, exists=True):
+        mock_doc = MagicMock()
+        mock_doc.id = doc_id
+        mock_doc.exists = exists
+        mock_doc.to_dict.return_value = data.copy() if data else {}
+        return mock_doc
+
+    def test_get_people_injects_doc_id(self):
+        """get_people() should set 'id' from doc.id when missing from data."""
         from database import users as users_mod
 
-        fake = FakeDocumentStore()
-        monkeypatch.setattr(users_mod, '_store', lambda: fake)
-        return fake
-
-    def test_get_people_injects_doc_id(self, store):
-        """get_people() should set 'id' from the document key when missing from data."""
-        from database import users as users_mod
-
-        store.set('users/uid-123/people/firestore-doc-id', {'name': 'Alice'})
+        mock_doc = self._make_mock_doc('firestore-doc-id', {'name': 'Alice'})
+        users_mod.db = MagicMock()
+        users_mod.db.collection.return_value.document.return_value.collection.return_value.stream.return_value = [
+            mock_doc
+        ]
 
         result = users_mod.get_people('uid-123')
         assert len(result) == 1
         assert result[0]['id'] == 'firestore-doc-id'
         assert result[0]['name'] == 'Alice'
 
-    def test_get_people_preserves_existing_id(self, store):
+    def test_get_people_preserves_existing_id(self):
         """get_people() should not overwrite an existing 'id' field."""
         from database import users as users_mod
 
-        store.set('users/uid-123/people/firestore-doc-id', {'id': 'stored-id', 'name': 'Bob'})
+        mock_doc = self._make_mock_doc('firestore-doc-id', {'id': 'stored-id', 'name': 'Bob'})
+        users_mod.db = MagicMock()
+        users_mod.db.collection.return_value.document.return_value.collection.return_value.stream.return_value = [
+            mock_doc
+        ]
 
         result = users_mod.get_people('uid-123')
         assert result[0]['id'] == 'stored-id'
 
-    def test_get_person_injects_doc_id(self, store):
-        """get_person() should inject the document key for legacy docs."""
+    def test_get_person_injects_doc_id(self):
+        """get_person() should inject doc ID for legacy docs."""
         from database import users as users_mod
 
-        store.set('users/uid-123/people/person-doc-id', {'name': 'Charlie'})
+        mock_doc = self._make_mock_doc('person-doc-id', {'name': 'Charlie'})
+        users_mod.db = MagicMock()
+        users_mod.db.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = (
+            mock_doc
+        )
 
         result = users_mod.get_person('uid-123', 'person-doc-id')
         assert result['id'] == 'person-doc-id'
 
-    def test_get_person_returns_none_when_not_exists(self, store):
+    def test_get_person_returns_none_when_not_exists(self):
         """get_person() should return None for missing docs."""
         from database import users as users_mod
+
+        mock_doc = self._make_mock_doc('nonexistent', {}, exists=False)
+        users_mod.db = MagicMock()
+        users_mod.db.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = (
+            mock_doc
+        )
 
         result = users_mod.get_person('uid-123', 'nonexistent')
         assert result is None
 
-    def test_get_people_by_ids_uses_doc_fetch(self, store):
-        """get_people_by_ids() should fetch by id, inject ids, and skip missing docs."""
+    def test_get_people_by_ids_uses_doc_fetch(self):
+        """get_people_by_ids() should use document fetches and inject IDs."""
         from database import users as users_mod
 
-        store.set('users/uid-123/people/pid-1', {'name': 'Alice'})
-        # pid-2 intentionally absent — a legacy/missing doc must be skipped, not 500.
+        mock_doc1 = self._make_mock_doc('pid-1', {'name': 'Alice'})
+        mock_doc2 = self._make_mock_doc('pid-2', {}, exists=False)
+
+        users_mod.db = MagicMock()
+        users_mod.db.get_all.return_value = [mock_doc1, mock_doc2]
 
         result = users_mod.get_people_by_ids('uid-123', ['pid-1', 'pid-2'])
         assert len(result) == 1
         assert result[0]['id'] == 'pid-1'
+        users_mod.db.get_all.assert_called_once()
 
-    def test_get_people_by_ids_handles_large_batch(self, store):
+    def test_get_people_by_ids_handles_large_batch(self):
         """get_people_by_ids() should handle >30 IDs (old where-in limit was 30)."""
         from database import users as users_mod
 
         ids = [f'pid-{i}' for i in range(50)]
-        for pid in ids:
-            store.set(f'users/uid-123/people/{pid}', {'name': f'Person {pid}'})
+        mock_docs = [self._make_mock_doc(pid, {'name': f'Person {pid}'}) for pid in ids]
+
+        users_mod.db = MagicMock()
+        users_mod.db.get_all.return_value = mock_docs
 
         result = users_mod.get_people_by_ids('uid-123', ids)
         assert len(result) == 50
-        # All ids injected (order is unspecified across backends).
-        assert {r['id'] for r in result} == set(ids)
+        # All should have IDs injected
+        for i, r in enumerate(result):
+            assert r['id'] == f'pid-{i}'
 
-    def test_get_people_by_ids_empty_list(self, store):
+    def test_get_people_by_ids_empty_list(self):
         """get_people_by_ids() should return empty list for empty input."""
         from database import users as users_mod
 

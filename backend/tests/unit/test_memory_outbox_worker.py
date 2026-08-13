@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from unittest.mock import patch
@@ -22,8 +23,6 @@ from models.memory_apply import (
 from models.memory_evidence import SourceState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState
 from utils.memory.short_term_promotion import _canonical_outbox_side_effects
-from database.store import factory as _store_factory
-from tests.store_fakes import FakeDocumentStore
 
 NOW = datetime(2026, 7, 27, 12, 0, tzinfo=timezone.utc)
 UID = "uid-outbox"
@@ -31,42 +30,146 @@ CONTROL_PATH = f"users/{UID}/memory_state/apply_control"
 OUTBOX_PATH = f"users/{UID}/memory_outbox"
 
 
-class _FakeStore(FakeDocumentStore):
-    """Neutral in-memory store with an optional injected update failure.
+class _FakeSnapshot:
+    def __init__(self, path: str, data: Optional[Dict[str, Any]]):
+        self.reference = _FakeDocumentReference(path, None)
+        self.id = path.rsplit("/", 1)[-1]
+        self.exists = data is not None
+        self._data = copy.deepcopy(data)
 
-    ``fail_update_statuses`` reproduces the old fake's ability to fail a specific
-    write (used to prove a lost ack leaves a replayable processing lease). The raw
-    exception text is deliberately private so log-sanitization is still exercised.
-    """
+    def to_dict(self):
+        return copy.deepcopy(self._data)
 
-    def __init__(self, docs: Dict[str, Dict[str, Any]]):
-        super().__init__(backing=docs)
+
+class _FakeDocumentReference:
+    def __init__(self, path: str, db: Optional["_FakeFirestore"]):
+        self.path = path
+        self._db = db
+
+    def get(self, transaction=None):
+        assert self._db is not None
+        return _FakeSnapshot(self.path, self._db.docs.get(self.path))
+
+    def collection(self, name: str):
+        assert self._db is not None
+        return _FakeQuery(self._db, f"{self.path}/{name}")
+
+    def delete(self):
+        assert self._db is not None
+        self._db.docs.pop(self.path, None)
+
+
+class _FakeQuery:
+    def __init__(
+        self,
+        db: "_FakeFirestore",
+        collection_path: str,
+        filters=None,
+        limit_count: Optional[int] = None,
+    ):
+        self._db = db
+        self._collection_path = collection_path
+        self._filters = list(filters or [])
+        self._limit_count = limit_count
+
+    def where(
+        self,
+        field: Optional[str] = None,
+        operation: Optional[str] = None,
+        value: Any = None,
+        *,
+        filter: Any = None,
+    ):
+        if filter is not None:
+            field = filter.field_path
+            operation = filter.op_string
+            value = filter.value
+        assert field is not None
+        assert operation is not None
+        return _FakeQuery(
+            self._db,
+            self._collection_path,
+            self._filters + [(field, operation, value)],
+            self._limit_count,
+        )
+
+    def limit(self, count: int):
+        return _FakeQuery(self._db, self._collection_path, self._filters, count)
+
+    def document(self, document_id: str):
+        return _FakeDocumentReference(f"{self._collection_path}/{document_id}", self._db)
+
+    def stream(self):
+        prefix = f"{self._collection_path}/"
+        matches = []
+        for path, data in sorted(self._db.docs.items()):
+            if not path.startswith(prefix):
+                continue
+            if all(self._matches(data, field, operation, value) for field, operation, value in self._filters):
+                matches.append(_FakeSnapshot(path, data))
+        return matches[: self._limit_count]
+
+    @staticmethod
+    def _matches(data: Dict[str, Any], field: str, operation: str, value: Any) -> bool:
+        actual = data.get(field)
+        if operation == "==":
+            return actual == value
+        if operation == "<=":
+            return actual is not None and actual <= value
+        raise AssertionError(f"unsupported fake query operation: {operation}")
+
+
+class _FakeTransaction:
+    def __init__(self, db: "_FakeFirestore"):
+        self._db = db
+        self._writes = []
+
+    def _begin(self):
+        self._writes = []
+
+    def update(self, ref: _FakeDocumentReference, patch: Dict[str, Any]):
+        status = patch.get("status")
+        if status in self._db.fail_update_statuses:
+            raise RuntimeError("injected write failure with PRIVATE MEMORY TEXT")
+        self._writes.append(("update", ref.path, copy.deepcopy(patch)))
+
+    def set(self, ref: _FakeDocumentReference, payload: Dict[str, Any]):
+        self._writes.append(("set", ref.path, copy.deepcopy(payload)))
+
+    def delete(self, ref: _FakeDocumentReference):
+        self._writes.append(("delete", ref.path, None))
+
+    def _commit(self):
+        for operation, path, payload in self._writes:
+            if operation == "delete":
+                self._db.docs.pop(path, None)
+            elif operation == "set":
+                assert payload is not None
+                self._db.docs[path] = payload
+            else:
+                assert payload is not None
+                self._db.docs[path].update(payload)
+
+    def _rollback(self):
+        self._writes = []
+
+    def _clean_up(self):
+        return None
+
+
+class _FakeFirestore:
+    def __init__(self, docs: Optional[Dict[str, Dict[str, Any]]] = None):
+        self.docs = copy.deepcopy(docs or {})
         self.fail_update_statuses: set[str] = set()
 
-    @property
-    def docs(self) -> Dict[str, Dict[str, Any]]:
-        return self._docs
+    def collection(self, path: str):
+        return _FakeQuery(self, path)
 
-    def update(self, path: str, data: Dict[str, Any]) -> None:
-        if data.get("status") in self.fail_update_statuses:
-            raise RuntimeError("injected write failure with PRIVATE MEMORY TEXT")
-        super().update(path, data)
+    def document(self, path: str):
+        return _FakeDocumentReference(path, self)
 
-
-@pytest.fixture(autouse=True)
-def _reset_document_store():
-    """Isolate the process-wide storage-port singleton for every test."""
-    _store_factory.reset_document_store()
-    yield
-    _store_factory.reset_document_store()
-
-
-def _install_store(store: _FakeStore) -> None:
-    # Install the fake as the process-wide document store so the migrated worker
-    # (and the account-deletion fence / projection side effects it calls) all read
-    # and write through the same neutral port (WP2/ADR-0002/0028).
-    _store_factory.reset_document_store()
-    _store_factory._store = store
+    def transaction(self):
+        return _FakeTransaction(self)
 
 
 def _stored(model):
@@ -173,9 +276,7 @@ def _db(*events: Dict[str, Any], items: Optional[Dict[str, Dict[str, Any]]] = No
         docs[_event_path(str(event["event_id"]))] = event
     for memory_id, item in (items or {}).items():
         docs[_item_path(memory_id)] = item
-    store = _FakeStore(docs)
-    _install_store(store)
-    return store
+    return _FakeFirestore(docs)
 
 
 def _recording_side_effects(calls, *, results: Optional[Dict[str, Any]] = None):
@@ -234,6 +335,7 @@ def test_lease_is_bounded_and_claims_pending_retryable_and_expired_processing():
     db = _db(pending, retryable, expired, overflow, future, live_lease, delivered, unrelated)
 
     leases = lease_canonical_memory_outbox_events(
+        db_client=db,
         uid=UID,
         worker_id="new-worker",
         limit=3,
@@ -259,6 +361,7 @@ def test_lease_is_bounded_and_claims_pending_retryable_and_expired_processing():
     assert db.docs[_event_path("repair")]["status"] == MemoryOutboxStatus.pending
 
     second_leases = lease_canonical_memory_outbox_events(
+        db_client=db,
         uid=UID,
         worker_id="other-worker",
         limit=3,
@@ -297,6 +400,7 @@ def test_malformed_firestore_models_retry_with_sanitized_boundary_errors(
     calls = []
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=_recording_side_effects(calls),
@@ -338,6 +442,7 @@ def test_projection_sync_hydrates_authoritative_short_and_long_term_items():
     calls = []
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=_recording_side_effects(calls),
@@ -370,6 +475,7 @@ def test_projection_sync_deletes_restricted_long_term_memory_instead_of_exposing
     calls = []
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=_recording_side_effects(calls),
@@ -399,6 +505,7 @@ def test_vector_sync_deletes_restricted_memory_instead_of_embedding_it():
     calls = []
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=_recording_side_effects(calls),
@@ -435,6 +542,7 @@ def test_vector_sync_repairs_when_item_becomes_restricted_during_delivery():
     )
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=side_effects,
@@ -456,6 +564,7 @@ def test_account_deletion_fence_makes_projection_delivery_delete_only():
     calls = []
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=_recording_side_effects(calls),
@@ -485,6 +594,7 @@ def test_account_deletion_fence_appearing_during_upsert_is_repaired_before_ack()
     )
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=side_effects,
@@ -496,52 +606,41 @@ def test_account_deletion_fence_appearing_during_upsert_is_repaired_before_ack()
     assert db.docs[_event_path("delete-race-vector")]["side_effect_action"] == "vector_delete"
 
 
-def test_projection_sync_converges_compatibility_row_across_create_update_and_delete():
-    create = _event("compat-create")
+def test_projection_sync_converges_keyword_graph_and_review_side_effects():
+    create = _event("projection-create")
     db = _db(create, items={"mem-1": _item()})
     paths = MemoryCollections(uid=UID)
-    projection_path = f"{paths.v3_compatibility_projection_items}/mem-1"
     graph_assertion_path = f"{paths.memory_graph_assertions}/mem-1"
     db.docs[graph_assertion_path] = {"memory_id": "mem-1"}
-    db.docs[paths.v3_compatibility_projection_state] = {
-        "uid": UID,
-        "schema_version": 1,
-        "source": "memory_items_projection",
-        "ready": True,
-        "account_generation": 7,
-        "projection_generation": 7,
-        "freshness_fence_generation": 7,
-        "tombstone_fence_generation": 7,
-        "vector_cleanup_fence_generation": 7,
-        "source_commit_id": "head-enrollment",
-        "projection_commit_id": "commit-head-enrollment",
-        "source_evidence_fence": "head-head-enrollment",
-        "projection_evidence_fence": "head-head-enrollment",
-        "projection_version": "v3_memorydb_compatibility",
-        "source_version": "memory_state_head:7",
-        "write_convergence_complete": True,
-        "delete_convergence_complete": True,
-        "tombstone_convergence_complete": True,
-        "empty_projection": False,
-    }
-    # The worker and the real projection side effects both read/write through the neutral storage
-    # port, which ``_db`` installed backed by this test's ``db.docs`` (WP2/ADR-0028 — no raw client).
-    side_effects = _canonical_outbox_side_effects()
+    side_effects = _canonical_outbox_side_effects(db_client=db)
 
     with (
-        patch("utils.memory.short_term_promotion.sync_atom_keyword_index_for_item", return_value=True),
-        patch("utils.memory.short_term_promotion.delete_atom_keyword_doc", return_value=True),
-        patch("utils.memory.short_term_promotion.kg_db.prune_memory_citations_from_kg", return_value=0),
-        patch("utils.memory.short_term_promotion.purge_stale_review_conflicts_for_memories", return_value=[]),
+        patch(
+            "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
+            return_value=True,
+        ) as keyword_upsert,
+        patch(
+            "utils.memory.short_term_promotion.delete_atom_keyword_doc",
+            return_value=True,
+        ) as keyword_delete,
+        patch(
+            "utils.memory.short_term_promotion.kg_db.prune_memory_citations_from_kg",
+            return_value=0,
+        ) as citation_prune,
+        patch(
+            "utils.memory.short_term_promotion.purge_stale_review_conflicts_for_memories",
+            return_value=[],
+        ) as review_purge,
     ):
         created = run_canonical_memory_outbox_worker_tick(
+            db_client=db,
             uid=UID,
             config=_config(),
             side_effects=side_effects,
             now=NOW,
         )
         assert created["delivered_count"] == 1
-        assert db.docs[projection_path]["memorydb"]["content"] == "PRIVATE MEMORY TEXT from authoritative storage"
+        assert keyword_upsert.call_count == 1
 
         db.docs[_item_path("mem-1")] = _item(
             content="UPDATED PRIVATE MEMORY TEXT",
@@ -551,19 +650,20 @@ def test_projection_sync_converges_compatibility_row_across_create_update_and_de
             ledger_sequence=2,
         )
         update = _event(
-            "compat-update",
+            "projection-update",
             item_revision=5,
             content_hash="content-hash-5",
         )
-        db.docs[_event_path("compat-update")] = update
+        db.docs[_event_path("projection-update")] = update
         updated = run_canonical_memory_outbox_worker_tick(
+            db_client=db,
             uid=UID,
             config=_config(),
             side_effects=side_effects,
             now=NOW,
         )
         assert updated["delivered_count"] == 1
-        assert db.docs[projection_path]["memorydb"]["content"] == "UPDATED PRIVATE MEMORY TEXT"
+        assert keyword_upsert.call_count == 2
 
         db.docs[_item_path("mem-1")] = _item(
             tier=MemoryTier.archive,
@@ -574,13 +674,14 @@ def test_projection_sync_converges_compatibility_row_across_create_update_and_de
             ledger_sequence=3,
         )
         delete = _event(
-            "compat-delete",
+            "projection-delete",
             action="delete",
             item_revision=6,
             content_hash="content-hash-6",
         )
-        db.docs[_event_path("compat-delete")] = delete
+        db.docs[_event_path("projection-delete")] = delete
         deleted = run_canonical_memory_outbox_worker_tick(
+            db_client=db,
             uid=UID,
             config=_config(),
             side_effects=side_effects,
@@ -588,8 +689,15 @@ def test_projection_sync_converges_compatibility_row_across_create_update_and_de
         )
 
     assert deleted["delivered_count"] == 1
-    assert projection_path not in db.docs
     assert graph_assertion_path not in db.docs
+    keyword_delete.assert_called_once_with(UID, "mem-1", db_client=db)
+    citation_prune.assert_called_once_with(UID, ["mem-1"], db_client=db)
+    review_purge.assert_called_once_with(
+        UID,
+        ["mem-1"],
+        reason="memory_outbox_projection_deleted",
+        db_client=db,
+    )
 
 
 def test_vector_sync_upserts_live_item_and_deletes_nonprojectable_or_missing_items():
@@ -625,6 +733,7 @@ def test_vector_sync_upserts_live_item_and_deletes_nonprojectable_or_missing_ite
     calls = []
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=_recording_side_effects(calls),
@@ -666,6 +775,7 @@ def test_stale_fences_are_safely_settled_without_side_effect(
     calls = []
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=_recording_side_effects(calls),
@@ -726,6 +836,7 @@ def test_reclaimed_processing_lease_repairs_current_state_before_ack_with_stale_
     )
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=side_effects,
@@ -756,6 +867,7 @@ def test_prior_source_generation_event_projects_unchanged_authoritative_item():
     calls = []
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=_recording_side_effects(calls),
@@ -796,6 +908,7 @@ def test_older_overlapping_run_repairs_newer_provider_state_before_acknowledging
             in_nested_run = True
             nested_summary.update(
                 run_canonical_memory_outbox_worker_tick(
+                    db_client=db,
                     uid=UID,
                     config=_config(worker_id="worker-newer"),
                     side_effects=side_effects,
@@ -822,6 +935,7 @@ def test_older_overlapping_run_repairs_newer_provider_state_before_acknowledging
     )
 
     older_summary = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(limit=1),
         side_effects=side_effects,
@@ -852,6 +966,7 @@ def test_barriers_settle_without_item_hydration_or_external_side_effect():
     calls = []
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=_recording_side_effects(calls),
@@ -873,6 +988,7 @@ def test_failures_retry_with_deterministic_backoff_then_dead_letter_without_raw_
     config = _config(max_attempts=3, base_backoff_seconds=10, max_backoff_seconds=60)
 
     first = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=config,
         side_effects=side_effects,
@@ -888,6 +1004,7 @@ def test_failures_retry_with_deterministic_backoff_then_dead_letter_without_raw_
 
     second_now = NOW + timedelta(seconds=10)
     second = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=config,
         side_effects=side_effects,
@@ -901,6 +1018,7 @@ def test_failures_retry_with_deterministic_backoff_then_dead_letter_without_raw_
 
     third_now = second_now + timedelta(seconds=20)
     third = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=config,
         side_effects=side_effects,
@@ -923,6 +1041,7 @@ def test_false_side_effect_result_is_not_acknowledged_as_delivered():
     db = _db(event, items={"mem-1": _item()})
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=_recording_side_effects([], results={"projection_upsert": False}),
@@ -960,12 +1079,14 @@ def test_retry_after_inconclusive_provider_write_repairs_newer_authoritative_rev
     )
 
     first = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=side_effects,
         now=NOW,
     )
     second = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=side_effects,
@@ -999,6 +1120,7 @@ def test_successful_side_effect_is_not_delivered_after_lease_ownership_is_lost()
     )
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=side_effects,
@@ -1019,6 +1141,7 @@ def test_delivered_ack_write_failure_leaves_processing_lease_for_safe_replay():
     calls = []
 
     result = run_canonical_memory_outbox_worker_tick(
+        db_client=db,
         uid=UID,
         config=_config(),
         side_effects=_recording_side_effects(calls),

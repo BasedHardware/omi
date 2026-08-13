@@ -41,24 +41,45 @@ def test_resolve_client_device_from_websocket_auth_message_uses_web_platform():
     assert context.platform == "web"
 
 
-def test_record_client_device_upserts_and_throttles(monkeypatch):
+@patch("database.redis_db.try_acquire_client_device_write_lock", return_value=True)
+def test_record_client_device_upserts_and_throttles(mock_lock):
+    import importlib
+    import os
+    from pathlib import Path
+
+    from tests.unit.memory_import_isolation import drop_stale_module
+
+    backend_dir = Path(__file__).resolve().parents[2]
+    users_file = os.path.join(backend_dir, "database", "users.py")
+    drop_stale_module("database.users", users_file)
     import database.users as users_db
-    from tests.store_fakes import FakeDocumentStore
 
-    store = FakeDocumentStore()
-    monkeypatch.setattr(users_db, "_store", lambda: store)
-    lock = MagicMock(return_value=True)
-    monkeypatch.setattr(users_db, "try_acquire_client_device_write_lock", lock)
+    importlib.reload(users_db)
 
-    users_db.record_client_device(
-        "uid-1",
-        client_device_id="macos_a1b2c3d4",
-        platform="macos",
-        app_version="1.0.0",
-    )
+    mock_doc = MagicMock()
+    mock_doc.get.return_value.exists = False
+    mock_collection = MagicMock()
+    mock_collection.document.return_value = mock_doc
+    mock_user = MagicMock()
+    mock_user.collection.return_value = mock_collection
 
-    lock.assert_called_once_with("uid-1", "macos_a1b2c3d4")
-    payload = store.get("users/uid-1/client_devices/macos_a1b2c3d4").to_dict()
+    mock_db = MagicMock()
+    original_db = users_db.__dict__.get("db")
+    users_db.db = mock_db
+    try:
+        mock_db.collection.return_value.document.return_value = mock_user
+        users_db.record_client_device(
+            "uid-1",
+            client_device_id="macos_a1b2c3d4",
+            platform="macos",
+            app_version="1.0.0",
+        )
+    finally:
+        users_db.db = original_db
+
+    mock_lock.assert_called_once_with("uid-1", "macos_a1b2c3d4")
+    mock_doc.set.assert_called_once()
+    payload = mock_doc.set.call_args[0][0]
     assert payload["platform"] == "macos"
     assert payload["device_class"] == "desktop"
     assert "first_seen_at" in payload

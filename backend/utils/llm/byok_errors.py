@@ -3,6 +3,16 @@ import logging
 from typing import Optional
 
 try:
+    from firebase_admin import messaging
+except ImportError:
+    messaging = None
+
+try:
+    import database.notifications as notification_db
+except ImportError:
+    notification_db = None
+
+try:
     from database.redis_db import (
         try_acquire_byok_llm_error_notification_lock,
         release_byok_llm_error_notification_lock,
@@ -27,7 +37,11 @@ from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
+_PERMANENT_FAILURE_CODES = frozenset({'UNREGISTERED', 'INVALID_REGISTRATION_TOKEN', 'NOT_FOUND'})
 _QUOTA_ERROR_NAMES = frozenset({'RateLimitError'})
+
+# Firebase Admin SDK rejects messaging.send_each() with more than 500 messages.
+_FCM_SEND_EACH_LIMIT = 500
 
 
 def get_llm_error_source(provider: Optional[str]) -> str:
@@ -123,15 +137,9 @@ def _release_byok_llm_error_lock(uid: str, provider: str, reason: str) -> None:
 
 
 def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> None:
-    # Import at call time, not module load: a top-level import created a cycle
-    # (utils.notifications -> utils.llm.clients -> ... -> byok_errors) whose broad ImportError
-    # fallback masked it by disabling delivery entirely (cubic review PR 10887). By call time both
-    # modules are fully initialized, so the import resolves and BYOK notifications are delivered.
-    try:
-        from utils.notifications import send_user_notification
-    except ImportError as e:
+    if notification_db is None or messaging is None:
         logger.error(
-            'BYOK LLM notification dependency unavailable uid=%s provider=%s reason=%s: %s', uid, provider, reason, e
+            'BYOK LLM notification dependencies unavailable uid=%s provider=%s reason=%s', uid, provider, reason
         )
         return
 
@@ -144,6 +152,18 @@ def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> N
         body = f'Your {provider_name} BYOK key was rejected. Update it in Omi settings to restore AI features.'
 
     try:
+        tokens = notification_db.get_all_tokens(uid)
+    except Exception as e:
+        logger.error(
+            'BYOK LLM notification token lookup failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e
+        )
+        return
+
+    if not tokens:
+        logger.info('No tokens found for BYOK LLM notification uid=%s provider=%s reason=%s', uid, provider, reason)
+        return
+
+    try:
         acquired = try_acquire_byok_llm_error_notification_lock(uid, provider, reason)
     except Exception as e:
         logger.error('BYOK LLM notification lock failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e)
@@ -153,20 +173,47 @@ def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> N
         logger.info('BYOK LLM notification already sent recently uid=%s provider=%s reason=%s', uid, provider, reason)
         return
 
-    # Delivery (device fan-out, invalid-address cleanup, and push-backend selection —
-    # fcm / unifiedpush / disabled) is owned by the shared transport; we only need the count.
+    notification = messaging.Notification(title='omi', body=body)
     data = {'type': 'byok_llm_error', 'provider': provider, 'reason': reason}
-    try:
-        success_count = send_user_notification(uid, 'omi', body, data)
-    except Exception as e:
-        logger.error('BYOK LLM notification send failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e)
-        success_count = 0
+    messages = [messaging.Message(token=token, notification=notification, data=data) for token in tokens]
+
+    invalid_tokens = []
+    success_count = 0
+    # Firebase rejects send_each() with more than 500 messages, so send in batches.
+    for start in range(0, len(messages), _FCM_SEND_EACH_LIMIT):
+        batch_tokens = tokens[start : start + _FCM_SEND_EACH_LIMIT]
+        batch_messages = messages[start : start + _FCM_SEND_EACH_LIMIT]
+        try:
+            response = messaging.send_each(batch_messages)
+        except Exception as e:
+            logger.error('BYOK LLM notification send failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e)
+            continue
+        for idx, result in enumerate(response.responses):
+            if result.success:
+                success_count += 1
+            elif result.exception:
+                error_code = getattr(result.exception, 'code', None)
+                if error_code in _PERMANENT_FAILURE_CODES:
+                    invalid_tokens.append(batch_tokens[idx])
+                else:
+                    logger.error('BYOK LLM notification FCM send failed uid=%s error=%s', uid, result.exception)
+
+    if invalid_tokens:
+        try:
+            notification_db.remove_bulk_tokens(invalid_tokens)
+        except Exception as e:
+            logger.error('BYOK LLM notification invalid token cleanup failed uid=%s: %s', uid, e)
 
     if success_count == 0:
-        # Nothing was delivered (no devices, push disabled, or send error) — release the dedupe
-        # lock so the next occurrence retries rather than being suppressed for 24h.
+        # No device actually received the notification — release the dedupe lock so
+        # the next occurrence retries rather than being suppressed for 24h.
         _release_byok_llm_error_lock(uid, provider, reason)
 
     logger.info(
-        'BYOK LLM notification sent uid=%s provider=%s reason=%s success=%s', uid, provider, reason, success_count
+        'BYOK LLM notification sent uid=%s provider=%s reason=%s success=%s total=%s',
+        uid,
+        provider,
+        reason,
+        success_count,
+        len(tokens),
     )

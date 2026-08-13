@@ -1,8 +1,5 @@
 from datetime import datetime, timezone
 
-import pytest
-
-import database.memory_non_active_routes as nar_module
 from database.memory_non_active_routes import (
     NonActiveRoute,
     NonActiveRouteOutcome,
@@ -10,15 +7,8 @@ from database.memory_non_active_routes import (
 )
 from utils.memory.non_active_route_audit import build_non_active_route_audit_report
 
-from tests.store_fakes import FakeDocumentStore
 
-
-@pytest.fixture
-def docs(monkeypatch):
-    """Route persistence through the neutral store seam; expose its backing dict."""
-    backing = {}
-    monkeypatch.setattr(nar_module, "_store", lambda: FakeDocumentStore(backing=backing))
-    return backing
+from tests.unit.fixtures.non_active_firestore import TransactionalFakeDb as _FakeDb
 
 
 def _persisted_route(route, source_id):
@@ -35,11 +25,12 @@ def _persisted_route(route, source_id):
     )
 
 
-def test_non_active_route_audit_counts_every_route_as_accounted_terminal_outcome(docs):
+def test_non_active_route_audit_counts_every_route_as_accounted_terminal_outcome():
+    db = _FakeDb()
     for route in NonActiveRoute:
-        persist_non_active_route_outcome(_persisted_route(route, f"source-{route.value}"))
+        persist_non_active_route_outcome(_persisted_route(route, f"source-{route.value}"), db_client=db)
 
-    report = build_non_active_route_audit_report("u1", docs.values())
+    report = build_non_active_route_audit_report("u1", db.docs.values())
 
     assert report.uid == "u1"
     assert report.status == "green"
@@ -65,21 +56,22 @@ def test_non_active_route_audit_counts_every_route_as_accounted_terminal_outcome
     assert all(item.remediation_state == "accounted_terminal_outcome" for item in report.evidence)
 
 
-def test_non_active_route_audit_is_red_for_missing_sources_duplicate_terminal_routes_and_default_visibility(docs):
-    first = persist_non_active_route_outcome(_persisted_route(NonActiveRoute.review, "source-dup"))
+def test_non_active_route_audit_is_red_for_missing_sources_duplicate_terminal_routes_and_default_visibility():
+    db = _FakeDb()
+    first = persist_non_active_route_outcome(_persisted_route(NonActiveRoute.review, "source-dup"), db_client=db)
     second = _persisted_route(NonActiveRoute.skip, "source-dup")
     second.idempotency_key = "idem-skip-dup"
-    persist_non_active_route_outcome(second)
+    persist_non_active_route_outcome(second, db_client=db)
 
-    visible_doc = dict(docs[f"users/u1/non_active_memory_routes/{first.outcome_id}"])
+    visible_doc = dict(db.docs[f"users/u1/non_active_memory_routes/{first.outcome_id}"])
     visible_doc["outcome_id"] = "nar_bad_visible"
     visible_doc["idempotency_key"] = "idem-bad-visible"
     visible_doc["payload_fingerprint"] = "bad"
     visible_doc["default_long_term_visible"] = True
-    docs["users/u1/non_active_memory_routes/nar_bad_visible"] = visible_doc
+    db.docs["users/u1/non_active_memory_routes/nar_bad_visible"] = visible_doc
 
     report = build_non_active_route_audit_report(
-        "u1", docs.values(), expected_source_ids=["source-dup", "source-missing"]
+        "u1", db.docs.values(), expected_source_ids=["source-dup", "source-missing"]
     )
 
     assert report.status == "red"

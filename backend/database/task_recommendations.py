@@ -6,11 +6,14 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
-from config.canonical_memory_cohort import is_canonical_memory_user
+from google.cloud import firestore
+
+from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
+from database._client import get_firestore_client
+from database.firestore_index_registry import ACTIVE_ATTENTION_OVERRIDE_QUERY
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
-from database.store import get_document_store
 from models.task_recommendation import (
     DecisionRecord,
     FeedbackCreate,
@@ -43,22 +46,6 @@ TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
 TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 
 
-def _store():
-    return get_document_store()
-
-
-def _collection_path(uid: str, collection: str) -> str:
-    return f'users/{uid}/{collection}'
-
-
-def _document_path(uid: str, collection: str, document_id: str) -> str:
-    return f'users/{uid}/{collection}/{document_id}'
-
-
-def _control_path(uid: str) -> str:
-    return f'users/{uid}/{TASK_INTELLIGENCE_CONTROL_COLLECTION}/{TASK_INTELLIGENCE_CONTROL_DOCUMENT}'
-
-
 class TaskRecommendationStoreError(RuntimeError):
     pass
 
@@ -83,14 +70,28 @@ class RecommendationGenerationMismatchError(TaskRecommendationStoreError):
     pass
 
 
+def _get_db(firestore_client: Any = None) -> Any:
+    return firestore_client or get_firestore_client()
+
+
+def _user_ref(uid: str, *, firestore_client: Any = None):
+    return _get_db(firestore_client).collection('users').document(uid)
+
+
+def _control_ref(uid: str, *, firestore_client: Any = None):
+    return (
+        _user_ref(uid, firestore_client=firestore_client)
+        .collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
+        .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
+    )
+
+
 def _validate_generation(
     snapshot: Any,
     *,
     uid: str,
     account_generation: int,
 ) -> None:
-    if not is_canonical_memory_user(uid):
-        raise RecommendationGenerationMismatchError('canonical task intelligence is not enabled')
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
@@ -116,7 +117,7 @@ def _record_malformed_embedded_payload(*, evaluation_id: str, error: ValidationE
         str(item.get('type', 'unknown')) for item in error.errors(include_input=False, include_url=False)[:5]
     ]
     logger.warning(
-        'Malformed embedded stored payload evaluation_id=%s validation_types=%s', evaluation_id, error_types
+        'Malformed embedded Firestore payload evaluation_id=%s validation_types=%s', evaluation_id, error_types
     )
     record_fallback(
         component='firestore_read',
@@ -138,10 +139,10 @@ def _request_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
 
 
-def _cleanup_expired_snapshot_receipts(uid: str, *, now: datetime) -> None:
-    receipts_path = _collection_path(uid, SNAPSHOT_RECEIPTS_COLLECTION)
-    for doc in _store().query(receipts_path, filters=[('expires_at', '<=', now)], limit=50):
-        _store().delete(doc.path)
+def _cleanup_expired_snapshot_receipts(uid: str, *, now: datetime, firestore_client: Any) -> None:
+    collection = _user_ref(uid, firestore_client=firestore_client).collection(SNAPSHOT_RECEIPTS_COLLECTION)
+    for snapshot in collection.where('expires_at', '<=', now).limit(50).stream():
+        snapshot.reference.delete()
 
 
 def get_intervention(
@@ -149,8 +150,14 @@ def get_intervention(
     intervention_id: str,
     *,
     account_generation: int = 0,
+    firestore_client: Any = None,
 ) -> Optional[dict[str, Any]]:
-    snapshot = _store().get(_document_path(uid, INTERVENTIONS_COLLECTION, intervention_id))
+    snapshot = (
+        _user_ref(uid, firestore_client=firestore_client)
+        .collection(INTERVENTIONS_COLLECTION)
+        .document(intervention_id)
+        .get()
+    )
     payload = _snapshot_dict(snapshot) if snapshot.exists else None
     return payload if payload is not None and payload.get('account_generation') == account_generation else None
 
@@ -162,7 +169,9 @@ def create_intervention(
     idempotency_key: str,
     account_generation: int = 0,
     now: datetime,
+    firestore_client: Any = None,
 ) -> tuple[InterventionRecord, bool]:
+    user_ref = _user_ref(uid, firestore_client=firestore_client)
     intervention_id = _stable_id('intervention', uid, account_generation, request.surface.value, idempotency_key)
     record = InterventionRecord(
         **request.model_dump(mode='python'),
@@ -173,14 +182,20 @@ def create_intervention(
     payload = record.model_dump(mode='python')
     payload['_request_hash'] = _request_hash(request.model_dump(mode='json'))
     payload['account_generation'] = account_generation
-    ref_path = _document_path(uid, INTERVENTIONS_COLLECTION, intervention_id)
-    control_path = _control_path(uid)
+    ref = user_ref.collection(INTERVENTIONS_COLLECTION).document(intervention_id)
+    client = _get_db(firestore_client)
+    transaction = client.transaction()
 
-    def apply(transaction):
-        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
-        existing = transaction.get(ref_path)
+    @firestore.transactional
+    def apply(write_transaction):
+        _validate_generation(
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
+        )
+        existing = ref.get(transaction=write_transaction)
         if not existing.exists:
-            transaction.set(ref_path, payload)
+            write_transaction.set(ref, payload)
             return record, True
         stored = _snapshot_dict(existing)
         if stored.get('_request_hash') != payload['_request_hash']:
@@ -193,7 +208,7 @@ def create_intervention(
             False,
         )
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def save_projection(
@@ -203,17 +218,27 @@ def save_projection(
     projection: WhatMattersNowProjection,
     decisions: list[DecisionRecord],
     account_generation: int = 0,
+    firestore_client: Any = None,
 ) -> WhatMattersNowProjection:
-    projection_path = _document_path(
-        uid, PROJECTIONS_COLLECTION, _stable_id('projection', account_generation, device_scope)
+    client = _get_db(firestore_client)
+    user_ref = _user_ref(uid, firestore_client=client)
+    projection_ref = user_ref.collection(PROJECTIONS_COLLECTION).document(
+        _stable_id('projection', account_generation, device_scope)
     )
-    decisions_path = _collection_path(uid, DECISIONS_COLLECTION)
-    decision_path = f"{decisions_path}/{_stable_id('decision', account_generation, device_scope, projection.evaluation_id)}"
-    control_path = _control_path(uid)
+    decisions_collection = user_ref.collection(DECISIONS_COLLECTION)
+    decision_ref = decisions_collection.document(
+        _stable_id('decision', account_generation, device_scope, projection.evaluation_id)
+    )
+    transaction = client.transaction()
 
-    def publish(transaction: Any) -> tuple[WhatMattersNowProjection, bool]:
-        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
-        current_snapshot = transaction.get(projection_path)
+    @firestore.transactional
+    def publish(write_transaction: Any) -> tuple[WhatMattersNowProjection, bool]:
+        _validate_generation(
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
+        )
+        current_snapshot = projection_ref.get(transaction=write_transaction)
         if current_snapshot.exists:
             current = parse_snapshot_strict(
                 WhatMattersNowProjection,
@@ -227,8 +252,8 @@ def save_projection(
         intervention_writes = []
         for recommendation in projection.recommendations:
             intervention_payload = recommendation.model_dump(mode='python')
-            intervention_path = _document_path(uid, INTERVENTIONS_COLLECTION, recommendation.intervention_id)
-            existing_intervention = transaction.get(intervention_path)
+            intervention_ref = user_ref.collection(INTERVENTIONS_COLLECTION).document(recommendation.intervention_id)
+            existing_intervention = intervention_ref.get(transaction=write_transaction)
             existing_created_at = (
                 _snapshot_dict(existing_intervention).get('created_at') if existing_intervention.exists else None
             )
@@ -243,12 +268,12 @@ def save_projection(
                     'created_at': existing_created_at or projection.generated_at,
                 }
             )
-            intervention_writes.append((intervention_path, intervention_payload))
+            intervention_writes.append((intervention_ref, intervention_payload))
         projection_payload = projection.model_dump(mode='python')
         projection_payload['account_generation'] = account_generation
-        transaction.set(projection_path, projection_payload)
-        transaction.set(
-            decision_path,
+        write_transaction.set(projection_ref, projection_payload)
+        write_transaction.set(
+            decision_ref,
             {
                 'device_scope': device_scope,
                 'account_generation': account_generation,
@@ -259,29 +284,29 @@ def save_projection(
                 'decisions': [decision.model_dump(mode='python') for decision in decisions],
             },
         )
-        for intervention_path, intervention_payload in intervention_writes:
-            transaction.set(intervention_path, intervention_payload)
+        for intervention_ref, intervention_payload in intervention_writes:
+            write_transaction.set(intervention_ref, intervention_payload)
         return projection, True
 
-    published_projection, did_publish = _store().run_transaction(publish)
+    published_projection, did_publish = publish(transaction)
     if not did_publish:
         return published_projection
 
-    store = _store()
-    batch = store.batch()
+    batch = client.batch()
     history = []
-    for doc in store.query(
-        decisions_path,
-        filters=[('device_scope', '==', device_scope), ('account_generation', '==', account_generation)],
+    for snapshot in (
+        decisions_collection.where('device_scope', '==', device_scope)
+        .where('account_generation', '==', account_generation)
+        .stream()
     ):
-        payload = _snapshot_dict(doc)
+        payload = _snapshot_dict(snapshot)
         if payload.get('evaluation_id') == projection.evaluation_id:
             continue
-        history.append((payload.get('evaluated_at'), payload.get('expires_at'), doc.path))
+        history.append((payload.get('evaluated_at'), payload.get('expires_at'), snapshot.reference))
     history.sort(key=lambda item: item[0] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    for index, (_, expires_at, path) in enumerate(history):
+    for index, (_, expires_at, ref) in enumerate(history):
         if expires_at is None or expires_at <= projection.generated_at or index >= MAX_DECISION_HISTORY_PER_DEVICE - 1:
-            batch.delete(path)
+            batch.delete(ref)
     batch.commit()
     return published_projection
 
@@ -293,17 +318,26 @@ def get_projection(
     now: datetime,
     include_expired: bool = False,
     account_generation: int = 0,
+    firestore_client: Any = None,
 ) -> Optional[WhatMattersNowProjection]:
-    ref_path = _document_path(
-        uid, PROJECTIONS_COLLECTION, _stable_id('projection', account_generation, device_scope)
+    client = _get_db(firestore_client)
+    ref = (
+        _user_ref(uid, firestore_client=client)
+        .collection(PROJECTIONS_COLLECTION)
+        .document(_stable_id('projection', account_generation, device_scope))
     )
-    control_path = _control_path(uid)
+    transaction = client.transaction()
 
-    def read(transaction):
-        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
-        return transaction.get(ref_path)
+    @firestore.transactional
+    def read(read_transaction):
+        _validate_generation(
+            _control_ref(uid, firestore_client=client).get(transaction=read_transaction),
+            uid=uid,
+            account_generation=account_generation,
+        )
+        return ref.get(transaction=read_transaction)
 
-    snapshot = _store().run_transaction(read)
+    snapshot = read(transaction)
     if not snapshot.exists:
         return None
     payload = _snapshot_dict(snapshot)
@@ -342,17 +376,26 @@ def get_decisions(
     *,
     device_scope: str,
     account_generation: int = 0,
+    firestore_client: Any = None,
 ) -> list[DecisionRecord]:
-    ref_path = _document_path(
-        uid, DECISIONS_COLLECTION, _stable_id('decision', account_generation, device_scope, evaluation_id)
+    client = _get_db(firestore_client)
+    ref = (
+        _user_ref(uid, firestore_client=client)
+        .collection(DECISIONS_COLLECTION)
+        .document(_stable_id('decision', account_generation, device_scope, evaluation_id))
     )
-    control_path = _control_path(uid)
+    transaction = client.transaction()
 
-    def read(transaction):
-        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
-        return transaction.get(ref_path)
+    @firestore.transactional
+    def read(read_transaction):
+        _validate_generation(
+            _control_ref(uid, firestore_client=client).get(transaction=read_transaction),
+            uid=uid,
+            account_generation=account_generation,
+        )
+        return ref.get(transaction=read_transaction)
 
-    snapshot = _store().run_transaction(read)
+    snapshot = read(transaction)
     if not snapshot.exists:
         return []
     payload = _snapshot_dict(snapshot)
@@ -392,17 +435,26 @@ def get_evaluation_projection(
     device_scope: str,
     now: datetime,
     account_generation: int = 0,
+    firestore_client: Any = None,
 ) -> Optional[WhatMattersNowProjection]:
-    ref_path = _document_path(
-        uid, DECISIONS_COLLECTION, _stable_id('decision', account_generation, device_scope, evaluation_id)
+    client = _get_db(firestore_client)
+    ref = (
+        _user_ref(uid, firestore_client=client)
+        .collection(DECISIONS_COLLECTION)
+        .document(_stable_id('decision', account_generation, device_scope, evaluation_id))
     )
-    control_path = _control_path(uid)
+    transaction = client.transaction()
 
-    def read(transaction):
-        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
-        return transaction.get(ref_path)
+    @firestore.transactional
+    def read(read_transaction):
+        _validate_generation(
+            _control_ref(uid, firestore_client=client).get(transaction=read_transaction),
+            uid=uid,
+            account_generation=account_generation,
+        )
+        return ref.get(transaction=read_transaction)
 
-    snapshot = _store().run_transaction(read)
+    snapshot = read(transaction)
     if not snapshot.exists:
         return None
     payload = _snapshot_dict(snapshot)
@@ -419,7 +471,10 @@ def create_feedback(
     now: datetime,
     override_expires_at: Optional[datetime],
     account_generation: int = 0,
+    firestore_client: Any = None,
 ) -> tuple[FeedbackRecord, bool]:
+    client = _get_db(firestore_client)
+    user_ref = _user_ref(uid, firestore_client=client)
     feedback_id = _stable_id('feedback', uid, account_generation, idempotency_key)
     attribution_chain_id = _stable_id('attr', uid, account_generation, request.subject_kind.value, request.subject_id)
     dedupe_key: Optional[str] = None
@@ -436,15 +491,20 @@ def create_feedback(
     payload['_request_hash'] = _request_hash(request.model_dump(mode='json'))
     payload['account_generation'] = account_generation
     payload['_override_expires_at'] = override_expires_at
-    ref_path = _document_path(uid, FEEDBACK_COLLECTION, feedback_id)
-    control_path = _control_path(uid)
+    ref = user_ref.collection(FEEDBACK_COLLECTION).document(feedback_id)
+    transaction = client.transaction()
 
-    def apply(transaction):
+    @firestore.transactional
+    def apply(write_transaction):
         nonlocal attribution_chain_id, dedupe_key, record, payload
-        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
+        _validate_generation(
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
+        )
         if request.intervention_id is not None:
-            intervention_path = _document_path(uid, INTERVENTIONS_COLLECTION, request.intervention_id)
-            intervention_snapshot = transaction.get(intervention_path)
+            intervention_ref = user_ref.collection(INTERVENTIONS_COLLECTION).document(request.intervention_id)
+            intervention_snapshot = intervention_ref.get(transaction=write_transaction)
             intervention_payload = _snapshot_dict(intervention_snapshot)
             if not intervention_snapshot.exists or intervention_payload.get('account_generation') != account_generation:
                 raise InterventionNotFoundError(request.intervention_id)
@@ -464,7 +524,7 @@ def create_feedback(
                 'account_generation': account_generation,
                 '_override_expires_at': override_expires_at,
             }
-        existing = transaction.get(ref_path)
+        existing = ref.get(transaction=write_transaction)
         if existing.exists:
             stored = _snapshot_dict(existing)
             if stored.get('_request_hash') != payload['_request_hash']:
@@ -473,10 +533,10 @@ def create_feedback(
             stored_override_expiry = stored.get('_override_expires_at')
             if isinstance(stored_dedupe_key, str) and isinstance(stored_override_expiry, datetime):
                 override_id = _stable_id('override', uid, account_generation, stored_dedupe_key)
-                override_path = _document_path(uid, ATTENTION_OVERRIDES_COLLECTION, override_id)
-                if not transaction.get(override_path).exists:
-                    transaction.set(
-                        override_path,
+                override_ref = user_ref.collection(ATTENTION_OVERRIDES_COLLECTION).document(override_id)
+                if not override_ref.get(transaction=write_transaction).exists:
+                    write_transaction.set(
+                        override_ref,
                         {
                             'override_id': override_id,
                             'account_generation': account_generation,
@@ -496,11 +556,11 @@ def create_feedback(
                 ),
                 False,
             )
-        transaction.set(ref_path, payload)
+        write_transaction.set(ref, payload)
         if override_expires_at is not None and dedupe_key is not None:
             override_id = _stable_id('override', uid, account_generation, dedupe_key)
-            transaction.set(
-                _document_path(uid, ATTENTION_OVERRIDES_COLLECTION, override_id),
+            write_transaction.set(
+                user_ref.collection(ATTENTION_OVERRIDES_COLLECTION).document(override_id),
                 {
                     'override_id': override_id,
                     'account_generation': account_generation,
@@ -515,7 +575,7 @@ def create_feedback(
             )
         return record, True
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def list_active_override_dedupe_keys(
@@ -523,17 +583,17 @@ def list_active_override_dedupe_keys(
     *,
     now: datetime,
     account_generation: int = 0,
+    firestore_client: Any = None,
 ) -> set[str]:
-    # Composite index for this (account_generation ==, expires_at >) serving query is declared in
-    # the shared index registry as task_attention_overrides_active_by_generation.
-    docs = _store().query(
-        _collection_path(uid, ATTENTION_OVERRIDES_COLLECTION),
-        filters=[('account_generation', '==', account_generation), ('expires_at', '>', now)],
+    query = ACTIVE_ATTENTION_OVERRIDE_QUERY.build(
+        _user_ref(uid, firestore_client=firestore_client).collection(ATTENTION_OVERRIDES_COLLECTION),
+        {'account_generation': account_generation, 'now': now},
+        field_filter_factory=FieldFilter,
     )
     return {
         str(payload['dedupe_key'])
-        for doc in docs
-        if (payload := _snapshot_dict(doc)).get('dedupe_key')
+        for snapshot in query.stream()
+        if (payload := _snapshot_dict(snapshot)).get('dedupe_key')
     }
 
 
@@ -543,37 +603,43 @@ def link_feedback_completion_candidate(
     candidate_id: str,
     *,
     account_generation: int,
+    firestore_client: Any = None,
 ) -> None:
-    ref_path = _document_path(uid, FEEDBACK_COLLECTION, feedback_id)
-    control_path = _control_path(uid)
+    client = _get_db(firestore_client)
+    ref = _user_ref(uid, firestore_client=client).collection(FEEDBACK_COLLECTION).document(feedback_id)
+    transaction = client.transaction()
 
-    def apply(transaction):
-        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
-        snapshot = transaction.get(ref_path)
+    @firestore.transactional
+    def apply(write_transaction):
+        _validate_generation(
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
+        )
+        snapshot = ref.get(transaction=write_transaction)
         payload = _snapshot_dict(snapshot)
         if not snapshot.exists or payload.get('account_generation') != account_generation:
             raise RecommendationGenerationMismatchError('feedback generation mismatch')
         payload['proposed_completion_candidate_id'] = candidate_id
-        transaction.set(ref_path, payload)
+        write_transaction.set(ref, payload)
 
-    _store().run_transaction(apply)
+    apply(transaction)
 
 
 def _first_chain_record(
-    uid: str, collection_name: str, attribution_chain_id: str, account_generation: int
+    user_ref: Any, collection_name: str, attribution_chain_id: str, account_generation: int
 ) -> Optional[dict[str, Any]]:
-    matches = _store().query(
-        _collection_path(uid, collection_name),
-        filters=[
-            ('attribution_chain_id', '==', attribution_chain_id),
-            ('account_generation', '==', account_generation),
-        ],
-        limit=1,
+    matches = list(
+        user_ref.collection(collection_name)
+        .where(filter=FieldFilter('attribution_chain_id', '==', attribution_chain_id))
+        .where(filter=FieldFilter('account_generation', '==', account_generation))
+        .limit(1)
+        .stream()
     )
     return _snapshot_dict(matches[0]) if matches else None
 
 
-def _outcome_matches_chain(uid: str, request: OutcomeCreate, source: dict[str, Any]) -> bool:
+def _outcome_matches_chain(user_ref: Any, request: OutcomeCreate, source: dict[str, Any]) -> bool:
     raw_source_kind = source.get('feedback_subject_kind') or source.get('subject_kind') or ''
     source_kind = str(getattr(raw_source_kind, 'value', raw_source_kind))
     source_id = str(source.get('feedback_subject_id') or source.get('subject_id') or '')
@@ -581,14 +647,14 @@ def _outcome_matches_chain(uid: str, request: OutcomeCreate, source: dict[str, A
     workstream_ids: set[str] = set()
 
     if source_kind == 'candidate':
-        candidate_snapshot = _store().get(_document_path(uid, 'candidates', source_id))
+        candidate_snapshot = user_ref.collection('candidates').document(source_id).get()
         if candidate_snapshot.exists:
             candidate = _snapshot_dict(candidate_snapshot)
             result_task_id = candidate.get('result_task_id')
             result_workstream_id = candidate.get('result_workstream_id')
             if isinstance(result_task_id, str):
                 allowed.add(('task', result_task_id))
-                task_snapshot = _store().get(_document_path(uid, 'action_items', result_task_id))
+                task_snapshot = user_ref.collection('action_items').document(result_task_id).get()
                 if task_snapshot.exists:
                     task_workstream_id = _snapshot_dict(task_snapshot).get('workstream_id')
                     if isinstance(task_workstream_id, str):
@@ -596,7 +662,7 @@ def _outcome_matches_chain(uid: str, request: OutcomeCreate, source: dict[str, A
             if isinstance(result_workstream_id, str):
                 workstream_ids.add(result_workstream_id)
     elif source_kind == 'task':
-        task_snapshot = _store().get(_document_path(uid, 'action_items', source_id))
+        task_snapshot = user_ref.collection('action_items').document(source_id).get()
         if task_snapshot.exists:
             workstream_id = _snapshot_dict(task_snapshot).get('workstream_id')
             if isinstance(workstream_id, str):
@@ -607,8 +673,12 @@ def _outcome_matches_chain(uid: str, request: OutcomeCreate, source: dict[str, A
     allowed.update(('workstream', workstream_id) for workstream_id in workstream_ids)
     if request.subject_kind.value == 'artifact':
         for workstream_id in workstream_ids:
-            artifact = _store().get(
-                f'{_document_path(uid, "workstreams", workstream_id)}/artifact_refs/{request.subject_id}'
+            artifact = (
+                user_ref.collection('workstreams')
+                .document(workstream_id)
+                .collection('artifact_refs')
+                .document(request.subject_id)
+                .get()
             )
             if artifact.exists:
                 allowed.add(('artifact', request.subject_id))
@@ -632,27 +702,35 @@ def create_outcome(
     idempotency_key: str,
     now: datetime,
     account_generation: int = 0,
+    firestore_client: Any = None,
 ) -> tuple[OutcomeRecord, bool]:
-    source = _first_chain_record(uid, INTERVENTIONS_COLLECTION, request.attribution_chain_id, account_generation)
+    user_ref = _user_ref(uid, firestore_client=firestore_client)
+    source = _first_chain_record(user_ref, INTERVENTIONS_COLLECTION, request.attribution_chain_id, account_generation)
     if source is None:
-        source = _first_chain_record(uid, FEEDBACK_COLLECTION, request.attribution_chain_id, account_generation)
+        source = _first_chain_record(user_ref, FEEDBACK_COLLECTION, request.attribution_chain_id, account_generation)
     if source is None:
         raise AttributionChainNotFoundError(request.attribution_chain_id)
-    if not _outcome_matches_chain(uid, request, source):
+    if not _outcome_matches_chain(user_ref, request, source):
         raise IdempotencyConflictError('outcome subject or code does not match attribution chain')
     outcome_id = _stable_id('outcome', uid, account_generation, idempotency_key)
     record = OutcomeRecord(**request.model_dump(mode='python'), outcome_id=outcome_id, occurred_at=now)
     payload = record.model_dump(mode='python')
     payload['_request_hash'] = _request_hash(request.model_dump(mode='json'))
     payload['account_generation'] = account_generation
-    ref_path = _document_path(uid, OUTCOMES_COLLECTION, outcome_id)
-    control_path = _control_path(uid)
+    ref = user_ref.collection(OUTCOMES_COLLECTION).document(outcome_id)
+    client = _get_db(firestore_client)
+    transaction = client.transaction()
 
-    def apply(transaction):
-        _validate_generation(transaction.get(control_path), uid=uid, account_generation=account_generation)
-        existing = transaction.get(ref_path)
+    @firestore.transactional
+    def apply(write_transaction):
+        _validate_generation(
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
+        )
+        existing = ref.get(transaction=write_transaction)
         if not existing.exists:
-            transaction.set(ref_path, payload)
+            write_transaction.set(ref, payload)
             return record, True
         stored = _snapshot_dict(existing)
         if stored.get('_request_hash') != payload['_request_hash']:
@@ -665,7 +743,7 @@ def create_outcome(
             False,
         )
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def replace_context_snapshot(
@@ -674,29 +752,37 @@ def replace_context_snapshot(
     *,
     account_generation: int = 0,
     idempotency_key: str | None = None,
+    firestore_client: Any = None,
 ) -> SnapshotReceipt:
-    ref_path = _document_path(
-        uid, CONTEXT_SNAPSHOTS_COLLECTION, _stable_id('context', account_generation, snapshot.device_id)
+    client = _get_db(firestore_client)
+    ref = (
+        _user_ref(uid, firestore_client=client)
+        .collection(CONTEXT_SNAPSHOTS_COLLECTION)
+        .document(_stable_id('context', account_generation, snapshot.device_id))
     )
-    control_path = _control_path(uid)
+    transaction = client.transaction()
     request_key = idempotency_key or snapshot.snapshot_id
     request_hash = _request_hash(snapshot.model_dump(mode='json'))
-    receipt_id = _stable_id('snapshot-receipt', account_generation, 'context', request_key)
-    receipt_path = _document_path(uid, SNAPSHOT_RECEIPTS_COLLECTION, receipt_id)
+    receipt_ref = (
+        _user_ref(uid, firestore_client=client)
+        .collection(SNAPSHOT_RECEIPTS_COLLECTION)
+        .document(_stable_id('snapshot-receipt', account_generation, 'context', request_key))
+    )
 
-    def apply(transaction):
+    @firestore.transactional
+    def apply(write_transaction):
         _validate_generation(
-            transaction.get(control_path),
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
             uid=uid,
             account_generation=account_generation,
         )
-        prior_receipt = transaction.get(receipt_path)
+        prior_receipt = receipt_ref.get(transaction=write_transaction)
         if prior_receipt.exists:
             prior = _snapshot_dict(prior_receipt)
             if prior.get('request_hash') != request_hash:
                 raise IdempotencyConflictError('idempotency key was used for a different context snapshot')
             return SnapshotReceipt.model_validate(prior['receipt'])
-        stored_snapshot = transaction.get(ref_path)
+        stored_snapshot = ref.get(transaction=write_transaction)
         replaced = stored_snapshot.exists
         if replaced:
             stored_payload = _snapshot_dict(stored_snapshot)
@@ -711,11 +797,11 @@ def replace_context_snapshot(
                 raise IdempotencyConflictError('context snapshot timestamp was reused for different state')
         payload = snapshot.model_dump(mode='python')
         payload['account_generation'] = account_generation
-        payload['_receipt_id'] = receipt_id
-        transaction.set(ref_path, payload)
+        payload['_receipt_id'] = receipt_ref.id
+        write_transaction.set(ref, payload)
         receipt = SnapshotReceipt(snapshot_id=snapshot.snapshot_id, replaced=replaced, expires_at=snapshot.expires_at)
-        transaction.set(
-            receipt_path,
+        write_transaction.set(
+            receipt_ref,
             {
                 'account_generation': account_generation,
                 'request_hash': request_hash,
@@ -725,8 +811,8 @@ def replace_context_snapshot(
         )
         return receipt
 
-    result = _store().run_transaction(apply)
-    _cleanup_expired_snapshot_receipts(uid, now=snapshot.generated_at)
+    result = apply(transaction)
+    _cleanup_expired_snapshot_receipts(uid, now=snapshot.generated_at, firestore_client=client)
     return result
 
 
@@ -736,11 +822,14 @@ def get_context_snapshot(
     *,
     now: datetime,
     account_generation: int = 0,
+    firestore_client: Any = None,
 ) -> Optional[NormalizedContextSnapshot]:
-    ref_path = _document_path(
-        uid, CONTEXT_SNAPSHOTS_COLLECTION, _stable_id('context', account_generation, device_id)
+    ref = (
+        _user_ref(uid, firestore_client=firestore_client)
+        .collection(CONTEXT_SNAPSHOTS_COLLECTION)
+        .document(_stable_id('context', account_generation, device_id))
     )
-    snapshot = _store().get(ref_path)
+    snapshot = ref.get()
     if not snapshot.exists:
         return None
     payload = _snapshot_dict(snapshot)
@@ -754,11 +843,13 @@ def get_context_snapshot(
     if record is None:
         return None
     if record.expires_at <= now:
-        _store().delete(ref_path)
+        ref.delete()
         receipt_id = payload.get('_receipt_id')
         if isinstance(receipt_id, str):
-            _store().delete(_document_path(uid, SNAPSHOT_RECEIPTS_COLLECTION, receipt_id))
-        _cleanup_expired_snapshot_receipts(uid, now=now)
+            _user_ref(uid, firestore_client=firestore_client).collection(SNAPSHOT_RECEIPTS_COLLECTION).document(
+                receipt_id
+            ).delete()
+        _cleanup_expired_snapshot_receipts(uid, now=now, firestore_client=_get_db(firestore_client))
         return None
     return record
 
@@ -769,30 +860,36 @@ def replace_open_loop_snapshot(
     *,
     account_generation: int = 0,
     idempotency_key: str | None = None,
+    firestore_client: Any = None,
 ) -> SnapshotReceipt:
+    client = _get_db(firestore_client)
     snapshot_key = _stable_id(
         'loop-snapshot', account_generation, snapshot.device_id, snapshot.runtime_id, snapshot.workstream_id
     )
-    ref_path = _document_path(uid, OPEN_LOOP_SNAPSHOTS_COLLECTION, snapshot_key)
-    control_path = _control_path(uid)
+    ref = _user_ref(uid, firestore_client=client).collection(OPEN_LOOP_SNAPSHOTS_COLLECTION).document(snapshot_key)
+    transaction = client.transaction()
     request_key = idempotency_key or snapshot_key
     request_hash = _request_hash(snapshot.model_dump(mode='json'))
-    receipt_id = _stable_id('snapshot-receipt', account_generation, 'open-loop', request_key)
-    receipt_path = _document_path(uid, SNAPSHOT_RECEIPTS_COLLECTION, receipt_id)
+    receipt_ref = (
+        _user_ref(uid, firestore_client=client)
+        .collection(SNAPSHOT_RECEIPTS_COLLECTION)
+        .document(_stable_id('snapshot-receipt', account_generation, 'open-loop', request_key))
+    )
 
-    def apply(transaction):
+    @firestore.transactional
+    def apply(write_transaction):
         _validate_generation(
-            transaction.get(control_path),
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
             uid=uid,
             account_generation=account_generation,
         )
-        prior_receipt = transaction.get(receipt_path)
+        prior_receipt = receipt_ref.get(transaction=write_transaction)
         if prior_receipt.exists:
             prior = _snapshot_dict(prior_receipt)
             if prior.get('request_hash') != request_hash:
                 raise IdempotencyConflictError('idempotency key was used for a different open-loop snapshot')
             return SnapshotReceipt.model_validate(prior['receipt'])
-        stored_snapshot = transaction.get(ref_path)
+        stored_snapshot = ref.get(transaction=write_transaction)
         replaced = stored_snapshot.exists
         if replaced:
             stored_payload = _snapshot_dict(stored_snapshot)
@@ -807,11 +904,11 @@ def replace_open_loop_snapshot(
                 raise IdempotencyConflictError('open-loop snapshot timestamp was reused for different state')
         payload = snapshot.model_dump(mode='python')
         payload['account_generation'] = account_generation
-        payload['_receipt_id'] = receipt_id
-        transaction.set(ref_path, payload)
+        payload['_receipt_id'] = receipt_ref.id
+        write_transaction.set(ref, payload)
         receipt = SnapshotReceipt(snapshot_id=snapshot_key, replaced=replaced, expires_at=snapshot.expires_at)
-        transaction.set(
-            receipt_path,
+        write_transaction.set(
+            receipt_ref,
             {
                 'account_generation': account_generation,
                 'request_hash': request_hash,
@@ -821,8 +918,8 @@ def replace_open_loop_snapshot(
         )
         return receipt
 
-    result = _store().run_transaction(apply)
-    _cleanup_expired_snapshot_receipts(uid, now=snapshot.generated_at)
+    result = apply(transaction)
+    _cleanup_expired_snapshot_receipts(uid, now=snapshot.generated_at, firestore_client=client)
     return result
 
 
@@ -832,51 +929,52 @@ def list_open_loop_snapshots(
     device_id: str,
     now: datetime,
     account_generation: int,
+    firestore_client: Any = None,
 ) -> list[OpenLoopSnapshot]:
-    loops_path = _collection_path(uid, OPEN_LOOP_SNAPSHOTS_COLLECTION)
-    docs = _store().query(
-        loops_path,
-        filters=[('device_id', '==', device_id), ('account_generation', '==', account_generation)],
-    )
+    collection = _user_ref(uid, firestore_client=firestore_client).collection(OPEN_LOOP_SNAPSHOTS_COLLECTION)
+    query = collection.where('device_id', '==', device_id).where('account_generation', '==', account_generation)
     records: list[OpenLoopSnapshot] = []
-    for doc in docs:
-        payload = _snapshot_dict(doc)
+    for snapshot in query.stream():
+        payload = _snapshot_dict(snapshot)
         record = parse_snapshot_or_none(
             OpenLoopSnapshot,
-            doc,
+            snapshot,
             payload_from_snapshot=lambda _snapshot: _without_generation(payload),
         )
         if record is None:
             continue
         if record.expires_at <= now:
-            _store().delete(doc.path)
+            snapshot.reference.delete()
             receipt_id = payload.get('_receipt_id')
             if isinstance(receipt_id, str):
-                _store().delete(_document_path(uid, SNAPSHOT_RECEIPTS_COLLECTION, receipt_id))
+                _user_ref(uid, firestore_client=firestore_client).collection(SNAPSHOT_RECEIPTS_COLLECTION).document(
+                    receipt_id
+                ).delete()
             continue
         records.append(record)
-    _cleanup_expired_snapshot_receipts(uid, now=now)
+    _cleanup_expired_snapshot_receipts(uid, now=now, firestore_client=_get_db(firestore_client))
     records.sort(key=lambda record: (record.workstream_id, record.runtime_id))
     return records
 
 
 def load_canonical_product_state(
-    uid: str, *, account_generation: int = 0
+    uid: str, *, account_generation: int = 0, firestore_client: Any = None
 ) -> dict[str, list[dict[str, Any]]]:
     """Load bounded canonical state; device-local execution state is loaded separately."""
 
-    store = _store()
+    user_ref = _user_ref(uid, firestore_client=firestore_client)
 
     def load_collection(name: str, limit: int) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
-        collection_path = _collection_path(uid, name)
-        if account_generation > 0:
-            docs = store.query(collection_path, filters=[('account_generation', '==', account_generation)], limit=limit)
-        else:
-            docs = store.query(collection_path, limit=limit)
-        for doc in docs:
-            payload = _snapshot_dict(doc)
-            payload.setdefault('id', doc.id)
+        collection = user_ref.collection(name)
+        query = (
+            collection.where('account_generation', '==', account_generation).limit(limit)
+            if account_generation > 0
+            else collection.limit(limit)
+        )
+        for snapshot in query.stream():
+            payload = _snapshot_dict(snapshot)
+            payload.setdefault('id', snapshot.id)
             stored_generation = payload.get('account_generation', 0)
             if stored_generation == account_generation:
                 records.append(payload)
@@ -894,19 +992,24 @@ def load_canonical_product_state(
         workstream_id = str(workstream.get('workstream_id') or workstream.get('id') or '')
         if not workstream_id:
             continue
-        workstream_path = _document_path(uid, 'workstreams', workstream_id)
+        workstream_ref = user_ref.collection('workstreams').document(workstream_id)
         if len(artifacts) < 200:
-            for doc in store.query(f'{workstream_path}/artifact_refs', limit=100):
-                payload = _snapshot_dict(doc)
-                payload.setdefault('artifact_id', doc.id)
+            for snapshot in workstream_ref.collection('artifact_refs').limit(100).stream():
+                payload = _snapshot_dict(snapshot)
+                payload.setdefault('artifact_id', snapshot.id)
                 payload.setdefault('workstream_id', workstream_id)
                 artifacts.append(payload)
                 if len(artifacts) >= 200:
                     break
         if len(workstream_events) < 200:
-            for doc in store.query(f'{workstream_path}/events', order_by='sequence', direction='desc', limit=20):
-                payload = _snapshot_dict(doc)
-                payload.setdefault('event_id', doc.id)
+            for snapshot in (
+                workstream_ref.collection('events')
+                .order_by('sequence', direction=firestore.Query.DESCENDING)
+                .limit(20)
+                .stream()
+            ):
+                payload = _snapshot_dict(snapshot)
+                payload.setdefault('event_id', snapshot.id)
                 payload.setdefault('workstream_id', workstream_id)
                 workstream_events.append(payload)
                 if len(workstream_events) >= 200:

@@ -1,18 +1,17 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from database.store import Filter, get_document_store
+from google.cloud.firestore_v1 import FieldFilter
+
+from ._client import db
 from models.announcement import Announcement, AnnouncementType, TriggerType
-
-
-def _store():
-    return get_document_store()
 
 
 def get_announcement_by_id(announcement_id: str) -> Optional[Announcement]:
     """Get a single announcement by ID."""
-    doc = _store().get(f"announcements/{announcement_id}")
-    if doc.exists:
+    doc_ref = db.collection("announcements").document(announcement_id)
+    doc = doc_ref.get()
+    if getattr(doc, "exists", False):
         raw: object = doc.to_dict()
         if isinstance(raw, dict):
             return Announcement.from_dict(cast(Dict[str, Any], raw))
@@ -25,9 +24,12 @@ def get_app_changelogs(from_version: str, to_version: str) -> List[Announcement]
     Returns changelogs where from_version < app_version <= to_version.
     Sorted by app_version descending (newest first).
     """
-    filters: List[Filter] = [("type", "==", AnnouncementType.CHANGELOG.value), ("active", "==", True)]
+    announcements_ref = db.collection("announcements")
+    query = announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.CHANGELOG.value)).where(
+        filter=FieldFilter("active", "==", True)
+    )
 
-    docs = _store().query("announcements", filters=filters)
+    docs = query.stream()
     changelogs: List[Announcement] = []
 
     for doc in docs:
@@ -55,9 +57,12 @@ def get_recent_changelogs(limit: int = 5, max_version: Optional[str] = None) -> 
     Returns up to `limit` changelogs sorted by version descending.
     If max_version is provided, only returns changelogs with app_version <= max_version.
     """
-    filters: List[Filter] = [("type", "==", AnnouncementType.CHANGELOG.value), ("active", "==", True)]
+    announcements_ref = db.collection("announcements")
+    query = announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.CHANGELOG.value)).where(
+        filter=FieldFilter("active", "==", True)
+    )
 
-    docs = _store().query("announcements", filters=filters)
+    docs = query.stream()
     changelogs: List[Announcement] = []
 
     for doc in docs:
@@ -85,13 +90,14 @@ def get_firmware_features(firmware_version: str, device_model: Optional[str] = N
     Get feature announcements for a specific firmware version.
     Optionally filter by device model.
     """
-    filters: List[Filter] = [
-        ("type", "==", AnnouncementType.FEATURE.value),
-        ("active", "==", True),
-        ("firmware_version", "==", firmware_version),
-    ]
+    announcements_ref = db.collection("announcements")
+    query = (
+        announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.FEATURE.value))
+        .where(filter=FieldFilter("active", "==", True))
+        .where(filter=FieldFilter("firmware_version", "==", firmware_version))
+    )
 
-    docs = _store().query("announcements", filters=filters)
+    docs = query.stream()
     features: List[Announcement] = []
 
     for doc in docs:
@@ -115,13 +121,14 @@ def get_app_features(app_version: str) -> List[Announcement]:
     """
     Get feature announcements for a specific app version.
     """
-    filters: List[Filter] = [
-        ("type", "==", AnnouncementType.FEATURE.value),
-        ("active", "==", True),
-        ("app_version", "==", app_version),
-    ]
+    announcements_ref = db.collection("announcements")
+    query = (
+        announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.FEATURE.value))
+        .where(filter=FieldFilter("active", "==", True))
+        .where(filter=FieldFilter("app_version", "==", app_version))
+    )
 
-    docs = _store().query("announcements", filters=filters)
+    docs = query.stream()
     out: List[Announcement] = []
     for doc in docs:
         raw: object = doc.to_dict()
@@ -136,9 +143,12 @@ def get_general_announcements(last_checked_at: Optional[datetime] = None) -> Lis
     If last_checked_at is provided, only returns announcements created after that time.
     """
     now = datetime.now(timezone.utc)
-    filters: List[Filter] = [("type", "==", AnnouncementType.ANNOUNCEMENT.value), ("active", "==", True)]
+    announcements_ref = db.collection("announcements")
+    query = announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.ANNOUNCEMENT.value)).where(
+        filter=FieldFilter("active", "==", True)
+    )
 
-    docs = _store().query("announcements", filters=filters)
+    docs = query.stream()
     announcements: List[Announcement] = []
 
     for doc in docs:
@@ -174,15 +184,16 @@ def get_all_announcements(
         announcement_type: Filter by type (changelog, feature, announcement)
         active_only: If True, only return active announcements
     """
-    filters: List[Filter] = []
+    announcements_ref = db.collection("announcements")
+    query = announcements_ref
 
     if announcement_type:
-        filters.append(("type", "==", announcement_type.value))
+        query = query.where(filter=FieldFilter("type", "==", announcement_type.value))
 
     if active_only:
-        filters.append(("active", "==", True))
+        query = query.where(filter=FieldFilter("active", "==", True))
 
-    docs = _store().query("announcements", filters=filters)
+    docs = query.stream()
     announcements: List[Announcement] = []
     for doc in docs:
         raw: object = doc.to_dict()
@@ -196,37 +207,41 @@ def get_all_announcements(
 
 def create_announcement(announcement: Announcement) -> Announcement:
     """Create a new announcement."""
-    _store().set(f"announcements/{announcement.id}", announcement.to_dict())
+    doc_ref = db.collection("announcements").document(announcement.id)
+    doc_ref.set(announcement.to_dict())
     return announcement
 
 
 def update_announcement(announcement_id: str, updates: Dict[str, Any]) -> Optional[Announcement]:
     """Update an existing announcement."""
-    path = f"announcements/{announcement_id}"
-    if not _store().exists(path):
+    doc_ref = db.collection("announcements").document(announcement_id)
+    doc = doc_ref.get()
+    if not getattr(doc, "exists", False):
         return None
 
-    _store().update(path, updates)
+    doc_ref.update(updates)
     return get_announcement_by_id(announcement_id)
 
 
 def delete_announcement(announcement_id: str) -> bool:
     """Delete an announcement."""
-    path = f"announcements/{announcement_id}"
-    if not _store().exists(path):
+    doc_ref = db.collection("announcements").document(announcement_id)
+    doc = doc_ref.get()
+    if not getattr(doc, "exists", False):
         return False
 
-    _store().delete(path)
+    doc_ref.delete()
     return True
 
 
 def deactivate_announcement(announcement_id: str) -> bool:
     """Soft delete - set active to False."""
-    path = f"announcements/{announcement_id}"
-    if not _store().exists(path):
+    doc_ref = db.collection("announcements").document(announcement_id)
+    doc = doc_ref.get()
+    if not getattr(doc, "exists", False):
         return False
 
-    _store().update(path, {"active": False})
+    doc_ref.update({"active": False})
     return True
 
 
@@ -325,7 +340,9 @@ def compare_versions(v1: str, v2: str) -> int:
 
 def get_dismissed_announcement_ids(uid: str) -> set[str]:
     """Get the set of announcement IDs that a user has dismissed."""
-    return {str(doc_id) for doc_id in _store().list_ids(f"users/{uid}/dismissed_announcements")}
+    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements")
+    docs = dismissed_ref.stream()
+    return {str(doc.id) for doc in docs}
 
 
 def dismiss_announcement(uid: str, announcement_id: str, cta_clicked: bool = False) -> bool:
@@ -333,19 +350,21 @@ def dismiss_announcement(uid: str, announcement_id: str, cta_clicked: bool = Fal
     Mark an announcement as dismissed for a user.
     Returns True if successful.
     """
-    _store().set(
-        f"users/{uid}/dismissed_announcements/{announcement_id}",
+    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements").document(announcement_id)
+    dismissed_ref.set(
         {
             "dismissed_at": datetime.now(timezone.utc),
             "cta_clicked": cta_clicked,
-        },
+        }
     )
     return True
 
 
 def is_announcement_dismissed(uid: str, announcement_id: str) -> bool:
     """Check if a user has dismissed a specific announcement."""
-    return _store().exists(f"users/{uid}/dismissed_announcements/{announcement_id}")
+    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements").document(announcement_id)
+    doc = dismissed_ref.get()
+    return bool(getattr(doc, "exists", False))
 
 
 # ============================================================================
@@ -397,7 +416,9 @@ def get_pending_announcements(
     dismissed_ids = get_dismissed_announcement_ids(uid)
 
     # Query all active announcements
-    docs = _store().query("announcements", filters=[("active", "==", True)])
+    announcements_ref = db.collection("announcements")
+    query = announcements_ref.where(filter=FieldFilter("active", "==", True))
+    docs = query.stream()
 
     pending: List[Announcement] = []
 

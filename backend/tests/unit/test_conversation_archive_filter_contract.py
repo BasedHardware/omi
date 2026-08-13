@@ -21,11 +21,9 @@ class _FieldFilter:
 
 class _Snapshot:
     update_time = None
-    reference = None
 
     def __init__(self, row):
         self._row = row
-        self.id = row.get("id")
 
     def to_dict(self):
         return dict(self._row)
@@ -95,11 +93,14 @@ class _Firestore:
         self.rows = rows
         self.queries = []
 
+    def document(self, uid):
+        assert uid == "user-1"
+        return self
+
     def collection(self, name):
-        # conversations.py now addresses the collection through the store port, which the
-        # FirestoreDocumentStore adapter resolves as a single full-path collection ref
-        # (users/{uid}/conversations) rather than the old nested users -> document -> conversations.
-        assert name == "users/user-1/conversations", name
+        assert name in {"users", "conversations"}
+        if name == "users":
+            return self
         query = _Query(self.rows)
         self.queries.append(query)
         return query
@@ -122,10 +123,9 @@ def conversations_db():
     google_api_core.__path__ = []
 
     firestore_module = ModuleType("google.cloud.firestore")
-    firestore_module.Query = SimpleNamespace(ASCENDING="ASCENDING", DESCENDING="DESCENDING")
+    firestore_module.Query = SimpleNamespace(DESCENDING="DESCENDING")
     firestore_v1_module = ModuleType("google.cloud.firestore_v1")
     firestore_v1_module.FieldFilter = _FieldFilter
-    firestore_v1_module.transactional = lambda func: func
     exceptions_module = ModuleType("google.api_core.exceptions")
     exceptions_module.AlreadyExists = type("AlreadyExists", (Exception,), {})
     exceptions_module.Conflict = type("Conflict", (Exception,), {})
@@ -225,16 +225,13 @@ def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
         ("source", "==", "omi"),
         ("status", "in", ["processing", "completed"]),
     ]
-    # The archive filters still precede pagination, which precedes the read. The store port's
-    # Firestore adapter applies offset before limit (its fixed order); the contract that matters
-    # is that the three where-filters come first and stream is last.
     assert [event[0] for event in list_query.events] == [
         "where",
         "where",
         "where",
         "order_by",
-        "offset",
         "limit",
+        "offset",
         "stream",
     ]
 

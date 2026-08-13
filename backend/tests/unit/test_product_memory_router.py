@@ -46,6 +46,7 @@ fastapi_stub.Depends = _identity
 fastapi_stub.HTTPException = _HTTPException
 fastapi_stub.Query = _identity
 fastapi_stub.Request = type("Request", (), {})
+fastapi_stub.Response = type("Response", (), {})
 auth_stub = types.ModuleType("utils.other.endpoints")
 auth_stub.get_current_user_uid = lambda: "u1"
 
@@ -60,7 +61,9 @@ from tests.unit.memory_import_isolation import (  # noqa: E402
 _ROUTER_STUB_NAMES = (
     "fastapi",
     "database._client",
+    "database.memories",
     "database.vector_db",
+    "utils.memory.memory_service",
     "utils.other.endpoints",
     "routers.memory_product",
 )
@@ -83,10 +86,8 @@ def _memory_product_router_import_isolation():
     globals()["memory_product"] = None
 
 
-from database import document_store  # noqa: E402
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState  # noqa: E402
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState  # noqa: E402
-from tests.store_fakes import FakeDocumentStore  # noqa: E402
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS  # noqa: E402
 
 memory_product = None  # populated by _memory_product_router_import_isolation
@@ -277,11 +278,13 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
             },
         }
     )
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
+    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
     response = memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
 
+    assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
+    assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['memory_id'] for item in response['items']] == ['fresh-short-term', 'long-term']
     assert response['uid'] == 'u1'
     assert response['query'] == 'coffee'
@@ -298,7 +301,7 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
 def test_product_routes_reject_global_kill_switch_before_per_user_rollout_vector_or_memory_reads(monkeypatch):
     db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(enabled=True, kill_switch=True)})
     vector_query = MagicMock()
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
+    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
     monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
 
@@ -320,7 +323,8 @@ def test_product_routes_reject_global_kill_switch_before_per_user_rollout_vector
         else:
             raise AssertionError('expected global memory read kill switch to deny product route')
 
-    # Every route fails closed at the global gate: no memory-item fetch, no vector query.
+    assert db_client.document_paths == [_global_read_gate_path(), _global_read_gate_path(), _global_read_gate_path()]
+    assert db_client.collection_paths == []
     vector_query.assert_not_called()
     memory_product.fetch_default_product_memory_search.assert_not_called()
     memory_product.fetch_archive_product_memory_search.assert_not_called()
@@ -329,7 +333,7 @@ def test_product_routes_reject_global_kill_switch_before_per_user_rollout_vector
 def test_product_routes_reject_missing_global_gate_before_per_user_rollout_vector_or_memory_reads(monkeypatch):
     db_client = _FirestoreFake({'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read'}})
     vector_query = MagicMock()
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
+    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
     monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
 
@@ -351,49 +355,50 @@ def test_product_routes_reject_missing_global_gate_before_per_user_rollout_vecto
         else:
             raise AssertionError('expected missing global memory read gate to deny product route')
 
-    # Every route fails closed on the absent global gate: no memory-item fetch, no vector query.
+    assert db_client.document_paths == [_global_read_gate_path(), _global_read_gate_path(), _global_read_gate_path()]
+    assert db_client.collection_paths == []
     vector_query.assert_not_called()
     memory_product.fetch_default_product_memory_search.assert_not_called()
     memory_product.fetch_archive_product_memory_search.assert_not_called()
 
 
-def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant_before_memory_items(monkeypatch):
+def test_product_search_endpoint_rejects_explicit_opt_out_and_malformed_control_before_memory_items(monkeypatch):
     cases = [
-        ({}, 'missing_rollout_state'),
         (
             {
                 'users/u1/memory_control/state': {
                     'schema_version': 1,
                     'uid': 'u1',
-                    'mode': 'off',
-                    'grants': {'omi_chat': {'default_memory': True}},
-                }
-            },
-            'memory_reads_disabled',
-        ),
-        (
-            {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}},
-            'malformed_rollout_state',
-        ),
-        (
-            {
-                'users/u1/memory_control/state': {
-                    'schema_version': 1,
-                    'uid': 'u1',
-                    'mode': 'read',
-                    'fallback_projection_ready': True,
-                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
-                    'grants': {'omi_chat': {}},
+                    'grants': {'omi_chat': {'default_memory': False}},
                 }
             },
             'missing_chat_default_memory_grant',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'schema_version': 1,
+                    'uid': 'u1',
+                    'grants': {'omi_chat': {'default_memory': 'yes'}},
+                }
+            },
+            'malformed_memory_control_state',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'schema_version': 1,
+                    'uid': 'other-user',
+                }
+            },
+            'uid_mismatch',
         ),
     ]
     monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
 
     for docs, expected_reason in cases:
         db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(), **docs})
-        monkeypatch.setattr(document_store, "_store", lambda db_client=db_client: FakeDocumentStore(backing=db_client.docs))
+        monkeypatch.setattr(memory_product, "db", db_client)
         try:
             memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
         except _HTTPException as exc:
@@ -403,8 +408,33 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
         else:
             raise AssertionError(f'expected product search to fail closed for {expected_reason}')
 
-    # Fail-closed authorization never reaches the memory-item fetch.
+        assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
+        assert db_client.collection_paths == []
+
     memory_product.fetch_default_product_memory_search.assert_not_called()
+
+
+def test_product_search_endpoint_uses_universal_defaults_without_control_backfill(monkeypatch):
+    db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
+    search = MagicMock(
+        return_value={
+            'uid': 'u1',
+            'query': 'coffee',
+            'items': [],
+            'total_count': 0,
+            'returned_count': 0,
+            'limit': 25,
+            'offset': 0,
+        }
+    )
+    monkeypatch.setattr(memory_product, 'db', db_client)
+    monkeypatch.setattr(memory_product, 'fetch_default_product_memory_search', search)
+
+    response = memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
+
+    assert response['rollout']['read_decision'] == 'USE_MEMORY'
+    assert response['policy']['app_has_default_memory_grant'] is True
+    search.assert_called_once()
 
 
 def test_product_search_endpoint_rejects_invalid_pagination(monkeypatch):
@@ -439,7 +469,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
     monkeypatch,
 ):
     cases = [
-        ({}, 'missing_rollout_state'),
+        ({}, 'missing_chat_archive_capability'),
         (
             {
                 'users/u1/memory_control/state': {
@@ -464,38 +494,34 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
                     'grants': {'omi_chat': {'default_memory': True, 'archive': 'yes'}},
                 }
             },
-            'malformed_archive_capability',
+            'malformed_memory_control_state',
         ),
         (
             {
                 'users/u1/memory_control/state': {
                     'schema_version': 1,
                     'uid': 'u1',
-                    'mode': 'off',
-                    'grants': {'omi_chat': {'default_memory': True, 'archive': True}},
-                }
-            },
-            'memory_reads_disabled',
-        ),
-        (
-            {
-                'users/u1/memory_control/state': {
-                    'schema_version': 1,
-                    'uid': 'u1',
-                    'mode': 'read',
-                    'fallback_projection_ready': True,
-                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
-                    'grants': {'omi_chat': {'archive': True}},
+                    'grants': {'omi_chat': {'default_memory': False, 'archive': True}},
                 }
             },
             'missing_chat_default_memory_grant',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'schema_version': 1,
+                    'uid': 'u1',
+                    'grants': {'omi_chat': {'default_memory': 'yes', 'archive': True}},
+                }
+            },
+            'malformed_memory_control_state',
         ),
     ]
     monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
 
     for docs, expected_reason in cases:
         db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(), **docs})
-        monkeypatch.setattr(document_store, "_store", lambda db_client=db_client: FakeDocumentStore(backing=db_client.docs))
+        monkeypatch.setattr(memory_product, "db", db_client)
         try:
             memory_product.search_archive_memory(query='coffee', limit=25, offset=0, include_archive=True, uid='u1')
         except _HTTPException as exc:
@@ -506,7 +532,9 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
         else:
             raise AssertionError(f'expected archive route to fail closed for {expected_reason}')
 
-    # Fail-closed authorization never reaches the memory-item fetch.
+        assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
+        assert db_client.collection_paths == []
+
     memory_product.fetch_archive_product_memory_search.assert_not_called()
 
 
@@ -532,11 +560,13 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
             },
         }
     )
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
+    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
     response = memory_product.search_archive_memory(query='coffee', limit=25, offset=0, include_archive=True, uid='u1')
 
+    assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
+    assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['memory_id'] for item in response['items']] == ['archive']
     assert response['policy']['consumer'] == 'omi_chat'
     assert response['policy']['archive_capability'] is True
@@ -546,20 +576,21 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
     assert response['archive_default_visible'] is False
 
 
-def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memory_item_reads(monkeypatch):
+def test_vector_search_endpoint_requires_vector_projection_commit_before_vector_or_memory_item_reads(monkeypatch):
     db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
     vector_query = MagicMock()
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
+    monkeypatch.setattr(memory_product, "db", db_client)
 
     try:
         memory_product.search_vector_memory(query='coffee', limit=10, uid='u1', vector_query=vector_query)
     except _HTTPException as exc:
         assert exc.status_code == 403
-        assert exc.detail['fallback_reason'] == 'missing_rollout_state'
+        assert exc.detail['fallback_reason'] == 'missing_vector_projection_commit_id'
     else:
-        raise AssertionError('expected disabled persisted rollout to fail closed')
+        raise AssertionError('expected missing vector projection commit to fail closed')
 
-    # Fails closed on the absent rollout state before any vector candidate lookup.
+    assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
+    assert db_client.collection_paths == []
     vector_query.assert_not_called()
 
 
@@ -592,7 +623,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
             },
         }
     )
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
+    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
     def hit(item, score):
@@ -619,6 +650,15 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
 
     response = memory_product.search_vector_memory(query='coffee', limit=10, uid='u1', vector_query=fake_vector_query)
 
+    assert db_client.document_paths == [
+        _global_read_gate_path(),
+        'users/u1/memory_control/state',
+        'users/u1/memory_items/stale-short-term',
+        'users/u1/memory_items/archive',
+        'users/u1/memory_items/long-term',
+        'users/u1/memory_items/fresh-short-term',
+    ]
+    assert db_client.collection_paths == []
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
     assert [item['memory_id'] for item in response['items']] == ['long-term', 'fresh-short-term']
     assert response['scores_by_memory_id'] == {'long-term': 0.9, 'fresh-short-term': 0.8}
@@ -652,9 +692,7 @@ def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_fl
             f'users/u1/memory_items/{stale_projection.memory_id}': _stored_item(stale_projection),
         }
     )
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
-    import database.memory_vector_repair_outbox as memory_vector_repair_outbox
-    monkeypatch.setattr(memory_vector_repair_outbox, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
+    monkeypatch.setattr(memory_product, "db", db_client)
 
     def fake_vector_query(uid, query, *, mode, limit):
         assert mode == SearchMode.default
@@ -705,9 +743,7 @@ def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(mon
             f'users/u1/memory_items/{stale_projection.memory_id}': _stored_item(stale_projection),
         }
     )
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
-    import database.memory_vector_repair_outbox as memory_vector_repair_outbox
-    monkeypatch.setattr(memory_vector_repair_outbox, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
+    monkeypatch.setattr(memory_product, "db", db_client)
 
     def fake_vector_query(uid, query, *, mode, limit):
         assert mode == SearchMode.default

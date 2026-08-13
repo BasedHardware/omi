@@ -33,7 +33,7 @@ class DefaultReadSearchResult:
 
     @property
     def should_use_legacy_fallback(self) -> bool:
-        return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
+        return False
 
 
 def parse_default_read_datetime(value: Any) -> datetime:
@@ -97,6 +97,7 @@ def fetch_default_read_list(
     query: str,
     limit: int,
     offset: int,
+    db_client: Any,
     decision: DefaultReadRolloutDecision,
     consumer: MemoryConsumer,
     now: Optional[datetime] = None,
@@ -118,6 +119,7 @@ def fetch_default_read_list(
     response = fetch_default_product_memory_search(
         uid=uid,
         query=query,
+        db_client=db_client,
         policy=policy,
         now=now,
         limit=bounded_limit,
@@ -137,6 +139,7 @@ def fetch_default_read_vector(
     uid: str,
     query: str,
     limit: int,
+    db_client: Any,
     decision: DefaultReadRolloutDecision,
     consumer: MemoryConsumer,
     vector_query: Optional[Callable[..., Any]] = None,
@@ -166,6 +169,7 @@ def fetch_default_read_vector(
     response = fetch_default_vector_memory_search(
         uid=uid,
         query=query,
+        db_client=db_client,
         policy=policy,
         vector_query=vector_query,
         limit=bounded_limit,

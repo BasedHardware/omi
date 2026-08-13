@@ -103,7 +103,9 @@ def _seed_live_generation(client: Any, uid: str, conversation_id: str, recording
     recording_sessions_db.create_or_get_recording_session(
         uid,
         recording_session_id,
-        conversation_id,    )
+        conversation_id,
+        firestore_client=client,
+    )
     return conversation_ref
 
 
@@ -120,7 +122,9 @@ def _assert_cleanup_lock_fences_late_segment_write(client: Any, uid: str) -> Non
         write_result['persisted'] = conversations_db.update_conversation_segments(
             uid,
             conversation_id,
-            [{'id': 'blocked-segment', 'text': 'blocked behind cleanup lock'}],        )
+            [{'id': 'blocked-segment', 'text': 'blocked behind cleanup lock'}],
+            firestore_client=client,
+        )
         writer_done.set()
 
     writer = threading.Thread(target=write_late_segment, name='listen-lifecycle-emulator-writer')
@@ -138,7 +142,9 @@ def _assert_cleanup_lock_fences_late_segment_write(client: Any, uid: str) -> Non
         uid,
         recording_session_id,
         conversation_id,
-        'discarded',    )
+        'discarded',
+        firestore_client=client,
+    )
     if not discarded['accepted'] or discarded['lifecycle_phase'] != 'discarded':
         raise AssertionError('cleanup-first ordering did not terminalize the old recording generation')
 
@@ -157,7 +163,9 @@ def _assert_live_content_prevents_cleanup(
     deleted = recording_sessions_db.tombstone_and_delete_empty_conversation(
         uid,
         conversation_id,
-        recording_session_id,    )
+        recording_session_id,
+        firestore_client=client,
+    )
     if deleted:
         raise AssertionError('cleanup ignored durable content committed by the late writer')
 
@@ -168,7 +176,7 @@ def _assert_live_content_prevents_cleanup(
     conversation = snapshot.to_dict() or {}
     if conversation.get('has_content') is not True:
         raise AssertionError('content write did not persist the durable has_content marker')
-    session = recording_sessions_db.get_recording_session(uid, recording_session_id)
+    session = recording_sessions_db.get_recording_session(uid, recording_session_id, firestore_client=client)
     if session is None or session['lifecycle_phase'] != 'in_progress':
         raise AssertionError('cleanup terminalized the recording session after content committed')
     return conversation_ref
@@ -196,14 +204,18 @@ def _assert_cleanup_fences_then_rolls_over(
     if not recording_sessions_db.tombstone_and_delete_empty_conversation(
         uid,
         old_conversation_id,
-        old_recording_session_id,    ):
+        old_recording_session_id,
+        firestore_client=client,
+    ):
         raise AssertionError('empty cleanup did not win the required cleanup-first ordering')
     if content_write(old_conversation_id):
         raise AssertionError('late content recreated a terminal conversation instead of being fenced')
 
     old_session = recording_sessions_db.get_recording_session(
         uid,
-        old_recording_session_id,    )
+        old_recording_session_id,
+        firestore_client=client,
+    )
     if old_session is None or old_session['lifecycle_phase'] != 'discarded':
         raise AssertionError('cleanup-first ordering did not terminalize the old recording generation')
 
@@ -251,7 +263,9 @@ def _assert_segment_content_contract(client: Any, uid: str) -> None:
             uid,
             conversation_id,
             [{'id': 'late-segment', 'text': 'persisted after cleanup read'}],
-            started_at=started_at,        ),
+            started_at=started_at,
+            firestore_client=client,
+        ),
     )
     conversation = conversation_ref.get().to_dict() or {}
     if not conversation.get('transcript_segments'):
@@ -264,7 +278,9 @@ def _assert_segment_content_contract(client: Any, uid: str) -> None:
             uid,
             target_conversation_id,
             [{'id': 'fenced-segment', 'text': 'replayed after cleanup'}],
-            started_at=started_at,        )
+            started_at=started_at,
+            firestore_client=client,
+        )
 
     _assert_cleanup_fences_then_rolls_over(
         client,
@@ -288,7 +304,9 @@ def _assert_photo_content_contract(client: Any, uid: str) -> None:
         return conversations_db.store_conversation_photos(
             uid,
             target_conversation_id,
-            [ConversationPhoto(id='late-photo', base64='aGVsbG8=', description='late screenshot')],        )
+            [ConversationPhoto(id='late-photo', base64='aGVsbG8=', description='late screenshot')],
+            firestore_client=client,
+        )
 
     conversation_ref = _assert_live_content_prevents_cleanup(
         client,
@@ -315,13 +333,17 @@ def _assert_photo_only_finalization_is_admitted(client: Any, uid: str) -> None:
     if not conversations_db.store_conversation_photos(
         uid,
         conversation_id,
-        [ConversationPhoto(id='only-photo', base64='aGVsbG8=', description='photo-only listen conversation')],    ):
+        [ConversationPhoto(id='only-photo', base64='aGVsbG8=', description='photo-only listen conversation')],
+        firestore_client=client,
+    ):
         raise AssertionError('photo-only writer unexpectedly lost its conversation parent')
 
     intent = lifecycle_service.request_finalization(
         uid,
         conversation_id,
-        has_byok_keys=False,    )
+        has_byok_keys=False,
+        firestore_client=client,
+    )
     if intent['status'] != 'queued' or not intent['job_id']:
         raise AssertionError(f'photo-only conversation was not admitted to durable finalization: {intent}')
 
@@ -337,7 +359,9 @@ def _assert_legacy_photo_only_finalization_is_admitted(client: Any, uid: str) ->
     intent = lifecycle_service.request_finalization(
         uid,
         conversation_id,
-        has_byok_keys=False,    )
+        has_byok_keys=False,
+        firestore_client=client,
+    )
     if intent['status'] != 'queued' or not intent['job_id']:
         raise AssertionError(f'legacy photo-only conversation was not admitted to durable finalization: {intent}')
 

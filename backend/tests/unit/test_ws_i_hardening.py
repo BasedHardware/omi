@@ -47,12 +47,6 @@ def _ws_i_hardening_import_isolation():
 
 
 ensure_utils_memory_packages_importable()
-from database import document_store  # noqa: E402
-import database.memory_apply_store as memory_apply_store  # noqa: E402
-import database.knowledge_graph as knowledge_graph  # noqa: E402
-import database.review_queue as review_queue  # noqa: E402
-import utils.memory.product_memory_read_service as product_memory_read_service  # noqa: E402
-from tests.store_fakes import FakeDocumentStore  # noqa: E402
 from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation  # noqa: E402
 from models.memory_evidence import (  # noqa: E402
     ArtifactPreservationState,
@@ -69,7 +63,7 @@ from utils.memory.canonical_memory_adapter import (  # noqa: E402
     write_canonical_extraction_memory,
 )
 
-from tests.unit.test_ws_i_write_convergence import (  # noqa: E402
+from tests.unit.fixtures.canonical_memory_fakes import (  # noqa: E402
     _FakeDb,
     _fresh_short_term_item,
     _install_heavy_import_stubs,
@@ -78,25 +72,20 @@ from tests.unit.test_ws_i_write_convergence import (  # noqa: E402
 )
 
 
-def test_atomic_bump_uses_store_transaction_primitive():
-    """Guarantees the bump goes through _store().run_transaction, not a bare read-then-set.
-
-    Static tripwire (labelled): the atomic-read-modify-write guarantee is proven
-    behaviorally by test_sequential_source_generation_bumps_are_monotonic below;
-    this only pins the transaction seam so a future edit can't quietly drop it.
-    """
+def test_atomic_bump_uses_firestore_transaction_primitive():
+    """Guarantees the bump goes through db.transaction(), not bare read-then-set."""
     source = inspect.getsource(atomic_bump_source_generation)
-    assert "run_transaction" in source
+    assert "transaction()" in source
     assert "_atomic_bump_source_generation_transaction" in source
     apply_store_source = (Path(__file__).resolve().parents[2] / "database" / "memory_apply_store.py").read_text(
         encoding="utf-8"
     )
     assert "def _atomic_bump_source_generation_transaction" in apply_store_source
-    assert "tx.get(control_path)" in apply_store_source
-    assert "tx.set(control_path" in apply_store_source
+    assert "control_ref.get(transaction=transaction)" in apply_store_source
+    assert "transaction.set(control_ref" in apply_store_source
 
 
-def test_sequential_source_generation_bumps_are_monotonic(monkeypatch):
+def test_sequential_source_generation_bumps_are_monotonic():
     uid = "uid-canonical"
     control_path = f"users/{uid}/memory_state/apply_control"
     db = _FakeDb(
@@ -110,10 +99,8 @@ def test_sequential_source_generation_bumps_are_monotonic(monkeypatch):
         }
     )
 
-    monkeypatch.setattr(memory_apply_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
-
-    first = atomic_bump_source_generation(uid)
-    second = atomic_bump_source_generation(uid)
+    first = atomic_bump_source_generation(uid, db_client=db)
+    second = atomic_bump_source_generation(uid, db_client=db)
 
     assert first.source_generation == 2
     assert second.source_generation == 3
@@ -139,11 +126,6 @@ def test_retract_path_is_one_idempotent_atomic_source_replacement(monkeypatch):
         }
     )
 
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
-    monkeypatch.setattr(memory_apply_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
-    monkeypatch.setattr(knowledge_graph, "_store", lambda: FakeDocumentStore(backing=db.docs))
-    monkeypatch.setattr(review_queue, "_store", lambda: FakeDocumentStore(backing=db.docs))
-    monkeypatch.setattr(product_memory_read_service, "_store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
@@ -167,10 +149,10 @@ def test_retract_path_is_one_idempotent_atomic_source_replacement(monkeypatch):
         "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
         return_value=apply_result,
     ):
-        write_canonical_extraction_memory(uid, payload)
+        write_canonical_extraction_memory(uid, payload, db_client=db)
 
-    first = retract_conversation_sourced_memories(uid, conversation_id)
-    second = retract_conversation_sourced_memories(uid, conversation_id)
+    first = retract_conversation_sourced_memories(uid, conversation_id, db_client=db)
+    second = retract_conversation_sourced_memories(uid, conversation_id, db_client=db)
 
     assert first["source_generation"] == 2
     assert second["source_generation"] == 2
@@ -209,8 +191,6 @@ def test_persist_evidence_preserves_redaction_status_on_active_reprocess_refresh
         }
     )
 
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
-    monkeypatch.setattr(memory_apply_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
@@ -221,7 +201,7 @@ def test_persist_evidence_preserves_redaction_status_on_active_reprocess_refresh
         "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
         wraps=apply_long_term_patch_firestore,
     ) as apply_mock:
-        returned_id = write_canonical_extraction_memory(uid, payload)
+        returned_id = write_canonical_extraction_memory(uid, payload, db_client=db)
 
     apply_mock.assert_called_once()
     assert returned_id == memory_id
@@ -297,8 +277,6 @@ def test_persist_evidence_keeps_terminal_state_and_apply_rejects_same_id_replay(
         }
     )
 
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
-    monkeypatch.setattr(memory_apply_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
@@ -310,7 +288,7 @@ def test_persist_evidence_keeps_terminal_state_and_apply_rejects_same_id_replay(
         wraps=apply_long_term_patch_firestore,
     ) as apply_mock:
         with pytest.raises(RuntimeError, match="source_not_active"):
-            write_canonical_extraction_memory(uid, payload)
+            write_canonical_extraction_memory(uid, payload, db_client=db)
 
     apply_mock.assert_called_once()
     assert db.docs[evidence_path] == terminal_evidence
@@ -337,8 +315,6 @@ def test_persist_evidence_defaults_redaction_when_no_prior_value(monkeypatch):
         }
     )
 
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
-    monkeypatch.setattr(memory_apply_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
@@ -349,7 +325,7 @@ def test_persist_evidence_defaults_redaction_when_no_prior_value(monkeypatch):
         "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
         wraps=apply_long_term_patch_firestore,
     ) as apply_mock:
-        returned_id = write_canonical_extraction_memory(uid, payload)
+        returned_id = write_canonical_extraction_memory(uid, payload, db_client=db)
 
     apply_mock.assert_called_once()
     assert returned_id == memory_id

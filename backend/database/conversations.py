@@ -7,32 +7,20 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
-from database.store import Filter, get_document_store
-from database.store.errors import AlreadyExists
-from database.store.sentinels import DELETE, SERVER_TIMESTAMP
 from models.audio_file import AudioFile
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
+from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
-
-
-def _store():
-    """The configured document store (``STORAGE_BACKEND`` seam, ADR-0002/0004). Tests patch this."""
-    return get_document_store()
-
-
-def _conversations_path(uid: str) -> str:
-    return f'users/{uid}/conversations'
-
-
-def _conversation_path(uid: str, conversation_id: str) -> str:
-    return f'users/{uid}/conversations/{conversation_id}'
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +40,8 @@ def get_conversation_ids(uid: str) -> List[str]:
     IDs-only projection (``select([])``) — used for bulk operations like account deletion where
     only the IDs are needed (e.g. to purge derived Pinecone vectors).
     """
-    return _store().list_ids(_conversations_path(uid))
+    coll = db.collection('users').document(uid).collection(conversations_collection)
+    return [doc.id for doc in coll.select([]).stream()]
 
 
 def _ensure_timezone_aware(dt: datetime) -> datetime:
@@ -63,6 +52,36 @@ def _ensure_timezone_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def _firestore_revision_datetime(value: Any) -> Optional[datetime]:
+    """Normalize Firestore snapshot metadata to an aware API datetime.
+
+    The production client exposes ``DatetimeWithNanoseconds`` (a datetime
+    subclass), while Firestore emulators and fakes may expose protobuf-like
+    ``seconds``/``nanos`` values. Keep that SDK variation at the database
+    boundary so response models always receive the same public type.
+    """
+    if isinstance(value, datetime):
+        return _ensure_timezone_aware(value)
+
+    to_datetime = getattr(value, 'ToDatetime', None)
+    if callable(to_datetime):
+        try:
+            return _ensure_timezone_aware(to_datetime(tzinfo=timezone.utc))
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+    try:
+        seconds = getattr(value, 'seconds')
+        nanos = getattr(value, 'nanos')
+        if isinstance(seconds, str) and isinstance(nanos, str):
+            timestamp = float(f'{seconds}.{nanos}')
+        else:
+            timestamp = float(seconds) + (float(nanos) / 1_000_000_000)
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
+        return None
 
 
 # *********************************
@@ -287,12 +306,13 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
 
 
 def _document_data_with_revision(document) -> Optional[Dict[str, Any]]:
-    """Return the stored document data stamped with the neutral last-write revision (ADR-0017)."""
+    """Return Firestore document data with its canonical server revision."""
     data = document.to_dict()
     if data is None:
         return None
-    if document.updated_at is not None:
-        data['updated_at'] = document.updated_at
+    revision = _firestore_revision_datetime(getattr(document, 'update_time', None))
+    if revision is not None:
+        data['updated_at'] = revision
     return data
 
 
@@ -321,8 +341,10 @@ def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> O
 
 @prepare_for_read(decrypt_func=_prepare_photo_for_read)
 def get_conversation_photos(uid: str, conversation_id: str):
-    photos_path = f'{_conversation_path(uid, conversation_id)}/photos'
-    photos = [doc.to_dict() for doc in _store().query(photos_path)]
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    photos_ref = conversation_ref.collection('photos')
+    photos = [doc.to_dict() for doc in photos_ref.stream()]
     return photos
 
 
@@ -342,12 +364,15 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     if 'photos' in conversation_data:
         del conversation_data['photos']
 
-    path = _conversation_path(uid, conversation_data['id'])
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+    transaction = db.transaction()
 
-    def _write_processing_result(tx):
+    @firestore.transactional
+    def _write_processing_result(transaction):
         write_data = copy.deepcopy(conversation_data)
-        existing_snapshot = tx.get(path)
-        if existing_snapshot.exists:
+        existing_snapshot = conversation_ref.get(transaction=transaction)
+        if getattr(existing_snapshot, 'exists', False):
             existing = existing_snapshot.to_dict() or {}
 
             # Processing owns generated content, while these fields are explicitly
@@ -376,12 +401,12 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                     write_data['structured'] = structured
                 structured['title'] = user_title
 
-            tx.set(path, write_data, merge=True)
+            transaction.set(conversation_ref, write_data, merge=True)
             return
 
-        tx.set(path, write_data)
+        transaction.set(conversation_ref, write_data)
 
-    _store().run_transaction(_write_processing_result)
+    _write_processing_result(transaction)
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
@@ -409,12 +434,15 @@ def persist_processing_result_with_lifecycle(
     if 'photos' in conversation_data:
         del conversation_data['photos']
 
-    path = _conversation_path(uid, conversation_data['id'])
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+    transaction = db.transaction()
 
-    def _persist(tx) -> bool:
+    @firestore.transactional
+    def _persist(transaction) -> bool:
         write_data = copy.deepcopy(conversation_data)
-        existing_snapshot = tx.get(path)
-        if not existing_snapshot.exists:
+        existing_snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
             # Deleting one is a decision its owner made, and a merge write to a
             # missing document would create it, so a late processor could bring
@@ -447,10 +475,10 @@ def persist_processing_result_with_lifecycle(
                 write_data['structured'] = structured
             structured['title'] = user_title
 
-        tx.set(path, write_data, merge=True)
+        transaction.set(conversation_ref, write_data, merge=True)
         return True
 
-    return _store().run_transaction(_persist)
+    return _persist(transaction)
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
@@ -467,29 +495,42 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     if 'photos' in conversation_data:
         del conversation_data['photos']
 
-    path = _conversation_path(uid, conversation_data['id'])
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     try:
-        _store().create(path, conversation_data)
+        conversation_ref.create(conversation_data)
         return True
-    except AlreadyExists:
+    except (AlreadyExists, Conflict):
         return False
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversation(uid, conversation_id):
-    conversation_data = _document_data_with_revision(_store().get(_conversation_path(uid, conversation_id)))
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_data = _document_data_with_revision(conversation_ref.get())
     return conversation_data
 
 
 def get_public_shared_conversation_bounded(
     uid: str,
     conversation_id: str,
+    *,
+    firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
     """Read only public-chat fields and decode the transcript within fixed bounds."""
-    snapshot = _store().get(
-        _conversation_path(uid, conversation_id),
-        fields=['visibility', 'is_locked', 'transcript_segments_compressed', 'transcript_segments'],
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    conversation_ref = (
+        client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    )
+    snapshot = conversation_ref.get(
+        field_paths=[
+            'visibility',
+            'is_locked',
+            'transcript_segments_compressed',
+            'transcript_segments',
+        ]
     )
     if not snapshot.exists:
         return None
@@ -520,7 +561,8 @@ def get_public_shared_conversation_bounded(
 def get_conversation_audio_stamp(uid: str, conversation_id: str) -> Optional[dict]:
     """Field-masked read of just the conversation_audio stamp — cheap enough for
     the pusher's per-batch staleness check (the full doc carries transcripts)."""
-    snapshot = _store().get(_conversation_path(uid, conversation_id), fields=['conversation_audio'])
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    snapshot = doc_ref.get(field_paths=['conversation_audio'])
     if not snapshot.exists:
         return None
     return (snapshot.to_dict() or {}).get('conversation_audio')
@@ -541,28 +583,35 @@ def get_conversations(
     starred: Optional[bool] = None,
     date_field: str = 'created_at',
 ):
-    filters: List[Filter] = []
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
-        filters.append(('discarded', '==', False))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if len(statuses) > 0:
-        filters.append(('status', 'in', statuses))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+
     if categories:
-        filters.append(('structured.category', 'in', categories))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+
     if folder_id:
-        filters.append(('folder_id', '==', folder_id))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+
     if starred is not None:
-        filters.append(('starred', '==', starred))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
+
+    # Apply date range filters if provided
     if start_date:
-        filters.append((date_field, '>=', start_date))
+        conversations_ref = conversations_ref.where(filter=FieldFilter(date_field, '>=', start_date))
     if end_date:
-        filters.append((date_field, '<=', end_date))
+        conversations_ref = conversations_ref.where(filter=FieldFilter(date_field, '<=', end_date))
 
     # Sort — must match the range-filter field to satisfy Firestore index requirements
     sort_field = date_field if (start_date or end_date) else 'created_at'
-    docs = _store().query(
-        _conversations_path(uid), filters=filters, order_by=sort_field, direction='desc', limit=limit, offset=offset
-    )
-    conversations = [_document_data_with_revision(doc) for doc in docs]
+    conversations_ref = conversations_ref.order_by(sort_field, direction=firestore.Query.DESCENDING)
+
+    # Limits
+    conversations_ref = conversations_ref.limit(limit).offset(offset)
+
+    conversations = [_document_data_with_revision(doc) for doc in conversations_ref.stream()]
     conversations = [conversation for conversation in conversations if conversation is not None]
     return conversations
 
@@ -578,32 +627,35 @@ def get_conversations_count(
     starred: Optional[bool] = None,
     sources: Optional[List[str]] = None,
 ):
-    filters: List[Filter] = []
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
-        filters.append(('discarded', '==', False))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if sources:
-        # Firestore allows only one disjunctive `in` filter per query, so a
-        # singleton source composes as equality, not a degenerate `in`.
+        # The archive's `sources=omi` must compose with the multi-status `in`
+        # filter below. Firestore allows only one disjunctive `in` filter per
+        # query, so a singleton source is an equality predicate, not a
+        # degenerate `in` predicate.
         if len(sources) == 1:
-            filters.append(('source', '==', sources[0]))
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', '==', sources[0]))
         else:
-            filters.append(('source', 'in', sources))
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if statuses:
         if len(statuses) == 1:
-            filters.append(('status', '==', statuses[0]))
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', statuses[0]))
         else:
-            filters.append(('status', 'in', statuses))
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
     if categories:
-        filters.append(('structured.category', 'in', categories))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
     if folder_id:
-        filters.append(('folder_id', '==', folder_id))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
     if starred is not None:
-        filters.append(('starred', '==', starred))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
     if start_date:
-        filters.append(('created_at', '>=', start_date))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
     if end_date:
-        filters.append(('created_at', '<=', end_date))
-    return _store().count(_conversations_path(uid), filters=filters)
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+    result = conversations_ref.count().get()
+    return int(result[0][0].value)
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -624,53 +676,59 @@ def get_conversations_without_photos(
     Same as get_conversations but without loading photos.
     Much faster for list endpoints and bulk operations where full photo base64 isn't needed.
     """
-    filters: List[Filter] = []
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
-        filters.append(('discarded', '==', False))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if sources:
-        # Keep the paginated list semantically identical to the count query:
-        # a singleton source composes as equality (Firestore allows one `in`).
+        # Keep the paginated list semantically identical to the count query;
+        # see `get_conversations_count` for why a singleton is equality.
         if len(sources) == 1:
-            filters.append(('source', '==', sources[0]))
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', '==', sources[0]))
         else:
-            filters.append(('source', 'in', sources))
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if len(statuses) > 0:
         if len(statuses) == 1:
-            filters.append(('status', '==', statuses[0]))
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', statuses[0]))
         else:
-            filters.append(('status', 'in', statuses))
-    if categories:
-        filters.append(('structured.category', 'in', categories))
-    if folder_id:
-        filters.append(('folder_id', '==', folder_id))
-    if starred is not None:
-        filters.append(('starred', '==', starred))
-    if start_date:
-        filters.append(('created_at', '>=', start_date))
-    if end_date:
-        filters.append(('created_at', '<=', end_date))
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
 
-    docs = _store().query(
-        _conversations_path(uid), filters=filters, order_by='created_at', direction='desc', limit=limit, offset=offset
-    )
-    conversations = [_document_data_with_revision(doc) for doc in docs]
+    if categories:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+
+    if folder_id:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+
+    if starred is not None:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
+
+    # Apply date range filters if provided
+    if start_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+
+    # Sort
+    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+
+    # Limits
+    conversations_ref = conversations_ref.limit(limit).offset(offset)
+
+    conversations = [_document_data_with_revision(doc) for doc in conversations_ref.stream()]
     conversations = [conversation for conversation in conversations if conversation is not None]
     return conversations
 
 
 def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: bool = True):
     """Yield all conversations for a user, decrypted, in batches. Used for streaming data export."""
-    filters: List[Filter] = []
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
-        filters.append(('discarded', '==', False))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
     offset = 0
     while True:
-        docs = _store().query(
-            _conversations_path(uid), filters=filters, order_by='created_at', direction='desc',
-            limit=batch_size, offset=offset,
-        )
+        batch_ref = conversations_ref.limit(batch_size).offset(offset)
         batch = []
-        for doc in docs:
+        for doc in batch_ref.stream():
             conv = doc.to_dict()
             conv = _prepare_conversation_for_read(conv, uid) or conv
             batch.append(conv)
@@ -687,18 +745,17 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
             'lifecycle fields may only be changed through utils.conversations.lifecycle: '
             + ', '.join(sorted(lifecycle_fields))
         )
-    path = _conversation_path(uid, conversation_id)
-    store = _store()
-    doc_snapshot = store.get(path)
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    doc_snapshot = doc_ref.get()
     if not doc_snapshot.exists:
         return
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
-    store.update(path, prepared_data)
+    doc_ref.update(prepared_data)
 
 
-def try_claim_conversation_memory_analytics(uid: str, conversation_id: str) -> bool:
+def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, firestore_client: Any = None) -> bool:
     """Atomically claim the one analytics success slot for a conversation.
 
     The marker lives in Firestore under the authoritative conversation document,
@@ -712,9 +769,17 @@ def try_claim_conversation_memory_analytics(uid: str, conversation_id: str) -> b
     failing closed avoids a possible duplicate and must never interrupt the
     underlying conversation extraction.
     """
-    marker_path = f'{_conversation_path(uid, conversation_id)}/analytics_markers/conversation_memories_extracted'
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    marker_ref = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .collection('analytics_markers')
+        .document('conversation_memories_extracted')
+    )
     try:
-        _store().create(marker_path, {'created_at': SERVER_TIMESTAMP})
+        marker_ref.create({'created_at': firestore.SERVER_TIMESTAMP})
         return True
     except AlreadyExists:
         return False
@@ -816,12 +881,14 @@ def _finalize_audio_file_group(
 
 
 def update_conversation_title(uid: str, conversation_id: str, title: str):
-    path = _conversation_path(uid, conversation_id)
-    store = _store()
-    if not store.exists(path):
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+
+    doc_snapshot = conversation_ref.get()
+    if not doc_snapshot.exists:
         return
 
-    store.update(path, {'structured.title': title, 'user_title': title})
+    conversation_ref.update({'structured.title': title, 'user_title': title})
 
 
 def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional[str], content: str) -> str:
@@ -835,14 +902,15 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
         'ok' on success, 'not_found' if conversation missing,
         'app_result_not_found' if app_id given but no matching apps_results entry.
     """
-    path = _conversation_path(uid, conversation_id)
-    store = _store()
-    doc_snapshot = store.get(path)
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+
+    doc_snapshot = conversation_ref.get()
     if not doc_snapshot.exists:
         return 'not_found'
 
     if app_id is None:
-        store.update(path, {'structured.overview': content})
+        conversation_ref.update({'structured.overview': content})
         return 'ok'
 
     raw = doc_snapshot.to_dict() or {}
@@ -856,7 +924,7 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
     if not found:
         return 'app_result_not_found'
 
-    store.update(path, {'apps_results': apps_results})
+    conversation_ref.update({'apps_results': apps_results})
     return 'ok'
 
 
@@ -874,10 +942,12 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
         'ok' on success, 'not_found' if conversation missing, 'locked' if conversation is locked,
         'segment_not_found' if segment_id not found.
     """
-    path = _conversation_path(uid, conversation_id)
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    transaction = db.transaction()
 
-    def _update_segment_text(tx) -> str:
-        doc_snapshot = tx.get(path)
+    @firestore.transactional
+    def _update_segment_text(transaction) -> str:
+        doc_snapshot = doc_ref.get(transaction=transaction)
         if not doc_snapshot.exists:
             return 'not_found'
 
@@ -902,10 +972,10 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
 
         doc_level = conversation_data.get('data_protection_level', 'standard')
         prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
-        tx.update(path, prepared_payload)
+        transaction.update(doc_ref, prepared_payload)
         return 'ok'
 
-    return _store().run_transaction(_update_segment_text)
+    return _update_segment_text(transaction)
 
 
 def delete_conversation_photos(uid: str, conversation_id: str) -> int:
@@ -922,25 +992,26 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     Returns:
         Number of photos deleted
     """
-    photos_path = f'{_conversation_path(uid, conversation_id)}/photos'
-    store = _store()
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    photos_ref = conversation_ref.collection('photos')
 
     # Get all photo documents
-    photos = store.query(photos_path)
+    photos = photos_ref.stream()
     deleted_count = 0
 
-    # Delete in batches (chunked for throughput; adapters honor their own batch limits)
-    batch = store.batch()
+    # Delete in batches of 500 (Firestore batch limit)
+    batch = db.batch()
     batch_count = 0
 
     for photo_doc in photos:
-        batch.delete(photo_doc.path)
+        batch.delete(photo_doc.reference)
         batch_count += 1
         deleted_count += 1
 
         if batch_count >= 500:
             batch.commit()
-            batch = store.batch()
+            batch = db.batch()
             batch_count = 0
 
     # Commit remaining
@@ -959,7 +1030,11 @@ def delete_conversation(uid, conversation_id):
     the account-deletion wipe, which walks *existing* documents and never sees a deleted parent.
     Children are enumerated live, so a subcollection added later is purged too.
     """
-    _store().delete_recursive(_conversation_path(uid, conversation_id))
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    for sub in conversation_ref.collections():
+        delete_collection_recursive(sub, client=db)
+    conversation_ref.delete()
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -974,15 +1049,20 @@ def get_conversations_by_id_without_photos(uid, conversation_ids, include_discar
 
 
 def _get_conversations_by_id(uid, conversation_ids, include_discarded: bool = False):
-    docs = _store().get_many(_conversations_path(uid), [str(conversation_id) for conversation_id in conversation_ids])
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection)
+
+    doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
+    docs = db.get_all(doc_refs)
 
     conversations_by_id = {}
     for doc in docs:
-        data = doc.to_dict()
-        if data.get('discarded') and not include_discarded:
-            continue
-        data.setdefault('id', doc.id)
-        conversations_by_id[str(data['id'])] = data
+        if doc.exists:
+            data = doc.to_dict()
+            if data.get('discarded') and not include_discarded:
+                continue
+            data.setdefault('id', doc.id)
+            conversations_by_id[str(data['id'])] = data
 
     return [
         conversations_by_id[str(conversation_id)]
@@ -1002,7 +1082,8 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
     and filtering them in memory. This simplifies the code but may be less performant for
     users with a very large number of documents.
     """
-    all_conversations = _store().query(_conversations_path(uid), fields=['data_protection_level', 'visibility'])
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    all_conversations = conversations_ref.select(['data_protection_level', 'visibility']).stream()
 
     to_migrate = []
     for doc in all_conversations:
@@ -1021,12 +1102,19 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
     """
     Migrates a batch of conversations to the target protection level, committing in batches of 450.
     """
-    store = _store()
-    batch = store.batch()
+    batch = db.batch()
     batch_count = 0
-    doc_snapshots = store.get_many(_conversations_path(uid), list(conversation_ids))
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    doc_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
+    doc_snapshots = db.get_all(
+        doc_refs, field_paths=['data_protection_level', 'transcript_segments', 'transcript_segments_compressed']
+    )
 
     for doc_snapshot in doc_snapshots:
+        if not doc_snapshot.exists:
+            logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
+            continue
+
         conversation_data = doc_snapshot.to_dict()
         current_level = conversation_data.get('data_protection_level', 'standard')
 
@@ -1051,18 +1139,19 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             )
 
         if not update_data.get('transcript_segments_compressed'):
-            update_data['transcript_segments_compressed'] = DELETE
+            update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
 
-        batch.update(doc_snapshot.path, update_data)
+        batch.update(doc_snapshot.reference, update_data)
         batch_count += 1
         if batch_count >= 100:
             batch.commit()
-            batch = store.batch()
+            batch = db.batch()
             batch_count = 0
 
         # Now migrate photos for this conversation in the same batch
-        photos_path = f'{doc_snapshot.path}/photos'
-        for photo_doc in store.query(photos_path, fields=['data_protection_level', 'base64']):
+        photos_ref = doc_snapshot.reference.collection('photos')
+        photos_stream = photos_ref.select(['data_protection_level', 'base64']).stream()
+        for photo_doc in photos_stream:
             photo_data = photo_doc.to_dict()
             current_photo_level = photo_data.get('data_protection_level', 'standard')
             if current_photo_level == target_level:
@@ -1079,11 +1168,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                 photo_update_payload['base64'] = plain_photo_data['base64']
 
             # Add photo update to the batch
-            batch.update(photo_doc.path, photo_update_payload)
+            batch.update(photo_doc.reference, photo_update_payload)
             batch_count += 1
             if batch_count >= 100:
                 batch.commit()
-                batch = store.batch()
+                batch = db.batch()
                 batch_count = 0
 
     if batch_count > 0:
@@ -1098,19 +1187,26 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_in_progress_conversation(uid: str):
-    docs = _store().query(
-        _conversations_path(uid), filters=[('status', '==', 'in_progress')],
-        order_by='created_at', direction='desc', limit=1,
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = (
+        user_ref.collection(conversations_collection)
+        .where(filter=FieldFilter('status', '==', 'in_progress'))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(1)
     )
-    conversation = docs[0].to_dict() if docs else None
+    docs = [doc.to_dict() for doc in conversations_ref.stream()]
+    conversation = docs[0] if docs else None
     return conversation
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_processing_conversations(uid: str):
-    docs = _store().query(_conversations_path(uid), filters=[('status', '==', 'processing')])
-    conversations = [doc.to_dict() for doc in docs]
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection).where(
+        filter=FieldFilter('status', '==', 'processing')
+    )
+    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
     # Exclude lazy-deferred conversations: they intentionally sit in `processing` (no LLM summary
     # yet) until the user opens them, where they're enriched on demand. They must NOT be swept
     # back to pusher for background processing — that would defeat the freemium cost saving.
@@ -1136,26 +1232,32 @@ def select_stale_in_progress(conversations, cutoff: datetime, limit: int):
     return stale[:limit]
 
 
-def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, limit: int = 10):
+def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, limit: int = 10, firestore_client=None):
     """In-progress conversations whose last activity predates the cutoff (#9809).
 
     The composite index orders by the last activity clock, so the bounded read
     always reaches the oldest candidates. Without that ordering, an arbitrary
     first page could keep old orphaned rows beyond it invisible forever.
     """
-    docs = _store().query(
-        _conversations_path(uid),
-        filters=[('status', '==', ConversationStatus.in_progress.value)],
-        order_by='finished_at',
-        direction='asc',
-        limit=limit,
+    client = firestore_client or get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    conversations_ref = (
+        STALE_IN_PROGRESS_CONVERSATIONS_QUERY.build(
+            user_ref.collection(conversations_collection),
+            {'status': ConversationStatus.in_progress.value},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('finished_at', direction=firestore.Query.ASCENDING)
+        .limit(limit)
     )
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
-    return select_stale_in_progress((doc.to_dict() for doc in docs), cutoff, limit)
+    return select_stale_in_progress((doc.to_dict() for doc in conversations_ref.stream()), cutoff, limit)
 
 
 def transition_conversation_status(uid: str, conversation_id: str, status: str):
-    _store().update(_conversation_path(uid, conversation_id),{'status': status})
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'status': status})
 
 
 def claim_conversation_status(
@@ -1166,10 +1268,13 @@ def claim_conversation_status(
     extra_updates: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Atomically transition a conversation status when the current status matches."""
-    path = _conversation_path(uid, conversation_id)
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    transaction = db.transaction()
 
-    def _claim(tx):
-        snapshot = tx.get(path)
+    @firestore.transactional
+    def _claim(transaction):
+        snapshot = conversation_ref.get(transaction=transaction)
         if not snapshot.exists:
             raise NotFound(f'Conversation {conversation_id} not found')
         current = snapshot.to_dict() or {}
@@ -1178,18 +1283,23 @@ def claim_conversation_status(
         updates = {'status': claimed_status.value}
         if extra_updates:
             updates.update(extra_updates)
-        tx.update(path, updates)
+        transaction.update(conversation_ref, updates)
         return True
 
-    return _store().run_transaction(_claim)
+    claimed = _claim(transaction)
+    return claimed
 
 
 def set_conversation_as_discarded(uid: str, conversation_id: str):
-    _store().update(_conversation_path(uid, conversation_id),{'discarded': True})
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'discarded': True})
 
 
 def restore_conversation_from_discarded(uid: str, conversation_id: str):
-    _store().update(_conversation_path(uid, conversation_id),{'discarded': False})
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'discarded': False})
 
 
 # *********************************
@@ -1219,16 +1329,23 @@ def get_action_items(
     end_date: Optional[datetime] = None,
 ):
     """Fetch action items directly from conversations collection"""
-    # Only get completed conversations with action items
-    filters: List[Filter] = [('status', '==', 'completed')]
-    if start_date:
-        filters.append(('created_at', '>=', start_date))
-    if end_date:
-        filters.append(('created_at', '<=', end_date))
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
 
-    # Get all conversations with action items (sorted by created_at descending)
+    # Only get completed conversations with action items
+    conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', 'completed'))
+
+    # Apply date range filters if provided
+    if start_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+
+    # Sort by created_at descending
+    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+
+    # Get all conversations with action items
     conversations = []
-    for doc in _store().query(_conversations_path(uid), filters=filters, order_by='created_at', direction='desc'):
+    for doc in conversations_ref.stream():
         conversation_data = doc.to_dict()
 
         # Check if conversation has action items
@@ -1314,7 +1431,9 @@ def get_action_items(
 
 
 def update_conversation_finished_at(uid: str, conversation_id: str, finished_at: datetime):
-    _store().update(_conversation_path(uid, conversation_id),{'finished_at': finished_at})
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'finished_at': finished_at})
 
 
 def update_conversation_segments(
@@ -1325,12 +1444,15 @@ def update_conversation_segments(
     data_protection_level: str = None,
     *,
     started_at: datetime = None,
+    firestore_client: Any = None,
 ):
-    path = _conversation_path(uid, conversation_id)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
 
-    def _write_segments(tx) -> bool:
-        doc_snapshot = tx.get(path)
-        if not doc_snapshot.exists:
+    @firestore.transactional
+    def _write_segments(transaction) -> bool:
+        doc_snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(doc_snapshot, 'exists', False):
             return False
         current = doc_snapshot.to_dict() or {}
         doc_level = data_protection_level or current.get('data_protection_level', 'standard')
@@ -1345,10 +1467,10 @@ def update_conversation_segments(
         if started_at:
             update_payload['started_at'] = started_at
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
-        tx.update(path, prepared_payload)
+        transaction.update(doc_ref, prepared_payload)
         return True
 
-    return _store().run_transaction(_write_segments)
+    return run_transactional(client, _write_segments)
 
 
 # ***********************************
@@ -1357,28 +1479,33 @@ def update_conversation_segments(
 
 
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):
-    _store().update(_conversation_path(uid, conversation_id),{'visibility': visibility})
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'visibility': visibility})
 
 
 def set_conversation_starred(uid: str, conversation_id: str, starred: bool):
-    _store().update(_conversation_path(uid, conversation_id),{'starred': starred})
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'starred': starred})
 
 
 def unlock_all_conversations(uid: str):
     """
     Finds all conversations for a user with is_locked: True and updates them to is_locked = False.
     """
-    store = _store()
-    docs = store.query(_conversations_path(uid), filters=[('is_locked', '==', True)])
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    locked_conversations_query = conversations_ref.where(filter=FieldFilter('is_locked', '==', True))
 
-    batch = store.batch()
+    batch = db.batch()
+    docs = locked_conversations_query.stream()
     count = 0
     for doc in docs:
-        batch.update(doc.path, {'is_locked': False})
+        batch.update(doc.reference, {'is_locked': False})
         count += 1
-        if count >= 499:  # chunked for throughput; adapters honor their own batch limits
+        if count >= 499:  # Firestore batch limit is 500
             batch.commit()
-            batch = store.batch()
+            batch = db.batch()
             count = 0
     if count > 0:
         batch.commit()
@@ -1397,21 +1524,25 @@ def set_postprocessing_status(
     fail_reason: str = None,
     model: PostProcessingModel = PostProcessingModel.fal_whisperx,
 ):
-    _store().update(_conversation_path(uid, conversation_id),
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update(
         {'postprocessing.status': status, 'postprocessing.model': model, 'postprocessing.fail_reason': fail_reason}
     )
 
 
 def store_model_segments_result(uid: str, conversation_id: str, model_name: str, segments: List[TranscriptSegment]):
-    store = _store()
-    segments_path = f'{_conversation_path(uid, conversation_id)}/{model_name}'
-    batch = store.batch()
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    segments_ref = conversation_ref.collection(model_name)
+    batch = db.batch()
     for i, segment in enumerate(segments):
         segment_id = str(uuid.uuid4())
-        batch.set(f'{segments_path}/{segment_id}', segment.model_dump())
+        segment_ref = segments_ref.document(segment_id)
+        batch.set(segment_ref, segment.model_dump())
         if i >= 400:
             batch.commit()
-            batch = store.batch()
+            batch = db.batch()
     batch.commit()
 
 
@@ -1419,14 +1550,16 @@ def store_model_emotion_predictions_result(
     uid: str, conversation_id: str, model_name: str, predictions: List[hume.HumeJobModelPredictionResponseModel]
 ):
     now = datetime.now()
-    store = _store()
-    predictions_path = f'{_conversation_path(uid, conversation_id)}/{model_name}'
-    batch = store.batch()
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    predictions_ref = conversation_ref.collection(model_name)
+    batch = db.batch()
     count = 0
     for prediction in predictions:
         prediction_id = str(uuid.uuid4())
+        prediction_ref = predictions_ref.document(prediction_id)
         batch.set(
-            f'{predictions_path}/{prediction_id}',
+            prediction_ref,
             {
                 "created_at": now,
                 "start": prediction.time[0],
@@ -1437,25 +1570,28 @@ def store_model_emotion_predictions_result(
         count = count + 1
         if count >= 100:
             batch.commit()
-            batch = store.batch()
+            batch = db.batch()
             count = 0
     batch.commit()
 
 
 def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
-    store = _store()
-    base = _conversation_path(uid, conversation_id)
-
-    def _segments(model: str):
-        return sorted([doc.to_dict() for doc in store.query(f'{base}/{model}')], key=lambda x: x.get('start', 0))
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    deepgram_ref = conversation_ref.collection('deepgram_streaming')
+    soniox_ref = conversation_ref.collection('soniox_streaming')
+    speechmatics_ref = conversation_ref.collection('speechmatics_streaming')
+    whisperx_ref = conversation_ref.collection('fal_whisperx')
 
     # Sort each provider's segments by start time, tolerating a legacy/partial doc missing 'start'
     # (a bare x['start'] would KeyError and 500 the whole transcripts response).
     return {
-        'deepgram': list(_segments('deepgram_streaming')),
-        'soniox': list(_segments('soniox_streaming')),
-        'speechmatics': list(_segments('speechmatics_streaming')),
-        'whisperx': list(_segments('fal_whisperx')),
+        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x.get('start', 0))),
+        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x.get('start', 0))),
+        'speechmatics': list(
+            sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x.get('start', 0))
+        ),
+        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x.get('start', 0))),
     }
 
 
@@ -1468,24 +1604,31 @@ def store_conversation_photos(
     uid: str,
     conversation_id: str,
     photos: List[ConversationPhoto],
+    *,
+    firestore_client: Any = None,
 ) -> bool:
-    conversation_path = _conversation_path(uid, conversation_id)
-    photos_path = f'{conversation_path}/photos'
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    photos_ref = conversation_ref.collection('photos')
+    transaction = client.transaction()
 
-    def _write(tx) -> bool:
-        conversation_snapshot = tx.get(conversation_path)
-        if not conversation_snapshot.exists:
+    @firestore.transactional
+    def _store(transaction) -> bool:
+        conversation_snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(conversation_snapshot, 'exists', False):
             return False
         level = (conversation_snapshot.to_dict() or {}).get('data_protection_level', 'standard')
         for photo in photos:
             photo_id = photo.id or str(uuid.uuid4())
+            photo_ref = photos_ref.document(photo_id)
             data = photo.model_dump()
             data['id'] = photo_id
-            tx.set(f'{photos_path}/{photo_id}', _prepare_photo_for_write(data, uid, level))
-        tx.update(conversation_path, {'has_content': True})
+            transaction.set(photo_ref, _prepare_photo_for_write(data, uid, level))
+        transaction.update(conversation_ref, {'has_content': True})
         return True
 
-    return _store().run_transaction(_write)
+    return _store(transaction)
 
 
 # ********************************
@@ -1542,13 +1685,16 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     start_threshold = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) - timedelta(minutes=2)
     end_threshold = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) + timedelta(minutes=2)
 
-    docs = _store().query(
-        _conversations_path(uid),
-        filters=[('finished_at', '>=', start_threshold), ('started_at', '<=', end_threshold)],
-        order_by='created_at', direction='desc',
+    query = (
+        db.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .where(filter=FieldFilter('finished_at', '>=', start_threshold))
+        .where(filter=FieldFilter('started_at', '<=', end_threshold))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
 
-    conversations = [doc.to_dict() for doc in docs]
+    conversations = [doc.to_dict() for doc in query.stream()]
     logger.info(f'get_closest_conversation_to_timestamps len(conversations) {len(conversations)}')
     if not conversations:
         return None
@@ -1569,11 +1715,14 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_last_completed_conversation(uid: str) -> Optional[dict]:
-    docs = _store().query(
-        _conversations_path(uid),
-        filters=[('status', '==', ConversationStatus.completed)],
-        order_by='created_at', direction='desc', limit=1,
+    query = (
+        db.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .where(filter=FieldFilter('status', '==', ConversationStatus.completed))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(1)
     )
-    conversations = [doc.to_dict() for doc in docs]
+    conversations = [doc.to_dict() for doc in query.stream()]
     conversation = conversations[0] if conversations else None
     return conversation

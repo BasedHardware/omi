@@ -72,7 +72,7 @@ def test_terminal_finalization_failure_records_once_after_dead_letter(monkeypatc
 
     assert conversation_finalization.final_attempt_failed('job-1', 2, 3, 4) is True
 
-    dead_letter.assert_called_once_with('job-1', 2, 3, 4)
+    dead_letter.assert_called_once_with('job-1', 2, 3, 4, firestore_client=None)
     terminal.assert_called_once_with('failure', accepted_at)
 
 

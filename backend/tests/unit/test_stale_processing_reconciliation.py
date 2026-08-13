@@ -69,7 +69,7 @@ def test_legacy_orphan_is_migrated_not_completed(monkeypatch):
     result = service.reconcile_stale_processing_conversations()
 
     assert result == {'completed': 0, 'migrated': 1, 'skipped': 0, 'error': 0}
-    stamp.assert_called_once_with('uid', 'legacy-1')
+    stamp.assert_called_once_with('uid', 'legacy-1', firestore_client=None)
     # A legacy row is never terminalized on first sight.
     complete.assert_not_called()
 
@@ -81,7 +81,7 @@ def test_aged_orphan_reaches_exactly_one_terminal_through_the_fence(monkeypatch)
     result = service.reconcile_stale_processing_conversations()
 
     assert result['completed'] == 1
-    complete.assert_called_once_with('uid', 'aged-1', expected_admitted_at=_ADMITTED)
+    complete.assert_called_once_with('uid', 'aged-1', expected_admitted_at=_ADMITTED, firestore_client=None)
 
 
 def test_fence_skip_is_a_skip_not_an_error(monkeypatch):
@@ -106,7 +106,7 @@ def test_legacy_stamp_cas_loss_is_skipped_not_migrated(monkeypatch):
     result = service.reconcile_stale_processing_conversations()
 
     assert result == {'completed': 0, 'migrated': 0, 'skipped': 1, 'error': 0}
-    stamp.assert_called_once_with('uid', 'already-stamped-1')
+    stamp.assert_called_once_with('uid', 'already-stamped-1', firestore_client=None)
     complete.assert_not_called()
 
 
@@ -123,7 +123,7 @@ def test_legacy_row_too_large_to_stamp_is_terminalized_not_retried_forever(monke
     result = service.reconcile_stale_processing_conversations()
 
     assert result == {'completed': 1, 'migrated': 0, 'skipped': 0, 'error': 0}
-    unstampable.assert_called_once_with('uid', 'oversized-1', stale_after=timedelta(seconds=900))
+    unstampable.assert_called_once_with('uid', 'oversized-1', stale_after=timedelta(seconds=900), firestore_client=None)
     # The generation-fenced terminal is for stamped rows only.
     complete.assert_not_called()
 

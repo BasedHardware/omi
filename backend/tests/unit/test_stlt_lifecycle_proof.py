@@ -89,39 +89,3 @@ def test_safe_error_omits_exception_args(mod: Any) -> None:
     label = mod._safe_error(Boom("secret memory content should not leak"))
     assert label == "Boom"
     assert "secret" not in label
-
-
-def test_ensure_user_control_writes_through_the_document_store_seam(mod: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    """--ensure-user-control must write the per-user control doc through the configured store
-    (``get_document_store``) — the same seam ``canonical_write_decision``/``read_v3_control`` read
-    from — not raw Firestore, so a Mongo-backed user is actually made write-ready."""
-    from types import SimpleNamespace
-
-    import database.memory_collections as mc_mod
-    import database.store as store_mod
-    import scripts.enroll_canonical_memory_user as enroll_mod
-    import utils.memory.v3.account_generation_source as ags_mod
-
-    writes: list[tuple[str, dict, bool]] = []
-
-    class _RecordingStore:
-        def set(self, path: str, data: dict, *, merge: bool = False) -> None:
-            writes.append((path, data, merge))
-
-    monkeypatch.setattr(store_mod, "get_document_store", lambda: _RecordingStore())
-    monkeypatch.setattr(
-        ags_mod,
-        "read_memory_v3_trusted_account_generation",
-        lambda uid: SimpleNamespace(account_generation=7, read_error_reason=None),
-    )
-    monkeypatch.setattr(
-        enroll_mod,
-        "build_user_control_state",
-        lambda **kw: {"stage": kw["stage"], "account_generation": kw["account_generation"]},
-    )
-
-    written = mod._ensure_user_control_only(uid="uid-test")
-
-    expected_path = mc_mod.MemoryCollections(uid="uid-test").memory_control_state
-    assert written == [expected_path]
-    assert writes == [(expected_path, {"stage": "write", "account_generation": 7}, True)]

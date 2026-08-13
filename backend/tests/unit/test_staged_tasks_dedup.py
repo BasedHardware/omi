@@ -23,7 +23,6 @@ from unittest.mock import MagicMock
 
 from database import action_items as action_items_db
 from database import staged_tasks as staged_tasks_db
-from tests.store_fakes import FakeDocumentStore
 
 # ---------------------------------------------------------------------------
 # _normalize_description
@@ -53,15 +52,27 @@ def test_normalize_handles_none_and_empty():
 
 
 def _make_doc(doc_id, data):
-    return (doc_id, data)
+    doc = MagicMock()
+    doc.id = doc_id
+    doc.to_dict.return_value = data
+    return doc
 
 
 def _stub_action_items_query(monkeypatch, docs):
-    """Seed the active-action-items collection through the ``_store()`` seam."""
-    store = FakeDocumentStore()
-    for doc_id, data in docs:
-        store._docs[f'users/uid/action_items/{doc_id}'] = dict(data)
-    monkeypatch.setattr(action_items_db, '_store', lambda: store)
+    """Stub db.collection(...).document(uid).collection(action_items).where(...).stream() to yield docs."""
+    fake_query = MagicMock()
+    fake_query.stream.return_value = iter(docs)
+
+    fake_subcol = MagicMock()
+    fake_subcol.where.return_value = fake_query
+
+    fake_user_doc = MagicMock()
+    fake_user_doc.collection.return_value = fake_subcol
+
+    fake_users = MagicMock()
+    fake_users.document.return_value = fake_user_doc
+
+    monkeypatch.setattr(action_items_db, 'db', MagicMock(collection=MagicMock(return_value=fake_users)))
 
 
 def test_returns_none_when_no_active_items(monkeypatch):
@@ -116,19 +127,35 @@ def test_normalizes_screen_marker_on_both_sides(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _seed_staged(monkeypatch, top):
-    """Seed a FakeDocumentStore with ``top`` (a single active staged task) and
-    wire it through the ``_store()`` seam. Returns ``(store, path)`` so a test can
-    assert on the stored document's resulting state."""
-    store = FakeDocumentStore()
-    path = f'users/uid/staged_tasks/{top["id"]}'
-    store.set(path, {'completed': False, **top})
-    monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
-    return store, path
+def _stub_top_staged(monkeypatch, top):
+    """Stub _user_col(uid, 'staged_tasks') so the top-staged-task query
+    returns ``top`` (a single doc dict) and update()/document() are spies."""
+    staged_doc = _make_doc(top['id'], top)
+
+    fake_query = MagicMock()
+    fake_query.where.return_value = fake_query
+    fake_query.order_by.return_value = fake_query
+    fake_query.limit.return_value = fake_query
+    fake_query.stream.return_value = iter([staged_doc])
+
+    update_calls = {}
+    fake_doc_ref = MagicMock()
+
+    def update(payload):
+        update_calls.update(payload)
+
+    fake_doc_ref.update.side_effect = update
+
+    fake_col = MagicMock()
+    fake_col.where.return_value = fake_query
+    fake_col.document.return_value = fake_doc_ref
+
+    monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: fake_col)
+    return update_calls
 
 
 def test_promote_skips_when_active_duplicate_exists(monkeypatch):
-    store, path = _seed_staged(
+    update_calls = _stub_top_staged(
         monkeypatch,
         {'id': 'staged-1', 'description': 'Follow up on Volt', 'relevance_score': 1},
     )
@@ -151,14 +178,13 @@ def test_promote_skips_when_active_duplicate_exists(monkeypatch):
 
     assert result == existing
     assert create_called == [], "create_action_item must not be called when a duplicate exists"
-    stored = store.get(path).to_dict()
-    assert stored.get('completed') is True
-    assert stored.get('promotion_skipped') == 'duplicate'
-    assert stored.get('promoted_to') == 'existing-action-1'
+    assert update_calls.get('completed') is True
+    assert update_calls.get('promotion_skipped') == 'duplicate'
+    assert update_calls.get('promoted_to') == 'existing-action-1'
 
 
 def test_promote_creates_when_no_duplicate(monkeypatch):
-    store, path = _seed_staged(
+    update_calls = _stub_top_staged(
         monkeypatch,
         {'id': 'staged-2', 'description': 'New unique task', 'relevance_score': 1},
     )
@@ -183,17 +209,16 @@ def test_promote_creates_when_no_duplicate(monkeypatch):
     result = staged_tasks_db.promote_staged_task('uid')
 
     assert result == {'id': 'fresh-id-1', 'description': 'New unique task'}
-    stored = store.get(path).to_dict()
     # The skip marker stays absent, while the canonical reconciliation target is durable.
-    assert 'promotion_skipped' not in stored
-    assert stored['promoted_to'] == 'fresh-id-1'
+    assert 'promotion_skipped' not in update_calls
+    assert update_calls['promoted_to'] == 'fresh-id-1'
     # The normal completed/promoted_at update still fires.
-    assert stored.get('completed') is True
-    assert isinstance(stored.get('promoted_at'), datetime)
+    assert update_calls.get('completed') is True
+    assert isinstance(update_calls.get('promoted_at'), datetime)
 
 
 def test_existing_reservation_never_recreates_task_closed_after_begin(monkeypatch):
-    store, path = _seed_staged(
+    update_calls = _stub_top_staged(
         monkeypatch,
         {'id': 'staged-existing', 'description': 'Deleted by user', 'relevance_score': 1},
     )
@@ -215,17 +240,16 @@ def test_existing_reservation_never_recreates_task_closed_after_begin(monkeypatc
     )
 
     assert result == {'id': 'task-deleted-after-begin'}
-    stored = store.get(path).to_dict()
-    assert stored['completed'] is True
-    assert stored['promoted_to'] == 'task-deleted-after-begin'
-    assert stored['promotion_skipped'] == 'duplicate_target_closed'
+    assert update_calls['completed'] is True
+    assert update_calls['promoted_to'] == 'task-deleted-after-begin'
+    assert update_calls['promotion_skipped'] == 'duplicate_target_closed'
 
 
 def test_promote_merges_missing_fields_on_dedup(monkeypatch):
     """When dedup hits, fields the existing action_item is MISSING that the
     staged task carries (e.g. a due_at from a later conversation) should be
     merged onto the existing item rather than silently dropped."""
-    _seed_staged(
+    _stub_top_staged(
         monkeypatch,
         {
             'id': 'staged-3',
@@ -277,7 +301,7 @@ def test_promote_merges_missing_fields_on_dedup(monkeypatch):
 def test_promote_dedup_no_merge_when_existing_already_has_fields(monkeypatch):
     """If the existing action_item already has every field the staged task
     carries, the merge step should be a no-op (no update_action_item call)."""
-    _seed_staged(
+    _stub_top_staged(
         monkeypatch,
         {
             'id': 'staged-4',
@@ -320,21 +344,31 @@ def test_create_staged_task_uses_normalized_dedup(monkeypatch):
     prefixed description should match an existing staged task whose
     description omits the marker, so we don't end up with two staged
     candidates that resolve to the same action_item."""
-    store = FakeDocumentStore()
-    store.set(
-        'users/uid/staged_tasks/staged-existing',
+    existing_doc = _make_doc(
+        'staged-existing',
         {'description': 'Email John', 'completed': False},
     )
-    monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
+
+    fake_col = MagicMock()
+    fake_col.stream.return_value = iter([existing_doc])
+
+    monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: fake_col)
 
     result = staged_tasks_db.create_staged_task('uid', '[screen] Email John')
     assert result['id'] == 'staged-existing'
-    # No new doc written — the collection still holds only the pre-existing row.
-    assert store.list_ids('users/uid/staged_tasks') == ['staged-existing']
+    fake_col.document.assert_not_called()  # no new doc written
 
 
 def test_promote_returns_none_when_no_staged(monkeypatch):
-    store = FakeDocumentStore()  # empty — no staged tasks
-    monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
+    fake_query = MagicMock()
+    fake_query.where.return_value = fake_query
+    fake_query.order_by.return_value = fake_query
+    fake_query.limit.return_value = fake_query
+    fake_query.stream.return_value = iter([])
+
+    fake_col = MagicMock()
+    fake_col.where.return_value = fake_query
+
+    monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: fake_col)
 
     assert staged_tasks_db.promote_staged_task('uid') is None

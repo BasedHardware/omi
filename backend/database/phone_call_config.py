@@ -23,12 +23,8 @@ paid-only (same as before this config existed).
 
 from typing import Any, Dict, Optional, cast
 
+from database._client import db
 from database.cache import get_memory_cache
-from database.store import get_document_store
-
-
-def _store():
-    return get_document_store()
 
 _CACHE_KEY = "phone_call_config:default"
 _CACHE_TTL_SECONDS = 60  # short so flag flips propagate within a minute
@@ -46,8 +42,8 @@ _DEFAULT_PAID_PLAN: Dict[str, Any] = {
 
 
 def _fetch_config() -> Dict[str, Any]:
-    doc = _store().get("phone_call_config/default")
-    if not doc.exists:
+    doc = db.collection("phone_call_config").document("default").get()
+    if not getattr(doc, "exists", False):
         return {}
     raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}

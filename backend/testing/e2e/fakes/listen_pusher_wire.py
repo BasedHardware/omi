@@ -596,96 +596,28 @@ class _FirestoreTransactionFacade:
         return getattr(self._firestore_module, name)
 
 
-def _strict_document_reference(database: _TransactionalFirestore, path: str) -> Any:
-    """Resolve a full logical path to a strict ``_TransactionalDocument`` reference.
-
-    Walks the ``collection/document/collection/document…`` segments so the neutral
-    storage port's path addressing maps onto the E2E fake's Firestore-shaped refs.
-    """
-    segments = path.split('/')
-    if len(segments) < 2 or len(segments) % 2 != 0:
-        raise ValueError(f'not a document path: {path!r}')
-    reference = database.collection(segments[0]).document(segments[1])
-    for index in range(2, len(segments), 2):
-        reference = reference.collection(segments[index]).document(segments[index + 1])
-    return reference
-
-
-class _StrictPortTransaction:
-    """Neutral storage-port ``Transaction`` over the strict staged Firestore transaction."""
-
-    def __init__(self, strict_transaction: _StrictTransaction, database: _TransactionalFirestore) -> None:
-        self._transaction = strict_transaction
-        self._database = database
-
-    def get(self, path: str):
-        from database.store.records import StoredDocument
-
-        snapshot = _strict_document_reference(self._database, path).get(transaction=self._transaction)
-        if not getattr(snapshot, 'exists', False):
-            return StoredDocument.missing(path)
-        return StoredDocument.present(path, snapshot.to_dict() or {})
-
-    def set(self, path: str, data: dict[str, Any], *, merge: bool = False) -> None:
-        from database.store.adapters.firestore import _translate
-
-        self._transaction.set(_strict_document_reference(self._database, path), _translate(data), merge=merge)
-
-    def update(self, path: str, data: dict[str, Any]) -> None:
-        from database.store.adapters.firestore import _translate
-
-        self._transaction.update(_strict_document_reference(self._database, path), _translate(data))
-
-    def delete(self, path: str) -> None:
-        self._transaction.delete(_strict_document_reference(self._database, path))
-
-
-class _StrictTransactionStore:
-    """Storage-port store that keeps the real adapter for reads/writes but drives
-    ``run_transaction`` through the strict staged, read-before-write commit.
-
-    Non-transactional operations already reach the E2E MockFirestore through the
-    default Firestore adapter; only the transactional reducers need the strict
-    serialization the emulator suite would otherwise be required to prove.
-    """
-
-    def __init__(self, base_store: Any, database: _TransactionalFirestore) -> None:
-        self._base = base_store
-        self._database = database
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._base, name)
-
-    def run_transaction(self, fn: Callable[[Any], Any], *, attempts: int = 3) -> Any:
-        strict_transaction = self._database.transaction()
-        runner = _strict_transactional(lambda transaction: fn(_StrictPortTransaction(transaction, self._database)))
-        return runner(strict_transaction)
-
-
 def install_fake_firestore_transactions(monkeypatch: Any, store: Any) -> _TransactionalFirestore:
     """Adapt the existing fake Firestore to the production transaction boundary.
 
-    The adapter preserves the E2E fake's storage/query shape, but gives the live
-    recording-session and finalization reducers a serializable staged commit and
-    Firestore's read-before-write rule.  It intentionally does not invent
-    contention/retry behavior; the emulator lifecycle suite owns that cross-worker
-    storage proof.
-
-    Both ``conversation_finalization_jobs`` and ``recording_sessions`` are on the
-    neutral storage port (WP2), so their strict transaction seam is installed as a
-    port ``DocumentStore`` whose ``run_transaction`` stages writes strictly while
-    every non-transactional operation flows through the real Firestore adapter over
-    the shared E2E MockFirestore.
+    The adapter preserves the E2E fake's storage/query shape, but gives the
+    live recording-session and finalization reducers a serializable staged
+    commit and Firestore's read-before-write rule.  It intentionally does not
+    invent contention/retry behavior; the emulator lifecycle suite owns that
+    cross-worker storage proof.
     """
 
     from database import conversation_finalization_jobs, recording_sessions
-    from database.store import get_document_store
 
     transactional_store = _TransactionalFirestore(store)
 
-    strict_store = _StrictTransactionStore(get_document_store(), transactional_store)
-    monkeypatch.setattr(conversation_finalization_jobs, 'get_document_store', lambda: strict_store)
-    monkeypatch.setattr(recording_sessions, 'get_document_store', lambda: strict_store)
+    monkeypatch.setattr(conversation_finalization_jobs, 'get_firestore_client', lambda: transactional_store)
+    monkeypatch.setattr(recording_sessions, 'get_firestore_client', lambda: transactional_store)
+    monkeypatch.setattr(
+        conversation_finalization_jobs,
+        'firestore',
+        _FirestoreTransactionFacade(conversation_finalization_jobs.firestore),
+    )
+    monkeypatch.setattr(recording_sessions, 'firestore', _FirestoreTransactionFacade(recording_sessions.firestore))
     return transactional_store
 
 

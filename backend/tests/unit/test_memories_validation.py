@@ -259,15 +259,6 @@ class TestExtractedMemoryValidation:
         if not hasattr(client, 'document_id_from_seed'):
             client.document_id_from_seed = lambda value: f'id-{value}'
 
-        # WP1 boundary module: models/memories.py imports document_id_from_seed from here.
-        document_ids = sys.modules.get('database.document_ids')
-        if document_ids is None:
-            document_ids = ModuleType('database.document_ids')
-            sys.modules['database.document_ids'] = document_ids
-            database.document_ids = document_ids
-        if not hasattr(document_ids, 'document_id_from_seed'):
-            document_ids.document_id_from_seed = lambda value: f'id-{value}'
-
         users = sys.modules.get('database.users')
         if users is None:
             users = ModuleType('database.users')

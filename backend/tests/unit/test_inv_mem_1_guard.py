@@ -14,7 +14,6 @@ from typing import List, Set, Tuple
 
 import pytest
 
-from config.memory_rollout import MemoryRolloutMode
 from database.memory_collections import MemoryCollections
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
@@ -27,14 +26,6 @@ from models.product_memory import (
     is_default_access_eligible,
 )
 from utils.memory.memory_read_api import query_default_product_memory_items
-from utils.memory.v3.control_reader_contract import (
-    V3ControlDecisionReason,
-    V3ControlReadResult,
-    V3ControlReaderRequest,
-    V3ControlRouteFamily,
-    V3ControlState,
-    decide_v3_control_route,
-)
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -59,6 +50,7 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         "historical_graph_enrichment_cursor",
         "memory_apply_control_state",
         "memory_lineage",
+        "memory_historical_overrides",
         "memory_evidence",
         "memory_graph_assertions",
         # Existing review surface, now centralized through MemoryCollections.
@@ -73,8 +65,6 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         "memory_commits",
         "memory_state",
         "memory_state_head",
-        "v3_compatibility_projection_state",
-        "v3_compatibility_projection_items",
         "all_collection_paths",
     }
 )
@@ -164,50 +154,6 @@ def _vector_hit(item: MemoryItem, *, score: float = 0.9) -> SearchVectorHit:
         source_commit_id=item.source_commit_id,
         content_hash=item.content_hash,
     )
-
-
-def _v3_request(**overrides) -> V3ControlReaderRequest:
-    values = {
-        "uid": "uid-guard",
-        "expected_account_generation": 7,
-        "cursor_memory_read_requested": False,
-        "cursor_secret_config_present": True,
-        "archive_requested": False,
-    }
-    values.update(overrides)
-    return V3ControlReaderRequest(**values)
-
-
-def _v3_state(**overrides) -> V3ControlState:
-    values = {
-        "uid": "uid-guard",
-        "schema_version": 1,
-        "configured_mode": MemoryRolloutMode.read,
-        "persisted_mode": MemoryRolloutMode.read,
-        "effective_mode": MemoryRolloutMode.read,
-        "mode_epoch": 1,
-        "cutover_epoch": 1,
-        "account_generation": 7,
-        "default_memory_grant": True,
-        "archive_allowed": False,
-        "rollout_write_ready": True,
-        "projection_ready": True,
-        "global_read_gate_open": True,
-        "write_convergence_ready": True,
-    }
-    values.update(overrides)
-    return V3ControlState(**values)
-
-
-def _v3_result(**overrides) -> V3ControlReadResult:
-    values = {
-        "cohort_enrolled": True,
-        "source_path": "users/uid-guard/memory_control/state",
-        "state": _v3_state(),
-        "read_error_reason": None,
-    }
-    values.update(overrides)
-    return V3ControlReadResult(**values)
 
 
 _RATchet_PARSE_CACHE: dict[str, ast.Module] = {}
@@ -450,27 +396,6 @@ class TestInvMem2VectorHydrationFailClosed:
         assert result.results == []
         assert result.decisions["mem_arch"] == SearchDecision.access_denied
         assert result.repair_purge_candidates == []
-
-
-class TestInvMem3CanonicalFailClosedNoLegacyFallback:
-    """INV-MEM-3: enrolled read-mode never falls back to legacy on failure."""
-
-    @pytest.mark.parametrize(
-        ("control_result", "expected_reason"),
-        [
-            (_v3_result(state=None), V3ControlDecisionReason.MISSING_CONTROL_DOC),
-            (_v3_result(state=_v3_state(account_generation=6)), V3ControlDecisionReason.STALE_GENERATION),
-            (_v3_result(state=_v3_state(projection_ready=False)), V3ControlDecisionReason.PROJECTION_NOT_READY),
-        ],
-    )
-    def test_enrolled_read_mode_fail_closed_without_legacy_fallback(self, control_result, expected_reason):
-        decision = decide_v3_control_route(_v3_request(), control_result)
-
-        assert decision.route_family == V3ControlRouteFamily.FAIL_CLOSED
-        assert decision.allowed is False
-        assert decision.reason == expected_reason
-        assert decision.fallback_to_legacy_allowed is False
-        assert decision.requires_legacy_reader is False
 
 
 class TestInvMemSourceRatchet:

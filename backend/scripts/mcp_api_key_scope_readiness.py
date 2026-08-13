@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import sys
@@ -61,8 +62,8 @@ def row_from_snapshot(snapshot: Any) -> McpApiKeyInventoryRow:
     )
 
 
-def inventory_mcp_api_keys(store: Any) -> List[McpApiKeyInventoryRow]:
-    return [row_from_snapshot(document) for document in store.query(MCP_API_KEY_COLLECTION)]
+def inventory_mcp_api_keys(db_client: Any) -> List[McpApiKeyInventoryRow]:
+    return [row_from_snapshot(snapshot) for snapshot in db_client.collection(MCP_API_KEY_COLLECTION).stream()]
 
 
 def summarize_inventory(rows: Sequence[McpApiKeyInventoryRow]) -> Dict[str, int]:
@@ -115,11 +116,11 @@ def normalize_assignments(
     return normalized, errors
 
 
-def apply_assignments(store: Any, assignments: Mapping[str, Mapping[str, Any]]) -> List[Dict[str, Any]]:
+def apply_assignments(db_client: Any, assignments: Mapping[str, Mapping[str, Any]]) -> List[Dict[str, Any]]:
     applied: List[Dict[str, Any]] = []
     for key_id in sorted(assignments):
         patch = {"app_id": assignments[key_id]["app_id"], "scopes": list(assignments[key_id]["scopes"])}
-        store.update(f"{MCP_API_KEY_COLLECTION}/{key_id}", patch)
+        db_client.collection(MCP_API_KEY_COLLECTION).document(key_id).update(patch)
         applied.append({"key_id": key_id, "patch": patch})
     return applied
 
@@ -137,7 +138,7 @@ def base_non_claims(executed: bool) -> List[str]:
 
 
 def run_readiness_inventory(
-    store: Any,
+    db_client: Any,
     *,
     execute: bool,
     allow_write: bool,
@@ -154,7 +155,7 @@ def run_readiness_inventory(
             "non_claims": base_non_claims(executed=False),
         }
 
-    rows = inventory_mcp_api_keys(store)
+    rows = inventory_mcp_api_keys(db_client)
     normalized_assignments, assignment_errors = normalize_assignments(assignments)
     if assignment_errors:
         return {
@@ -181,7 +182,7 @@ def run_readiness_inventory(
     if not allow_write:
         return result
 
-    result["applied_assignments"] = apply_assignments(store, normalized_assignments)
+    result["applied_assignments"] = apply_assignments(db_client, normalized_assignments)
     result["status"] = "APPLIED"
     result["read_only"] = False
     result["mutation_allowed"] = True
@@ -198,12 +199,9 @@ def load_assignments(path: Optional[str]) -> Dict[str, Dict[str, Any]]:
     return cast(Dict[str, Dict[str, Any]], loaded)
 
 
-def build_production_store() -> Any:
-    # Imported lazily so the default NOT_RUN path (and running this file directly, with only
-    # ``scripts/`` on ``sys.path``) never needs the ``database`` package or a configured backend.
-    from database.store import get_document_store
-
-    return get_document_store()
+def build_production_db_client() -> Any:
+    client_module = importlib.import_module("database._client")
+    return client_module.db
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -229,18 +227,18 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Optional[Sequence[str]] = None, *, store: Any = None) -> int:
+def main(argv: Optional[Sequence[str]] = None, *, db_client: Any = None) -> int:
     args = parse_args(argv)
     if not args.execute:
-        payload = run_readiness_inventory(None, execute=False, allow_write=False, assignments={})
+        payload = run_readiness_inventory(db_client=None, execute=False, allow_write=False, assignments={})
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
 
     try:
         assignments = load_assignments(args.assignment_file)
-        active_store = store or build_production_store()
+        client = db_client or build_production_db_client()
         payload = run_readiness_inventory(
-            active_store, execute=True, allow_write=bool(args.allow_write), assignments=assignments
+            client, execute=True, allow_write=bool(args.allow_write), assignments=assignments
         )
     except Exception as exc:
         payload = {

@@ -17,21 +17,17 @@ entry like "1.0.531" matches every build of that semantic version.
 
 from typing import Any, Optional, cast
 
+from database._client import db
 from database.announcements import compare_versions
 from database.cache import get_memory_cache
-from database.store import get_document_store
 
 _CACHE_KEY_PREFIX = "app_review_config:"
 _CACHE_TTL_SECONDS = 60  # short so flag flips propagate within a minute
 
 
-def _store():
-    return get_document_store()
-
-
 def _fetch_review_config(platform: str) -> dict[str, Any]:
-    doc = _store().get(f"app_review_config/{platform}")
-    if not doc.exists:
+    doc = db.collection("app_review_config").document(platform).get()
+    if not getattr(doc, "exists", False):
         return {}
     raw: object = doc.to_dict()
     return cast(dict[str, Any], raw) if isinstance(raw, dict) else {}

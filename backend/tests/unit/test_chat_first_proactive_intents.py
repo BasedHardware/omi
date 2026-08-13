@@ -7,8 +7,6 @@ from unittest.mock import patch
 import pytest
 
 import database.chat_first_intents as intents_db
-from tests.store_fakes import FakeDocumentStore
-from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from models.chat_first import (
     CaptureLinkSpec,
     ChatFirstSubject,
@@ -23,22 +21,155 @@ from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 NOW = datetime(2026, 7, 15, 12, tzinfo=timezone.utc)
 UID = 'user-1'
 GENERATION = 7
-CONTROL_PATH = f'users/{UID}/task_intelligence_control/state'
+
+
+class _Snapshot:
+    def __init__(self, database, path):
+        self._database = database
+        self._path = path
+        self.exists = path in database.rows
+
+    def to_dict(self):
+        return deepcopy(self._database.rows.get(self._path))
+
+
+class _Document:
+    def __init__(self, database, path):
+        self._database = database
+        self._path = path
+
+    @property
+    def id(self):
+        return self._path[-1]
+
+    def collection(self, name):
+        return _Collection(self._database, (*self._path, name))
+
+    def get(self, transaction=None):
+        if transaction is not None:
+            transaction.read()
+        return _Snapshot(self._database, self._path)
+
+    def set(self, payload):
+        self._database.rows[self._path] = deepcopy(payload)
+
+
+class _Collection:
+    def __init__(self, database, path):
+        self._database = database
+        self._path = path
+
+    def document(self, identifier):
+        return _Document(self._database, (*self._path, identifier))
+
+    def stream(self):
+        child_length = len(self._path) + 1
+        return [
+            _Snapshot(self._database, path)
+            for path in sorted(self._database.rows)
+            if path[: len(self._path)] == self._path and len(path) == child_length
+        ]
+
+    def where(self, *, filter):
+        """Minimal FieldFilter mock supporting chained equality/range filters."""
+        child_length = len(self._path) + 1
+        snapshots = [
+            _Snapshot(self._database, path)
+            for path in sorted(self._database.rows)
+            if path[: len(self._path)] == self._path and len(path) == child_length
+        ]
+        field = filter.field_path
+        op = filter.op_string
+        value = filter.value
+        matched = []
+        for snap in snapshots:
+            snap_data = snap.to_dict() or {}
+            actual = snap_data
+            for component in field.split('.'):
+                if not isinstance(actual, dict):
+                    actual = None
+                    break
+                actual = actual.get(component)
+            if op == 'in':
+                if actual in value:
+                    matched.append(snap)
+            elif op == '==':
+                if actual == value:
+                    matched.append(snap)
+            elif op == '<=':
+                if actual is not None and actual <= value:
+                    matched.append(snap)
+            else:  # pragma: no cover - only ``in``/``==`` used by this suite
+                matched.append(snap)
+        return _FilteredCollection(matched)
+
+
+class _FilteredCollection:
+    """Result of ``_Collection.where`` — supports ``stream`` only."""
+
+    def __init__(self, snapshots):
+        self._snapshots = snapshots
+
+    def stream(self):
+        return self._snapshots
+
+    def where(self, *, filter):
+        field = filter.field_path
+        op = filter.op_string
+        value = filter.value
+        matched = []
+        for snap in self._snapshots:
+            actual = snap.to_dict() or {}
+            for component in field.split('.'):
+                if not isinstance(actual, dict):
+                    actual = None
+                    break
+                actual = actual.get(component)
+            if op == '==' and actual == value:
+                matched.append(snap)
+            elif op == '<=' and actual is not None and actual <= value:
+                matched.append(snap)
+        return _FilteredCollection(matched)
+
+    def limit(self, count):
+        return _FilteredCollection(self._snapshots[:count])
+
+
+class _Transaction:
+    def __init__(self):
+        self._wrote = False
+
+    def read(self):
+        if self._wrote:
+            raise AssertionError('Firestore transactions must finish reads before writes')
+
+    def set(self, ref, payload):
+        self._wrote = True
+        ref.set(payload)
+
+
+class _Firestore:
+    def __init__(self):
+        self.rows = {}
+
+    def collection(self, name):
+        return _Collection(self, (name,))
+
+    def transaction(self):
+        return _Transaction()
 
 
 @pytest.fixture
-def store(monkeypatch):
-    set_canonical_cohort(monkeypatch, UID)
-    fake = FakeDocumentStore()
-    monkeypatch.setattr(intents_db, '_store', lambda: fake)
-    fake.set(
-        CONTROL_PATH,
-        TaskWorkflowControl(
-            workflow_mode=TaskWorkflowMode.read,
-            account_generation=GENERATION,
-            chat_first_ui_enabled=True,
-        ).persisted_payload(),
+def firestore(monkeypatch):
+    monkeypatch.setattr(
+        intents_db.firestore, 'transactional', lambda function: lambda transaction: function(transaction)
     )
+    fake = _Firestore()
+    fake.rows[('users', UID, 'task_intelligence_control', 'state')] = TaskWorkflowControl(
+        workflow_mode=TaskWorkflowMode.read,
+        account_generation=GENERATION,
+        chat_first_ui_enabled=True,
+    ).persisted_payload()
     return fake
 
 
@@ -52,7 +183,7 @@ def _question(subject: ChatFirstSubject | None = None) -> QuestionCardSpec:
     )
 
 
-def test_agent_intent_reserves_then_receipt_accounts_one_turn_idempotently(store):
+def test_agent_intent_reserves_then_receipt_accounts_one_turn_idempotently(firestore):
     question = _question()
     intent, created = intents_db.create_intent(
         UID,
@@ -62,6 +193,7 @@ def test_agent_intent_reserves_then_receipt_accounts_one_turn_idempotently(store
         blocks=[question],
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
     retried, created_on_retry = intents_db.create_intent(
         UID,
@@ -71,6 +203,7 @@ def test_agent_intent_reserves_then_receipt_accounts_one_turn_idempotently(store
         blocks=[question],
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
 
     assert created is True
@@ -79,7 +212,7 @@ def test_agent_intent_reserves_then_receipt_accounts_one_turn_idempotently(store
     assert (
         len(
             intents_db.get_budget_state(
-                UID, account_generation=GENERATION, now=NOW
+                UID, account_generation=GENERATION, now=NOW, firestore_client=firestore
             ).reservations
         )
         == 1
@@ -91,6 +224,7 @@ def test_agent_intent_reserves_then_receipt_accounts_one_turn_idempotently(store
         receipt_id='kernel-receipt-1',
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
     replayed = intents_db.acknowledge_materialization(
         UID,
@@ -98,8 +232,9 @@ def test_agent_intent_reserves_then_receipt_accounts_one_turn_idempotently(store
         receipt_id='kernel-receipt-1',
         account_generation=GENERATION,
         now=NOW + timedelta(seconds=1),
+        firestore_client=firestore,
     )
-    budget = intents_db.get_budget_state(UID, account_generation=GENERATION, now=NOW)
+    budget = intents_db.get_budget_state(UID, account_generation=GENERATION, now=NOW, firestore_client=firestore)
 
     assert delivered.delivery_state == 'delivered'
     assert replayed == delivered
@@ -107,7 +242,7 @@ def test_agent_intent_reserves_then_receipt_accounts_one_turn_idempotently(store
     assert budget.materialized_at == [NOW]
 
 
-def test_budget_gate_counts_reservations_before_a_provider_call(store):
+def test_budget_gate_counts_reservations_before_a_provider_call(firestore):
     question = _question()
     for continuity_key in ('first', 'second'):
         intents_db.create_intent(
@@ -118,20 +253,22 @@ def test_budget_gate_counts_reservations_before_a_provider_call(store):
             blocks=[question],
             account_generation=GENERATION,
             now=NOW,
+            firestore_client=firestore,
         )
 
-    budget = intents_db.get_budget_state(UID, account_generation=GENERATION, now=NOW)
+    budget = intents_db.get_budget_state(UID, account_generation=GENERATION, now=NOW, firestore_client=firestore)
 
     assert budget_allows(budget, now=NOW) is False
 
 
-def test_agent_judgment_admission_is_single_writer_and_decline_releases_its_slot(store):
+def test_agent_judgment_admission_is_single_writer_and_decline_releases_its_slot(firestore):
     first = intents_db.admit_agent_judgment(
         UID,
         continuity_key='first',
         subject=ChatFirstSubject(kind='goal', id='goal-1'),
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
     duplicate = intents_db.admit_agent_judgment(
         UID,
@@ -139,6 +276,7 @@ def test_agent_judgment_admission_is_single_writer_and_decline_releases_its_slot
         subject=ChatFirstSubject(kind='goal', id='goal-1'),
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
     second = intents_db.admit_agent_judgment(
         UID,
@@ -146,6 +284,7 @@ def test_agent_judgment_admission_is_single_writer_and_decline_releases_its_slot
         subject=ChatFirstSubject(kind='goal', id='goal-2'),
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
 
     assert first.newly_reserved is True
@@ -159,6 +298,7 @@ def test_agent_judgment_admission_is_single_writer_and_decline_releases_its_slot
             subject=ChatFirstSubject(kind='goal', id='goal-3'),
             account_generation=GENERATION,
             now=NOW,
+            firestore_client=firestore,
         )
 
     intents_db.release_agent_judgment_admission(
@@ -166,6 +306,7 @@ def test_agent_judgment_admission_is_single_writer_and_decline_releases_its_slot
         continuity_key='first',
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
     retry = intents_db.admit_agent_judgment(
         UID,
@@ -173,12 +314,13 @@ def test_agent_judgment_admission_is_single_writer_and_decline_releases_its_slot
         subject=ChatFirstSubject(kind='goal', id='goal-3'),
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
 
     assert retry.newly_reserved is True
 
 
-def test_pre_admitted_agent_judgment_reuses_its_reservation_when_the_intent_is_persisted(store):
+def test_pre_admitted_agent_judgment_reuses_its_reservation_when_the_intent_is_persisted(firestore):
     question = _question()
     admission = intents_db.admit_agent_judgment(
         UID,
@@ -186,6 +328,7 @@ def test_pre_admitted_agent_judgment_reuses_its_reservation_when_the_intent_is_p
         subject=question.subject,
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
 
     intent, created = intents_db.create_intent(
@@ -196,6 +339,7 @@ def test_pre_admitted_agent_judgment_reuses_its_reservation_when_the_intent_is_p
         blocks=[question],
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
 
     assert admission.newly_reserved is True
@@ -204,7 +348,7 @@ def test_pre_admitted_agent_judgment_reuses_its_reservation_when_the_intent_is_p
     assert (
         len(
             intents_db.get_budget_state(
-                UID, account_generation=GENERATION, now=NOW
+                UID, account_generation=GENERATION, now=NOW, firestore_client=firestore
             ).reservations
         )
         == 1
@@ -221,7 +365,7 @@ def test_budget_has_explicit_rolling_and_utc_day_boundaries():
     assert budget_allows(daily, now=NOW + timedelta(days=1)) is True
 
 
-def test_capture_arrival_retry_creates_one_deterministic_receipt_intent(store):
+def test_capture_arrival_retry_creates_one_deterministic_receipt_intent(firestore):
     blocks = [CaptureLinkSpec(type='captureLink', conversation_id='capture-1', summary='New Omi capture')]
     first, created = intents_db.create_intent(
         UID,
@@ -231,6 +375,7 @@ def test_capture_arrival_retry_creates_one_deterministic_receipt_intent(store):
         blocks=blocks,
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
     retry, created_on_retry = intents_db.create_intent(
         UID,
@@ -240,6 +385,7 @@ def test_capture_arrival_retry_creates_one_deterministic_receipt_intent(store):
         blocks=blocks,
         account_generation=GENERATION,
         now=NOW + timedelta(minutes=1),
+        firestore_client=firestore,
     )
 
     assert created is True
@@ -248,7 +394,7 @@ def test_capture_arrival_retry_creates_one_deterministic_receipt_intent(store):
     assert retry.source == 'capture_arrival'
 
 
-def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_receipt(store):
+def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_receipt(firestore):
     sequence_id = f'cold-start:{GENERATION}'
     question = QuestionCardSpec(
         type='questionCard',
@@ -266,6 +412,7 @@ def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_recei
         blocks=[question],
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
     retried, retry_created = intents_db.get_or_create_cold_start_intent(
         UID,
@@ -275,6 +422,7 @@ def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_recei
         blocks=[CaptureLinkSpec(type='captureLink', conversation_id='capture-1', summary='Ignored retry shape')],
         account_generation=GENERATION,
         now=NOW + timedelta(minutes=1),
+        firestore_client=firestore,
     )
 
     assert created is True
@@ -282,21 +430,22 @@ def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_recei
     assert retried == first
     assert first.delivery_state == 'pending_kernel_receipt'
     assert (
-        intents_db.has_active_sparse_cold_start_sequence(UID, account_generation=GENERATION)
+        intents_db.has_active_sparse_cold_start_sequence(UID, account_generation=GENERATION, firestore_client=firestore)
         is True
     )
-    assert intents_db.fetch_ready_intents(UID, account_generation=GENERATION) == [first]
+    assert intents_db.fetch_ready_intents(UID, account_generation=GENERATION, firestore_client=firestore) == [first]
     delivered = intents_db.acknowledge_materialization(
         UID,
         intent_id=first.intent_id,
         receipt_id='kernel-receipt-1',
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
 
     assert delivered.delivery_state == 'delivered'
     assert (
-        intents_db.has_active_sparse_cold_start_sequence(UID, account_generation=GENERATION)
+        intents_db.has_active_sparse_cold_start_sequence(UID, account_generation=GENERATION, firestore_client=firestore)
         is True
     )
     terminalized = intents_db.acknowledge_sparse_cold_start_sequence_terminal(
@@ -306,11 +455,12 @@ def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_recei
         terminal_state='abandoned',
         account_generation=GENERATION,
         now=NOW + timedelta(seconds=1),
+        firestore_client=firestore,
     )
     assert terminalized.cold_start_sequence_terminal_state == 'abandoned'
     assert terminalized.cold_start_sequence_terminal_receipt_id == 'sequence-terminal-receipt-1'
     assert (
-        intents_db.has_active_sparse_cold_start_sequence(UID, account_generation=GENERATION)
+        intents_db.has_active_sparse_cold_start_sequence(UID, account_generation=GENERATION, firestore_client=firestore)
         is False
     )
     assert (
@@ -321,6 +471,7 @@ def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_recei
             terminal_state='abandoned',
             account_generation=GENERATION,
             now=NOW + timedelta(seconds=2),
+            firestore_client=firestore,
         )
         == terminalized
     )
@@ -332,6 +483,7 @@ def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_recei
             terminal_state='completed',
             account_generation=GENERATION,
             now=NOW + timedelta(seconds=3),
+            firestore_client=firestore,
         )
     with pytest.raises(intents_db.ChatFirstIntentConflictError):
         intents_db.acknowledge_materialization(
@@ -340,11 +492,12 @@ def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_recei
             receipt_id='different-kernel-receipt',
             account_generation=GENERATION,
             now=NOW + timedelta(seconds=1),
+            firestore_client=firestore,
         )
-    assert intents_db.fetch_ready_intents(UID, account_generation=GENERATION) == []
+    assert intents_db.fetch_ready_intents(UID, account_generation=GENERATION, firestore_client=firestore) == []
 
 
-def test_deferral_releases_once_verbatim_when_due_or_subject_changes(store):
+def test_deferral_releases_once_verbatim_when_due_or_subject_changes(firestore):
     question = _question()
     receipt, created = intents_db.record_deferral(
         UID,
@@ -353,6 +506,7 @@ def test_deferral_releases_once_verbatim_when_due_or_subject_changes(store):
         question=question,
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
 
     assert created is True
@@ -362,6 +516,7 @@ def test_deferral_releases_once_verbatim_when_due_or_subject_changes(store):
             UID,
             account_generation=GENERATION,
             now=NOW + timedelta(hours=23, minutes=59),
+            firestore_client=firestore,
         )
         == []
     )
@@ -370,11 +525,13 @@ def test_deferral_releases_once_verbatim_when_due_or_subject_changes(store):
         UID,
         account_generation=GENERATION,
         now=NOW + timedelta(hours=24),
+        firestore_client=firestore,
     )
     replay = intents_db.release_due_deferrals(
         UID,
         account_generation=GENERATION,
         now=NOW + timedelta(hours=25),
+        firestore_client=firestore,
     )
 
     assert len(due) == 1
@@ -393,12 +550,14 @@ def test_deferral_releases_once_verbatim_when_due_or_subject_changes(store):
         question=task_question,
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
     subject_change = intents_db.release_due_deferrals(
         UID,
         account_generation=GENERATION,
         now=NOW + timedelta(minutes=1),
         subject=task_subject,
+        firestore_client=firestore,
     )
 
     assert len(subject_change) == 1
@@ -406,14 +565,11 @@ def test_deferral_releases_once_verbatim_when_due_or_subject_changes(store):
     assert subject_change[0].blocks[0].question_id != task_question.question_id
 
 
-def test_workflow_mode_cannot_suppress_intent_but_stale_generation_still_rejects(store):
-    store.set(
-        CONTROL_PATH,
-        TaskWorkflowControl(
-            workflow_mode=TaskWorkflowMode.off,
-            account_generation=GENERATION,
-        ).persisted_payload(),
-    )
+def test_workflow_mode_cannot_suppress_intent_but_stale_generation_still_rejects(firestore):
+    firestore.rows[('users', UID, 'task_intelligence_control', 'state')] = TaskWorkflowControl(
+        workflow_mode=TaskWorkflowMode.off,
+        account_generation=GENERATION,
+    ).persisted_payload()
     question = _question()
 
     intent, created = intents_db.create_intent(
@@ -424,17 +580,15 @@ def test_workflow_mode_cannot_suppress_intent_but_stale_generation_still_rejects
         blocks=[question],
         account_generation=GENERATION,
         now=NOW,
+        firestore_client=firestore,
     )
 
     assert created is True
     assert intent.account_generation == GENERATION
-    store.set(
-        CONTROL_PATH,
-        TaskWorkflowControl(
-            workflow_mode=TaskWorkflowMode.off,
-            account_generation=GENERATION + 1,
-        ).persisted_payload(),
-    )
+    firestore.rows[('users', UID, 'task_intelligence_control', 'state')] = TaskWorkflowControl(
+        workflow_mode=TaskWorkflowMode.off,
+        account_generation=GENERATION + 1,
+    ).persisted_payload()
 
     with pytest.raises(intents_db.ChatFirstIntentGenerationMismatch):
         intents_db.create_intent(
@@ -445,16 +599,16 @@ def test_workflow_mode_cannot_suppress_intent_but_stale_generation_still_rejects
             blocks=[question],
             account_generation=GENERATION,
             now=NOW,
+            firestore_client=firestore,
         )
 
-    assert sum(INTENTS_COLLECTION in path for path in store._docs) == 1
+    assert sum(INTENTS_COLLECTION in path for path in firestore.rows) == 1
 
 
-def test_malformed_control_or_proactive_state_fails_closed_without_a_fail_open_drop(store):
+def test_malformed_control_or_proactive_state_fails_closed_without_a_fail_open_drop(firestore):
     question = _question()
-    malformed_control = store.get(CONTROL_PATH).to_dict()
-    malformed_control['unexpected_legacy_field'] = True
-    store.set(CONTROL_PATH, malformed_control)
+    malformed_control_path = ('users', UID, 'task_intelligence_control', 'state')
+    firestore.rows[malformed_control_path]['unexpected_legacy_field'] = True
 
     with patch('database.read_boundary.record_fallback') as fallback:
         with pytest.raises(intents_db.ChatFirstIntentGenerationMismatch, match='capability state is malformed'):
@@ -466,22 +620,20 @@ def test_malformed_control_or_proactive_state_fails_closed_without_a_fail_open_d
                 blocks=[question],
                 account_generation=GENERATION,
                 now=NOW,
+                firestore_client=firestore,
             )
 
     fallback.assert_not_called()
-    assert not any(INTENTS_COLLECTION in path or DEFERRALS_COLLECTION in path for path in store._docs)
+    assert not any(INTENTS_COLLECTION in path or DEFERRALS_COLLECTION in path for path in firestore.rows)
 
 
-def test_malformed_intent_cannot_be_materialized_or_overwritten(store):
-    path = f'users/{UID}/{intents_db.INTENTS_COLLECTION}/malformed-intent'
-    store.set(
-        path,
-        {
-            'account_generation': GENERATION,
-            'unexpected_legacy_field': True,
-        },
-    )
-    original = deepcopy(store._docs[path])
+def test_malformed_intent_cannot_be_materialized_or_overwritten(firestore):
+    path = ('users', UID, intents_db.INTENTS_COLLECTION, 'malformed-intent')
+    firestore.rows[path] = {
+        'account_generation': GENERATION,
+        'unexpected_legacy_field': True,
+    }
+    original = deepcopy(firestore.rows[path])
 
     with patch('database.read_boundary.record_fallback') as fallback:
         with pytest.raises(intents_db.ChatFirstIntentGenerationMismatch, match='proactive intent is malformed'):
@@ -491,25 +643,23 @@ def test_malformed_intent_cannot_be_materialized_or_overwritten(store):
                 receipt_id='kernel-receipt-1',
                 account_generation=GENERATION,
                 now=NOW,
+                firestore_client=firestore,
             )
 
     fallback.assert_not_called()
-    assert store._docs[path] == original
+    assert firestore.rows[path] == original
 
 
-def test_malformed_deferral_cannot_be_accepted_or_overwritten(store):
+def test_malformed_deferral_cannot_be_accepted_or_overwritten(firestore):
     question = _question()
     continuity_key = 'malformed-deferral'
     deferral_id = intents_db._stable_id('cfd', UID, GENERATION, continuity_key)
-    path = f'users/{UID}/{intents_db.DEFERRALS_COLLECTION}/{deferral_id}'
-    store.set(
-        path,
-        {
-            'account_generation': GENERATION,
-            'unexpected_legacy_field': True,
-        },
-    )
-    original = deepcopy(store._docs[path])
+    path = ('users', UID, intents_db.DEFERRALS_COLLECTION, deferral_id)
+    firestore.rows[path] = {
+        'account_generation': GENERATION,
+        'unexpected_legacy_field': True,
+    }
+    original = deepcopy(firestore.rows[path])
 
     with patch('database.read_boundary.record_fallback') as fallback:
         with pytest.raises(intents_db.ChatFirstIntentGenerationMismatch, match='deferral is malformed'):
@@ -520,29 +670,27 @@ def test_malformed_deferral_cannot_be_accepted_or_overwritten(store):
                 question=question,
                 account_generation=GENERATION,
                 now=NOW,
+                firestore_client=firestore,
             )
 
     fallback.assert_not_called()
-    assert store._docs[path] == original
+    assert firestore.rows[path] == original
 
 
-def test_malformed_budget_state_cannot_be_reset_to_an_enabled_default(store):
-    path = f'users/{UID}/{intents_db.STATE_COLLECTION}/{intents_db.BUDGET_DOCUMENT}'
-    store.set(
-        path,
-        {
-            'account_generation': GENERATION,
-            'unexpected_legacy_field': True,
-        },
-    )
-    original = deepcopy(store._docs[path])
+def test_malformed_budget_state_cannot_be_reset_to_an_enabled_default(firestore):
+    path = ('users', UID, intents_db.STATE_COLLECTION, intents_db.BUDGET_DOCUMENT)
+    firestore.rows[path] = {
+        'account_generation': GENERATION,
+        'unexpected_legacy_field': True,
+    }
+    original = deepcopy(firestore.rows[path])
 
     with patch('database.read_boundary.record_fallback') as fallback:
         with pytest.raises(intents_db.ChatFirstIntentGenerationMismatch, match='proactive budget state is malformed'):
-            intents_db.get_budget_state(UID, account_generation=GENERATION, now=NOW)
+            intents_db.get_budget_state(UID, account_generation=GENERATION, now=NOW, firestore_client=firestore)
 
     fallback.assert_not_called()
-    assert store._docs[path] == original
+    assert firestore.rows[path] == original
 
 
 INTENTS_COLLECTION = intents_db.INTENTS_COLLECTION

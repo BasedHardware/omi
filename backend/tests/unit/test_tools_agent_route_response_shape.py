@@ -108,10 +108,7 @@ def _install_route_stubs(monkeypatch):
     monkeypatch.setitem(sys.modules, 'utils.retrieval.tool_services.action_items', action_services_mod)
 
     users_mod = types.ModuleType('database.users')
-    # WP1 moved the agent-VM Firestore reads/writes into database/users.py; agent_tools imports all three.
     users_mod.get_agent_vm = MagicMock(return_value=None)
-    users_mod.update_agent_vm = MagicMock()
-    users_mod.clear_agent_vm = MagicMock()
     monkeypatch.setitem(sys.modules, 'database.users', users_mod)
 
     client_mod = types.ModuleType('database._client')
@@ -137,8 +134,6 @@ def _install_route_stubs(monkeypatch):
     google_api_exceptions_mod.AlreadyExists = type('AlreadyExists', (Exception,), {})
     google_api_exceptions_mod.Conflict = type('Conflict', (Exception,), {})
     google_api_exceptions_mod.NotFound = type('NotFound', (Exception,), {})
-    # database._client (reached via the WP1 document_store handle) imports InvalidArgument.
-    google_api_exceptions_mod.InvalidArgument = type('InvalidArgument', (Exception,), {})
     google_auth_mod = types.ModuleType('google.auth')
     google_auth_mod.__path__ = []
     google_transport_mod = types.ModuleType('google.auth.transport')

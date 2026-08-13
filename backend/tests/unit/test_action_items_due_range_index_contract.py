@@ -8,13 +8,11 @@ due-range read -- the chat ``get_action_items`` tool and GET /v1/action-items wi
 failed with ``FailedPrecondition: 400 The query requires an index``; the ``conversation_id``
 chains kept failing after (completed ASC, due_at ASC) was declared.
 
-The query shapes are discovered by running the production function through the neutral storage
-port (WP2/ADR-0028): ``get_action_items`` no longer touches a raw Firestore client, it issues
-``store.query(path, filters=..., order_by=..., direction=...)`` calls. We record those port
-calls and convert each to a Firestore index signature (equality fields, then the ordered field,
-then ``__name__``). Firestore orders the equality prefix itself, so equality fields are compared
-as a set. Adding an equality filter or changing the order direction without declaring the
-matching index fails here instead of in prod.
+The query shapes are discovered by running the production function through the sanctioned
+``monkeypatch.setattr(action_items, 'db', ...)`` seam and are then converted to Firestore index
+signatures (equality fields, then the ordered field, then ``__name__``). Firestore orders the
+equality prefix itself, so equality fields are compared as a set. Adding an equality filter or
+changing the order direction without declaring the matching index fails here instead of in prod.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -27,39 +25,44 @@ from database.firestore_index_registry import firebase_index_manifest
 BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
-class _RecordingStore:
-    """Storage-port stand-in that records every ``query`` composite the caller builds.
+class _RecordingQuery:
+    """Firestore query stand-in that records every composite the caller builds.
 
-    ``get_action_items`` can issue more than one query per call (the incomplete bucket, the
-    bounded legacy scan, and the completed bucket). Each ``query`` call is recorded as its
-    ``filters``/``order_by``/``direction`` so the test can reconstruct the Firestore composite
-    it maps to. Queries return no rows -- this test asserts on the query *shapes*, not results.
+    ``get_action_items`` can build more than one query per call (the completed bucket and the
+    bounded legacy scan), each starting from ``db.collection('users')``; that call opens a new
+    recording.
     """
 
     def __init__(self):
-        self.queries: list[dict] = []
+        self.queries: list[list[tuple]] = []
+        self._current: list[tuple] = []
 
-    def query(
-        self,
-        collection,
-        *,
-        filters=None,
-        order_by=None,
-        direction='asc',
-        limit=None,
-        offset=None,
-        fields=None,
-        start_after=None,
-    ):
-        self.queries.append(
-            {
-                'collection': collection,
-                'filters': [tuple(f) for f in (filters or [])],
-                'order_by': order_by,
-                'direction': direction,
-            }
-        )
-        return []
+    def collection(self, name):
+        if name == 'users':
+            self._current = []
+            self.queries.append(self._current)
+        return self
+
+    def document(self, _name):
+        return self
+
+    def where(self, *_args, **kwargs):
+        filt = kwargs.get('filter')
+        self._current.append(('where', getattr(filt, 'field_path', None), getattr(filt, 'op_string', None)))
+        return self
+
+    def order_by(self, field, direction=None):
+        self._current.append(('order_by', field, direction))
+        return self
+
+    def offset(self, _n):
+        return self
+
+    def limit(self, _n):
+        return self
+
+    def stream(self):
+        return iter(())
 
 
 def _declared_action_item_signatures():
@@ -74,16 +77,16 @@ def _declared_action_item_signatures():
 
 def _index_signature(recorded):
     """Firestore composite order: equality fields, then the ordered field, then __name__."""
-    equalities = [(field, 'ASCENDING') for field, op, *_ in recorded['filters'] if op == '==']
-    assert recorded['order_by'], 'due-range reads must order explicitly so a bounded prefix matches product sort'
-    order = 'ASCENDING' if recorded['direction'] == 'asc' else 'DESCENDING'
-    ordered = (recorded['order_by'], order)
-    return (frozenset(equalities), ordered, ('__name__', order))
+    equalities = [(field, 'ASCENDING') for kind, field, op in recorded if kind == 'where' and op == '==']
+    orders = [(field, direction) for kind, field, direction in recorded if kind == 'order_by']
+    assert orders, 'due-range reads must order explicitly so a bounded prefix matches product sort'
+    ordered = orders[-1]
+    return (frozenset(equalities), ordered, ('__name__', ordered[1]))
 
 
 def _record_due_range_queries(monkeypatch, **filters):
-    recorder = _RecordingStore()
-    monkeypatch.setattr(action_items, '_store', lambda: recorder)
+    recorder = _RecordingQuery()
+    monkeypatch.setattr(action_items, 'db', recorder)
     action_items.get_action_items(
         'uid-under-test',
         due_start_date=BASE,
@@ -106,16 +109,15 @@ DUE_RANGE_CALLS = [
 
 def test_due_range_read_filters_completed_and_orders_due_at_ascending(monkeypatch):
     (recorded,) = _record_due_range_queries(monkeypatch, completed=False)
-    assert any(field == 'completed' and op == '==' for field, op, *_ in recorded['filters'])
-    assert recorded['order_by'] == 'due_at'
-    assert recorded['direction'] == 'asc'
+    assert ('where', 'completed', '==') in recorded
+    assert ('order_by', 'due_at', action_items.firestore.Query.ASCENDING) in recorded
 
 
 def test_conversation_due_range_read_keeps_the_conversation_equality(monkeypatch):
     recorded = _record_due_range_queries(monkeypatch, conversation_id='conv-under-test')
     assert recorded, 'a conversation-scoped due-range read must issue at least one query'
     for query in recorded:
-        assert any(field == 'conversation_id' and op == '==' for field, op, *_ in query['filters'])
+        assert ('where', 'conversation_id', '==') in query
 
 
 @pytest.mark.parametrize('filters', DUE_RANGE_CALLS)

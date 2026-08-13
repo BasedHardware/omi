@@ -112,9 +112,6 @@ from utils.memory.canonical_memory_adapter import (
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem
 
-from database import document_store
-from tests.store_fakes import FakeDocumentStore
-
 CANONICAL_UID = "uid-canonical-ws-m"
 LEGACY_UID = "uid-legacy-ws-m"
 NEEDLE = "CONFIRM-XYZZY-99182"
@@ -171,6 +168,13 @@ def _long_term_item(
     )
 
 
+def _data_protection_db(level: str = "enhanced") -> MagicMock:
+    user_doc = MagicMock(exists=True, to_dict=lambda: {"data_protection_level": level})
+    db_client = MagicMock()
+    db_client.document.return_value = MagicMock(get=lambda: user_doc)
+    return db_client
+
+
 def test_user_rejected_long_term_item_is_not_rebuild_or_vector_eligible():
     rejected = _long_term_item().model_copy(update={"promotion": {"user_review": False}})
 
@@ -179,8 +183,8 @@ def test_user_rejected_long_term_item_is_not_rebuild_or_vector_eligible():
 
 
 @pytest.fixture(autouse=True)
-def _canonical_cohort(monkeypatch):
-    from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+def _universal_memory(monkeypatch):
+    from tests.unit.universal_memory_test_helpers import configure_universal_memory
 
     atom_index = importlib.import_module("utils.memory.atom_keyword_index")
     canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
@@ -203,13 +207,8 @@ def _canonical_cohort(monkeypatch):
             "MemorySystem": memory_system.MemorySystem,
         }
     )
-    set_canonical_cohort(monkeypatch, CANONICAL_UID)
-    cohort = frozenset({CANONICAL_UID})
-    for resolve_func in (
-        upsert_atom_keyword_doc.__globals__["resolve_memory_system"],
-        search_canonical_memories.__globals__["resolve_memory_system"],
-    ):
-        monkeypatch.setitem(resolve_func.__globals__, "CANONICAL_MEMORY_USERS", cohort)
+    configure_universal_memory(monkeypatch, CANONICAL_UID)
+    monkeypatch.setattr(atom_index, "ensure_canonical_apply_control_state", lambda *args, **kwargs: None)
 
 
 @pytest.fixture
@@ -272,17 +271,9 @@ def mock_typesense():
     typesense_client.collections.__getitem__.return_value = memories_collection
     typesense_client.collections.create.return_value = None
 
-    # ``document_store`` now reads the user's data_protection_level through the neutral storage port
-    # (ADR-0022), no longer through an injected Firestore client. Seed a shared in-memory store so
-    # the cohort user reads as ``enhanced`` (Typesense-eligible, not e2ee).
-    user_docs: dict = {f"users/{CANONICAL_UID}": {"data_protection_level": "enhanced"}}
-
     with (
         patch("utils.memory.atom_keyword_index._typesense_client", return_value=typesense_client),
-        patch.object(document_store, "_store", lambda: FakeDocumentStore(backing=user_docs)),
-        patch("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=user_docs)),
-        patch("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=user_docs)),
-        patch("database.review_queue._store", lambda: FakeDocumentStore(backing=user_docs)),
+        patch("utils.memory.atom_keyword_index.default_db_client", _data_protection_db()),
     ):
         yield typesense_client, docs_store
 
@@ -324,19 +315,13 @@ class TestKeywordSearchAndHybrid:
         assert memories_collection_name() == "canonical_memory_atoms"
         assert typesense_client.collections.__getitem__.call_args_list[-1].args[0] == "canonical_memory_atoms"
 
-    def test_e2ee_user_skips_index(self, mock_typesense, monkeypatch):
+    def test_e2ee_user_skips_index_using_explicit_db_client(self, mock_typesense):
         _, docs_store = mock_typesense
-        # Data protection is now sourced from the storage port (ADR-0022): mark the cohort user
-        # e2ee in the shared store and assert the atom is not indexed (behavioral, not a check on
-        # which Firestore client method was called).
-        monkeypatch.setattr(
-            document_store,
-            "_store",
-            lambda: FakeDocumentStore(backing={f"users/{CANONICAL_UID}": {"data_protection_level": "e2ee"}}),
-        )
+        db_client = _data_protection_db("e2ee")
 
-        assert upsert_atom_keyword_doc(_long_term_item()) is False
+        assert upsert_atom_keyword_doc(_long_term_item(), db_client=db_client) is False
         assert docs_store == {}
+        db_client.document.assert_called_with(f"users/{CANONICAL_UID}")
 
     def test_existing_wrong_typesense_schema_does_not_index(self, mock_typesense):
         typesense_client, docs_store = mock_typesense
@@ -408,14 +393,11 @@ class TestKeywordSearchAndHybrid:
         assert keyword_search_memory_ids(first.uid, NEEDLE) == []
         assert keyword_search_memory_ids(second.uid, NEEDLE) == [memory_id]
 
-    def test_legacy_user_indexes_nothing(self, mock_typesense, monkeypatch):
+    def test_arbitrary_user_uses_the_same_keyword_index(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
         item = _long_term_item(uid=LEGACY_UID, memory_id="mem_legacy")
-        from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
-
-        clear_canonical_cohort(monkeypatch)
-        assert upsert_atom_keyword_doc(item) is False
-        assert docs_store == {}
+        assert upsert_atom_keyword_doc(item) is True
+        assert set(docs_store) == {_provider_id(item)}
 
     def test_literal_needle_found_with_vector_disabled(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
@@ -434,6 +416,7 @@ class TestKeywordSearchAndHybrid:
             NEEDLE,
             limit=5,
             vector_query=_empty_vector,
+            db_client=_data_protection_db(),
         )
         assert len(results) == 1
         assert results[0]["memory_id"] == item.memory_id
@@ -463,6 +446,7 @@ class TestKeywordSearchAndHybrid:
             NEEDLE,
             limit=5,
             vector_query=_empty_vector,
+            db_client=_data_protection_db(),
         )
         assert [row["memory_id"] for row in results] == ["mem_active"]
 
@@ -510,6 +494,7 @@ class TestKeywordSearchAndHybrid:
             "coffee",
             limit=5,
             vector_query=_vector_query,
+            db_client=_data_protection_db(),
         )
 
         assert [row["memory_id"] for row in results] == [short_term.memory_id, long_term.memory_id]
@@ -559,18 +544,21 @@ class TestKeywordSearchAndHybrid:
             "Project Beacon",
             limit=5,
             vector_query=_vector_query,
+            db_client=_data_protection_db(),
         )
         second = search_canonical_memories(
             CANONICAL_UID,
             "Project Beacon",
             limit=5,
             vector_query=_vector_query,
+            db_client=_data_protection_db(),
         )
         default_list = search_canonical_memories(
             CANONICAL_UID,
             "",
             limit=5,
             vector_query=_vector_query,
+            db_client=_data_protection_db(),
         )
 
         assert [row["memory_id"] for row in first] == [survivor.memory_id, unique_short_term.memory_id]
@@ -584,10 +572,6 @@ class TestKeywordSearchAndHybrid:
         item = _long_term_item()
         upsert_atom_keyword_doc(item)
 
-        monkeypatch.setattr(
-            "utils.memory.memory_service.canonical_read_enabled",
-            lambda uid, db_client=None: True,
-        )
         monkeypatch.setattr(
             "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
             lambda uid, db_client=None: [item],
@@ -613,42 +597,6 @@ class TestKeywordSearchAndHybrid:
 
         assert len(matches) == 1
         assert matches[0].memory.id == item.memory_id
-
-    def test_legacy_memory_service_search_unchanged(self, monkeypatch):
-        from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
-
-        clear_canonical_cohort(monkeypatch)
-        import utils.memory.memory_service as service_mod
-
-        vector_matches = [{"memory_id": "mem-legacy-1", "score": 0.9}]
-        memories = [
-            {
-                "id": "mem-legacy-1",
-                "uid": LEGACY_UID,
-                "content": "legacy content",
-                "category": "interesting",
-                "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
-                "updated_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
-                "is_locked": False,
-            }
-        ]
-        keyword_called = {"count": 0}
-
-        def _keyword_guard(*args, **kwargs):
-            keyword_called["count"] += 1
-            return []
-
-        monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", lambda *a, **k: memories)
-        monkeypatch.setattr(service_mod.vector_db, "find_similar_memories", lambda *a, **k: vector_matches)
-        monkeypatch.setattr(
-            "utils.memory.atom_keyword_index.keyword_search_memory_ids",
-            _keyword_guard,
-        )
-
-        matches = MemoryService().search(LEGACY_UID, "legacy", limit=5)
-        assert keyword_called["count"] == 0
-        assert len(matches) == 1
-        assert matches[0].memory.id == "mem-legacy-1"
 
 
 class TestPurgeAndRebuild:
@@ -679,7 +627,7 @@ class TestPurgeAndRebuild:
         monkeypatch.setattr("utils.memory.atom_keyword_index.delete_atom_keyword_doc", delete)
 
         assert sync_atom_keyword_index_for_item(item) is False
-        delete.assert_called_once_with(item.uid, item.memory_id)
+        delete.assert_called_once_with(item.uid, item.memory_id, db_client=None)
 
     def test_delete_attempts_exact_remote_removal_even_after_index_eligibility_is_revoked(
         self,
@@ -730,10 +678,6 @@ class TestPurgeAndRebuild:
         docs_store[other_doc["id"]] = other_doc
 
         monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.resolve_memory_system",
-            lambda uid, **_: MemorySystem.CANONICAL,
-        )
-        monkeypatch.setattr(
             "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
             lambda uid, db_client=None: [item],
         )
@@ -753,11 +697,12 @@ class TestPurgeAndRebuild:
         )
 
         db_client = MagicMock()
-        result = purge_canonical_derived_user_data(CANONICAL_UID)
+        db_client.collection.return_value.where.return_value.limit.return_value.stream.return_value = []
+        result = purge_canonical_derived_user_data(CANONICAL_UID, db_client=db_client)
         assert result["purged"] is True
         assert result["keyword_docs_deleted"] >= 0
         assert set(docs_store) == {other_doc["id"]}
-        delete_kg.assert_called_once_with(CANONICAL_UID)
+        delete_kg.assert_called_once_with(CANONICAL_UID, db_client=db_client)
 
     def test_conversation_cascade_deletes_keyword_doc(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
@@ -806,7 +751,7 @@ class TestPurgeAndRebuild:
             lambda uid, memory_ids, db_client=None: 0,
         )
 
-        retract_conversation_sourced_memories(CANONICAL_UID, "conv-1")
+        retract_conversation_sourced_memories(CANONICAL_UID, "conv-1", db_client=MagicMock())
         assert _provider_id(item) not in docs_store
 
     def test_rebuild_reconstructs_index_count_verified(self, mock_typesense, monkeypatch):

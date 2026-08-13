@@ -17,7 +17,47 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 from routers import action_items as ai_mod  # noqa: E402
 from database import action_items as action_items_db  # noqa: E402
-from tests.store_fakes import FakeDocumentStore  # noqa: E402
+
+
+class _Doc:
+    def __init__(self, doc_id, data):
+        self.id = doc_id
+        self._data = data
+
+    def to_dict(self):
+        return self._data
+
+
+class _Query:
+    def __init__(self, docs):
+        self.docs = docs
+        self.projected_fields = None
+
+    def select(self, fields):
+        self.projected_fields = fields
+        return self
+
+    def stream(self):
+        return self.docs
+
+
+class _CollectionPath:
+    def __init__(self, query):
+        self.query = query
+
+    def document(self, _):
+        return self
+
+    def collection(self, _):
+        return self.query
+
+
+class _Firestore:
+    def __init__(self, docs):
+        self.query = _Query(docs)
+
+    def collection(self, _):
+        return _CollectionPath(self.query)
 
 
 def test_list_action_item_ids_returns_ids(monkeypatch):
@@ -58,34 +98,33 @@ def test_list_action_item_ids_scopes_select_all_to_completion_bucket(monkeypatch
     assert seen == {'uid': 'user-9', 'completed': True}
 
 
-def test_visible_action_item_ids_matches_explicit_bucket_and_excludes_deleted(monkeypatch):
-    store = FakeDocumentStore()
-    for doc_id, data in [
-        ('active', {'completed': False}),
-        ('legacy-active', {'completed': None}),
-        ('legacy-status-active', {'status': 'active'}),
-        ('legacy-status-done', {'status': 'completed'}),
-        ('done', {'completed': True}),
-        ('deleted-active', {'completed': False, 'deleted': True}),
-    ]:
-        store._docs[f'users/user-9/action_items/{doc_id}'] = dict(data)
-    monkeypatch.setattr(action_items_db, '_store', lambda: store)
+def test_visible_action_item_ids_matches_explicit_bucket_and_excludes_deleted():
+    client = _Firestore(
+        [
+            _Doc('active', {'completed': False}),
+            _Doc('legacy-active', {'completed': None}),
+            _Doc('legacy-status-active', {'status': 'active'}),
+            _Doc('legacy-status-done', {'status': 'completed'}),
+            _Doc('done', {'completed': True}),
+            _Doc('deleted-active', {'completed': False, 'deleted': True}),
+        ]
+    )
 
-    ids = action_items_db.get_visible_action_item_ids('user-9', completed=False)
+    ids = action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
 
     assert ids == ['active']
+    assert client.query.projected_fields == ['completed', 'status', 'deleted']
 
 
-def test_visible_action_item_ids_excludes_legacy_null_completion_rows(monkeypatch):
-    store = FakeDocumentStore()
-    for doc_id, data in [
-        ('legacy-done', {'completed': None, 'status': 'completed'}),
-        ('legacy-active', {'completed': None, 'status': 'active'}),
-    ]:
-        store._docs[f'users/user-9/action_items/{doc_id}'] = dict(data)
-    monkeypatch.setattr(action_items_db, '_store', lambda: store)
+def test_visible_action_item_ids_excludes_legacy_null_completion_rows():
+    client = _Firestore(
+        [
+            _Doc('legacy-done', {'completed': None, 'status': 'completed'}),
+            _Doc('legacy-active', {'completed': None, 'status': 'active'}),
+        ]
+    )
 
-    ids = action_items_db.get_visible_action_item_ids('user-9', completed=True)
+    ids = action_items_db.get_visible_action_item_ids('user-9', completed=True, firestore_client=client)
 
     assert ids == []
 

@@ -26,7 +26,7 @@ class MemoryGlobalReadGateObservability(BaseModel):
     """Global memory read kill-switch observability attached to search responses."""
 
     source_path: str = Field(description='Firestore source path of the global read gate.')
-    read_decision: str = Field(description='Server read decision value (USE_MEMORY / SHADOW_ONLY / etc.).')
+    read_decision: str = Field(description='Server read decision value (USE_MEMORY or DENY_MEMORY).')
     fallback_reason: Optional[str] = Field(default=None, description='Fallback reason when reads are disabled.')
     reason: str = Field(description='Effective reason (fallback_reason when present, else the gate reason).')
 

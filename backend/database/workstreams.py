@@ -1,22 +1,16 @@
-"""Canonical workstream persistence and atomic task/workflow transactions.
-
-All persistence goes through the backend-neutral storage port (``database.store``); no storage SDK
-type crosses this module's boundary. Transactions use ``_store().run_transaction(fn)``: every
-``fn(tx)`` performs all reads before any write (the store forbids read-after-write inside a
-transaction). The neutral transaction handle exposes only ``get``/``set``/``update``/``delete`` —
-there is no ``create``, so a create-if-absent is an existence read followed by ``set``.
-"""
+"""Canonical workstream persistence and atomic task/workflow transactions."""
 
 import hashlib
 import json
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
-from config.canonical_memory_cohort import is_canonical_memory_user
+from google.cloud import firestore
 
+from google.cloud.firestore_v1 import FieldFilter
 import database.goals as goals_db
+from database._client import get_firestore_client
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
-from database.store import get_document_store
 from models.action_item import ActionItemResponse, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import CandidateRecord, CandidateResolutionReceipt, CandidateStatus, CandidateSubjectKind
 from models.goal import GoalResponse, GoalStatus
@@ -45,7 +39,6 @@ from models.workstream import (
 )
 
 WORKSTREAMS_COLLECTION = 'workstreams'
-GOALS_COLLECTION = 'goals'
 EVENTS_COLLECTION = 'events'
 ARTIFACTS_COLLECTION = 'artifact_refs'
 ARTIFACT_HEADS_COLLECTION = 'artifact_heads'
@@ -57,10 +50,6 @@ ACTION_ITEMS_COLLECTION = 'action_items'
 CANDIDATE_INTEGRATION_OUTBOX_COLLECTION = 'candidate_integration_outbox'
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
 TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
-
-
-def _store():
-    return get_document_store()
 
 
 class WorkstreamStoreError(RuntimeError):
@@ -79,6 +68,10 @@ class WorkstreamGenerationMismatchError(WorkstreamStoreError):
     pass
 
 
+def _get_db(firestore_client: Any = None) -> Any:
+    return firestore_client or get_firestore_client()
+
+
 def _stable_id(prefix: str, *parts: object) -> str:
     payload = '\x1f'.join(str(part) for part in parts).encode('utf-8')
     return f'{prefix}_{hashlib.sha256(payload).hexdigest()[:32]}'
@@ -95,89 +88,50 @@ def _task_responses_from_snapshots(snapshots: Any, *, context: str) -> list[Acti
     return parse_snapshots(ActionItemResponse, active_snapshots, document_id_field='id')
 
 
-# --- logical path helpers (collection/document chains) ---
+def _user_ref(uid: str, *, firestore_client: Any = None):
+    return _get_db(firestore_client).collection('users').document(uid)
 
 
-def _user_path(uid: str) -> str:
-    return f'users/{uid}'
+def _workstream_ref(uid: str, workstream_id: str, *, firestore_client: Any = None):
+    return _user_ref(uid, firestore_client=firestore_client).collection(WORKSTREAMS_COLLECTION).document(workstream_id)
 
 
-def _workstreams_collection_path(uid: str) -> str:
-    return f'{_user_path(uid)}/{WORKSTREAMS_COLLECTION}'
+def _task_ref(uid: str, task_id: str, *, firestore_client: Any = None):
+    return _user_ref(uid, firestore_client=firestore_client).collection(ACTION_ITEMS_COLLECTION).document(task_id)
 
 
-def _workstream_path(uid: str, workstream_id: str) -> str:
-    return f'{_workstreams_collection_path(uid)}/{workstream_id}'
+def _candidate_ref(uid: str, candidate_id: str, *, firestore_client: Any = None):
+    return _user_ref(uid, firestore_client=firestore_client).collection(CANDIDATES_COLLECTION).document(candidate_id)
 
 
-def _events_collection_path(uid: str, workstream_id: str) -> str:
-    return f'{_workstream_path(uid, workstream_id)}/{EVENTS_COLLECTION}'
+def _candidate_outbox_ref(uid: str, candidate_id: str, *, firestore_client: Any = None):
+    return (
+        _user_ref(uid, firestore_client=firestore_client)
+        .collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION)
+        .document(candidate_id)
+    )
 
 
-def _event_path(uid: str, workstream_id: str, event_id: str) -> str:
-    return f'{_events_collection_path(uid, workstream_id)}/{event_id}'
+def _control_ref(uid: str, *, firestore_client: Any = None):
+    return (
+        _user_ref(uid, firestore_client=firestore_client)
+        .collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
+        .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
+    )
 
 
-def _artifacts_collection_path(uid: str, workstream_id: str) -> str:
-    return f'{_workstream_path(uid, workstream_id)}/{ARTIFACTS_COLLECTION}'
-
-
-def _artifact_path(uid: str, workstream_id: str, artifact_id: str) -> str:
-    return f'{_artifacts_collection_path(uid, workstream_id)}/{artifact_id}'
-
-
-def _artifact_head_path(uid: str, workstream_id: str, head_id: str) -> str:
-    return f'{_workstream_path(uid, workstream_id)}/{ARTIFACT_HEADS_COLLECTION}/{head_id}'
-
-
-def _checkpoints_collection_path(uid: str, workstream_id: str) -> str:
-    return f'{_workstream_path(uid, workstream_id)}/{CHECKPOINTS_COLLECTION}'
-
-
-def _checkpoint_path(uid: str, workstream_id: str, checkpoint_id: str) -> str:
-    return f'{_checkpoints_collection_path(uid, workstream_id)}/{checkpoint_id}'
-
-
-def _tasks_collection_path(uid: str) -> str:
-    return f'{_user_path(uid)}/{ACTION_ITEMS_COLLECTION}'
-
-
-def _task_path(uid: str, task_id: str) -> str:
-    return f'{_tasks_collection_path(uid)}/{task_id}'
-
-
-def _goal_path(uid: str, goal_id: str) -> str:
-    # goals is on the storage port and no longer exposes a Firestore-ref seam; this transactional
-    # module owns the goal document path it reads/writes inside its own store transactions (the path
-    # is goals' canonical layout).
-    return f'{_user_path(uid)}/{GOALS_COLLECTION}/{goal_id}'
-
-
-def _candidate_path(uid: str, candidate_id: str) -> str:
-    return f'{_user_path(uid)}/{CANDIDATES_COLLECTION}/{candidate_id}'
-
-
-def _candidate_outbox_path(uid: str, candidate_id: str) -> str:
-    return f'{_user_path(uid)}/{CANDIDATE_INTEGRATION_OUTBOX_COLLECTION}/{candidate_id}'
-
-
-def _control_path(uid: str) -> str:
-    return f'{_user_path(uid)}/{TASK_INTELLIGENCE_CONTROL_COLLECTION}/{TASK_INTELLIGENCE_CONTROL_DOCUMENT}'
-
-
-def _work_intent_receipt_path(uid: str, receipt_id: str) -> str:
-    return f'{_user_path(uid)}/{WORK_INTENT_RECEIPTS_COLLECTION}/{receipt_id}'
-
-
-def _mutation_receipt_path(
+def _mutation_receipt_ref(
     uid: str,
     *,
     operation: str,
     idempotency_key: str,
     account_generation: int,
-) -> str:
+    firestore_client: Any,
+):
     receipt_id = _stable_id('mutation', uid, account_generation, operation, idempotency_key)
-    return f'{_user_path(uid)}/{MUTATION_RECEIPTS_COLLECTION}/{receipt_id}'
+    return (
+        _user_ref(uid, firestore_client=firestore_client).collection(MUTATION_RECEIPTS_COLLECTION).document(receipt_id)
+    )
 
 
 def _mutation_hash(payload: Any) -> str:
@@ -187,54 +141,52 @@ def _mutation_hash(payload: Any) -> str:
 
 
 def _begin_mutation(
-    tx: Any,
+    write_transaction: Any,
     *,
     uid: str,
     operation: str,
     idempotency_key: str,
     account_generation: int,
     request_payload: Any,
-) -> tuple[str, Optional[dict[str, Any]], str]:
-    control_snapshot = tx.get(_control_path(uid))
+    firestore_client: Any,
+) -> tuple[Any, Optional[dict[str, Any]], str]:
+    control_snapshot = _control_ref(uid, firestore_client=firestore_client).get(transaction=write_transaction)
     _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
-    receipt_path = _mutation_receipt_path(
+    receipt_ref = _mutation_receipt_ref(
         uid,
         operation=operation,
         idempotency_key=idempotency_key,
         account_generation=account_generation,
+        firestore_client=firestore_client,
     )
     request_hash = _mutation_hash(request_payload)
-    receipt_snapshot = tx.get(receipt_path)
+    receipt_snapshot = receipt_ref.get(transaction=write_transaction)
     if not receipt_snapshot.exists:
-        return receipt_path, None, request_hash
+        return receipt_ref, None, request_hash
     receipt = _snapshot_dict(receipt_snapshot)
     if receipt.get('request_hash') != request_hash:
         raise WorkstreamConflictError('idempotency key was reused with different content')
     result = receipt.get('result')
     if not isinstance(result, dict):
         raise WorkstreamConflictError('idempotent mutation receipt is incomplete')
-    return receipt_path, cast(dict[str, Any], result), request_hash
+    return receipt_ref, cast(dict[str, Any], result), request_hash
 
 
 def _finish_mutation(
-    tx: Any,
-    receipt_path: str,
+    write_transaction: Any,
+    receipt_ref: Any,
     *,
     request_hash: str,
     result: dict[str, Any],
     now: datetime,
 ) -> None:
-    # Reached only when the receipt did not exist at ``_begin_mutation``, so an unconditional set
-    # stands in for the create the neutral transaction handle does not expose.
-    tx.set(
-        receipt_path,
+    write_transaction.create(
+        receipt_ref,
         {'request_hash': request_hash, 'result': result, 'created_at': now},
     )
 
 
 def _validate_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
-    if not is_canonical_memory_user(uid):
-        raise WorkstreamConflictError('canonical task intelligence is not enabled')
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
@@ -354,11 +306,12 @@ def _assert_goal_exists(
     goal_id: Optional[str],
     *,
     account_generation: int,
-    tx: Any,
+    transaction: Any,
+    firestore_client: Any,
 ) -> None:
     if goal_id is None:
         return
-    snapshot = tx.get(_goal_path(uid, goal_id))
+    snapshot = goals_db.goal_document_ref(uid, goal_id, firestore_client=firestore_client).get(transaction=transaction)
     if not snapshot.exists:
         raise WorkstreamConflictError('goal does not exist')
     goal = goals_db.normalize_goal_storage(_snapshot_dict(snapshot), goal_id=goal_id)
@@ -373,8 +326,9 @@ def get_workstream(
     workstream_id: str,
     *,
     account_generation: Optional[int] = None,
+    firestore_client: Any = None,
 ) -> Optional[Workstream]:
-    snapshot = _store().get(_workstream_path(uid, workstream_id))
+    snapshot = _workstream_ref(uid, workstream_id, firestore_client=firestore_client).get()
     if not snapshot.exists:
         return None
     payload = _snapshot_dict(snapshot)
@@ -383,15 +337,15 @@ def get_workstream(
     return parse_snapshot_or_none(Workstream, snapshot, payload_from_snapshot=_workstream_payload)
 
 
-def get_workstream_goal_id(uid: str, workstream_id: str) -> Optional[str]:
-    workstream = get_workstream(uid, workstream_id)
+def get_workstream_goal_id(uid: str, workstream_id: str, *, firestore_client: Any = None) -> Optional[str]:
+    workstream = get_workstream(uid, workstream_id, firestore_client=firestore_client)
     if workstream is None:
         raise WorkstreamNotFoundError(workstream_id)
     return workstream.goal_id
 
 
-def get_task_workflow_control(uid: str) -> TaskWorkflowControl:
-    snapshot = _store().get(_control_path(uid))
+def get_task_workflow_control(uid: str, *, firestore_client: Any = None) -> TaskWorkflowControl:
+    snapshot = _control_ref(uid, firestore_client=firestore_client).get()
     if not snapshot.exists:
         return TaskWorkflowControl()
     return parse_snapshot_strict(TaskWorkflowControl, snapshot)
@@ -402,11 +356,17 @@ def list_open_workstreams(
     *,
     limit: int = 500,
     account_generation: Optional[int] = None,
+    firestore_client: Any = None,
 ) -> list[Workstream]:
-    filters: list[tuple[str, str, Any]] = [('status', '==', WorkstreamStatus.open.value)]
+    query = (
+        _user_ref(uid, firestore_client=firestore_client)
+        .collection(WORKSTREAMS_COLLECTION)
+        .where(filter=FieldFilter('status', '==', WorkstreamStatus.open.value))
+    )
     if account_generation is not None and account_generation > 0:
-        filters.append(('account_generation', '==', account_generation))
-    snapshots = _store().query(_workstreams_collection_path(uid), filters=filters, limit=limit)
+        query = query.where(filter=FieldFilter('account_generation', '==', account_generation))
+    query = query.limit(limit)
+    snapshots = list(query.stream())
     if account_generation == 0:
         snapshots = [snapshot for snapshot in snapshots if _snapshot_dict(snapshot).get('account_generation', 0) == 0]
     records = parse_snapshots(Workstream, snapshots, payload_from_snapshot=_workstream_payload)
@@ -420,11 +380,15 @@ def list_workstreams_for_goal(
     *,
     include_archived: bool = False,
     limit: int = 100,
+    firestore_client: Any = None,
 ) -> list[Workstream]:
-    snapshots = _store().query(
-        _workstreams_collection_path(uid), filters=[('goal_id', '==', goal_id)], limit=limit
+    query = (
+        _user_ref(uid, firestore_client=firestore_client)
+        .collection(WORKSTREAMS_COLLECTION)
+        .where(filter=FieldFilter('goal_id', '==', goal_id))
+        .limit(limit)
     )
-    records = parse_snapshots(Workstream, snapshots, payload_from_snapshot=_workstream_payload)
+    records = parse_snapshots(Workstream, query.stream(), payload_from_snapshot=_workstream_payload)
     if not include_archived:
         records = [record for record in records if record.status != WorkstreamStatus.archived]
     records.sort(key=lambda record: record.updated_at, reverse=True)
@@ -438,39 +402,44 @@ def update_workstream(
     *,
     idempotency_key: str,
     account_generation: int,
+    firestore_client: Any = None,
 ) -> Workstream:
-    workstream_path = _workstream_path(uid, workstream_id)
+    client = _get_db(firestore_client)
+    ref = _workstream_ref(uid, workstream_id, firestore_client=client)
     patch = update.model_dump(mode='python', exclude_unset=True)
+    transaction = client.transaction()
     now = datetime.now(timezone.utc)
 
-    def apply(tx):
-        receipt_path, stored_result, request_hash = _begin_mutation(
-            tx,
+    @firestore.transactional
+    def apply(write_transaction):
+        receipt_ref, stored_result, request_hash = _begin_mutation(
+            write_transaction,
             uid=uid,
             operation=f'workstream-update:{workstream_id}',
             idempotency_key=idempotency_key,
             account_generation=account_generation,
             request_payload=update.model_dump(mode='json', exclude_unset=True),
+            firestore_client=client,
         )
         if stored_result is not None:
             return Workstream.model_validate(stored_result)
-        snapshot = tx.get(workstream_path)
+        snapshot = ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
         _assert_workstream_generation(snapshot, account_generation=account_generation)
         result = _workstream_from_snapshot(snapshot).model_copy(update={**patch, 'updated_at': now})
-        tx.update(workstream_path, {**patch, 'updated_at': now})
+        write_transaction.update(ref, {**patch, 'updated_at': now})
         result_payload = result.model_dump(mode='python')
         _finish_mutation(
-            tx,
-            receipt_path,
+            write_transaction,
+            receipt_ref,
             request_hash=request_hash,
             result=result_payload,
             now=now,
         )
         return result
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def append_workstream_event(
@@ -480,21 +449,25 @@ def append_workstream_event(
     *,
     idempotency_key: str,
     account_generation: int,
+    firestore_client: Any = None,
     required_status: Optional[WorkstreamStatus] = None,
 ) -> WorkstreamEvent:
-    workstream_path = _workstream_path(uid, workstream_id)
+    client = _get_db(firestore_client)
+    workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
+    transaction = client.transaction()
     now = datetime.now(timezone.utc)
     event_id = _stable_id('wse', uid, workstream_id, account_generation, idempotency_key)
-    event_path = _event_path(uid, workstream_id, event_id)
+    event_ref = workstream_ref.collection(EVENTS_COLLECTION).document(event_id)
 
-    def apply(tx):
-        control_snapshot = tx.get(_control_path(uid))
+    @firestore.transactional
+    def apply(write_transaction):
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
-        workstream_snapshot = tx.get(workstream_path)
+        workstream_snapshot = workstream_ref.get(transaction=write_transaction)
         if not workstream_snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
         _assert_workstream_generation(workstream_snapshot, account_generation=account_generation)
-        existing = tx.get(event_path)
+        existing = event_ref.get(transaction=write_transaction)
         if existing.exists:
             stored = parse_snapshot_strict(WorkstreamEvent, existing)
             stored_proposal = WorkstreamEventCreate(
@@ -520,14 +493,14 @@ def append_workstream_event(
             sensitivity=event.sensitivity,
             created_at=now,
         )
-        tx.set(event_path, record.model_dump(mode='python'))
-        tx.update(
-            workstream_path,
+        write_transaction.create(event_ref, record.model_dump(mode='python'))
+        write_transaction.update(
+            workstream_ref,
             {'latest_event_sequence': sequence, 'last_meaningful_progress_at': now, 'updated_at': now},
         )
         return record
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def list_workstream_events(
@@ -536,15 +509,16 @@ def list_workstream_events(
     *,
     after_sequence: int = 0,
     limit: int = 100,
+    firestore_client: Any = None,
 ) -> list[WorkstreamEvent]:
-    snapshots = _store().query(
-        _events_collection_path(uid, workstream_id),
-        filters=[('sequence', '>', after_sequence)],
-        order_by='sequence',
-        direction='asc',
-        limit=limit,
+    query = (
+        _workstream_ref(uid, workstream_id, firestore_client=firestore_client)
+        .collection(EVENTS_COLLECTION)
+        .where(filter=FieldFilter('sequence', '>', after_sequence))
+        .order_by('sequence', direction=firestore.Query.ASCENDING)
+        .limit(limit)
     )
-    return parse_snapshots(WorkstreamEvent, snapshots)
+    return parse_snapshots(WorkstreamEvent, query.stream())
 
 
 def create_artifact_descriptor(
@@ -554,31 +528,36 @@ def create_artifact_descriptor(
     *,
     idempotency_key: str,
     account_generation: int,
+    firestore_client: Any = None,
 ) -> ArtifactDescriptor:
-    workstream_path = _workstream_path(uid, workstream_id)
+    client = _get_db(firestore_client)
+    workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
     artifact_id = _stable_id('artifact', uid, workstream_id, proposal.logical_key, proposal.version)
-    artifact_path = _artifact_path(uid, workstream_id, artifact_id)
-    head_path = _artifact_head_path(
-        uid, workstream_id, _stable_id('artifact-head', uid, workstream_id, proposal.logical_key)
+    artifact_ref = workstream_ref.collection(ARTIFACTS_COLLECTION).document(artifact_id)
+    head_ref = workstream_ref.collection(ARTIFACT_HEADS_COLLECTION).document(
+        _stable_id('artifact-head', uid, workstream_id, proposal.logical_key)
     )
+    transaction = client.transaction()
     now = datetime.now(timezone.utc)
 
-    def apply(tx):
-        receipt_path, stored_result, request_hash = _begin_mutation(
-            tx,
+    @firestore.transactional
+    def apply(write_transaction):
+        receipt_ref, stored_result, request_hash = _begin_mutation(
+            write_transaction,
             uid=uid,
             operation=f'artifact-create:{workstream_id}',
             idempotency_key=idempotency_key,
             account_generation=account_generation,
             request_payload=proposal.model_dump(mode='json'),
+            firestore_client=client,
         )
         if stored_result is not None:
             return ArtifactDescriptor.model_validate(stored_result)
-        workstream_snapshot = tx.get(workstream_path)
+        workstream_snapshot = workstream_ref.get(transaction=write_transaction)
         if not workstream_snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
         _assert_workstream_generation(workstream_snapshot, account_generation=account_generation)
-        existing = tx.get(artifact_path)
+        existing = artifact_ref.get(transaction=write_transaction)
         record = ArtifactDescriptor(
             **proposal.model_dump(mode='python'),
             artifact_id=artifact_id,
@@ -592,23 +571,23 @@ def create_artifact_descriptor(
             if stored.model_dump(mode='python', include=proposal_fields) != proposal.model_dump(mode='python'):
                 raise WorkstreamConflictError('artifact version already exists with different content')
             _finish_mutation(
-                tx,
-                receipt_path,
+                write_transaction,
+                receipt_ref,
                 request_hash=request_hash,
                 result=stored.model_dump(mode='python'),
                 now=now,
             )
             return stored
-        head_snapshot = tx.get(head_path)
-        superseded_path = None
+        head_snapshot = head_ref.get(transaction=write_transaction)
+        superseded_ref = None
         if head_snapshot.exists:
             head = _snapshot_dict(head_snapshot)
             expected_version = int(head.get('version', 0)) + 1
             expected_artifact_id = head.get('artifact_id')
             if proposal.version != expected_version or proposal.supersedes_artifact_id != expected_artifact_id:
                 raise WorkstreamConflictError('artifact version must advance and supersede the current logical head')
-            superseded_path = _artifact_path(uid, workstream_id, str(expected_artifact_id))
-            superseded_snapshot = tx.get(superseded_path)
+            superseded_ref = workstream_ref.collection(ARTIFACTS_COLLECTION).document(str(expected_artifact_id))
+            superseded_snapshot = superseded_ref.get(transaction=write_transaction)
             if not superseded_snapshot.exists:
                 raise WorkstreamConflictError('artifact head points to a missing descriptor')
             superseded = parse_snapshot_strict(ArtifactDescriptor, superseded_snapshot)
@@ -618,8 +597,10 @@ def create_artifact_descriptor(
             raise WorkstreamConflictError('the first logical artifact version must be version 1 without supersession')
         if proposal.supersedes_artifact_id is not None and not proposal.evidence_event_ids:
             raise WorkstreamConflictError('artifact revisions must cite the journal evidence that caused the change')
-        for evidence_event_id in proposal.evidence_event_ids:
-            evidence_snapshot = tx.get(_event_path(uid, workstream_id, evidence_event_id))
+        for event_id in proposal.evidence_event_ids:
+            evidence_snapshot = (
+                workstream_ref.collection(EVENTS_COLLECTION).document(event_id).get(transaction=write_transaction)
+            )
             if not evidence_snapshot.exists:
                 raise WorkstreamConflictError('artifact references a missing workstream event')
         workstream = _workstream_from_snapshot(workstream_snapshot)
@@ -635,12 +616,14 @@ def create_artifact_descriptor(
             sensitivity=WorkstreamSensitivity.normal,
             created_at=now,
         )
-        tx.set(artifact_path, record.model_dump(mode='python'))
-        tx.set(_event_path(uid, workstream_id, event_id), event.model_dump(mode='python'))
-        if superseded_path is not None:
-            tx.update(superseded_path, {'status': ArtifactStatus.superseded.value})
-        tx.set(
-            head_path,
+        write_transaction.create(artifact_ref, record.model_dump(mode='python'))
+        write_transaction.create(
+            workstream_ref.collection(EVENTS_COLLECTION).document(event_id), event.model_dump(mode='python')
+        )
+        if superseded_ref is not None:
+            write_transaction.update(superseded_ref, {'status': ArtifactStatus.superseded.value})
+        write_transaction.set(
+            head_ref,
             {
                 'logical_key': proposal.logical_key,
                 'artifact_id': artifact_id,
@@ -648,20 +631,20 @@ def create_artifact_descriptor(
                 'updated_at': now,
             },
         )
-        tx.update(
-            workstream_path,
+        write_transaction.update(
+            workstream_ref,
             {'latest_event_sequence': sequence, 'last_meaningful_progress_at': now, 'updated_at': now},
         )
         _finish_mutation(
-            tx,
-            receipt_path,
+            write_transaction,
+            receipt_ref,
             request_hash=request_hash,
             result=record.model_dump(mode='python'),
             now=now,
         )
         return record
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def transition_artifact_status(
@@ -672,9 +655,12 @@ def transition_artifact_status(
     *,
     idempotency_key: str,
     account_generation: int,
+    firestore_client: Any = None,
 ) -> ArtifactDescriptor:
-    workstream_path = _workstream_path(uid, workstream_id)
-    artifact_path = _artifact_path(uid, workstream_id, artifact_id)
+    client = _get_db(firestore_client)
+    workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
+    artifact_ref = workstream_ref.collection(ARTIFACTS_COLLECTION).document(artifact_id)
+    transaction = client.transaction()
     now = datetime.now(timezone.utc)
     allowed_transitions = {
         ArtifactStatus.draft: ArtifactStatus.awaiting_review,
@@ -682,29 +668,31 @@ def transition_artifact_status(
         ArtifactStatus.approved: ArtifactStatus.delivered,
     }
 
-    def apply(tx):
-        receipt_path, stored_result, request_hash = _begin_mutation(
-            tx,
+    @firestore.transactional
+    def apply(write_transaction):
+        receipt_ref, stored_result, request_hash = _begin_mutation(
+            write_transaction,
             uid=uid,
             operation=f'artifact-status:{workstream_id}:{artifact_id}',
             idempotency_key=idempotency_key,
             account_generation=account_generation,
             request_payload=request.model_dump(mode='json'),
+            firestore_client=client,
         )
         if stored_result is not None:
             return ArtifactDescriptor.model_validate(stored_result)
-        workstream_snapshot = tx.get(workstream_path)
+        workstream_snapshot = workstream_ref.get(transaction=write_transaction)
         if not workstream_snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
         _assert_workstream_generation(workstream_snapshot, account_generation=account_generation)
-        artifact_snapshot = tx.get(artifact_path)
+        artifact_snapshot = artifact_ref.get(transaction=write_transaction)
         if not artifact_snapshot.exists:
             raise WorkstreamNotFoundError(artifact_id)
         artifact = parse_snapshot_strict(ArtifactDescriptor, artifact_snapshot)
         if artifact.status == request.status:
             _finish_mutation(
-                tx,
-                receipt_path,
+                write_transaction,
+                receipt_ref,
                 request_hash=request_hash,
                 result=artifact.model_dump(mode='python'),
                 now=now,
@@ -724,23 +712,25 @@ def transition_artifact_status(
             sensitivity=WorkstreamSensitivity.normal,
             created_at=now,
         )
-        tx.update(artifact_path, {'status': request.status.value})
-        tx.set(_event_path(uid, workstream_id, event.event_id), event.model_dump(mode='python'))
-        tx.update(
-            workstream_path,
+        write_transaction.update(artifact_ref, {'status': request.status.value})
+        write_transaction.create(
+            workstream_ref.collection(EVENTS_COLLECTION).document(event.event_id), event.model_dump(mode='python')
+        )
+        write_transaction.update(
+            workstream_ref,
             {'latest_event_sequence': sequence, 'last_meaningful_progress_at': now, 'updated_at': now},
         )
         result = artifact.model_copy(update={'status': request.status})
         _finish_mutation(
-            tx,
-            receipt_path,
+            write_transaction,
+            receipt_ref,
             request_hash=request_hash,
             result=result.model_dump(mode='python'),
             now=now,
         )
         return result
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def list_artifact_descriptors(
@@ -748,14 +738,15 @@ def list_artifact_descriptors(
     workstream_id: str,
     *,
     limit: int = 100,
+    firestore_client: Any = None,
 ) -> list[ArtifactDescriptor]:
-    snapshots = _store().query(
-        _artifacts_collection_path(uid, workstream_id),
-        order_by='created_at',
-        direction='desc',
-        limit=limit,
+    query = (
+        _workstream_ref(uid, workstream_id, firestore_client=firestore_client)
+        .collection(ARTIFACTS_COLLECTION)
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(limit)
     )
-    return parse_snapshots(ArtifactDescriptor, snapshots)
+    return parse_snapshots(ArtifactDescriptor, query.stream())
 
 
 def upsert_continuation_checkpoint(
@@ -765,31 +756,36 @@ def upsert_continuation_checkpoint(
     *,
     idempotency_key: str,
     account_generation: int,
+    firestore_client: Any = None,
 ) -> ContinuationCheckpoint:
-    workstream_path = _workstream_path(uid, workstream_id)
+    client = _get_db(firestore_client)
+    workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
     checkpoint_id = _stable_id('checkpoint', uid, workstream_id, checkpoint.runtime_id)
-    checkpoint_path = _checkpoint_path(uid, workstream_id, checkpoint_id)
+    checkpoint_ref = workstream_ref.collection(CHECKPOINTS_COLLECTION).document(checkpoint_id)
+    transaction = client.transaction()
     now = datetime.now(timezone.utc)
 
-    def apply(tx):
-        receipt_path, stored_result, request_hash = _begin_mutation(
-            tx,
+    @firestore.transactional
+    def apply(write_transaction):
+        receipt_ref, stored_result, request_hash = _begin_mutation(
+            write_transaction,
             uid=uid,
             operation=f'checkpoint-upsert:{workstream_id}:{checkpoint.runtime_id}',
             idempotency_key=idempotency_key,
             account_generation=account_generation,
             request_payload=checkpoint.model_dump(mode='json'),
+            firestore_client=client,
         )
         if stored_result is not None:
             return ContinuationCheckpoint.model_validate(stored_result)
-        workstream_snapshot = tx.get(workstream_path)
+        workstream_snapshot = workstream_ref.get(transaction=write_transaction)
         if not workstream_snapshot.exists:
             raise WorkstreamNotFoundError(workstream_id)
         _assert_workstream_generation(workstream_snapshot, account_generation=account_generation)
         workstream = _workstream_from_snapshot(workstream_snapshot)
         if checkpoint.last_event_sequence > workstream.latest_event_sequence:
             raise WorkstreamConflictError('checkpoint cannot advance beyond the workstream journal')
-        checkpoint_snapshot = tx.get(checkpoint_path)
+        checkpoint_snapshot = checkpoint_ref.get(transaction=write_transaction)
         if checkpoint_snapshot.exists:
             existing = parse_snapshot_strict(ContinuationCheckpoint, checkpoint_snapshot)
             if checkpoint.last_event_sequence < existing.last_event_sequence:
@@ -803,8 +799,8 @@ def upsert_continuation_checkpoint(
                 if not equivalent:
                     raise WorkstreamConflictError('checkpoint sequence already stores different content')
                 _finish_mutation(
-                    tx,
-                    receipt_path,
+                    write_transaction,
+                    receipt_ref,
                     request_hash=request_hash,
                     result=existing.model_dump(mode='python'),
                     now=now,
@@ -816,24 +812,30 @@ def upsert_continuation_checkpoint(
             workstream_id=workstream_id,
             updated_at=now,
         )
-        tx.set(checkpoint_path, record.model_dump(mode='python'))
+        write_transaction.set(checkpoint_ref, record.model_dump(mode='python'))
         _finish_mutation(
-            tx,
-            receipt_path,
+            write_transaction,
+            receipt_ref,
             request_hash=request_hash,
             result=record.model_dump(mode='python'),
             now=now,
         )
         return record
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def list_continuation_checkpoints(
     uid: str,
     workstream_id: str,
+    *,
+    firestore_client: Any = None,
 ) -> list[ContinuationCheckpoint]:
-    snapshots = _store().query(_checkpoints_collection_path(uid, workstream_id))
+    snapshots = (
+        _workstream_ref(uid, workstream_id, firestore_client=firestore_client)
+        .collection(CHECKPOINTS_COLLECTION)
+        .stream()
+    )
     return parse_snapshots(ContinuationCheckpoint, snapshots)
 
 
@@ -841,20 +843,25 @@ def resolve_workstream_candidate(
     uid: str,
     candidate: CandidateRecord,
     account_generation: int,
+    *,
+    firestore_client: Any = None,
 ) -> CandidateResolutionReceipt:
     if candidate.subject_kind != CandidateSubjectKind.workstream or candidate.workstream_proposal is None:
         raise WorkstreamConflictError('Candidate is not a workstream create proposal')
-    candidate_path = _candidate_path(uid, candidate.candidate_id)
+    client = _get_db(firestore_client)
+    candidate_ref = _candidate_ref(uid, candidate.candidate_id, firestore_client=client)
     workstream_id = _stable_id('workstream', uid, account_generation, candidate.candidate_id)
     task_id = _stable_id('task', uid, account_generation, candidate.candidate_id)
-    workstream_path = _workstream_path(uid, workstream_id)
-    task_path = _task_path(uid, task_id)
+    workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
+    task_ref = _task_ref(uid, task_id, firestore_client=client)
+    transaction = client.transaction()
     now = datetime.now(timezone.utc)
 
-    def apply(tx):
-        control_snapshot = tx.get(_control_path(uid))
+    @firestore.transactional
+    def apply(write_transaction):
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
-        candidate_snapshot = tx.get(candidate_path)
+        candidate_snapshot = candidate_ref.get(transaction=write_transaction)
         if not candidate_snapshot.exists:
             raise WorkstreamNotFoundError(candidate.candidate_id)
         stored_candidate = parse_snapshot_strict(CandidateRecord, candidate_snapshot)
@@ -879,10 +886,11 @@ def resolve_workstream_candidate(
             uid,
             stored_candidate.goal_id,
             account_generation=account_generation,
-            tx=tx,
+            transaction=write_transaction,
+            firestore_client=client,
         )
-        workstream_snapshot = tx.get(workstream_path)
-        task_snapshot = tx.get(task_path)
+        workstream_snapshot = workstream_ref.get(transaction=write_transaction)
+        task_snapshot = task_ref.get(transaction=write_transaction)
         if workstream_snapshot.exists or task_snapshot.exists:
             raise WorkstreamConflictError('deterministic workstream resolution id collision')
         event_id, event_data = _initial_event_storage(
@@ -893,8 +901,8 @@ def resolve_workstream_candidate(
             evidence_refs=stored_candidate.evidence_refs,
             now=now,
         )
-        tx.set(
-            workstream_path,
+        write_transaction.create(
+            workstream_ref,
             _workstream_storage(
                 workstream_id=workstream_id,
                 title=proposal.title,
@@ -905,9 +913,9 @@ def resolve_workstream_candidate(
                 account_generation=account_generation,
             ),
         )
-        tx.set(_event_path(uid, workstream_id, event_id), event_data)
-        tx.set(
-            task_path,
+        write_transaction.create(workstream_ref.collection(EVENTS_COLLECTION).document(event_id), event_data)
+        write_transaction.create(
+            task_ref,
             _task_storage(
                 task_id=task_id,
                 description=proposal.anchor_task.description,
@@ -925,8 +933,8 @@ def resolve_workstream_candidate(
                 account_generation=account_generation,
             ),
         )
-        tx.update(
-            candidate_path,
+        write_transaction.update(
+            candidate_ref,
             {
                 'status': CandidateStatus.accepted.value,
                 'resolution_reason': 'accepted',
@@ -935,8 +943,8 @@ def resolve_workstream_candidate(
                 'resolved_at': now,
             },
         )
-        tx.set(
-            _candidate_outbox_path(uid, stored_candidate.candidate_id),
+        write_transaction.create(
+            _candidate_outbox_ref(uid, stored_candidate.candidate_id, firestore_client=client),
             {
                 'outbox_id': stored_candidate.candidate_id,
                 'candidate_id': stored_candidate.candidate_id,
@@ -958,7 +966,7 @@ def resolve_workstream_candidate(
             resolved_at=now,
         )
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def resolve_work_intent(
@@ -967,20 +975,26 @@ def resolve_work_intent(
     *,
     idempotency_key: str,
     account_generation: int,
+    firestore_client: Any = None,
 ) -> WorkIntentReceipt:
     if not idempotency_key.strip():
         raise ValueError('idempotency_key is required')
+    client = _get_db(firestore_client)
     receipt_id = _stable_id('intent', uid, account_generation, idempotency_key)
-    receipt_path = _work_intent_receipt_path(uid, receipt_id)
+    receipt_ref = (
+        _user_ref(uid, firestore_client=client).collection(WORK_INTENT_RECEIPTS_COLLECTION).document(receipt_id)
+    )
     request_hash = hashlib.sha256(
         json.dumps(request.model_dump(mode='json'), sort_keys=True, separators=(',', ':')).encode('utf-8')
     ).hexdigest()
+    transaction = client.transaction()
     now = datetime.now(timezone.utc)
 
-    def apply(tx):
-        control_snapshot = tx.get(_control_path(uid))
+    @firestore.transactional
+    def apply(write_transaction):
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
-        receipt_snapshot = tx.get(receipt_path)
+        receipt_snapshot = receipt_ref.get(transaction=write_transaction)
         if receipt_snapshot.exists:
             stored = _snapshot_dict(receipt_snapshot)
             if stored.get('request_hash') != request_hash:
@@ -990,8 +1004,8 @@ def resolve_work_intent(
 
         newly_created = False
         if isinstance(request, TaskOriginWorkIntent):
-            task_path = _task_path(uid, request.task_id)
-            task_snapshot = tx.get(task_path)
+            task_ref = _task_ref(uid, request.task_id, firestore_client=client)
+            task_snapshot = task_ref.get(transaction=write_transaction)
             if not task_snapshot.exists:
                 raise WorkstreamNotFoundError(f'task:{request.task_id}')
             task = _snapshot_dict(task_snapshot)
@@ -1000,10 +1014,10 @@ def resolve_work_intent(
                 raise WorkstreamGenerationMismatchError('task account generation mismatch')
             existing_workstream_id = task.get('workstream_id')
             goal_id = task.get('goal_id')
-            legacy_goal_path = None
+            legacy_goal_ref = None
             if isinstance(goal_id, str) and goal_id:
-                goal_path = _goal_path(uid, goal_id)
-                goal_snapshot = tx.get(goal_path)
+                goal_ref = goals_db.goal_document_ref(uid, goal_id, firestore_client=client)
+                goal_snapshot = goal_ref.get(transaction=write_transaction)
                 if not goal_snapshot.exists:
                     raise WorkstreamConflictError('goal does not exist')
                 goal_payload = goals_db.normalize_goal_storage(_snapshot_dict(goal_snapshot), goal_id=goal_id)
@@ -1013,9 +1027,11 @@ def resolve_work_intent(
                 if goal_payload['status'] in {GoalStatus.achieved.value, GoalStatus.abandoned.value}:
                     raise WorkstreamConflictError('ended goal cannot receive new work')
                 if goal_generation == 0:
-                    legacy_goal_path = goal_path
+                    legacy_goal_ref = goal_ref
             if isinstance(existing_workstream_id, str) and existing_workstream_id:
-                existing_workstream = tx.get(_workstream_path(uid, existing_workstream_id))
+                existing_workstream = _workstream_ref(uid, existing_workstream_id, firestore_client=client).get(
+                    transaction=write_transaction
+                )
                 if not existing_workstream.exists:
                     raise WorkstreamConflictError('task points to a missing workstream')
                 existing_payload = _snapshot_dict(existing_workstream)
@@ -1027,33 +1043,33 @@ def resolve_work_intent(
                     raise WorkstreamConflictError('task and workstream goals disagree')
                 workstream_id = existing_workstream_id
                 task_id = request.task_id
-                if legacy_goal_path is not None:
-                    tx.update(
-                        legacy_goal_path,
+                if legacy_goal_ref is not None:
+                    write_transaction.update(
+                        legacy_goal_ref,
                         {'account_generation': account_generation, 'updated_at': now},
                     )
                 if task_generation == 0:
-                    tx.update(
-                        task_path,
+                    write_transaction.update(
+                        task_ref,
                         {'account_generation': account_generation, 'updated_at': now},
                     )
                 if workstream_generation == 0:
-                    tx.update(
-                        _workstream_path(uid, workstream_id),
+                    write_transaction.update(
+                        _workstream_ref(uid, workstream_id, firestore_client=client),
                         {'account_generation': account_generation, 'updated_at': now},
                     )
             else:
                 workstream_id = _stable_id('workstream', uid, account_generation, 'task', request.task_id)
                 task_id = request.task_id
-                workstream_path = _workstream_path(uid, workstream_id)
-                workstream_snapshot = tx.get(workstream_path)
+                workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
+                workstream_snapshot = workstream_ref.get(transaction=write_transaction)
                 if workstream_snapshot.exists:
                     existing = _workstream_from_snapshot(workstream_snapshot)
                     if existing.goal_id != goal_id:
                         raise WorkstreamConflictError('deterministic workstream goal collision')
-                if legacy_goal_path is not None:
-                    tx.update(
-                        legacy_goal_path,
+                if legacy_goal_ref is not None:
+                    write_transaction.update(
+                        legacy_goal_ref,
                         {'account_generation': account_generation, 'updated_at': now},
                     )
                 if not workstream_snapshot.exists:
@@ -1065,8 +1081,8 @@ def resolve_work_intent(
                         evidence_refs=[],
                         now=now,
                     )
-                    tx.set(
-                        workstream_path,
+                    write_transaction.create(
+                        workstream_ref,
                         _workstream_storage(
                             workstream_id=workstream_id,
                             title=request.title or str(task.get('description') or 'Task'),
@@ -1076,10 +1092,12 @@ def resolve_work_intent(
                             account_generation=account_generation,
                         ),
                     )
-                    tx.set(_event_path(uid, workstream_id, event_id), event_data)
+                    write_transaction.create(
+                        workstream_ref.collection(EVENTS_COLLECTION).document(event_id), event_data
+                    )
                     newly_created = True
-                tx.update(
-                    task_path,
+                write_transaction.update(
+                    task_ref,
                     {
                         'workstream_id': workstream_id,
                         'account_generation': account_generation,
@@ -1092,13 +1110,17 @@ def resolve_work_intent(
                 uid,
                 goal_id,
                 account_generation=account_generation,
-                tx=tx,
+                transaction=write_transaction,
+                firestore_client=client,
             )
             workstream_id = _stable_id('workstream', uid, 'goal-intent', receipt_id)
             task_id = _stable_id('task', uid, 'goal-intent', receipt_id)
-            workstream_path = _workstream_path(uid, workstream_id)
-            task_path = _task_path(uid, task_id)
-            if tx.get(workstream_path).exists or tx.get(task_path).exists:
+            workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
+            task_ref = _task_ref(uid, task_id, firestore_client=client)
+            if (
+                workstream_ref.get(transaction=write_transaction).exists
+                or task_ref.get(transaction=write_transaction).exists
+            ):
                 raise WorkstreamConflictError('deterministic goal-origin intent id collision')
             event_id, event_data = _initial_event_storage(
                 uid=uid,
@@ -1108,8 +1130,8 @@ def resolve_work_intent(
                 evidence_refs=[],
                 now=now,
             )
-            tx.set(
-                workstream_path,
+            write_transaction.create(
+                workstream_ref,
                 _workstream_storage(
                     workstream_id=workstream_id,
                     title=request.title,
@@ -1119,9 +1141,9 @@ def resolve_work_intent(
                     account_generation=account_generation,
                 ),
             )
-            tx.set(_event_path(uid, workstream_id, event_id), event_data)
-            tx.set(
-                task_path,
+            write_transaction.create(workstream_ref.collection(EVENTS_COLLECTION).document(event_id), event_data)
+            write_transaction.create(
+                task_ref,
                 _task_storage(
                     task_id=task_id,
                     description=request.anchor_task_description,
@@ -1142,10 +1164,10 @@ def resolve_work_intent(
             newly_created=newly_created,
             created_at=now,
         )
-        tx.set(receipt_path, {**receipt.model_dump(mode='python'), 'request_hash': request_hash})
+        write_transaction.create(receipt_ref, {**receipt.model_dump(mode='python'), 'request_hash': request_hash})
         return receipt
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def import_task_goal_links(
@@ -1154,30 +1176,35 @@ def import_task_goal_links(
     *,
     idempotency_key: str,
     account_generation: int,
+    firestore_client: Any = None,
 ) -> TaskGoalLinkImportReport:
+    client = _get_db(firestore_client)
     request_payload = request.model_dump(mode='json')
     operation = 'task-goal-link-import'
     request_hash = _mutation_hash(request_payload)
-    receipt_path = _mutation_receipt_path(
+    receipt_ref = _mutation_receipt_ref(
         uid,
         operation=operation,
         idempotency_key=idempotency_key,
         account_generation=account_generation,
+        firestore_client=client,
     )
+    reservation_transaction = client.transaction()
     reservation_now = datetime.now(timezone.utc)
 
-    def reserve(tx):
-        control_snapshot = tx.get(_control_path(uid))
+    @firestore.transactional
+    def reserve(write_transaction):
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
-        receipt_snapshot = tx.get(receipt_path)
+        receipt_snapshot = receipt_ref.get(transaction=write_transaction)
         if receipt_snapshot.exists:
             receipt = _snapshot_dict(receipt_snapshot)
             if receipt.get('request_hash') != request_hash:
                 raise WorkstreamConflictError('idempotency key was reused with different content')
             result = receipt.get('result')
             return cast(Optional[dict[str, Any]], result if isinstance(result, dict) else None)
-        tx.set(
-            receipt_path,
+        write_transaction.create(
+            receipt_ref,
             {
                 'request_hash': request_hash,
                 'status': 'processing',
@@ -1188,17 +1215,19 @@ def import_task_goal_links(
         )
         return None
 
-    stored_result = _store().run_transaction(reserve)
+    stored_result = reserve(reservation_transaction)
     if stored_result is not None:
         return TaskGoalLinkImportReport.model_validate(stored_result)
     for index, link in enumerate(request.links):
-        task_path = _task_path(uid, link.task_id)
-        goal_path = _goal_path(uid, link.goal_id)
+        task_ref = _task_ref(uid, link.task_id, firestore_client=client)
+        goal_ref = goals_db.goal_document_ref(uid, link.goal_id, firestore_client=client)
+        transaction = client.transaction()
 
-        def apply(tx, index=index, link=link, task_path=task_path, goal_path=goal_path):
-            control_snapshot = tx.get(_control_path(uid))
+        @firestore.transactional
+        def apply(write_transaction):
+            control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
             _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
-            receipt_snapshot = tx.get(receipt_path)
+            receipt_snapshot = receipt_ref.get(transaction=write_transaction)
             if not receipt_snapshot.exists:
                 raise WorkstreamConflictError('migration receipt disappeared')
             receipt = _snapshot_dict(receipt_snapshot)
@@ -1210,8 +1239,8 @@ def import_task_goal_links(
             existing_outcome = outcomes.get(outcome_key)
             if isinstance(existing_outcome, str):
                 return existing_outcome
-            task_snapshot = tx.get(task_path)
-            goal_snapshot = tx.get(goal_path)
+            task_snapshot = task_ref.get(transaction=write_transaction)
+            goal_snapshot = goal_ref.get(transaction=write_transaction)
             if not task_snapshot.exists or not goal_snapshot.exists:
                 outcome = 'failed'
             else:
@@ -1219,7 +1248,9 @@ def import_task_goal_links(
                 workstream_id = task.get('workstream_id')
                 relationship_valid = True
                 if isinstance(workstream_id, str) and workstream_id:
-                    workstream_snapshot = tx.get(_workstream_path(uid, workstream_id))
+                    workstream_snapshot = _workstream_ref(uid, workstream_id, firestore_client=client).get(
+                        transaction=write_transaction
+                    )
                     relationship_valid = bool(
                         workstream_snapshot.exists
                         and _snapshot_dict(workstream_snapshot).get('goal_id') == link.goal_id
@@ -1240,8 +1271,8 @@ def import_task_goal_links(
                 elif current_goal_id == link.goal_id:
                     outcome = 'unchanged'
                     if task_generation == 0:
-                        tx.update(
-                            task_path,
+                        write_transaction.update(
+                            task_ref,
                             {
                                 'account_generation': account_generation,
                                 'updated_at': datetime.now(timezone.utc),
@@ -1249,8 +1280,8 @@ def import_task_goal_links(
                         )
                 else:
                     outcome = 'imported'
-                    tx.update(
-                        task_path,
+                    write_transaction.update(
+                        task_ref,
                         {
                             'goal_id': link.goal_id,
                             'account_generation': account_generation,
@@ -1258,16 +1289,18 @@ def import_task_goal_links(
                         },
                     )
             outcomes[outcome_key] = outcome
-            tx.update(receipt_path, {'outcomes': outcomes, 'updated_at': datetime.now(timezone.utc)})
+            write_transaction.update(receipt_ref, {'outcomes': outcomes, 'updated_at': datetime.now(timezone.utc)})
             return outcome
 
-        _store().run_transaction(apply)
+        apply(transaction)
+    completion_transaction = client.transaction()
     now = datetime.now(timezone.utc)
 
-    def complete(tx):
-        control_snapshot = tx.get(_control_path(uid))
+    @firestore.transactional
+    def complete(write_transaction):
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
-        receipt_snapshot = tx.get(receipt_path)
+        receipt_snapshot = receipt_ref.get(transaction=write_transaction)
         if not receipt_snapshot.exists:
             raise WorkstreamConflictError('migration receipt disappeared')
         receipt = _snapshot_dict(receipt_snapshot)
@@ -1289,8 +1322,8 @@ def import_task_goal_links(
                 link.task_id for index, link in enumerate(request.links) if ordered_outcomes[index] == 'failed'
             ],
         )
-        tx.update(
-            receipt_path,
+        write_transaction.update(
+            receipt_ref,
             {
                 'status': 'complete',
                 'result': report.model_dump(mode='python'),
@@ -1300,40 +1333,50 @@ def import_task_goal_links(
         )
         return report
 
-    return _store().run_transaction(complete)
+    return complete(completion_transaction)
 
 
-def get_goal_detail(uid: str, goal_id: str) -> GoalDetailProjection:
-    goal = goals_db.get_goal_by_id(uid, goal_id)
+def get_goal_detail(uid: str, goal_id: str, *, firestore_client: Any = None) -> GoalDetailProjection:
+    client = _get_db(firestore_client)
+    goal = goals_db.get_goal_by_id(uid, goal_id, firestore_client=client)
     if goal is None:
         raise WorkstreamNotFoundError(f'goal:{goal_id}')
-    task_snapshots = _store().query(_tasks_collection_path(uid), filters=[('goal_id', '==', goal_id)])
+    user_ref = _user_ref(uid, firestore_client=client)
+    task_snapshots = (
+        user_ref.collection(ACTION_ITEMS_COLLECTION).where(filter=FieldFilter('goal_id', '==', goal_id)).stream()
+    )
     tasks = _task_responses_from_snapshots(task_snapshots, context='goal_detail')
     return GoalDetailProjection(
         goal=GoalResponse.model_validate(goals_db.ensure_released_goal_aliases(goal)),
-        active_threads=list_workstreams_for_goal(uid, goal_id),
+        active_threads=list_workstreams_for_goal(uid, goal_id, firestore_client=client),
         tasks=tasks,
-        progress_events=goals_db.list_goal_progress_events(uid, goal_id),
+        progress_events=goals_db.list_goal_progress_events(uid, goal_id, firestore_client=client),
     )
 
 
 def get_workstream_detail(
     uid: str,
     workstream_id: str,
+    *,
+    firestore_client: Any = None,
 ) -> WorkstreamDetailProjection:
-    workstream = get_workstream(uid, workstream_id)
+    client = _get_db(firestore_client)
+    workstream = get_workstream(uid, workstream_id, firestore_client=client)
     if workstream is None:
         raise WorkstreamNotFoundError(workstream_id)
-    task_snapshots = _store().query(
-        _tasks_collection_path(uid), filters=[('workstream_id', '==', workstream_id)]
+    task_snapshots = (
+        _user_ref(uid, firestore_client=client)
+        .collection(ACTION_ITEMS_COLLECTION)
+        .where(filter=FieldFilter('workstream_id', '==', workstream_id))
+        .stream()
     )
     tasks = _task_responses_from_snapshots(task_snapshots, context='workstream_detail')
     return WorkstreamDetailProjection(
         workstream=workstream,
-        recent_events=list_workstream_events(uid, workstream_id),
+        recent_events=list_workstream_events(uid, workstream_id, firestore_client=client),
         tasks=tasks,
-        artifacts=list_artifact_descriptors(uid, workstream_id),
-        checkpoints=list_continuation_checkpoints(uid, workstream_id),
+        artifacts=list_artifact_descriptors(uid, workstream_id, firestore_client=client),
+        checkpoints=list_continuation_checkpoints(uid, workstream_id, firestore_client=client),
     )
 
 

@@ -5,8 +5,6 @@ This module owns the trusted V3 account-generation read contract.
 
 from __future__ import annotations
 
-from database import document_store
-
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, cast
@@ -70,7 +68,8 @@ def _fail(*, uid: str, source_path: str, reason: V3AccountGenerationFailureReaso
 def read_memory_v3_trusted_account_generation(
     *,
     uid: str,
-    tx: Any | None = None,
+    db_client: Any,
+    transaction: Any | None = None,
 ) -> V3TrustedAccountGenerationResult:
     """Read and validate the independent account-generation state-head source.
 
@@ -78,15 +77,13 @@ def read_memory_v3_trusted_account_generation(
     reads and then compare it with control/projection/cursor generations. It must
     not derive ``expected_account_generation`` from the projection state being
     verified or from the memory control decision document.
-
-    When ``tx`` (a neutral store transaction handle) is provided the read joins
-    that transaction, so a caller can fence the trusted head and its control
-    write in one commit; otherwise it is a plain point read through the port.
     """
 
     source_path = MemoryCollections(uid=uid).memory_state_head
     try:
-        data = _snapshot_data(tx.get(source_path) if tx is not None else document_store.get_document(source_path))
+        document = db_client.document(source_path)
+        snapshot = document.get(transaction=transaction) if transaction is not None else document.get()
+        data = _snapshot_data(snapshot)
     except Exception:
         return _fail(uid=uid, source_path=source_path, reason=V3AccountGenerationFailureReason.READ_FAILED)
 

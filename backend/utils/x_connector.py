@@ -30,14 +30,12 @@ import httpx
 from database import redis_db
 from database import users as users_db
 from database import x_posts as x_posts_db
-from database import memories as memories_db
-from database import x_sync_registry
-from database.vector_db import upsert_memory_vectors_batch, upsert_x_post_vectors_batch
+from database._client import db
+from database.vector_db import upsert_x_post_vectors_batch
 from models.memories import MemoryDB
 from utils.llm.memories import extract_memories_from_text
-from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import MemorySystem
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -74,7 +72,8 @@ _STATE_PREFIX = 'x_oauth_state:'
 
 # Lightweight registry of connected users so the periodic sync job can enumerate
 # them without a collection-group query/index. Written on connect, removed on
-# disconnect. Persistence lives in database/x_sync_registry.py.
+# disconnect.
+_REGISTRY_COLLECTION = 'x_connector_users'
 SYNC_JOB_INTERVAL_HOURS = 6  # background sync cadence (the cron fires hourly)
 _SYNC_JOB_USER_SPACING_SEC = 1.5  # gap between users to stay gentle on X limits
 
@@ -203,14 +202,16 @@ def _store_tokens(uid: str, token_resp: Dict, handle: Optional[str] = None, x_us
 
 def _register_user(uid: str) -> None:
     try:
-        x_sync_registry.register_sync_user(uid)
+        db.collection(_REGISTRY_COLLECTION).document(uid).set(
+            {'uid': uid, 'updated_at': datetime.now(timezone.utc)}, merge=True
+        )
     except Exception as e:
         logger.warning(f'x_connector: failed to register user {uid} for sync: {e}')
 
 
 def _unregister_user(uid: str) -> None:
     try:
-        x_sync_registry.unregister_sync_user(uid)
+        db.collection(_REGISTRY_COLLECTION).document(uid).delete()
     except Exception as e:
         logger.warning(f'x_connector: failed to unregister user {uid}: {e}')
 
@@ -369,25 +370,15 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
                 # (and cleanly removable on disconnect / re-import).
                 mdb.app_id = INTEGRATION_KEY
                 memory_dbs.append(mdb)
-            # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
-            if resolve_memory_system(uid) == MemorySystem.CANONICAL:
-                memory_service = MemoryService()
-                for mdb in memory_dbs:
-                    memory_service.write(uid, mdb.model_dump())
-            else:
-                memories_db.save_memories(uid, [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs])
-                upsert_memory_vectors_batch(
-                    uid,
-                    [
-                        {
-                            'memory_id': m.id,
-                            'content': m.content,
-                            'category': m.category.value,
-                            'subject_entity_id': m.subject_entity_id,
-                        }
-                        for m in memory_dbs
-                    ],
-                )
+            MemoryService(db_client=db).create_external_memory_batch(
+                uid,
+                memory_dbs,
+                memory_system=MemorySystem.CANONICAL,
+                consumer='x_connector',
+                operation='x_memory_extract',
+                upsert_vectors=False,
+                require_canonical_promotion=True,
+            )
             capture_memory_write(
                 principal_id=uid,
                 source="twitter_x_connector",
@@ -586,9 +577,7 @@ async def run_x_sync_job() -> Dict:
     """Incrementally sync every connected X user. Errors are isolated per user;
     a slow/failed account never blocks the others."""
     try:
-        # Offload the synchronous store read to db_executor like every other storage call in this
-        # coroutine — running it inline blocks the event loop for the duration of the query.
-        uids = await run_blocking(db_executor, x_sync_registry.list_sync_user_ids)
+        uids = [d.id for d in db.collection(_REGISTRY_COLLECTION).stream()]
     except Exception as e:
         logger.error(f'x_connector: sync job could not list users: {e}')
         return {'users': 0, 'synced': 0, 'new_posts': 0}

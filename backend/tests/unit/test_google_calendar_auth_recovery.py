@@ -67,7 +67,7 @@ def test_refresh_google_token_marks_missing_refresh_token_reauth_required(monkey
         'connected': False,
         'reauth_required': True,
         'reauth_reason': 'missing_refresh_token',
-        'access_token': google_utils.DELETE,
+        'access_token': google_utils.firestore.DELETE_FIELD,
     }
 
 
@@ -104,7 +104,7 @@ def test_refresh_google_token_marks_invalid_grant_reauth_required(monkeypatch):
         'refresh_token': 'refresh-token',
         'reauth_required': True,
         'reauth_reason': 'invalid_grant',
-        'access_token': google_utils.DELETE,
+        'access_token': google_utils.firestore.DELETE_FIELD,
     }
 
 

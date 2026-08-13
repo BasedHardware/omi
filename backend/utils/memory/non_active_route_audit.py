@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from database import document_store
+from database._client import db
 from database.memory_collections import MemoryCollections
 from database.memory_non_active_routes import NonActiveRoute, PersistedNonActiveRouteOutcome
 
@@ -160,17 +160,17 @@ def fetch_non_active_route_audit_report(
     *,
     run_id: Optional[str] = None,
     expected_source_ids: Optional[Iterable[str]] = None,
+    db_client: Any = db,
 ) -> NonActiveRouteAuditReport:
     """Fetch route-store docs and build the memory non-active no-silent-loss audit report."""
 
-    route_docs = _fetch_non_active_route_docs(uid, run_id=run_id)
+    route_docs = _fetch_non_active_route_docs(uid, run_id=run_id, db_client=db_client)
     return build_non_active_route_audit_report(uid, route_docs, expected_source_ids=expected_source_ids)
 
 
-def _fetch_non_active_route_docs(uid: str, *, run_id: Optional[str]) -> List[Dict[str, Any]]:
+def _fetch_non_active_route_docs(uid: str, *, run_id: Optional[str], db_client: Any) -> List[Dict[str, Any]]:
     collection_path = MemoryCollections(uid=uid).non_active_memory_routes
+    query = db_client.collection(collection_path)
     if run_id:
-        snapshots = document_store.stream_collection_where(collection_path, "run_id", "==", run_id)
-    else:
-        snapshots = document_store.stream_collection(collection_path)
-    return [snapshot.to_dict() or {} for snapshot in snapshots]
+        query = query.where("run_id", "==", run_id)
+    return [snapshot.to_dict() or {} for snapshot in query.stream()]

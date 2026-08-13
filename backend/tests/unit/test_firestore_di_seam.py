@@ -16,9 +16,7 @@ pytest.importorskip("fake_firestore")
 import database._client as client_module  # noqa: E402
 import database.helpers as helpers  # noqa: E402
 import database.memories as memories_db  # noqa: E402
-from database import memory_ledger, projection_repair  # noqa: E402
 from fakes.firestore import setup_fake_firestore, teardown_fake_firestore  # noqa: E402
-from tests.store_fakes import FakeDocumentStore  # noqa: E402
 
 pytestmark = pytest.mark.slow
 
@@ -108,31 +106,34 @@ def fake_firestore():
         teardown_fake_firestore()
 
 
-@pytest.fixture
-def memory_store(monkeypatch):
-    """One FakeDocumentStore backing memories + the ledger + repair enqueue (WP2 port seam)."""
-    store = FakeDocumentStore()
-    monkeypatch.setattr(memories_db, "_store", lambda: store)
-    monkeypatch.setattr(memory_ledger, "_store", lambda: store)
-    monkeypatch.setattr(projection_repair, "_store", lambda: store)
-    return store
-
-
-def test_create_memory_writes_through_the_store_at_resolved_protection(monkeypatch, memory_store):
-    # WP2 (ADR-0021): create_memory no longer takes an injected firestore client; it writes through
-    # the neutral port (_store) and resolves data protection via the standard path.
+def test_create_memory_uses_injected_firestore_for_data_protection(monkeypatch, fake_firestore):
     uid = "uid-injected-memory"
-    monkeypatch.setattr(helpers.redis_db, "get_user_data_protection_level", MagicMock(return_value="standard"))
+    fake_firestore.collection("users").document(uid).set({"data_protection_level": "standard"})
+
+    monkeypatch.setattr(helpers.redis_db, "get_user_data_protection_level", MagicMock(return_value="enhanced"))
+    monkeypatch.setattr(
+        helpers.redis_db,
+        "set_user_data_protection_level",
+        MagicMock(side_effect=AssertionError("wrote global Redis data protection cache")),
+    )
+    monkeypatch.setattr(
+        memories_db, "get_firestore_client", MagicMock(side_effect=AssertionError("used global client"))
+    )
+    monkeypatch.setattr(
+        helpers.users_db,
+        "get_user_profile",
+        MagicMock(side_effect=AssertionError("used global user profile lookup")),
+    )
 
     memory = {
         "id": "mem-1",
-        "content": "Port writes should stay plaintext at standard protection.",
+        "content": "Injected Firestore writes should stay plaintext at standard protection.",
         "created_at": "2026-06-30T00:00:00+00:00",
     }
 
-    returned = memories_db.create_memory(uid, memory)
+    returned = memories_db.create_memory(uid, memory, firestore_client=fake_firestore)
 
-    saved = memory_store.get(f"users/{uid}/memories/mem-1").to_dict()
+    saved = fake_firestore.collection("users").document(uid).collection("memories").document("mem-1").get().to_dict()
     assert returned is memory
     assert memory["data_protection_level"] == "standard"
     assert saved["data_protection_level"] == "standard"

@@ -8,18 +8,13 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
+from google.cloud import firestore
 from pydantic import BaseModel, StrictInt, StrictStr
 
-from database.store import get_document_store
-from database.store.sentinels import Increment
+from database._client import get_firestore_client
 from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import enforce_chat_quota
-
-
-def _store():
-    return get_document_store()
-
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -121,8 +116,9 @@ async def _post_json(
 
 
 def _record_session(uid: str, token: str, provider: str, model: str, expires_at: str) -> None:
-    _store().set(
-        f"users/{uid}/realtime_sessions/{hashlib.sha256(token.encode()).hexdigest()}",
+    get_firestore_client().collection("users").document(uid).collection("realtime_sessions").document(
+        hashlib.sha256(token.encode()).hexdigest()
+    ).set(
         {
             "provider": provider,
             "model": model,
@@ -130,7 +126,7 @@ def _record_session(uid: str, token: str, provider: str, model: str, expires_at:
             "minted_at": datetime.now(timezone.utc),
             "expires_at": expires_at,
             "max_minutes": _SESSION_MAX_MIN,
-        },
+        }
     )
 
 
@@ -207,18 +203,20 @@ def _record_usage(
     for prefix in ("desktop_chat", account):
         updates.update(
             {
-                f"{prefix}.input_tokens": Increment(input_tokens),
-                f"{prefix}.output_tokens": Increment(output_tokens),
-                f"{prefix}.cache_read_tokens": Increment(cached_tokens),
-                f"{prefix}.cache_write_tokens": Increment(0),
-                f"{prefix}.total_tokens": Increment(total_tokens),
-                f"{prefix}.cost_usd": Increment(cost),
-                f"{prefix}.call_count": Increment(1),
+                f"{prefix}.input_tokens": firestore.Increment(input_tokens),
+                f"{prefix}.output_tokens": firestore.Increment(output_tokens),
+                f"{prefix}.cache_read_tokens": firestore.Increment(cached_tokens),
+                f"{prefix}.cache_write_tokens": firestore.Increment(0),
+                f"{prefix}.total_tokens": firestore.Increment(total_tokens),
+                f"{prefix}.cost_usd": firestore.Increment(cost),
+                f"{prefix}.call_count": firestore.Increment(1),
             }
         )
-    updates["desktop_chat.quota_questions"] = Increment(1)
-    updates[f"{account}.quota_questions"] = Increment(1)
-    _store().set(f"users/{uid}/llm_usage/{date}", updates, merge=True)
+    updates["desktop_chat.quota_questions"] = firestore.Increment(1)
+    updates[f"{account}.quota_questions"] = firestore.Increment(1)
+    get_firestore_client().collection("users").document(uid).collection("llm_usage").document(date).set(
+        updates, merge=True
+    )
 
 
 def _usage_cost(report: UsageReport) -> float:

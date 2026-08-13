@@ -9,39 +9,35 @@ users with older, actively-used profiles to be re-prompted to
 
 import inspect
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from utils.other import storage as storage_mod
-from tests.object_store_fakes import FakeObjectStore
 
 
 class TestGetUserHasSpeechProfile:
-    def _wire(self, monkeypatch, exists: bool) -> FakeObjectStore:
-        store = FakeObjectStore()
-        if exists:
-            store.put("spb", "uid1/speech_profile.wav", b"x")
-        monkeypatch.setattr(storage_mod, "_speech_profiles_bucket_name", lambda required=False: "spb")
-        monkeypatch.setattr(storage_mod, "_object_store", lambda: store)
-        return store
+    def _bucket_with_blob(self, exists: bool):
+        blob = MagicMock()
+        blob.exists.return_value = exists
+        bucket = MagicMock()
+        bucket.blob.return_value = blob
+        return bucket, blob
 
-    def test_existing_profile_counts_regardless_of_age(self, monkeypatch):
+    def test_existing_profile_counts_regardless_of_age(self):
         """An existing profile is reported as present — no age cutoff (#5128)."""
-        store = self._wire(monkeypatch, exists=True)
-        meta_reads = []
-        monkeypatch.setattr(store, "get_metadata", lambda b, k: (meta_reads.append(k), None)[1])
-        assert storage_mod.get_user_has_speech_profile("uid1") is True
+        bucket, blob = self._bucket_with_blob(exists=True)
+        with patch.object(storage_mod, "_get_speech_profiles_bucket", return_value=bucket):
+            assert storage_mod.get_user_has_speech_profile("uid1") is True
         # No metadata fetch for age checks — the old expiry code called blob.reload()
-        assert meta_reads == []
+        blob.reload.assert_not_called()
 
-    def test_missing_profile(self, monkeypatch):
-        self._wire(monkeypatch, exists=False)
-        assert storage_mod.get_user_has_speech_profile("uid1") is False
+    def test_missing_profile(self):
+        bucket, _ = self._bucket_with_blob(exists=False)
+        with patch.object(storage_mod, "_get_speech_profiles_bucket", return_value=bucket):
+            assert storage_mod.get_user_has_speech_profile("uid1") is False
 
-    def test_missing_bucket(self, monkeypatch):
-        monkeypatch.setattr(storage_mod, "_speech_profiles_bucket_name", lambda required=False: None)
-        touched = []
-        monkeypatch.setattr(storage_mod, "_object_store", lambda: touched.append(1))
-        assert storage_mod.get_user_has_speech_profile("uid1") is False
-        assert touched == []  # unconfigured bucket short-circuits before the store
+    def test_missing_bucket(self):
+        with patch.object(storage_mod, "_get_speech_profiles_bucket", return_value=None):
+            assert storage_mod.get_user_has_speech_profile("uid1") is False
 
     def test_no_age_parameter_in_signature(self):
         """Guard against reintroducing an expiry knob on the existence check."""

@@ -23,13 +23,10 @@ from typing import Any, Mapping
 import google.auth
 import google.auth.transport.requests
 import httpx
-from database.store import get_document_store, sentinels
+from google.cloud.firestore import DELETE_FIELD, transactional
+
+from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
-
-
-def _store():
-    return get_document_store()
-
 
 RECONCILER_SCHEMA_VERSION = 1
 DEFAULT_ZONE = "us-central1-a"
@@ -279,12 +276,13 @@ def reconcile_requested(vm: Mapping[str, Any], now: float | None = None) -> bool
     )
 
 
-def _claim_run_lease_txn(tx: Any, lease_path: str, owner: str, now: float, ttl: int) -> bool:
-    snapshot = tx.get(lease_path)
+@transactional
+def _claim_run_lease_txn(transaction: Any, lease_ref: Any, owner: str, now: float, ttl: int) -> bool:
+    snapshot = lease_ref.get(transaction=transaction)
     current = snapshot.to_dict() if snapshot.exists else {}
     if isinstance(current, dict) and float(current.get("expiresAt", 0) or 0) > now and current.get("owner") != owner:
         return False
-    tx.set(lease_path, {"owner": owner, "claimedAt": now, "expiresAt": now + ttl}, merge=True)
+    transaction.set(lease_ref, {"owner": owner, "claimedAt": now, "expiresAt": now + ttl}, merge=True)
     return True
 
 
@@ -292,21 +290,27 @@ def claim_reconciler_run_lease(
     environment: str, owner: str, now: float | None = None, ttl: int = LEASE_TTL_SECONDS
 ) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
     return bool(
-        _store().run_transaction(
-            lambda tx: _claim_run_lease_txn(tx, f"agent_vm_reconciler_leases/{environment}", owner, now, ttl)
+        _claim_run_lease_txn(
+            client.transaction(),
+            client.collection("agent_vm_reconciler_leases").document(environment),
+            owner,
+            now,
+            ttl,
         )
     )
 
 
-def _renew_run_lease_txn(tx: Any, lease_path: str, owner: str, now: float, ttl: int) -> bool:
-    snapshot = tx.get(lease_path)
+@transactional
+def _renew_run_lease_txn(transaction: Any, lease_ref: Any, owner: str, now: float, ttl: int) -> bool:
+    snapshot = lease_ref.get(transaction=transaction)
     current = snapshot.to_dict() if snapshot.exists else {}
     if not isinstance(current, dict) or current.get("owner") != owner:
         return False
     if float(current.get("expiresAt", 0) or 0) <= now:
         return False
-    tx.update(lease_path, {"expiresAt": now + ttl, "heartbeatAt": now})
+    transaction.update(lease_ref, {"expiresAt": now + ttl, "heartbeatAt": now})
     return True
 
 
@@ -314,35 +318,43 @@ def renew_reconciler_run_lease(
     environment: str, owner: str, now: float | None = None, ttl: int = LEASE_TTL_SECONDS
 ) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
     return bool(
-        _store().run_transaction(
-            lambda tx: _renew_run_lease_txn(tx, f"agent_vm_reconciler_leases/{environment}", owner, now, ttl)
+        _renew_run_lease_txn(
+            client.transaction(),
+            client.collection("agent_vm_reconciler_leases").document(environment),
+            owner,
+            now,
+            ttl,
         )
     )
 
 
-def _release_run_lease_txn(tx: Any, lease_path: str, owner: str) -> bool:
-    snapshot = tx.get(lease_path)
+@transactional
+def _release_run_lease_txn(transaction: Any, lease_ref: Any, owner: str) -> bool:
+    snapshot = lease_ref.get(transaction=transaction)
     current = snapshot.to_dict() if snapshot.exists else {}
     if not isinstance(current, dict) or current.get("owner") != owner:
         return False
-    tx.update(lease_path, {"owner": sentinels.DELETE, "expiresAt": 0, "releasedAt": time.time()})
+    transaction.update(lease_ref, {"owner": DELETE_FIELD, "expiresAt": 0, "releasedAt": time.time()})
     return True
 
 
 def release_reconciler_run_lease(environment: str, owner: str) -> bool:
+    client = get_firestore_client()
     return bool(
-        _store().run_transaction(
-            lambda tx: _release_run_lease_txn(tx, f"agent_vm_reconciler_leases/{environment}", owner)
+        _release_run_lease_txn(
+            client.transaction(), client.collection("agent_vm_reconciler_leases").document(environment), owner
         )
     )
 
 
+@transactional
 def _claim_vm_lease_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
-    recovery_path: str | None,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    recovery_ref: Any | None,
     recovery_migration_id: str | None,
     vm_name: str,
     auth_token: str,
@@ -351,12 +363,12 @@ def _claim_vm_lease_txn(
     now: float,
     ttl: int,
 ) -> bool:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     if account_deletion_blocks_access(status):
         return False
-    snapshot = tx.get(user_path)
+    snapshot = user_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if not isinstance(vm, dict) or vm.get("vmName") != vm_name or vm.get("authToken") != auth_token:
         return False
@@ -365,7 +377,7 @@ def _claim_vm_lease_txn(
     release_changed = release_id is not None and reconcile.get("releaseId") != release_id
     same_release = release_id is None or not release_changed
     if reconcile.get("state") == "quarantined" and same_release:
-        recovery_snapshot = tx.get(recovery_path) if recovery_path is not None else None
+        recovery_snapshot = recovery_ref.get(transaction=transaction) if recovery_ref is not None else None
         recovery = recovery_snapshot.to_dict() if recovery_snapshot is not None and recovery_snapshot.exists else None
         recorded_instance_id = str(vm.get("instanceId") or "")
         if (
@@ -396,12 +408,12 @@ def _claim_vm_lease_txn(
         update.update(
             {
                 "agentVm.reconcile.retryCount": 0,
-                "agentVm.reconcile.retryAt": sentinels.DELETE,
-                "agentVm.reconcile.lastError": sentinels.DELETE,
-                "agentVm.reconcile.driftReasons": sentinels.DELETE,
+                "agentVm.reconcile.retryAt": DELETE_FIELD,
+                "agentVm.reconcile.lastError": DELETE_FIELD,
+                "agentVm.reconcile.driftReasons": DELETE_FIELD,
             }
         )
-    tx.update(user_path, update)
+    transaction.update(user_ref, update)
     return True
 
 
@@ -415,46 +427,47 @@ def claim_vm_lease(
     now: float | None = None,
 ) -> bool:
     now = time.time() if now is None else now
-    recovery_path = (
-        f"users/{uid}/agentVmMigrations/{recovery_migration_id}"
+    client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
+    recovery_ref = (
+        user_ref.collection("agentVmMigrations").document(recovery_migration_id)
         if isinstance(recovery_migration_id, str) and _MIGRATION_ID.fullmatch(recovery_migration_id)
         else None
     )
     return bool(
-        _store().run_transaction(
-            lambda tx: _claim_vm_lease_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                recovery_path,
-                recovery_migration_id,
-                vm_name,
-                auth_token,
-                owner,
-                release_id,
-                now,
-                LEASE_TTL_SECONDS,
-            )
+        _claim_vm_lease_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            user_ref,
+            recovery_ref,
+            recovery_migration_id,
+            vm_name,
+            auth_token,
+            owner,
+            release_id,
+            now,
+            LEASE_TTL_SECONDS,
         )
     )
 
 
+@transactional
 def _renew_vm_lease_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
     vm_name: str,
     auth_token: str,
     owner: str,
     now: float,
     ttl: int,
 ) -> bool:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     if account_deletion_blocks_access(status):
         return False
-    snapshot = tx.get(user_path)
+    snapshot = user_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if not isinstance(vm, dict) or vm.get("vmName") != vm_name or vm.get("authToken") != auth_token:
         return False
@@ -464,34 +477,38 @@ def _renew_vm_lease_txn(
     lease: dict[str, Any] = lease_raw if isinstance(lease_raw, dict) else {}
     if lease.get("owner") != owner or float(lease.get("expiresAt", 0) or 0) <= now:
         return False
+    reconcile_raw = vm.get("reconcile")
+    reconcile = reconcile_raw if isinstance(reconcile_raw, dict) else {}
     if reconcile.get("state") == "quarantined":
         return False
-    tx.update(user_path, {"agentVm.reconcile.lease.expiresAt": now + ttl, "agentVm.reconcile.lease.heartbeatAt": now})
+    transaction.update(
+        user_ref, {"agentVm.reconcile.lease.expiresAt": now + ttl, "agentVm.reconcile.lease.heartbeatAt": now}
+    )
     return True
 
 
 def renew_vm_lease(uid: str, vm_name: str, auth_token: str, owner: str, now: float | None = None) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
     return bool(
-        _store().run_transaction(
-            lambda tx: _renew_vm_lease_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                vm_name,
-                auth_token,
-                owner,
-                now,
-                LEASE_TTL_SECONDS,
-            )
+        _renew_vm_lease_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            client.collection("users").document(uid),
+            vm_name,
+            auth_token,
+            owner,
+            now,
+            LEASE_TTL_SECONDS,
         )
     )
 
 
+@transactional
 def _update_vm_reconcile_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
     vm_name: str,
     auth_token: str,
     owner: str,
@@ -502,12 +519,12 @@ def _update_vm_reconcile_txn(
     force_consume_start_request: bool = False,
 ) -> bool:
     now = time.time() if now is None else now
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     if account_deletion_blocks_access(status):
         return False
-    snapshot = tx.get(user_path)
+    snapshot = user_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if not isinstance(vm, dict) or vm.get("vmName") != vm_name or vm.get("authToken") != auth_token:
         return False
@@ -525,7 +542,7 @@ def _update_vm_reconcile_txn(
         update[f"agentVm.reconcile.{key}"] = value
     for key, value in (vm_fields or {}).items():
         update[f"agentVm.{key}"] = value
-    tx.update(user_path, update)
+    transaction.update(user_ref, update)
     return True
 
 
@@ -540,7 +557,7 @@ def _reconcile_update_fields(
     requested_at = reconcile.get("startRequestedAt")
     current_request_at = float(requested_at) if isinstance(requested_at, (int, float)) else None
     clears_start_request = (
-        result.get("startRequested") is sentinels.DELETE or result.get("startRequestedAt") is sentinels.DELETE
+        result.get("startRequested") is DELETE_FIELD or result.get("startRequestedAt") is DELETE_FIELD
     )
     if (
         not force_consume_start_request
@@ -567,29 +584,29 @@ def update_vm_reconcile(
     consume_start_request_at: float | None = None,
     force_consume_start_request: bool = False,
 ) -> bool:
+    client = get_firestore_client()
     return bool(
-        _store().run_transaction(
-            lambda tx: _update_vm_reconcile_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                vm_name,
-                auth_token,
-                owner,
-                fields,
-                vm_fields,
-                now,
-                consume_start_request_at,
-                force_consume_start_request,
-            )
+        _update_vm_reconcile_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            client.collection("users").document(uid),
+            vm_name,
+            auth_token,
+            owner,
+            fields,
+            vm_fields,
+            now,
+            consume_start_request_at,
+            force_consume_start_request,
         )
     )
 
 
+@transactional
 def _clear_missing_vm_if_current_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
     vm_name: str,
     zone: str,
     auth_token: str,
@@ -603,12 +620,12 @@ def _clear_missing_vm_if_current_txn(
     separately observe that no pre-existing session lease remains before this
     compare-and-swap deletes the pointer.
     """
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     if account_deletion_blocks_access(status):
         return False
-    snapshot = tx.get(user_path)
+    snapshot = user_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if (
         not isinstance(vm, dict)
@@ -633,7 +650,7 @@ def _clear_missing_vm_if_current_txn(
     missing_since = reconcile.get("missingSince")
     if not isinstance(missing_since, (int, float)) or float(missing_since) != expected_missing_since:
         return False
-    tx.update(user_path, {"agentVm": sentinels.DELETE})
+    transaction.update(user_ref, {"agentVm": DELETE_FIELD})
     return True
 
 
@@ -648,31 +665,30 @@ def clear_missing_vm_if_current(
 ) -> bool:
     """Delete a proven-abandoned missing VM record with deletion and owner fences."""
     now = time.time() if now is None else now
+    client = get_firestore_client()
     return bool(
-        _store().run_transaction(
-            lambda tx: _clear_missing_vm_if_current_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                vm_name,
-                zone,
-                auth_token,
-                owner,
-                expected_missing_since,
-                now,
-            )
+        _clear_missing_vm_if_current_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            client.collection("users").document(uid),
+            vm_name,
+            zone,
+            auth_token,
+            owner,
+            expected_missing_since,
+            now,
         )
     )
 
 
 def clear_vm_reconcile_lease_fields() -> dict[str, Any]:
     return {
-        "lease": sentinels.DELETE,
-        "startRequested": sentinels.DELETE,
-        "startRequestedAt": sentinels.DELETE,
-        "drainRequested": sentinels.DELETE,
-        "drainRequestedAt": sentinels.DELETE,
-        "migrationDrainRelease": sentinels.DELETE,
+        "lease": DELETE_FIELD,
+        "startRequested": DELETE_FIELD,
+        "startRequestedAt": DELETE_FIELD,
+        "drainRequested": DELETE_FIELD,
+        "drainRequestedAt": DELETE_FIELD,
+        "migrationDrainRelease": DELETE_FIELD,
     }
 
 
@@ -709,6 +725,8 @@ def active_boot_image_migration(
     vm_name: str,
     instance_id: str,
     migration_id: str,
+    *,
+    firestore_client: Any | None = None,
 ) -> dict[str, Any] | None:
     """Find the durable migration belonging to this provider VM identity.
 
@@ -716,7 +734,8 @@ def active_boot_image_migration(
     crash before cutover while leaving the post-cutover retirement path fenced
     by the same durable journal.
     """
-    snapshot = _store().get(f"users/{uid}/agentVmMigrations/{migration_id}")
+    client = firestore_client or get_firestore_client()
+    snapshot = client.collection("users").document(uid).collection("agentVmMigrations").document(migration_id).get()
     migration = snapshot.to_dict() if snapshot.exists else None
     if (
         not isinstance(migration, dict)
@@ -733,11 +752,12 @@ def active_boot_image_migration(
     return migration if predecessor_matches or candidate_matches else None
 
 
+@transactional
 def _begin_boot_image_migration_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
-    migration_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    migration_ref: Any,
     vm_name: str,
     zone: str,
     auth_token: str,
@@ -745,15 +765,15 @@ def _begin_boot_image_migration_txn(
     migration: Mapping[str, Any],
     now: float,
 ) -> dict[str, Any] | None:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     if account_deletion_blocks_access(
         normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     ):
         return None
-    snapshot = tx.get(user_path)
+    snapshot = user_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
-    existing = tx.get(migration_path)
+    existing = migration_ref.get(transaction=transaction)
     current = existing.to_dict() if existing.exists else None
     durable_migration_id = migration.get("migrationId")
     reconcile = vm.get("reconcile") if isinstance(vm, dict) else None
@@ -808,27 +828,27 @@ def _begin_boot_image_migration_txn(
             # Atomically exchange the crash-retained drain marker for the
             # migration state. Both block new admission, while later journal
             # transitions continue to reject unrelated drain requests.
-            tx.update(
-                user_path,
+            transaction.update(
+                user_ref,
                 {
                     "agentVm.reconcile.state": "migration_claimed",
-                    "agentVm.reconcile.drainRequested": sentinels.DELETE,
-                    "agentVm.reconcile.drainRequestedAt": sentinels.DELETE,
-                    "agentVm.reconcile.migrationDrainRelease": sentinels.DELETE,
+                    "agentVm.reconcile.drainRequested": DELETE_FIELD,
+                    "agentVm.reconcile.drainRequestedAt": DELETE_FIELD,
+                    "agentVm.reconcile.migrationDrainRelease": DELETE_FIELD,
                 },
             )
         # A terminal candidate cleanup is explicitly retryable.  Reuse the
         # durable candidate name/token but remove its old provider identity so
         # the next creation can be recorded under the same fenced journal.
         if current.get("state") == "candidate_deleted":
-            tx.update(
-                migration_path,
-                {"state": "candidate_creating", "candidateInstanceId": sentinels.DELETE, "updatedAt": now},
+            transaction.update(
+                migration_ref,
+                {"state": "candidate_creating", "candidateInstanceId": DELETE_FIELD, "updatedAt": now},
             )
             return {**current, "state": "candidate_creating"}
         return current
     record = {**migration, "state": "candidate_creating", "createdAt": now, "updatedAt": now}
-    tx.set(migration_path, record)
+    transaction.set(migration_ref, record)
     update: dict[str, Any] = {
         "agentVm.reconcile.state": "migration_claimed",
         "agentVm.reconcile.durableMigration": durable_migration_id,
@@ -838,9 +858,9 @@ def _begin_boot_image_migration_txn(
         # journal in one transaction. Admission remains closed throughout.
         update.update(
             {
-                "agentVm.reconcile.drainRequested": sentinels.DELETE,
-                "agentVm.reconcile.drainRequestedAt": sentinels.DELETE,
-                "agentVm.reconcile.migrationDrainRelease": sentinels.DELETE,
+                "agentVm.reconcile.drainRequested": DELETE_FIELD,
+                "agentVm.reconcile.drainRequestedAt": DELETE_FIELD,
+                "agentVm.reconcile.migrationDrainRelease": DELETE_FIELD,
             }
         )
     if not recorded_instance_id:
@@ -848,7 +868,7 @@ def _begin_boot_image_migration_txn(
         # inside this stopped-only, owner-token-and-lease CAS, then every
         # subsequent journal transition requires that exact provider identity.
         update["agentVm.instanceId"] = old_instance_id
-    tx.update(user_path, update)
+    transaction.update(user_ref, update)
     return record
 
 
@@ -863,28 +883,29 @@ def begin_boot_image_migration(
     now: float | None = None,
 ) -> dict[str, Any] | None:
     now = time.time() if now is None else now
-    result = _store().run_transaction(
-        lambda tx: _begin_boot_image_migration_txn(
-            tx,
-            f"account_deletions/{uid}",
-            f"users/{uid}",
-            f"users/{uid}/agentVmMigrations/{migration_id}",
-            vm_name,
-            zone,
-            auth_token,
-            owner,
-            migration,
-            now,
-        )
+    client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
+    result = _begin_boot_image_migration_txn(
+        client.transaction(),
+        client.collection("account_deletions").document(uid),
+        user_ref,
+        user_ref.collection("agentVmMigrations").document(migration_id),
+        vm_name,
+        zone,
+        auth_token,
+        owner,
+        migration,
+        now,
     )
     return result if isinstance(result, dict) else None
 
 
+@transactional
 def _record_boot_image_candidate_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
-    migration_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    migration_ref: Any,
     vm_name: str,
     zone: str,
     auth_token: str,
@@ -892,15 +913,15 @@ def _record_boot_image_candidate_txn(
     candidate_instance_id: str,
     now: float,
 ) -> bool:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     if account_deletion_blocks_access(
         normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     ):
         return False
-    snapshot = tx.get(user_path)
+    snapshot = user_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
-    migration_snapshot = tx.get(migration_path)
+    migration_snapshot = migration_ref.get(transaction=transaction)
     migration = migration_snapshot.to_dict() if migration_snapshot.exists else None
     if (
         not isinstance(vm, dict)
@@ -920,8 +941,8 @@ def _record_boot_image_candidate_txn(
         return migration.get("candidateInstanceId") == candidate_instance_id
     if migration.get("state") != "candidate_creating":
         return False
-    tx.update(
-        migration_path,
+    transaction.update(
+        migration_ref,
         {"state": "candidate_ready", "candidateInstanceId": candidate_instance_id, "updatedAt": now},
     )
     return True
@@ -938,29 +959,30 @@ def record_boot_image_candidate(
     now: float | None = None,
 ) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
     return bool(
-        _store().run_transaction(
-            lambda tx: _record_boot_image_candidate_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                f"users/{uid}/agentVmMigrations/{migration_id}",
-                vm_name,
-                zone,
-                auth_token,
-                owner,
-                candidate_instance_id,
-                now,
-            )
+        _record_boot_image_candidate_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            user_ref,
+            user_ref.collection("agentVmMigrations").document(migration_id),
+            vm_name,
+            zone,
+            auth_token,
+            owner,
+            candidate_instance_id,
+            now,
         )
     )
 
 
+@transactional
 def _record_boot_image_state_disks_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
-    migration_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    migration_ref: Any,
     vm_name: str,
     zone: str,
     auth_token: str,
@@ -968,14 +990,14 @@ def _record_boot_image_state_disks_txn(
     state: Mapping[str, Any],
     now: float,
 ) -> bool:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     if account_deletion_blocks_access(
         normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     ):
         return False
-    snapshot = tx.get(user_path)
-    migration_snapshot = tx.get(migration_path)
+    snapshot = user_ref.get(transaction=transaction)
+    migration_snapshot = migration_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     migration = migration_snapshot.to_dict() if migration_snapshot.exists else None
     if (
@@ -998,7 +1020,7 @@ def _record_boot_image_state_disks_txn(
     source_clone_id = state.get("sourceCloneDiskId")
     if isinstance(source_clone_id, str) and source_clone_id:
         update["sourceCloneDiskId"] = source_clone_id
-    tx.update(migration_path, update)
+    transaction.update(migration_ref, update)
     return True
 
 
@@ -1013,29 +1035,30 @@ def record_boot_image_state_disks(
     now: float | None = None,
 ) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
     return bool(
-        _store().run_transaction(
-            lambda tx: _record_boot_image_state_disks_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                f"users/{uid}/agentVmMigrations/{migration_id}",
-                vm_name,
-                zone,
-                auth_token,
-                owner,
-                state,
-                now,
-            )
+        _record_boot_image_state_disks_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            user_ref,
+            user_ref.collection("agentVmMigrations").document(migration_id),
+            vm_name,
+            zone,
+            auth_token,
+            owner,
+            state,
+            now,
         )
     )
 
 
+@transactional
 def _mark_boot_image_migration_candidate_deleted_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
-    migration_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    migration_ref: Any,
     vm_name: str,
     zone: str,
     auth_token: str,
@@ -1043,14 +1066,14 @@ def _mark_boot_image_migration_candidate_deleted_txn(
     candidate_instance_id: str,
     now: float,
 ) -> bool:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     if account_deletion_blocks_access(
         normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     ):
         return False
-    snapshot = tx.get(user_path)
-    migration_snapshot = tx.get(migration_path)
+    snapshot = user_ref.get(transaction=transaction)
+    migration_snapshot = migration_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     migration = migration_snapshot.to_dict() if migration_snapshot.exists else None
     if (
@@ -1061,8 +1084,8 @@ def _mark_boot_image_migration_candidate_deleted_txn(
         or not _migration_matches(vm, vm_name=vm_name, zone=zone, auth_token=auth_token, owner=owner, now=now)
     ):
         return False
-    tx.update(
-        migration_path,
+    transaction.update(
+        migration_ref,
         {"state": "candidate_deleted", "candidateDeletedAt": now, "updatedAt": now},
     )
     return True
@@ -1079,29 +1102,30 @@ def mark_boot_image_migration_candidate_deleted(
     now: float | None = None,
 ) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
     return bool(
-        _store().run_transaction(
-            lambda tx: _mark_boot_image_migration_candidate_deleted_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                f"users/{uid}/agentVmMigrations/{migration_id}",
-                vm_name,
-                zone,
-                auth_token,
-                owner,
-                candidate_instance_id,
-                now,
-            )
+        _mark_boot_image_migration_candidate_deleted_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            user_ref,
+            user_ref.collection("agentVmMigrations").document(migration_id),
+            vm_name,
+            zone,
+            auth_token,
+            owner,
+            candidate_instance_id,
+            now,
         )
     )
 
 
+@transactional
 def _recover_missing_boot_image_candidate_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
-    migration_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    migration_ref: Any,
     vm_name: str,
     zone: str,
     auth_token: str,
@@ -1109,14 +1133,14 @@ def _recover_missing_boot_image_candidate_txn(
     now: float,
 ) -> bool:
     """Permit recreation only after GCE has confirmed the candidate is gone."""
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     if account_deletion_blocks_access(
         normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     ):
         return False
-    snapshot = tx.get(user_path)
-    migration_snapshot = tx.get(migration_path)
+    snapshot = user_ref.get(transaction=transaction)
+    migration_snapshot = migration_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     migration = migration_snapshot.to_dict() if migration_snapshot.exists else None
     if (
@@ -1127,9 +1151,9 @@ def _recover_missing_boot_image_candidate_txn(
     ):
         return False
     if migration.get("state") != "candidate_creating":
-        tx.update(
-            migration_path,
-            {"state": "candidate_creating", "candidateInstanceId": sentinels.DELETE, "updatedAt": now},
+        transaction.update(
+            migration_ref,
+            {"state": "candidate_creating", "candidateInstanceId": DELETE_FIELD, "updatedAt": now},
         )
     return True
 
@@ -1145,28 +1169,29 @@ def recover_missing_boot_image_candidate(
 ) -> bool:
     """Fence a retry after a candidate has been observed absent in GCE."""
     now = time.time() if now is None else now
+    client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
     return bool(
-        _store().run_transaction(
-            lambda tx: _recover_missing_boot_image_candidate_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                f"users/{uid}/agentVmMigrations/{migration_id}",
-                vm_name,
-                zone,
-                auth_token,
-                owner,
-                now,
-            )
+        _recover_missing_boot_image_candidate_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            user_ref,
+            user_ref.collection("agentVmMigrations").document(migration_id),
+            vm_name,
+            zone,
+            auth_token,
+            owner,
+            now,
         )
     )
 
 
+@transactional
 def _cutover_boot_image_migration_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
-    migration_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    migration_ref: Any,
     vm_name: str,
     zone: str,
     auth_token: str,
@@ -1174,15 +1199,15 @@ def _cutover_boot_image_migration_txn(
     candidate: Mapping[str, Any],
     now: float,
 ) -> bool:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     if account_deletion_blocks_access(
         normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     ):
         return False
-    snapshot = tx.get(user_path)
+    snapshot = user_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
-    migration_snapshot = tx.get(migration_path)
+    migration_snapshot = migration_ref.get(transaction=transaction)
     migration = migration_snapshot.to_dict() if migration_snapshot.exists else None
     if (
         not isinstance(vm, dict)
@@ -1212,9 +1237,9 @@ def _cutover_boot_image_migration_txn(
         or retention_seconds < soak_seconds
     ):
         return False
-    tx.update(user_path, {"agentVm": dict(candidate)})
-    tx.update(
-        migration_path,
+    transaction.update(user_ref, {"agentVm": dict(candidate)})
+    transaction.update(
+        migration_ref,
         {
             "state": "cutover",
             "cutoverAt": now,
@@ -1226,11 +1251,12 @@ def _cutover_boot_image_migration_txn(
     return True
 
 
+@transactional
 def _claim_boot_image_migration_retirement_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
-    migration_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    migration_ref: Any,
     vm_name: str,
     zone: str,
     auth_token: str,
@@ -1239,14 +1265,14 @@ def _claim_boot_image_migration_retirement_txn(
     candidate_instance_id: str,
     now: float,
 ) -> dict[str, Any] | None:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     if account_deletion_blocks_access(
         normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     ):
         return None
-    snapshot = tx.get(user_path)
-    migration_snapshot = tx.get(migration_path)
+    snapshot = user_ref.get(transaction=transaction)
+    migration_snapshot = migration_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     migration = migration_snapshot.to_dict() if migration_snapshot.exists else None
     reconcile = vm.get("reconcile") if isinstance(vm, Mapping) else None
@@ -1281,30 +1307,30 @@ def _claim_boot_image_migration_retirement_txn(
             return {**migration, "state": "soaking"}
         if now < float(retire_after):
             if migration.get("state") == "cutover":
-                tx.update(
-                    user_path,
+                transaction.update(
+                    user_ref,
                     {
                         "agentVm.reconcile.state": "ready",
-                        "agentVm.reconcile.lease": sentinels.DELETE,
-                        "agentVm.reconcile.startRequested": sentinels.DELETE,
-                        "agentVm.reconcile.startRequestedAt": sentinels.DELETE,
+                        "agentVm.reconcile.lease": DELETE_FIELD,
+                        "agentVm.reconcile.startRequested": DELETE_FIELD,
+                        "agentVm.reconcile.startRequestedAt": DELETE_FIELD,
                         "agentVm.reconcile.migration.state": "retained",
-                        "agentVm.reconcile.migration.cutoverPending": sentinels.DELETE,
+                        "agentVm.reconcile.migration.cutoverPending": DELETE_FIELD,
                     },
                 )
-                tx.update(migration_path, {"state": "retained", "admittedAt": now, "updatedAt": now})
+                transaction.update(migration_ref, {"state": "retained", "admittedAt": now, "updatedAt": now})
                 return {**migration, "state": "admitted"}
-            tx.update(
-                user_path,
+            transaction.update(
+                user_ref,
                 {
                     "agentVm.reconcile.state": "ready",
-                    "agentVm.reconcile.lease": sentinels.DELETE,
-                    "agentVm.reconcile.startRequested": sentinels.DELETE,
-                    "agentVm.reconcile.startRequestedAt": sentinels.DELETE,
+                    "agentVm.reconcile.lease": DELETE_FIELD,
+                    "agentVm.reconcile.startRequested": DELETE_FIELD,
+                    "agentVm.reconcile.startRequestedAt": DELETE_FIELD,
                 },
             )
             return {**migration, "state": "retained"}
-        tx.update(migration_path, {"state": "retiring", "retirementClaimedAt": now, "updatedAt": now})
+        transaction.update(migration_ref, {"state": "retiring", "retirementClaimedAt": now, "updatedAt": now})
         return {**migration, "state": "retiring"}
     return migration if migration.get("state") == "retiring" else None
 
@@ -1320,29 +1346,30 @@ def claim_boot_image_migration_retirement(
     now: float | None = None,
 ) -> dict[str, Any] | None:
     now = time.time() if now is None else now
-    result = _store().run_transaction(
-        lambda tx: _claim_boot_image_migration_retirement_txn(
-            tx,
-            f"account_deletions/{uid}",
-            f"users/{uid}",
-            f"users/{uid}/agentVmMigrations/{migration_id}",
-            vm_name,
-            zone,
-            auth_token,
-            owner,
-            migration_id,
-            candidate_instance_id,
-            now,
-        )
+    client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
+    result = _claim_boot_image_migration_retirement_txn(
+        client.transaction(),
+        client.collection("account_deletions").document(uid),
+        user_ref,
+        user_ref.collection("agentVmMigrations").document(migration_id),
+        vm_name,
+        zone,
+        auth_token,
+        owner,
+        migration_id,
+        candidate_instance_id,
+        now,
     )
     return result if isinstance(result, dict) else None
 
 
+@transactional
 def _complete_boot_image_migration_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
-    migration_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    migration_ref: Any,
     vm_name: str,
     zone: str,
     auth_token: str,
@@ -1351,14 +1378,14 @@ def _complete_boot_image_migration_txn(
     candidate_instance_id: str,
     now: float,
 ) -> bool:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     if account_deletion_blocks_access(
         normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     ):
         return False
-    snapshot = tx.get(user_path)
-    migration_snapshot = tx.get(migration_path)
+    snapshot = user_ref.get(transaction=transaction)
+    migration_snapshot = migration_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     migration = migration_snapshot.to_dict() if migration_snapshot.exists else None
     reconcile = vm.get("reconcile") if isinstance(vm, Mapping) else None
@@ -1385,13 +1412,13 @@ def _complete_boot_image_migration_txn(
     ):
         return False
     completion = {
-        "agentVm.reconcile.migration": sentinels.DELETE,
-        "agentVm.reconcile.durableMigration": sentinels.DELETE,
+        "agentVm.reconcile.migration": DELETE_FIELD,
+        "agentVm.reconcile.durableMigration": DELETE_FIELD,
         "agentVm.reconcile.state": "ready",
     }
     completion.update({f"agentVm.reconcile.{key}": value for key, value in clear_vm_reconcile_lease_fields().items()})
-    tx.update(user_path, completion)
-    tx.update(migration_path, {"state": "completed", "completedAt": now, "updatedAt": now})
+    transaction.update(user_ref, completion)
+    transaction.update(migration_ref, {"state": "completed", "completedAt": now, "updatedAt": now})
     return True
 
 
@@ -1406,21 +1433,21 @@ def complete_boot_image_migration(
     now: float | None = None,
 ) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
     return bool(
-        _store().run_transaction(
-            lambda tx: _complete_boot_image_migration_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                f"users/{uid}/agentVmMigrations/{migration_id}",
-                vm_name,
-                zone,
-                auth_token,
-                owner,
-                migration_id,
-                candidate_instance_id,
-                now,
-            )
+        _complete_boot_image_migration_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            user_ref,
+            user_ref.collection("agentVmMigrations").document(migration_id),
+            vm_name,
+            zone,
+            auth_token,
+            owner,
+            migration_id,
+            candidate_instance_id,
+            now,
         )
     )
 
@@ -1436,43 +1463,44 @@ def cutover_boot_image_migration(
     now: float | None = None,
 ) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
     return bool(
-        _store().run_transaction(
-            lambda tx: _cutover_boot_image_migration_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                f"users/{uid}/agentVmMigrations/{migration_id}",
-                vm_name,
-                zone,
-                auth_token,
-                owner,
-                candidate,
-                now,
-            )
+        _cutover_boot_image_migration_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            user_ref,
+            user_ref.collection("agentVmMigrations").document(migration_id),
+            vm_name,
+            zone,
+            auth_token,
+            owner,
+            candidate,
+            now,
         )
     )
 
 
+@transactional
 def _request_vm_start_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
     expected_vm_name: str,
     expected_auth_token: str,
     now: float,
 ) -> bool:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     if account_deletion_blocks_access(status):
         return False
-    snapshot = tx.get(user_path)
+    snapshot = user_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if not isinstance(vm, dict) or vm.get("vmName") != expected_vm_name or vm.get("authToken") != expected_auth_token:
         return False
-    tx.update(
-        user_path,
+    transaction.update(
+        user_ref,
         {
             "agentVm.reconcile.startRequested": True,
             "agentVm.reconcile.startRequestedAt": now,
@@ -1483,44 +1511,44 @@ def _request_vm_start_txn(
 
 def request_vm_start(uid: str, vm_name: str, auth_token: str, now: float | None = None) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
     return bool(
-        _store().run_transaction(
-            lambda tx: _request_vm_start_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                vm_name,
-                auth_token,
-                now,
-            )
+        _request_vm_start_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            client.collection("users").document(uid),
+            vm_name,
+            auth_token,
+            now,
         )
     )
 
 
+@transactional
 def _claim_session_lease_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
-    lease_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    lease_ref: Any,
     vm_name: str,
     auth_token: str,
     lease_id: str,
     now: float,
     ttl: int,
 ) -> bool:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     if account_deletion_blocks_access(status):
         return False
-    snapshot = tx.get(user_path)
+    snapshot = user_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if not isinstance(vm, dict) or vm.get("vmName") != vm_name or vm.get("authToken") != auth_token:
         return False
     if reconcile_requested(vm, now):
         return False
-    tx.set(
-        lease_path,
+    transaction.set(
+        lease_ref,
         {"leaseId": lease_id, "vmName": vm_name, "claimedAt": now, "heartbeatAt": now, "expiresAt": now + ttl},
     )
     return True
@@ -1528,50 +1556,55 @@ def _claim_session_lease_txn(
 
 def claim_session_lease(uid: str, vm_name: str, auth_token: str, lease_id: str, now: float | None = None) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
     return bool(
-        _store().run_transaction(
-            lambda tx: _claim_session_lease_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                f"users/{uid}/agentVmLeases/{lease_id}",
-                vm_name,
-                auth_token,
-                lease_id,
-                now,
-                SESSION_LEASE_TTL_SECONDS,
-            )
+        _claim_session_lease_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            user_ref,
+            user_ref.collection("agentVmLeases").document(lease_id),
+            vm_name,
+            auth_token,
+            lease_id,
+            now,
+            SESSION_LEASE_TTL_SECONDS,
         )
     )
 
 
-def _heartbeat_session_lease_txn(tx: Any, lease_path: str, now: float, ttl: int) -> bool:
-    snapshot = tx.get(lease_path)
+@transactional
+def _heartbeat_session_lease_txn(transaction: Any, lease_ref: Any, now: float, ttl: int) -> bool:
+    snapshot = lease_ref.get(transaction=transaction)
     lease = snapshot.to_dict() if snapshot.exists else {}
     if not isinstance(lease, dict) or float(lease.get("expiresAt", 0) or 0) <= now:
         return False
-    tx.update(lease_path, {"heartbeatAt": now, "expiresAt": now + ttl})
+    transaction.update(lease_ref, {"heartbeatAt": now, "expiresAt": now + ttl})
     return True
 
 
 def heartbeat_session_lease(uid: str, lease_id: str, now: float | None = None) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
     return bool(
-        _store().run_transaction(
-            lambda tx: _heartbeat_session_lease_txn(
-                tx, f"users/{uid}/agentVmLeases/{lease_id}", now, SESSION_LEASE_TTL_SECONDS
-            )
+        _heartbeat_session_lease_txn(
+            client.transaction(),
+            client.collection("users").document(uid).collection("agentVmLeases").document(lease_id),
+            now,
+            SESSION_LEASE_TTL_SECONDS,
         )
     )
 
 
 def release_session_lease(uid: str, lease_id: str) -> None:
-    _store().delete(f"users/{uid}/agentVmLeases/{lease_id}")
+    client = get_firestore_client()
+    client.collection("users").document(uid).collection("agentVmLeases").document(lease_id).delete()
 
 
 def active_session_count(uid: str, vm_name: str, now: float | None = None) -> int:
     now = time.time() if now is None else now
-    leases = _store().query(f"users/{uid}/agentVmLeases")
+    client = get_firestore_client()
+    leases = client.collection("users").document(uid).collection("agentVmLeases").stream()
     return sum(
         1
         for snapshot in leases

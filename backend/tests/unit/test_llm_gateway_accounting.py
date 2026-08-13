@@ -307,17 +307,13 @@ def test_image_generation_uses_a_size_and_quality_rate_card() -> None:
     assert event.cost_basis == 'per_image_generation_rate_excludes_prompt_input_tokens'
 
 
-def test_ledger_write_is_immutable_idempotent_and_snapshots_subscription_tier(monkeypatch) -> None:
-    import database.llm_gateway_accounting as accounting_module
-    from tests.store_fakes import FakeDocumentStore
-
-    docs: dict = {'users/user-123': {'subscription': {'plan': 'pro'}}}
-    monkeypatch.setattr(accounting_module, '_store', lambda: FakeDocumentStore(backing=docs))
-
+def test_firestore_ledger_write_is_immutable_idempotent_and_snapshots_subscription_tier() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
     event = {'attempt_id': 'invocation-1:1', 'provider': 'openai', 'user_uid': 'user-123'}
-    assert record_llm_gateway_attempt(event)  # new event
-    assert not record_llm_gateway_attempt(event)  # idempotent: attempt id already persisted
-    stored = docs[f'{ATTEMPTS_COLLECTION}/invocation-1:1']
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    assert not record_llm_gateway_attempt(event, firestore_client=client)
+    stored = client.collections[ATTEMPTS_COLLECTION]['invocation-1:1']
     assert stored['subscription_tier'] == 'pro'
 
 

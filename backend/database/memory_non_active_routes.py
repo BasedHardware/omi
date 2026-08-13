@@ -8,15 +8,35 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+try:
+    from google.cloud.firestore_v1 import transactional
+except ImportError:  # pragma: no cover - local unit tests mock Firestore.
+
+    def transactional(func):
+        def wrapper(transaction, *args, **kwargs):
+            if hasattr(transaction, "_begin"):
+                transaction._begin()
+            try:
+                result = func(transaction, *args, **kwargs)
+                if hasattr(transaction, "_commit"):
+                    transaction._commit()
+                return result
+            except Exception:
+                if hasattr(transaction, "_rollback"):
+                    transaction._rollback()
+                raise
+            finally:
+                if hasattr(transaction, "_clean_up"):
+                    transaction._clean_up()
+
+        return wrapper
+
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from database._client import db
 from database.memory_collections import MemoryCollections
 from database.read_boundary import parse_snapshot_strict
-from database.store import Transaction, get_document_store
-
-
-def _store():
-    return get_document_store()
 
 
 class NonActiveRoute(str, Enum):
@@ -81,27 +101,30 @@ class PersistedNonActiveRouteOutcome(_NonActiveRouteOutcomeBase):
 
 def persist_non_active_route_outcome(
     outcome: NonActiveRouteOutcome,
+    *,
+    db_client=db,
 ) -> PersistedNonActiveRouteOutcome:
-    return _store().run_transaction(
-        lambda tx: _persist_non_active_route_outcome_transaction(tx, outcome)
-    )
+    transaction = db_client.transaction()
+    return _persist_non_active_route_outcome_transaction(transaction, db_client, outcome)
 
 
+@transactional
 def _persist_non_active_route_outcome_transaction(
-    tx: Transaction,
+    transaction,
+    db_client,
     outcome: NonActiveRouteOutcome,
 ) -> PersistedNonActiveRouteOutcome:
     persisted = _with_persistence_fields(outcome)
     collections = MemoryCollections(uid=persisted.uid)
-    outcome_path = f"{collections.non_active_memory_routes}/{persisted.outcome_id}"
-    snapshot = tx.get(outcome_path)
+    outcome_ref = db_client.document(f"{collections.non_active_memory_routes}/{persisted.outcome_id}")
+    snapshot = outcome_ref.get(transaction=transaction)
     if snapshot.exists:
         existing = parse_snapshot_strict(PersistedNonActiveRouteOutcome, snapshot)
         if existing.payload_fingerprint != persisted.payload_fingerprint:
             raise NonActiveRouteStoreConflict("idempotency key payload mismatch")
         return existing
 
-    tx.set(outcome_path, persisted.model_dump(mode="json"))
+    transaction.set(outcome_ref, persisted.model_dump(mode="json"))
     return persisted
 
 

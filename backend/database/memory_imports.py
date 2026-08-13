@@ -7,11 +7,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
-from database.document_ids import document_id_from_seed
+from google.api_core.exceptions import AlreadyExists, Conflict
+from google.cloud import firestore
+
+from database._client import document_id_from_seed
 from database.memory_collections import MemoryCollections
-from database.store import get_document_store
-from database.store.errors import AlreadyExists
-from database.store.sentinels import Increment
 from models.memory_imports import (
     MemoryImportArtifact,
     MemoryImportArtifactSourceState,
@@ -25,13 +25,13 @@ from models.memory_imports import (
 MEMORY_IMPORT_BODY_STORAGE_MODE_ENV = "MEMORY_IMPORT_BODY_STORAGE_MODE"
 
 
-def _store():
-    return get_document_store()
-
-
 @dataclass(frozen=True)
 class MemoryImportIngestResult:
     response: MemoryImportBatchResponse
+
+
+def _firestore_increment(value: int) -> Any:
+    return firestore.Increment(value)
 
 
 def _normalized_source_type(source_type: str) -> str:
@@ -91,6 +91,7 @@ def ingest_memory_import_batch(
     uid: str,
     request: MemoryImportBatchRequest,
     *,
+    db_client: Any,
     now: Optional[datetime] = None,
 ) -> MemoryImportIngestResult:
     """Persist import artifacts only; never create product memories or indexes."""
@@ -105,7 +106,7 @@ def ingest_memory_import_batch(
     for item in request.items:
         content_hash = _stable_content_hash(item)
         artifact_id = _artifact_id(uid, source_type, request.source_account_hash, item)
-        artifact_path = f"{collections.memory_import_artifacts}/{artifact_id}"
+        artifact_ref: Any = db_client.document(f"{collections.memory_import_artifacts}/{artifact_id}")
         artifact = MemoryImportArtifact(
             artifact_id=artifact_id,
             uid=uid,
@@ -125,13 +126,12 @@ def ingest_memory_import_batch(
             updated_at=current_time,
         )
         try:
-            _store().create(artifact_path, artifact.model_dump(mode="json"))
+            artifact_ref.create(artifact.model_dump(mode="json"))
             created += 1
             continue
-        except AlreadyExists:
+        except (AlreadyExists, Conflict):
             deduped += 1
-            _store().set(
-                artifact_path,
+            artifact_ref.set(
                 {
                     "run_id": run_id,
                     "source_state": MemoryImportArtifactSourceState.active.value,
@@ -141,10 +141,9 @@ def ingest_memory_import_batch(
             )
             continue
 
-    run_path = f"{collections.memory_import_runs}/{run_id}"
+    run_ref: Any = db_client.document(f"{collections.memory_import_runs}/{run_id}")
     try:
-        _store().create(
-            run_path,
+        run_ref.create(
             {
                 "run_id": run_id,
                 "uid": uid,
@@ -162,15 +161,14 @@ def ingest_memory_import_batch(
                 "updated_at": current_time.isoformat(),
                 "completed_at": None,
                 "last_error": None,
-            },
+            }
         )
-    except AlreadyExists:
+    except (AlreadyExists, Conflict):
         pass
-    _store().set(
-        run_path,
+    run_ref.set(
         {
-            "artifact_count": Increment(created),
-            "deduped_count": Increment(deduped),
+            "artifact_count": _firestore_increment(created),
+            "deduped_count": _firestore_increment(deduped),
             "updated_at": current_time.isoformat(),
         },
         merge=True,

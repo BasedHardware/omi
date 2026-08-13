@@ -13,24 +13,8 @@ from speaker_math import cosine_distance
 logger = logging.getLogger(__name__)
 
 BATCH_MODEL_NAME: str = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
-# Normalize once: a whitespace-padded value would pass the empty check and the routing policy but
-# then fail the approved-set validation at load, taking down the serving pod.
-STREAM_MODEL_NAME: str = os.getenv("PARAKEET_STREAM_MODEL", "").strip()
+STREAM_MODEL_NAME: str = os.getenv("PARAKEET_STREAM_MODEL", "")
 INFERENCE_MODE: str = os.getenv("PARAKEET_INFERENCE_MODE", "nemo")
-
-# Real-time (streaming/PTT) model allow-list. This mirrors
-# ``config.stt_provider_policy.APPROVED_STREAMING_PARAKEET_MODELS`` — the code-owned source of
-# truth — which this isolated GPU image cannot import (only ``backend/parakeet/`` is copied in).
-# ``test_stt_provider_policy.py`` guards the two sets against drift. The routing policy silently
-# falls back to the English-only default for an unrecognized value, so if this pod loaded the raw
-# env instead, routing would claim English while the pod attempted a model that does not exist —
-# a silent divergence. Reject an unapproved value at startup with a clear message instead.
-APPROVED_STREAM_MODELS: frozenset = frozenset(
-    {
-        "nvidia/parakeet-rnnt-1.1b",
-        "nvidia/parakeet-1-1b-rnnt-multilingual",
-    }
-)
 
 _stream_model: Optional[Any] = None
 _nim_url: Optional[str] = None
@@ -142,29 +126,11 @@ def _load_nemo_model(model_name: str) -> Any:
     raise RuntimeError(f"Could not load model {model_name} with any NeMo class: {last_err}")
 
 
-def _validate_stream_model(model_name: str) -> None:
-    """Fail fast on a configured-but-unapproved ``PARAKEET_STREAM_MODEL``.
-
-    Routing (``config.stt_provider_policy.streaming_parakeet_model``) maps an unrecognized value
-    to the English-only default, so serving the raw env unchecked would route English traffic to a
-    backend attempting a model that does not exist. Reject it here with a clear message rather than
-    surfacing an opaque model-load error deep in NeMo.
-    """
-    if model_name not in APPROVED_STREAM_MODELS:
-        raise ValueError(
-            f"PARAKEET_STREAM_MODEL={model_name!r} is not an approved streaming model "
-            f"(expected one of {sorted(APPROVED_STREAM_MODELS)}). Routing assumes the English-only "
-            "default is served, so an unapproved value would silently diverge from what this pod "
-            "loads — fix the deployment env."
-        )
-
-
 def _init_stream_model() -> None:
     global _stream_model
     if not STREAM_MODEL_NAME:
         logger.info("No PARAKEET_STREAM_MODEL set, streaming will be unavailable")
         return
-    _validate_stream_model(STREAM_MODEL_NAME)
     _stream_model = _load_nemo_model(STREAM_MODEL_NAME)
 
 
@@ -253,23 +219,14 @@ def _transcribe_nim(file_path: str) -> Dict[str, Any]:
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
 
-    # Language handling across OpenAI-compatible ASR backends:
-    #   - NVIDIA NIM auto-detects with the sentinel "multi" (must be sent).
-    #   - faster-whisper / speaches auto-detect ONLY when `language` is omitted; they reject
-    #     ""/"auto"/"multi" as an enum error.
-    # So: "auto" (or empty) => omit the field (whisper-style auto-detect); "multi" or a concrete
-    # code => send it (NIM auto-detect, or a forced language on any backend).
-    nim_language = os.getenv("NIM_LANGUAGE", "multi").strip()
-    req_data: Dict[str, str] = {}
-    if nim_language and nim_language.lower() != "auto":
-        req_data["language"] = nim_language
+    nim_language = os.getenv("NIM_LANGUAGE", "multi")
 
     try:
         with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=120.0, write=30.0, pool=10.0)) as client:
             resp = client.post(
                 f"{_nim_url}/v1/audio/transcriptions",
                 files={"file": ("audio.wav", audio_bytes, "audio/wav")},
-                data=req_data,
+                data={"language": nim_language},
             )
         resp.raise_for_status()
         data: Dict[str, Any] = cast(Dict[str, Any], resp.json())

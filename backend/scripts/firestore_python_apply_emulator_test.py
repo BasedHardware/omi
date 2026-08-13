@@ -92,6 +92,7 @@ def main() -> int:
         operation_id=operation.operation_id,
         patch_payload=patch_payload,
         proposed_operation=operation,
+        db_client=db_client,
     )
     if result.status != ApplyStatus.committed:
         raise AssertionError(f"expected committed apply result, got {result.status}: {result.reason}")
@@ -132,7 +133,7 @@ def main() -> int:
     for key, value in expected_state_head.items():
         if stored_state_head.get(key) != value:
             raise AssertionError(f"state-head {key} mismatch: {stored_state_head.get(key)!r} != {value!r}")
-    trusted = read_memory_v3_trusted_account_generation(uid=uid)
+    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
     if trusted.read_error_reason is not None:
         raise AssertionError(f"trusted account-generation reader failed: {trusted.read_error_reason}")
     if trusted.account_generation != result.control_state.account_generation:
@@ -146,6 +147,7 @@ def main() -> int:
         uid=uid,
         operation_id=operation.operation_id,
         patch_payload=patch_payload,
+        db_client=db_client,
     )
     if retry.status != ApplyStatus.idempotent_skip:
         raise AssertionError(f"expected idempotent replay on retry, got {retry.status}")

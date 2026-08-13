@@ -43,8 +43,10 @@ def _candidate() -> dict[str, Any]:
 
 
 def _claim_once(uid: str, worker_id: str, now: datetime, barrier: Barrier) -> list[dict[str, Any]]:
+    db_client = firestore.Client(project=PROJECT_ID)
     barrier.wait(timeout=15)
     return lease_vector_repair_purge_outbox_records(
+        db_client=db_client,
         uid=uid,
         worker_id=worker_id,
         limit=1,

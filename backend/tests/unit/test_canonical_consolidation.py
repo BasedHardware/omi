@@ -43,8 +43,6 @@ from utils.memory.canonical_consolidation import (
     run_canonical_consolidation,
 )
 from utils.memory.memory_system import MemorySystem
-from database import document_store
-from tests.store_fakes import FakeDocumentStore
 
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
 UID = "uid-canonical"
@@ -232,7 +230,7 @@ def test_every_nonempty_pending_set_is_due():
     assert consolidation_trigger_reason(pending_count=0) is None
 
 
-def test_gather_excludes_superseded_candidates(monkeypatch):
+def test_gather_excludes_superseded_candidates():
     active = _item("mem_a", "Lives in Seattle")
     superseded = _item("mem_old", "Lives in NYC", tier=MemoryTier.long_term)
     superseded.status = MemoryItemStatus.superseded
@@ -249,7 +247,6 @@ def test_gather_excludes_superseded_candidates(monkeypatch):
             f"users/{UID}/memory_items/{hydrated.memory_id}": hydrated.model_dump(mode="python"),
         }
     )
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     hits = [
         MagicMock(memory_id=superseded.memory_id, score=0.95),
         MagicMock(memory_id=hydrated.memory_id, score=0.9),
@@ -259,23 +256,22 @@ def test_gather_excludes_superseded_candidates(monkeypatch):
         "utils.memory.canonical_consolidation.query_memory_vector_candidates",
         return_value=MagicMock(hits=hits),
     ):
-        context = gather_consolidation_candidates(UID, [active])
+        context = gather_consolidation_candidates(UID, [active], db_client=db)
 
     assert [candidate.memory_id for candidate in context.candidates_by_anchor[active.memory_id]] == [hydrated.memory_id]
     assert context.candidates_by_anchor[active.memory_id][0].sensitivity_labels == ("health",)
 
 
-def test_gather_never_sends_restricted_pending_text_to_vector_search(monkeypatch):
+def test_gather_never_sends_restricted_pending_text_to_vector_search():
     restricted = _item("mem_secret", "password-like material", sensitivity_labels=["credential"])
     db = _FakeDb(
         {
             f"users/{UID}/memory_items/{restricted.memory_id}": restricted.model_dump(mode="python"),
         }
     )
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     with patch("utils.memory.canonical_consolidation.query_memory_vector_candidates") as vector_query:
-        context = gather_consolidation_candidates(UID, [restricted])
+        context = gather_consolidation_candidates(UID, [restricted], db_client=db)
 
     vector_query.assert_not_called()
     assert context.candidates_by_anchor[restricted.memory_id] == []
@@ -919,17 +915,10 @@ def test_batch_rejects_duplicate_supersede_across_decisions():
     assert error == "output_invalid:duplicate_supersede_target:mem_new_b"
 
 
-def test_legacy_cohort_is_noop():
-    with patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.LEGACY):
-        report = run_canonical_consolidation("uid-legacy", run_id="test-run", now=NOW)
-    assert report.skipped_reason == "not_canonical_cohort"
-
-
-def test_clean_total_batch_routes_and_advances_watermark(monkeypatch):
+def test_clean_total_batch_routes_and_advances_watermark():
     item = _item("mem_a", "Enjoys hiking")
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     context = _context([item])
     response = ConsolidationAgentBatch(decisions=[_promote(item)])
 
@@ -946,7 +935,7 @@ def test_clean_total_batch_routes_and_advances_watermark(monkeypatch):
             return_value=[item.memory_id],
         ) as apply_route,
     ):
-        report = run_canonical_consolidation(UID, run_id="run-1", now=NOW)
+        report = run_canonical_consolidation(UID, db_client=db, run_id="run-1", now=NOW)
 
     assert report.promoted_memory_ids == [item.memory_id]
     assert report.batched_memory_ids == [item.memory_id]
@@ -955,11 +944,10 @@ def test_clean_total_batch_routes_and_advances_watermark(monkeypatch):
     apply_route.assert_called_once()
 
 
-def test_one_pass_caps_llm_batches_and_leaves_overflow_for_next_pass(monkeypatch):
+def test_one_pass_caps_llm_batches_and_leaves_overflow_for_next_pass():
     items = [_item(f"mem_{index}", f"Observation {index}") for index in range(11)]
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     def context_for_batch(uid, pending_batch, **kwargs):
         assert uid == UID
@@ -987,7 +975,7 @@ def test_one_pass_caps_llm_batches_and_leaves_overflow_for_next_pass(monkeypatch
             side_effect=lambda uid, *, decision, **kwargs: [decision.source_memory_id],
         ) as apply_route,
     ):
-        report = run_canonical_consolidation(UID, run_id="run-all", now=NOW)
+        report = run_canonical_consolidation(UID, db_client=db, run_id="run-all", now=NOW)
 
     assert report.trigger_reason == "pending_items"
     assert report.batched_memory_ids == [item.memory_id for item in items[:10]]
@@ -995,12 +983,11 @@ def test_one_pass_caps_llm_batches_and_leaves_overflow_for_next_pass(monkeypatch
     assert apply_route.call_count == 10
 
 
-def test_query_cap_overflow_remains_due_on_the_next_scheduler_pass(monkeypatch):
+def test_query_cap_overflow_remains_due_on_the_next_scheduler_pass():
     selected = _item("mem-selected", "Selected by the first bounded query")
     overflow = _item("mem-overflow", "Overflow from the first bounded query")
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     def context_for_batch(uid, pending_batch, **kwargs):
         assert uid == UID
@@ -1028,9 +1015,10 @@ def test_query_cap_overflow_remains_due_on_the_next_scheduler_pass(monkeypatch):
             side_effect=lambda uid, *, decision, **kwargs: [decision.source_memory_id],
         ),
     ):
-        first = run_canonical_consolidation(UID, run_id="run-capped-1", now=NOW)
+        first = run_canonical_consolidation(UID, db_client=db, run_id="run-capped-1", now=NOW)
         second = run_canonical_consolidation(
             UID,
+            db_client=db,
             run_id="run-capped-2",
             now=NOW + timedelta(hours=1),
         )
@@ -1041,12 +1029,11 @@ def test_query_cap_overflow_remains_due_on_the_next_scheduler_pass(monkeypatch):
     assert second.batched_memory_ids == [overflow.memory_id]
 
 
-def test_run_applies_promote_before_non_promote_pending_dependent(monkeypatch):
+def test_run_applies_promote_before_non_promote_pending_dependent():
     survivor = _item("mem_survivor", "Enjoys hiking")
     duplicate = _item("mem_duplicate", "Also enjoys hiking")
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     context = _context([survivor, duplicate])
     archive_duplicate = ConsolidationAgentDecision(
         source_memory_id=duplicate.memory_id,
@@ -1077,7 +1064,7 @@ def test_run_applies_promote_before_non_promote_pending_dependent(monkeypatch):
             side_effect=record_apply,
         ),
     ):
-        report = run_canonical_consolidation(UID, run_id="run-1", now=NOW)
+        report = run_canonical_consolidation(UID, db_client=db, run_id="run-1", now=NOW)
 
     assert applied_order == [survivor.memory_id, duplicate.memory_id]
     assert report.promoted_memory_ids == [survivor.memory_id]
@@ -1085,11 +1072,10 @@ def test_run_applies_promote_before_non_promote_pending_dependent(monkeypatch):
     assert report.watermark_blocked is False
 
 
-def test_incomplete_output_blocks_all_mutation_and_watermark(monkeypatch):
+def test_incomplete_output_blocks_all_mutation_and_watermark():
     items = [_item("mem_a", "A"), _item("mem_b", "B")]
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     with (
         patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
@@ -1101,7 +1087,7 @@ def test_incomplete_output_blocks_all_mutation_and_watermark(monkeypatch):
         ),
         patch("utils.memory.canonical_consolidation.apply_consolidation_decision") as apply_route,
     ):
-        report = run_canonical_consolidation(UID, run_id="run-1", now=NOW)
+        report = run_canonical_consolidation(UID, db_client=db, run_id="run-1", now=NOW)
 
     assert report.watermark_blocked is True
     assert report.batched_memory_ids == []
@@ -1109,11 +1095,10 @@ def test_incomplete_output_blocks_all_mutation_and_watermark(monkeypatch):
     apply_route.assert_not_called()
 
 
-def test_recurrence_handoff_failure_blocks_routes_and_watermark(monkeypatch):
+def test_recurrence_handoff_failure_blocks_routes_and_watermark():
     item = _item("mem_loop", "Investor update remains unresolved")
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     signal = CanonicalRecurrenceSignal(
         signal_id="observation-1",
         title="Investor update",
@@ -1144,6 +1129,7 @@ def test_recurrence_handoff_failure_blocks_routes_and_watermark(monkeypatch):
     ):
         report = run_canonical_consolidation(
             UID,
+            db_client=db,
             run_id="run-1",
             now=NOW,
             recurrence_signal_sink=lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("down")),
@@ -1154,12 +1140,11 @@ def test_recurrence_handoff_failure_blocks_routes_and_watermark(monkeypatch):
     apply_route.assert_not_called()
 
 
-def test_poison_source_has_bounded_llm_retries_then_terminal_review_without_starving_later_batch(monkeypatch):
+def test_poison_source_has_bounded_llm_retries_then_terminal_review_without_starving_later_batch():
     poison = _item("mem_poison", "Requires manual interpretation")
     healthy = _item("mem_healthy", "Ordinary source context")
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     pending_by_run = [[poison, healthy], [poison, healthy], [poison]]
     llm_sources: list[str] = []
     applied_routes: list[tuple[str, str]] = []
@@ -1188,14 +1173,16 @@ def test_poison_source_has_bounded_llm_retries_then_terminal_review_without_star
         patch.object(consolidation, "invoke_consolidation_agent", side_effect=invoke),
         patch.object(consolidation, "apply_consolidation_decision", side_effect=apply),
     ):
-        first = run_canonical_consolidation(UID, run_id="retry-1", now=NOW)
+        first = run_canonical_consolidation(UID, db_client=db, run_id="retry-1", now=NOW)
         second = run_canonical_consolidation(
             UID,
+            db_client=db,
             run_id="retry-2",
             now=NOW + timedelta(minutes=1),
         )
         third = run_canonical_consolidation(
             UID,
+            db_client=db,
             run_id="retry-3",
             now=NOW + timedelta(minutes=2),
         )
@@ -1221,12 +1208,11 @@ def test_poison_source_has_bounded_llm_retries_then_terminal_review_without_star
     assert healthy.memory_id not in retry_docs
 
 
-def test_exhausted_apply_failure_is_quarantined_and_skipped_without_starving_later_source(monkeypatch):
+def test_exhausted_apply_failure_is_quarantined_and_skipped_without_starving_later_source():
     poison = _item("mem_poison", "Cannot be applied safely")
     healthy = _item("mem_healthy", "Retain as source context")
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     invoked_batches: list[list[str]] = []
 
     def invoke(context, **_kwargs):
@@ -1259,9 +1245,10 @@ def test_exhausted_apply_failure_is_quarantined_and_skipped_without_starving_lat
         patch.object(consolidation, "invoke_consolidation_agent", side_effect=invoke),
         patch.object(consolidation, "apply_consolidation_decision", side_effect=apply),
     ):
-        first = run_canonical_consolidation(UID, run_id="quarantine-1", now=NOW)
+        first = run_canonical_consolidation(UID, db_client=db, run_id="quarantine-1", now=NOW)
         second = run_canonical_consolidation(
             UID,
+            db_client=db,
             run_id="quarantine-2",
             now=NOW + timedelta(minutes=1),
         )
@@ -1280,12 +1267,11 @@ def test_exhausted_apply_failure_is_quarantined_and_skipped_without_starving_lat
     assert retry_docs[poison.memory_id]["status"] == "quarantined"
 
 
-def test_terminal_store_failure_advances_durable_scan_cursor_past_query_window(monkeypatch):
+def test_terminal_store_failure_advances_durable_scan_cursor_past_query_window():
     poison = _item("mem_poison", "Cannot settle while its evidence store is unavailable")
     healthy = _item("mem_healthy", "A later healthy item")
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     cursors: list[tuple[datetime, str] | None] = []
 
     def list_pending(uid, *, start_after=None, **_kwargs):
@@ -1320,9 +1306,10 @@ def test_terminal_store_failure_advances_durable_scan_cursor_past_query_window(m
         patch.object(consolidation, "invoke_consolidation_agent", side_effect=invoke),
         patch.object(consolidation, "apply_consolidation_decision", side_effect=apply),
     ):
-        first = run_canonical_consolidation(UID, run_id="cursor-1", now=NOW)
+        first = run_canonical_consolidation(UID, db_client=db, run_id="cursor-1", now=NOW)
         second = run_canonical_consolidation(
             UID,
+            db_client=db,
             run_id="cursor-2",
             now=NOW + timedelta(minutes=1),
         )
@@ -1335,22 +1322,23 @@ def test_terminal_store_failure_advances_durable_scan_cursor_past_query_window(m
     assert consolidation._scan_cursor_document_path(UID) not in db.docs
 
 
-def test_attempt_claim_is_durable_before_work_and_enforces_concurrent_cost_bound(monkeypatch):
+def test_attempt_claim_is_durable_before_work_and_enforces_concurrent_cost_bound():
     item = _item("mem_claimed", "One exact revision")
     db = _FakeDb()
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     first, first_claimed = consolidation._claim_retry_state(
         UID,
         item,
         lease_owner="runner-a",
         now=NOW,
+        db_client=db,
     )
     concurrent, concurrent_claimed = consolidation._claim_retry_state(
         UID,
         item,
         lease_owner="runner-b",
         now=NOW,
+        db_client=db,
     )
 
     assert first_claimed is True
@@ -1365,6 +1353,7 @@ def test_attempt_claim_is_durable_before_work_and_enforces_concurrent_cost_bound
         item,
         lease_owner="runner-b",
         now=expired_time,
+        db_client=db,
     )
     assert expired_claimed is True
     assert state.attempt_count == 2
@@ -1374,6 +1363,7 @@ def test_attempt_claim_is_durable_before_work_and_enforces_concurrent_cost_bound
         status="retryable",
         error_code="output_invalid:partition_mismatch",
         now=expired_time,
+        db_client=db,
         expected_lease_owner="runner-b",
     )
     state, claimed = consolidation._claim_retry_state(
@@ -1381,6 +1371,7 @@ def test_attempt_claim_is_durable_before_work_and_enforces_concurrent_cost_bound
         item,
         lease_owner="runner-c",
         now=expired_time + timedelta(minutes=1),
+        db_client=db,
     )
     assert claimed is True
     assert state.attempt_count == 3
@@ -1390,6 +1381,7 @@ def test_attempt_claim_is_durable_before_work_and_enforces_concurrent_cost_bound
         status="retryable",
         error_code="output_invalid:partition_mismatch",
         now=expired_time + timedelta(minutes=1),
+        db_client=db,
         expected_lease_owner="runner-c",
     )
 
@@ -1398,20 +1390,21 @@ def test_attempt_claim_is_durable_before_work_and_enforces_concurrent_cost_bound
         item,
         lease_owner="runner-d",
         now=expired_time + timedelta(minutes=2),
+        db_client=db,
     )
     assert claimed is False
     assert exhausted.attempt_count == consolidation.MAX_CONSOLIDATION_FAILURE_ATTEMPTS
 
 
-def test_new_revision_does_not_inherit_old_revision_quarantine(monkeypatch):
+def test_new_revision_does_not_inherit_old_revision_quarantine():
     item = _item("mem_revised", "Original revision")
     db = _FakeDb()
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     claimed_state, claimed = consolidation._claim_retry_state(
         UID,
         item,
         lease_owner="runner-a",
         now=NOW,
+        db_client=db,
     )
     assert claimed is True
     consolidation._transition_retry_state(
@@ -1420,6 +1413,7 @@ def test_new_revision_does_not_inherit_old_revision_quarantine(monkeypatch):
         status="quarantined",
         error_code="output_invalid:partition_mismatch",
         now=NOW,
+        db_client=db,
         expected_lease_owner=claimed_state.lease_owner,
     )
     revised = item.model_copy(
@@ -1430,27 +1424,28 @@ def test_new_revision_does_not_inherit_old_revision_quarantine(monkeypatch):
         }
     )
 
-    assert consolidation._read_retry_state(UID, revised) is None
+    assert consolidation._read_retry_state(UID, revised, db_client=db) is None
     revised_state, revised_claimed = consolidation._claim_retry_state(
         UID,
         revised,
         lease_owner="runner-b",
         now=NOW + timedelta(minutes=1),
+        db_client=db,
     )
     assert revised_claimed is True
     assert revised_state.attempt_count == 1
 
 
-def test_terminal_review_retry_state_is_not_reported_as_quarantine(monkeypatch):
+def test_terminal_review_retry_state_is_not_reported_as_quarantine():
     item = _item("mem_terminal_review", "Already escalated")
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     state, claimed = consolidation._claim_retry_state(
         UID,
         item,
         lease_owner="runner-a",
         now=NOW,
+        db_client=db,
     )
     assert claimed is True
     consolidation._transition_retry_state(
@@ -1459,6 +1454,7 @@ def test_terminal_review_retry_state_is_not_reported_as_quarantine(monkeypatch):
         status="terminal_review",
         error_code="output_invalid:partition_mismatch",
         now=NOW,
+        db_client=db,
         expected_lease_owner=state.lease_owner,
     )
 
@@ -1468,7 +1464,7 @@ def test_terminal_review_retry_state_is_not_reported_as_quarantine(monkeypatch):
         patch.object(consolidation, "invoke_consolidation_agent") as invoke,
         patch.object(consolidation, "apply_consolidation_decision") as apply_route,
     ):
-        report = run_canonical_consolidation(UID, run_id="terminal-state", now=NOW)
+        report = run_canonical_consolidation(UID, db_client=db, run_id="terminal-state", now=NOW)
 
     assert report.review_memory_ids == [item.memory_id]
     assert report.quarantined_memory_ids == []

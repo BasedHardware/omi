@@ -1,10 +1,20 @@
 import copy
+import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, cast
 
+from fastapi import HTTPException
+from google.cloud.firestore_v1 import FieldFilter, LastUpdateOption, Query
+
 from config.memory_confidence import CONFIDENCE_BANDS
-from database import memories as memories_db
 from database import memory_ledger
+from database.firestore_index_registry import (
+    REVIEW_QUEUE_BY_CONFLICT_QUERY,
+    REVIEW_QUEUE_BY_FACT_QUERY,
+    REVIEW_QUEUE_BY_STATUS_QUERY,
+    REVIEW_QUEUE_BY_STATUS_ID_QUERY,
+    REVIEW_QUEUE_ORDERED_QUERY,
+)
 from database import short_term_memories as short_term_db
 from database.memory_non_active_routes import (
     NonActiveRoute,
@@ -12,21 +22,14 @@ from database.memory_non_active_routes import (
     persist_non_active_route_outcome,
 )
 from database.read_boundary import parse_snapshot_or_none
-from database.store import get_document_store
 from models.memory_review import build_memory_review_conflict
 from models.product_memory import MemoryItem, MemoryItemStatus
-
-
-def _store():
-    return get_document_store()
-
+from ._client import db
 
 users_collection = 'users'
 review_queue_collection = 'memory_review_queue'
 review_queue_state_collection = 'memory_state'
 corrections_collection = 'memory_corrections'
-memories_collection = 'memories'
-memory_items_collection = 'memory_items'
 REVIEW_PURGE_ARRAY_CONTAINS_ANY_CHUNK_SIZE = 30
 REVIEW_PURGE_PAGE_SIZE = 100
 REVIEW_LIST_PAGE_SIZE = 100
@@ -84,6 +87,7 @@ def create_review_conflict(
     source_short_term_id: Optional[str] = None,
     impact: Optional[float] = None,
     ttl_hours: int = 72,
+    db_client: Any = None,
 ) -> Dict[str, Any]:
     item = build_memory_review_conflict(
         fact=fact,
@@ -93,7 +97,10 @@ def create_review_conflict(
         impact=impact,
         ttl_hours=ttl_hours,
     )
-    _store().set(f'{users_collection}/{uid}/{review_queue_collection}/{item["review_id"]}', item)
+    client = db_client if db_client is not None else db
+    client.collection(users_collection).document(uid).collection(review_queue_collection).document(
+        item["review_id"]
+    ).set(item)
     return item
 
 
@@ -102,53 +109,97 @@ def purge_stale_review_conflicts_for_memories(
     memory_ids: List[str],
     *,
     reason: str = "source_memory_deleted",
+    db_client: Any = None,
 ) -> List[str]:
     """Tombstone and redact indexed review projections that reference removed memories."""
-    target_ids: Set[str] = {memory_id for memory_id in memory_ids if memory_id}
+    target_ids = sorted({memory_id for memory_id in memory_ids if memory_id})
     if not target_ids:
         return []
 
     now = datetime.now(timezone.utc)
     purged: Set[str] = set()
-    # The port scans the containing collection neutrally; the coarse index lanes and
-    # array_contains_any chunking used against raw Firestore collapse into a single scan plus
-    # the same referenced-id intersection re-check that already backed the indexed query.
-    for doc in _store().query(f'{users_collection}/{uid}/{review_queue_collection}'):
-        raw: object = doc.to_dict()
-        item: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-        referenced = _review_referenced_memory_ids(item)
-        if not referenced.intersection(target_ids):
-            continue
+    seen_documents: Set[str] = set()
+    client = db_client if db_client is not None else db
+    users_ref = client.collection(users_collection)
+    if hasattr(users_ref, 'document'):
+        queue_ref = users_ref.document(uid).collection(review_queue_collection)
+    else:
+        queue_ref = client.collection(f'{users_collection}/{uid}/{review_queue_collection}')
 
-        candidate_raw: object = item.get('candidate')
-        candidate: Dict[str, Any] = cast(Dict[str, Any], candidate_raw) if isinstance(candidate_raw, dict) else {}
-        candidate_id: Any = candidate.get('id')
-        redacted_candidate = {'id': candidate_id} if candidate_id else {}
-        has_previous_status = 'previous_status' in item
-        already_redacted = (
-            item.get('status') == 'tombstoned'
-            and has_previous_status
-            and candidate == redacted_candidate
-            and item.get('permitted_uses') == []
-            and all(field in item for field in ('reason', 'resolved_at', 'updated_at'))
+    for offset in range(0, len(target_ids), REVIEW_PURGE_ARRAY_CONTAINS_ANY_CHUNK_SIZE):
+        target_chunk = target_ids[offset : offset + REVIEW_PURGE_ARRAY_CONTAINS_ANY_CHUNK_SIZE]
+        query_specs = (
+            (
+                REVIEW_QUEUE_BY_FACT_QUERY,
+                {'fact_ids': target_chunk},
+            ),
+            (
+                REVIEW_QUEUE_BY_CONFLICT_QUERY,
+                {'conflict_ids': target_chunk},
+            ),
         )
-        if not already_redacted:
-            was_tombstoned = item.get('status') == 'tombstoned'
-            _store().update(
-                doc.path,
-                {
-                    'status': 'tombstoned',
-                    'previous_status': (
-                        item.get('previous_status') if has_previous_status else item.get('status')
-                    ),
-                    'reason': item.get('reason') if was_tombstoned and 'reason' in item else reason,
-                    'candidate': redacted_candidate,
-                    'permitted_uses': [],
-                    'resolved_at': (item.get('resolved_at') if was_tombstoned and 'resolved_at' in item else now),
-                    'updated_at': (item.get('updated_at') if was_tombstoned and 'updated_at' in item else now),
-                },
-            )
-        purged.add(str(item.get('review_id') or doc.id))
+        for query_spec, query_values in query_specs:
+            query = query_spec.build(
+                queue_ref,
+                query_values,
+                field_filter_factory=FieldFilter,
+            ).order_by('__name__')
+            cursor: Any = None
+            while True:
+                page_query = query.start_after(cursor) if cursor is not None else query
+                page = list(page_query.limit(REVIEW_PURGE_PAGE_SIZE).stream())
+                if not page:
+                    break
+                for doc in page:
+                    document_path = str(getattr(doc.reference, 'path', '') or f'{uid}:{doc.id}')
+                    if document_path in seen_documents:
+                        continue
+
+                    raw: object = doc.to_dict()
+                    item: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+                    referenced = _review_referenced_memory_ids(item)
+                    if not referenced.intersection(target_chunk):
+                        continue
+                    seen_documents.add(document_path)
+
+                    candidate_raw: object = item.get('candidate')
+                    candidate: Dict[str, Any] = (
+                        cast(Dict[str, Any], candidate_raw) if isinstance(candidate_raw, dict) else {}
+                    )
+                    candidate_id: Any = candidate.get('id')
+                    redacted_candidate = {'id': candidate_id} if candidate_id else {}
+                    has_previous_status = 'previous_status' in item
+                    already_redacted = (
+                        item.get('status') == 'tombstoned'
+                        and has_previous_status
+                        and candidate == redacted_candidate
+                        and item.get('permitted_uses') == []
+                        and all(field in item for field in ('reason', 'resolved_at', 'updated_at'))
+                    )
+                    if not already_redacted:
+                        was_tombstoned = item.get('status') == 'tombstoned'
+                        doc.reference.update(
+                            {
+                                'status': 'tombstoned',
+                                'previous_status': (
+                                    item.get('previous_status') if has_previous_status else item.get('status')
+                                ),
+                                'reason': item.get('reason') if was_tombstoned and 'reason' in item else reason,
+                                'candidate': redacted_candidate,
+                                'permitted_uses': [],
+                                'resolved_at': (
+                                    item.get('resolved_at') if was_tombstoned and 'resolved_at' in item else now
+                                ),
+                                'updated_at': (
+                                    item.get('updated_at') if was_tombstoned and 'updated_at' in item else now
+                                ),
+                            }
+                        )
+                    purged.add(str(item.get('review_id') or doc.id))
+
+                if len(page) < REVIEW_PURGE_PAGE_SIZE:
+                    break
+                cursor = page[-1]
     return sorted(purged)
 
 
@@ -201,7 +252,7 @@ def _authoritative_canonical_review_projection(
         return {**redacted, 'status': 'tombstoned', 'reason': 'canonical_review_identity_missing'}
     snapshot = source_snapshot
     if snapshot is _UNREAD_SOURCE_SNAPSHOT:
-        snapshot = _store().get(f'{users_collection}/{uid}/{memory_items_collection}/{memory_id}')
+        snapshot = db.collection(users_collection).document(uid).collection('memory_items').document(memory_id).get()
     if not getattr(snapshot, 'exists', False):
         return {**redacted, 'status': 'tombstoned', 'reason': 'canonical_review_source_missing'}
     source = parse_snapshot_or_none(MemoryItem, snapshot)
@@ -231,7 +282,9 @@ def _authoritative_canonical_review_page(uid: str, items: List[Dict[str, Any]]) 
     )
     source_snapshots: Dict[str, Any] = {memory_id: None for memory_id in canonical_memory_ids}
     if canonical_memory_ids:
-        for snapshot in _store().get_many(f'{users_collection}/{uid}/{memory_items_collection}', canonical_memory_ids):
+        source_collection = db.collection(users_collection).document(uid).collection('memory_items')
+        source_refs = [source_collection.document(memory_id) for memory_id in canonical_memory_ids]
+        for snapshot in db.get_all(source_refs):
             source_id = str(getattr(snapshot, 'id', '') or '').strip()
             if source_id in source_snapshots:
                 source_snapshots[source_id] = snapshot
@@ -294,54 +347,179 @@ def _repair_scanned_review_documents(
                 update['created_at'] = REVIEW_LIST_LEGACY_CREATED_AT_SENTINEL
         if not update:
             continue
+        reference = getattr(document, 'reference', None)
+        if reference is None:
+            raise RuntimeError('review queue snapshot is missing its document reference')
+        update_time = getattr(document, 'update_time', None)
+        if update_time is None:
+            reference.update(update)
+        else:
+            reference.update(update, option=LastUpdateOption(update_time))
 
-        # Re-read under a transaction: a stale self-heal redaction (status -> tombstoned) must not
-        # clobber a row a concurrent accept/reject already resolved. Redact only while still pending;
-        # the benign rank backfill (impact/created_at) may always apply.
-        def _heal(tx, path=document.path, planned=dict(update)) -> None:
-            snapshot = tx.get(path)
-            if not snapshot.exists:
-                return
-            still_pending = (snapshot.to_dict() or {}).get('status') in {'pending', 'pending_review'}
-            if 'status' in planned and not still_pending:
-                planned = {k: v for k, v in planned.items() if k in ('impact', 'created_at')}
-            if planned:
-                tx.update(path, planned)
 
-        _store().run_transaction(_heal)
+def _legacy_scan_cursor_ref(uid: str, status: str) -> Any:
+    status_digest = hashlib.sha256(status.encode('utf-8')).hexdigest()[:16]
+    return (
+        db.collection(users_collection)
+        .document(uid)
+        .collection(review_queue_state_collection)
+        .document(f'review_queue_legacy_scan_{status_digest}')
+    )
+
+
+def _read_legacy_scan_cursor(uid: str, status: str) -> Optional[str]:
+    cursor_ref = _legacy_scan_cursor_ref(uid, status)
+    snapshot = cursor_ref.get()
+    if not getattr(snapshot, 'exists', False):
+        return None
+    raw: object = snapshot.to_dict()
+    payload = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+    cursor_id = payload.get('last_review_id')
+    if (
+        payload.get('schema_version') == REVIEW_LIST_LEGACY_CURSOR_SCHEMA_VERSION
+        and payload.get('uid') == uid
+        and payload.get('status') == status
+        and isinstance(cursor_id, str)
+        and cursor_id
+    ):
+        return cursor_id
+    # A malformed operational cursor must not pin the compatibility lane.
+    cursor_ref.delete()
+    return None
+
+
+def _advance_legacy_scan_cursor(
+    uid: str,
+    status: str,
+    *,
+    prior_cursor_id: Optional[str],
+    documents: List[Any],
+) -> None:
+    cursor_ref = _legacy_scan_cursor_ref(uid, status)
+    if len(documents) >= REVIEW_LIST_LEGACY_SCAN_LIMIT:
+        cursor_ref.set(
+            {
+                'schema_version': REVIEW_LIST_LEGACY_CURSOR_SCHEMA_VERSION,
+                'uid': uid,
+                'status': status,
+                'last_review_id': documents[-1].id,
+                'updated_at': datetime.now(timezone.utc),
+            }
+        )
+    elif prior_cursor_id is not None:
+        # The scan reached the tail. Wrap on the next request so newly created
+        # sparse rows cannot remain behind an old cursor forever.
+        cursor_ref.delete()
 
 
 def list_review_conflicts(uid: str, status: str = 'pending', limit: int = 100) -> List[Dict[str, Any]]:
+    queue_ref = db.collection(users_collection).document(uid).collection(review_queue_collection)
     effective_limit = max(0, min(int(limit), REVIEW_LIST_MAX_LIMIT))
     if effective_limit == 0:
         return []
-
-    filters = [('status', '==', status)] if status else None
-    documents = list(_store().query(f'{users_collection}/{uid}/{review_queue_collection}', filters=filters))
-
-    page_items: List[Dict[str, Any]] = []
-    for document in documents:
-        raw: object = document.to_dict()
-        item: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-        item.setdefault('review_id', document.id)
-        page_items.append(item)
-    projected_items = _authoritative_canonical_review_page(uid, page_items)
-
-    # Self-heal stale canonical rows and backfill legacy rows missing the ranked fields. The
-    # Firestore ranked-query and rotating legacy-cursor lanes existed only because order_by drops
-    # documents missing an ordered field; a neutral collection scan returns every row, so one
-    # repair pass over the scanned documents subsumes both lanes.
     if status:
-        _repair_scanned_review_documents(
-            documents,
-            page_items,
-            projected_items,
-            backfill_rank_fields=True,
+        query = REVIEW_QUEUE_BY_STATUS_QUERY.build(
+            queue_ref,
+            {'status': status},
+            field_filter_factory=FieldFilter,
         )
+    else:
+        query = REVIEW_QUEUE_ORDERED_QUERY.build(queue_ref, {}, field_filter_factory=FieldFilter)
+    query = (
+        query.order_by('impact', direction=Query.DESCENDING)
+        .order_by('created_at', direction=Query.DESCENDING)
+        .order_by('__name__', direction=Query.DESCENDING)
+    )
 
+    page_size = min(effective_limit, REVIEW_LIST_PAGE_SIZE)
+    required_pages = (effective_limit + page_size - 1) // page_size
+    max_pages = required_pages + REVIEW_LIST_STALE_PAGE_ALLOWANCE
     items: List[Dict[str, Any]] = []
     review_ids: Set[str] = set()
-    for item in projected_items:
+    stale_documents: List[Any] = []
+    stale_original_items: List[Dict[str, Any]] = []
+    stale_projected_items: List[Dict[str, Any]] = []
+    cursor: Any = None
+    for _page_number in range(max_pages):
+        page_query = query.start_after(cursor) if cursor is not None else query
+        documents = list(page_query.limit(page_size).stream())
+        if not documents:
+            break
+        page_items: List[Dict[str, Any]] = []
+        for document in documents:
+            raw: object = document.to_dict()
+            item: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+            item.setdefault('review_id', document.id)
+            page_items.append(item)
+        projected_page = _authoritative_canonical_review_page(uid, page_items)
+        if status:
+            stale_documents.extend(documents)
+            stale_original_items.extend(page_items)
+            stale_projected_items.extend(projected_page)
+        for item in projected_page:
+            if status and item.get('status') != status:
+                continue
+            review_id = str(item.get('review_id') or '').strip()
+            if review_id in review_ids:
+                continue
+            if review_id:
+                review_ids.add(review_id)
+            items.append(item)
+            if len(items) >= effective_limit:
+                break
+        if len(items) >= effective_limit:
+            break
+        if len(documents) < page_size:
+            break
+        cursor = documents[-1]
+
+    if status:
+        _repair_scanned_review_documents(
+            stale_documents,
+            stale_original_items,
+            stale_projected_items,
+        )
+
+    # Historical queue records predate the ranked-query fields. Firestore
+    # order_by excludes documents that do not contain every ordered field, so
+    # keep an explicitly bounded, durably rotating document-id lane until
+    # those rows drain.
+    if status:
+        legacy_query = REVIEW_QUEUE_BY_STATUS_ID_QUERY.build(
+            queue_ref,
+            {'status': status},
+            field_filter_factory=FieldFilter,
+        ).order_by('__name__', direction=Query.DESCENDING)
+    else:
+        legacy_query = queue_ref.order_by('__name__', direction=Query.DESCENDING)
+    legacy_cursor_id = _read_legacy_scan_cursor(uid, status)
+    if legacy_cursor_id is not None:
+        legacy_query = legacy_query.start_after({'__name__': queue_ref.document(legacy_cursor_id)})
+    legacy_documents = list(legacy_query.limit(REVIEW_LIST_LEGACY_SCAN_LIMIT).stream())
+    legacy_items: List[Dict[str, Any]] = []
+    for document in legacy_documents:
+        raw: object = document.to_dict()
+        item = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+        if 'impact' in item and 'created_at' in item:
+            continue
+        item.setdefault('review_id', document.id)
+        legacy_items.append(item)
+    projected_legacy_items = _authoritative_canonical_review_page(uid, legacy_items)
+    if status:
+        legacy_documents_by_id = {document.id: document for document in legacy_documents}
+        _repair_scanned_review_documents(
+            [legacy_documents_by_id[str(item.get('review_id') or '')] for item in legacy_items],
+            legacy_items,
+            projected_legacy_items,
+            backfill_rank_fields=True,
+        )
+    _advance_legacy_scan_cursor(
+        uid,
+        status,
+        prior_cursor_id=legacy_cursor_id,
+        documents=legacy_documents,
+    )
+    for item in projected_legacy_items:
         if status and item.get('status') != status:
             continue
         review_id = str(item.get('review_id') or '').strip()
@@ -362,7 +540,7 @@ def list_review_conflicts(uid: str, status: str = 'pending', limit: int = 100) -
 
 
 def get_review_conflict(uid: str, review_id: str) -> Optional[Dict[str, Any]]:
-    doc = _store().get(f'{users_collection}/{uid}/{review_queue_collection}/{review_id}')
+    doc = db.collection(users_collection).document(uid).collection(review_queue_collection).document(review_id).get()
     if not doc.exists:
         return None
     raw: object = doc.to_dict()
@@ -412,6 +590,7 @@ def _append_canonical_resolution_commit(
         decision=decision,
         correction=correction,
         reason=reason,
+        db_client=db,
     )
 
 
@@ -463,7 +642,7 @@ def record_correction(
         'reason': reason,
         'created_at': now,
     }
-    _store().set(f'{users_collection}/{uid}/{corrections_collection}/{correction_id}', record)
+    db.collection(users_collection).document(uid).collection(corrections_collection).document(correction_id).set(record)
     return record
 
 
@@ -562,7 +741,7 @@ def resolve_review_conflict(
         'updated_at': now,
         'resolution_commit_id': commit_obj.get('commit_id'),
     }
-    _store().update(f'{users_collection}/{uid}/{review_queue_collection}/{review_id}', update)
+    db.collection(users_collection).document(uid).collection(review_queue_collection).document(review_id).update(update)
     if item.get('source_short_term_id'):
         short_term_db.mark_consolidated(uid, item['source_short_term_id'], update.get('resolution_commit_id'))
 
@@ -656,43 +835,32 @@ def append_resolution_commit(
     correction: Optional[Dict[str, Any]],
     mutations: List[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    if decision == 'drop' or not mutations:
+    if decision == "drop" or not mutations:
         return None
-    if decision == 'accept':
-        candidate_raw: object = item.get('candidate')
+    # Historical review rows remain readable, but their resolution may not
+    # mutate the protected historical memory collection.  Import lazily to
+    # avoid the canonical adapter -> review queue module cycle; the operation
+    # itself still runs only after this module is fully initialized.
+    from utils.memory.memory_service import MemoryService
+
+    memory_service = MemoryService(db_client=db)
+    if decision == "accept":
+        candidate_raw: object = item.get("candidate")
         candidate: Dict[str, Any] = cast(Dict[str, Any], candidate_raw) if isinstance(candidate_raw, dict) else {}
-        conflict_with_raw: object = item.get('conflict_with')
+        conflict_with_raw: object = item.get("conflict_with")
         conflict_with: List[str] = cast(List[str], conflict_with_raw) if isinstance(conflict_with_raw, list) else []
-        return memories_db.merge_contradict_memory(
-            uid,
-            accepted_fact(candidate),
-            conflict_with,
-        )
-    if decision == 'correct':
+        memory_service.write(uid, accepted_fact(candidate))
+        _delete_review_conflicts_idempotently(memory_service, uid, conflict_with)
+    if decision == "correct":
         correction_dict: Dict[str, Any] = correction if correction is not None else {}
-        target_id: Any = correction_dict.get('target_fact_id') or item.get('fact_id')
-        arg_changes_raw: object = correction_dict.get('arg_changes')
+        target_id: Any = correction_dict.get("target_fact_id") or item.get("fact_id")
+        arg_changes_raw: object = correction_dict.get("arg_changes")
         arg_changes: Dict[str, Any] = cast(Dict[str, Any], arg_changes_raw) if isinstance(arg_changes_raw, dict) else {}
-        return memories_db.refine_memory(uid, target_id, arg_changes)
+        if arg_changes:
+            memory_service.refine(uid, str(target_id), arg_changes)
     if decision == 'reject':
-        now = datetime.now(timezone.utc)
         fact_id: Any = item.get('fact_id')
-        memory_path = f'{users_collection}/{uid}/{memories_collection}/{fact_id}'
-
-        def write_projection(tx: Any) -> None:
-            snapshot = tx.get(memory_path)
-            if snapshot.exists:
-                tx.update(memory_path, {'invalid_at': now, 'updated_at': now, 'review_status': 'rejected'})
-
-        return memory_ledger.append_commit(
-            uid,
-            None,
-            mutations,
-            run_id=f"review_queue:{item.get('review_id')}",
-            commit_time=now,
-            projection_writer=write_projection,
-            use_current_head=True,
-        )
+        _delete_review_conflicts_idempotently(memory_service, uid, [str(fact_id)])
     return memory_ledger.append_commit(
         uid,
         None,
@@ -700,6 +868,40 @@ def append_resolution_commit(
         run_id=f"review_queue:{item.get('review_id')}",
         use_current_head=True,
     )
+
+
+def _delete_review_conflicts_idempotently(memory_service: Any, uid: str, memory_ids: List[str]) -> None:
+    """Tombstone review conflicts as one bounded canonical operation.
+
+    The legacy review ledger is written after canonical mutations for wire
+    compatibility.  A retry can therefore observe conflicts already
+    tombstoned if the ledger write failed; filter those identities before the
+    batch operation and treat a fully tombstoned 404 as success.  Active or
+    unknown identities still fail closed instead of silently dropping a
+    conflict.
+    """
+    normalized = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
+    if not normalized:
+        return
+    status_reader = getattr(memory_service, '_canonical_status', None)
+    pending: List[str] = []
+    if callable(status_reader):
+        for memory_id in normalized:
+            status = status_reader(uid, memory_id)
+            if status != MemoryItemStatus.tombstoned:
+                pending.append(memory_id)
+    else:
+        pending = normalized
+    if not pending:
+        return
+    try:
+        memory_service.delete_batch(uid, pending)
+    except HTTPException as exc:
+        if exc.status_code != 404 or not callable(status_reader):
+            raise
+        remaining = [memory_id for memory_id in pending if status_reader(uid, memory_id) != MemoryItemStatus.tombstoned]
+        if remaining:
+            raise
 
 
 def resolve_expired_review_conflicts(

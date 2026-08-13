@@ -15,12 +15,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Literal, Optional, Set, cast
 
+from google.cloud.firestore_v1 import FieldFilter, transactional
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, model_validator
 
-from database import document_store
+from database._client import db as default_db_client
+from database.firestore_index_registry import CANONICAL_CONSOLIDATION_QUERY
 from database.memory_apply_store import MissingMemoryDocument, apply_long_term_patch_firestore
-from database.store import get_document_store
 from database.memory_collections import MemoryCollections
 from database.vector_db import query_memory_vector_candidates
 from models.memory_evidence import SourceState
@@ -48,7 +49,11 @@ from models.product_memory import (
 from utils.executors import llm_executor, submit_with_context
 from utils.llm.clients import get_llm
 from utils.log_sanitizer import sanitize_pii
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import (
+    MemorySystem as MemorySystem,  # compatibility export for older test doubles; never used for routing
+    ensure_canonical_apply_control_state,
+    resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
+)
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -157,21 +162,12 @@ def _coerce_aware_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _read_control_state(uid: str) -> MemoryControlState:
-    collections = MemoryCollections(uid=uid)
-    path = collections.memory_apply_control_state
-    snapshot = document_store.get_document(path)
-    payload = _snapshot_payload(snapshot)
-    if payload:
-        return MemoryControlState(**payload)
-    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    document_store.set_document(path, control.model_dump(mode="json"))
-    return control
+def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
+    return ensure_canonical_apply_control_state(uid, db_client=db_client)
 
 
-def _persist_control_state(control: MemoryControlState) -> None:
-    document_store.set_document(
-        MemoryCollections(uid=control.uid).memory_apply_control_state,
+def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
+    db_client.document(MemoryCollections(uid=control.uid).memory_apply_control_state).set(
         {
             "last_consolidation_run_at": (
                 control.last_consolidation_run_at.isoformat() if control.last_consolidation_run_at is not None else None
@@ -199,8 +195,8 @@ def _scan_cursor_document_path(uid: str) -> str:
     return f"{MemoryCollections(uid=uid).memory_runs}/canonical_consolidation_scan_cursor"
 
 
-def _read_scan_cursor(uid: str) -> Optional[ConsolidationScanCursor]:
-    payload = _snapshot_payload(document_store.get_document(_scan_cursor_document_path(uid)))
+def _read_scan_cursor(uid: str, *, db_client: Any) -> Optional[ConsolidationScanCursor]:
+    payload = _snapshot_payload(db_client.document(_scan_cursor_document_path(uid)).get())
     if not payload:
         return None
     cursor = ConsolidationScanCursor.model_validate(payload)
@@ -209,22 +205,22 @@ def _read_scan_cursor(uid: str) -> Optional[ConsolidationScanCursor]:
     return cursor
 
 
-def _persist_scan_cursor(uid: str, item: MemoryItem, *, now: datetime) -> None:
+def _persist_scan_cursor(uid: str, item: MemoryItem, *, now: datetime, db_client: Any) -> None:
     cursor = ConsolidationScanCursor(
         uid=uid,
         captured_at=item.captured_at,
         memory_id=item.memory_id,
         updated_at=now,
     )
-    document_store.set_document(_scan_cursor_document_path(uid), cursor.model_dump(mode="python"))
+    db_client.document(_scan_cursor_document_path(uid)).set(cursor.model_dump(mode="python"))
 
 
-def _clear_scan_cursor(uid: str) -> None:
-    document_store.delete_document(_scan_cursor_document_path(uid))
+def _clear_scan_cursor(uid: str, *, db_client: Any) -> None:
+    db_client.document(_scan_cursor_document_path(uid)).delete()
 
 
-def _read_retry_state(uid: str, item: MemoryItem) -> Optional[ConsolidationRetryState]:
-    snapshot = document_store.get_document(_retry_state_document_path(uid, item))
+def _read_retry_state(uid: str, item: MemoryItem, *, db_client: Any) -> Optional[ConsolidationRetryState]:
+    snapshot = db_client.document(_retry_state_document_path(uid, item)).get()
     payload = _snapshot_payload(snapshot)
     if not payload:
         return None
@@ -239,15 +235,17 @@ def _read_retry_state(uid: str, item: MemoryItem) -> Optional[ConsolidationRetry
     return state
 
 
+@transactional
 def _claim_retry_state_transaction(
     transaction: Any,
+    db_client: Any,
     uid: str,
     item: MemoryItem,
     lease_owner: str,
     now: datetime,
 ) -> tuple[ConsolidationRetryState, bool]:
-    path = _retry_state_document_path(uid, item)
-    snapshot = transaction.get(path)
+    ref = db_client.document(_retry_state_document_path(uid, item))
+    snapshot = ref.get(transaction=transaction)
     payload = _snapshot_payload(snapshot)
     prior = ConsolidationRetryState.model_validate(payload) if payload else None
     if prior is not None and (
@@ -283,7 +281,7 @@ def _claim_retry_state_transaction(
         lease_owner=lease_owner,
         lease_expires_at=now + timedelta(seconds=CONSOLIDATION_ATTEMPT_LEASE_SECONDS),
     )
-    transaction.set(path, state.model_dump(mode="python"))
+    transaction.set(ref, state.model_dump(mode="python"))
     return state, True
 
 
@@ -293,14 +291,16 @@ def _claim_retry_state(
     *,
     lease_owner: str,
     now: datetime,
+    db_client: Any,
 ) -> tuple[ConsolidationRetryState, bool]:
-    return document_store.run_transaction(
-        lambda tx: _claim_retry_state_transaction(tx, uid, item, lease_owner, now)
-    )
+    transaction = db_client.transaction()
+    return _claim_retry_state_transaction(transaction, db_client, uid, item, lease_owner, now)
 
 
+@transactional
 def _transition_retry_state_transaction(
     transaction: Any,
+    db_client: Any,
     uid: str,
     item: MemoryItem,
     status: Literal["retryable", "quarantined", "terminal_review"],
@@ -308,8 +308,8 @@ def _transition_retry_state_transaction(
     now: datetime,
     expected_lease_owner: Optional[str],
 ) -> ConsolidationRetryState:
-    path = _retry_state_document_path(uid, item)
-    snapshot = transaction.get(path)
+    ref = db_client.document(_retry_state_document_path(uid, item))
+    snapshot = ref.get(transaction=transaction)
     payload = _snapshot_payload(snapshot)
     if not payload:
         raise ValueError("consolidation retry state is missing")
@@ -334,7 +334,7 @@ def _transition_retry_state_transaction(
             "lease_expires_at": None,
         }
     )
-    transaction.set(path, state.model_dump(mode="python"))
+    transaction.set(ref, state.model_dump(mode="python"))
     return state
 
 
@@ -345,29 +345,32 @@ def _transition_retry_state(
     status: Literal["retryable", "quarantined", "terminal_review"],
     error_code: str,
     now: datetime,
+    db_client: Any,
     expected_lease_owner: Optional[str] = None,
 ) -> ConsolidationRetryState:
-    return document_store.run_transaction(
-        lambda tx: _transition_retry_state_transaction(
-            tx,
-            uid,
-            item,
-            status,
-            error_code,
-            now,
-            expected_lease_owner,
-        )
+    transaction = db_client.transaction()
+    return _transition_retry_state_transaction(
+        transaction,
+        db_client,
+        uid,
+        item,
+        status,
+        error_code,
+        now,
+        expected_lease_owner,
     )
 
 
+@transactional
 def _delete_retry_state_transaction(
     transaction: Any,
+    db_client: Any,
     uid: str,
     item: MemoryItem,
     expected_lease_owner: str,
 ) -> None:
-    path = _retry_state_document_path(uid, item)
-    snapshot = transaction.get(path)
+    ref = db_client.document(_retry_state_document_path(uid, item))
+    snapshot = ref.get(transaction=transaction)
     payload = _snapshot_payload(snapshot)
     if not payload:
         return
@@ -381,7 +384,7 @@ def _delete_retry_state_transaction(
         raise ValueError("consolidation retry state identity mismatch")
     if state.lease_owner != expected_lease_owner:
         raise ValueError("consolidation retry lease ownership changed")
-    transaction.delete(path)
+    transaction.delete(ref)
 
 
 def _delete_retry_state(
@@ -389,14 +392,15 @@ def _delete_retry_state(
     item: MemoryItem,
     *,
     expected_lease_owner: str,
+    db_client: Any,
 ) -> None:
-    document_store.run_transaction(
-        lambda tx: _delete_retry_state_transaction(
-            tx,
-            uid,
-            item,
-            expected_lease_owner,
-        )
+    transaction = db_client.transaction()
+    _delete_retry_state_transaction(
+        transaction,
+        db_client,
+        uid,
+        item,
+        expected_lease_owner,
     )
 
 
@@ -462,40 +466,39 @@ def _is_active_consolidation_item(item: MemoryItem) -> bool:
 def list_pending_consolidation_items(
     uid: str,
     *,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     limit: int = DEFAULT_CONSOLIDATION_QUERY_LIMIT,
     start_after: Optional[tuple[datetime, str]] = None,
 ) -> List[MemoryItem]:
     """Fetch a bounded, oldest-first set of consolidation-eligible items."""
+    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     if limit <= 0:
         raise ValueError("consolidation query limit must be positive")
     effective_limit = min(limit, MAX_CONSOLIDATION_QUERY_LIMIT)
-    query_start_after: Optional[Dict[str, Any]] = None
+    query = CANONICAL_CONSOLIDATION_QUERY.build(
+        client.collection(MemoryCollections(uid=uid).memory_items),
+        {
+            "tier": MemoryLayer.short_term.value,
+            "status": MemoryItemStatus.active.value,
+            "processing_state": ProcessingState.processed.value,
+            "source_state": SourceState.active.value,
+        },
+        field_filter_factory=FieldFilter,
+    )
+    query = query.order_by("captured_at").order_by("memory_id")
     if start_after is not None:
         cursor_time, cursor_memory_id = start_after
         if not cursor_memory_id.strip():
             raise ValueError("consolidation query cursor memory_id must not be blank")
-        # The neutral keyset cursor is {value, id}: the order-by field value plus the document id
-        # (memory_items are keyed by memory_id). The adapter appends the __name__/_id tie-break, so a
-        # single-field order_by paginates deterministically; the previous {captured_at, memory_id}
-        # shape (+ a duplicate memory_id order) made both real adapters KeyError on resume.
-        query_start_after = {
-            "value": _coerce_aware_utc(cursor_time),
-            "id": cursor_memory_id,
-        }
-    snapshots = get_document_store().query(
-        MemoryCollections(uid=uid).memory_items,
-        filters=[
-            ("tier", "==", MemoryLayer.short_term.value),
-            ("status", "==", MemoryItemStatus.active.value),
-            ("processing_state", "==", ProcessingState.processed.value),
-            ("source_state", "==", SourceState.active.value),
-        ],
-        order_by=[("captured_at", "asc")],
-        limit=effective_limit,
-        start_after=query_start_after,
-    )
+        query = query.start_after(
+            {
+                "captured_at": _coerce_aware_utc(cursor_time),
+                "memory_id": cursor_memory_id,
+            }
+        )
+    snapshots = query.limit(effective_limit).stream()
     items = [MemoryItem(**_snapshot_payload(snapshot)) for snapshot in snapshots]
     for item in items:
         if item.uid != uid:
@@ -544,12 +547,12 @@ class ConsolidationContext:
 
 
 def _hydrate_memory_item(
-    uid: str, memory_id: str, *, cache: Dict[str, Optional[MemoryItem]]
+    uid: str, memory_id: str, *, db_client: Any, cache: Dict[str, Optional[MemoryItem]]
 ) -> Optional[MemoryItem]:
     if memory_id in cache:
         return cache[memory_id]
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    payload = _snapshot_payload(document_store.get_document(path))
+    payload = _snapshot_payload(db_client.document(path).get())
     if not payload:
         cache[memory_id] = None
         return None
@@ -565,9 +568,11 @@ def gather_consolidation_candidates(
     uid: str,
     pending_items: List[MemoryItem],
     *,
+    db_client: Any = None,
     candidate_limit: Optional[int] = None,
 ) -> ConsolidationContext:
     """Vector-search similar memories and hydrate active items (deterministic only)."""
+    client: Any = db_client if db_client is not None else default_db_client
     per_item = candidate_limit if candidate_limit is not None else candidates_per_item_limit()
     context = ConsolidationContext(uid=uid, pending_items=list(pending_items))
     cache: Dict[str, Optional[MemoryItem]] = {item.memory_id: item for item in pending_items}
@@ -583,7 +588,7 @@ def gather_consolidation_candidates(
         for hit in query_result.hits:
             if hit.memory_id == anchor.memory_id or hit.memory_id in seen:
                 continue
-            item = _hydrate_memory_item(uid, hit.memory_id, cache=cache)
+            item = _hydrate_memory_item(uid, hit.memory_id, db_client=client, cache=cache)
             if item is None:
                 continue
             seen.add(hit.memory_id)
@@ -1250,11 +1255,10 @@ def apply_consolidation_decision(
     control: MemoryControlState,
     run_id: str,
     now: datetime,
+    db_client: Any,
     quarantine: bool = False,
 ) -> List[str]:
     """Atomically settle one source item, including LT graph assertion/supersedes."""
-    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
-        raise ConsolidationApplySkipped("not_canonical_cohort")
     source = pending_by_id.get(decision.source_memory_id)
     if source is None:
         raise ConsolidationApplySkipped(f"missing pending source: {decision.source_memory_id}")
@@ -1319,6 +1323,7 @@ def apply_consolidation_decision(
             operation_id=operation.operation_id,
             patch_payload=patch_payload,
             proposed_operation=operation,
+            db_client=db_client,
         )
         if result.status != ApplyStatus.retryable_head_mismatch:
             break
@@ -1394,6 +1399,7 @@ def _escalate_to_terminal_review(
     batched_ids: List[str],
     run_id: str,
     now: datetime,
+    db_client: Any,
 ) -> None:
     """Settle an exhausted source as review, or quarantine it without promotion."""
     error_code = state.last_error_code
@@ -1401,7 +1407,7 @@ def _escalate_to_terminal_review(
     decision = _terminal_review_decision(item)
     quarantine_committed = False
     try:
-        control = _read_control_state(uid)
+        control = _read_control_state(uid, db_client=db_client)
         applied_ids = apply_consolidation_decision(
             uid,
             decision=decision,
@@ -1409,10 +1415,11 @@ def _escalate_to_terminal_review(
             control=control,
             run_id=f"{run_id}:retry-exhausted",
             now=now,
+            db_client=db_client,
         )
     except Exception as review_exc:
         try:
-            control = _read_control_state(uid)
+            control = _read_control_state(uid, db_client=db_client)
             applied_ids = apply_consolidation_decision(
                 uid,
                 decision=decision,
@@ -1420,6 +1427,7 @@ def _escalate_to_terminal_review(
                 control=control,
                 run_id=f"{run_id}:quarantine",
                 now=now,
+                db_client=db_client,
                 quarantine=True,
             )
             quarantine_committed = bool(applied_ids)
@@ -1440,6 +1448,7 @@ def _escalate_to_terminal_review(
                     status="retryable",
                     error_code=error_code,
                     now=now,
+                    db_client=db_client,
                     expected_lease_owner=state.lease_owner,
                 )
             except Exception as state_exc:
@@ -1458,6 +1467,7 @@ def _escalate_to_terminal_review(
                 status="retryable",
                 error_code=error_code,
                 now=now,
+                db_client=db_client,
                 expected_lease_owner=state.lease_owner,
             )
         except Exception as state_exc:
@@ -1482,6 +1492,7 @@ def _escalate_to_terminal_review(
             status=final_status,
             error_code=error_code,
             now=now,
+            db_client=db_client,
             expected_lease_owner=state.lease_owner,
         )
     except Exception as exc:
@@ -1506,6 +1517,7 @@ def _record_batch_failure(
     batched_ids: List[str],
     run_id: str,
     now: datetime,
+    db_client: Any,
 ) -> None:
     safe_code = _safe_consolidation_failure_code(error_code)
     _append_report_error(report, safe_code)
@@ -1523,6 +1535,7 @@ def _record_batch_failure(
                 batched_ids=batched_ids,
                 run_id=run_id,
                 now=now,
+                db_client=db_client,
             )
             continue
         try:
@@ -1532,6 +1545,7 @@ def _record_batch_failure(
                 status="retryable",
                 error_code=safe_code,
                 now=now,
+                db_client=db_client,
                 expected_lease_owner=state.lease_owner,
             )
         except Exception as exc:
@@ -1558,22 +1572,22 @@ def _record_batch_failure(
 def run_canonical_consolidation(
     uid: str,
     *,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
     recurrence_signal_sink: Optional[Callable[..., int]] = None,
 ) -> ConsolidationReport:
     """Batched consolidation entry point for one canonical user."""
+    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
-        return ConsolidationReport(uid=uid, skipped_reason="not_canonical_cohort")
     if not consolidation_enabled():
         return ConsolidationReport(uid=uid, skipped_reason="consolidation_disabled")
 
     scan_cursor: Optional[ConsolidationScanCursor] = None
     try:
-        scan_cursor = _read_scan_cursor(uid)
+        scan_cursor = _read_scan_cursor(uid, db_client=client)
     except Exception as exc:
         logger.warning(
             "consolidation_scan_cursor_invalid uid=%s reason=%s",
@@ -1581,20 +1595,21 @@ def run_canonical_consolidation(
             type(exc).__name__,
         )
         try:
-            _clear_scan_cursor(uid)
+            _clear_scan_cursor(uid, db_client=client)
         except Exception:
             pass
     cursor_values = (scan_cursor.captured_at, scan_cursor.memory_id) if scan_cursor is not None else None
     pending = list_pending_consolidation_items(
         uid,
+        db_client=client,
         now=current_time,
         start_after=cursor_values,
     )
     if scan_cursor is not None and not pending:
-        _clear_scan_cursor(uid)
+        _clear_scan_cursor(uid, db_client=client)
         scan_cursor = None
-        pending = list_pending_consolidation_items(uid, now=current_time)
-    control = _read_control_state(uid)
+        pending = list_pending_consolidation_items(uid, db_client=client, now=current_time)
+    control = _read_control_state(uid, db_client=client)
     trigger = consolidation_trigger_reason(
         pending_count=len(pending),
     )
@@ -1631,7 +1646,7 @@ def run_canonical_consolidation(
         first_retry_state: Optional[ConsolidationRetryState] = None
         first_retry_state_read = False
         try:
-            first_retry_state = _read_retry_state(uid, first_item)
+            first_retry_state = _read_retry_state(uid, first_item, db_client=client)
             first_retry_state_read = True
         except Exception:
             # Isolate unreadable retry state so one malformed operational row
@@ -1649,7 +1664,7 @@ def run_canonical_consolidation(
                 retry_state = (
                     first_retry_state
                     if item.memory_id == first_item.memory_id and first_retry_state_read
-                    else _read_retry_state(uid, item)
+                    else _read_retry_state(uid, item, db_client=client)
                 )
             except Exception as exc:
                 watermark_blocked = True
@@ -1685,6 +1700,7 @@ def run_canonical_consolidation(
                     batched_ids=batched_ids,
                     run_id=run_id,
                     now=current_time,
+                    db_client=client,
                 )
                 continue
             try:
@@ -1693,6 +1709,7 @@ def run_canonical_consolidation(
                     item,
                     lease_owner=attempt_lease_owner,
                     now=current_time,
+                    db_client=client,
                 )
             except Exception as exc:
                 watermark_blocked = True
@@ -1725,6 +1742,7 @@ def run_canonical_consolidation(
                         batched_ids=batched_ids,
                         run_id=run_id,
                         now=current_time,
+                        db_client=client,
                     )
                 else:
                     if item.memory_id not in report.retryable_memory_ids:
@@ -1739,7 +1757,7 @@ def run_canonical_consolidation(
             continue
 
         try:
-            context = gather_consolidation_candidates(uid, llm_pending_batch)
+            context = gather_consolidation_candidates(uid, llm_pending_batch, db_client=client)
         except Exception as exc:
             watermark_blocked = True
             logger.warning(
@@ -1756,6 +1774,7 @@ def run_canonical_consolidation(
                 batched_ids=batched_ids,
                 run_id=run_id,
                 now=current_time,
+                db_client=client,
             )
             offset += effective_batch_cap
             continue
@@ -1780,6 +1799,7 @@ def run_canonical_consolidation(
                 batched_ids=batched_ids,
                 run_id=run_id,
                 now=current_time,
+                db_client=client,
             )
             offset += effective_batch_cap
             continue
@@ -1791,6 +1811,7 @@ def run_canonical_consolidation(
                 recurrence_signal_sink(
                     uid,
                     agent_batch.recurrence_signals,
+                    firestore_client=client,
                 )
             except Exception as exc:
                 watermark_blocked = True
@@ -1808,6 +1829,7 @@ def run_canonical_consolidation(
                     batched_ids=batched_ids,
                     run_id=run_id,
                     now=current_time,
+                    db_client=client,
                 )
                 offset += effective_batch_cap
                 continue
@@ -1815,7 +1837,7 @@ def run_canonical_consolidation(
         ordered_decisions = sorted(agent_batch.decisions, key=lambda decision: decision.route != "promote")
         batch_apply_failed = False
         for decision_index, decision in enumerate(ordered_decisions):
-            control = _read_control_state(uid)
+            control = _read_control_state(uid, db_client=client)
             try:
                 applied_ids = apply_consolidation_decision(
                     uid,
@@ -1824,6 +1846,7 @@ def run_canonical_consolidation(
                     control=control,
                     run_id=run_id,
                     now=current_time,
+                    db_client=client,
                 )
             except (ConsolidationApplySkipped, MissingMemoryDocument) as exc:
                 report.decisions_skipped += 1
@@ -1847,6 +1870,7 @@ def run_canonical_consolidation(
                     batched_ids=batched_ids,
                     run_id=run_id,
                     now=current_time,
+                    db_client=client,
                 )
                 batch_apply_failed = True
                 break
@@ -1860,6 +1884,7 @@ def run_canonical_consolidation(
                         uid,
                         pending_by_id[decision.source_memory_id],
                         expected_lease_owner=claimed_state.lease_owner or "",
+                        db_client=client,
                     )
                 except Exception as exc:
                     _append_report_error(report, f"retry_state:cleanup_{type(exc).__name__}")
@@ -1885,17 +1910,17 @@ def run_canonical_consolidation(
 
     try:
         if watermark_blocked and pending:
-            _persist_scan_cursor(uid, pending[-1], now=current_time)
+            _persist_scan_cursor(uid, pending[-1], now=current_time, db_client=client)
         elif scan_cursor is not None:
-            _clear_scan_cursor(uid)
+            _clear_scan_cursor(uid, db_client=client)
     except Exception as exc:
         _append_report_error(report, f"scan_cursor:{type(exc).__name__}")
 
     if batched_ids and not watermark_blocked:
-        updated_control = _read_control_state(uid).model_copy(
+        updated_control = _read_control_state(uid, db_client=client).model_copy(
             update={"last_consolidation_run_at": current_time, "updated_at": current_time}
         )
-        _persist_control_state(updated_control)
+        _persist_control_state(updated_control, db_client=client)
         report.last_consolidation_run_at = current_time
     else:
         report.last_consolidation_run_at = control.last_consolidation_run_at

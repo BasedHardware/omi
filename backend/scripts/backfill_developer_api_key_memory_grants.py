@@ -43,7 +43,7 @@ from typing import Any, Optional, cast
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
-from database.store import get_document_store
+from database._client import get_firestore_client
 from database.memory_app_key_grants import (
     DEVELOPER_API_CONSUMER,
     DEVELOPER_API_DEFAULT_APP_ID,
@@ -51,10 +51,6 @@ from database.memory_app_key_grants import (
     seed_developer_api_key_memory_grant,
 )
 from utils.scopes import Scopes, has_scope
-
-
-def _store():
-    return get_document_store()
 
 # Developer API keys created before this instant predate the create-path grant seeding
 # (commit 8e03144a, 2026-06-27 22:54:46 +0700). Keys created after it are seeded on create.
@@ -84,10 +80,10 @@ def _created_before_seeding(created_at: Any) -> Optional[bool]:
     return created_at < SEEDING_LANDED_AT
 
 
-def _has_grant(uid: str, key_id: str, grant_cache: dict[str, Any]) -> bool:
+def _has_grant(db: Any, uid: str, key_id: str, grant_cache: dict[str, Any]) -> bool:
     """Whether this uid already holds any grant entry for this Developer API key."""
     if uid not in grant_cache:
-        state = read_app_key_memory_grants_state(uid)
+        state = read_app_key_memory_grants_state(uid, db_client=db)
         grant_cache[uid] = state.state if state.present and not state.malformed else {}
     return (
         cast(dict[str, Any], grant_cache[uid])
@@ -109,17 +105,16 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=0, help="Optional max number of Developer API keys to inspect.")
     args = parser.parse_args()
 
+    db: Any = get_firestore_client()
     counts: defaultdict[str, int] = defaultdict(int)
     grant_cache: dict[str, Any] = {}
     would_seed_uids: set[str] = set()
 
-    dev_api_keys = _store().query(
-        "dev_api_keys",
-        fields=["id", "user_id", "scopes", "created_at"],
-        limit=args.limit or None,
-    )
+    query = db.collection("dev_api_keys").select(["id", "user_id", "scopes", "created_at"])
+    if args.limit:
+        query = query.limit(args.limit)
 
-    for doc in dev_api_keys:
+    for doc in query.stream():
         data = cast(dict[str, Any], doc.to_dict() or {})
         counts["total_dev_key_docs"] += 1
 
@@ -148,7 +143,7 @@ def main() -> None:
             continue
 
         counts["pre_seeding_keys_with_memory_scope"] += 1
-        if _has_grant(uid, key_id, grant_cache):
+        if _has_grant(db, uid, key_id, grant_cache):
             counts["already_granted"] += 1
             continue
 
@@ -162,6 +157,7 @@ def main() -> None:
                 key_id,
                 default_read=grant_default_read,
                 write=grant_write,
+                db_client=db,
             )
             counts["grants_written"] += 1
             # This uid's cached grant document is now stale; drop it so a second key for the

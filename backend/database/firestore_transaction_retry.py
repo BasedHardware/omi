@@ -45,30 +45,6 @@ def _is_transaction_contention(error: BaseException) -> bool:
     return False
 
 
-def map_store_transaction_contention(operation: Callable[[], T], *, operation_name: str) -> T:
-    """Run a neutral-store transaction call, translating exhausted contention into
-    ``FirestoreContentionExhausted`` so call sites (and the routes that map it to HTTP 503) keep
-    their retry contract after the storage-port migration.
-
-    ``DocumentStore.run_transaction`` performs bounded in-transaction contention retries and then
-    re-raises the terminal provider error (a Firestore ``Aborted``) when contention is not resolved.
-    Before the port migration this translation was performed by
-    ``run_with_transaction_contention_retry``; callers that now go through the neutral store's own
-    ``run_transaction`` wrap the call here so a raw ``Aborted`` never escapes as an unmapped 500.
-    Only genuine contention is translated — every other failure propagates unchanged.
-    """
-    try:
-        return operation()
-    except FirestoreContentionExhausted:
-        raise
-    except Exception as error:
-        if _is_transaction_contention(error):
-            raise FirestoreContentionExhausted(
-                f"Firestore transaction contention exhausted for {operation_name}"
-            ) from error
-        raise
-
-
 def run_with_transaction_contention_retry(
     transaction_factory: Callable[[], Any],
     operation: Callable[[Any], T],

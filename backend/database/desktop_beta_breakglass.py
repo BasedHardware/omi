@@ -8,7 +8,9 @@ import json
 import re
 from typing import Any, cast
 
-from database.store import get_document_store
+from google.cloud.firestore import transactional
+
+from database._client import get_firestore_client
 from database.desktop_update_channels import (
     BETA_ADMISSION_COLLECTION,
     BETA_ADMISSION_DOCUMENT,
@@ -23,10 +25,6 @@ from database.desktop_update_channels import (
 BETA_BREAKGLASS_AUDITS_COLLECTION = "desktop_beta_breakglass_audits"
 _INCIDENT_URL = re.compile(r"^https://github\.com/BasedHardware/omi/(?:issues|discussions)/[1-9][0-9]*(?:[/?#].*)?$")
 _REQUEST_ID = re.compile(r"^https://github\.com/BasedHardware/omi/actions/runs/[1-9][0-9]*/attempts/[1-9][0-9]*$")
-
-
-def _store():
-    return get_document_store()
 
 
 def _required(value: object, field: str) -> str:
@@ -76,35 +74,36 @@ def _digest(manifest: dict[str, Any]) -> str:
     return "sha256:" + hashlib.sha256(canonical).hexdigest()
 
 
+@transactional
 def _commit(
-    tx: Any,
-    control_path: str,
-    pointer_path: str,
-    audit_path: str,
-    target_path: str,
+    transaction: Any,
+    control_ref: Any,
+    pointer_ref: Any,
+    audit_ref: Any,
+    target_ref: Any,
     request: dict[str, Any],
     operation: str,
     emergency_manifest: dict[str, Any] | None,
     now: datetime,
 ) -> dict[str, Any]:
-    control_snapshot = tx.get(control_path)
-    pointer_snapshot = tx.get(pointer_path)
-    audit_snapshot = tx.get(audit_path)
-    target_snapshot = tx.get(target_path)
-    if audit_snapshot.exists:
+    control_snapshot = control_ref.get(transaction=transaction)
+    pointer_snapshot = pointer_ref.get(transaction=transaction)
+    audit_snapshot = audit_ref.get(transaction=transaction)
+    target_snapshot = target_ref.get(transaction=transaction)
+    if getattr(audit_snapshot, "exists", False):
         raise ValueError("request was already used")
 
     control = validate_beta_admission_control(
-        control_snapshot.to_dict() if control_snapshot.exists else {}
+        control_snapshot.to_dict() if getattr(control_snapshot, "exists", False) else {}
     )
-    raw_pointer = pointer_snapshot.to_dict() if pointer_snapshot.exists else {}
+    raw_pointer = pointer_snapshot.to_dict() if getattr(pointer_snapshot, "exists", False) else {}
     current = cast(dict[str, Any], raw_pointer) if isinstance(raw_pointer, dict) else {}
     if current.get("release_id") != request["current_release_id"]:
         raise ValueError("current release mismatch")
     if parse_pointer_generation(current.get("generation", 0)) != request["expected_generation"]:
         raise ValueError("generation mismatch")
 
-    target_exists = target_snapshot.exists
+    target_exists = getattr(target_snapshot, "exists", False)
     if operation == "rollback":
         target = _manifest(target_snapshot, "rollback target manifest does not exist")
         if target["qualification_tier"] != "T2" or target["qualification_passed"] is not True:
@@ -146,11 +145,11 @@ def _commit(
         "control_generation": control["control_generation"] + 1,
         "admission_updated_at": now,
     }
-    tx.set(audit_path, audit)
+    transaction.create(audit_ref, audit)
     if operation == "rollout" and not target_exists:
-        tx.set(target_path, target)
-    tx.set(control_path, paused)
-    tx.set(pointer_path, pointer)
+        transaction.create(target_ref, target)
+    transaction.set(control_ref, paused)
+    transaction.set(pointer_ref, pointer)
     return {"pointer": pointer, "audit": audit, "admission": paused}
 
 
@@ -159,36 +158,33 @@ def _execute(
     request: dict[str, Any],
     *,
     emergency_manifest: dict[str, Any] | None = None,
+    firestore_client: Any = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     validated = _request(request, operation)
     manifest = normalize_release_manifest(emergency_manifest) if emergency_manifest is not None else None
     if manifest is not None and manifest["release_id"] != validated["target_release_id"]:
         raise ValueError("emergency target identity mismatch")
+    client = firestore_client or get_firestore_client()
     audit_id = hashlib.sha256(validated["request_id"].encode()).hexdigest()
-    control_path = f"{BETA_ADMISSION_COLLECTION}/{BETA_ADMISSION_DOCUMENT}"
-    pointer_path = f"{CHANNELS_COLLECTION}/macos-beta"
-    audit_path = f"{BETA_BREAKGLASS_AUDITS_COLLECTION}/{audit_id}"
-    target_path = f"{MANIFESTS_COLLECTION}/{validated['target_release_id']}"
-    committed_now = now or datetime.now(timezone.utc)
-    return _store().run_transaction(
-        lambda tx: _commit(
-            tx,
-            control_path,
-            pointer_path,
-            audit_path,
-            target_path,
-            validated,
-            operation,
-            manifest,
-            committed_now,
-        )
+    return _commit(
+        client.transaction(),
+        client.collection(BETA_ADMISSION_COLLECTION).document(BETA_ADMISSION_DOCUMENT),
+        client.collection(CHANNELS_COLLECTION).document("macos-beta"),
+        client.collection(BETA_BREAKGLASS_AUDITS_COLLECTION).document(audit_id),
+        client.collection(MANIFESTS_COLLECTION).document(validated["target_release_id"]),
+        validated,
+        operation,
+        manifest,
+        now or datetime.now(timezone.utc),
     )
 
 
-def rollback_beta(request: dict[str, Any], *, now: datetime | None = None):
-    return _execute("rollback", request, now=now)
+def rollback_beta(request: dict[str, Any], *, firestore_client: Any = None, now: datetime | None = None):
+    return _execute("rollback", request, firestore_client=firestore_client, now=now)
 
 
-def emergency_rollout_beta(request: dict[str, Any], manifest: dict[str, Any], *, now: datetime | None = None):
-    return _execute("rollout", request, emergency_manifest=manifest, now=now)
+def emergency_rollout_beta(
+    request: dict[str, Any], manifest: dict[str, Any], *, firestore_client: Any = None, now: datetime | None = None
+):
+    return _execute("rollout", request, emergency_manifest=manifest, firestore_client=firestore_client, now=now)

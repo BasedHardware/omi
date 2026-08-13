@@ -4,10 +4,27 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
 
+try:
+    from google.api_core.exceptions import NotFound as FirestoreNotFound  # type: ignore[reportAssignmentType]  # fallback class below rebinds the name in stub-less test envs
+except Exception:  # pragma: no cover - lightweight tests may stub only google.cloud
+
+    class FirestoreNotFound(Exception):
+        pass
+
+
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownVariableType]  # firestore transactional decorator is untyped
+
 from config.memory_confidence import SOURCE_SIGNAL_CAPTURE_PRIORS
 from database import memory_ledger
+from database.firestore_index_registry import (
+    UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
+    UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
+)
+from database.memory_collections import MemoryCollections
 from database import short_term_memories as short_term_db
-from database.store import Filter, get_document_store
+from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
@@ -81,16 +98,8 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
-def _store():
-    return get_document_store()
-
-
-def _memories_path(uid: str) -> str:
-    return f'{users_collection}/{uid}/{memories_collection}'
-
-
-def _memory_path(uid: str, memory_id: str) -> str:
-    return f'{users_collection}/{uid}/{memories_collection}/{memory_id}'
+def _get_db(firestore_client: Any = None) -> Any:
+    return firestore_client if firestore_client is not None else get_firestore_client()
 
 
 def _update_memory_if_exists(
@@ -98,21 +107,28 @@ def _update_memory_if_exists(
     memory_id: str,
     update_payload: Dict[str, Any],
     operation: str,
+    *,
+    firestore_client: Any = None,
 ) -> bool:
-    store = _store()
-    path = _memory_path(uid, memory_id)
-    if not store.exists(path):
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    try:
+        memory_ref.update(update_payload)
+        return True
+    except FirestoreNotFound:
         logger.warning('Skipping stale memory %s update: memory document no longer exists uid=%s', operation, uid)
         return False
-    store.update(path, update_payload)
-    return True
 
 
-def get_memory_ids(uid: str) -> List[str]:
+def get_memory_ids(uid: str, *, firestore_client: Any = None) -> List[str]:
     """Return all memory document IDs for a user without decrypting any fields (IDs-only projection).
 
     Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
-    return _store().list_ids(_memories_path(uid))
+    database = _get_db(firestore_client)
+    coll = database.collection(users_collection).document(uid).collection(memories_collection)
+    return [doc.id for doc in coll.select([]).stream()]
 
 
 # *********************************
@@ -179,30 +195,84 @@ def get_memories(
     end_date: Optional[datetime] = None,
     include_invalidated: bool = False,
     sort: str = 'scoring_desc',
+    *,
+    firestore_client: Any = None,
 ) -> List[Dict[str, Any]]:
     logger.info(f'get_memories db {uid} {limit} {offset} {categories} {start_date} {end_date} {sort}')
-    filters: List[Filter] = []
-    if categories:
-        filters.append(('category', 'in', categories))
-    if start_date:
-        filters.append(('created_at', '>=', start_date))
-    if end_date:
-        filters.append(('created_at', '<=', end_date))
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
 
-    # Keep the query on the existing indexed order (scoring desc, created_at desc). MCP-specific
-    # sort modes are applied after batch collection to avoid requiring extra composite indexes for
-    # category-filtered reads.
-    # TODO: put user review to the query
-    memories: List[Dict[str, Any]] = [
-        _typed_doc(doc)
-        for doc in _store().query(
-            _memories_path(uid),
-            filters=filters,
-            order_by=[('scoring', 'desc'), ('created_at', 'desc')],
-            limit=limit,
-            offset=offset,
+    if categories:
+        memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
+
+    if start_date:
+        memories_ref = memories_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+
+    if end_date:
+        memories_ref = memories_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+
+    if sort in {'updated_desc', 'updated_at_desc', 'updated_or_created_desc'}:
+        # ``updated_at`` is absent from a material slice of the released
+        # collection. Firestore excludes those docs from an ``order_by`` query,
+        # so fetch bounded candidate windows from both updated and created order,
+        # merge by document id, then apply the product's final fallback key in
+        # Python. A row in the final top-N must occur in the corresponding top-N
+        # source window (updated rows in updated order, legacy rows in created
+        # order), so this remains bounded without dropping old data.
+        candidate_limit = max(1, min(limit + max(offset, 0), 5000))
+
+        def _ordered_query(order_fields: tuple[str, ...]) -> Any:
+            query = memories_ref
+            for field in order_fields:
+                query = query.order_by(field, direction=firestore.Query.DESCENDING)
+            return query.limit(candidate_limit).stream()
+
+        candidate_docs = list(_ordered_query(('updated_at',)))
+        candidate_docs.extend(_ordered_query(('created_at',)))
+        by_id: Dict[str, Dict[str, Any]] = {}
+        for doc in candidate_docs:
+            payload = _typed_doc(doc)
+            doc_id = getattr(doc, 'id', None) or payload.get('id')
+            if not isinstance(doc_id, str) or not doc_id:
+                continue
+            payload.setdefault('id', doc_id)
+            by_id.setdefault(doc_id, payload)
+
+        def _sort_key(memory: Dict[str, Any]) -> tuple[float, str]:
+            value = memory.get('updated_at') or memory.get('created_at')
+            if isinstance(value, str):
+                try:
+                    value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                except ValueError:
+                    value = None
+            if not isinstance(value, datetime):
+                timestamp = float('-inf')
+            else:
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=timezone.utc)
+                timestamp = value.timestamp()
+            return (-timestamp, str(memory.get('id') or ''))
+
+        memories = sorted(
+            (
+                memory
+                for memory in by_id.values()
+                if memory.get('user_review') is not False and (include_invalidated or memory.get('invalid_at') is None)
+            ),
+            key=_sort_key,
         )
-    ]
+        return memories[max(0, offset) : max(0, offset) + max(1, limit)]
+
+    # Keep the default query on the existing indexed scoring order. Unrelated
+    # legacy callers retain their released order and pagination semantics.
+    memories_ref = memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING).order_by(
+        'created_at', direction=firestore.Query.DESCENDING
+    )
+
+    memories_ref = memories_ref.limit(limit).offset(offset)
+
+    # TODO: put user review to firestore query
+    memories: List[Dict[str, Any]] = [_typed_doc(doc) for doc in memories_ref.stream()]
     logger.info(f"get_memories {len(memories)}")
     # Exclude user-rejected memories, and (by default) superseded/retracted ones.
     # invalid_at is filtered in Python: old docs lack the field (-> None -> active),
@@ -215,19 +285,124 @@ def get_memories(
     return result
 
 
+_HISTORICAL_SCAN_PAGE_MAX = 500
+HistoricalScanCursor = tuple[datetime, str]
+
+
+def _coerce_historical_scan_time(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _historical_scan_page(
+    uid: str,
+    *,
+    order_field: str,
+    query_spec: Any,
+    limit: int,
+    start_after: Optional[HistoricalScanCursor],
+    firestore_client: Any,
+) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
+    """Shared bounded keyset scan for one historical order field.
+
+    Returns decrypted payloads (snapshot.id as ``id`` authority), the raw scan
+    cursors aligned 1:1 with those payloads, and whether the underlying query
+    is exhausted. Callers filter duplicates / visibility into None slots.
+    """
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    bounded_limit = max(1, min(int(limit or 100), _HISTORICAL_SCAN_PAGE_MAX))
+    query = query_spec.build(memories_ref, {}, field_filter_factory=FieldFilter)
+    query = query.order_by(order_field, direction=firestore.Query.DESCENDING).order_by('__name__')
+    if start_after is not None:
+        cursor_time, cursor_memory_id = start_after
+        if not cursor_memory_id.strip():
+            raise ValueError('historical scan cursor memory_id must not be blank')
+        query = query.start_after(
+            {
+                order_field: _coerce_historical_scan_time(cursor_time),
+                '__name__': memories_ref.document(cursor_memory_id),
+            }
+        )
+    snapshots = list(query.limit(bounded_limit).stream())
+    payloads: list[dict[str, Any]] = []
+    cursors: list[HistoricalScanCursor] = []
+    for snapshot in snapshots:
+        doc_id = getattr(snapshot, 'id', None)
+        if not isinstance(doc_id, str) or not doc_id.strip():
+            continue
+        payload = _typed_doc(snapshot)
+        payload['id'] = doc_id
+        order_raw = payload.get(order_field)
+        if isinstance(order_raw, datetime):
+            order_time = _coerce_historical_scan_time(order_raw)
+        else:
+            order_time = datetime.fromtimestamp(0, tz=timezone.utc)
+        decrypted = _prepare_memory_for_read(payload, uid) or payload
+        decrypted = dict(decrypted)
+        decrypted['id'] = doc_id
+        payloads.append(decrypted)
+        cursors.append((order_time, doc_id))
+    exhausted = len(snapshots) < bounded_limit
+    return payloads, cursors, exhausted
+
+
+def scan_memories_updated_at_page(
+    uid: str,
+    *,
+    limit: int = 100,
+    start_after: Optional[HistoricalScanCursor] = None,
+    firestore_client: Any = None,
+) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
+    """Bounded updated_at-present historical keyset page (updated_at DESC, __name__ ASC)."""
+    return _historical_scan_page(
+        uid,
+        order_field='updated_at',
+        query_spec=UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
+        limit=limit,
+        start_after=start_after,
+        firestore_client=firestore_client,
+    )
+
+
+def scan_memories_created_at_page(
+    uid: str,
+    *,
+    limit: int = 100,
+    start_after: Optional[HistoricalScanCursor] = None,
+    firestore_client: Any = None,
+) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
+    """Bounded created_at historical keyset page (created_at DESC, __name__ ASC).
+
+    Callers must filter updated_at-present duplicates so each document is owned
+    by exactly one of the dual streams.
+    """
+    return _historical_scan_page(
+        uid,
+        order_field='created_at',
+        query_spec=UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
+        limit=limit,
+        start_after=start_after,
+        firestore_client=firestore_client,
+    )
+
+
 @prepare_for_read(decrypt_func=cast(_DecryptFunc, _prepare_memory_for_read))
-def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+def get_user_public_memories(
+    uid: str, limit: int = 100, offset: int = 0, *, firestore_client: Any = None
+) -> List[Dict[str, Any]]:
     logger.info(f'get_public_memories {limit} {offset}')
 
-    memories: List[Dict[str, Any]] = [
-        _typed_doc(doc)
-        for doc in _store().query(
-            _memories_path(uid),
-            order_by=[('scoring', 'desc'), ('created_at', 'desc')],
-            limit=limit,
-            offset=offset,
-        )
-    ]
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    memories_ref = memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING).order_by(
+        'created_at', direction=firestore.Query.DESCENDING
+    )
+
+    memories_ref = memories_ref.limit(limit).offset(offset)
+
+    memories: List[Dict[str, Any]] = [_typed_doc(doc) for doc in memories_ref.stream()]
 
     # Consider visibility as 'public' if it's missing
     public_memories: List[Dict[str, Any]] = [
@@ -238,63 +413,107 @@ def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0) -> Lis
 
 
 @prepare_for_read(decrypt_func=cast(_DecryptFunc, _prepare_memory_for_read))
-def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+def get_non_filtered_memories(
+    uid: str, limit: int = 100, offset: int = 0, *, firestore_client: Any = None
+) -> List[Dict[str, Any]]:
     logger.info(f'get_non_filtered_memories {uid} {limit} {offset}')
-    return [
-        _typed_doc(doc)
-        for doc in _store().query(
-            _memories_path(uid), order_by='created_at', direction='desc', limit=limit, offset=offset
-        )
-    ]
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    memories_ref = memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    memories_ref = memories_ref.limit(limit).offset(offset)
+    memories: List[Dict[str, Any]] = [_typed_doc(doc) for doc in memories_ref.stream()]
+    return memories
 
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
-def create_memory(uid: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    path = _memory_path(uid, data['id'])
+def create_memory(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) -> Dict[str, Any]:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(data['id'])
 
-    def build_commit(tx: Any) -> Dict[str, Any]:
-        snapshot = tx.get(path)
+    def build_commit(transaction: Any) -> Dict[str, Any]:
+        snapshot = memory_ref.get(transaction=transaction)
         existing_data: Optional[Dict[str, Any]] = _typed_doc(snapshot) if snapshot.exists else None
         merged_data = _merge_memory_for_write(uid, existing_data, data)
 
-        def write_projection(write_tx: Any) -> None:
-            write_tx.set(path, merged_data)
+        def write_projection(write_transaction: Any) -> None:
+            write_transaction.set(memory_ref, merged_data)
 
         return {'mutations': [memory_ledger.add_fact(merged_data)], 'projection_writer': write_projection}
 
-    return memory_ledger.append_commit_with_builder(uid, None, build_commit, use_current_head=True)
+    return memory_ledger.append_commit_with_builder(
+        uid,
+        None,
+        build_commit,
+        use_current_head=True,
+        firestore_client=database,
+    )
 
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
-def save_memories(uid: str, data: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def save_memories(uid: str, data: List[Dict[str, Any]], *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
     if not data:
         return
 
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     coalesced_data = _coalesce_memory_writes(uid, data)
-    paths_and_data: List[tuple[str, Dict[str, Any]]] = [
-        (_memory_path(uid, memory['id']), memory) for memory in coalesced_data
+    refs_and_data: List[tuple[Any, Dict[str, Any]]] = [
+        (memories_ref.document(memory['id']), memory) for memory in coalesced_data
     ]
 
-    def build_commit(tx: Any) -> Dict[str, Any]:
-        snapshots: List[Any] = [tx.get(path) for path, _ in paths_and_data]
+    def build_commit(transaction: Any) -> Dict[str, Any]:
+        snapshots: List[Any] = []
+        for memory_ref, _ in refs_and_data:
+            snapshots.append(memory_ref.get(transaction=transaction))
 
-        merged_data: List[tuple[str, Dict[str, Any]]] = []
-        for (path, memory), snapshot in zip(paths_and_data, snapshots):
+        merged_data: List[tuple[Any, Dict[str, Any]]] = []
+        for (memory_ref, memory), snapshot in zip(refs_and_data, snapshots):
             existing_data: Optional[Dict[str, Any]] = _typed_doc(snapshot) if snapshot.exists else None
-            merged_data.append((path, _merge_memory_for_write(uid, existing_data, memory)))
+            merged_data.append((memory_ref, _merge_memory_for_write(uid, existing_data, memory)))
 
-        def write_projection(write_tx: Any) -> None:
-            for path, memory in merged_data:
-                write_tx.set(path, memory)
+        def write_projection(write_transaction: Any) -> None:
+            for memory_ref, memory in merged_data:
+                write_transaction.set(memory_ref, memory)
 
         return {
             'mutations': [memory_ledger.add_fact(memory) for _, memory in merged_data],
             'projection_writer': write_projection,
         }
 
-    return memory_ledger.append_commit_with_builder(uid, None, build_commit, use_current_head=True)
+    return memory_ledger.append_commit_with_builder(
+        uid,
+        None,
+        build_commit,
+        use_current_head=True,
+        firestore_client=database,
+    )
+
+
+@transactional
+def _set_memory_transaction(  # type: ignore[reportUnusedFunction]  # reserved: pre-ledger transactional write path
+    transaction: Any, uid: str, memory_ref: Any, memory: Dict[str, Any]
+) -> None:
+    snapshot = memory_ref.get(transaction=transaction)
+    existing_data: Optional[Dict[str, Any]] = _typed_doc(snapshot) if snapshot.exists else None
+    transaction.set(memory_ref, _merge_memory_for_write(uid, existing_data, memory))
+
+
+@transactional
+def _set_memories_transaction(  # type: ignore[reportUnusedFunction]  # reserved: pre-ledger transactional write path
+    transaction: Any, uid: str, refs_and_data: List[tuple[Any, Dict[str, Any]]]
+) -> None:
+    snapshots: List[Any] = []
+    for memory_ref, _ in refs_and_data:
+        snapshots.append(memory_ref.get(transaction=transaction))
+
+    for (memory_ref, memory), snapshot in zip(refs_and_data, snapshots):
+        existing_data: Optional[Dict[str, Any]] = _typed_doc(snapshot) if snapshot.exists else None
+        transaction.set(memory_ref, _merge_memory_for_write(uid, existing_data, memory))
 
 
 def _merge_memory_for_write(
@@ -343,75 +562,106 @@ def _merge_evidence(  # type: ignore[reportUnusedFunction]  # reserved: thin ali
     return merge_evidence_sets(existing, incoming)
 
 
-def delete_memories(uid: str) -> None:
-    store = _store()
+def delete_memories(uid: str, *, firestore_client: Any = None) -> None:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     # Chunk deletes to stay under the Firestore 500-writes-per-batch limit. A user with more than
     # 500 memories would otherwise make the single batch.commit() raise and delete nothing. Mirrors
     # the chunking in unlock_all_memories.
-    batch = store.batch()
+    batch = database.batch()
     count = 0
-    for doc in store.query(_memories_path(uid)):
-        batch.delete(doc.path)
+    for doc in memories_ref.stream():
+        batch.delete(doc.reference)
         count += 1
         if count >= 499:  # Firestore batch limit is 500
             batch.commit()
-            batch = store.batch()
+            batch = database.batch()
             count = 0
     if count > 0:
         batch.commit()
 
 
 @prepare_for_read(decrypt_func=cast(_DecryptFunc, _prepare_memory_for_read))
-def get_memory(uid: str, memory_id: str) -> Optional[Dict[str, Any]]:
-    snapshot = _store().get(_memory_path(uid, memory_id))
+def get_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    snapshot = memory_ref.get()
     raw: object = snapshot.to_dict()
     memory_data: Optional[Dict[str, Any]] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
     return memory_data
 
 
-def get_memories_by_ids(uid: str, memory_ids: List[str]) -> List[Dict[str, Any]]:
+def get_memories_by_ids(uid: str, memory_ids: List[str], *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     """
     Batch fetch multiple memories by their IDs.
-    Uses the port's multi-get for efficient batch retrieval.
+    Uses Firestore's get_all for efficient batch retrieval.
     """
     if not memory_ids:
         return []
 
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+
+    doc_refs = [memories_ref.document(memory_id) for memory_id in memory_ids]
+    docs = database.get_all(doc_refs)
+
     memories: List[Dict[str, Any]] = []
-    for doc in _store().get_many(_memories_path(uid), memory_ids):
-        memory_data = _prepare_memory_for_read(_typed_doc(doc), uid)
-        if memory_data:
-            memories.append(memory_data)
+    for doc in docs:
+        if doc.exists:
+            memory_data = _prepare_memory_for_read(_typed_doc(doc), uid)
+            if memory_data:
+                memories.append(memory_data)
 
     return memories
 
 
-def review_memory(uid: str, memory_id: str, value: bool) -> None:
-    _store().update(_memory_path(uid, memory_id), {'reviewed': True, 'user_review': value})
+def review_memory(uid: str, memory_id: str, value: bool, *, firestore_client: Any = None) -> None:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    memory_ref.update({'reviewed': True, 'user_review': value})
 
 
-def set_memory_kg_extracted(uid: str, memory_id: str) -> None:
-    _update_memory_if_exists(uid, memory_id, {'kg_extracted': True}, 'kg_extracted')
+def set_memory_kg_extracted(uid: str, memory_id: str, *, firestore_client: Any = None) -> None:
+    _update_memory_if_exists(uid, memory_id, {'kg_extracted': True}, 'kg_extracted', firestore_client=firestore_client)
 
 
-def change_memory_visibility(uid: str, memory_id: str, value: str) -> None:
-    _store().update(_memory_path(uid, memory_id), {'visibility': value})
+def change_memory_visibility(uid: str, memory_id: str, value: str, *, firestore_client: Any = None) -> None:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    memory_ref.update({'visibility': value})
 
 
-def update_memory_fields(uid: str, memory_id: str, data: Dict[str, Any]) -> None:
+def update_memory_fields(uid: str, memory_id: str, data: Dict[str, Any], *, firestore_client: Any = None) -> None:
     """Updates specified fields for a memory and sets the updated_at timestamp."""
     if not data:
         return
 
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+
     update_payload = data.copy()
     update_payload['updated_at'] = datetime.now(timezone.utc)
-    _store().update(_memory_path(uid, memory_id), update_payload)
+    memory_ref.update(update_payload)
 
 
-def add_evidence(uid: str, memory_id: str, evidence: Dict[str, Any]) -> None:
+def add_evidence(uid: str, memory_id: str, evidence: Dict[str, Any], *, firestore_client: Any = None) -> None:
     """Append one provenance Evidence row to a memory if it is not already present."""
-    path = _memory_path(uid, memory_id)
-    doc_snapshot = _store().get(path)
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+
+    doc_snapshot = memory_ref.get()
     if not doc_snapshot.exists:
         return
 
@@ -428,19 +678,22 @@ def add_evidence(uid: str, memory_id: str, evidence: Dict[str, Any]) -> None:
     doc_level = memory_data.get('data_protection_level', 'standard')
     if doc_level == 'enhanced':
         update_payload = _encrypt_memory_data(update_payload, uid)
-    _store().update(path, update_payload)
+    memory_ref.update(update_payload)
 
 
-def recompute_evidence(uid: str, memory_id: str) -> List[Dict[str, Any]]:
+def recompute_evidence(uid: str, memory_id: str, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     """Placeholder hook for later veracity/tombstone recomputation tickets."""
-    memory = get_memory(uid, memory_id)
+    memory = get_memory(uid, memory_id, firestore_client=firestore_client)
     return (memory or {}).get('evidence', [])
 
 
-def edit_memory(uid: str, memory_id: str, value: str) -> Optional[Dict[str, Any]]:
-    path = _memory_path(uid, memory_id)
+def edit_memory(uid: str, memory_id: str, value: str, *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
 
-    doc_snapshot = _store().get(path)
+    doc_snapshot = memory_ref.get()
     if not doc_snapshot.exists:
         return
 
@@ -455,11 +708,11 @@ def edit_memory(uid: str, memory_id: str, value: str) -> Optional[Dict[str, Any]
     if doc_level == 'enhanced':
         content_change['to_sha256'] = hashlib.sha256(value.encode('utf-8')).hexdigest()
 
-    def write_projection(tx: Any) -> None:
-        snapshot = tx.get(path)
+    def write_projection(transaction: Any) -> None:
+        snapshot = memory_ref.get(transaction=transaction)
         if not snapshot.exists:
             return
-        tx.update(path, {'content': content, 'edited': True, 'updated_at': update_time})
+        transaction.update(memory_ref, {'content': content, 'edited': True, 'updated_at': update_time})
 
     return memory_ledger.append_commit(
         uid,
@@ -471,16 +724,21 @@ def edit_memory(uid: str, memory_id: str, value: str) -> Optional[Dict[str, Any]
     )
 
 
-def refine_memory(uid: str, memory_id: str, arg_changes: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    path = _memory_path(uid, memory_id)
+def refine_memory(
+    uid: str, memory_id: str, arg_changes: Dict[str, Any], *, firestore_client: Any = None
+) -> Optional[Dict[str, Any]]:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
     update_time = datetime.now(timezone.utc)
 
-    def write_projection(tx: Any) -> None:
-        snapshot = tx.get(path)
+    def write_projection(transaction: Any) -> None:
+        snapshot = memory_ref.get(transaction=transaction)
         if not snapshot.exists:
             return
         update_payload = projection_update_for_refine(_typed_doc(snapshot) or {}, arg_changes, update_time)
-        tx.update(path, update_payload)
+        transaction.update(memory_ref, update_payload)
 
     return memory_ledger.append_commit(
         uid,
@@ -499,23 +757,28 @@ def merge_contradict_memory(
     new_memory: Dict[str, Any],
     superseded_ids: List[str],
     valid_interval: Optional[Dict[str, Any]] = None,
+    *,
+    firestore_client: Any = None,
 ) -> Dict[str, Any]:
-    new_path = _memory_path(uid, new_memory['id'])
-    superseded_paths = [_memory_path(uid, memory_id) for memory_id in superseded_ids]
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    new_ref = memories_ref.document(new_memory['id'])
+    superseded_refs = [memories_ref.document(memory_id) for memory_id in superseded_ids]
     update_time = datetime.now(timezone.utc)
     valid_interval = valid_interval or {}
     invalid_at = valid_interval.get('valid_to') or update_time
 
-    def build_commit(tx: Any) -> Dict[str, Any]:
-        new_snapshot = tx.get(new_path)
+    def build_commit(transaction: Any) -> Dict[str, Any]:
+        new_snapshot = new_ref.get(transaction=transaction)
         existing_new: Optional[Dict[str, Any]] = _typed_doc(new_snapshot) if new_snapshot.exists else None
         merged_new = _merge_memory_for_write(uid, existing_new, new_memory)
 
-        def write_projection(write_tx: Any) -> None:
-            write_tx.set(new_path, merged_new)
-            for path in superseded_paths:
-                write_tx.update(
-                    path,
+        def write_projection(write_transaction: Any) -> None:
+            write_transaction.set(new_ref, merged_new)
+            for memory_ref in superseded_refs:
+                write_transaction.update(
+                    memory_ref,
                     {
                         'invalid_at': invalid_at,
                         'superseded_by': merged_new['id'],
@@ -537,7 +800,13 @@ def merge_contradict_memory(
             'projection_writer': write_projection,
         }
 
-    return memory_ledger.append_commit_with_builder(uid, None, build_commit, use_current_head=True)
+    return memory_ledger.append_commit_with_builder(
+        uid,
+        None,
+        build_commit,
+        use_current_head=True,
+        firestore_client=database,
+    )
 
 
 def projection_update_for_refine(
@@ -564,6 +833,8 @@ def invalidate_memory(
     memory_id: str,
     superseded_by: Optional[str] = None,
     invalid_at: Optional[datetime] = None,
+    *,
+    firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
     """Soft-invalidate a memory that has been superseded or retracted.
 
@@ -574,7 +845,10 @@ def invalidate_memory(
     """
     if invalid_at is None:
         invalid_at = datetime.now(timezone.utc)
-    path = _memory_path(uid, memory_id)
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
     update_payload: Dict[str, Any] = {'invalid_at': invalid_at, 'updated_at': datetime.now(timezone.utc)}
     if superseded_by is not None:
         update_payload['superseded_by'] = superseded_by
@@ -589,12 +863,14 @@ def invalidate_memory(
     else:
         ledger_mutation = memory_ledger.retract_fact(memory_id, reason='invalidated')
 
-    def write_projection(tx: Any) -> None:
-        # Update-if-exists (ADR-0021): a missing legacy projection doc is already invalidated from
-        # the caller's perspective. Guard with exists() rather than relying on an update-on-missing
-        # raise, since that is adapter-defined; the ledger mutation still records the invalidation.
-        if tx.get(path).exists:
-            tx.update(path, update_payload)
+    def write_projection(transaction: Any) -> None:
+        try:
+            transaction.update(memory_ref, update_payload)
+        except FirestoreNotFound:
+            # Missing legacy projection docs are already invalidated from the caller's
+            # perspective. Keep the operation idempotent; the ledger mutation still
+            # records the invalidation for canonical state.
+            return
 
     return memory_ledger.append_commit(
         uid,
@@ -606,12 +882,16 @@ def invalidate_memory(
     )
 
 
-def delete_memory(uid: str, memory_id: str) -> None:
-    _store().delete(_memory_path(uid, memory_id))
+def delete_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> None:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    memory_ref.delete()
 
 
-def delete_memories_batch(uid: str, memory_ids: List[str]) -> None:
-    """Delete multiple memories in a single batched write.
+def delete_memories_batch(uid: str, memory_ids: List[str], *, firestore_client: Any = None) -> None:
+    """Delete multiple memories in a single batched Firestore write.
 
     The router caps a batch-delete request at MEMORIES_BATCH_MAX (100), well under
     Firestore's 500-writes-per-batch limit, but this helper mirrors the chunking in
@@ -619,43 +899,50 @@ def delete_memories_batch(uid: str, memory_ids: List[str]) -> None:
     """
     if not memory_ids:
         return
-    store = _store()
-    batch = store.batch()
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    batch = database.batch()
     count = 0
     for memory_id in memory_ids:
-        batch.delete(_memory_path(uid, memory_id))
+        batch.delete(memories_ref.document(memory_id))
         count += 1
         if count >= 499:  # Firestore batch limit is 500
             batch.commit()
-            batch = store.batch()
+            batch = database.batch()
             count = 0
     if count > 0:
         batch.commit()
 
 
-def delete_all_memories(uid: str) -> None:
-    store = _store()
+def delete_all_memories(uid: str, *, firestore_client: Any = None) -> None:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     # Chunk deletes to stay under the Firestore 500-writes-per-batch limit. Account deletion and
     # "delete all memories" hit this for any user with more than 500 memories: the single
     # batch.commit() would raise and remove nothing. Mirrors the chunking in unlock_all_memories.
-    batch = store.batch()
+    batch = database.batch()
     count = 0
-    for doc in store.query(_memories_path(uid)):
-        batch.delete(doc.path)
+    for doc in memories_ref.stream():
+        batch.delete(doc.reference)
         count += 1
         if count >= 499:  # Firestore batch limit is 500
             batch.commit()
-            batch = store.batch()
+            batch = database.batch()
             count = 0
     if count > 0:
         batch.commit()
 
 
-def ripple_source_deletion(uid: str, source_id: str) -> Dict[str, Any]:
+def ripple_source_deletion(uid: str, source_id: str, *, firestore_client: Any = None) -> Dict[str, Any]:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     now = datetime.now(timezone.utc)
     affected: List[Dict[str, Any]] = []
 
-    for doc in _store().query(_memories_path(uid)):
+    for doc in memories_ref.stream():
         raw_memory = _typed_doc(doc)
         memory = _prepare_memory_for_read(raw_memory, uid) or raw_memory
         evidence = _evidence_for_source_ripple(memory, source_id, doc.id)
@@ -665,7 +952,7 @@ def ripple_source_deletion(uid: str, source_id: str) -> Dict[str, Any]:
         active_evidence = active_evidence_items(tombstoned_evidence)
         affected.append(
             {
-                'path': doc.path,
+                'ref': doc.reference,
                 'id': doc.id,
                 'memory': memory,
                 'evidence': tombstoned_evidence,
@@ -695,14 +982,14 @@ def ripple_source_deletion(uid: str, source_id: str) -> Dict[str, Any]:
         and cast(Dict[str, Any], evidence).get('evidence_id')
     ]
 
-    def write_projection(tx: Any) -> None:
+    def write_projection(transaction: Any) -> None:
         for item in affected:
             if item['active_evidence']:
                 update_payload = _source_survival_update(item['memory'], item['evidence'], item['active_evidence'], now)
             else:
                 update_payload = _payload_tombstone_update(item['evidence'], now)
-            tx.update(
-                item['path'],
+            transaction.update(
+                item['ref'],
                 _prepare_data_for_write(update_payload, uid, item['memory'].get('data_protection_level', 'standard')),
             )
 
@@ -818,37 +1105,61 @@ def _evidence_for_source_ripple(memory: Dict[str, Any], source_id: str, memory_i
     ]
 
 
-def get_memory_ids_for_conversation(uid: str, conversation_id: str) -> List[str]:
+def get_memory_ids_for_conversation(uid: str, conversation_id: str, *, firestore_client: Any = None) -> List[str]:
     """Get all memory IDs associated with a conversation."""
-    return [
-        doc.id
-        for doc in _store().query(_memories_path(uid), filters=[('memory_id', '==', conversation_id)])
-    ]
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    query = memories_ref.where(filter=FieldFilter('memory_id', '==', conversation_id))
+
+    memory_ids = [doc.id for doc in query.stream()]
+    return memory_ids
 
 
-def delete_memories_for_conversation(uid: str, memory_id: str) -> Dict[str, Any]:
-    result = ripple_source_deletion(uid, memory_id)
+def delete_memories_for_conversation(uid: str, memory_id: str, *, firestore_client: Any = None) -> Dict[str, Any]:
+    result = ripple_source_deletion(uid, memory_id, firestore_client=firestore_client)
     logger.info(f"delete_memories_for_conversation {memory_id} {len(result['retracted_memory_ids'])}")
     return result
 
 
-def unlock_all_memories(uid: str) -> None:
+def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
     """
-    Finds all memories for a user with is_locked: True and updates them to is_locked = False.
+    Unlock both released legacy rows and canonical product-memory rows.
     """
-    store = _store()
-    batch = store.batch()
-    count = 0
-    for doc in store.query(_memories_path(uid), filters=[('is_locked', '==', True)]):
-        batch.update(doc.path, {'is_locked': False})
-        count += 1
-        if count >= 499:  # Firestore batch limit is 500
+    database = _get_db(firestore_client)
+    legacy_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    canonical_ref = database.collection(MemoryCollections(uid=uid).memory_items)
+
+    def commit_updates(docs: Any, update: Dict[str, Any]) -> int:
+        batch = database.batch()
+        count = 0
+        total = 0
+        for doc in docs:
+            batch.update(doc.reference, update)
+            count += 1
+            total += 1
+            if count >= 499:  # Firestore batch limit is 500
+                batch.commit()
+                batch = database.batch()
+                count = 0
+        if count > 0:
             batch.commit()
-            batch = store.batch()
-            count = 0
-    if count > 0:
-        batch.commit()
-    logger.info(f"Unlocked all memories for user {uid}")
+        return total
+
+    legacy_count = commit_updates(
+        legacy_ref.where(filter=FieldFilter('is_locked', '==', True)).stream(),
+        {'is_locked': False},
+    )
+    canonical_count = commit_updates(
+        canonical_ref.where(filter=FieldFilter('promotion.is_locked', '==', True)).stream(),
+        {'promotion.is_locked': False},
+    )
+    logger.info(
+        "Unlocked all memories for user %s legacy_count=%d canonical_count=%d",
+        uid,
+        legacy_count,
+        canonical_count,
+    )
 
 
 # **************************************
@@ -856,14 +1167,18 @@ def unlock_all_memories(uid: str) -> None:
 # **************************************
 
 
-def get_memories_to_migrate(uid: str, target_level: str) -> List[Dict[str, Any]]:
+def get_memories_to_migrate(uid: str, target_level: str, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     """
     Finds all memories that are not at the target protection level by fetching all documents
     and filtering them in memory. This simplifies the code but may be less performant for
     users with a very large number of documents.
     """
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    all_memories = memories_ref.select(['data_protection_level']).stream()
+
     to_migrate: List[Dict[str, Any]] = []
-    for doc in _store().query(_memories_path(uid), fields=['data_protection_level']):
+    for doc in all_memories:
         doc_data = _typed_doc(doc)
         current_level = doc_data.get('data_protection_level', 'standard')
         if target_level != current_level:
@@ -872,14 +1187,23 @@ def get_memories_to_migrate(uid: str, target_level: str) -> List[Dict[str, Any]]
     return to_migrate
 
 
-def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: str) -> None:
+def migrate_memories_level_batch(
+    uid: str, memory_ids: List[str], target_level: str, *, firestore_client: Any = None
+) -> None:
     """
     Migrates a batch of memories to the target protection level.
     """
-    store = _store()
-    batch = store.batch()
+    database = _get_db(firestore_client)
+    batch = database.batch()
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
+    doc_refs = [memories_ref.document(mem_id) for mem_id in memory_ids]
+    doc_snapshots = database.get_all(doc_refs)
 
-    for doc_snapshot in store.get_many(_memories_path(uid), memory_ids):
+    for doc_snapshot in doc_snapshots:
+        if not doc_snapshot.exists:
+            logger.warning(f"Memory {doc_snapshot.id} not found, skipping.")
+            continue
+
         memory_data = _typed_doc(doc_snapshot)
         current_level = memory_data.get('data_protection_level', 'standard')
 
@@ -897,32 +1221,40 @@ def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: 
 
         # Update the document with the migrated data and the new protection level.
         update_data = {'data_protection_level': target_level, 'content': migrated_content}
-        batch.update(doc_snapshot.path, update_data)
+        batch.update(doc_snapshot.reference, update_data)
 
     batch.commit()
 
 
-def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None) -> int:
+def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, *, firestore_client: Any = None) -> int:
     """
     Migrate memories from one user to another.
     If app_id is provided, only migrate memories related to that app.
     """
     logger.info(f'Migrating memories from {prev_uid} to {new_uid}')
 
-    store = _store()
-    filters: List[Filter] = [('app_id', '==', app_id)] if app_id else []
+    # Get source memories
+    database = _get_db(firestore_client)
+    prev_user_ref = database.collection(users_collection).document(prev_uid)
+    prev_memories_ref = prev_user_ref.collection(memories_collection)
+
+    # Apply app_id filter if provided
+    if app_id:
+        query = prev_memories_ref.where(filter=FieldFilter('app_id', '==', app_id))
+    else:
+        query = prev_memories_ref
 
     # Get memories to migrate
-    memories_to_migrate: List[Dict[str, Any]] = [
-        _typed_doc(doc) for doc in store.query(_memories_path(prev_uid), filters=filters)
-    ]
+    memories_to_migrate: List[Dict[str, Any]] = [_typed_doc(doc) for doc in query.stream()]
 
     if not memories_to_migrate:
         logger.info(f'No memories to migrate for user {prev_uid}')
         return 0
 
     # Create batch for destination user
-    batch = store.batch()
+    batch = database.batch()
+    new_user_ref = database.collection(users_collection).document(new_uid)
+    new_memories_ref = new_user_ref.collection(memories_collection)
 
     # Add memories to batch
     for memory in memories_to_migrate:
@@ -941,7 +1273,8 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None) 
                 logger.warning(f"migrate_memories: could not decrypt memory {memory.get('id')}; copying as-is")
             else:
                 memory = {**memory, 'content': encryption.encrypt(plaintext, new_uid)}
-        batch.set(_memory_path(new_uid, memory['id']), memory)
+        memory_ref = new_memories_ref.document(memory['id'])
+        batch.set(memory_ref, memory)
 
     # Commit batch
     batch.commit()

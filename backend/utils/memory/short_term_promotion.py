@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
 
-from database import document_store
 from database import knowledge_graph as kg_db
+from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
 from database.memory_outbox_worker import (
     CanonicalMemoryOutboxSideEffects,
@@ -41,12 +41,12 @@ from utils.memory.canonical_required_processing import (
     run_required_memory_processing,
 )
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector, sync_canonical_memory_vector
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
-from utils.memory.short_term_lifecycle import ShortTermDisposition
-from utils.memory.v3.compatibility_projection_sync import (
-    delete_v3_compatibility_projection_item,
-    upsert_v3_compatibility_projection_item,
+from utils.memory.memory_system import (
+    MemorySystem as MemorySystem,  # compatibility export for legacy test doubles
+    ensure_canonical_apply_control_state,
+    resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
 )
+from utils.memory.short_term_lifecycle import ShortTermDisposition
 
 
 def _coerce_aware_utc(value: datetime) -> datetime:
@@ -82,16 +82,16 @@ class CanonicalShortTermMaintenanceReport:
         return len(self.consolidation.batched_memory_ids) if self.consolidation is not None else 0
 
 
-def _delete_atom_projection_and_citations(uid: str, memory_id: str) -> bool:
+def _delete_atom_projection_and_citations(uid: str, memory_id: str, *, db_client: Any) -> bool:
     """Delete every keyword/KG/review projection owned by one canonical memory."""
-    kg_db.delete_memory_graph_assertion(uid, memory_id)
-    if not delete_atom_keyword_doc(uid, memory_id):
+    kg_db.delete_memory_graph_assertion(uid, memory_id, db_client=db_client)
+    if not delete_atom_keyword_doc(uid, memory_id, db_client=db_client):
         return False
-    kg_db.prune_memory_citations_from_kg(uid, [memory_id])
+    kg_db.prune_memory_citations_from_kg(uid, [memory_id], db_client=db_client)
     item_path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    snapshot = document_store.get_document(item_path)
+    snapshot = db_client.document(item_path).get()
     authoritative_item: Optional[MemoryItem] = None
-    if snapshot.exists:
+    if getattr(snapshot, "exists", False):
         raw_item: object = snapshot.to_dict()
         if not isinstance(raw_item, dict):
             raise ValueError("authoritative memory item payload is invalid")
@@ -108,30 +108,19 @@ def _delete_atom_projection_and_citations(uid: str, memory_id: str) -> bool:
             uid,
             [memory_id],
             reason="memory_outbox_projection_deleted",
+            db_client=db_client,
         )
     return True
 
 
-def _canonical_outbox_side_effects() -> CanonicalMemoryOutboxSideEffects:
+def _canonical_outbox_side_effects(*, db_client: Any) -> CanonicalMemoryOutboxSideEffects:
     def projection_upsert(item: MemoryItem, account_generation: int) -> bool:
-        if not sync_atom_keyword_index_for_item(item):
-            return False
-        return upsert_v3_compatibility_projection_item(
-            item,
-            expected_account_generation=account_generation,
-        )
+        del account_generation
+        return sync_atom_keyword_index_for_item(item, db_client=db_client)
 
     def projection_delete(uid: str, memory_id: str, account_generation: int) -> bool:
-        # Remove the user-facing compatibility row first. External projection
-        # cleanup remains retryable, while a transient provider failure must
-        # never leave deleted/private content visible through `/v3`.
-        if not delete_v3_compatibility_projection_item(
-            uid,
-            memory_id,
-            expected_account_generation=account_generation,
-        ):
-            return False
-        return _delete_atom_projection_and_citations(uid, memory_id)
+        del account_generation
+        return _delete_atom_projection_and_citations(uid, memory_id, db_client=db_client)
 
     def vector_upsert(item: MemoryItem, commit_id: str) -> bool:
         return sync_canonical_memory_vector(item, projection_commit_id=commit_id)
@@ -159,6 +148,7 @@ def _canonical_outbox_worker_config(*, run_id: str) -> CanonicalMemoryOutboxWork
 def _drain_canonical_outbox(
     uid: str,
     *,
+    db_client: Any,
     run_id: str,
     now: datetime,
     max_ticks: int = 5,
@@ -179,9 +169,10 @@ def _drain_canonical_outbox(
         "actions": [],
         "errors": [],
     }
-    side_effects = _canonical_outbox_side_effects()
+    side_effects = _canonical_outbox_side_effects(db_client=db_client)
     for _tick in range(max_ticks):
         summary = run_canonical_memory_outbox_worker_tick(
+            db_client=db_client,
             uid=uid,
             config=config,
             side_effects=side_effects,
@@ -243,22 +234,26 @@ def _merge_canonical_outbox_summaries(*summaries: Dict[str, Any]) -> Dict[str, A
 def run_canonical_short_term_ttl_lifecycle(
     uid: str,
     *,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     limit: Optional[int] = None,
 ) -> CanonicalShortTermLifecycleReport:
     """Audit expiry and settle indexed Short-term items through canonical L2 apply."""
+    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
-        return CanonicalShortTermLifecycleReport(uid=uid, skipped_reason="not_canonical_cohort")
+    # Universal accounts lazily receive the apply ledger.  Integrity failures
+    # propagate and fail this UID closed; they never select a legacy lifecycle.
+    ensure_canonical_apply_control_state(uid, db_client=client)
 
     items = fetch_expired_short_term_memory_items_firestore(
         uid=uid,
+        db_client=client,
         now=current_time,
         limit=limit,
     )
-    store = FirestoreShortTermLifecycleTransitionStore(now=current_time)
+    store = FirestoreShortTermLifecycleTransitionStore(db_client=client, now=current_time)
     created = 0
     existing = 0
     terminal = 0
@@ -284,8 +279,8 @@ def run_canonical_short_term_ttl_lifecycle(
             and item.status == MemoryItemStatus.active
             and item.processing_state == ProcessingState.processed
         ):
-            control_snapshot = document_store.get_document(MemoryCollections(uid=uid).memory_apply_control_state)
-            if not control_snapshot.exists:
+            control_snapshot = client.document(MemoryCollections(uid=uid).memory_apply_control_state).get()
+            if not getattr(control_snapshot, "exists", False):
                 raise RuntimeError("canonical memory control state is missing")
             raw_control = control_snapshot.to_dict()
             if not isinstance(raw_control, dict):
@@ -306,6 +301,7 @@ def run_canonical_short_term_ttl_lifecycle(
                 control=MemoryControlState.model_validate(raw_control),
                 run_id=f"{run_id}:ttl",
                 now=current_time,
+                db_client=client,
             )
             terminal += 1
 
@@ -320,6 +316,7 @@ def run_canonical_short_term_ttl_lifecycle(
 def run_canonical_short_term_maintenance(
     uid: str,
     *,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
@@ -327,8 +324,8 @@ def run_canonical_short_term_maintenance(
     required_processor: Optional[RequiredMemoryProcessor] = None,
 ) -> CanonicalShortTermMaintenanceReport:
     """Drain prior projections, run maintenance phases, then project their commits."""
-    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
-        return CanonicalShortTermMaintenanceReport(uid=uid, skipped_reason="not_canonical_cohort")
+    client: Any = db_client if db_client is not None else default_db_client
+    ensure_canonical_apply_control_state(uid, db_client=client)
 
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     # Settle already-committed invalidations before reading Short-term rows.
@@ -336,17 +333,25 @@ def run_canonical_short_term_maintenance(
     pre_outbox_now = current_time if now is not None else datetime.now(timezone.utc)
     pre_outbox = _drain_canonical_outbox(
         uid,
+        db_client=client,
         run_id=run_id,
         now=pre_outbox_now,
     )
     required_processing = run_required_memory_processing(
         uid,
+        db_client=client,
         processor=required_processor,
         now=current_time,
     )
-    lifecycle = run_canonical_short_term_ttl_lifecycle(uid, now=current_time, run_id=run_id)
+    lifecycle = run_canonical_short_term_ttl_lifecycle(
+        uid,
+        db_client=client,
+        now=current_time,
+        run_id=run_id,
+    )
     consolidation = run_canonical_consolidation(
         uid,
+        db_client=client,
         now=current_time,
         run_id=run_id,
         llm_invoke=llm_invoke,
@@ -357,6 +362,7 @@ def run_canonical_short_term_maintenance(
     outbox_now = current_time if now is not None else datetime.now(timezone.utc)
     post_outbox = _drain_canonical_outbox(
         uid,
+        db_client=client,
         run_id=run_id,
         now=outbox_now,
     )

@@ -10,7 +10,9 @@ from collections.abc import Awaitable, Callable, Mapping, MutableMapping
 from dataclasses import dataclass
 from typing import Any
 
-from database.store import get_document_store, sentinels
+from google.cloud.firestore import DELETE_FIELD, transactional
+
+from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from services.agent_vm_lifecycle import AgentVmRelease, DEFAULT_ZONE, clear_vm_reconcile_lease_fields
 from utils.executors import db_executor, run_blocking
@@ -19,10 +21,6 @@ _MIGRATION_ID = re.compile(r"^[0-9a-f]{24}$")
 PRODUCTION_MIGRATION_APPROVAL_POLICY = "state-preserving-v1"
 PRODUCTION_MIGRATION_MIN_ADMISSION_SOAK_SECONDS = 10 * 60
 PRODUCTION_MIGRATION_MIN_RETENTION_SECONDS = 7 * 24 * 60 * 60
-
-
-def _store():
-    return get_document_store()
 
 
 @dataclass(frozen=True)
@@ -137,11 +135,12 @@ def _owner_lease_matches(
     )
 
 
+@transactional
 def _supersede_failed_boot_image_migration_txn(
-    tx: Any,
-    deletion_path: str,
-    user_path: str,
-    migration_path: str,
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    migration_ref: Any,
     vm_name: str,
     zone: str,
     auth_token: str,
@@ -150,14 +149,14 @@ def _supersede_failed_boot_image_migration_txn(
     replacement_release_id: str,
     now: float,
 ) -> bool:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     if account_deletion_blocks_access(
         normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     ):
         return False
-    snapshot = tx.get(user_path)
-    migration_snapshot = tx.get(migration_path)
+    snapshot = user_ref.get(transaction=transaction)
+    migration_snapshot = migration_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     migration = migration_snapshot.to_dict() if migration_snapshot.exists else None
     reconcile = vm.get("reconcile") if isinstance(vm, Mapping) else None
@@ -186,17 +185,17 @@ def _supersede_failed_boot_image_migration_txn(
     ):
         return False
     owner_update: dict[str, Any] = {
-        "agentVm.reconcile.durableMigration": sentinels.DELETE,
+        "agentVm.reconcile.durableMigration": DELETE_FIELD,
         "agentVm.reconcile.state": "ready",
         "agentVm.reconcile.retryCount": 0,
-        "agentVm.reconcile.retryAt": sentinels.DELETE,
-        "agentVm.reconcile.lastError": sentinels.DELETE,
-        "agentVm.reconcile.driftReasons": sentinels.DELETE,
+        "agentVm.reconcile.retryAt": DELETE_FIELD,
+        "agentVm.reconcile.lastError": DELETE_FIELD,
+        "agentVm.reconcile.driftReasons": DELETE_FIELD,
     }
     owner_update.update({f"agentVm.reconcile.{key}": value for key, value in clear_vm_reconcile_lease_fields().items()})
-    tx.update(user_path, owner_update)
-    tx.update(
-        migration_path,
+    transaction.update(user_ref, owner_update)
+    transaction.update(
+        migration_ref,
         {
             "state": "superseded",
             "supersededAt": now,
@@ -218,21 +217,21 @@ def supersede_failed_boot_image_migration(
     now: float | None = None,
 ) -> bool:
     now = time.time() if now is None else now
+    client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
     return bool(
-        _store().run_transaction(
-            lambda tx: _supersede_failed_boot_image_migration_txn(
-                tx,
-                f"account_deletions/{uid}",
-                f"users/{uid}",
-                f"users/{uid}/agentVmMigrations/{migration_id}",
-                vm_name,
-                zone,
-                auth_token,
-                owner,
-                migration_id,
-                replacement_release_id,
-                now,
-            )
+        _supersede_failed_boot_image_migration_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            user_ref,
+            user_ref.collection("agentVmMigrations").document(migration_id),
+            vm_name,
+            zone,
+            auth_token,
+            owner,
+            migration_id,
+            replacement_release_id,
+            now,
         )
     )
 

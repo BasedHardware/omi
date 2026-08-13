@@ -15,10 +15,12 @@ import google.auth.transport.requests
 import google.oauth2.id_token
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from google.cloud.firestore import transactional
+from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, ConfigDict, Field
 
-from database.store import get_document_store, sentinels
 from database import users as users_db
+from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from services.agent_vm_lifecycle import (
     AgentVmRelease,
@@ -62,10 +64,6 @@ class AccountDeletionAccessBlocked(RuntimeError):
 
 class AgentVmCreateOutcomeUnknown(RuntimeError):
     """The provider may have accepted a create request before the failure."""
-
-
-def _store():
-    return get_document_store()
 
 
 class AgentVmReadinessError(RuntimeError):
@@ -177,7 +175,7 @@ def _agent_vm_startup_metadata(bucket: str) -> dict[str, str]:
 
 
 def _get_vm(uid: str) -> dict[str, Any] | None:
-    snapshot = _store().get(f"users/{uid}")
+    snapshot = get_firestore_client().collection("users").document(uid).get()
     if not snapshot.exists:
         return None
     vm = snapshot.to_dict().get("agentVm")
@@ -197,15 +195,16 @@ def _validate_ready_vm_ip(status: str, ip: str | None) -> None:
         raise ValueError("refusing to persist ready agentVm without a usable IP address")
 
 
+@transactional
 def _claim_vm_if_allowed_txn(
-    tx, deletion_path: str, user_path: str, candidate: dict[str, Any]
+    transaction, deletion_ref, user_ref, candidate: dict[str, Any]
 ) -> tuple[dict[str, Any], bool]:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     deletion_status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     if account_deletion_blocks_access(deletion_status):
         raise AccountDeletionAccessBlocked(deletion_status or "unknown")
-    snapshot = tx.get(user_path)
+    snapshot = user_ref.get(transaction=transaction)
     current = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if isinstance(current, dict) and current.get("vmName"):
         reconcile = current.get("reconcile")
@@ -217,25 +216,30 @@ def _claim_vm_if_allowed_txn(
         # Replace the entire agentVm map. set(..., merge=True) recursively
         # preserves nested reconcile.state/missingSince and would leave the
         # replacement permanently treated as reconcile-in-progress.
-        tx.update(user_path, {"agentVm": candidate})
+        transaction.update(user_ref, {"agentVm": candidate})
         return candidate, True
-    tx.set(user_path, {"agentVm": candidate}, merge=True)
+    transaction.set(user_ref, {"agentVm": candidate}, merge=True)
     return candidate, True
 
 
 def _claim_vm_if_allowed(uid: str, candidate: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    return _store().run_transaction(
-        lambda tx: _claim_vm_if_allowed_txn(tx, f"account_deletions/{uid}", f"users/{uid}", candidate)
+    client = get_firestore_client()
+    return _claim_vm_if_allowed_txn(
+        client.transaction(),
+        client.collection("account_deletions").document(uid),
+        client.collection("users").document(uid),
+        candidate,
     )
 
 
 def _vm_lifecycle_allowed(uid: str, expected_vm_name: str, expected_auth_token: str) -> bool:
-    deletion = _store().get(f"account_deletions/{uid}")
+    client = get_firestore_client()
+    deletion = client.collection("account_deletions").document(uid).get()
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     deletion_status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     if account_deletion_blocks_access(deletion_status):
         return False
-    user = _store().get(f"users/{uid}")
+    user = client.collection("users").document(uid).get()
     current = (user.to_dict() or {}).get("agentVm") if user.exists else None
     return (
         isinstance(current, dict)
@@ -244,10 +248,11 @@ def _vm_lifecycle_allowed(uid: str, expected_vm_name: str, expected_auth_token: 
     )
 
 
+@transactional
 def _set_vm_if_current_txn(
-    tx,
-    deletion_path: str,
-    user_path: str,
+    transaction,
+    deletion_ref,
+    user_ref,
     expected_vm_name: str,
     expected_auth_token: str,
     status: str,
@@ -255,12 +260,12 @@ def _set_vm_if_current_txn(
     zone: str,
     instance_id: str | None = None,
 ) -> bool:
-    deletion = tx.get(deletion_path)
+    deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     deletion_status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     if account_deletion_blocks_access(deletion_status):
         return False
-    snapshot = tx.get(user_path)
+    snapshot = user_ref.get(transaction=transaction)
     current = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if not isinstance(current, dict):
         return False
@@ -282,7 +287,7 @@ def _set_vm_if_current_txn(
         if not _GCE_NUMERIC_ID.fullmatch(instance_id):
             raise ValueError("Agent VM instance ID must be numeric")
         next_vm["instanceId"] = instance_id
-    tx.set(user_path, {"agentVm": next_vm}, merge=True)
+    transaction.set(user_ref, {"agentVm": next_vm}, merge=True)
     return True
 
 
@@ -295,18 +300,17 @@ def _set_vm_if_current(
     zone: str = _ZONE,
     instance_id: str | None = None,
 ) -> bool:
-    return _store().run_transaction(
-        lambda tx: _set_vm_if_current_txn(
-            tx,
-            f"account_deletions/{uid}",
-            f"users/{uid}",
-            expected_vm_name,
-            expected_auth_token,
-            status,
-            ip,
-            zone,
-            instance_id,
-        )
+    client = get_firestore_client()
+    return _set_vm_if_current_txn(
+        client.transaction(),
+        client.collection("account_deletions").document(uid),
+        client.collection("users").document(uid),
+        expected_vm_name,
+        expected_auth_token,
+        status,
+        ip,
+        zone,
+        instance_id,
     )
 
 
@@ -578,7 +582,13 @@ def _compute_identity_fields(claims: dict[str, Any]) -> tuple[str, str, str, str
 
 
 def _find_vm_owner(vm_name: str) -> tuple[str, dict[str, Any]] | None:
-    snapshots = _store().query("users", filters=[("agentVm.vmName", "==", vm_name)], limit=2)
+    snapshots = (
+        get_firestore_client()
+        .collection("users")
+        .where(filter=FieldFilter("agentVm.vmName", "==", vm_name))
+        .limit(2)
+        .stream()
+    )
     owner: tuple[str, dict[str, Any]] | None = None
     for snapshot in snapshots:
         data = snapshot.to_dict() or {}

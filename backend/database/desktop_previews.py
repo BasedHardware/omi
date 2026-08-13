@@ -13,12 +13,9 @@ import re
 from typing import Any, cast
 from urllib.parse import urlparse
 
-from database.store import get_document_store
+from google.cloud.firestore import transactional
 
-
-def _store():
-    return get_document_store()
-
+from database._client import get_firestore_client
 
 PREVIEW_MANIFESTS_COLLECTION = "desktop_preview_manifests"
 PREVIEW_POINTERS_COLLECTION = "desktop_preview_pointers"
@@ -192,35 +189,31 @@ def _build_preview_delisting(current: dict[str, Any], *, slug: str, expected_gen
     return {"slug": slug, "deleted": True, "generation": current_generation}
 
 
+@transactional
 def _publish_preview_transaction(
-    tx: Any,
-    manifest_path: str,
-    pointer_path: str,
+    transaction: Any,
+    manifest_ref: Any,
+    pointer_ref: Any,
     *,
     manifest: dict[str, Any],
     expected_generation: int | None,
 ) -> dict[str, Any]:
-    # Every read happens before the first write (the storage port forbids a
-    # transactional read after a write): read the immutable manifest and the
-    # mutable pointer up front, then stage any writes.
-    manifest_snapshot = tx.get(manifest_path)
-    pointer_snapshot = tx.get(pointer_path)
-    manifest_exists = manifest_snapshot.exists
-    if manifest_exists:
+    manifest_snapshot = manifest_ref.get(transaction=transaction)
+    if getattr(manifest_snapshot, "exists", False):
         raw_existing: object = manifest_snapshot.to_dict()
         existing_data = cast(dict[str, Any], raw_existing) if isinstance(raw_existing, dict) else {}
         existing = normalize_preview_manifest(existing_data)
         if existing != manifest:
             raise ValueError("preview artifact already exists with different immutable metadata")
+    else:
+        transaction.create(manifest_ref, {**manifest, "created_at": datetime.now(timezone.utc)})
 
-    raw_current: object = pointer_snapshot.to_dict() if pointer_snapshot.exists else {}
+    pointer_snapshot = pointer_ref.get(transaction=transaction)
+    raw_current: object = pointer_snapshot.to_dict() if getattr(pointer_snapshot, "exists", False) else {}
     current = cast(dict[str, Any], raw_current) if isinstance(raw_current, dict) else {}
     pointer = _build_preview_pointer(current, manifest, expected_generation=expected_generation)
-
-    if not manifest_exists:
-        tx.set(manifest_path, {**manifest, "created_at": datetime.now(timezone.utc)})
     if pointer is not current:
-        tx.set(pointer_path, pointer)
+        transaction.set(pointer_ref, pointer)
     return {"manifest": manifest, "pointer": pointer}
 
 
@@ -228,38 +221,42 @@ def publish_preview(
     data: dict[str, Any],
     *,
     expected_generation: int | None = None,
+    firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically register an immutable preview and advance only its slug pointer."""
     if expected_generation is not None and (isinstance(expected_generation, bool) or expected_generation < 0):
         raise ValueError("expected_generation must be a non-negative integer")
     manifest = normalize_preview_manifest(data)
-    manifest_path = f"{PREVIEW_MANIFESTS_COLLECTION}/{_manifest_id(manifest['slug'], manifest['source_sha'])}"
-    pointer_path = f"{PREVIEW_POINTERS_COLLECTION}/{manifest['slug']}"
-    return _store().run_transaction(
-        lambda tx: _publish_preview_transaction(
-            tx,
-            manifest_path,
-            pointer_path,
-            manifest=manifest,
-            expected_generation=expected_generation,
-        )
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    manifest_ref = client.collection(PREVIEW_MANIFESTS_COLLECTION).document(
+        _manifest_id(manifest["slug"], manifest["source_sha"])
+    )
+    pointer_ref = client.collection(PREVIEW_POINTERS_COLLECTION).document(manifest["slug"])
+    transaction = client.transaction()
+    return _publish_preview_transaction(
+        transaction,
+        manifest_ref,
+        pointer_ref,
+        manifest=manifest,
+        expected_generation=expected_generation,
     )
 
 
+@transactional
 def _delist_preview_transaction(
-    tx: Any,
-    pointer_path: str,
+    transaction: Any,
+    pointer_ref: Any,
     *,
     slug: str,
     expected_generation: int,
 ) -> dict[str, Any]:
-    pointer_snapshot = tx.get(pointer_path)
-    if not pointer_snapshot.exists:
+    pointer_snapshot = pointer_ref.get(transaction=transaction)
+    if not getattr(pointer_snapshot, "exists", False):
         return {"slug": slug, "deleted": False, "generation": None}
     raw_current: object = pointer_snapshot.to_dict()
     current = cast(dict[str, Any], raw_current) if isinstance(raw_current, dict) else {}
     result = _build_preview_delisting(current, slug=slug, expected_generation=expected_generation)
-    tx.delete(pointer_path)
+    transaction.delete(pointer_ref)
     return result
 
 
@@ -267,25 +264,26 @@ def delist_preview(
     slug: str,
     *,
     expected_generation: int,
+    firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically delist one mutable preview pointer, retaining immutable artifacts."""
     normalized_slug = _slug(slug.strip())
     if isinstance(expected_generation, bool) or expected_generation < 0:
         raise ValueError("expected_generation must be a non-negative integer")
-    pointer_path = f"{PREVIEW_POINTERS_COLLECTION}/{normalized_slug}"
-    return _store().run_transaction(
-        lambda tx: _delist_preview_transaction(
-            tx,
-            pointer_path,
-            slug=normalized_slug,
-            expected_generation=expected_generation,
-        )
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    pointer_ref = client.collection(PREVIEW_POINTERS_COLLECTION).document(normalized_slug)
+    transaction = client.transaction()
+    return _delist_preview_transaction(
+        transaction,
+        pointer_ref,
+        slug=normalized_slug,
+        expected_generation=expected_generation,
     )
 
 
-def _get_manifest(slug: str, source_sha: str) -> dict[str, Any] | None:
-    snapshot = _store().get(f"{PREVIEW_MANIFESTS_COLLECTION}/{_manifest_id(slug, source_sha)}")
-    if not snapshot.exists:
+def _get_manifest(slug: str, source_sha: str, *, firestore_client: Any) -> dict[str, Any] | None:
+    snapshot = firestore_client.collection(PREVIEW_MANIFESTS_COLLECTION).document(_manifest_id(slug, source_sha)).get()
+    if not getattr(snapshot, "exists", False):
         return None
     raw_manifest: object = snapshot.to_dict()
     manifest_data = cast(dict[str, Any], raw_manifest) if isinstance(raw_manifest, dict) else {}
@@ -295,18 +293,20 @@ def _get_manifest(slug: str, source_sha: str) -> dict[str, Any] | None:
     return manifest
 
 
-def get_preview_manifest(slug: str, source_sha: str) -> dict[str, Any] | None:
+def get_preview_manifest(slug: str, source_sha: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
     """Resolve one immutable preview artifact by its slug and full source SHA."""
     normalized_slug = _slug(slug.strip())
     normalized_sha = _source_sha(source_sha.strip())
-    return _get_manifest(normalized_slug, normalized_sha)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    return _get_manifest(normalized_slug, normalized_sha, firestore_client=client)
 
 
-def get_current_preview(slug: str) -> dict[str, Any] | None:
+def get_current_preview(slug: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
     """Resolve a slug's current pointer and its immutable preview artifact."""
     normalized_slug = _slug(slug.strip())
-    pointer_snapshot = _store().get(f"{PREVIEW_POINTERS_COLLECTION}/{normalized_slug}")
-    if not pointer_snapshot.exists:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    pointer_snapshot = client.collection(PREVIEW_POINTERS_COLLECTION).document(normalized_slug).get()
+    if not getattr(pointer_snapshot, "exists", False):
         return None
     raw_pointer: object = pointer_snapshot.to_dict()
     pointer_data = cast(dict[str, Any], raw_pointer) if isinstance(raw_pointer, dict) else {}
@@ -314,7 +314,7 @@ def get_current_preview(slug: str) -> dict[str, Any] | None:
     if pointer_data.get("slug") != normalized_slug or not isinstance(source_sha_raw, str):
         raise ValueError("preview pointer is malformed")
     source_sha = _source_sha(source_sha_raw)
-    manifest = _get_manifest(normalized_slug, source_sha)
+    manifest = _get_manifest(normalized_slug, source_sha, firestore_client=client)
     if manifest is None:
         raise ValueError("preview pointer references a missing manifest")
     return {

@@ -72,7 +72,6 @@ def make_database_client_stub() -> ModuleType:
     client_mod = types.ModuleType("database._client")
     client_mod.db = MagicMock()
     client_mod.delete_collection_recursive = MagicMock()
-    client_mod.run_transactional = MagicMock()
     client_mod.get_firestore_client = lambda: client_mod.db
 
     def _document_id_from_seed(seed: str) -> str:
@@ -800,14 +799,18 @@ def install_memory_product_router_stubs(
 ) -> list[str]:
     sys.modules["fastapi"] = fastapi_stub
     sys.modules["database._client"] = MagicMock()
-    vector_db_stub = types.ModuleType("database.vector_db")
+    memories_stub = AutoMockModule("database.memories")
+    memories_stub.get_memories = MagicMock(return_value=[])
+    sys.modules["database.memories"] = memories_stub
+    vector_db_stub = AutoMockModule("database.vector_db")
     vector_db_stub.query_memory_vector_candidates = MagicMock(return_value=[])
     sys.modules["database.vector_db"] = vector_db_stub
     sys.modules["utils.other.endpoints"] = auth_stub
     database_pkg = sys.modules.get("database")
     if isinstance(database_pkg, ModuleType):
+        setattr(database_pkg, "memories", memories_stub)
         setattr(database_pkg, "vector_db", vector_db_stub)
-    return ["fastapi", "database._client", "database.vector_db", "utils.other.endpoints"]
+    return ["fastapi", "database._client", "database.memories", "database.vector_db", "utils.other.endpoints"]
 
 
 _NON_ACTIVE_ROUTES_FIRESTORE_STUBBED = False

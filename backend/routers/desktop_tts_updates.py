@@ -4,14 +4,13 @@ from datetime import datetime, timezone
 from html import escape
 import hmac
 import os
-import uuid
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 from database import redis_db
-from database.store import get_document_store
+from database._client import get_firestore_client
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
@@ -29,10 +28,6 @@ _OPENAI_VOICES = frozenset(
     {"alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "marin", "cedar"}
 )
 _RELEASES_COLLECTION = "desktop_releases"
-
-
-def _store():
-    return get_document_store()
 
 
 class TtsSynthesizeRequest(BaseModel):
@@ -124,7 +119,12 @@ def _appcast_xml(releases: list[ReleaseInfo], platform: str) -> str:
 
 
 def _release_models() -> list[tuple[str, ReleaseInfo]]:
-    snapshots = _store().query(_RELEASES_COLLECTION, order_by="build_number", direction="desc")
+    snapshots = (
+        get_firestore_client()
+        .collection(_RELEASES_COLLECTION)
+        .order_by("build_number", direction="DESCENDING")
+        .stream()
+    )
     releases: list[tuple[str, ReleaseInfo]] = []
     for snapshot in snapshots:
         try:
@@ -136,14 +136,12 @@ def _release_models() -> list[tuple[str, ReleaseInfo]]:
 
 def _create_release(request: CreateReleaseRequest) -> str:
     release = ReleaseInfo(**request.model_dump(), published_at=datetime.now(timezone.utc).isoformat())
-    doc_id = str(uuid.uuid4())
-    _store().create(f"{_RELEASES_COLLECTION}/{doc_id}", release.model_dump())
-    return doc_id
+    return get_firestore_client().collection(_RELEASES_COLLECTION).add(release.model_dump())[1].id
 
 
 def _promote_release(doc_id: str) -> tuple[str, str]:
-    path = f"{_RELEASES_COLLECTION}/{doc_id}"
-    snapshot = _store().get(path)
+    ref = get_firestore_client().collection(_RELEASES_COLLECTION).document(doc_id)
+    snapshot = ref.get()
     if not snapshot.exists:
         raise ValueError("release not found")
     release = ReleaseInfo.model_validate(snapshot.to_dict())
@@ -151,7 +149,7 @@ def _promote_release(doc_id: str) -> tuple[str, str]:
     new_channel = {"staging": "beta", "beta": "stable"}.get(old_channel)
     if new_channel is None:
         raise ValueError("release is already stable")
-    _store().update(path, {"channel": new_channel})
+    ref.update({"channel": new_channel})
     return old_channel, new_channel
 
 

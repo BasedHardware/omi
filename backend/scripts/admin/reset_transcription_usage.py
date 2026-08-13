@@ -18,8 +18,8 @@ Commands
 ``reset-month``Zero ``transcription_seconds`` on every current-month hourly_usage doc
                for the user. DRY-RUN by default; requires ``--reason`` and
                ``--apply`` to write. Prints before/after totals and writes a
-               durable audit record (``admin_audit_log`` in the document store
-               + a JSON stdout line).
+               durable audit record (Firestore ``admin_audit_log`` + a JSON
+               stdout line).
 
 Credentials
 -----------
@@ -58,7 +58,6 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
-from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
@@ -226,30 +225,33 @@ def build_audit_record(
 
 
 # ---------------------------------------------------------------------------
-# I/O — thin wrappers over the neutral document store / Auth. Imports are local
-# so the pure helpers above stay importable without the backend runtime. The
-# store backend (Firestore | Mongo) is chosen by env (STORAGE_BACKEND +
-# connection vars), so this CLI runs on-prem against MongoDB as well as prod.
+# I/O — thin wrappers over Firestore / Auth. Imports are local so the pure
+# helpers above stay importable without the backend runtime.
 # ---------------------------------------------------------------------------
 
 
-def _document_store() -> Any:
-    from database.store import get_document_store  # backend-neutral store
+def _firestore_client() -> Any:
+    from database._client import get_firestore_client  # supported getter
 
-    return get_document_store()
+    return get_firestore_client()
 
 
-def fetch_monthly_hourly_docs(store: Any, uid: str, year: int, month: int) -> list[tuple[str, dict[str, Any]]]:
+def fetch_monthly_hourly_docs(client: Any, uid: str, year: int, month: int) -> list[tuple[str, dict[str, Any]]]:
     """Return ``(doc_id, data)`` for every hourly_usage doc in the given month.
 
     Mirrors ``database/user_usage.get_monthly_usage_stats``: filters on the
     ``year``/``month`` fields the increment path writes alongside each bucket.
     """
-    docs = store.query(
-        f"users/{uid}/hourly_usage",
-        filters=[("year", "==", year), ("month", "==", month)],
+    from google.cloud.firestore_v1 import FieldFilter
+
+    query = (
+        client.collection("users")
+        .document(uid)
+        .collection("hourly_usage")
+        .where(filter=FieldFilter("year", "==", year))
+        .where(filter=FieldFilter("month", "==", month))
     )
-    return [(doc.id, (doc.to_dict() or {})) for doc in docs]
+    return [(doc.id, (doc.to_dict() or {})) for doc in query.stream()]
 
 
 def resolve_uid(*, uid: Optional[str], email: Optional[str]) -> tuple[str, Optional[str]]:
@@ -307,33 +309,28 @@ def resolve_plan_and_limit(uid: str) -> tuple[str, Optional[int]]:
     return get_plan_display_name(plan), (limit_seconds or None)
 
 
-def apply_reset(store: Any, uid: str, plan: ResetPlan) -> None:
+def apply_reset(client: Any, uid: str, plan: ResetPlan) -> None:
     """Zero ``transcription_seconds`` on every doc in the reset plan (batched).."""
     if not plan.doc_ids:
         return
-    hourly_path = f"users/{uid}/hourly_usage"
+    hourly = client.collection("users").document(uid).collection("hourly_usage")
     for chunk_start in range(0, len(plan.doc_ids), _BATCH_LIMIT):
-        batch = store.batch()
+        batch = client.batch()
         for doc_id in plan.doc_ids[chunk_start : chunk_start + _BATCH_LIMIT]:
-            batch.set(f"{hourly_path}/{doc_id}", {"transcription_seconds": 0}, merge=True)
+            batch.set(hourly.document(doc_id), {"transcription_seconds": 0}, merge=True)
         batch.commit()
 
 
-def write_audit(store: Any, record: AuditRecord) -> str:
-    """Persist the audit record to ``admin_audit_log`` and return its doc id.
-
-    The neutral store has no server-side auto-id, so the id is generated here
-    and used as the document name; the same id is returned so the caller can
-    finalize the record after the mutation outcome is known.
-    """
-    audit_id = uuid4().hex
-    store.set(f"admin_audit_log/{audit_id}", record.to_dict())
-    return audit_id
+def write_audit(client: Any, record: AuditRecord) -> str:
+    """Persist the audit record to ``admin_audit_log`` and return its doc id."""
+    doc_ref = client.collection("admin_audit_log").document()
+    doc_ref.set(record.to_dict())
+    return doc_ref.id
 
 
-def update_audit(store: Any, audit_id: str, record: AuditRecord) -> None:
+def update_audit(client: Any, audit_id: str, record: AuditRecord) -> None:
     """Update an existing audit record after the mutation outcome is known."""
-    store.set(f"admin_audit_log/{audit_id}", record.to_dict())
+    client.collection("admin_audit_log").document(audit_id).set(record.to_dict())
 
 
 # ---------------------------------------------------------------------------
@@ -400,10 +397,10 @@ def _print_usage(
 
 def cmd_show(args: argparse.Namespace) -> int:
     uid, email = resolve_uid(uid=args.uid, email=args.email)
-    store = _document_store()
+    client = _firestore_client()
     now = datetime.now(timezone.utc)
     plan, limit_seconds = resolve_plan_and_limit(uid)
-    docs = fetch_monthly_hourly_docs(store, uid, now.year, now.month)
+    docs = fetch_monthly_hourly_docs(client, uid, now.year, now.month)
     usage = aggregate_monthly_usage(docs)
     _print_usage(uid, email, plan, limit_seconds, usage, month_label(now))
     return 0
@@ -411,10 +408,10 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 def cmd_reset_month(args: argparse.Namespace) -> int:
     uid, email = resolve_uid(uid=args.uid, email=args.email)
-    store = _document_store()
+    client = _firestore_client()
     now = datetime.now(timezone.utc)
     plan_name, _limit = resolve_plan_and_limit(uid)
-    docs = fetch_monthly_hourly_docs(store, uid, now.year, now.month)
+    docs = fetch_monthly_hourly_docs(client, uid, now.year, now.month)
     reset_plan = build_reset_plan(docs)
 
     if not reset_plan.touches:
@@ -465,12 +462,12 @@ def cmd_reset_month(args: argparse.Namespace) -> int:
         docs_touched=reset_plan.touches,
         now=now,
     )
-    audit_id = write_audit(store, pending_record)
+    audit_id = write_audit(client, pending_record)
 
-    apply_reset(store, uid, reset_plan)
+    apply_reset(client, uid, reset_plan)
     # All batched commits succeeded — finalize the audit record.
     final_record = replace(record, applied=True, after_seconds=0)
-    update_audit(store, audit_id, final_record)
+    update_audit(client, audit_id, final_record)
     print(f"Applied. Audit written: admin_audit_log/{audit_id}")
     print("audit: " + json.dumps(_sanitized_audit_payload(final_record), sort_keys=True))
     return 0

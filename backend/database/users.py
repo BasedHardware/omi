@@ -1,10 +1,11 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Literal, Optional, TypedDict
+from typing import Any, Literal, Optional, TypedDict
 
-from ._client import document_id_from_seed
-from database.store import get_document_store
-from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayUnion
+from google.api_core.exceptions import NotFound
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter, transactional
+from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
 from database.account_deletion_policy import normalize_account_deletion_status
 from database.account_deletion_transitions import (
     adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
@@ -32,18 +33,6 @@ from utils.subscription import get_default_basic_subscription
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _store():
-    """The configured document store (``STORAGE_BACKEND`` seam, ADR-0002/0004).
-
-    Indirection over the factory so tests can inject a specific backend (a mongomock-backed adapter
-    for hermetic units, a live adapter for the dual-backend contract test) by patching this name —
-    the WP2 analogue of the old ``monkeypatch.setattr(users, 'db', fake)``.
-    """
-    return get_document_store()
-
-
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
@@ -130,8 +119,7 @@ def record_client_device(
 
         now = datetime.now(timezone.utc)
         coarse, _os_value = _normalize_platform(platform)
-        store = _store()
-        path = f'users/{uid}/client_devices/{client_device_id}'
+        doc_ref = db.collection('users').document(uid).collection('client_devices').document(client_device_id)
         updates = {
             'platform': platform,
             'device_class': coarse,
@@ -142,10 +130,11 @@ def record_client_device(
         if label:
             updates['label'] = label
 
-        if not store.exists(path):
+        snapshot = doc_ref.get()
+        if not snapshot.exists:
             updates['first_seen_at'] = now
 
-        store.set(path, updates, merge=True)
+        doc_ref.set(updates, merge=True)
     except Exception as e:  # noqa: BLE001
         logger.warning("record_client_device failed for uid=%s: %s", uid, e)
 
@@ -173,21 +162,20 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
             return
 
         now = datetime.now(timezone.utc)
-        store = _store()
-        path = f'users/{uid}'
+        user_ref = db.collection('users').document(uid)
 
         updates = {
             'last_active_platform': coarse,
             'last_active_os': os_value,
             'last_active_at': now,
             f'last_active_at_{coarse}': now,
-            'platforms_used': ArrayUnion([coarse]),
+            'platforms_used': firestore.ArrayUnion([coarse]),
         }
 
         # `signup_platform` is set_once. Read the doc (single read) and only
         # include the field in the write if it's not already present. Cheaper
         # than a transaction for a field that almost never changes.
-        snapshot = store.get(path)
+        snapshot = user_ref.get()
         if snapshot.exists:
             data = snapshot.to_dict() or {}
             if not data.get('signup_platform'):
@@ -200,46 +188,54 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
             updates['signup_os'] = os_value
             updates['signup_platform_at'] = now
 
-        store.set(path, updates, merge=True)
+        user_ref.set(updates, merge=True)
     except Exception as e:  # noqa: BLE001
         logger.warning("record_user_platform failed for uid=%s: %s", uid, e)
 
 
 def is_exists_user(uid: str):
-    return _store().exists(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    if not user_ref.get().exists:
+        return False
+    return True
 
 
 def get_user_profile(uid: str) -> dict:
     """Gets the full user profile document."""
-    user_doc = _store().get(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
     if user_doc.exists:
         return user_doc.to_dict()
     return {}
 
 
 def get_user_store_recording_permission(uid: str):
-    user_data = _store().get(f'users/{uid}').to_dict() or {}
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('store_recording_permission', False)
 
 
 def set_user_store_recording_permission(uid: str, value: bool):
-    _store().update(f'users/{uid}', {'store_recording_permission': value})
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'store_recording_permission': value})
 
 
 def get_user_private_cloud_sync_enabled(uid: str) -> bool:
     """Check if user has private cloud sync enabled."""
-    user_data = _store().get(f'users/{uid}').to_dict() or {}
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('private_cloud_sync_enabled', True)
 
 
 def set_user_private_cloud_sync_enabled(uid: str, value: bool):
     """Enable or disable private cloud sync for a user."""
-    _store().update(f'users/{uid}', {'private_cloud_sync_enabled': value})
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'private_cloud_sync_enabled': value})
 
 
 def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Optional[str] = None):
-    _store().set(
-        f'users/{uid}',
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
         {
             'cancellation_feedback': {
                 'reason': reason,
@@ -259,7 +255,8 @@ BYOK_HEARTBEAT_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 
 def get_byok_state(uid: str) -> dict:
-    data = _store().get(f'users/{uid}').to_dict() or {}
+    user_ref = db.collection('users').document(uid)
+    data = user_ref.get().to_dict() or {}
     return data.get('byok', {})
 
 
@@ -279,8 +276,8 @@ def is_byok_active(uid: str) -> bool:
 
 
 def set_byok_active(uid: str, fingerprints: dict):
-    _store().set(
-        f'users/{uid}',
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
         {
             'byok': {
                 'active': True,
@@ -293,8 +290,8 @@ def set_byok_active(uid: str, fingerprints: dict):
 
 
 def clear_byok_active(uid: str):
-    _store().set(
-        f'users/{uid}',
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
         {
             'byok': {
                 'active': False,
@@ -310,8 +307,7 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
     # Stored in a top-level collection so it survives the user record being deleted.
     # Use merge=True so a retried delete request does not erase a durable wipe marker
     # (pending/failed/retrying/deleting_auth) already written to the same document.
-    _store().set(
-        f'account_deletions/{uid}',
+    db.collection('account_deletions').document(uid).set(
         {
             'uid': uid,
             'reason': reason or '',
@@ -322,14 +318,15 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
     )
 
 
-def get_user_deletion_wipe_status(uid: str) -> str | None:
+def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
     """Return the authoritative deletion lifecycle state for an authenticated UID.
 
     This intentionally bypasses caches: an accepted deletion must become an
     access barrier on the very next request, and a cached pre-delete miss would
     reopen the exact half-deleted-account window this marker closes.
     """
-    snapshot = _store().get(f'account_deletions/{uid}')
+    client = firestore_client or get_firestore_client()
+    snapshot = client.collection('account_deletions').document(uid).get()
     if not snapshot.exists:
         return None
     status = (snapshot.to_dict() or {}).get('wipe_status')
@@ -349,11 +346,45 @@ def mark_user_deletion_wipe_running(uid: str):
     ``stale_after`` (default 10 min) and re-enqueued concurrently, leading to
     duplicate work where a later failure overwrites a successful completion.
     """
-    _store().set(
-        f'account_deletions/{uid}',
+    db.collection('account_deletions').document(uid).set(
         {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)},
         merge=True,
     )
+
+
+@transactional
+def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) -> DeletionWipeIntent:
+    snapshot = doc_ref.get(transaction=transaction)
+    if snapshot.exists:
+        data = snapshot.to_dict() or {}
+        existing_job_id = data.get('wipe_job_id')
+        # A repeat request must join the existing durable deletion authority,
+        # never reset a claimed/running/completed job backwards.
+        if isinstance(existing_job_id, str) and existing_job_id:
+            status = data.get('wipe_status')
+            # ``deleting_auth`` is a legacy pre-worker state. New admissions
+            # create ``pending`` atomically, but a retry may safely promote an
+            # older durable intent because the worker owns Firebase Auth
+            # deletion.
+            if status == 'deleting_auth':
+                transaction.update(
+                    doc_ref,
+                    {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
+                )
+                return {'wipe_job_id': existing_job_id, 'dispatch_claimed': True}
+            if status in {'pending', 'retrying', 'running', 'failed', 'completed'}:
+                return {'wipe_job_id': existing_job_id, 'dispatch_claimed': False}
+    transaction.set(
+        doc_ref,
+        {
+            'wipe_status': 'pending',
+            'wipe_intent_at': datetime.now(timezone.utc),
+            'wipe_queued_at': datetime.now(timezone.utc),
+            'wipe_job_id': wipe_job_id,
+        },
+        merge=True,
+    )
+    return {'wipe_job_id': wipe_job_id, 'dispatch_claimed': True}
 
 
 def mark_user_deletion_wipe_intent(uid: str) -> DeletionWipeIntent:
@@ -366,73 +397,48 @@ def mark_user_deletion_wipe_intent(uid: str) -> DeletionWipeIntent:
     remains a legacy recovery state and is promoted by a retry or reconciler.
     """
     wipe_job_id = uuid.uuid4().hex
-    path = f'account_deletions/{uid}'
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id)
 
-    def _txn(tx) -> DeletionWipeIntent:
-        snapshot = tx.get(path)
-        if snapshot.exists:
-            data = snapshot.to_dict() or {}
-            existing_job_id = data.get('wipe_job_id')
-            # A repeat request must join the existing durable deletion authority,
-            # never reset a claimed/running/completed job backwards.
-            if isinstance(existing_job_id, str) and existing_job_id:
-                status = data.get('wipe_status')
-                # ``deleting_auth`` is a legacy pre-worker state. New admissions
-                # create ``pending`` atomically, but a retry may safely promote an
-                # older durable intent because the worker owns Firebase Auth
-                # deletion.
-                if status == 'deleting_auth':
-                    tx.update(path, {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)})
-                    return {'wipe_job_id': existing_job_id, 'dispatch_claimed': True}
-                if status in {'pending', 'retrying', 'running', 'failed', 'completed'}:
-                    return {'wipe_job_id': existing_job_id, 'dispatch_claimed': False}
-        tx.set(
-            path,
-            {
-                'wipe_status': 'pending',
-                'wipe_intent_at': datetime.now(timezone.utc),
-                'wipe_queued_at': datetime.now(timezone.utc),
-                'wipe_job_id': wipe_job_id,
-            },
-            merge=True,
-        )
-        return {'wipe_job_id': wipe_job_id, 'dispatch_claimed': True}
 
-    return _store().run_transaction(_txn)
+@transactional
+def _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id: str) -> bool:
+    """Promote a newly-created intent to pending exactly once.
+
+    The status and opaque job id are checked in the same transaction as the
+    write. This fences a retry/repeated request from moving an already claimed,
+    running, failed, or completed wipe backwards before it can enqueue again.
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return False
+    data = snapshot.to_dict() or {}
+    if data.get('wipe_status') != 'deleting_auth' or data.get('wipe_job_id') != wipe_job_id:
+        return False
+    transaction.update(
+        doc_ref,
+        {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
+    )
+    return True
 
 
 def mark_user_deletion_wipe_started(uid: str, wipe_job_id: str) -> bool:
-    """Atomically promote one newly-created wipe intent to queue-pending.
-
-    The status and opaque job id are checked in the same transaction as the write. This fences a
-    retry/repeated request from moving an already claimed, running, failed, or completed wipe
-    backwards before it can enqueue again.
-    """
-    path = f'account_deletions/{uid}'
-
-    def _txn(tx) -> bool:
-        snapshot = tx.get(path)
-        if not snapshot.exists:
-            return False
-        data = snapshot.to_dict() or {}
-        if data.get('wipe_status') != 'deleting_auth' or data.get('wipe_job_id') != wipe_job_id:
-            return False
-        tx.update(path, {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)})
-        return True
-
-    return _store().run_transaction(_txn)
+    """Atomically promote one newly-created wipe intent to queue-pending."""
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id)
 
 
 def mark_user_deletion_wipe_completed(uid: str) -> bool:
     """Complete the wipe only if no provider cleanup remains outstanding."""
-    path = f'account_deletions/{uid}'
-    return _store().run_transaction(lambda tx: _mark_user_deletion_wipe_completed_txn(tx, path))
+    doc_ref = db.collection('account_deletions').document(uid)
+    return _mark_user_deletion_wipe_completed_txn(db.transaction(), doc_ref)
 
 
 def mark_user_deletion_wipe_failed(uid: str):
     """Mark the background data wipe as failed so a reconciliation worker can retry."""
-    _store().set(
-        f'account_deletions/{uid}',
+    db.collection('account_deletions').document(uid).set(
         {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
         merge=True,
     )
@@ -445,15 +451,19 @@ def record_late_agent_vm_cleanup(
     expected_instance_id: str | None = None,
 ) -> bool:
     """Persist a late VM only when an admitted deletion owns its cleanup."""
-    path = f'account_deletions/{uid}'
-    return _store().run_transaction(
-        lambda tx: _record_late_agent_vm_cleanup_txn(tx, path, vm_name, zone, expected_instance_id)
+    doc_ref = db.collection('account_deletions').document(uid)
+    return _record_late_agent_vm_cleanup_txn(
+        db.transaction(),
+        doc_ref,
+        vm_name,
+        zone,
+        expected_instance_id,
     )
 
 
 def get_late_agent_vm_cleanup(uid: str) -> dict[str, str] | None:
     """Return a late-created VM that must be retried independently of user data."""
-    snapshot = _store().get(f'account_deletions/{uid}')
+    snapshot = db.collection('account_deletions').document(uid).get()
     data = snapshot.to_dict() or {}
     pending = data.get('late_agent_vm_cleanup') if snapshot.exists else None
     if not isinstance(pending, dict):
@@ -477,19 +487,29 @@ def get_late_agent_vm_cleanup(uid: str) -> dict[str, str] | None:
 
 def adopt_legacy_late_agent_vm_cleanup(uid: str, vm_name: str, zone: str, expected_instance_id: str) -> bool:
     """CAS-upgrade a pre-instance-ID cleanup record before provider deletion."""
-    path = f'account_deletions/{uid}'
-    return _store().run_transaction(
-        lambda tx: _adopt_legacy_late_agent_vm_cleanup_txn(tx, path, vm_name, zone, expected_instance_id)
-    )
+    doc_ref = db.collection('account_deletions').document(uid)
+    return _adopt_legacy_late_agent_vm_cleanup_txn(db.transaction(), doc_ref, vm_name, zone, expected_instance_id)
 
 
 def clear_late_agent_vm_cleanup(uid: str, vm_name: str) -> None:
     """Clear a late-VM retry record only after its matching GCE instance is gone."""
-    path = f'account_deletions/{uid}'
-    snapshot = _store().get(path)
+    doc_ref = db.collection('account_deletions').document(uid)
+    snapshot = doc_ref.get()
     pending = (snapshot.to_dict() or {}).get('late_agent_vm_cleanup') if snapshot.exists else None
     if isinstance(pending, dict) and pending.get('vmName') == vm_name:
-        _store().update(path, {'late_agent_vm_cleanup': DELETE})
+        doc_ref.update({'late_agent_vm_cleanup': firestore.DELETE_FIELD})
+
+
+@transactional
+def _ensure_deletion_wipe_job_id_txn(transaction, doc_ref, generated_job_id: str) -> str | None:
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return None
+    existing_job_id = (snapshot.to_dict() or {}).get('wipe_job_id')
+    if isinstance(existing_job_id, str) and existing_job_id:
+        return existing_job_id
+    transaction.update(doc_ref, {'wipe_job_id': generated_job_id})
+    return generated_job_id
 
 
 def ensure_deletion_wipe_job_id(uid: str) -> str | None:
@@ -499,25 +519,14 @@ def ensure_deletion_wipe_job_id(uid: str) -> str | None:
     the reconciler claims the state first, then atomically assigns an opaque id
     before it re-enqueues the task.
     """
-    path = f'account_deletions/{uid}'
-    generated_job_id = uuid.uuid4().hex
-
-    def _txn(tx) -> str | None:
-        snapshot = tx.get(path)
-        if not snapshot.exists:
-            return None
-        existing_job_id = (snapshot.to_dict() or {}).get('wipe_job_id')
-        if isinstance(existing_job_id, str) and existing_job_id:
-            return existing_job_id
-        tx.update(path, {'wipe_job_id': generated_job_id})
-        return generated_job_id
-
-    return _store().run_transaction(_txn)
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _ensure_deletion_wipe_job_id_txn(transaction, doc_ref, uuid.uuid4().hex)
 
 
 def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution:
     """Resolve an opaque task id to one canonical deletion job document."""
-    docs = _store().query('account_deletions', filters=[('wipe_job_id', '==', wipe_job_id)], limit=2)
+    docs = list(db.collection('account_deletions').where('wipe_job_id', '==', wipe_job_id).limit(2).stream())
     if not docs:
         return {'outcome': 'missing', 'uid': None}
     if len(docs) != 1:
@@ -540,7 +549,7 @@ def resolve_legacy_deletion_wipe_uid(legacy_uid: str) -> DeletionWipeTaskResolut
     It must name a still-actionable canonical deletion record, and the handler
     uses the document id returned here rather than the payload value.
     """
-    doc = _store().get(f'account_deletions/{legacy_uid}')
+    doc = db.collection('account_deletions').document(legacy_uid).get()
     if not doc.exists:
         return {'outcome': 'missing', 'uid': None}
     status = (doc.to_dict() or {}).get('wipe_status')
@@ -551,33 +560,36 @@ def resolve_legacy_deletion_wipe_uid(legacy_uid: str) -> DeletionWipeTaskResolut
     return {'outcome': 'resolved', 'uid': doc.id}
 
 
+@transactional
+def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subscription_id: str | None, error: str):
+    snapshot = doc_ref.get(transaction=transaction)
+    if snapshot.exists:
+        status = (snapshot.to_dict() or {}).get('wipe_status')
+        if status in ('pending', 'retrying', 'running', 'failed', 'completed'):
+            return False
+
+    transaction.set(
+        doc_ref,
+        {
+            'wipe_status': 'billing_failed',
+            'billing_failed_at': datetime.now(timezone.utc),
+            'billing_subscription_id': subscription_id or '',
+            'billing_error': error,
+        },
+        merge=True,
+    )
+    return True
+
+
 def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, error: str) -> bool:
     """Record that account deletion is blocked on Stripe cancellation.
 
     Never clobbers an actionable or terminal wipe state. A billing failure can
     only block deletion before a destructive wipe has been queued or started.
     """
-    path = f'account_deletions/{uid}'
-
-    def _txn(tx) -> bool:
-        snapshot = tx.get(path)
-        if snapshot.exists:
-            status = (snapshot.to_dict() or {}).get('wipe_status')
-            if status in ('pending', 'retrying', 'running', 'failed', 'completed'):
-                return False
-        tx.set(
-            path,
-            {
-                'wipe_status': 'billing_failed',
-                'billing_failed_at': datetime.now(timezone.utc),
-                'billing_subscription_id': subscription_id or '',
-                'billing_error': error,
-            },
-            merge=True,
-        )
-        return True
-
-    return _store().run_transaction(_txn)
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid, subscription_id, error)
 
 
 def cancel_user_deletion_wipe(uid: str):
@@ -587,8 +599,7 @@ def cancel_user_deletion_wipe(uid: str):
     persisted. Without this, the reconciliation worker would later wipe the
     user's data even though their Firebase account still exists.
     """
-    _store().set(
-        f'account_deletions/{uid}',
+    db.collection('account_deletions').document(uid).set(
         {'wipe_status': 'cancelled', 'wipe_cancelled_at': datetime.now(timezone.utc)},
         merge=True,
     )
@@ -622,7 +633,7 @@ def get_pending_deletion_wipes(
     running_cutoff = datetime.now(timezone.utc) - running_stale_after
     budget = limit
 
-    failed_docs = _store().query('account_deletions', filters=[('wipe_status', '==', 'failed')], limit=budget)
+    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').limit(budget).stream()
     result = [doc.to_dict() | {'uid': doc.id} for doc in failed_docs]
 
     if len(result) < limit:
@@ -631,7 +642,7 @@ def get_pending_deletion_wipes(
         # first page of fresh pending docs, leaving them permanently unqueued.
         # The ``account_deletions`` collection only holds deletion events so
         # the full scan is bounded.
-        pending_docs = _store().query('account_deletions', filters=[('wipe_status', '==', 'pending')])
+        pending_docs = db.collection('account_deletions').where('wipe_status', '==', 'pending').stream()
         for doc in pending_docs:
             if len(result) >= limit:
                 break
@@ -647,7 +658,7 @@ def get_pending_deletion_wipes(
         # behind other cleanup jobs) can take several minutes; we only want to
         # reclaim a ``running`` marker when the worker has almost certainly
         # crashed or the pod was killed mid-execution.
-        running_docs = _store().query('account_deletions', filters=[('wipe_status', '==', 'running')])
+        running_docs = db.collection('account_deletions').where('wipe_status', '==', 'running').stream()
         for doc in running_docs:
             if len(result) >= limit:
                 break
@@ -662,7 +673,7 @@ def get_pending_deletion_wipes(
         # 'pending') usually means a crash/deploy after auth.delete_account()
         # succeeded. The reconciler verifies the Firebase user is gone before
         # recovering these — see reconcile_pending_deletion_wipes.
-        deleting_auth_docs = _store().query('account_deletions', filters=[('wipe_status', '==', 'deleting_auth')])
+        deleting_auth_docs = db.collection('account_deletions').where('wipe_status', '==', 'deleting_auth').stream()
         for doc in deleting_auth_docs:
             if len(result) >= limit:
                 break
@@ -672,7 +683,7 @@ def get_pending_deletion_wipes(
                 result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
-        retrying_docs = _store().query('account_deletions', filters=[('wipe_status', '==', 'retrying')])
+        retrying_docs = db.collection('account_deletions').where('wipe_status', '==', 'retrying').stream()
         for doc in retrying_docs:
             if len(result) >= limit:
                 break
@@ -687,8 +698,11 @@ def get_pending_deletion_wipes(
     return result
 
 
-def _claim_deletion_wipe_txn(tx, path: str, stale_after: timedelta, running_stale_after: timedelta) -> str | None:
-    """Atomically claim a wipe for re-enqueueing inside a storage-port transaction.
+@transactional
+def _claim_deletion_wipe_txn(
+    transaction, doc_ref, stale_after: timedelta, running_stale_after: timedelta
+) -> str | None:
+    """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
 
     Transitions ``wipe_status`` from ``failed``, stale ``pending``, stale
     ``deleting_auth`` (auth user verified gone by caller), stale ``running``
@@ -699,7 +713,7 @@ def _claim_deletion_wipe_txn(tx, path: str, stale_after: timedelta, running_stal
     Firebase auth deletion succeeds or interrupting a live worker. ``retrying``
     claims that are not yet stale are also refused (another worker owns them).
     """
-    snapshot = tx.get(path)
+    snapshot = doc_ref.get(transaction=transaction)
     if not snapshot.exists:
         return None
     data = snapshot.to_dict()
@@ -712,7 +726,7 @@ def _claim_deletion_wipe_txn(tx, path: str, stale_after: timedelta, running_stal
         intent_at = data.get('wipe_intent_at')
         if intent_at and intent_at >= now - stale_after:
             return None
-        tx.update(path, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
     if status == 'pending':
         # Re-validate the pending marker age *inside* the transaction. The
@@ -722,7 +736,7 @@ def _claim_deletion_wipe_txn(tx, path: str, stale_after: timedelta, running_stal
         queued_at = data.get('wipe_queued_at')
         if queued_at and queued_at >= now - stale_after:
             return None
-        tx.update(path, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
     if status == 'running':
         # A ``running`` marker means the worker started executing. Only reclaim
@@ -732,10 +746,10 @@ def _claim_deletion_wipe_txn(tx, path: str, stale_after: timedelta, running_stal
         running_at = data.get('wipe_running_at')
         if running_at and running_at >= now - running_stale_after:
             return None
-        tx.update(path, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
     if status == 'failed':
-        tx.update(path, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
     if status == 'retrying':
         claimed_at = data.get('wipe_claimed_at')
@@ -747,7 +761,7 @@ def _claim_deletion_wipe_txn(tx, path: str, stale_after: timedelta, running_stal
         # another copy every pass, causing duplicate wipes to race.
         if claimed_at and claimed_at < now - running_stale_after:
             # Stale claim (worker probably crashed). Re-claim it.
-            tx.update(path, {'wipe_claimed_at': now})
+            transaction.update(doc_ref, {'wipe_claimed_at': now})
             return snapshot.id
     return None
 
@@ -763,11 +777,13 @@ def claim_deletion_wipe(
     another worker already owns a non-stale claim. This prevents the same wipe
     from being re-enqueued concurrently by multiple workers or scheduler runs.
     """
-    path = f'account_deletions/{uid}'
-    return _store().run_transaction(lambda tx: _claim_deletion_wipe_txn(tx, path, stale_after, running_stale_after))
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after)
 
 
-def _claim_deletion_wipe_task_txn(tx, path: str, running_stale_after: timedelta) -> str:
+@transactional
+def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: timedelta) -> str:
     """Claim a Cloud Tasks delivery before running an account-deletion wipe.
 
     The claim intentionally stays in ``retrying`` until the cleanup worker
@@ -775,7 +791,7 @@ def _claim_deletion_wipe_task_txn(tx, path: str, running_stale_after: timedelta)
     request is cancelled while waiting for a cleanup thread, a later delivery can
     retry without waiting for the long running-stale lease.
     """
-    snapshot = tx.get(path)
+    snapshot = doc_ref.get(transaction=transaction)
     if not snapshot.exists:
         return 'missing'
 
@@ -793,7 +809,7 @@ def _claim_deletion_wipe_task_txn(tx, path: str, running_stale_after: timedelta)
             return 'running'
 
     if status in ('pending', 'retrying', 'failed', 'running'):
-        tx.update(path, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return 'claimed'
 
     return 'not_actionable'
@@ -805,31 +821,31 @@ def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELE
     Returns one of: ``claimed``, ``running``, ``completed``, ``missing``, or
     ``not_actionable``. Only ``claimed`` callers may run the destructive wipe.
     """
-    path = f'account_deletions/{uid}'
-    return _store().run_transaction(lambda tx: _claim_deletion_wipe_task_txn(tx, path, running_stale_after))
-
-
-def _people_path(uid: str) -> str:
-    return f'users/{uid}/people'
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after)
 
 
 def create_person(uid: str, data: dict):
-    _store().set(f"{_people_path(uid)}/{data['id']}", data)
+    people_ref = db.collection('users').document(uid).collection('people')
+    people_ref.document(data['id']).set(data)
     return data
 
 
 def get_person(uid: str, person_id: str):
-    doc = _store().get(f'{_people_path(uid)}/{person_id}')
-    if not doc.exists:
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+    if not person_doc.exists:
         return None
-    person_data = doc.to_dict()
-    person_data.setdefault('id', doc.id)
+    person_data = person_doc.to_dict()
+    person_data.setdefault('id', person_doc.id)
     return person_data
 
 
 def get_people(uid: str):
+    people_ref = db.collection('users').document(uid).collection('people')
     result = []
-    for person in _store().query(_people_path(uid)):
+    for person in people_ref.stream():
         data = person.to_dict()
         data.setdefault('id', person.id)
         result.append(data)
@@ -837,7 +853,9 @@ def get_people(uid: str):
 
 
 def get_person_by_name(uid: str, name: str):
-    docs = _store().query(_people_path(uid), filters=[('name', '==', name)], limit=1)
+    people_ref = db.collection('users').document(uid).collection('people')
+    query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
+    docs = list(query.stream())
     if docs:
         data = docs[0].to_dict()
         data.setdefault('id', docs[0].id)
@@ -846,49 +864,51 @@ def get_person_by_name(uid: str, name: str):
 
 
 def get_people_by_ids(uid: str, person_ids: list[str]):
-    """Fetch people docs by ID.
+    """Fetch people docs by ID using db.get_all().
 
-    Results are returned in an unspecified order across backends; callers must not assume the
-    result order matches person_ids order.
+    Note: db.get_all() returns results in arbitrary order (Firestore behavior).
+    Callers must not assume the result order matches person_ids order.
     """
     if not person_ids:
         return []
+    people_ref = db.collection('users').document(uid).collection('people')
+    # Use document ID fetches instead of where("id", "in", ...) to handle
+    # legacy docs that may not have a stored 'id' field.
+    doc_refs = [people_ref.document(pid) for pid in person_ids]
     all_people = []
-    # Fetch by document id (not a where("id", "in", ...)) to handle legacy docs without a stored
-    # 'id' field. The neutral record exposes .exists/.to_dict()/.id, so the read boundary parses it
-    # unchanged whichever backend is configured.
-    for doc in _store().get_many(_people_path(uid), person_ids):
-        data = doc.to_dict()
-        data.setdefault('id', doc.id)
-        if parse_snapshot_or_none(Person, doc, document_id_field='id') is not None:
-            all_people.append(data)
+    for doc in db.get_all(doc_refs):
+        if doc.exists:
+            data = doc.to_dict()
+            data.setdefault('id', doc.id)
+            if parse_snapshot_or_none(Person, doc, document_id_field='id') is not None:
+                all_people.append(data)
     return all_people
 
 
 def update_person(uid: str, person_id: str, name: str) -> bool:
-    """Rename a person. Returns False when the person does not exist so callers can 404.
-
-    The existence check and the rename run in a transaction so they are atomic — this removes the
-    read-then-write race the Firestore-only path guarded against by catching NotFound.
-    """
-    path = f'{_people_path(uid)}/{person_id}'
-
-    def _rename(tx) -> bool:
-        if not tx.get(path).exists:
-            return False
-        tx.update(path, {'name': name})
-        return True
-
-    return _store().run_transaction(_rename)
+    """Rename a person. Returns False when the person does not exist so callers can 404,
+    instead of letting Firestore .update() raise NotFound and surface as an HTTP 500."""
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    if not person_ref.get().exists:
+        return False
+    try:
+        person_ref.update({'name': name})
+    except NotFound:
+        # The person was deleted between the existence check and the update; treat as missing so
+        # the caller 404s instead of 500ing on the Firestore NotFound race.
+        return False
+    return True
 
 
 def delete_person(uid: str, person_id: str):
-    _store().delete(f'{_people_path(uid)}/{person_id}')
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_ref.delete()
 
 
-def _add_sample_transaction(tx, path, sample_path, transcript, max_samples):
+@transactional
+def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples):
     """Transaction to atomically add sample and transcript."""
-    snapshot = tx.get(path)
+    snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
         return False
 
@@ -917,7 +937,7 @@ def _add_sample_transaction(tx, path, sample_path, transcript, max_samples):
         update_data['speech_sample_transcripts'] = transcripts
         update_data['speech_samples_version'] = 3
 
-    tx.update(path, update_data)
+    transaction.update(person_ref, update_data)
     return True
 
 
@@ -941,13 +961,15 @@ def add_person_speech_sample(
     Returns:
         True if sample was added, False if limit reached or person not found
     """
-    path = f'users/{uid}/people/{person_id}'
-    return _store().run_transaction(lambda tx: _add_sample_transaction(tx, path, sample_path, transcript, max_samples))
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    transaction = db.transaction()
+    return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
 
 
 def get_person_speech_samples_count(uid: str, person_id: str) -> int:
     """Get the count of speech samples for a person."""
-    person_doc = _store().get(f'users/{uid}/people/{person_id}')
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
 
     if not person_doc.exists:
         return 0
@@ -956,9 +978,10 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
     return len(person_data.get('speech_samples', []))
 
 
-def _remove_sample_transaction(tx, path, sample_path: str) -> bool:
+@transactional
+def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> bool:
     """Atomically remove a sample and its aligned transcript."""
-    snapshot = tx.get(path)
+    snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
         return False
 
@@ -975,8 +998,8 @@ def _remove_sample_transaction(tx, path, sample_path: str) -> bool:
     if idx < len(transcripts):
         transcripts.pop(idx)
 
-    tx.update(
-        path,
+    transaction.update(
+        person_ref,
         {
             'speech_samples': samples,
             'speech_sample_transcripts': transcripts,
@@ -999,25 +1022,27 @@ def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> b
     Returns:
         True if removed, False if person or sample not found
     """
-    path = f'users/{uid}/people/{person_id}'
-    return _store().run_transaction(lambda tx: _remove_sample_transaction(tx, path, sample_path))
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    transaction = db.transaction()
+    return _remove_sample_transaction(transaction, person_ref, sample_path)
 
 
 def set_user_speaker_embedding(uid: str, embedding: list) -> bool:
     """Store speaker embedding for the user's own voice on their user document."""
-    _store().update(
-        f'users/{uid}',
+    user_ref = db.collection('users').document(uid)
+    user_ref.update(
         {
             'speaker_embedding': embedding,
             'speaker_embedding_updated_at': datetime.now(timezone.utc),
-        },
+        }
     )
     return True
 
 
 def get_user_speaker_embedding(uid: str) -> Optional[list]:
     """Get the user's own speaker embedding from their user document."""
-    user_doc = _store().get(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
     if not user_doc.exists:
         return None
     return user_doc.to_dict().get('speaker_embedding')
@@ -1035,19 +1060,17 @@ def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> b
     Returns:
         True if stored successfully, False if person not found
     """
-    path = f'users/{uid}/people/{person_id}'
-    store = _store()
-    person_doc = store.get(path)
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
 
     if not person_doc.exists:
         return False
 
-    store.update(
-        path,
+    person_ref.update(
         {
             'speaker_embedding': embedding,
             'updated_at': datetime.now(timezone.utc),
-        },
+        }
     )
     return True
 
@@ -1063,9 +1086,8 @@ def get_person_speaker_embedding(uid: str, person_id: str) -> Optional[list]:
     Returns:
         List of floats representing the embedding, or None if not found
     """
-    path = f'users/{uid}/people/{person_id}'
-    store = _store()
-    person_doc = store.get(path)
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
 
     if not person_doc.exists:
         return None
@@ -1087,9 +1109,8 @@ def set_person_speech_sample_transcript(uid: str, person_id: str, sample_index: 
     Returns:
         True if updated successfully, False if person not found or index out of bounds
     """
-    path = f'users/{uid}/people/{person_id}'
-    store = _store()
-    person_doc = store.get(path)
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
 
     if not person_doc.exists:
         return False
@@ -1108,12 +1129,11 @@ def set_person_speech_sample_transcript(uid: str, person_id: str, sample_index: 
 
     transcripts[sample_index] = transcript
 
-    store.update(
-        path,
+    person_ref.update(
         {
             'speech_sample_transcripts': transcripts,
             'updated_at': datetime.now(timezone.utc),
-        },
+        }
     )
     return True
 
@@ -1141,9 +1161,8 @@ def update_person_speech_samples_after_migration(
     Returns:
         True if updated successfully, False if person not found
     """
-    path = f'users/{uid}/people/{person_id}'
-    store = _store()
-    person_doc = store.get(path)
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
 
     if not person_doc.exists:
         return False
@@ -1159,9 +1178,9 @@ def update_person_speech_samples_after_migration(
     if speaker_embedding is not None:
         update_data['speaker_embedding'] = speaker_embedding
     else:
-        update_data['speaker_embedding'] = DELETE
+        update_data['speaker_embedding'] = firestore.DELETE_FIELD
 
-    store.update(path, update_data)
+    person_ref.update(update_data)
     return True
 
 
@@ -1177,19 +1196,17 @@ def clear_person_speaker_embedding(uid: str, person_id: str) -> bool:
     Returns:
         True if cleared successfully, False if person not found
     """
-    path = f'users/{uid}/people/{person_id}'
-    store = _store()
-    person_doc = store.get(path)
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
 
     if not person_doc.exists:
         return False
 
-    store.update(
-        path,
+    person_ref.update(
         {
-            'speaker_embedding': DELETE,
+            'speaker_embedding': firestore.DELETE_FIELD,
             'updated_at': datetime.now(timezone.utc),
-        },
+        }
     )
     return True
 
@@ -1206,31 +1223,40 @@ def update_person_speech_samples_version(uid: str, person_id: str, version: int)
     Returns:
         True if updated successfully, False if person not found
     """
-    path = f'users/{uid}/people/{person_id}'
-    store = _store()
-    person_doc = store.get(path)
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
 
     if not person_doc.exists:
         return False
 
-    store.update(
-        path,
+    person_ref.update(
         {
             'speech_samples_version': version,
             'updated_at': datetime.now(timezone.utc),
-        },
+        }
     )
     return True
 
 
 def delete_user_data(uid: str):
-    # Delete the user document and every subcollection beneath it. Backends do not cascade; the
-    # port's delete_recursive descends into subcollections first (the historical behavior that
-    # enumerated user_ref.collections(): conversations, memories, action_items, folders, goals,
-    # integrations, task_integrations, fcm_tokens, fair_use_*, hourly_usage, meetings,
-    # screen_activity, files, people, chat_sessions, messages, and any future additions).
-    logger.info(f"Deleting user document and subcollections: {uid}")
-    _store().delete_recursive(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    root_exists = user_ref.get().exists
+
+    # Enumerate subcollections live even when the root document is missing.
+    # Firestore permits immediate children to survive a parent deletion; an
+    # early "User not found" return would falsely mark the deletion complete.
+    # This picks up
+    # everything the user has written (conversations, memories, action_items,
+    # folders, goals, integrations, task_integrations, fcm_tokens, fair_use_*,
+    # hourly_usage, meetings, screen_activity, files, people, chat_sessions,
+    # messages, and any future additions).
+    for sub in user_ref.collections():
+        logger.info(f"Deleting subcollection {sub.id} for user {uid}")
+        delete_collection_recursive(sub, client=db)
+
+    if root_exists:
+        logger.info(f"Deleting user document: {uid}")
+        user_ref.delete()
     return {'status': 'ok', 'message': 'Account deleted successfully'}
 
 
@@ -1241,8 +1267,7 @@ def delete_user_data(uid: str):
 
 def set_conversation_summary_rating_score(uid: str, conversation_id: str, value: int):
     doc_id = document_id_from_seed('memory_summary' + conversation_id)
-    _store().set(
-        f'analytics/{doc_id}',
+    db.collection('analytics').document(doc_id).set(
         {
             'id': doc_id,
             'memory_id': conversation_id,
@@ -1250,20 +1275,21 @@ def set_conversation_summary_rating_score(uid: str, conversation_id: str, value:
             'value': value,
             'created_at': datetime.now(timezone.utc),
             'type': 'memory_summary',
-        },
+        }
     )
 
 
 def get_conversation_summary_rating_score(conversation_id: str):
     doc_id = document_id_from_seed('memory_summary' + conversation_id)
-    doc = _store().get(f'analytics/{doc_id}')
+    doc_ref = db.collection('analytics').document(doc_id)
+    doc = doc_ref.get()
     if doc.exists:
         return doc.to_dict()
     return None
 
 
 def get_all_ratings(rating_type: str = 'memory_summary'):
-    ratings = _store().query('analytics', filters=[('type', '==', rating_type)])
+    ratings = db.collection('analytics').where('type', '==', rating_type).stream()
     return [rating.to_dict() for rating in ratings]
 
 
@@ -1297,7 +1323,7 @@ def set_chat_message_rating_score(
         data['platform'] = platform
     if app_version:
         data['app_version'] = app_version
-    _store().set(f'analytics/{doc_id}', data)
+    db.collection('analytics').document(doc_id).set(data)
 
 
 # **************************************
@@ -1306,35 +1332,42 @@ def set_chat_message_rating_score(
 
 
 def get_stripe_connect_account_id(uid: str):
-    user_data = _store().get(f'users/{uid}').to_dict() or {}
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('stripe_account_id', None)
 
 
 def set_stripe_connect_account_id(uid: str, account_id: str):
-    _store().update(f'users/{uid}', {'stripe_account_id': account_id})
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'stripe_account_id': account_id})
 
 
 def set_paypal_payment_details(uid: str, data: dict):
-    _store().update(f'users/{uid}', {'paypal_details': data})
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'paypal_details': data})
 
 
 def get_paypal_payment_details(uid: str):
-    user_data = _store().get(f'users/{uid}').to_dict() or {}
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('paypal_details', None)
 
 
 def set_default_payment_method(uid: str, payment_method_id: str):
-    _store().update(f'users/{uid}', {'default_payment_method': payment_method_id})
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'default_payment_method': payment_method_id})
 
 
 def get_default_payment_method(uid: str):
-    user_data = _store().get(f'users/{uid}').to_dict() or {}
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('default_payment_method', None)
 
 
 def get_stripe_customer_id(uid: str) -> Optional[str]:
     """Get the Stripe customer ID for a user."""
-    user_doc = _store().get(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
     if user_doc.exists:
         user_data = user_doc.to_dict()
         return user_data.get('stripe_customer_id')
@@ -1342,11 +1375,14 @@ def get_stripe_customer_id(uid: str) -> Optional[str]:
 
 
 def set_stripe_customer_id(uid: str, customer_id: str):
-    _store().update(f'users/{uid}', {'stripe_customer_id': customer_id})
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'stripe_customer_id': customer_id})
 
 
 def get_user_by_stripe_customer_id(customer_id: str):
-    docs = _store().query('users', filters=[('stripe_customer_id', '==', customer_id)], limit=1)
+    users_ref = db.collection('users')
+    query = users_ref.where(filter=FieldFilter('stripe_customer_id', '==', customer_id)).limit(1)
+    docs = list(query.stream())
     if docs:
         user_dict = docs[0].to_dict()
         user_dict['uid'] = docs[0].id
@@ -1360,7 +1396,8 @@ def update_user_subscription(uid: str, subscription_data: dict):
     subscription_data_to_store.pop('features', None)
     subscription_data_to_store.pop('limits', None)
 
-    _store().update(f'users/{uid}', {'subscription': subscription_data_to_store})
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'subscription': subscription_data_to_store})
 
 
 # **************************************
@@ -1378,7 +1415,8 @@ def get_data_protection_level(uid: str) -> str:
     Returns:
         'enhanced' or 'e2ee'. Defaults to 'enhanced'.
     """
-    user_doc = _store().get(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
 
     if user_doc.exists:
         user_data = user_doc.to_dict()
@@ -1397,18 +1435,21 @@ def set_data_protection_level(uid: str, level: str) -> None:
     """
     if level not in ['enhanced', 'e2ee']:
         raise ValueError("Invalid data protection level. Only 'enhanced' or 'e2ee' are supported.")
-    _store().set(f'users/{uid}', {'data_protection_level': level}, merge=True)
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'data_protection_level': level}, merge=True)
 
 
 def set_migration_status(uid: str, target_level: str):
     """Sets the migration status on the user's profile."""
+    user_ref = db.collection('users').document(uid)
     migration_status = {'target_level': target_level, 'status': 'in_progress', 'started_at': datetime.now(timezone.utc)}
-    _store().set(f'users/{uid}', {'migration_status': migration_status}, merge=True)
+    user_ref.set({'migration_status': migration_status}, merge=True)
 
 
 def finalize_migration(uid: str, target_level: str):
     """Atomically sets the new protection level and removes the migration status field."""
-    _store().update(f'users/{uid}', {'data_protection_level': target_level, 'migration_status': DELETE})
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'data_protection_level': target_level, 'migration_status': firestore.DELETE_FIELD})
 
 
 # **************************************
@@ -1428,7 +1469,8 @@ def get_user_language_preference(uid: str) -> str:
     """
 
     def fetch_language():
-        user_doc = _store().get(f'users/{uid}', fields=['language'])
+        user_ref = db.collection('users').document(uid)
+        user_doc = user_ref.get(['language'])
 
         if user_doc.exists:
             user_data = user_doc.to_dict()
@@ -1457,14 +1499,16 @@ def set_user_language_preference(uid: str, language: str) -> None:
         uid: User ID
         language: Language code (e.g., 'en', 'vi')
     """
-    _store().set(f'users/{uid}', {'language': language}, merge=True)
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'language': language}, merge=True)
     invalidate(_USER_LANGUAGE_CACHE, uid)
     invalidate(_USER_TRANSCRIPTION_PREFS_CACHE, uid)
 
 
 def get_user_onboarding_state(uid: str) -> dict:
     """Get the user's onboarding state from Firestore."""
-    user_doc = _store().get(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
     if user_doc.exists:
         user_data = user_doc.to_dict()
         return user_data.get('onboarding', {})
@@ -1473,13 +1517,14 @@ def get_user_onboarding_state(uid: str) -> dict:
 
 def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:
     """Update the user's onboarding state in Firestore (merge with existing)."""
-    _store().set(f'users/{uid}', {'onboarding': onboarding_data}, merge=True)
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'onboarding': onboarding_data}, merge=True)
 
 
 def get_user_subscription(uid: str) -> Subscription:
     """Gets the user's subscription, creating a default free one if it doesn't exist."""
-    store = _store()
-    user_doc = store.get(f'users/{uid}', fields=['subscription'])
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get(['subscription'])
     if user_doc.exists:
         user_data = user_doc.to_dict()
         if 'subscription' in user_data:
@@ -1507,13 +1552,14 @@ def get_user_subscription(uid: str) -> Subscription:
     sub_to_store = default_subscription.model_dump()
     sub_to_store.pop('features', None)
     sub_to_store.pop('limits', None)
-    store.set(f'users/{uid}', {'subscription': sub_to_store}, merge=True)
+    user_ref.set({'subscription': sub_to_store}, merge=True)
     return default_subscription
 
 
 def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
     """Gets the user's stored subscription without creating a default record."""
-    user_doc = _store().get(f'users/{uid}', fields=['subscription'])
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get(['subscription'])
     if not user_doc.exists:
         return None
 
@@ -1536,13 +1582,17 @@ def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
 
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
     """Get user's training data opt-in status."""
-    user_data = _store().get(f'users/{uid}').to_dict() or {}
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('training_data_opt_in', None)
 
 
-def get_user_location_context_consent(uid: str) -> Optional[LocationContextConsent]:
+def get_user_location_context_consent(
+    uid: str, *, firestore_client: Any | None = None
+) -> Optional[LocationContextConsent]:
     """Read the uncached, server-owned city-context consent record fail-closed."""
-    snapshot = _store().get(f'users/{uid}', fields=['location_context_consent'])
+    client = firestore_client or get_firestore_client()
+    snapshot = client.collection('users').document(uid).get(['location_context_consent'])
     user_data = snapshot.to_dict() or {}
     if not isinstance(user_data, dict):
         return None
@@ -1561,6 +1611,7 @@ def set_user_location_context_consent(
     *,
     enabled: bool,
     now: datetime | None = None,
+    firestore_client: Any | None = None,
 ) -> LocationContextConsent:
     """Persist the only authority for city-context disclosure and revoke fail-closed."""
     current_time = now or datetime.now(timezone.utc)
@@ -1585,7 +1636,8 @@ def set_user_location_context_consent(
             revoked_at=current_time,
         )
 
-    _store().set(f'users/{uid}', {'location_context_consent': consent.model_dump()}, merge=True)
+    client = firestore_client or get_firestore_client()
+    client.collection('users').document(uid).set({'location_context_consent': consent.model_dump()}, merge=True)
     if not enabled:
         try:
             delete_cached_user_geolocation(uid)
@@ -1597,14 +1649,14 @@ def set_user_location_context_consent(
 
 def set_user_training_data_opt_in(uid: str, status: str):
     """Set user's training data opt-in status. Status can be: pending_review, approved, rejected"""
-    _store().update(
-        f'users/{uid}',
+    user_ref = db.collection('users').document(uid)
+    user_ref.update(
         {
             'training_data_opt_in': {
                 'status': status,
                 'requested_at': datetime.now(timezone.utc),
             }
-        },
+        }
     )
 
 
@@ -1651,8 +1703,11 @@ def get_task_integrations(uid: str) -> dict:
     Returns:
         Dictionary with app_key as keys and connection details as values
     """
+    user_ref = db.collection('users').document(uid)
+    integrations_ref = user_ref.collection('task_integrations')
+
     integrations = {}
-    for doc in _store().query(f'users/{uid}/task_integrations'):
+    for doc in integrations_ref.stream():
         integrations[doc.id] = doc.to_dict()
 
     return integrations
@@ -1669,7 +1724,9 @@ def get_task_integration(uid: str, app_key: str) -> Optional[dict]:
     Returns:
         Connection details or None if not found
     """
-    doc = _store().get(f'users/{uid}/task_integrations/{app_key}')
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('task_integrations').document(app_key)
+    doc = integration_ref.get()
 
     if doc.exists:
         return doc.to_dict()
@@ -1685,15 +1742,15 @@ def set_task_integration(uid: str, app_key: str, data: dict) -> None:
         app_key: Task integration app key (e.g., 'asana', 'todoist')
         data: Connection details to save
     """
-    store = _store()
-    path = f'users/{uid}/task_integrations/{app_key}'
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('task_integrations').document(app_key)
 
     # Add timestamp
     data['updated_at'] = datetime.now(timezone.utc)
-    if not store.exists(path):
+    if not integration_ref.get().exists:
         data['created_at'] = datetime.now(timezone.utc)
 
-    store.set(path, data, merge=True)
+    integration_ref.set(data, merge=True)
 
 
 def delete_task_integration(uid: str, app_key: str) -> bool:
@@ -1708,25 +1765,25 @@ def delete_task_integration(uid: str, app_key: str) -> bool:
     Returns:
         True if deleted, False if not found
     """
-    store = _store()
-    path = f'users/{uid}/task_integrations/{app_key}'
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('task_integrations').document(app_key)
 
-    if not store.exists(path):
+    if not integration_ref.get().exists:
         return False
 
     # Check if this is the default integration
-    user_doc = store.get(f'users/{uid}')
+    user_doc = user_ref.get()
     is_default = False
     if user_doc.exists:
         user_data = user_doc.to_dict()
         is_default = user_data.get('default_task_integration') == app_key
 
     # Delete integration
-    store.delete(path)
+    integration_ref.delete()
 
     # Clear default if needed
     if is_default:
-        store.update(f'users/{uid}', {'default_task_integration': DELETE})
+        user_ref.update({'default_task_integration': firestore.DELETE_FIELD})
 
     return True
 
@@ -1741,7 +1798,8 @@ def get_default_task_integration(uid: str) -> Optional[str]:
     Returns:
         App key of default integration or None
     """
-    user_doc = _store().get(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
 
     if user_doc.exists:
         user_data = user_doc.to_dict()
@@ -1758,7 +1816,8 @@ def set_default_task_integration(uid: str, app_key: str) -> None:
         uid: User ID
         app_key: Task integration app key to set as default
     """
-    _store().set(f'users/{uid}', {'default_task_integration': app_key}, merge=True)
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'default_task_integration': app_key}, merge=True)
 
 
 # **************************************
@@ -1777,7 +1836,9 @@ def get_integration(uid: str, app_key: str) -> Optional[dict]:
     Returns:
         Connection details or None if not found
     """
-    doc = _store().get(f'users/{uid}/integrations/{app_key}')
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('integrations').document(app_key)
+    doc = integration_ref.get()
 
     if doc.exists:
         return doc.to_dict()
@@ -1793,15 +1854,15 @@ def set_integration(uid: str, app_key: str, data: dict) -> None:
         app_key: Integration app key (e.g., 'google_calendar', 'whoop')
         data: Connection details to save
     """
-    store = _store()
-    path = f'users/{uid}/integrations/{app_key}'
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('integrations').document(app_key)
 
     # Add timestamp
     data['updated_at'] = datetime.now(timezone.utc)
-    if not store.exists(path):
+    if not integration_ref.get().exists:
         data['created_at'] = datetime.now(timezone.utc)
 
-    store.set(path, data, merge=True)
+    integration_ref.set(data, merge=True)
 
 
 def delete_integration(uid: str, app_key: str) -> bool:
@@ -1815,13 +1876,13 @@ def delete_integration(uid: str, app_key: str) -> bool:
     Returns:
         True if deleted, False if not found
     """
-    store = _store()
-    path = f'users/{uid}/integrations/{app_key}'
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('integrations').document(app_key)
 
-    if not store.exists(path):
+    if not integration_ref.get().exists:
         return False
 
-    store.delete(path)
+    integration_ref.delete()
     return True
 
 
@@ -1839,7 +1900,8 @@ def get_user_transcription_preferences(uid: str) -> dict:
     """
 
     def fetch_preferences():
-        user_doc = _store().get(f'users/{uid}', fields=['transcription_preferences', 'language'])
+        user_ref = db.collection('users').document(uid)
+        user_doc = user_ref.get(['transcription_preferences', 'language'])
 
         if user_doc.exists:
             user_data = user_doc.to_dict()
@@ -1872,23 +1934,14 @@ def get_agent_vm(uid: str) -> Optional[dict]:
     Returns:
         Dict with VM details (ip, auth_token, status, etc.) or None if no VM.
     """
-    user_doc = _store().get(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
 
     if user_doc.exists:
         user_data = user_doc.to_dict()
         return user_data.get('agentVm')
 
     return None
-
-
-def update_agent_vm(uid: str, update: dict) -> None:
-    """Apply a partial update to the user's agentVm fields (dotted-key update dict)."""
-    _store().update(f'users/{uid}', update)
-
-
-def clear_agent_vm(uid: str) -> None:
-    """Delete the user's agentVm record."""
-    _store().update(f'users/{uid}', {'agentVm': DELETE})
 
 
 def set_user_transcription_preferences(uid: str, single_language_mode: bool = None, vocabulary: list = None) -> None:
@@ -1900,6 +1953,7 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
         single_language_mode: If True, use exact language instead of multi-language detection
         vocabulary: List of custom keywords/terms for better transcription accuracy
     """
+    user_ref = db.collection('users').document(uid)
     update_data = {}
 
     if single_language_mode is not None:
@@ -1910,7 +1964,7 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
         update_data['transcription_preferences.vocabulary'] = vocabulary[:100]
 
     if update_data:
-        _store().update(f'users/{uid}', update_data)
+        user_ref.update(update_data)
         invalidate(_USER_TRANSCRIPTION_PREFS_CACHE, uid)
 
 
@@ -1928,9 +1982,10 @@ def set_user_custom_stt_usage(uid: str, uses_custom_stt: bool) -> None:
     Callers should only invoke this when the value actually changes, so the
     `_since` timestamp is not overwritten on every session and writes stay rare.
     """
+    user_ref = db.collection('users').document(uid)
     update_data = {'transcription_preferences.uses_custom_stt': uses_custom_stt}
     update_data['transcription_preferences.custom_stt_since'] = datetime.now(timezone.utc) if uses_custom_stt else None
-    _store().update(f'users/{uid}', update_data)
+    user_ref.update(update_data)
     invalidate(_USER_TRANSCRIPTION_PREFS_CACHE, uid)
 
 
@@ -1948,7 +2003,8 @@ def get_notification_settings(uid: str) -> dict:
     """
     # Proactive desktop notifications are OFF by default (frequency 0). Users opt in
     # via the Settings frequency slider; an explicit stored value always wins.
-    doc = _store().get(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    doc = user_ref.get()
     if not doc.exists:
         return {'enabled': True, 'frequency': 0}
     data = doc.to_dict()
@@ -1959,19 +2015,21 @@ def get_notification_settings(uid: str) -> dict:
 
 
 def update_notification_settings(uid: str, enabled: bool = None, frequency: int = None) -> dict:
+    user_ref = db.collection('users').document(uid)
     updates = {}
     if enabled is not None:
         updates['notifications_enabled'] = enabled
     if frequency is not None:
         updates['notification_frequency'] = frequency
     if updates:
-        _store().update(f'users/{uid}', updates)
+        user_ref.update(updates)
     return get_notification_settings(uid)
 
 
 def _get_raw_assistant_settings(uid: str) -> dict:
     """Read only the assistant_settings sub-map (without update_channel injection)."""
-    doc = _store().get(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    doc = user_ref.get()
     if not doc.exists:
         return {}
     return doc.to_dict().get('assistant_settings') or {}
@@ -1983,7 +2041,8 @@ def get_assistant_settings(uid: str) -> dict:
     Injects top-level ``update_channel`` into the response dict (it lives
     outside ``assistant_settings`` in Firestore but the API returns it together).
     """
-    doc = _store().get(f'users/{uid}')
+    user_ref = db.collection('users').document(uid)
+    doc = user_ref.get()
     if not doc.exists:
         return {}
     data = doc.to_dict()
@@ -2014,10 +2073,11 @@ def update_assistant_settings(uid: str, settings: dict) -> dict:
         else:
             existing[section] = values
 
+    user_ref = db.collection('users').document(uid)
     updates = {'assistant_settings': existing}
     if update_channel is not None:
         updates['update_channel'] = update_channel
-    _store().update(f'users/{uid}', updates)
+    user_ref.update(updates)
 
     # Build response (include update_channel for the caller)
     if update_channel is not None:
@@ -2026,7 +2086,8 @@ def update_assistant_settings(uid: str, settings: dict) -> dict:
 
 
 def _get_ai_user_profile_from_firestore(uid: str) -> Optional[dict]:
-    doc = _store().get(f'users/{uid}', fields=['ai_user_profile'])
+    user_ref = db.collection('users').document(uid)
+    doc = user_ref.get(['ai_user_profile'])
     if not doc.exists:
         return None
     return doc.to_dict().get('ai_user_profile')
@@ -2053,6 +2114,7 @@ def update_ai_user_profile(
         existing['generated_at'] = generated_at
     if data_sources_used is not None:
         existing['data_sources_used'] = data_sources_used
-    _store().update(f'users/{uid}', {'ai_user_profile': existing})
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'ai_user_profile': existing})
     invalidate(_USER_AI_PROFILE_CACHE, uid)
     return existing

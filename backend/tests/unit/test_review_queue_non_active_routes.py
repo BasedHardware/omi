@@ -17,7 +17,6 @@ import pytest
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 from database.memory_non_active_routes import NonActiveRoute
-from tests.store_fakes import FakeDocumentStore
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -26,6 +25,7 @@ _BACKEND = Path(__file__).resolve().parents[2]
 def review_queue():
     """Load a fresh database.review_queue against no-op sibling submodule fakes."""
     fakes = {
+        "database._client": AutoMockModule("database._client"),
         "database.memories": AutoMockModule("database.memories"),
         "database.memory_ledger": AutoMockModule("database.memory_ledger"),
         "database.short_term_memories": AutoMockModule("database.short_term_memories"),
@@ -36,6 +36,38 @@ def review_queue():
             os.path.join(str(_BACKEND), "database", "review_queue.py"),
         )
         yield module
+
+
+class _Doc:
+    def __init__(self):
+        self.updates = []
+
+    def update(self, data):
+        self.updates.append(data)
+
+
+class _Collection:
+    def __init__(self, doc):
+        self._doc = doc
+
+    def document(self, doc_id):
+        return self._doc
+
+
+class _UserDoc:
+    def __init__(self, doc):
+        self._doc = doc
+
+    def collection(self, name):
+        return _Collection(self._doc)
+
+
+class _Db:
+    def __init__(self, doc):
+        self._doc = doc
+
+    def collection(self, name):
+        return _Collection(_UserDoc(self._doc))
 
 
 def _item(**overrides):
@@ -55,16 +87,13 @@ def _item(**overrides):
 
 def test_review_queue_reject_persists_non_active_route_store_outcome(review_queue, monkeypatch):
     captured = []
+    doc = _Doc()
 
     def fake_persist(outcome):
         captured.append(outcome)
         return outcome
 
-    # The review-queue doc exists in production (resolve_review_conflict returns not_found
-    # otherwise), so seed it: update() requires an existing doc on every backend.
-    store = FakeDocumentStore()
-    store.set("users/u1/memory_review_queue/review_1", _item())
-    monkeypatch.setattr(review_queue, "_store", lambda: store)
+    monkeypatch.setattr(review_queue, "db", _Db(doc))
     monkeypatch.setattr(review_queue, "get_review_conflict", lambda uid, review_id: _item())
     monkeypatch.setattr(
         review_queue,
@@ -94,11 +123,10 @@ def test_review_queue_reject_persists_non_active_route_store_outcome(review_queu
 
 def test_review_queue_timeout_drop_persists_skip_route_without_memory_commit(review_queue, monkeypatch):
     captured = []
+    doc = _Doc()
     append_mock = MagicMock(return_value=None)
 
-    store = FakeDocumentStore()
-    store.set("users/u1/memory_review_queue/review_1", _item(veracity=0.1))
-    monkeypatch.setattr(review_queue, "_store", lambda: store)
+    monkeypatch.setattr(review_queue, "db", _Db(doc))
     monkeypatch.setattr(review_queue, "get_review_conflict", lambda uid, review_id: _item(veracity=0.1))
     monkeypatch.setattr(review_queue, "append_resolution_commit", append_mock)
     monkeypatch.setattr(

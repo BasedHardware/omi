@@ -10,11 +10,11 @@ fields the model marks required (``title``, ``created_at``, ``message_count``,
 """
 
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 from database import chat as chat_db
 from database.chat import _normalize_chat_session, get_chat_session_by_id
 from models.chat_session import ChatSessionResponse
-from tests.store_fakes import FakeDocumentStore
 
 
 def test_normalize_none_passthrough():
@@ -52,10 +52,25 @@ def test_normalize_fills_missing_timestamps_with_utc_now():
 def test_get_chat_session_by_id_injects_document_id(monkeypatch):
     session_id = 'doc-key-123'
     now = datetime.now(timezone.utc)
-    # Stored doc lacks 'id' — the read must inject the document key so the response validates.
-    store = FakeDocumentStore()
-    store.set(f'users/uid-1/chat_sessions/{session_id}', {'updated_at': now, 'plugin_id': None})
-    monkeypatch.setattr(chat_db, '_store', lambda: store)
+    session_data = {'updated_at': now, 'plugin_id': None}
+
+    mock_doc = MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = session_data
+
+    mock_session_ref = MagicMock()
+    mock_session_ref.get.return_value = mock_doc
+
+    mock_sessions_col = MagicMock()
+    mock_sessions_col.document.return_value = mock_session_ref
+
+    mock_user_ref = MagicMock()
+    mock_user_ref.collection.return_value = mock_sessions_col
+
+    mock_users_col = MagicMock()
+    mock_users_col.document.return_value = mock_user_ref
+
+    monkeypatch.setattr(chat_db, 'db', MagicMock(collection=MagicMock(return_value=mock_users_col)))
 
     result = get_chat_session_by_id('uid-1', session_id)
 

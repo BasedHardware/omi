@@ -26,7 +26,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from database import conversation_finalization_jobs as jobs_db
-from database._client import get_firestore_client
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from utils.conversations import lifecycle as lifecycle_service
 from firebase_admin import firestore
@@ -41,9 +40,7 @@ pytestmark = pytest.mark.skipif(not _EMULATOR, reason='requires FIRESTORE_EMULAT
 
 
 def _client():
-    # The migrated module reaches the emulator through the storage port; direct
-    # setup/cleanup here uses the same underlying Firestore client the port wraps.
-    return get_firestore_client()
+    return jobs_db._client(None)
 
 
 def _cleanup_cursor():

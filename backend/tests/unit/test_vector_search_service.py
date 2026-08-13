@@ -9,48 +9,6 @@ from database.memory_vector_repair_outbox import (
 )
 from utils.memory.vector_search_service import fetch_default_vector_memory_search
 from utils.memory.vector_search_telemetry import VectorSearchTelemetryConfig
-from database import document_store
-from tests.store_fakes import FakeDocumentStore
-
-
-class _RecordingDocumentStore(FakeDocumentStore):
-    """FakeDocumentStore that records per-path reads/collection scans for behavioral assertions.
-
-    After the D1 migration (ADR-0022) ``document_store`` hydrates through ``get_document_store()``
-    (the ``_store`` seam) rather than the injected Firestore-shaped fake, so the fake's
-    ``document_paths``/``collection_paths`` counters no longer observe hydration. This records the
-    reads that ``document_store`` actually performs so the tests keep their read-order/read-budget
-    intent, while ``backing`` shares the injected fake's ``.docs`` dict so seeded data is visible.
-    """
-
-    def __init__(self, *, backing, reads, scans):
-        super().__init__(backing=backing)
-        self._reads = reads
-        self._scans = scans
-
-    def get(self, path, *, fields=None):
-        self._reads.append(path)
-        return super().get(path, fields=fields)
-
-    def query(self, collection, **kwargs):
-        self._scans.append(collection)
-        return super().query(collection, **kwargs)
-
-
-def _patch_document_store(monkeypatch, db_client):
-    """Route ``document_store`` reads/writes to a store sharing ``db_client.docs``; return trackers.
-
-    Returns ``(reads, scans)`` lists that accumulate the document paths hydrated and collection
-    paths scanned across the whole call, since ``document_store._store()`` is invoked per operation.
-    """
-    reads: list = []
-    scans: list = []
-    monkeypatch.setattr(
-        document_store,
-        '_store',
-        lambda: _RecordingDocumentStore(backing=db_client.docs, reads=reads, scans=scans),
-    )
-    return reads, scans
 
 
 class _Snapshot:
@@ -179,9 +137,7 @@ def _hit(item, *, score, projection_commit_id=None, vector_id=None, **overrides)
     return SearchVectorHit(**data)
 
 
-def test_default_memory_vector_search_hydrates_authoritative_items_and_filters_stale_short_term_and_archive(
-    monkeypatch,
-):
+def test_default_memory_vector_search_hydrates_authoritative_items_and_filters_stale_short_term_and_archive():
     now = datetime.now(timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -204,7 +160,6 @@ def test_default_memory_vector_search_hydrates_authoritative_items_and_filters_s
             for item in [fresh_short_term, stale_short_term, long_term, archive]
         }
     )
-    reads, scans = _patch_document_store(monkeypatch, db_client)
     vector_calls = []
 
     def fake_vector_query(uid, query, *, mode, limit):
@@ -214,6 +169,7 @@ def test_default_memory_vector_search_hydrates_authoritative_items_and_filters_s
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=10,
@@ -222,8 +178,8 @@ def test_default_memory_vector_search_hydrates_authoritative_items_and_filters_s
     )
 
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
-    assert scans == []
-    assert set(reads) == {
+    assert db_client.collection_paths == []
+    assert set(db_client.document_paths) == {
         'users/u1/memory_items/stale-short-term',
         'users/u1/memory_items/archive',
         'users/u1/memory_items/long-term',
@@ -249,6 +205,7 @@ def test_default_memory_vector_search_rejects_missing_freshness_fence_before_vec
         fetch_default_vector_memory_search(
             uid='u1',
             query='coffee',
+            db_client=_FirestoreFake(),
             policy=MemoryAccessPolicy.for_omi_chat(),
             vector_query=fake_vector_query,
             repair_purge_callback=lambda candidates: repair_batches.append(candidates),
@@ -265,11 +222,10 @@ def test_default_memory_vector_search_rejects_missing_freshness_fence_before_vec
     assert repair_batches == []
 
 
-def test_default_memory_vector_search_rejects_hits_missing_mandatory_freshness_fence_fields(monkeypatch):
+def test_default_memory_vector_search_rejects_hits_missing_mandatory_freshness_fence_fields():
     now = datetime.now(timezone.utc)
     item = _memory_item('missing-fence-fields', tier=MemoryTier.long_term, now=now)
     db_client = _FirestoreFake({f'users/u1/memory_items/{item.memory_id}': _stored_item(item)})
-    _patch_document_store(monkeypatch, db_client)
 
     def fake_vector_query(uid, query, *, mode, limit):
         return _VectorCandidateResult(
@@ -287,6 +243,7 @@ def test_default_memory_vector_search_rejects_hits_missing_mandatory_freshness_f
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=5,
@@ -298,15 +255,12 @@ def test_default_memory_vector_search_rejects_hits_missing_mandatory_freshness_f
     assert response['decisions'] == {'missing-fence-fields': 'stale_vector'}
 
 
-def test_default_memory_vector_search_rejects_vectors_from_purged_account_generation_even_when_item_matches_hit(
-    monkeypatch,
-):
+def test_default_memory_vector_search_rejects_vectors_from_purged_account_generation_even_when_item_matches_hit():
     now = datetime.now(timezone.utc)
     stale_generation_item = _memory_item('stale-generation', tier=MemoryTier.long_term, now=now, account_generation=2)
     db_client = _FirestoreFake(
         {f'users/u1/memory_items/{stale_generation_item.memory_id}': _stored_item(stale_generation_item)}
     )
-    _patch_document_store(monkeypatch, db_client)
 
     def fake_vector_query(uid, query, *, mode, limit):
         return _VectorCandidateResult(hits=[_hit(stale_generation_item, score=0.99)], rejected_count=0)
@@ -314,6 +268,7 @@ def test_default_memory_vector_search_rejects_vectors_from_purged_account_genera
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=5,
@@ -325,7 +280,7 @@ def test_default_memory_vector_search_rejects_vectors_from_purged_account_genera
     assert response['decisions'] == {'stale-generation': 'stale_vector'}
 
 
-def test_default_memory_vector_search_dispatches_repair_purge_candidates_for_hydration_rejects(monkeypatch):
+def test_default_memory_vector_search_dispatches_repair_purge_candidates_for_hydration_rejects():
     now = datetime.now(timezone.utc)
     missing_authoritative = _memory_item('missing-authoritative', tier=MemoryTier.long_term, now=now)
     stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
@@ -338,7 +293,6 @@ def test_default_memory_vector_search_dispatches_repair_purge_candidates_for_hyd
             for item in [stale_projection, missing_metadata, old_generation, valid]
         }
     )
-    _patch_document_store(monkeypatch, db_client)
     repair_batches = []
 
     def fake_vector_query(uid, query, *, mode, limit):
@@ -361,6 +315,7 @@ def test_default_memory_vector_search_dispatches_repair_purge_candidates_for_hyd
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         repair_purge_callback=lambda candidates: repair_batches.append(candidates),
@@ -383,14 +338,13 @@ def test_default_memory_vector_search_dispatches_repair_purge_candidates_for_hyd
     assert 'valid' not in {candidate['memory_id'] for candidate in repair_batches[0]}
 
 
-def test_default_memory_vector_search_writes_deterministic_repair_purge_outbox_records_once(monkeypatch):
+def test_default_memory_vector_search_writes_deterministic_repair_purge_outbox_records_once():
     now = datetime.now(timezone.utc)
     stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
     valid = _memory_item('valid', tier=MemoryTier.long_term, now=now)
     db_client = _FirestoreFake(
         {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [stale_projection, valid]}
     )
-    _patch_document_store(monkeypatch, db_client)
     writer_batches = []
 
     def fake_vector_query(uid, query, *, mode, limit):
@@ -410,6 +364,7 @@ def test_default_memory_vector_search_writes_deterministic_repair_purge_outbox_r
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         repair_purge_outbox_writer=lambda records: writer_batches.append(records),
@@ -440,7 +395,7 @@ def test_default_memory_vector_search_writes_deterministic_repair_purge_outbox_r
     assert [record['record_id'] for record in rebuilt] == [record['record_id']]
 
 
-def test_memory_vector_repair_purge_outbox_persistence_sets_stable_user_outbox_path_idempotently(monkeypatch):
+def test_memory_vector_repair_purge_outbox_persistence_sets_stable_user_outbox_path_idempotently():
     candidate = {
         'vector_id': 'memvec:stale-projection',
         'memory_id': 'stale-projection',
@@ -450,30 +405,26 @@ def test_memory_vector_repair_purge_outbox_persistence_sets_stable_user_outbox_p
         'required_account_generation': 3,
     }
     records = build_vector_repair_purge_outbox_records(uid='u1', candidates=[candidate])
+    db_client = _FirestoreFake()
 
-    import database.memory_vector_repair_outbox as outbox_mod
-    docs: dict = {}
-    monkeypatch.setattr(outbox_mod, '_store', lambda: FakeDocumentStore(backing=docs))
-
-    first_write = write_vector_repair_purge_outbox_records(records=records)
-    second_write = write_vector_repair_purge_outbox_records(records=records)
+    first_write = write_vector_repair_purge_outbox_records(db_client=db_client, records=records)
+    second_write = write_vector_repair_purge_outbox_records(db_client=db_client, records=records)
 
     record = records[0]
     expected_path = f"users/u1/memory_outbox/{record['record_id']}"
     assert first_write == records
     assert second_write == records
     assert record['outbox_path'] == expected_path
-    # idempotent: both writes resolve to the same single stable path
-    assert list(docs.keys()) == [expected_path]
-    assert docs[expected_path]['record_id'] == record['record_id']
-    assert docs[expected_path]['idempotency_key'] == record['record_id']
+    assert db_client.document_paths == [expected_path, expected_path]
+    assert db_client.set_paths == [expected_path, expected_path]
+    assert db_client.docs[expected_path]['record_id'] == record['record_id']
+    assert db_client.docs[expected_path]['idempotency_key'] == record['record_id']
 
 
-def test_default_memory_vector_search_does_not_write_outbox_for_no_candidates_or_missing_fence(monkeypatch):
+def test_default_memory_vector_search_does_not_write_outbox_for_no_candidates_or_missing_fence():
     now = datetime.now(timezone.utc)
     valid = _memory_item('valid', tier=MemoryTier.long_term, now=now)
     db_client = _FirestoreFake({f'users/u1/memory_items/{valid.memory_id}': _stored_item(valid)})
-    _patch_document_store(monkeypatch, db_client)
     writer_batches = []
     vector_calls = []
 
@@ -484,6 +435,7 @@ def test_default_memory_vector_search_does_not_write_outbox_for_no_candidates_or
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         repair_purge_outbox_writer=lambda records: writer_batches.append(records),
@@ -501,6 +453,7 @@ def test_default_memory_vector_search_does_not_write_outbox_for_no_candidates_or
         fetch_default_vector_memory_search(
             uid='u1',
             query='coffee',
+            db_client=db_client,
             policy=MemoryAccessPolicy.for_omi_chat(),
             vector_query=fake_vector_query,
             repair_purge_outbox_writer=lambda records: writer_batches.append(records),
@@ -517,7 +470,7 @@ def test_default_memory_vector_search_does_not_write_outbox_for_no_candidates_or
     assert writer_batches == []
 
 
-def test_default_memory_vector_search_preserves_vector_ranking_after_authoritative_filtering(monkeypatch):
+def test_default_memory_vector_search_preserves_vector_ranking_after_authoritative_filtering():
     now = datetime.now(timezone.utc)
     lower_updated_newer = _memory_item('newer-lower-score', tier=MemoryTier.long_term, now=now, updated_at=now)
     higher_score_older = _memory_item(
@@ -533,7 +486,6 @@ def test_default_memory_vector_search_preserves_vector_ranking_after_authoritati
             for item in [lower_updated_newer, higher_score_older]
         }
     )
-    _patch_document_store(monkeypatch, db_client)
 
     def fake_vector_query(uid, query, *, mode, limit):
         return _VectorCandidateResult(
@@ -543,6 +495,7 @@ def test_default_memory_vector_search_preserves_vector_ranking_after_authoritati
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=5,
@@ -553,7 +506,7 @@ def test_default_memory_vector_search_preserves_vector_ranking_after_authoritati
     assert [item['memory_id'] for item in response['items']] == ['older-higher-score', 'newer-lower-score']
 
 
-def test_default_memory_vector_search_overfetches_and_refills_when_early_candidates_are_rejected(monkeypatch):
+def test_default_memory_vector_search_overfetches_and_refills_when_early_candidates_are_rejected():
     now = datetime.now(timezone.utc)
     stale_short_term = _memory_item(
         'stale-short-term',
@@ -580,7 +533,6 @@ def test_default_memory_vector_search_overfetches_and_refills_when_early_candida
             for item in [stale_short_term, archive, valid_one, valid_two, valid_three]
         }
     )
-    reads, scans = _patch_document_store(monkeypatch, db_client)
     vector_limits = []
 
     def fake_vector_query(uid, query, *, mode, limit):
@@ -590,6 +542,7 @@ def test_default_memory_vector_search_overfetches_and_refills_when_early_candida
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=3,
@@ -610,7 +563,7 @@ def test_default_memory_vector_search_overfetches_and_refills_when_early_candida
     assert response['hydration_rejected_missing_count'] == 1
     assert response['hydration_rejected_access_denied_count'] == 2
     assert response['returned_count'] == 3
-    assert set(reads) == {
+    assert set(db_client.document_paths) == {
         'users/u1/memory_items/stale-short-term',
         'users/u1/memory_items/archive',
         'users/u1/memory_items/missing-authoritative',
@@ -618,10 +571,10 @@ def test_default_memory_vector_search_overfetches_and_refills_when_early_candida
         'users/u1/memory_items/valid-two',
         'users/u1/memory_items/valid-three',
     }
-    assert scans == []
+    assert db_client.collection_paths == []
 
 
-def test_default_memory_vector_search_stops_at_candidate_budget_without_unbounded_refill_or_reads(monkeypatch):
+def test_default_memory_vector_search_stops_at_candidate_budget_without_unbounded_refill_or_reads():
     now = datetime.now(timezone.utc)
     stale_short_term = _memory_item(
         'stale-short-term',
@@ -644,7 +597,6 @@ def test_default_memory_vector_search_stops_at_candidate_budget_without_unbounde
             for item in [stale_short_term, archive, valid_one, valid_two]
         }
     )
-    reads, scans = _patch_document_store(monkeypatch, db_client)
     vector_limits = []
 
     def fake_vector_query(uid, query, *, mode, limit):
@@ -654,6 +606,7 @@ def test_default_memory_vector_search_stops_at_candidate_budget_without_unbounde
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=3,
@@ -670,11 +623,11 @@ def test_default_memory_vector_search_stops_at_candidate_budget_without_unbounde
     assert response['candidate_budget'] == 4
     assert response['candidate_request_limit'] == 4
     assert response['queried_candidate_count'] == 4
-    assert len(reads) == 4
-    assert scans == []
+    assert len(db_client.document_paths) == 4
+    assert db_client.collection_paths == []
 
 
-def test_default_memory_vector_search_emits_low_cardinality_telemetry_without_identifiers(monkeypatch):
+def test_default_memory_vector_search_emits_low_cardinality_telemetry_without_identifiers():
     now = datetime.now(timezone.utc)
     stale_short_term = _memory_item('stale-short-term', now=now, captured_at=now - timedelta(days=45))
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now)
@@ -682,7 +635,6 @@ def test_default_memory_vector_search_emits_low_cardinality_telemetry_without_id
     db_client = _FirestoreFake(
         {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [stale_short_term, archive, valid]}
     )
-    _patch_document_store(monkeypatch, db_client)
     emitted = []
 
     def fake_vector_query(uid, query, *, mode, limit):
@@ -698,6 +650,7 @@ def test_default_memory_vector_search_emits_low_cardinality_telemetry_without_id
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee raw query text',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         telemetry_emitter=lambda payload: emitted.append(payload),
@@ -734,11 +687,10 @@ def test_default_memory_vector_search_emits_low_cardinality_telemetry_without_id
         )
 
 
-def test_default_memory_vector_search_telemetry_failure_is_recorded_without_masking_results(monkeypatch):
+def test_default_memory_vector_search_telemetry_failure_is_recorded_without_masking_results():
     now = datetime.now(timezone.utc)
     valid = _memory_item('valid', tier=MemoryTier.long_term, now=now)
     db_client = _FirestoreFake({f'users/u1/memory_items/{valid.memory_id}': _stored_item(valid)})
-    _patch_document_store(monkeypatch, db_client)
 
     def fake_vector_query(uid, query, *, mode, limit):
         return _VectorCandidateResult(hits=[_hit(valid, score=0.95, vector_id='memvec:valid')], rejected_count=0)
@@ -749,6 +701,7 @@ def test_default_memory_vector_search_telemetry_failure_is_recorded_without_mask
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         telemetry_emitter=failing_emitter,
@@ -769,7 +722,7 @@ def test_default_memory_vector_search_telemetry_failure_is_recorded_without_mask
     }
 
 
-def test_default_memory_vector_search_stops_refill_at_vector_query_budget_and_returns_validated_results(monkeypatch):
+def test_default_memory_vector_search_stops_refill_at_vector_query_budget_and_returns_validated_results():
     now = datetime.now(timezone.utc)
     stale_short_term = _memory_item('stale-short-term', now=now, captured_at=now - timedelta(days=45))
     valid_one = _memory_item('valid-one', tier=MemoryTier.long_term, now=now)
@@ -785,7 +738,6 @@ def test_default_memory_vector_search_stops_refill_at_vector_query_budget_and_re
             for item in [stale_short_term, valid_one, valid_two]
         }
     )
-    _patch_document_store(monkeypatch, db_client)
     vector_limits = []
 
     def fake_vector_query(uid, query, *, mode, limit):
@@ -795,6 +747,7 @@ def test_default_memory_vector_search_stops_refill_at_vector_query_budget_and_re
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=2,
@@ -816,7 +769,7 @@ def test_default_memory_vector_search_stops_refill_at_vector_query_budget_and_re
     assert response['archive_default_visible'] is False
 
 
-def test_default_memory_vector_search_stops_hydration_at_read_budget_without_unbounded_firestore_reads(monkeypatch):
+def test_default_memory_vector_search_stops_hydration_at_read_budget_without_unbounded_firestore_reads():
     now = datetime.now(timezone.utc)
     valid_one = _memory_item('valid-one', tier=MemoryTier.long_term, now=now)
     valid_two = _memory_item('valid-two', tier=MemoryTier.long_term, now=now)
@@ -824,7 +777,6 @@ def test_default_memory_vector_search_stops_hydration_at_read_budget_without_unb
     db_client = _FirestoreFake(
         {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [valid_one, valid_two, valid_three]}
     )
-    reads, scans = _patch_document_store(monkeypatch, db_client)
 
     def fake_vector_query(uid, query, *, mode, limit):
         return _VectorCandidateResult(
@@ -839,6 +791,7 @@ def test_default_memory_vector_search_stops_hydration_at_read_budget_without_unb
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=3,
@@ -849,7 +802,7 @@ def test_default_memory_vector_search_stops_hydration_at_read_budget_without_unb
         required_account_generation=0,
     )
 
-    assert reads == ['users/u1/memory_items/valid-one', 'users/u1/memory_items/valid-two']
+    assert db_client.document_paths == ['users/u1/memory_items/valid-one', 'users/u1/memory_items/valid-two']
     assert [item['memory_id'] for item in response['items']] == ['valid-one', 'valid-two']
     assert response['hydrated_candidate_count'] == 2
     assert response['candidate_hydration_read_count'] == 2
@@ -874,6 +827,7 @@ def test_default_memory_vector_search_uses_injected_clock_to_timeout_before_vect
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
+        db_client=_FirestoreFake(),
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         timeout_seconds=0.1,
@@ -899,6 +853,7 @@ def test_default_memory_vector_search_telemetry_includes_bounded_timeout_and_bud
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee raw query text',
+        db_client=_FirestoreFake(),
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(hits=[], rejected_count=0),
         telemetry_emitter=lambda payload: emitted.append(payload),

@@ -10,7 +10,19 @@ logger = logging.getLogger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def _get_user_profile_for_data_protection(uid: str) -> Dict[str, Any]:
+def _typed_doc(raw: object) -> Dict[str, Any]:
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
+def _get_user_profile_for_data_protection(uid: str, firestore_client: Any = None) -> Dict[str, Any]:
+    if firestore_client is not None:
+        user_ref = firestore_client.collection('users').document(uid)
+        user_doc = user_ref.get()
+        if getattr(user_doc, "exists", False):
+            raw: object = user_doc.to_dict()
+            return _typed_doc(raw)
+        return {}
+
     return users_db.get_user_profile(uid)
 
 
@@ -68,13 +80,17 @@ def set_data_protection_level(data_arg_name: str) -> Callable[[F], F]:
             if not needs_backfill:
                 return func(*args, **kwargs)
 
-            level: Optional[str] = redis_db.get_user_data_protection_level(uid)
+            firestore_client = bound_args.arguments.get('firestore_client')
+            level: Optional[str] = (
+                None if firestore_client is not None else redis_db.get_user_data_protection_level(uid)
+            )
 
             if not level:
                 try:
-                    user_profile = _get_user_profile_for_data_protection(uid)
+                    user_profile = _get_user_profile_for_data_protection(uid, firestore_client=firestore_client)
                     level = user_profile.get('data_protection_level', 'enhanced') if user_profile else 'enhanced'
-                    redis_db.set_user_data_protection_level(uid, level)
+                    if firestore_client is None:
+                        redis_db.set_user_data_protection_level(uid, level)
                 except Exception as e:
                     logger.error(f"Failed to get user profile for {uid}: {e}")
                     level = 'enhanced'

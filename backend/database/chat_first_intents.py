@@ -5,9 +5,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 
-from config.canonical_memory_cohort import is_canonical_memory_user
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
+
+from database._client import get_firestore_client
+from database.firestore_index_registry import CHAT_FIRST_DEFERRALS_DUE_QUERY, CHAT_FIRST_DEFERRALS_SUBJECT_QUERY
 from database.read_boundary import MalformedDocError, parse_snapshot_strict
-from database.store import Filter, get_document_store
 from models.chat_first import (
     ChatFirstBlockSpec,
     ChatFirstSubject,
@@ -26,8 +29,6 @@ INTENTS_COLLECTION = 'chat_first_proactive_intents'
 DEFERRALS_COLLECTION = 'chat_first_deferrals'
 STATE_COLLECTION = 'chat_first_proactive_state'
 BUDGET_DOCUMENT = 'budget'
-TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
-TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 _DEFERRAL_DUE_AFTER = timedelta(hours=24)
 
 
@@ -65,32 +66,28 @@ class AgentJudgmentAdmission:
     newly_reserved: bool
 
 
-def _store():
-    return get_document_store()
+def _db(firestore_client: Any = None) -> Any:
+    return firestore_client or get_firestore_client()
 
 
-def _control_path(uid: str) -> str:
-    return f'users/{uid}/{TASK_INTELLIGENCE_CONTROL_COLLECTION}/{TASK_INTELLIGENCE_CONTROL_DOCUMENT}'
+def _user_ref(uid: str, *, firestore_client: Any = None):
+    return _db(firestore_client).collection('users').document(uid)
 
 
-def _intents_collection_path(uid: str) -> str:
-    return f'users/{uid}/{INTENTS_COLLECTION}'
+def _control_ref(uid: str, *, firestore_client: Any = None):
+    return _user_ref(uid, firestore_client=firestore_client).collection('task_intelligence_control').document('state')
 
 
-def _intent_path(uid: str, intent_id: str) -> str:
-    return f'users/{uid}/{INTENTS_COLLECTION}/{intent_id}'
+def _intent_ref(uid: str, intent_id: str, *, firestore_client: Any = None):
+    return _user_ref(uid, firestore_client=firestore_client).collection(INTENTS_COLLECTION).document(intent_id)
 
 
-def _deferrals_collection_path(uid: str) -> str:
-    return f'users/{uid}/{DEFERRALS_COLLECTION}'
+def _deferral_ref(uid: str, deferral_id: str, *, firestore_client: Any = None):
+    return _user_ref(uid, firestore_client=firestore_client).collection(DEFERRALS_COLLECTION).document(deferral_id)
 
 
-def _deferral_path(uid: str, deferral_id: str) -> str:
-    return f'users/{uid}/{DEFERRALS_COLLECTION}/{deferral_id}'
-
-
-def _budget_path(uid: str) -> str:
-    return f'users/{uid}/{STATE_COLLECTION}/{BUDGET_DOCUMENT}'
+def _budget_ref(uid: str, *, firestore_client: Any = None):
+    return _user_ref(uid, firestore_client=firestore_client).collection(STATE_COLLECTION).document(BUDGET_DOCUMENT)
 
 
 def _stable_id(prefix: str, *parts: object) -> str:
@@ -117,8 +114,6 @@ def proactive_deferral_id(uid: str, *, account_generation: int, continuity_key: 
 
 
 def _require_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
-    if not is_canonical_memory_user(uid):
-        raise ChatFirstIntentGenerationMismatch('chat-first capability changed')
     control = TaskWorkflowControl()
     if snapshot.exists:
         try:
@@ -159,11 +154,11 @@ def _deferral_from_snapshot(snapshot: Any) -> ProactiveDeferral:
         raise ChatFirstIntentGenerationMismatch('chat-first deferral is malformed') from error
 
 
-def _require_current_control(uid: str, *, account_generation: int) -> None:
+def _require_current_control(uid: str, *, account_generation: int, firestore_client: Any) -> None:
     """Fence read-only entry points before they inspect feature-specific rows."""
 
     _require_control(
-        _store().get(_control_path(uid)),
+        _control_ref(uid, firestore_client=firestore_client).get(),
         uid=uid,
         account_generation=account_generation,
     )
@@ -178,11 +173,13 @@ def get_budget_state(
     *,
     account_generation: int,
     now: datetime,
+    firestore_client: Any = None,
 ) -> ProactiveBudgetState:
-    """Read bounded accounting only after the caller passed cohort eligibility."""
+    """Read bounded accounting after the caller passed generation validation."""
 
-    _require_current_control(uid, account_generation=account_generation)
-    snapshot = _store().get(_budget_path(uid))
+    client = _db(firestore_client)
+    _require_current_control(uid, account_generation=account_generation, firestore_client=client)
+    snapshot = _budget_ref(uid, firestore_client=client).get()
     return _budget_from_snapshot(snapshot, account_generation=account_generation, now=now)
 
 
@@ -193,6 +190,7 @@ def admit_agent_judgment(
     subject: ChatFirstSubject,
     account_generation: int,
     now: datetime,
+    firestore_client: Any = None,
 ) -> AgentJudgmentAdmission:
     """Atomically reserve one agent-tier evaluation before any provider call.
 
@@ -202,19 +200,22 @@ def admit_agent_judgment(
     materialized turn.
     """
 
+    client = _db(firestore_client)
     intent_id = proactive_intent_id(
         uid,
         account_generation=account_generation,
         source_key='agent_judgment',
         continuity_key=continuity_key,
     )
-    intent_path = _intent_path(uid, intent_id)
-    budget_path = _budget_path(uid)
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    budget_ref = _budget_ref(uid, firestore_client=client)
+    transaction = client.transaction()
 
+    @firestore.transactional
     def apply(write_transaction: Any) -> AgentJudgmentAdmission:
-        control_snapshot = write_transaction.get(_control_path(uid))
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _require_control(control_snapshot, uid=uid, account_generation=account_generation)
-        existing_snapshot = write_transaction.get(intent_path)
+        existing_snapshot = intent_ref.get(transaction=write_transaction)
         if existing_snapshot.exists:
             existing = _intent_from_snapshot(existing_snapshot)
             if (
@@ -226,7 +227,7 @@ def admit_agent_judgment(
                 raise ChatFirstIntentConflictError('agent judgment continuity key was reused')
             return AgentJudgmentAdmission(existing_intent=existing, newly_reserved=False)
 
-        budget_snapshot = write_transaction.get(budget_path)
+        budget_snapshot = budget_ref.get(transaction=write_transaction)
         budget = _budget_from_snapshot(budget_snapshot, account_generation=account_generation, now=now)
         if any(reservation.intent_id == intent_id for reservation in budget.reservations):
             return AgentJudgmentAdmission(existing_intent=None, newly_reserved=False)
@@ -234,10 +235,10 @@ def admit_agent_judgment(
             reserved = reserve_budget(budget, intent_id=intent_id, now=now)
         except ValueError as exc:
             raise ProactiveBudgetExhausted('proactive turn budget exhausted') from exc
-        write_transaction.set(budget_path, reserved.model_dump(mode='python'))
+        write_transaction.set(budget_ref, reserved.model_dump(mode='python'))
         return AgentJudgmentAdmission(existing_intent=None, newly_reserved=True)
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def release_agent_judgment_admission(
@@ -246,6 +247,7 @@ def release_agent_judgment_admission(
     continuity_key: str,
     account_generation: int,
     now: datetime,
+    firestore_client: Any = None,
 ) -> None:
     """Release an unused pre-judge reservation without touching an intent.
 
@@ -254,20 +256,23 @@ def release_agent_judgment_admission(
     and idempotent.
     """
 
+    client = _db(firestore_client)
     intent_id = proactive_intent_id(
         uid,
         account_generation=account_generation,
         source_key='agent_judgment',
         continuity_key=continuity_key,
     )
-    intent_path = _intent_path(uid, intent_id)
-    budget_path = _budget_path(uid)
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    budget_ref = _budget_ref(uid, firestore_client=client)
+    transaction = client.transaction()
 
+    @firestore.transactional
     def apply(write_transaction: Any) -> None:
-        control_snapshot = write_transaction.get(_control_path(uid))
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _require_control(control_snapshot, uid=uid, account_generation=account_generation)
-        intent_snapshot = write_transaction.get(intent_path)
-        budget_snapshot = write_transaction.get(budget_path)
+        intent_snapshot = intent_ref.get(transaction=write_transaction)
+        budget_snapshot = budget_ref.get(transaction=write_transaction)
         if intent_snapshot.exists:
             return
         budget = _budget_from_snapshot(budget_snapshot, account_generation=account_generation, now=now)
@@ -275,10 +280,10 @@ def release_agent_judgment_admission(
         if len(reservations) == len(budget.reservations):
             return
         write_transaction.set(
-            budget_path, budget.model_copy(update={'reservations': reservations}).model_dump(mode='python')
+            budget_ref, budget.model_copy(update={'reservations': reservations}).model_dump(mode='python')
         )
 
-    _store().run_transaction(apply)
+    apply(transaction)
 
 
 def create_intent(
@@ -290,9 +295,11 @@ def create_intent(
     blocks: list[ChatFirstBlockSpec],
     account_generation: int,
     now: datetime,
+    firestore_client: Any = None,
 ) -> tuple[ProactiveIntent, bool]:
     """Idempotently persist an intent and atomically reserve agent-turn budget."""
 
+    client = _db(firestore_client)
     intent_id = proactive_intent_id(
         uid,
         account_generation=account_generation,
@@ -308,15 +315,17 @@ def create_intent(
         blocks=blocks,
         created_at=now,
     )
-    intent_path = _intent_path(uid, intent_id)
-    budget_path = _budget_path(uid)
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    budget_ref = _budget_ref(uid, firestore_client=client)
+    transaction = client.transaction()
 
+    @firestore.transactional
     def apply(write_transaction: Any) -> tuple[ProactiveIntent, bool]:
-        control_snapshot = write_transaction.get(_control_path(uid))
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _require_control(control_snapshot, uid=uid, account_generation=account_generation)
-        existing_snapshot = write_transaction.get(intent_path)
+        existing_snapshot = intent_ref.get(transaction=write_transaction)
         budget_snapshot = (
-            write_transaction.get(budget_path)
+            budget_ref.get(transaction=write_transaction)
             if intent.consumes_turn_budget and not existing_snapshot.exists
             else None
         )
@@ -340,12 +349,12 @@ def create_intent(
                 reserved = reserve_budget(budget, intent_id=intent_id, now=now)
             except ValueError as exc:
                 raise ProactiveBudgetExhausted('proactive turn budget exhausted') from exc
-        write_transaction.set(intent_path, _intent_payload(intent))
+        write_transaction.set(intent_ref, _intent_payload(intent))
         if reserved is not None:
-            write_transaction.set(budget_path, reserved.model_dump(mode='python'))
+            write_transaction.set(budget_ref, reserved.model_dump(mode='python'))
         return intent, True
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def get_or_create_cold_start_intent(
@@ -357,6 +366,7 @@ def get_or_create_cold_start_intent(
     blocks: list[ChatFirstBlockSpec],
     account_generation: int,
     now: datetime,
+    firestore_client: Any = None,
 ) -> tuple[ProactiveIntent, bool]:
     """Persist exactly one generation-bound cold-start intent.
 
@@ -368,6 +378,7 @@ def get_or_create_cold_start_intent(
 
     if source not in {'cold_start_rich', 'cold_start_sparse'}:
         raise ValueError('cold-start intents require a cold-start source')
+    client = _db(firestore_client)
     intent_id = proactive_intent_id(
         uid,
         account_generation=account_generation,
@@ -384,12 +395,14 @@ def get_or_create_cold_start_intent(
         delivery_state='pending_kernel_receipt',
         created_at=now,
     )
-    intent_path = _intent_path(uid, intent_id)
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    transaction = client.transaction()
 
+    @firestore.transactional
     def apply(write_transaction: Any) -> tuple[ProactiveIntent, bool]:
-        control_snapshot = write_transaction.get(_control_path(uid))
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _require_control(control_snapshot, uid=uid, account_generation=account_generation)
-        existing_snapshot = write_transaction.get(intent_path)
+        existing_snapshot = intent_ref.get(transaction=write_transaction)
         if existing_snapshot.exists:
             existing = _intent_from_snapshot(existing_snapshot)
             if (
@@ -399,10 +412,10 @@ def get_or_create_cold_start_intent(
             ):
                 raise ChatFirstIntentConflictError('cold-start continuity key was reused')
             return existing, False
-        write_transaction.set(intent_path, _intent_payload(intent))
+        write_transaction.set(intent_ref, _intent_payload(intent))
         return intent, True
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def has_cold_start_intent_created_on(
@@ -410,11 +423,14 @@ def has_cold_start_intent_created_on(
     *,
     account_generation: int,
     date_value: date,
+    firestore_client: Any = None,
 ) -> bool:
     """Whether this generation already used today's deterministic opener slot."""
 
-    _require_current_control(uid, account_generation=account_generation)
-    for snapshot in _store().query(_intents_collection_path(uid)):
+    client = _db(firestore_client)
+    _require_current_control(uid, account_generation=account_generation, firestore_client=client)
+    collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
+    for snapshot in collection.stream():
         intent = _intent_from_snapshot(snapshot)
         if intent.account_generation != account_generation:
             continue
@@ -433,6 +449,7 @@ def acknowledge_sparse_cold_start_sequence_terminal(
     terminal_state: ColdStartSequenceTerminalState,
     account_generation: int,
     now: datetime,
+    firestore_client: Any = None,
 ) -> ProactiveIntent:
     """Accept one local-journal terminal receipt for the sparse sequence.
 
@@ -446,18 +463,21 @@ def acknowledge_sparse_cold_start_sequence_terminal(
     expected_sequence_id = f'cold-start:{account_generation}'
     if sequence_id != expected_sequence_id:
         raise ChatFirstIntentConflictError('cold-start terminal sequence does not match generation')
+    client = _db(firestore_client)
     intent_id = proactive_intent_id(
         uid,
         account_generation=account_generation,
         source_key='cold_start',
         continuity_key=sequence_id,
     )
-    intent_path = _intent_path(uid, intent_id)
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    transaction = client.transaction()
 
+    @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent:
-        control_snapshot = write_transaction.get(_control_path(uid))
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _require_control(control_snapshot, uid=uid, account_generation=account_generation)
-        snapshot = write_transaction.get(intent_path)
+        snapshot = intent_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise ProactiveIntentNotReady('cold-start intent is not ready')
         intent = _intent_from_snapshot(snapshot)
@@ -482,21 +502,24 @@ def acknowledge_sparse_cold_start_sequence_terminal(
                 'cold_start_sequence_terminal_receipt_id': receipt_id,
             }
         )
-        write_transaction.set(intent_path, _intent_payload(terminalized))
+        write_transaction.set(intent_ref, _intent_payload(terminalized))
         return terminalized
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def has_active_sparse_cold_start_sequence(
     uid: str,
     *,
     account_generation: int,
+    firestore_client: Any = None,
 ) -> bool:
     """Whether a sparse local-journal sequence can still own the Chat tail."""
 
-    _require_current_control(uid, account_generation=account_generation)
-    for snapshot in _store().query(_intents_collection_path(uid)):
+    client = _db(firestore_client)
+    _require_current_control(uid, account_generation=account_generation, firestore_client=client)
+    collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
+    for snapshot in collection.stream():
         intent = _intent_from_snapshot(snapshot)
         if intent.account_generation != account_generation or intent.source != 'cold_start_sparse':
             continue
@@ -510,19 +533,20 @@ def fetch_ready_intents(
     *,
     account_generation: int,
     limit: int = 8,
+    firestore_client: Any = None,
 ) -> list[ProactiveIntent]:
     """Return ready intents only; this never changes delivery or writes Chat."""
 
-    _require_current_control(uid, account_generation=account_generation)
-    # Push the delivery-state filter to the store so delivered historical rows
+    client = _db(firestore_client)
+    _require_current_control(uid, account_generation=account_generation, firestore_client=client)
+    collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
+    # Push the delivery-state filter to Firestore so delivered historical rows
     # are never transferred for a foreground materialization.  The caller only
     # ever needs ready or pending-receipt intents, which are bounded; the full
     # collection otherwise grows with account age.
+    query = collection.where(filter=FieldFilter('delivery_state', 'in', ['ready', 'pending_kernel_receipt']))
     ready: list[ProactiveIntent] = []
-    for snapshot in _store().query(
-        _intents_collection_path(uid),
-        filters=[('delivery_state', 'in', ['ready', 'pending_kernel_receipt'])],
-    ):
+    for snapshot in query.stream():
         intent = _intent_from_snapshot(snapshot)
         if intent.account_generation != account_generation:
             continue
@@ -538,20 +562,24 @@ def acknowledge_materialization(
     receipt_id: str,
     account_generation: int,
     now: datetime,
+    firestore_client: Any = None,
 ) -> ProactiveIntent:
     """Accept a local-kernel receipt and atomically account for an agent turn."""
 
-    intent_path = _intent_path(uid, intent_id)
-    budget_path = _budget_path(uid)
+    client = _db(firestore_client)
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    budget_ref = _budget_ref(uid, firestore_client=client)
+    transaction = client.transaction()
 
+    @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent:
-        control_snapshot = write_transaction.get(_control_path(uid))
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _require_control(control_snapshot, uid=uid, account_generation=account_generation)
-        intent_snapshot = write_transaction.get(intent_path)
+        intent_snapshot = intent_ref.get(transaction=write_transaction)
         if not intent_snapshot.exists:
             raise ProactiveIntentNotReady('proactive intent is not ready')
         intent = _intent_from_snapshot(intent_snapshot)
-        budget_snapshot = write_transaction.get(budget_path) if intent.consumes_turn_budget else None
+        budget_snapshot = budget_ref.get(transaction=write_transaction) if intent.consumes_turn_budget else None
         if intent.account_generation != account_generation:
             raise ChatFirstIntentGenerationMismatch('intent account generation changed')
         if intent.delivery_state == 'delivered':
@@ -572,11 +600,11 @@ def acknowledge_materialization(
             assert budget_snapshot is not None
             budget = _budget_from_snapshot(budget_snapshot, account_generation=account_generation, now=now)
             accounted = account_materialization(budget, intent_id=intent_id, now=now)
-            write_transaction.set(budget_path, accounted.model_dump(mode='python'))
-        write_transaction.set(intent_path, _intent_payload(delivered))
+            write_transaction.set(budget_ref, accounted.model_dump(mode='python'))
+        write_transaction.set(intent_ref, _intent_payload(delivered))
         return delivered
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def record_deferral(
@@ -587,9 +615,11 @@ def record_deferral(
     question: QuestionCardSpec,
     account_generation: int,
     now: datetime,
+    firestore_client: Any = None,
 ) -> tuple[DeferralReceipt, bool]:
     """Accept the kernel's idempotent deferral outbox record."""
 
+    client = _db(firestore_client)
     deferral_id = proactive_deferral_id(
         uid,
         account_generation=account_generation,
@@ -604,12 +634,14 @@ def record_deferral(
         created_at=now,
         due_at=now + _DEFERRAL_DUE_AFTER,
     )
-    path = _deferral_path(uid, deferral_id)
+    ref = _deferral_ref(uid, deferral_id, firestore_client=client)
+    transaction = client.transaction()
 
+    @firestore.transactional
     def apply(write_transaction: Any) -> tuple[DeferralReceipt, bool]:
-        control_snapshot = write_transaction.get(_control_path(uid))
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _require_control(control_snapshot, uid=uid, account_generation=account_generation)
-        existing_snapshot = write_transaction.get(path)
+        existing_snapshot = ref.get(transaction=write_transaction)
         if existing_snapshot.exists:
             existing = _deferral_from_snapshot(existing_snapshot)
             if (
@@ -623,10 +655,10 @@ def record_deferral(
                 DeferralReceipt(deferral_id=existing.deferral_id, due_at=existing.due_at, state=existing.state),
                 False,
             )
-        write_transaction.set(path, deferral.model_dump(mode='python'))
+        write_transaction.set(ref, deferral.model_dump(mode='python'))
         return DeferralReceipt(deferral_id=deferral_id, due_at=deferral.due_at, state='pending'), True
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def release_due_deferrals(
@@ -635,35 +667,42 @@ def release_due_deferrals(
     account_generation: int,
     now: datetime,
     subject: ChatFirstSubject | None = None,
+    firestore_client: Any = None,
 ) -> list[ProactiveIntent]:
     """Release due or meaningful-subject-change deferrals exactly once.
 
-    Keep the pending/state and releaseability predicates in the store. A user's
+    Keep the pending/state and releaseability predicates in Firestore. A user's
     deferral collection is unbounded, and streaming released or future rows on
     every foreground wake turns old history into the hot path.
     """
 
-    _require_current_control(uid, account_generation=account_generation)
-    collection_path = _deferrals_collection_path(uid)
+    client = _db(firestore_client)
+    _require_current_control(uid, account_generation=account_generation, firestore_client=client)
+    collection = _user_ref(uid, firestore_client=client).collection(DEFERRALS_COLLECTION)
     if subject is None:
-        filters: list[Filter] = [
-            ('account_generation', '==', account_generation),
-            ('state', '==', 'pending'),
-            ('due_at', '<=', now),
-        ]
+        query = CHAT_FIRST_DEFERRALS_DUE_QUERY.build(
+            collection,
+            {'account_generation': account_generation, 'state': 'pending', 'due_at': now},
+            field_filter_factory=FieldFilter,
+        )
     else:
-        filters = [
-            ('account_generation', '==', account_generation),
-            ('state', '==', 'pending'),
-            ('subject.kind', '==', subject.kind),
-            ('subject.id', '==', subject.id),
-        ]
+        query = CHAT_FIRST_DEFERRALS_SUBJECT_QUERY.build(
+            collection,
+            {
+                'account_generation': account_generation,
+                'state': 'pending',
+                'subject_kind': subject.kind,
+                'subject_id': subject.id,
+            },
+            field_filter_factory=FieldFilter,
+        )
+    query = query.limit(32)
     candidates: list[ProactiveDeferral] = []
-    for snapshot in _store().query(collection_path, filters=filters, limit=32):
+    for snapshot in query.stream():
         deferred = _deferral_from_snapshot(snapshot)
         # Keep strict model validation and an exact subject check as the final
-        # fence for old/malformed rows and for fake stores that do not fully
-        # emulate nested-field filtering.
+        # fence for old/malformed rows and for fake clients that do not fully
+        # emulate Firestore's nested-field filtering.
         if deferred.account_generation != account_generation or deferred.state != 'pending':
             continue
         if subject is not None and deferred.subject != subject:
@@ -679,6 +718,7 @@ def release_due_deferrals(
             deferred,
             account_generation=account_generation,
             now=now,
+            firestore_client=client,
         )
         if intent is not None:
             released.append(intent)
@@ -691,6 +731,7 @@ def _release_deferral_transaction(
     *,
     account_generation: int,
     now: datetime,
+    firestore_client: Any,
 ) -> ProactiveIntent | None:
     intent_id = proactive_intent_id(
         uid,
@@ -710,14 +751,16 @@ def _release_deferral_transaction(
         blocks=[released_question],
         created_at=now,
     )
-    deferral_path = _deferral_path(uid, deferred.deferral_id)
-    intent_path = _intent_path(uid, intent_id)
+    deferral_ref = _deferral_ref(uid, deferred.deferral_id, firestore_client=firestore_client)
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=firestore_client)
+    transaction = firestore_client.transaction()
 
+    @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent | None:
-        control_snapshot = write_transaction.get(_control_path(uid))
+        control_snapshot = _control_ref(uid, firestore_client=firestore_client).get(transaction=write_transaction)
         _require_control(control_snapshot, uid=uid, account_generation=account_generation)
-        deferral_snapshot = write_transaction.get(deferral_path)
-        intent_snapshot = write_transaction.get(intent_path)
+        deferral_snapshot = deferral_ref.get(transaction=write_transaction)
+        intent_snapshot = intent_ref.get(transaction=write_transaction)
         if not deferral_snapshot.exists:
             return None
         current = _deferral_from_snapshot(deferral_snapshot)
@@ -728,14 +771,14 @@ def _release_deferral_transaction(
             if existing.source != 'deferral_reraise' or existing.continuity_key != current.continuity_key:
                 raise ChatFirstIntentConflictError('deferral intent collision')
             released = current.model_copy(update={'state': 'released', 'released_intent_id': existing.intent_id})
-            write_transaction.set(deferral_path, released.model_dump(mode='python'))
+            write_transaction.set(deferral_ref, released.model_dump(mode='python'))
             return existing
         released = current.model_copy(update={'state': 'released', 'released_intent_id': intent_id})
-        write_transaction.set(intent_path, _intent_payload(intent))
-        write_transaction.set(deferral_path, released.model_dump(mode='python'))
+        write_transaction.set(intent_ref, _intent_payload(intent))
+        write_transaction.set(deferral_ref, released.model_dump(mode='python'))
         return intent
 
-    return _store().run_transaction(apply)
+    return apply(transaction)
 
 
 def iter_ready_intent_ids(
