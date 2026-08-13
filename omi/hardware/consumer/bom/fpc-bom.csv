@@ -1,5 +1,5 @@
 ID,SKU,Description,Manufacturer,MPN,Designator,Qty,Board,Category,Populate,LCSC_PN,JLC_Status,Stock_Note
 68,202004257,PCBA;Omi2 FPC Board,,,,1,fpc,pcba-reference,n/a,,,
-69,323040920,"Omi2-Charging contact ring;D9.9*H1.0mm (custom, sourced by drawing/SKU)",,,J1,1,fpc,custom-part,yes,,,
+69,323040920,"Omi2-Charging contact ring;D9.9*H1.0mm (custom, sourced by drawing/SKU)",,,J1,1,fpc,custom-part,n/a,,,Soldered to FPC by hand — sourced by SKU/drawing from FPC vendor
 70,319016329,PCB;Omi2 FPC v1.1,,,,1,fpc,pcb-reference,n/a,,,
 71,320210763,SMD BTB Male CONN;6+4P-0.25;L2.51*W1.4*H0.41mm,Suntech,ST-BTB-K3570606M,J3,1,fpc,component,yes,,N/A,Not on LCSC

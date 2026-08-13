@@ -1,17 +1,17 @@
 ID,SKU,Description,Manufacturer,MPN,Designator,Qty,Board,Category,Populate,LCSC_PN,JLC_Status,Stock_Note
 72,203001260,Omi2-Mechanical Parts Assembly,,,,1,mechanical,assembly-header,n/a,,,
-73,323050581,"Omi2-Front Cover;aluminium,D25.5*H5.5mm (custom)",,,,1,mechanical,cnc-part,n/a,,,Custom CNC — see mechanical/parts/cnc/case-a.step
-74,322991494,Dust filter;5.8*4.0*0.1mm,,,,2,mechanical,consumable,n/a,,,Generic — search AliExpress
-75,327160930,double-sided tape;D4*d1.5*H0.1mm,,,,2,mechanical,consumable,n/a,,,Generic — search AliExpress
-76,326020842,Screw;Phillips flat-head screws;CM1.2*5,,,,3,mechanical,consumable,n/a,,,Generic — search AliExpress
-77,323020666,N52 magnet;D3*H3mm,,,,4,mechanical,consumable,n/a,,,Generic — search AliExpress "N52 neodymium 3x3mm"
-78,322081192,"Omi2-light pipe;PC,D6*H1.9mm (custom)",,,,1,mechanical,custom-part,n/a,,,Custom SLA — see mechanical/parts/sla/led-guide-white-translucent.step
-79,401040192,S300 glue;20g/pcs,,,,1,mechanical,consumable,n/a,,,Generic silicone adhesive
-80,327160931,double-sided tape;14*12.5*0.1mm,,,,1,mechanical,consumable,n/a,,,Generic — search AliExpress
-81,323050582,"Omi2-Back Cover;aluminium,D25.5*H5.5mm (custom)",,,,1,mechanical,cnc-part,n/a,,,Custom CNC — see mechanical/parts/cnc/case-b.step
-82,322081191,"Omi2-Middle Frame;PC+ABS,D23.2*H6.35mm (custom)",,,,1,mechanical,injection-molding,n/a,,,Custom mold — see mechanical/parts/injection-molding/wrapper.step
-83,401040231,UV glue-DDY6203_6,,,,1,mechanical,consumable,n/a,,,UV cure adhesive — search "DDY6203" or generic UV bonding glue
+73,323050581,"Omi2-Front Cover;aluminium,D25.5*H5.5mm (custom)",,,,1,mechanical,cnc-part,n/a,,,Custom CNC AL6061-T6 anodized — see mechanical/parts/cnc/case-a.step
+74,322991494,Dust filter;5.8*4.0*0.1mm,,,,2,mechanical,consumable,n/a,,,"Acoustic mesh filter; spec: 5.8×4.0×0.1mm, >80dB SPL pass; search AliExpress ""MEMS mic dust mesh"""
+75,327160930,double-sided tape;D4*d1.5*H0.1mm,,,,2,mechanical,consumable,n/a,,,"3M VHB or equiv; annular D4×d1.5×0.1mm; search AliExpress ""die-cut double-sided tape 4mm"""
+76,326020842,Screw;Phillips flat-head screws;CM1.2*5,,,,3,mechanical,consumable,n/a,,,"M1.2×5mm Phillips flat-head, stainless A2; search AliExpress ""M1.2x5 screw"""
+77,323020666,N52 magnet;D3*H3mm,,,,4,mechanical,consumable,n/a,,,"Nickel-plated N52 neodymium D3×H3mm, axially magnetized; search AliExpress ""N52 neodymium 3x3mm"""
+78,322081192,"Omi2-light pipe;PC,D6*H1.9mm (custom)",,,,1,mechanical,custom-part,n/a,,,Custom SLA polycarbonate clear/translucent — see mechanical/parts/sla/led-guide-white-translucent.step
+79,401040192,S300 glue;20g/pcs,,,,1,mechanical,consumable,n/a,,,"Silicone adhesive (RTV, clear); search AliExpress ""S300 silicone glue"" or use Loctite SI 5145"
+80,327160931,double-sided tape;14*12.5*0.1mm,,,,1,mechanical,consumable,n/a,,,"3M VHB or equiv; 14×12.5×0.1mm rectangle; search AliExpress ""die-cut double-sided tape"""
+81,323050582,"Omi2-Back Cover;aluminium,D25.5*H5.5mm (custom)",,,,1,mechanical,cnc-part,n/a,,,Custom CNC AL6061-T6 anodized — see mechanical/parts/cnc/case-b.step
+82,322081191,"Omi2-Middle Frame;PC+ABS,D23.2*H6.35mm (custom)",,,,1,mechanical,injection-molding,n/a,,,Custom mold PC+ABS blend black — see mechanical/parts/injection-molding/wrapper.step
+83,401040231,UV glue-DDY6203_6,,,,1,mechanical,consumable,n/a,,,"UV cure adhesive (365nm); search ""DDY6203"" or use Loctite 3491/Dymax 429"
 84,313020340,Lithium polymer Battery 3.7V-150mAh;wire 6mm-D16*H6.1mm-32AWG (custom),GERUIPU,GRP1654M1-1C-1S1P-3.7V-150mAh,,1,off-board-electrical,battery,n/a,,,See BATTERY-SPEC.md for full procurement spec
-85,316040251,Vibration Motor 3V-85mA-10000rpm;D5.0*H2.5mm (custom),LIDEWEI,LBM0525A4123F,,1,off-board-electrical,motor,n/a,,,Source from LIDEWEI direct or AliExpress "coin motor 5x2.5mm"
-86,328060165,"Omi Necklace Rope;2.5mm,L650mm (custom)",,,,1,mechanical,accessory,n/a,,,Generic — search AliExpress "necklace cord 2.5mm"
-87,322101050,"Omi2-Protection Cover;28.7*35.5*11mm (custom, molded)",,,,1,mechanical,injection-molding,n/a,,,Custom mold — sourced with middle frame
+85,316040251,Vibration Motor 3V-85mA-10000rpm;D5.0*H2.5mm (custom),LIDEWEI,LBM0525A4123F,,1,off-board-electrical,motor,n/a,,,"Coin ERM motor D5×H2.5mm 3V 85mA; source from LIDEWEI direct or AliExpress ""coin motor 5x2.5mm 3V"""
+86,328060165,"Omi Necklace Rope;2.5mm,L650mm (custom)",,,,1,mechanical,accessory,n/a,,,"Waxed polyester cord 2.5mm×650mm black; search AliExpress ""necklace cord 2.5mm waxed"""
+87,322101050,"Omi2-Protection Cover;28.7*35.5*11mm (custom, molded)",,,,1,mechanical,injection-molding,n/a,,,Custom mold TPU/silicone — sourced with middle frame tooling
