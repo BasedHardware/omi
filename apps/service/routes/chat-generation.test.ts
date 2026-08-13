@@ -483,6 +483,39 @@ describe("ratified chat generation wire red proofs", () => {
     db.close();
   });
 
+  test("default app composition consumes the authorized memory read through Chat's context seam", async () => {
+    let received: ChatGenerationContextPacket | null = null;
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        received = input.context;
+        queueMicrotask(() => {
+          input.onDelta("memory-backed answer");
+          input.onComplete();
+        });
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const db = new Database(":memory:");
+    const local = createLocalDevService({
+      db,
+      ownerAccountId: ACCOUNT,
+      memoryCount: 2,
+      accountTimezone: "UTC",
+      devSecretLabel: "chat-default-memory-context-proof",
+      generationSource: source,
+    });
+    const { eventsResponse } = await admitAndOpen(local, create("default-memory-context"));
+    expect(parseSse(await eventsResponse.text()).at(-1)?.data.kind).toBe("done");
+    expect(received).not.toBeNull();
+    expect(received?.items).toHaveLength(2);
+    expect(received?.items.every((item) => item.sourceKind === "memory_projection"
+      && item.ownerAccountId === ACCOUNT && item.trust === "untrusted-evidence")).toBe(true);
+    const serialized = JSON.stringify(received);
+    expect(serialized).not.toContain("mem1_");
+    expect(serialized).not.toContain("cit1_");
+    db.close();
+  });
+
   test("GET projects internal accepted records out of every generation stream", async () => {
     const hanging: ChatGenerationSource = Object.freeze({
       start() {

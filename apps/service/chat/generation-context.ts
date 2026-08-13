@@ -187,6 +187,16 @@ export interface ChatGenerationContextSource {
   load(input: ChatGenerationContextSourceInput): Promise<ChatGenerationContextResult>;
 }
 
+export interface MemoryReadChatGenerationContextSourceOptions {
+  /**
+   * Returns one canonical, authorization-filtered page. Null means the
+   * MemoryRouteReadPort could not safely load memory (unavailable, denied, or
+   * owner mismatch) and must not be represented as an empty complete page.
+   */
+  readonly readCanonicalPage: (input: ChatGenerationContextSourceInput) => Promise<string | null>;
+  readonly maxTokens?: number;
+}
+
 const isSafeId = (value: unknown): value is string => typeof value === "string" && SAFE_ID.test(value);
 const isSafeHash = (value: unknown): value is string => typeof value === "string" && SAFE_HASH.test(value);
 const isSafeInt = (value: unknown): value is number => typeof value === "number"
@@ -589,3 +599,66 @@ export const createDeterministicChatGenerationContextSource = (
 /** Deliberately empty adapter; it now returns a truthful, hashable packet. */
 export const createEmptyChatGenerationContextSource = (): ChatGenerationContextSource =>
   createDeterministicChatGenerationContextSource();
+
+/**
+ * Adapts one authorized memory page into Chat's context packet seam.
+ * Callers must obtain those bytes through `MemoryRouteReadPort`; this adapter
+ * does not read storage itself. Null from `readCanonicalPage` fail-opens to an
+ * empty packet (Chat continues; this is not a claim that no memory exists).
+ * Hostile or contract-drifted page bytes still fail closed.
+ */
+export const createMemoryReadChatGenerationContextSource = (
+  options: MemoryReadChatGenerationContextSourceOptions,
+): ChatGenerationContextSource => Object.freeze({
+  async load(input: ChatGenerationContextSourceInput): Promise<ChatGenerationContextPacket> {
+    const generationId = input.generationId ?? input.admitted.generationId
+      ?? `generation:${input.admitted.message.id}`;
+    const nowEpochMilliseconds = input.nowEpochMilliseconds ?? input.admitted.message.createdAt;
+    const canonicalPageJson = await options.readCanonicalPage(input);
+    if (canonicalPageJson === null) {
+      return createChatGenerationContextPacket({
+        accountId: input.accountId,
+        generationId,
+        nowEpochMilliseconds,
+        candidates: [],
+        history: input.history,
+        attachments: input.admitted.message.attachments,
+        maxTokens: options.maxTokens,
+      });
+    }
+    const page = parseSynthesizedPageJson(canonicalPageJson);
+    if (page === null) throw new TypeError("memory context source returned an invalid canonical page");
+    const degraded = page.completeness.status !== "complete" || page.window.hasMore;
+    const candidates = page.items.map((item, index): ChatGenerationContextCandidate => {
+      const sourceDigest = hashText(`memory-item\0${item.id}`);
+      const citationDigest = hashText(`memory-citations\0${item.id}\0${(item.citations ?? []).join("\0")}`);
+      const outputDigest = item.provenance?.outputDigest;
+      const preview = redactText(item.text);
+      return Object.freeze({
+        sourceKind: "memory_projection",
+        sourceId: `memory:${sourceDigest.slice("sha256:".length)}`,
+        claimId: null,
+        evidenceId: `citation:${citationDigest.slice("sha256:".length)}`,
+        ownerAccountId: input.accountId,
+        sourceHash: outputDigest === undefined ? sourceDigest : `sha256:${outputDigest}`,
+        capturedAt: nowEpochMilliseconds,
+        expiresAt: null,
+        redactedPreview: preview,
+        tokenEstimate: tokenEstimateOf(preview),
+        inclusionReason: degraded ? "authorized_memory_projection_degraded" : "authorized_memory_projection",
+        policyDecision: degraded ? "degraded" : "included",
+        priority: page.items.length - index,
+        conflictKey: null,
+      });
+    });
+    return createChatGenerationContextPacket({
+      accountId: input.accountId,
+      generationId,
+      nowEpochMilliseconds,
+      candidates,
+      history: input.history,
+      attachments: input.admitted.message.attachments,
+      maxTokens: options.maxTokens,
+    });
+  },
+});

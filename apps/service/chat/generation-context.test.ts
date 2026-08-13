@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   createChatGenerationContextPacket,
   createDeterministicChatGenerationContextSource,
+  createMemoryReadChatGenerationContextSource,
   loadedChatGenerationMemoryContext,
   normalizeChatGenerationContext,
   snapshotChatGenerationMemoryContext,
@@ -78,6 +79,124 @@ const delta = (eventId: string, sequence: number, text: string): ChatGenerationU
 });
 
 describe("structured Chat generation context packets", () => {
+  test("canonical authorized memory pages adapt at the existing context seam without exposing opaque refs", async () => {
+    const rawItemId = "retrieval-node-v1:context-fixture";
+    const rawCitation = "citation-v1:context-fixture";
+    const outputDigest = "c".repeat(64);
+    const canonicalPage = JSON.stringify({
+      contractVersion: "1.0.0",
+      items: [{
+        id: rawItemId,
+        text: "Project token: top-secret remains context data",
+        citations: [rawCitation],
+        provenance: {
+          synthesisVersion: "v1",
+          inputDigest: "a".repeat(64),
+          outputDigest,
+        },
+      }],
+      window: { status: "complete", complete: true, hasMore: false, nextCursor: null },
+      completeness: {
+        version: "recall-completeness-v1",
+        status: "complete",
+        reasons: [],
+        frontiers: {
+          declaredFrontier: "frontier-v1:declared",
+          newestSearchedAcceptedFrontier: "frontier-v1:declared",
+          missingAcceptedFrontierReason: null,
+          newestSearchedStmFrontier: "frontier-v1:included",
+          missingStmFrontierReason: null,
+        },
+      },
+      absence: null,
+    });
+    const source = createMemoryReadChatGenerationContextSource({
+      readCanonicalPage: async () => canonicalPage,
+    });
+    const packet = await source.load({
+      accountId: ACCOUNT,
+      generationId: "generation:memory-read",
+      admitted: admitted("human:memory-read", "generation:memory-read"),
+      nowEpochMilliseconds: 250,
+      history: Object.freeze([]),
+      bearerToken: "context-token",
+    });
+    if (Array.isArray(packet)) throw new TypeError("memory adapter returned legacy context");
+    expect(packet.items).toHaveLength(1);
+    expect(packet.items[0]).toMatchObject({
+      sourceKind: "memory_projection",
+      sourceHash: `sha256:${outputDigest}`,
+      policyDecision: "included",
+      trust: "untrusted-evidence",
+    });
+    expect(packet.items[0]?.redactedPreview).toContain("[redacted]");
+    expect(JSON.stringify(packet)).not.toContain(rawItemId);
+    expect(JSON.stringify(packet)).not.toContain(rawCitation);
+    expect(await source.load({
+      accountId: ACCOUNT,
+      generationId: "generation:memory-read",
+      admitted: admitted("human:memory-read", "generation:memory-read"),
+      nowEpochMilliseconds: 250,
+      history: Object.freeze([]),
+      bearerToken: "context-token",
+    })).toEqual(packet);
+  });
+
+  test("memory context rejects malformed or contract-drifted page bytes before provider use", async () => {
+    const source = createMemoryReadChatGenerationContextSource({
+      readCanonicalPage: async () => JSON.stringify({
+        contractVersion: "1.0.0",
+        items: [],
+        window: { status: "complete", complete: true, hasMore: false, nextCursor: null },
+        completeness: {
+          version: "recall-completeness-v1",
+          status: "complete",
+          reasons: [],
+          frontiers: {
+            declaredFrontier: "frontier-v1:declared",
+            newestSearchedAcceptedFrontier: null,
+            missingAcceptedFrontierReason: "no_accepted_work",
+            newestSearchedStmFrontier: null,
+            missingStmFrontierReason: "no_eligible_stm",
+          },
+        },
+        absence: { kind: "query_gap" },
+        extra: "contract drift",
+      }),
+    });
+    try {
+      await source.load({
+        accountId: ACCOUNT,
+        generationId: "generation:invalid-memory",
+        admitted: admitted("human:invalid-memory", "generation:invalid-memory"),
+        nowEpochMilliseconds: 250,
+        history: Object.freeze([]),
+        bearerToken: "context-token",
+      });
+      throw new Error("expected invalid canonical page to fail closed");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TypeError);
+      expect((error as TypeError).message).toContain("invalid canonical page");
+    }
+  });
+
+  test("unavailable memory-read fail-opens to an empty packet without claiming absence", async () => {
+    const source = createMemoryReadChatGenerationContextSource({
+      readCanonicalPage: async () => null,
+    });
+    const packet = await source.load({
+      accountId: ACCOUNT,
+      generationId: "generation:unavailable-memory",
+      admitted: admitted("human:unavailable-memory", "generation:unavailable-memory"),
+      nowEpochMilliseconds: 250,
+      history: Object.freeze([]),
+      bearerToken: "context-token",
+    });
+    if (Array.isArray(packet)) throw new TypeError("memory adapter returned legacy context");
+    expect(packet.items).toEqual([]);
+    expect(packet.ownerAccountId).toBe(ACCOUNT);
+  });
+
   test("deterministically compacts priority/conflicting evidence and records self-noise", () => {
     const input = {
       accountId: ACCOUNT,

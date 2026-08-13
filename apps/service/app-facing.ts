@@ -71,7 +71,7 @@ import {
   type ChatGenerationSupervisor,
 } from "./chat/generation-supervisor";
 import {
-  createEmptyChatGenerationContextSource,
+  createMemoryReadChatGenerationContextSource,
   type ChatGenerationContextSource,
 } from "./chat/generation-context";
 import {
@@ -104,6 +104,7 @@ import {
   MEMORY_READ_TRANSITIONAL_ALIAS_PATH,
   registerMemoryRoutes,
 } from "./routes/memories";
+import { snapshotMemoryRouteReadOutcome } from "./routes/memory-read-port";
 import {
   LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS,
   registerListenRoutes,
@@ -211,8 +212,8 @@ export interface LocalServiceOptions {
   readonly listenDefaultUnmetered?: boolean;
   /** Required provider seam; production LLM integration is a later adapter. */
   readonly generationSource: ChatGenerationSource;
-  /** Required consultation seam; memory implementation is owned outside Chat. */
-  readonly generationContext: ChatGenerationContextSource;
+  /** Optional consultation override; omission adapts the existing authorized memory read. */
+  readonly generationContext?: ChatGenerationContextSource;
   readonly generationLiveness?: ChatGenerationLivenessPolicy;
   readonly generationStreamPolicy?: ChatGenerationStreamPolicy;
   readonly generationStreamScheduler?: import("./chat/generation-source").ChatGenerationScheduler;
@@ -432,7 +433,7 @@ export const createLocalDevService = (options: LocalDevServiceOptions): LocalSer
     conversationProcessorFactory: options.conversationProcessorFactory
       ?? createDeterministicListenConversationProcessor,
     generationSource: options.generationSource ?? createGatewayRequiredChatGenerationSource(),
-    generationContext: options.generationContext ?? createEmptyChatGenerationContextSource(),
+    generationContext: options.generationContext,
   });
 };
 
@@ -471,9 +472,6 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   }
   if (options.generationSource === undefined) {
     throw new TypeError("generationSource is required");
-  }
-  if (options.generationContext === undefined) {
-    throw new TypeError("generationContext is required");
   }
   const ownsStores = options.stores === undefined;
   if (options.persistentQaStores === true && ownsStores) {
@@ -615,26 +613,6 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       .digest("hex")}`;
   const chatNowEpochMilliseconds = options.nowEpochMilliseconds
     ?? (() => anchorEpochSeconds * 1_000);
-  const chatSupervisor = options.chatSupervisor ?? createChatGenerationSupervisor({
-    source: options.generationSource,
-    context: options.generationContext,
-    messages: stores.chatMessages,
-    events: stores.chatEvents,
-    finalization: stores.chatFinalization,
-    attachments: stores.chatAttachments,
-    nowEpochMilliseconds: chatNowEpochMilliseconds,
-    liveness: options.generationLiveness ?? DEFAULT_CHAT_GENERATION_LIVENESS,
-    scheduler: options.generationStreamScheduler,
-    assistantMessageId: (accountId, generationId) =>
-      opaqueChatId("assistant", accountId, generationId),
-    eventId: (accountId, generationId, kind, sequence) =>
-      opaqueChatId("event", accountId, generationId, kind, String(sequence)),
-    revision: (accountId, messageId, payloadHash) =>
-      opaqueChatId("revision", accountId, messageId, payloadHash),
-    agentRunEvents,
-  });
-  chatSupervisor.recoverInterrupted();
-
   const prepareRead = async (principal: DevPrincipal) => {
     const loader = createSqliteQaRecallLoader({
       db: options.db,
@@ -689,6 +667,43 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       traceSink: () => {},
     });
   };
+
+  const memoryReadPort = createPreparedMemoryRouteReadPort({ resolvePrincipal, prepareRead });
+  const generationContext = options.generationContext
+    ?? createMemoryReadChatGenerationContextSource({
+      readCanonicalPage: async (input) => {
+        const principal = resolvePrincipal(input.bearerToken);
+        if (principal === null || principal.uid !== input.accountId) return null;
+        const outcome = snapshotMemoryRouteReadOutcome(await memoryReadPort.read({
+          bearer_token: input.bearerToken,
+          now_epoch_seconds: Math.floor(
+            (input.nowEpochMilliseconds ?? chatNowEpochMilliseconds()) / 1_000,
+          ),
+          request: { limit: 25, cursor: null },
+        })) ?? Object.freeze({ kind: "unavailable" as const });
+        if (outcome.kind !== "loaded") return null;
+        return outcome.canonical_json;
+      },
+    });
+  const chatSupervisor = options.chatSupervisor ?? createChatGenerationSupervisor({
+    source: options.generationSource,
+    context: generationContext,
+    messages: stores.chatMessages,
+    events: stores.chatEvents,
+    finalization: stores.chatFinalization,
+    attachments: stores.chatAttachments,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+    liveness: options.generationLiveness ?? DEFAULT_CHAT_GENERATION_LIVENESS,
+    scheduler: options.generationStreamScheduler,
+    assistantMessageId: (accountId, generationId) =>
+      opaqueChatId("assistant", accountId, generationId),
+    eventId: (accountId, generationId, kind, sequence) =>
+      opaqueChatId("event", accountId, generationId, kind, String(sequence)),
+    revision: (accountId, messageId, payloadHash) =>
+      opaqueChatId("revision", accountId, messageId, payloadHash),
+    agentRunEvents,
+  });
+  chatSupervisor.recoverInterrupted();
 
   /**
    * The tasks read's prepared ports, per principal.
@@ -761,7 +776,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     return new Response(JSON.stringify({ status: "ready" }), { status: 200, headers: JSON_HEADERS });
   });
   registerMemoryRoutes(app, {
-    readPort: createPreparedMemoryRouteReadPort({ resolvePrincipal, prepareRead }),
+    readPort: memoryReadPort,
     nowEpochSeconds: () => anchorEpochSeconds,
     counter,
   });
