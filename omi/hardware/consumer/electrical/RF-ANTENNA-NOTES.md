@@ -1,5 +1,7 @@
 # RF & Antenna Notes — Omi Consumer Mainboard
 
+**Sources:** KiCad PCB (`OMI.kicad_pcb`), KiCad schematic (`nRF7002.kicad_sch`, `nRF5340.kicad_sch`), factory BOM (`omi-bom.csv`)
+
 ## RF Architecture Overview
 
 The Omi mainboard uses a **shared single antenna** for BLE and WiFi (both 2.4GHz and 5GHz bands):
@@ -34,14 +36,21 @@ nRF7002 (WiFi 5GHz) ────────────────────
 
 ### RF Switch Control (U10, FM8625H)
 
-| RFSW_EN State | Active Path | Notes |
-|---------------|-------------|-------|
-| LOW (default) | BLE 2.4GHz (nRF5340 → switch → diplexer) | Default state after reset — BLE active |
-| HIGH | WiFi 2.4GHz (nRF7002 → switch → diplexer) | Set by coexistence logic when WiFi needs antenna |
+**Verified from KiCad PCB (`OMI.kicad_pcb`) net assignments:**
 
-**⚠ Verify RFSW_EN polarity against the FM8625H datasheet.** The truth table above reflects the expected default (BLE at boot). The actual polarity depends on which switch port (RF1/RF2) is connected to BLE vs WiFi in the PCB layout. Check the schematic net connections at U10 pins.
+| U10 Pin | Function | Net Name | Connected To |
+|---------|----------|----------|-------------|
+| Pin 3 (RF1) | Switch port 1 | `/nRF5340/RF_LE` | BLE 2.4GHz path (nRF5340) |
+| Pin 1 (RF2) | Switch port 2 | `/nRF5340/nRF7002/TXRF0` | WiFi 2.4GHz path (nRF7002) |
+| Pin 5 (ANT) | Common port | `Net-(U10-ANT)` | Diplexer U3 low-band port |
+| Pin 6 (VCTL) | Control | `/nRF5340/nRF7002/SW_CTRL0` | Coexistence control from nRF7002 subsystem |
 
-- RFSW_EN is driven from nRF5340 GPIO (voltage domain: VDD_nRF or VDD_3V3 — verify level compatibility with FM8625H VDD)
+| SW_CTRL0 State | Active Path | Notes |
+|----------------|-------------|-------|
+| LOW (default) | RF1 → BLE 2.4GHz (nRF5340 → switch → diplexer) | Default state after reset — BLE active |
+| HIGH | RF2 → WiFi 2.4GHz (nRF7002 → switch → diplexer) | Set by coexistence logic when WiFi needs antenna |
+
+- Control signal is `SW_CTRL0` from the nRF7002 coexistence interface, not a direct nRF5340 GPIO
 - Switching time: typically <100ns for SPDT RF switches — fast enough for packet-level coexistence
 - During WiFi 5GHz operation, the 2.4GHz switch position does not matter (5GHz bypasses U10)
 

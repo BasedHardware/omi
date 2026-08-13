@@ -1,5 +1,7 @@
 # Battery Procurement Specification — Omi Consumer
 
+**Sources:** Factory BOM (`omi-bom.csv` row 84), KiCad schematic (`WirelessCharger.kicad_sch` — U15 BQ25101 ISET circuit), KiCad PCB (`OMI.kicad_pcb` — R8/R28 positions), TI BQ25101 datasheet (K_ISET = 135 AΩ)
+
 ## Primary Battery
 
 | Parameter | Value | Tolerance |
@@ -99,7 +101,7 @@ Any LiPo cell meeting these criteria will work:
 
 **⚠ WiFi current is higher than typical BLE wearables.** Nordic's nRF7002 product spec lists 191mA (2.4GHz) and 260mA (5GHz) TX current before system overhead. Verify the cell's protection PCB does not trip during WiFi operation. If the cell's protection trips below 300mA, it is unsuitable.
 
-**⚠ Thermal sensing caveat:** The on-board NTC (R28, 10K) drives the BQ25101 TS pin for charge temperature monitoring. For effective cell protection, R28 must be thermally coupled to the battery — mounted near the cell, not near the charger IC or other heat sources. If R28 is far from the cell (e.g., on the opposite side of the PCB near U4/BQ25101), the temperature reading may not reflect actual cell temperature during charging.
+**⚠ Thermal sensing caveat:** The on-board NTC (R28, 10K) drives the BQ25101 TS pin for charge temperature monitoring. R28 is positioned ~1mm from U15 (BQ25101 charger IC) per KiCad PCB — it senses charger IC temperature, not cell temperature directly. Thermal coupling to the battery is indirect. For effective cell protection during charging, verify the cell's built-in protection circuit handles temperature independently.
 
 ### Protection PCB Requirements
 

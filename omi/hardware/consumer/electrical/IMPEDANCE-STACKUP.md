@@ -1,5 +1,7 @@
 # Impedance & PCB Stackup — Omi Consumer Mainboard
 
+**Sources:** KiCad PCB (`OMI.kicad_pcb`, `OMI-Charger.kicad_pcb`, `OMI-FPC.kicad_pcb`), gerber drill files (`OMI-front-in1.drl`, `OMI-in1-in2.drl`, `OMI-in2-back.drl`, `OMI-PTH.drl`), gerber job files
+
 ## Stackup (Design Intent — from KiCad 9 PCB Source)
 
 4-layer HDI stackup, total thickness ~0.5934mm (including solder mask):
@@ -106,7 +108,7 @@ When ordering PCBs from JLCPCB, select the closest standard stackup:
 | Thickness | ~1.0mm (KiCad design: 0.9mm core + copper + mask) |
 | Copper | 1 oz outer |
 | Material | FR4 |
-| Surface finish | HASL or ENIG |
+| Surface finish | Specify HASL or ENIG when ordering (KiCad design: unspecified). ENIG recommended for pogo pin pads. |
 | Impedance control | Not required |
 
 ## FPC Stackup

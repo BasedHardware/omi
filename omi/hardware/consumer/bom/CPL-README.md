@@ -1,6 +1,6 @@
 # Component Placement List (CPL) — Omi Consumer
 
-Pick-and-place / centroid files for PCBA ordering. Generated from KiCad 9 PCB source files using `kicad-cli pcb export pos --use-drill-file-origin`.
+Pick-and-place / centroid files for PCBA ordering. Generated from KiCad 9 PCB source files (`OMI.kicad_pcb`, `OMI-Charger.kicad_pcb`, `OMI-FPC.kicad_pcb`) using `kicad-cli pcb export pos --use-drill-file-origin`.
 
 ## Files
 
@@ -54,14 +54,23 @@ Cross-reference with Nordic datasheet pin-1 ball marking and KiCad PCB pad numbe
 
 ### 4. Bottom-Side Components (Mainboard)
 
-24 components are on the bottom layer. This requires **dual-side assembly** (two reflow passes). Bottom-side components:
+24 components are on the bottom layer **including 5 ICs**. This requires **dual-side assembly** (two reflow passes). Bottom-side components (verified from KiCad PCB `OMI.kicad_pcb`):
 
 ```
-C14, C34, C36, C42, C48, C52, D3, D4, Q7, R4, R5, R6, R9, R10, R11,
-R24, R25, R26, R27, R34, R35, R36, R47, R48
+Passives (0201):  C14, C34, C36, C42, C48, C52, R4, R5, R6, R9, R10, R11, R24, R26, R27
+NTC (0402):       R28
+Diodes (SOD-523): D3, D4
+MOSFET (SOT-523): Q7
+ICs:              U5  (LSM6DS3TR-C, IMU, LGA-14, 2.5×3mm)
+                  U7  (CSNP4GCR01-DPW, NAND flash, LGA-8, 8×6mm)
+                  U9  (74LVC1G00, logic, SC70-5)
+                  U12 (P25Q16SH, SPI flash, USON-8, 3×2mm)
+                  U14 (GLF73910-BD01, battery protection, WLCSP-4, 0.97×0.97mm)
 ```
 
-Order dual-side assembly. Bottom side goes through reflow first, then top side.
+**⚠ This is NOT a trivial bottom side.** U7 (NAND, 8×6mm) is the largest back-side part. Discuss bottom-side reflow capability with your CM before ordering. See `STENCIL-REFLOW-NOTES.md` for detailed assembly guidance.
+
+Order dual-side assembly (Standard, not Economic). Bottom side goes through reflow first, then top side.
 
 ### 5. Package Name Mapping
 

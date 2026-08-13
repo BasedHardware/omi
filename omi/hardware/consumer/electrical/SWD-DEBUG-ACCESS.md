@@ -1,5 +1,7 @@
 # SWD Debug Access — Omi Consumer Mainboard
 
+**Sources:** KiCad PCB (`OMI.kicad_pcb`), KiCad schematic (`nRF5340_mcu.kicad_sch`), factory BOM (`omi-bom.csv`)
+
 ## Overview
 
 The nRF5340 SoC requires SWD (Serial Wire Debug) for **initial firmware flashing** on blank boards. OTA (Over-The-Air) update only works after the bootloader is programmed.

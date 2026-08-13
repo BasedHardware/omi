@@ -1,6 +1,7 @@
 # LCSC / JLCPCB Part Sourcing Summary — Omi Consumer
 
-**Last updated:** 2026-08-11
+**Last updated:** 2026-08-13
+**Sources:** Factory BOM (`omi-bom.csv`), KiCad PCB/schematic (mainboard, charger, FPC), LCSC.com stock check 2026-08-11
 
 ## Coverage
 
@@ -40,11 +41,11 @@ These 15 MPNs must be sourced from authorized distributors or manufacturer direc
 
 | MPN | Ref | Package | Sourcing Plan | Qty (incl. attrition) |
 |-----|-----|---------|---------------|----------------------|
-| ST-BTB-K3570606F | J1 (main) | 6+4P BTB female | Source Suntech direct or Alibaba. Must match mating height (0.6mm) with male connector. Order in tape/reel. | 2 |
-| ST-BTB-K3570606M | J3 (FPC) | 6+4P BTB male | Source Suntech direct. Mating pair to J1 above. | 2 |
+| ST-BTB-K3570606F | J1 (main) | 6+4P BTB female | Source Suntech direct or Alibaba. Must match mating height (0.6mm) with male connector. **⚠ BOM says 0.25mm pitch, KiCad footprint `BTB6_0d35` confirms 0.35mm** — verify with supplier before ordering. Order in tape/reel. | 2 |
+| ST-BTB-K3570606M | J3 (FPC) | 6+4P BTB male | Source Suntech direct. Mating pair to J1 above. Same pitch conflict — see J1 note. | 2 |
 | CA02-PG07 | PP1–PP6 (main) | WH1.5mm pogo | Source JINLANTIAN (Alibaba). 6 per board. Spring travel 1.5mm. | 8 |
 | CA62-PG308 | PP1–PP2 (charger) | WH3.3mm pogo | Source JINLANTIAN (Alibaba). 2 per board. Spring travel 3.3mm. **Different from mainboard pogos.** | 3 |
-| MMICT5838-00-012 | MIC1, MIC2 | SMD-7P (3.5×2.65mm) | TDK T5838 PDM MEMS microphone. MMICT5848 variant on LCSC (C5176729) — verify pin-compatible and same sensitivity (-41dB). Top-port orientation critical. | 3 |
+| MMICT5838-00-012 | MIC1, MIC2 | SMD-7P (3.5×2.65mm) | TDK T5838 PDM MEMS microphone. **Bottom-port** — sound enters from PCB side (verify acoustic port alignment with enclosure). MMICT5848 variant on LCSC (C5176729) — verify pin-compatible and same sensitivity (-41dB). | 3 |
 | MHPA0606RGBDT | D2, D7 | 0606 (0.69×0.69mm) | RGB LED. Larger 0808/1010 sizes available on LCSC but **will not fit footprint**. Source MEIHUA direct. | 3 |
 | TS-1001S | K2 | 2.6×1.6×0.53mm | Ultra-low-profile tactile switch. Source JINBEILI direct or find equivalent with same footprint (163gf actuation). | 2 |
 | 1S32000049 | X2 | 1.6×1.2mm 4-pad | 32MHz crystal, 8pF load, 10ppm. Source Faith Long direct or find equivalent: 32MHz, 8pF CL, 10ppm, ≤70Ω ESR, 1.6×1.2mm package. | 2 |
@@ -57,8 +58,8 @@ These parts have LCSC numbers but were out of stock at search time. For each, a 
 |---------|-----|-----|-------------|--------|
 | C3606597 | nRF5340-CLAA | U1 | Main SoC, WLCSP-95 | **Critical.** DigiKey 5765-NRF5340-CLAA-R-ND. Mouser 949-NRF5340-CLAA-R. MSL-1. X-ray required post-reflow. Standard assembly only (not Economic) at JLCPCB due to WLCSP. |
 | C2875272 | CJ17-400001010B20 | X3 | 40MHz crystal 4-pad | DigiKey or Mouser. Match: 40MHz, 10pF CL, 10ppm, 1.6×1.2mm, ≤80Ω ESR. |
-| C93230 | DST1610A | X1 | 32.768KHz crystal | DigiKey. Match: 32.768KHz, 12.5pF CL, 20ppm, 1.6×1.0mm 2-pad. Equiv: Epson FC-12M (LCSC C32346). |
-| C383245 | LN237N3T5G | Q1, Q2 | N-CH MOSFET SOT-883 | Equiv: Nexperia PMV65XNEA (LCSC C304020, verify SOT-883 package). Match: N-CH, Vds≥30V, Id≥1.5A, SOT-883. |
+| C93230 | DST1610A | X1 | 32.768KHz crystal | DigiKey. Match: 32.768KHz, 12.5pF CL, 20ppm, **1.6×1.0mm 2-pad** (not 2.05×1.2mm). No verified LCSC alternate — Epson FC-12M is wrong package (2.05×1.2mm). |
+| C383245 | LN237N3T5G | Q1, Q2 | N-CH MOSFET SOT-883 | **No verified alternate.** Previously considered PMV65XNEA — rejected (MPN not found in Nexperia SOT-883 catalog). Source LRC direct. Match: N-CH, Vds≥30V, Id≥1.5A, SOT-883, verify D-G-S pinout. |
 | C5152997 | SGM2036S-3.3XXDH4G/TR | U16 | 3.3V LDO | DigiKey. Equiv: any 3.3V 300mA LDO in XTDFN-4 (1×1mm). Check dropout and PSRR specs. |
 | C5153132 | 74LVC1G00XC5G/TR | U9 | NAND gate SC70-5 | Equiv: TI SN74LVC1G00DCKR (LCSC C7468, SC70-5). Same function, same package. |
 | C77131 | NCP15XH103F03RC | R28 | NTC 10K 1% 0402 | Equiv: TDK NTCG103JF103FT1 (10KΩ, 1%, 0402, B=3380K — verify B-value matches BQ25101 NTC profile). |

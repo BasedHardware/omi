@@ -1,5 +1,7 @@
 # FPC Flex-Specific Fabrication Notes — Omi Consumer
 
+**Sources:** KiCad PCB (`OMI-FPC.kicad_pcb`), KiCad schematic (`OMI-FPC.kicad_sch`), gerber job (`OMI-FPC-job.gbrjob`), factory BOM (`omi-bom.csv`)
+
 ## Overview
 
 The Omi FPC (Flexible Printed Circuit) connects the mainboard to the charger board via the BTB connector. It carries **9 signals**: SWD debug (SWDCLK, SWDIO), UART (TXD, RXD), power (VIN+, VDD_3V3, bat+), reset (~RESET), and GND. It is a 2-layer flex with 2 components (~29.3 × 12.5mm per gerber).
@@ -15,7 +17,7 @@ The Omi FPC (Flexible Printed Circuit) connects the mainboard to the charger boa
 | **Copper weight** | **1 oz (35µm)** | Per KiCad PCB design (both layers). ½ oz is NOT in the design files. |
 | **Surface finish** | Specify ENIG when ordering | KiCad design: unspecified. ENIG needed for BTB connector soldering. |
 | **Cover layer** | **Polyimide coverlay** (not solder mask) | Coverlay provides better flex life than liquid solder mask |
-| **Board version** | v1.1 | Per gerber files |
+| **Board version** | v1.1 | Per factory BOM (gerber zip filename says v1.0 — BOM is authoritative) |
 
 ### FPC Stackup Breakdown
 
@@ -50,7 +52,7 @@ The FPC gerber zip includes a file `OMI-FPC-Enhance.gbr`. This is the **stiffene
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | **Material** | FR4 or polyimide | FR4 is cheaper; polyimide is more flex-compatible |
-| **Thickness** | **0.3mm** | Per KiCad annotation: "Total Thickness = 0.3mm" |
+| **Thickness** | **0.3mm** | Per KiCad annotation: "Total Thickness = 0.3mm" — ambiguous whether this means stiffener alone or stiffener + FPC combined. Confirm interpretation with fab. |
 | **Location** | **Defined by `OMI-FPC-Enhance.gbr`** — stiffener zones under BTB connector (J3) and charging ring (J1) areas | Fab must use the Enhance layer as stiffener outline; do not guess placement |
 | **Adhesive** | 3M 467 or equivalent PSA (pressure-sensitive adhesive) | Standard FPC stiffener bonding |
 | **Setback from bend zone** | ≥1.0mm from bend transition edge | Stiffener edge must NOT extend into or overlap the bend zone — abrupt stiffness transition causes stress concentration and cracking |

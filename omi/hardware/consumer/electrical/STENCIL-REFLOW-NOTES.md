@@ -1,5 +1,7 @@
 # Stencil & Reflow Assembly Notes — Omi Consumer
 
+**Sources:** KiCad PCB (`OMI.kicad_pcb` — layer assignments, pad sizes), factory BOM (`omi-bom.csv`), gerber drill files
+
 ## Assembly Complexity
 
 The Omi mainboard uses advanced packages that **require professional PCBA assembly**:
@@ -52,7 +54,7 @@ FPC flex board has only 2 SMD connectors (J1, J3). Stencil may not be needed if 
 
 | Parameter | Requirement |
 |-----------|-------------|
-| **Type** | **Type 5 (15–25µm)** preferred for 0.35mm pitch WLCSP; **Type 4 (20–38µm)** acceptable if CM validates SPI results |
+| **Type** | **Type 5 (15–25µm) required** for U1 (160µm pads, fails 5-ball rule with Type 4); **Type 4 (20–38µm)** marginal for U2 only — CM must validate SPI results |
 | Alloy | SAC305 (Sn96.5/Ag3.0/Cu0.5) — lead-free, RoHS |
 | Flux | No-clean, halogen-free |
 | Shelf life | Check expiration; paste must be refrigerated (2–10°C) |

@@ -2,8 +2,8 @@
 
 **Objective:** Make it possible for an indie maker to build their own Omi consumer device using only what's in this repo + standard suppliers.
 
-**Last updated:** 2026-08-11
-**Reviewed by:** Codex (multi-round review — all tasks scored ≥8/10)
+**Last updated:** 2026-08-13
+**Reviewed by:** Codex (multi-round review) + source-of-truth audit against KiCad PCB/schematics/gerbers + factory BOM
 
 ---
 
@@ -15,12 +15,12 @@
 | Pick-and-Place / CPL Files | ✅ Complete — 3 boards | 9/10 |
 | LCSC / Distributor Part Numbers | ✅ Complete — 48/63 found, sourcing guide | 8.0/10 |
 | SWD Debug Pad Map | ✅ Complete — SWD-DEBUG-ACCESS.md | 8.1/10 |
-| Stencil / Reflow / PCBA Notes | ✅ Complete — STENCIL-REFLOW-NOTES.md | 8.0/10 |
-| Battery Procurement Spec | ✅ Complete — BATTERY-SPEC.md | 8.0/10 |
-| RF / Antenna Notes | ✅ Complete — RF-ANTENNA-NOTES.md | 8.0/10 |
-| Impedance / Stackup Notes | ✅ Complete — IMPEDANCE-STACKUP.md | 8.0/10 |
-| FPC Flex Fab Notes | ✅ Complete — FPC-FLEX-FAB-NOTES.md | 8.3/10 |
-| Alternate Parts List | ✅ Complete — ALTERNATES.md | 8.2/10 |
+| Stencil / Reflow / PCBA Notes | ✅ Audited — STENCIL-REFLOW-NOTES.md | 8.0→audit fix |
+| Battery Procurement Spec | ✅ Audited — BATTERY-SPEC.md | 8.0→audit fix |
+| RF / Antenna Notes | ✅ Verified — RF-ANTENNA-NOTES.md | 8.0→verified |
+| Impedance / Stackup Notes | ✅ Audited — IMPEDANCE-STACKUP.md | 8.0→audit fix |
+| FPC Flex Fab Notes | ✅ Audited — FPC-FLEX-FAB-NOTES.md | 8.3→audit fix |
+| Alternate Parts List | ✅ Updated — ALTERNATES.md | 8.2→updated |
 | Electronics Build Guide | ✅ Complete — electronics.mdx improved | 8.2/10 |
 | PCB Gerbers | ✅ Complete (existing) | — |
 | KiCad Source | ✅ Complete (existing, KiCad 9) | — |
@@ -29,7 +29,7 @@
 | Firmware Source | ✅ Complete (existing) | — |
 | License (MIT) | ✅ Complete (existing) | — |
 
-**Average Codex Score: 8.5/10** (across 11 reviewed tasks)
+**Post-audit:** 14 factual errors found and fixed by cross-referencing against KiCad PCB/schematics + factory BOM. Codex independent verification caught 1 additional error (BQ25101 charge current).
 
 ---
 
@@ -82,3 +82,8 @@ Each task went through multiple Codex review rounds until scoring ≥8/10. Key c
 | R3 | FC-12M crystal package wrong → 2.05×1.2mm not 1.6×1.0mm | Wrong footprint |
 | R3 | Mic listed as top-port → corrected to bottom-port per TDK data | Blocked audio path |
 | R3 | NAND flash listed as 8GB → corrected to 4Gbit (512MB) per BOM | Misleading spec |
+| **Audit** | Bottom-side component list completely wrong (5 ICs missing, 6 wrong refs) | CM gets wrong assembly difficulty |
+| **Audit** | BQ25101 charge current ~100mA → ~135mA (K_ISET=135 AΩ, R8=1KΩ) | Wrong battery spec |
+| **Audit** | FPC PI core 50µm → 203.2µm (4× off), copper ½oz → 1oz, BTB pitch 0.25→0.35mm | Wrong FPC fabrication |
+| **Audit** | Blind via count 159→176, min drill 0.15→0.102mm, charger thickness 1.6→1.0mm | Wrong fab specs |
+| **Audit** | RF switch truth table verified from KiCad net assignments (RF1=BLE, RF2=WiFi) | Resolved ambiguity |

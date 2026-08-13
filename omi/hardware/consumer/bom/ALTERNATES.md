@@ -1,6 +1,7 @@
 # Alternate Parts List — Omi Consumer
 
-**Last updated:** 2026-08-11
+**Last updated:** 2026-08-13
+**Sources:** Factory BOM (`omi-bom.csv`), KiCad PCB/schematic (mainboard, charger, FPC)
 
 ## How to Use This Document
 
@@ -26,6 +27,10 @@ Parts are classified into three tiers:
 | Connectors (J1, J3, PP1–PP6) | ⚠️ | Must match mating height, pitch, and pin count exactly. |
 | Power ICs (U8, U16 LDO) | ⚠️ | Must match voltage, current, package, pinout. Very few share XTDFN-4 footprint. |
 | Power ICs (U13 buck, U15 charger) | 🚫 | TI DSBGA-6 packages. No verified alternate; use exact MPN. |
+| IMU (U5 LSM6DS3TR-C) | ⚠️ | LGA-14 (2.5×3mm), back side. Other 6-axis IMUs exist in same package but require firmware driver and I2C/SPI address verification. |
+| SPI Flash (U12 P25Q16SH) | ⚠️ | USON-8 (3×2mm), back side. Other 128Mbit SPI flash may be pin-compatible but require SFDP table and QE bit behavior matching for firmware. |
+| RGB LED (D2, D7 MHPA0606RGBDT) | 🚫 | 0606 (0.69×0.69mm) — no LCSC alternate in this footprint. Use exact MPN from MEIHUA. |
+| Tactile switch (K2 TS-1001S) | ⚠️ | 2.6×1.6×0.53mm ultra-low-profile. Must match footprint and profile height exactly for enclosure fit. |
 | MOSFETs (Q1, Q2, Q7) | 🚫 | No verified alternate. Use exact MPN; see details below. |
 | Logic (U9 NAND gate) | ✅ | 74LVC1G00 in SC70-5 — prefer Schmitt-trigger versions (SGMICRO, Nexperia). |
 | General passives (R, C not in RF path) | ✅ | Any equivalent value/tolerance/package from major vendor. |
@@ -126,6 +131,50 @@ These parts have no pin-compatible alternate. Plan inventory accordingly.
 | U10 | FM8625H | FUMAN SPDT RF switch. Other SPDT switches may work but require RF path re-validation (insertion loss, isolation, P1dB). | FUMAN direct, LCSC sourcing request |
 | U14 | GLF73910-BD01 | GLF battery protection IC. Other protection ICs require OVP/UVP threshold matching to BQ25101 charge profile. | GLF direct |
 | MIC1, MIC2 | MMICT5838-00-012 | TDK T5838 PDM MEMS mic. Other PDM mics differ in sensitivity, SNR, pinout, and port direction (this mic is bottom-port per TDK distributor data — sound enters from PCB side). | TDK direct, DigiKey |
+
+### U5: IMU (LSM6DS3TR-C, LGA-14 2.5×3mm — back side)
+
+⚠️ **Candidate only.** The LSM6DS3TR-C is a mature ST 6-axis IMU. Pin-compatible alternates exist but require:
+- Same LGA-14 (2.5×3mm, 0.5mm pitch) package and pinout
+- I2C address match (SA0 pin determines 0x6A/0x6B)
+- Firmware driver compatibility (register map)
+- Vibration motor coupling qualification (U5 is on back side near motor mount)
+
+| MPN | Manufacturer | Status | Notes |
+|-----|-------------|--------|-------|
+| LSM6DSO (LCSC C2849283) | STMicroelectronics | ⚠️ **Unverified** | Drop-in successor to LSM6DS3, same LGA-14, but register map differs. Firmware driver change required. |
+| ICM-42688-P (TDK) | TDK InvenSense | ❌ **Rejected** | Different package (LGA-14 but 2.5×3×0.73mm, different pinout). Not pin-compatible. |
+
+**If OOS:** Source from DigiKey (497-LSM6DS3TR-C) or Mouser. ST makes this part in high volume.
+
+### U12: SPI Flash (P25Q16SH-UXH-IR, USON-8 3×2mm — back side)
+
+⚠️ **Candidate only.** Other 128Mbit SPI NOR flash in USON-8 may work but require:
+- Exact USON-8 (3×2mm) package and pinout match
+- SFDP (Serial Flash Discoverable Parameters) table compatibility
+- QE (Quad Enable) bit behavior matching for firmware
+- Same or better read/erase performance
+
+| MPN | Manufacturer | Status | Notes |
+|-----|-------------|--------|-------|
+| W25Q128JWSIQ (Winbond) | Winbond | ⚠️ **Unverified** | 128Mbit USON-8 (3×2mm). Widely available on LCSC. Requires firmware SFDP/QE bit verification. |
+| GD25Q128EWIGR (GigaDevice) | GigaDevice | ⚠️ **Unverified** | 128Mbit USON-8. LCSC available. Same caveat on SFDP/QE. |
+
+**If OOS:** Source Puya P25Q16SH from Puya Semi direct. LCSC has `-SSH` variant (SOIC-8) — **wrong package**, do not use.
+
+### D2, D7: RGB LED (MHPA0606RGBDT, 0606 0.69×0.69mm)
+
+🚫 **No verified alternate.** The 0606 RGB LED footprint (0.69×0.69mm) is uncommon. Larger 0808/1010 sizes are widely available but **will not fit the PCB footprint**. Source MHPA0606RGBDT from MEIHUA direct or Alibaba.
+
+### K2: Tactile Switch (TS-1001S, 2.6×1.6×0.53mm)
+
+⚠️ **Candidate only.** Ultra-low-profile SMD tactile switch. Must match:
+- Footprint: 2.6×1.6mm
+- Profile height: ≤0.53mm (enclosure clearance critical)
+- Actuation force: ~163gf (similar feel)
+- 4-pin SMD configuration
+
+Source JINBEILI TS-1001S direct if OOS. Check C&K/Alps for ultra-low-profile equivalents, but verify all four dimensions match.
 
 ## ⚠️ Crystal Alternates (USE WITH CAUTION)
 
