@@ -106,7 +106,6 @@ describe("gateway chat generation source", () => {
       "content-type": "application/json",
       "x-omi-service-caller": "platform",
       "x-omi-user-uid": "account-1",
-      "x-omi-tenant-id": "account-1",
       "x-omi-llm-feature": "rewrite_chat",
     });
     const body = JSON.parse(String(requests[0]?.init.body)) as Record<string, unknown>;
@@ -114,6 +113,59 @@ describe("gateway chat generation source", () => {
     expect(JSON.stringify(body)).not.toContain("glm");
     expect(JSON.stringify(body)).not.toContain("deepseek");
     expect(body.stream).toBe(true);
+  });
+
+  test("keeps a networked fake behind the authenticated HTTP gateway contract", async () => {
+    let observed: Readonly<{
+      authorization: string | null;
+      caller: string | null;
+      tenant: string | null;
+      body: Record<string, unknown>;
+    }> | null = null;
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        observed = Object.freeze({
+          authorization: request.headers.get("authorization"),
+          caller: request.headers.get("x-omi-service-caller"),
+          tenant: request.headers.get("x-omi-tenant-id"),
+          body: await request.json() as Record<string, unknown>,
+        });
+        return stream(
+          JSON.stringify({ choices: [{ delta: { content: "fake-through-gateway" } }] }),
+          "[DONE]",
+        );
+      },
+    });
+
+    try {
+      const source = createGatewayChatGenerationSource({
+        gatewayUrl: `http://127.0.0.1:${server.port}`,
+        laneId: "omi:auto:chat-agent",
+        serviceToken: "network-test-token",
+      });
+      const deltas: string[] = [];
+      const outcome = new Promise<"done" | "failed">((resolve) => {
+        source.start(input({
+          onDelta: (text) => deltas.push(text),
+          onComplete: () => resolve("done"),
+          onError: () => resolve("failed"),
+        }));
+      });
+
+      expect(await outcome).toBe("done");
+      expect(deltas).toEqual(["fake-through-gateway"]);
+      expect(observed).toMatchObject({
+        authorization: "Bearer network-test-token",
+        caller: "platform",
+        tenant: null,
+      });
+      expect(observed?.body.model).toBe("omi:auto:chat-agent");
+      expect(observed?.body.stream).toBe(true);
+    } finally {
+      server.stop(true);
+    }
   });
 
   test("fails closed when the gateway stream ends without its terminal marker", async () => {

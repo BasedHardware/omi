@@ -298,7 +298,6 @@ export const createGatewayChatGenerationSource = (
               "content-type": "application/json",
               "x-omi-service-caller": serviceCaller,
               "x-omi-user-uid": input.context.ownerAccountId,
-              "x-omi-tenant-id": input.context.ownerAccountId,
               "x-omi-llm-feature": usageFeature,
             },
             body: JSON.stringify({
