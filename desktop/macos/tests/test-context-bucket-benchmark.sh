@@ -7,6 +7,7 @@ python3 desktop/macos/scripts/context-bucket-benchmark.py
 python3 - <<'PY'
 import importlib.util
 import io
+import json
 from pathlib import Path
 import sys
 import types
@@ -17,6 +18,17 @@ path = Path("desktop/macos/scripts/context-bucket-benchmark.py")
 spec = importlib.util.spec_from_file_location("context_bucket_benchmark", path)
 benchmark = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(benchmark)
+
+fixture = json.loads(Path("desktop/macos/e2e/fixtures/context-bucket-proactivity-benchmark.json").read_text())
+material_case = next(case for case in fixture["cases"] if case["id"] == "worthy-material-change-no-commitment")
+assert set(material_case["allowedDecisions"]) == {"insight", "suggest"}
+assert material_case["forbiddenOutputTerms"] == [
+    "task_candidate",
+    "assigned owner: Alex",
+    "due tomorrow",
+    "due at 17:00",
+]
+assert json.loads(benchmark.map_case(material_case)["tasks"]) == []
 
 case = {
     "id": "synthetic-text-output",
