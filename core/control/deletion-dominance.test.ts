@@ -97,6 +97,9 @@ const ratified = (version: string) => ({
 
 const clearLegalHold = () => ({
   status: "clear" as const,
+  account_id: ACCOUNT,
+  control_revision: 7,
+  deletion_epoch: 31,
   policy_version: "legal-hold-v1",
   disposition_receipt_digest: digest("f"),
 });
@@ -275,6 +278,9 @@ describe("lifecycle dominance and terminal cleanup", () => {
     const held = planDeletionDominance(terminalInput({
       legal_hold: {
         status: "held",
+        account_id: ACCOUNT,
+        control_revision: 7,
+        deletion_epoch: 31,
         policy_version: "legal-hold-v1",
         disposition_receipt_digest: digest("9"),
       },
@@ -420,6 +426,12 @@ describe("strict detached input and coordinate closure", () => {
     expectErrorCode(() => planDeletionDominance(terminalInput({
       terminal_export_receipt: exportReceipt({ stranded_data_present: false }),
       inventory: inventory({ stranded_product_data: 1 }),
+    })), "terminal_coordinate_mismatch");
+    expectErrorCode(() => planDeletionDominance(terminalInput({
+      legal_hold: { ...clearLegalHold(), account_id: "acct-other" },
+    })), "account_coordinate_mismatch");
+    expectErrorCode(() => planDeletionDominance(terminalInput({
+      legal_hold: { ...clearLegalHold(), deletion_epoch: 32 },
     })), "terminal_coordinate_mismatch");
   });
 

@@ -122,6 +122,9 @@ export type LegalHoldCoordinate =
   | { readonly status: "unverified" }
   | {
       readonly status: "clear" | "held";
+      readonly account_id: string;
+      readonly control_revision: number;
+      readonly deletion_epoch: number;
       readonly policy_version: string;
       readonly disposition_receipt_digest: string;
     };
@@ -379,10 +382,20 @@ const parseLegalHold = (value: unknown): LegalHoldCoordinate => {
   }
   const row = exactPlainRecord(
     value,
-    ["status", "policy_version", "disposition_receipt_digest"],
+    [
+      "status",
+      "account_id",
+      "control_revision",
+      "deletion_epoch",
+      "policy_version",
+      "disposition_receipt_digest",
+    ],
     "invalid_legal_hold_coordinate",
   );
   if ((row.status !== "clear" && row.status !== "held")
+    || !isWellFormedAccountId(row.account_id)
+    || !safeEpoch(row.control_revision)
+    || !safeEpoch(row.deletion_epoch)
     || !boundedCoordinate(row.policy_version)
     || !digest(row.disposition_receipt_digest)) fail("invalid_legal_hold_coordinate");
   return value as LegalHoldCoordinate;
@@ -484,6 +497,7 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
     projection?.account_id,
     tombstone?.account_id,
     exportReceipt?.account_id,
+    legalHold.status === "unverified" ? undefined : legalHold.account_id,
     verifiedInventory?.account_id,
   ]
     .filter((value): value is string => value !== undefined);
@@ -501,6 +515,13 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
     }
     const stranded = inventory.find((row) => row.surface === "stranded_product_data")!;
     if (stranded.remaining_count > 0 && !exportReceipt.stranded_data_present) {
+      fail("terminal_coordinate_mismatch");
+    }
+  }
+  if (legalHold.status !== "unverified") {
+    if (tombstone === null
+      || legalHold.control_revision !== tombstone.control_revision
+      || legalHold.deletion_epoch !== tombstone.deletion_epoch) {
       fail("terminal_coordinate_mismatch");
     }
   }
@@ -586,7 +607,8 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
   }
 
   if (projection.lifecycle_state === "active") {
-    if (tombstone !== null || exportReceipt !== null || verifiedInventory !== null) {
+    if (tombstone !== null || exportReceipt !== null || verifiedInventory !== null
+      || legalHold.status !== "unverified") {
       fail("terminal_coordinate_mismatch");
     }
     let mode: LifecycleOperationMode;
@@ -616,7 +638,8 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
   }
 
   if (projection.lifecycle_state === "deletion_pending") {
-    if (tombstone !== null || exportReceipt !== null || verifiedInventory !== null) {
+    if (tombstone !== null || exportReceipt !== null || verifiedInventory !== null
+      || legalHold.status !== "unverified") {
       fail("terminal_coordinate_mismatch");
     }
     return Object.freeze({

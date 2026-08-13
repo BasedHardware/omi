@@ -34,7 +34,8 @@ The planner accepts exact detached plain data containing:
 - the immutable terminal-deletion export receipt, if any;
 - the latest restore-replay checkpoint, if the account is being recovered;
 - an externally authorized legal-hold disposition receipt (`clear`, `held`, or
-  explicitly `unverified`), without hold content or operator identity;
+  explicitly `unverified`), bound to the exact account, control revision, and
+  deletion epoch but containing no hold content or operator identity;
 - a runtime-verified complete-source inventory produced by the separately
   pre-registered deletion cleanup inventory contract, or `null`; and
 - only the approval coordinates of retention/disposition and recovery-objective
