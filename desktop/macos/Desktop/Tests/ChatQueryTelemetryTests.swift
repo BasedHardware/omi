@@ -87,6 +87,50 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertEqual(detail?.retryable, false)
   }
 
+  func testWorkerRecoveryTelemetryIsBoundedAndExplainsTheNextSendContract() {
+    let failure = AgentRuntimeFailure(
+      code: "adapter_execution_failed",
+      userMessage: "Agent run failed",
+      technicalMessage: "private prompt /Users/person/secret.txt",
+      source: "adapter_execution",
+      adapterId: "pi-mono",
+      retryable: true,
+      recoveryAction: "worker_recycled",
+      recoveryOutcome: "recovered",
+      retryDisposition: "next_send"
+    )
+    let event = ChatQueryTelemetryEvent.failed(
+      ChatQueryTelemetryContext(attemptId: "attempt-recycled", surface: "main_chat", harness: "piMono"),
+      durationMs: 400,
+      errorClass: .agentError,
+      partialResponse: false,
+      detail: .from(BridgeError.agentRuntimeFailure(failure))
+    )
+    let properties = event.analyticsPayload.properties
+    XCTAssertEqual(properties["recovery_action"] as? String, "worker_recycled")
+    XCTAssertEqual(properties["recovery_outcome"] as? String, "recovered")
+    XCTAssertEqual(properties["retry_disposition"] as? String, "next_send")
+    XCTAssertFalse(String(describing: properties).contains("/Users/person"))
+    XCTAssertFalse(String(describing: properties).contains("private prompt"))
+  }
+
+  func testRuntimeDetailedFailureCodeMustBeInTheAnalyticsAllowlist() {
+    let failure = AgentRuntimeFailure(
+      code: "provider_error_/Users/person/secret.txt",
+      userMessage: "Agent run failed"
+    )
+    let event = ChatQueryTelemetryEvent.failed(
+      ChatQueryTelemetryContext(attemptId: "attempt-private-code", surface: "main_chat", harness: "piMono"),
+      durationMs: 100,
+      errorClass: .agentRuntime,
+      partialResponse: false,
+      detail: .from(BridgeError.agentRuntimeFailure(failure))
+    )
+    let properties = event.analyticsPayload.properties
+    XCTAssertNil(properties["failure_code"])
+    XCTAssertFalse(String(describing: properties).contains("/Users/person"))
+  }
+
   func testAnalyticsPayloadUsesTypedAllowlist() {
     let event = ChatQueryTelemetryEvent.failed(
       ChatQueryTelemetryContext(

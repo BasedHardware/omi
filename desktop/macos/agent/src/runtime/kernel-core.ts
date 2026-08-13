@@ -142,6 +142,7 @@ import type {
   AgentRuntimeKernelOptions,
 } from "./kernel-types.js";
 import { ExternalSurfaceAuthorityError, StaleAdapterBindingError } from "./kernel-types.js";
+import { AdapterWorkerRecycledError } from "./worker-pool.js";
 import { providerBoundaryForAdapter, resolveAdapterWithinBoundary } from "./execution-policy.js";
 import type { SurfaceRef } from "./surface-session.js";
 
@@ -973,6 +974,7 @@ export class KernelCore {
       let binding: AdapterBinding;
       let handle: AdapterBindingHandle;
       let bindingResolutionProtectedBindingId: string | null = null;
+      let adapterDispatchStarted = false;
       try {
         assertExecutionAuthority();
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
@@ -1122,6 +1124,7 @@ export class KernelCore {
             { capabilityRef: toolCapability.capabilityRef },
           );
           this.markAttemptRunning(attempt, binding);
+          adapterDispatchStarted = true;
           return worker.adapter.executeAttempt(
             {
               sessionId: accepted.session.sessionId,
@@ -1141,7 +1144,24 @@ export class KernelCore {
             (event) => this.persistAdapterEvent(accepted.session.sessionId, accepted.run.runId, attempt.attemptId, event),
             abortController.signal,
           );
-        });
+        }, adapterId === "pi-mono" ? {
+          recycleWorkerOnError: true,
+          shouldRecycleWorkerOnError: () => adapterDispatchStarted,
+          onWorkerRecycled: () => {
+            this.markBindingStale(binding, attempt, "pinned_worker_recycled_after_execution_error");
+            this.appendEvent({
+              sessionId: accepted.session.sessionId,
+              runId: accepted.run.runId,
+              attemptId: attempt.attemptId,
+              type: "worker.recycled",
+              payload: {
+                adapterId,
+                recoveryAction: "worker_recycled",
+                retryDisposition: "next_send",
+              },
+            });
+          },
+        } : undefined);
         this.activeExecutions.delete(accepted.run.runId);
         assertExecutionAuthority();
         if (handle.bindingId && nextContextDelivery) {
@@ -1198,19 +1218,34 @@ export class KernelCore {
           resumeFromAttemptId = attempt.attemptId;
           continue;
         }
-        if (await this.tryRecoverAttempt(input, attempt, error, "adapter_execution_failed", attemptNo < maxAttempts)) {
+        const workerRecovery = error instanceof AdapterWorkerRecycledError ? error : null;
+        if (
+          !workerRecovery
+          && await this.tryRecoverAttempt(input, attempt, error, "adapter_execution_failed", attemptNo < maxAttempts)
+        ) {
           retryReason = "recoverable_error";
           resumeFromAttemptId = attempt.attemptId;
           continue;
         }
         const wasCancelling = this.runStatus(accepted.run.runId) === "cancelling";
         const status: AttemptStatus = wasCancelling ? "cancelled" : "failed";
-        const failure = wasCancelling ? null : failureFromError(error, {
-          code: "adapter_execution_failed",
-          source: "adapter_execution",
-          adapterId: attempt.adapterId,
-          retryable: false,
-        });
+        const baseFailure = wasCancelling ? null : failureFromError(
+          workerRecovery?.originalError ?? error,
+          {
+            code: "adapter_execution_failed",
+            source: "adapter_execution",
+            adapterId: attempt.adapterId,
+            retryable: Boolean(workerRecovery),
+          },
+        );
+        const failure = baseFailure && workerRecovery ? {
+          ...baseFailure,
+          userMessage: "The local agent reset its session after an error. Send your message again.",
+          retryable: true,
+          recoveryAction: "worker_recycled" as const,
+          recoveryOutcome: workerRecovery.stopSucceeded ? "recovered" as const : "stop_failed" as const,
+          retryDisposition: "next_send" as const,
+        } : baseFailure;
         this.finishAttemptAndRun({
           sessionId: accepted.session.sessionId,
           runId: accepted.run.runId,

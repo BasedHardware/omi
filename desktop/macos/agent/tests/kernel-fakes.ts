@@ -213,11 +213,19 @@ export function createKernelHarness(
     maxAttempts?: number;
     recoverAfterError?: (error: unknown) => Promise<boolean>;
   },
+  makeAdapter?: () => FakeRuntimeAdapter,
 ): KernelHarness {
   const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
-  const adapter = new FakeRuntimeAdapter(adapterId);
+  const adapter = makeAdapter?.() ?? new FakeRuntimeAdapter(adapterId);
+  let firstFactoryCall = true;
   const registry = new AdapterRegistry();
-  registry.register(adapterId, () => adapter, maxWorkers);
+  registry.register(adapterId, () => {
+    if (firstFactoryCall) {
+      firstFactoryCall = false;
+      return adapter;
+    }
+    return makeAdapter?.() ?? adapter;
+  }, maxWorkers);
   const kernel = new AgentRuntimeKernel({
     store,
     registry,

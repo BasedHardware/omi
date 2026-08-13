@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { baseRunInput, createKernelHarness } from "./kernel-fakes.js";
+import { baseRunInput, createKernelHarness, FakeRuntimeAdapter } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
 
@@ -109,6 +109,76 @@ describe("AgentRuntimeKernel adapter binding resolution", () => {
     ]);
     expect(store.allRows("SELECT type FROM events ORDER BY event_seq").map((row) => row.type)).toContain("binding.stale");
     expect(store.allRows("SELECT type FROM events ORDER BY event_seq").map((row) => row.type)).toContain("binding.replaced");
+    store.close();
+  });
+
+  it("recycles a poisoned pi-mono worker so the next send succeeds in the same daemon", async () => {
+    const adapters: FakeRuntimeAdapter[] = [];
+    let genericRecoveryCalls = 0;
+    const makeAdapter = () => {
+      const adapter = new FakeRuntimeAdapter("pi-mono");
+      Object.assign(adapter.capabilities, {
+        resumeFidelity: "none",
+        supportsNativeResume: false,
+        requiresPinnedWorker: true,
+        restartBehavior: "process_local_bindings_stale",
+      });
+      adapters.push(adapter);
+      return adapter;
+    };
+    const { store, adapter, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "pi-mono",
+      1,
+      undefined,
+      () => ({
+        maxAttempts: 2,
+        recoverAfterError: async () => {
+          genericRecoveryCalls += 1;
+          return true;
+        },
+      }),
+      makeAdapter,
+    );
+    adapter.failNextExecutionError = new Error("poisoned local adapter state");
+
+    const failed = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-poisoned",
+    });
+    expect(failed.terminalStatus).toBe("failed");
+    expect(adapters).toHaveLength(1);
+    expect(adapter.executed).toHaveLength(1);
+    expect(genericRecoveryCalls).toBe(0);
+    expect(adapter.stopped).toBe(1);
+    expect(store.getRow("SELECT status FROM adapter_bindings").status).toBe("stale");
+    expect(JSON.parse(failed.run.resultJson!)).toMatchObject({
+      failure: {
+        code: "adapter_execution_failed",
+        recoveryAction: "worker_recycled",
+        recoveryOutcome: "recovered",
+        retryDisposition: "next_send",
+        retryable: true,
+      },
+    });
+
+    const recovered = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-after-recycle",
+    });
+    expect(recovered.terminalStatus).toBe("succeeded");
+    expect(adapters).toHaveLength(2);
+    expect(adapters[1]?.executed).toHaveLength(1);
+    expect(store.allRows("SELECT status FROM adapter_bindings ORDER BY binding_generation"))
+      .toEqual([
+        expect.objectContaining({ status: "closed" }),
+        expect.objectContaining({ status: "active" }),
+      ]);
+    expect(store.allRows("SELECT type FROM events WHERE type = 'worker.recycled'")).toHaveLength(1);
     store.close();
   });
 });
