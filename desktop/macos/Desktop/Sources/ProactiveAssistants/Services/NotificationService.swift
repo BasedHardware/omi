@@ -10,6 +10,33 @@ private struct UNCompletionHandlerBox: @unchecked Sendable {
   init(_ value: @escaping (UNNotificationPresentationOptions) -> Void) { self.value = value }
 }
 
+/// Serializes notification-settings PATCHes so every mutation — user slider/toggle
+/// changes and the launch migration alike — reaches the backend in request order.
+/// An unordered send could let an earlier mutation land last and clear the
+/// pending-sync journal against a state the server never stored.
+@MainActor
+final class NotificationSettingsSyncQueue {
+  static let shared = NotificationSettingsSyncQueue()
+
+  private var tail: Task<Void, Never>?
+
+  /// `enabled: nil` leaves the master toggle untouched server-side (used by the
+  /// launch migration, which only moves the frequency).
+  func enqueue(enabled: Bool?, frequency: Int, revision: Int) {
+    let previous = tail
+    tail = Task {
+      await previous?.value
+      do {
+        _ = try await APIClient.shared.updateNotificationSettings(
+          enabled: enabled, frequency: frequency)
+        NotificationService.completeNotificationSettingsSync(revision: revision)
+      } catch {
+        logError("Failed to update notification settings", error: error)
+      }
+    }
+  }
+}
+
 /// Sound options for notifications
 enum NotificationSound {
   case `default`
@@ -927,19 +954,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   static func migrateToBalancedDefaultIfNeeded() {
     guard let target = applyBalancedDefaultMigration(defaults: .standard) else { return }
     log("NotificationService: applied balanced-by-default migration (frequency=\(target))")
-    // Route the backend push through the pending-sync journal: if it fails (offline,
-    // signed out during onboarding), the next Settings load preserves the local value
-    // and retries the push instead of hydrating the stale server value back over it.
+    // Route the backend push through the pending-sync journal and the shared send
+    // queue: a failed push (offline, signed out during onboarding) is retried by the
+    // next Settings load instead of the stale server value hydrating back over the
+    // local re-enable, and a slow launch push can never land after — and overwrite —
+    // a frequency change the user makes right after startup.
     let revision = beginNotificationSettingsSync()
-    Task {
-      do {
-        _ = try await APIClient.shared.updateNotificationSettings(enabled: nil, frequency: target)
-        completeNotificationSettingsSync(revision: revision)
-      } catch {
-        logError(
-          "NotificationService: balanced-by-default migration backend push failed", error: error)
-      }
-    }
+    NotificationSettingsSyncQueue.shared.enqueue(enabled: nil, frequency: target, revision: revision)
   }
 
   /// Local half of the balanced-by-default migration, split from the backend push so the
