@@ -66,9 +66,9 @@ final class MessageMetadataTests: XCTestCase {
     XCTAssertEqual(metadata.offeredToolsSummary, "0 tools")
   }
 
-  func testResponseContextPopoverDoesNotClaimAServedModelOrPromptBody() {
+  func testResponseContextPopoverDoesNotClaimAServedModelOrPromptBody() throws {
     // omi-test-quality: source-inspection -- static contract: Response Context must not restore Model, Full System Prompt, or XML prompt-count parsers.
-    let popover = try! String(contentsOfFile: popoverSourcePath(), encoding: .utf8)
+    let popover = try String(contentsOfFile: popoverSourcePath(), encoding: .utf8)
     XCTAssertFalse(popover.contains("Full System Prompt"))
     XCTAssertFalse(popover.contains("Context in Prompt"))
     XCTAssertFalse(popover.contains("metadata.model"))
@@ -77,7 +77,7 @@ final class MessageMetadataTests: XCTestCase {
     XCTAssertTrue(popover.contains("metadata.tokenSummary"))
 
     // omi-test-quality: source-inspection -- static contract: completion must stamp kernel snapshot evidence, not a kernel-hash systemPrompt.
-    let provider = try! String(contentsOfFile: chatProviderSourcePath(), encoding: .utf8)
+    let provider = try String(contentsOfFile: chatProviderSourcePath(), encoding: .utf8)
     XCTAssertTrue(provider.contains("MessageMetadata.fromCompletedTurn"))
     XCTAssertFalse(provider.contains("systemPrompt: \"kernel-context:"))
   }
