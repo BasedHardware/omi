@@ -62,7 +62,6 @@ from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
-from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
@@ -111,6 +110,8 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
 
     def _run_enrichment():
         try:
+            from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
+
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
