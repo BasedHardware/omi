@@ -7374,6 +7374,36 @@
         "title": "ConversationFinalizationStatusResponse",
         "type": "object"
       },
+      "ConversationLinkSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "const": "conversationLink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "conversation_id",
+          "summary"
+        ],
+        "title": "ConversationLinkSpec",
+        "type": "object"
+      },
       "ConversationMutationResponse": {
         "description": "Canonical conversation snapshot returned after a user mutation.",
         "properties": {
@@ -7811,6 +7841,15 @@
             ],
             "description": "Stable client-generated session ID. When provided, retries return the same conversation ID.",
             "title": "Client Session Id"
+          },
+          "conversation_role": {
+            "default": "ambient",
+            "enum": [
+              "ambient",
+              "meeting"
+            ],
+            "title": "Conversation Role",
+            "type": "string"
           },
           "finished_at": {
             "anyOf": [
@@ -16747,6 +16786,7 @@
               "discriminator": {
                 "mapping": {
                   "captureLink": "#/components/schemas/CaptureLinkSpec",
+                  "conversationLink": "#/components/schemas/ConversationLinkSpec",
                   "goalLink": "#/components/schemas/GoalLinkSpec",
                   "memoryLink": "#/components/schemas/MemoryLinkSpec",
                   "questionCard": "#/components/schemas/QuestionCardSpec",
@@ -16766,6 +16806,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/CaptureLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/ConversationLinkSpec"
                 },
                 {
                   "$ref": "#/components/schemas/MemoryLinkSpec"
