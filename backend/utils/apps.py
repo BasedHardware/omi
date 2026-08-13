@@ -519,13 +519,22 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
             set_generic_cache(redis_cache_key, reduced_apps, 60 * 10)  # 10 minutes cached
             all_apps = reduced_apps
 
+        # Drop any record missing an id before the lookups below. `_safe_build_app` already skips a
+        # record the App model rejects, but `id` is read unguarded to build app_ids and again per
+        # app — upstream of any model construction — so one legacy document without it raises
+        # KeyError and 500s the whole marketplace listing for every user.
+        usable_apps = [app for app in all_apps if app.get('id')]
+        skipped_no_id = len(all_apps) - len(usable_apps)
+        if skipped_no_id:
+            logger.warning("Skipping %d marketplace app record(s) without an id", skipped_no_id)
+
         # Process apps (add installs, reviews, etc.)
-        app_ids = [app['id'] for app in all_apps]
+        app_ids = [app['id'] for app in usable_apps]
         apps_installs = get_apps_installs_count(app_ids)
         apps_reviews = get_apps_reviews(app_ids) if include_reviews else {}
 
         apps: List[App] = []
-        for app in all_apps:
+        for app in usable_apps:
             if app.get('disabled'):
                 continue
             app_dict = app
