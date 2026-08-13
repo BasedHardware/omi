@@ -2838,8 +2838,8 @@ class TasksStore: ObservableObject {
 
     // 4. Update in-memory arrays immediately (optimistic UI)
     if newCompleted {
-      incompleteTasks.removeAll { $0.id == task.id }
       completedTasks.insert(updatedTask, at: 0)
+      incompleteTasks.removeAll { $0.id == task.id }
 
       // Compact relevance scores to fill the gap
       if let score = task.relevanceScore {
@@ -2873,8 +2873,8 @@ class TasksStore: ObservableObject {
         }
       }
     } else {
-      completedTasks.removeAll { $0.id == task.id }
       incompleteTasks.insert(updatedTask, at: 0)
+      completedTasks.removeAll { $0.id == task.id }
     }
 
     // 5. Refresh dashboard arrays immediately (SQLite was already updated in step 1)
@@ -3011,11 +3011,11 @@ class TasksStore: ObservableObject {
     }
     guard isCurrent(lease) else { return }
     if attemptedCompleted {
-      completedTasks.removeAll { $0.id == task.id }
       incompleteTasks.insert(task, at: 0)
+      completedTasks.removeAll { $0.id == task.id }
     } else {
-      incompleteTasks.removeAll { $0.id == task.id }
       completedTasks.insert(task, at: 0)
+      incompleteTasks.removeAll { $0.id == task.id }
     }
     self.error = backendError.localizedDescription
   }
