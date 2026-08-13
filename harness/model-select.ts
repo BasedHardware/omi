@@ -2,6 +2,10 @@ import { CodexModel } from "../drivers/model/codex";
 import { GlmModel } from "../drivers/model/glm";
 import { DeterministicFakeModel, type ModelPort } from "../drivers/model/port";
 import { CachingModelPort, SqliteVerdictStore, verdictCachePath } from "../drivers/model/verdict-cache";
+import {
+  offlineModelPipelineResourceDigest,
+  withOfflineModelPipelineExclusivity,
+} from "./offline-model-pipeline-lock";
 
 export interface ModelSelection { model: ModelPort; live: boolean; }
 
@@ -83,9 +87,29 @@ const bare = (options: readonly string[]): ModelPort => {
   return modelForProfile(requested ?? "glm");
 };
 
+export const modelPipelineResourceDigest = (options: readonly string[]): string => {
+  const requested = requestedModel(options);
+  const explicit = process.env["OMI_MODEL_PIPELINE_RESOURCE_ID"];
+  if (requested === "codex") {
+    return offlineModelPipelineResourceDigest({
+      explicit_resource_id: explicit ?? "codex-local-default",
+    });
+  }
+  const name = requested ?? "glm";
+  const profile = MODEL_PROFILES[name];
+  if (!profile) throw new Error(`unknown model profile: ${name}`);
+  return offlineModelPipelineResourceDigest({
+    credential: profileApiKey(profile),
+    ...(explicit ? { explicit_resource_id: explicit } : {}),
+  });
+};
+
 /** Opt-in via OMI_VERDICT_CACHE=<path>; unset leaves the port exactly as before. */
 const liveModel = (options: readonly string[]): ModelPort => {
-  const model = bare(options);
+  const model = withOfflineModelPipelineExclusivity(
+    bare(options),
+    modelPipelineResourceDigest(options),
+  );
   const path = verdictCachePath();
   return path
     ? new CachingModelPort(model, new SqliteVerdictStore(path), modelProfileCacheNamespace(options))

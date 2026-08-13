@@ -4,6 +4,7 @@ import {
   liveModelVersion,
   MODEL_PROFILES,
   modelForProfile,
+  modelPipelineResourceDigest,
   modelProfileCacheNamespace,
   profileApiKey,
   selectModel,
@@ -12,6 +13,7 @@ import {
 const ENV_KEYS = [
   "GLM_API_KEY", "ZAI_API_KEY", "OMI_BENCH_OPENAI_API_KEY",
   "OMI_BENCH_OPENAI_MODEL", "OPENCODE_GO_API_KEY", "OMI_BOUNDARY_VERSION",
+  "OMI_MODEL_PIPELINE_RESOURCE_ID", "OMI_MODEL_PIPELINE_LOCK_DIR",
 ] as const;
 const original = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 
@@ -68,5 +70,18 @@ describe("offline model profile registry", () => {
     expect(liveModelVersion(["--model", "glm"])).toBe("glm-qualified-variant");
     expect(modelProfileCacheNamespace(["--model", "glm"]))
       .toBe("glm:glm-qualified-variant");
+  });
+
+  test("credential aliases share a pipeline resource while DeepSeek and GLM stay distinct", () => {
+    process.env["GLM_API_KEY"] = "shared-glm-key";
+    process.env["ZAI_API_KEY"] = "ignored-alias";
+    process.env["OPENCODE_GO_API_KEY"] = "deepseek-key";
+    const glm = modelPipelineResourceDigest(["--model", "glm"]);
+    expect(glm).toBe(modelPipelineResourceDigest(["--model", "glm"]));
+    expect(glm).not.toBe(modelPipelineResourceDigest(["--model", "deepseek-flash"]));
+
+    process.env["OMI_MODEL_PIPELINE_RESOURCE_ID"] = "explicit-shared-resource";
+    expect(modelPipelineResourceDigest(["--model", "glm"]))
+      .toBe(modelPipelineResourceDigest(["--model", "deepseek-flash"]));
   });
 });
