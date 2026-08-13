@@ -150,7 +150,10 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
         self.assertRegex(workflow, r"types:\s*\[[^]]*closed[^]]*\]")
         self.assertIn("github.event.pull_request.number || github.sha", workflow)
-        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
+        self.assertIn(
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}",
+            workflow,
+        )
         self.assertIn("github.event.action != 'closed'", changes)
 
     def test_notification_boundary_runs_targeted_release_regression(self):
@@ -244,7 +247,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             concurrency,
         )
         self.assertIn(
-            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}",
             concurrency,
         )
         self.assertNotIn("github.ref", concurrency)
