@@ -447,7 +447,7 @@ final class OnboardingFlowTests: XCTestCase {
     let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
     let defaultChoice = try XCTUnwrap(
       secondBrainSource.range(of: "model.capture(SBOnboardingModel.defaultCaptureSelection)"))
-    let continuousChoice = try XCTUnwrap(secondBrainSource.range(of: "model.capture(.continuous)"))
+    let continuousChoice = try XCTUnwrap(secondBrainSource.range(of: "model.capture(.always)"))
 
     XCTAssertLessThan(
       defaultChoice.lowerBound,
@@ -458,6 +458,9 @@ final class OnboardingFlowTests: XCTestCase {
         .contains(".keyboardShortcut(.defaultAction)"),
       "Return must choose the meeting-only capture default")
     XCTAssertFalse(secondBrainSource.contains("reaches me anytime"))
+    XCTAssertTrue(secondBrainSource.contains("Text(\"Only Meetings\")"))
+    XCTAssertTrue(secondBrainSource.contains("Text(\"Always On\")"))
+    XCTAssertFalse(secondBrainSource.contains("from my calendar"))
   }
 
   // Regression: arrow navigation must be computed from persisted step state and

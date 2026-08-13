@@ -39,22 +39,18 @@ struct SBOnboardingWidgetShape: Equatable {
 @MainActor
 final class SBOnboardingModel: ObservableObject {
   enum CaptureSelection: Equatable {
-    case onlyDuringMeetings
-    case continuous
+    case onlyMeetings
+    case always
 
-    var systemAudioCaptureMode: AssistantSettings.SystemAudioCaptureMode {
+    var audioRecordingMode: AssistantSettings.AudioRecordingMode {
       switch self {
-      case .onlyDuringMeetings: .onlyDuringMeetings
-      case .continuous: .always
+      case .onlyMeetings: .onlyMeetings
+      case .always: .always
       }
-    }
-
-    var startsListeningImmediately: Bool {
-      self == .continuous
     }
   }
 
-  static let defaultCaptureSelection: CaptureSelection = .onlyDuringMeetings
+  static let defaultCaptureSelection: CaptureSelection = .onlyMeetings
 
   enum Step: Int, CaseIterable {
     case promise, name, howHeard, language, role
@@ -692,13 +688,13 @@ final class SBOnboardingModel: ObservableObject {
   // MARK: capture choice → completes onboarding
 
   func capture(_ selection: CaptureSelection) {
-    AssistantSettings.shared.systemAudioCaptureMode = selection.systemAudioCaptureMode
-    complete(startListening: selection.startsListeningImmediately)
+    AssistantSettings.shared.audioRecordingMode = selection.audioRecordingMode
+    complete()
   }
 
   /// The one handoff both exit paths run when onboarding ends.
   ///
-  /// `skip()` and `complete(startListening:)` used to carry byte-identical
+  /// `skip()` and `complete()` used to carry byte-identical
   /// copies of this sequence, which is how the post-onboarding guidance came to
   /// be produced by neither: there was no single place that owned "onboarding is
   /// over, hand the user to the app". There is now, so a step added here can
@@ -741,7 +737,7 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   /// Replicates the essential real side-effects of the legacy handleOnboardingComplete().
-  private func complete(startListening: Bool) {
+  private func complete() {
     // Do NOT mark file indexing complete here. Onboarding never actually scans, so
     // setting this flag "faked" the Files connector as connected while indexing
     // nothing — and, worse, permanently suppressed the Home view's automatic
@@ -766,7 +762,7 @@ final class SBOnboardingModel: ObservableObject {
       }
     }
     Task { [appState] in
-      if startListening { appState.startTranscription() }
+      appState.startTranscription()
       await appState.reconcileCapture()
     }
     // NOTE: previously this created a "Run omi for two days…" welcome task. That

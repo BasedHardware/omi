@@ -914,27 +914,14 @@ struct SBOnboardingView: View {
       Button {
         model.capture(SBOnboardingModel.defaultCaptureSelection)
       } label: {
-        // **One `Text`, not an `HStack` of two.** The label is wider than the capsule's 340 pt
-        // measure, and side by side the first run wrapped to two lines while the qualifier stayed on
-        // one and centred itself against them — a lopsided block inside the pill, on the last card
-        // of the flow. Concatenated, the whole label wraps as a single centred paragraph.
-        //
-        // The qualifier still steps down in *alpha* on the label colour rather than moving to another
-        // rung — the ladder is for type on the panel, and there is no second ink inside a primary
-        // button. `Ink.surface` restated here because a per-run colour is the only way to vary one
-        // inside a concatenation, and `Ink.surface` is exactly what `InkButtonStyle` sets for
-        // `.primary`.
-        (Text("● Only during meetings ")
-          + Text("· from my calendar").foregroundColor(Ink.surface.opacity(0.75)))
-          .multilineTextAlignment(.center)
-          .frame(maxWidth: .infinity)
+        Text("Only Meetings").frame(maxWidth: .infinity)
       }
       .buttonStyle(InkButtonStyle(kind: .primary))
       .keyboardShortcut(.defaultAction)
       Button {
-        model.capture(.continuous)
+        model.capture(.always)
       } label: {
-        Text("Start listening — continuously").frame(maxWidth: .infinity)
+        Text("Always On").frame(maxWidth: .infinity)
       }
       .buttonStyle(InkButtonStyle(kind: .secondary))
     }

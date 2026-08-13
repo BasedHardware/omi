@@ -313,11 +313,11 @@ import XCTest
     }
   }
 
-  // MARK: - AssistantSettings.systemAudioCaptureMode
+  // MARK: - AssistantSettings.audioRecordingMode
 
   @MainActor
-  final class SystemAudioCaptureModeSettingsTests: XCTestCase {
-    private let key = "systemAudioCaptureMode"
+  final class AudioRecordingModeSettingsTests: XCTestCase {
+    private let key = AssistantSettings.audioRecordingModeDefaultsKey
 
     override func setUp() {
       super.setUp()
@@ -330,21 +330,45 @@ import XCTest
     }
 
     func testDefaultsToOnlyDuringMeetings() {
-      XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .onlyDuringMeetings)
+      XCTAssertEqual(AssistantSettings.shared.audioRecordingMode, .onlyMeetings)
     }
 
     func testPersistsAndReadsBack() {
-      AssistantSettings.shared.systemAudioCaptureMode = .onlyDuringMeetings
-      XCTAssertEqual(UserDefaults.standard.string(forKey: key), "onlyDuringMeetings")
-      XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .onlyDuringMeetings)
+      AssistantSettings.shared.audioRecordingMode = .onlyMeetings
+      XCTAssertEqual(UserDefaults.standard.string(forKey: key), "onlyMeetings")
+      XCTAssertEqual(AssistantSettings.shared.audioRecordingMode, .onlyMeetings)
 
-      AssistantSettings.shared.systemAudioCaptureMode = .never
-      XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .never)
+      AssistantSettings.shared.audioRecordingMode = .off
+      XCTAssertEqual(AssistantSettings.shared.audioRecordingMode, .off)
     }
 
     func testUnknownRawValueFallsBackToDefault() {
       UserDefaults.standard.set("garbage", forKey: key)
-      XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .onlyDuringMeetings)
+      XCTAssertEqual(AssistantSettings.shared.audioRecordingMode, .onlyMeetings)
+    }
+
+    func testLegacySettingsCollapseIntoOneMode() {
+      XCTAssertEqual(
+        AssistantSettings.migratedAudioRecordingMode(
+          legacyTranscriptionEnabled: false,
+          legacySystemAudioModeRaw: "always"),
+        .off)
+      XCTAssertEqual(
+        AssistantSettings.migratedAudioRecordingMode(
+          legacyTranscriptionEnabled: true,
+          legacySystemAudioModeRaw: "onlyDuringMeetings"),
+        .onlyMeetings)
+      XCTAssertEqual(
+        AssistantSettings.migratedAudioRecordingMode(
+          legacyTranscriptionEnabled: true,
+          legacySystemAudioModeRaw: "always"),
+        .always)
+      XCTAssertEqual(
+        AssistantSettings.migratedAudioRecordingMode(
+          legacyTranscriptionEnabled: true,
+          legacySystemAudioModeRaw: "never"),
+        .always,
+        "Legacy mic-only users should remain recording rather than become Off")
     }
   }
 
@@ -382,7 +406,6 @@ import XCTest
       let transition = try XCTUnwrap(
         MeetingConversationBoundaryPolicy.transition(previousRole: .ambient, meetingActive: true)
       )
-
       XCTAssertEqual(
         MeetingConversationBoundaryPolicy.committedRole(
           previousRole: .ambient, transition: transition, rotationSucceeded: false),
@@ -392,6 +415,87 @@ import XCTest
         MeetingConversationBoundaryPolicy.committedRole(
           previousRole: .ambient, transition: transition, rotationSucceeded: true),
         .meeting
+      )
+    }
+
+    func testMeetingGateClosingWithSegmentsFinishesConversation() {
+      XCTAssertTrue(
+        MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: .onlyMeetings,
+          meetingStateReady: true,
+          shouldCapture: false,
+          segmentCount: 12,
+          hasSpeakerSegments: false
+        )
+      )
+    }
+
+    func testMeetingGateClosingWithOnlyInMemorySegmentsFinishesConversation() {
+      XCTAssertTrue(
+        MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: .onlyMeetings,
+          meetingStateReady: true,
+          shouldCapture: false,
+          segmentCount: 0,
+          hasSpeakerSegments: true
+        )
+      )
+    }
+
+    func testWaitingForFirstMeetingDoesNotFinishEmptySession() {
+      XCTAssertFalse(
+        MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: .onlyMeetings,
+          meetingStateReady: true,
+          shouldCapture: false,
+          segmentCount: 0,
+          hasSpeakerSegments: false
+        )
+      )
+    }
+
+    func testNonMeetingModesDoNotUseMeetingEndBoundary() {
+      XCTAssertFalse(
+        MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: .always,
+          meetingStateReady: true,
+          shouldCapture: false,
+          segmentCount: 12,
+          hasSpeakerSegments: true
+        )
+      )
+      XCTAssertFalse(
+        MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: .off,
+          meetingStateReady: true,
+          shouldCapture: false,
+          segmentCount: 12,
+          hasSpeakerSegments: true
+        )
+      )
+    }
+
+    func testActiveMeetingDoesNotFinishConversation() {
+      XCTAssertFalse(
+        MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: .onlyMeetings,
+          meetingStateReady: true,
+          shouldCapture: true,
+          segmentCount: 12,
+          hasSpeakerSegments: true
+        )
+      )
+    }
+
+    func testUnreadyMeetingStateDoesNotFinishExistingConversation() {
+      XCTAssertFalse(
+        MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: .onlyMeetings,
+          meetingStateReady: false,
+          shouldCapture: false,
+          segmentCount: 12,
+          hasSpeakerSegments: true
+        )
       )
     }
   }
