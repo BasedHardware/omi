@@ -1,0 +1,3 @@
+{
+  "change": "Deleted tasks stay deleted — deletions now sync to the server with retry, so they can't come back after a reinstall or refresh"
+}

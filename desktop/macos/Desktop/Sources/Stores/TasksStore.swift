@@ -2402,7 +2402,10 @@ class TasksStore: ObservableObject {
     }
     guard isCurrent(lease) else { return }
 
-    guard !items.isEmpty else { return }
+    if items.isEmpty {
+      await flushPendingBackendDeletions(lease: lease)
+      return
+    }
     log("TasksStore: Retrying sync for \(items.count) unsynced items")
 
     var synced = 0
@@ -2472,6 +2475,53 @@ class TasksStore: ObservableObject {
     if isCurrent(lease) {
       log("TasksStore: Retry sync completed — \(synced)/\(items.count) items synced")
     }
+    await flushPendingBackendDeletions(lease: lease)
+  }
+
+  /// Push unacknowledged deletions to the backend and purge the tombstones it confirms.
+  ///
+  /// Second half of the tombstone contract in `deleteTask`: the tombstone records that the
+  /// user deleted the task, this flush makes the server agree, and only the server's
+  /// confirmation removes the local row. Partial confirmations purge exactly the confirmed
+  /// IDs — the rest stay tombstoned for the next pass.
+  private func flushPendingBackendDeletions(lease: OwnerOperationLease) async {
+    guard isCurrent(lease) else { return }
+    let pending: [String]
+    do {
+      pending = try await ActionItemStorage.shared.getPendingBackendDeletionIds()
+    } catch {
+      if isCurrent(lease) { logError("TasksStore: Failed to read pending deletions", error: error) }
+      return
+    }
+    guard isCurrent(lease), !pending.isEmpty else { return }
+    log("TasksStore: Flushing \(pending.count) unacknowledged task deletions")
+
+    var confirmed: [String] = []
+    do {
+      try await APIClient.shared.batchDeleteActionItems(
+        ids: pending,
+        expectedOwnerId: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot
+      )
+      confirmed = pending
+    } catch let partial as APIClient.BatchDeletePartialFailure {
+      confirmed = partial.confirmedIDs
+    } catch {
+      guard isCurrent(lease) else { return }
+      logError("TasksStore: Deletion flush failed — tombstones retained", error: error)
+      return
+    }
+
+    guard isCurrent(lease) else { return }
+    for id in confirmed {
+      try? await ActionItemStorage.shared.deleteActionItemByBackendId(
+        id,
+        deletedBy: "user",
+        authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+      )
+      guard isCurrent(lease) else { return }
+    }
+    log("TasksStore: Deletion flush confirmed \(confirmed.count)/\(pending.count)")
   }
 
   /// One-time backfill: assign relevance scores to all unscored active tasks.
@@ -3176,15 +3226,29 @@ class TasksStore: ObservableObject {
     let ownerID = lease.ownerID
     if let beforeLocalMutation { await beforeLocalMutation() }
     guard isCurrent(lease) else { return }
-    // Local-first: soft-delete in SQLite immediately for instant UI update
+    // Local-first, but as a tombstone, not a hard delete: the row keeps `deleted = 1,
+    // backendSynced = 0` until the server acknowledges, so a failed backend call cannot be
+    // forgotten and hydration cannot resurrect the task. Hard-deleting here was how 450
+    // deleted tasks came back after a reinstall.
+    let isLocalOnly = ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly
     do {
-      try await ActionItemStorage.shared.deleteActionItemByBackendId(
-        task.id,
-        deletedBy: "user",
-        authorization: Self.localMutationAuthorization(
-          snapshot: lease.authorizationSnapshot
+      if isLocalOnly {
+        // No backend row exists; a tombstone would wait forever for an ack.
+        try await ActionItemStorage.shared.deleteActionItemByBackendId(
+          task.id,
+          deletedBy: "user",
+          authorization: Self.localMutationAuthorization(
+            snapshot: lease.authorizationSnapshot
+          )
         )
-      )
+      } else {
+        try await ActionItemStorage.shared.markActionItemDeletedPendingBackendSync(
+          backendId: task.id,
+          authorization: Self.localMutationAuthorization(
+            snapshot: lease.authorizationSnapshot
+          )
+        )
+      }
     } catch {
       guard isCurrent(lease) else { return }
       logError("TasksStore: Failed to soft-delete task locally", error: error)
@@ -3234,9 +3298,8 @@ class TasksStore: ObservableObject {
       }
     }
 
-    // Hard-delete on backend in background. Unsynced local-only tasks have
-    // no backend row to delete.
-    if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+    // Delete on backend; only an acknowledgement clears the local tombstone.
+    if isLocalOnly {
       log("TasksStore: Skipped backend delete for unsynced local task \(task.id)")
       return
     }
@@ -3246,9 +3309,16 @@ class TasksStore: ObservableObject {
         expectedOwnerId: ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
+      guard isCurrent(lease) else { return }
+      try? await ActionItemStorage.shared.deleteActionItemByBackendId(
+        task.id,
+        deletedBy: "user",
+        authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+      )
     } catch {
       guard isCurrent(lease) else { return }
-      logError("TasksStore: Failed to hard-delete task on backend (local delete preserved)", error: error)
+      logError(
+        "TasksStore: Backend delete not acknowledged — tombstone retained for retry", error: error)
     }
   }
 
@@ -3259,6 +3329,14 @@ class TasksStore: ObservableObject {
     expectedOwnerID: String? = nil
   ) async {
     guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
+    // Undo of a tombstoned delete: the row still exists locally (deleted, awaiting the
+    // backend ack). Purge it before the re-insert below or undo would create a duplicate.
+    try? await ActionItemStorage.shared.deleteActionItemByBackendId(
+      task.id,
+      deletedBy: "user",
+      authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+    )
+    guard isCurrent(lease) else { return }
 
     // A local-only task never had a backend row (deleteTask skipped the backend
     // delete). Restoring it through the backend-recreate path below is wrong on

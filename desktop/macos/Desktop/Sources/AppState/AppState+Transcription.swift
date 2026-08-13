@@ -25,6 +25,10 @@ extension AppState {
     currentConversationRole = conversationRole
     meetingBoundaryInProgress = false
     pendingMeetingState = nil
+    // A new session re-evaluates the route from scratch: the user may have unplugged the
+    // dead device, and pinning last session's heal would ignore a working default.
+    silentMicHealedDeviceID = nil
+    meetingEndFinalizationInProgress = false
 
     // Paywall hard-stop: every code path that enables the mic + WS streaming
     // funnels through here, including auto-restart from sleep and toggle
@@ -662,6 +666,9 @@ extension AppState {
     // Silent healing — no user-facing UI, the recording just keeps working.
     audioCaptureService?.stopCapture()
     audioCaptureService = AudioCaptureService(overrideDeviceID: builtInID)
+    // Hold the healed route for the rest of the session so the next rebuild does not
+    // re-resolve back to the silent default and undo this.
+    silentMicHealedDeviceID = builtInID
     recordingInputDeviceName =
       AudioCaptureService.getCurrentMicrophoneName() ?? "Built-in Microphone"
 
@@ -693,7 +700,16 @@ extension AppState {
     }
 
     audioCaptureService?.stopCapture()
-    audioCaptureService = AudioCaptureService()
+    // Rebuilding must not silently move the user back onto a route already proven dead.
+    // The choice is `SilentMicRoutePolicy`'s so the contract has one tested home; a nil
+    // result means "follow the system default", which is what the plain initialiser does.
+    if let deviceID = SilentMicRoutePolicy.captureDeviceID(
+      healed: silentMicHealedDeviceID, systemDefault: nil)
+    {
+      audioCaptureService = AudioCaptureService(overrideDeviceID: deviceID)
+    } else {
+      audioCaptureService = AudioCaptureService()
+    }
     AudioLevelMonitor.shared.updateMicrophoneLevel(0)
 
     if !sttSession.useLocalSTT {
@@ -1283,6 +1299,7 @@ extension AppState {
     captureReconcilePending = false
     pendingCoreAudioCaptureRecoveryReason = nil
     silentMicRecoveryAttempts = 0
+    silentMicHealedDeviceID = nil
     isAwaitingMeeting = false
     meetingBoundaryInProgress = false
     pendingMeetingState = nil

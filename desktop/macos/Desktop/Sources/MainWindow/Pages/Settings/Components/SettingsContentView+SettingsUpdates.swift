@@ -3,27 +3,6 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
-@MainActor
-private final class NotificationSettingsSyncQueue {
-  static let shared = NotificationSettingsSyncQueue()
-
-  private var tail: Task<Void, Never>?
-
-  func enqueue(enabled: Bool, frequency: Int, revision: Int) {
-    let previous = tail
-    tail = Task {
-      await previous?.value
-      do {
-        _ = try await APIClient.shared.updateNotificationSettings(
-          enabled: enabled, frequency: frequency)
-        NotificationService.completeNotificationSettingsSync(revision: revision)
-      } catch {
-        logError("Failed to update notification settings", error: error)
-      }
-    }
-  }
-}
-
 extension SettingsContentView {
   func openURLInDefaultBrowser(_ url: URL) {
     if let appURL = NSWorkspace.shared.urlForApplication(toOpen: url) {
