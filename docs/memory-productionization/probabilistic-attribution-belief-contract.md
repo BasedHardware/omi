@@ -135,5 +135,6 @@ Before activation, tests and held-out evaluation must prove:
 - an external wording policy is deterministic for the same belief/policy coordinates;
 - no unauthorized or hidden support affects score, ranking, wording, timing, or presence;
 - uncertainty calibration and coverage on fresh modality-specific data; and
-- zero confidently wrong owner answers on the standing blind floor without collapsing
-  useful correct/partly recall.
+- zero certain-voice owner mismatches on the standing identity-expression
+  floor, with usefulness (correct/partly, generic `wrong`, `unsure`) reported
+  separately and not allowed to veto identity-safe abstention or qualification.

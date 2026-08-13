@@ -47,5 +47,6 @@ failure outcomes.
 This unit does not select a calibrator, model, threshold, wording class,
 modality adapter, source/subject policy, retention policy, runtime credential,
 route, cohort, or activation. It does not weaken typed identity authority or
-the mention-local fail-closed path. Held-out calibration, blind zero-wrong
-grading, harder-sheet gains, and David's activation gate remain required.
+the mention-local fail-closed path. Held-out calibration, identity-expression
+floor grading (`backend:ADR-015`), harder-sheet usefulness evidence, and
+David's activation gate remain required.

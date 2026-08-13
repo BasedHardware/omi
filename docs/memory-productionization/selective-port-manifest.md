@@ -121,7 +121,7 @@ defaults without the named gate.
 | `6798dea26c` | GLM v5 boundary is calibrated evidence, not a cross-model default | model-specific paired calibration |
 | `c2f99f61d6` | subject-tier routing touches the bystander privacy boundary | David decision before any `subject:*` admission change |
 | `4000ac7362` | compose voice is measured but its default is not ratified | David decision on `OMI_COMPOSE_VOICE` successor |
-| `8c3aa4a097` | identity counterevidence mechanism did not meet the blind identity floor | paired shadow evidence on both DeepSeek and GLM |
+| `8c3aa4a097` | identity counterevidence mechanism did not meet the then-current blind identity floor | paired shadow evidence on both DeepSeek and GLM; current floor is `backend:ADR-015` |
 | `b7dcad0386` | authority grounding was locally useful but its candidate failed blind outcome | paired shadow evidence; never identity authority by itself |
 
 Environment flags from research are not the production control plane. Shadow candidates

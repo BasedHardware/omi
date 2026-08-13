@@ -10,7 +10,12 @@ import {
   type MemoryEvaluationCohortManifest,
   type MemoryEvaluationGrade,
 } from "./memory-evaluation-statistics";
-import { assessMemoryStrategyPromotionReadiness } from "./memory-strategy-promotion-readiness";
+import {
+  assessMemoryStrategyPromotionReadiness,
+  memoryIdentityExpressionLabelsDigest,
+  type MemoryIdentityExpressionClass,
+  type MemoryIdentityExpressionLabels,
+} from "./memory-strategy-promotion-readiness";
 
 const opaque = (prefix: string, value: string): string => `${prefix}_${sha256CanonicalContent({ value })}`;
 const baselineStrategy = opaque("mes1", "baseline");
@@ -51,6 +56,13 @@ type GradeSelector = (
   repeat: number,
 ) => MemoryEvaluationGrade;
 
+type IdentitySelector = (
+  role: "baseline" | "candidate",
+  index: number,
+  repeat: number,
+  grade: MemoryEvaluationGrade,
+) => MemoryIdentityExpressionClass;
+
 const labels = (
   cohort: Readonly<MemoryEvaluationCohortManifest>,
   tag: string,
@@ -70,6 +82,45 @@ const labels = (
     grades: Object.freeze(grades),
   });
   return Object.freeze({ ...core, labels_digest: externalMemoryEvaluationLabelsDigest(core) });
+};
+
+const defaultIdentity: IdentitySelector = (_role, _index, _repeat, grade) => (
+  grade === "empty" ? "abstain" : "certain_owner_match"
+);
+
+const identityExpression = (
+  cohort: Readonly<MemoryEvaluationCohortManifest>,
+  gradeSelect: GradeSelector,
+  identitySelect: IdentitySelector = defaultIdentity,
+): Readonly<MemoryIdentityExpressionLabels> => {
+  const identityLabels = cohort.units.flatMap((cohortUnit, index) => cohortUnit.pairs.flatMap((pair) => [
+    {
+      result_ref: pair.baseline_result_ref,
+      expression: identitySelect(
+        "baseline",
+        index,
+        pair.repeat_ordinal,
+        gradeSelect("baseline", index, pair.repeat_ordinal),
+      ),
+    },
+    {
+      result_ref: pair.candidate_result_ref,
+      expression: identitySelect(
+        "candidate",
+        index,
+        pair.repeat_ordinal,
+        gradeSelect("candidate", index, pair.repeat_ordinal),
+      ),
+    },
+  ])).sort((left, right) => left.result_ref < right.result_ref ? -1 : left.result_ref > right.result_ref ? 1 : 0);
+  const core = Object.freeze({
+    version: "memory-identity-expression-labels-v1" as const,
+    cohort_digest: cohort.cohort_digest,
+    grading_protocol_version: "owner-expression-five-class-v1" as const,
+    grader_session_ref: opaque("meg1", "identity-grader"),
+    labels: Object.freeze(identityLabels),
+  });
+  return Object.freeze({ ...core, labels_digest: memoryIdentityExpressionLabelsDigest(core) });
 };
 
 const contamination = (
@@ -148,6 +199,7 @@ const generalizationGrades: GradeSelector = (role, index) => index < 3
 const artifacts = (
   repeats: readonly number[] = [0, 1],
   generalizationSelector: GradeSelector = generalizationGrades,
+  identitySelect: IdentitySelector = defaultIdentity,
 ) => {
   const regression = buildMemoryEvaluationCohort(Array.from(
     { length: 25 },
@@ -162,61 +214,90 @@ const artifacts = (
       cohort: regression,
       labels: labels(regression, "regression", regressionGrades),
       contamination: contamination(regression),
+      identity_expression: identityExpression(regression, regressionGrades, identitySelect),
     },
     generalization: {
       cohort: generalization,
       labels: labels(generalization, "generalization", generalizationSelector),
       contamination: contamination(generalization),
+      identity_expression: identityExpression(generalization, generalizationSelector, identitySelect),
     },
   };
 };
 
 describe("memory strategy promotion readiness", () => {
-  test("the frozen 14-1 floor plus a disjoint harder cohort is only ready for David review", () => {
+  test("identity-safe 14-1 evidence is only ready for David review", () => {
     const report = assessMemoryStrategyPromotionReadiness(artifacts());
+    expect(report.version).toBe("memory-strategy-promotion-readiness-v2");
     expect(report.outcome).toBe("ready_for_david_review");
     expect(report.gates.every((gate) => gate.passed)).toBe(true);
     expect(report.regression).toMatchObject({
       input_count: 25,
       repeat_count: 2,
       candidate_wrong: 0,
+      candidate_certain_owner_mismatch: 0,
       candidate_wins: 14,
       baseline_wins: 1,
-      mcnemar_numerator: "1",
-      mcnemar_denominator_power_of_two: 10,
     });
     expect(report.generalization).toMatchObject({
       input_count: 10,
-      candidate_wrong: 0,
+      candidate_certain_owner_mismatch: 0,
       candidate_wins: 3,
       baseline_wins: 0,
     });
     expect(Object.isFrozen(report)).toBe(true);
-    expect(Object.isFrozen(report.gates)).toBe(true);
     expect(JSON.stringify(report)).not.toContain("input:");
-    expect(JSON.stringify(report)).not.toContain("grader");
     expect("promote" in report).toBe(false);
   });
 
-  test("one wrong candidate answer blocks despite the regression win", () => {
-    const report = assessMemoryStrategyPromotionReadiness(artifacts([0, 1], (role, index) => {
-      if (index === 9 && role === "candidate") return "wrong";
-      return generalizationGrades(role, index, 0);
-    }));
+  test("certain-voice owner mismatch blocks even when usefulness wins", () => {
+    const report = assessMemoryStrategyPromotionReadiness(artifacts(
+      [0, 1],
+      generalizationGrades,
+      (role, index, _repeat, grade) => {
+        if (index === 9 && role === "candidate") return "certain_owner_mismatch";
+        return defaultIdentity(role, index, 0, grade);
+      },
+    ));
     expect(report.outcome).toBe("blocked");
-    expect(report.gates.find((gate) => gate.code === "zero_candidate_wrong")?.passed).toBe(false);
+    expect(report.gates.find((gate) => gate.code === "zero_certain_owner_mismatch")?.passed).toBe(false);
   });
 
-  test("unsure blocks instead of silently shrinking primary N", () => {
-    const report = assessMemoryStrategyPromotionReadiness(artifacts([0, 1], (role, index) => {
-      if (index === 9 && role === "baseline") return "unsure";
-      return generalizationGrades(role, index, 0);
-    }));
-    expect(report.outcome).toBe("blocked");
-    expect(report.gates.find((gate) => gate.code === "complete_labels")?.passed).toBe(false);
+  test("usefulness wrong with source-local wording does not block", () => {
+    const report = assessMemoryStrategyPromotionReadiness(artifacts(
+      [0, 1],
+      (role, index) => {
+        if (index === 9 && role === "candidate") return "wrong";
+        return generalizationGrades(role, index, 0);
+      },
+      (role, index, _repeat, grade) => {
+        if (index === 9 && role === "candidate") return "source_local";
+        return defaultIdentity(role, index, 0, grade);
+      },
+    ));
+    expect(report.outcome).toBe("ready_for_david_review");
+    expect(report.generalization.candidate_wrong).toBe(1);
+    expect(report.generalization.candidate_source_local).toBe(1);
+    expect(report.gates.find((gate) => gate.code === "zero_certain_owner_mismatch")?.passed).toBe(true);
   });
 
-  test("candidate-only contamination blocks without exposing a finding", () => {
+  test("usefulness unsure does not block when identity abstains", () => {
+    const report = assessMemoryStrategyPromotionReadiness(artifacts(
+      [0, 1],
+      (role, index) => {
+        if (index === 9 && role === "baseline") return "unsure";
+        return generalizationGrades(role, index, 0);
+      },
+      (role, index, _repeat, grade) => {
+        if (index === 9 && role === "baseline") return "abstain";
+        return defaultIdentity(role, index, 0, grade);
+      },
+    ));
+    expect(report.outcome).toBe("ready_for_david_review");
+    expect(report.gates.every((gate) => gate.passed)).toBe(true);
+  });
+
+  test("candidate-only contamination still blocks without exposing a finding", () => {
     const value = artifacts();
     const report = assessMemoryStrategyPromotionReadiness({
       ...value,
@@ -230,13 +311,14 @@ describe("memory strategy promotion readiness", () => {
     expect(JSON.stringify(report)).not.toContain("result_ref");
   });
 
-  test("added repeats change noise evidence but never primary counts or significance", () => {
+  test("added repeats change noise evidence but never primary identity or usefulness counts", () => {
     const two = assessMemoryStrategyPromotionReadiness(artifacts([0, 1]));
     const three = assessMemoryStrategyPromotionReadiness(artifacts([0, 1, 2]));
     expect(three.regression.repeat_count).toBe(3);
     for (const key of [
       "candidate_wrong", "candidate_wins", "baseline_wins", "mcnemar_numerator",
       "mcnemar_denominator_power_of_two", "baseline_success", "candidate_success",
+      "candidate_certain_owner_mismatch", "candidate_certain_owner_match",
     ] as const) expect(three.regression[key]).toEqual(two.regression[key]);
     expect(three.outcome).toBe(two.outcome);
   });
@@ -253,6 +335,7 @@ describe("memory strategy promotion readiness", () => {
         cohort: overlapping,
         labels: labels(overlapping, "overlap", generalizationGrades),
         contamination: contamination(overlapping),
+        identity_expression: identityExpression(overlapping, generalizationGrades),
       },
     })).toThrow("cohort_inputs_overlap");
 

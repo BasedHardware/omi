@@ -6,7 +6,8 @@ Status: P5 preregistration, 2026-08-11; implementation not yet landed
 
 For one authority strategy and one candidate strategy, does the candidate
 increase externally graded `correct|partly` answers on distinct evaluation
-inputs without adding a confidently `wrong` owner answer?
+inputs? Primary `wrong` counts are reported as usefulness, not as the
+identity floor.
 
 The primary analysis is fixed before labels are imported:
 
@@ -21,9 +22,11 @@ The primary analysis is fixed before labels are imported:
   descriptive read-path noise floor only. Repeats never increase primary N;
 - no statistic or threshold automatically promotes a strategy.
 
-The production identity floor remains external and stricter: candidate primary
-wrong must be zero on David's blind identity sheet, while the ratified
-correct+partly gain must not materially regress.
+The production identity floor is external identity-expression grading
+(`backend:ADR-015` / `memory-identity-expression-labels-v1`): zero
+certain-voice owner mismatches. Usefulness `wrong`/`unsure` and the ratified
+correct+partly comparison are reported to David; they do not veto identity-safe
+abstention or qualification, and they do not replace the identity floor.
 
 ## Required artifacts
 
