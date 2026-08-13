@@ -1033,5 +1033,29 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     const writerGrantStatements = writerGrantSql.replace(/^--.*$/gm, "");
     expect(writerGrantStatements).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE|CREATE|ALTER|DROP)\b/);
     expect(writerGrantSql).not.toMatch(/memory_(?:legacy_proposition|migration_item)/);
+
+    const migrationRuntime = migrationSql.find((migration) => migration.version === 33)!.sql;
+    expect(migrationRuntime).toContain("CREATE FUNCTION omi_memory.resume_legacy_proposition_mapping");
+    expect(migrationRuntime).toContain("CREATE FUNCTION omi_memory.record_legacy_migration_item_tombstone");
+    expect(migrationRuntime.match(/SECURITY DEFINER/g)).toHaveLength(2);
+    expect(migrationRuntime.match(/SET search_path = pg_catalog, omi_memory/g)).toHaveLength(2);
+    expect(migrationRuntime.match(/current_setting\('omi.account_id', true\) IS DISTINCT FROM p_account_id/g))
+      .toHaveLength(2);
+    expect(migrationRuntime.match(/current_setting\('omi.capability', true\) IS DISTINCT FROM 'memories.project'/g))
+      .toHaveLength(2);
+    expect(migrationRuntime.match(/nullif\(current_setting\('omi.principal_id', true\), ''\) IS NULL/g))
+      .toHaveLength(2);
+    expect(migrationRuntime.match(/pg_advisory_xact_lock/g)).toHaveLength(2);
+    expect(migrationRuntime).toContain("memory_migration_item_tombstones AS t");
+    expect(migrationRuntime).toContain("RETURN QUERY SELECT 'tombstoned'::text");
+    expect(migrationRuntime).toContain("GRANT EXECUTE ON FUNCTION omi_memory.resume_legacy_proposition_mapping");
+    expect(migrationRuntime).toContain("GRANT EXECUTE ON FUNCTION omi_memory.record_legacy_migration_item_tombstone");
+    expect(migrationRuntime).toContain(
+      "REVOKE ALL ON omi_memory.memory_legacy_proposition_mappings FROM omi_platform_application",
+    );
+    expect(migrationRuntime).toContain(
+      "REVOKE ALL ON omi_memory.memory_migration_item_tombstones FROM omi_platform_application",
+    );
+    expect(migrationRuntime).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE)[^;]*memory_(?:legacy_proposition|migration_item)/s);
   });
 });

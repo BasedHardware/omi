@@ -19,6 +19,10 @@ import {
   type ProductProjectionPayload,
   type ProductProjectionWriteBody,
 } from "../../apps/service/stores/product-projection-repository";
+import {
+  legacyMigrationTombstoneRequestDigest,
+  legacyPropositionMappingResumeRequestDigest,
+} from "../../apps/service/stores/legacy-proposition-migration-repository";
 import { defineMemoryEvaluationEvidenceSource } from "../../apps/service/stores/memory-evaluation-evidence-source";
 import { materializeFinalizedMemoryReadGrounding } from "../../apps/service/stores/memory-read-grounding-repository";
 import {
@@ -136,6 +140,8 @@ import { createPostgresFirebaseAuthorizedLedgerRuntime } from "./firebase-author
 import { createPostgresPredicateBatchWorkInputRepository } from "./predicate-batch-work-input";
 import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
 import { createPostgresProductProjectionWriteRepository } from "./product-projection-repository";
+import { createPostgresLegacyPropositionMigrationRepository } from
+  "./legacy-proposition-migration-repository";
 import { createPostgresTombstoneRestoreTarget } from "./tombstone-restore-target";
 import { createPostgresRestoreReplayCheckpointRepository } from
   "./restore-replay-checkpoint-repository";
@@ -4363,6 +4369,172 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       citations: 1, evidence_refs: 1, receipts: 2,
     }]);
 
+    const migration = createPostgresLegacyPropositionMigrationRepository({ pool: appRolePool });
+    const resumeRequest = (legacySourceId: string, proposedId: string | null) => {
+      const body = {
+        legacy_source_id: legacySourceId,
+        proposed_random_opaque_proposition_id: proposedId,
+      };
+      return Object.freeze({
+        ...body,
+        request_digest: legacyPropositionMappingResumeRequestDigest(accountId, body),
+      });
+    };
+    const tombstoneRequest = (
+      legacySourceId: string,
+      sequence: number,
+      operationId: string,
+      eventTime: number,
+    ) => {
+      const body = {
+        legacy_source_id: legacySourceId,
+        tombstone_sequence: sequence,
+        tombstone_operation_id: operationId,
+        tombstoned_at_event_time: eventTime,
+      };
+      return Object.freeze({
+        ...body,
+        request_digest: legacyMigrationTombstoneRequestDigest(accountId, body),
+      });
+    };
+    const allocationSource = `legacy:qualification:allocation:${suffix}`;
+    try {
+      expect(await migration.resumeMapping(
+        projectContext, resumeRequest(allocationSource, null),
+      )).toEqual({ kind: "allocation_required" });
+    } catch (error) {
+      throw new Error(
+        `legacy migration qualification failed at ${productStatement} code ${productProviderCode} constraint ${productConstraint}`,
+        { cause: error },
+      );
+    }
+
+    const mappedSource = `legacy:qualification:mapped:${suffix}`;
+    const durableWinner = `proposition:${suffix}:opaque-winner`;
+    const inserted = await migration.resumeMapping(
+      projectContext, resumeRequest(mappedSource, durableWinner),
+    );
+    expect(inserted).toMatchObject({
+      kind: "inserted",
+      mapping: {
+        owner_account_id: accountId,
+        legacy_source_id: mappedSource,
+        proposition_id: durableWinner,
+      },
+    });
+    await expect(migration.resumeMapping(
+      projectContext, resumeRequest(mappedSource, `proposition:${suffix}:losing-proposal`),
+    )).resolves.toMatchObject({
+      kind: "reused",
+      mapping: { proposition_id: durableWinner },
+    });
+
+    const mappedTombstone = tombstoneRequest(
+      mappedSource, 7, `migration-tombstone:${suffix}:mapped`, 70,
+    );
+    await expect(migration.recordTombstone(projectContext, mappedTombstone))
+      .resolves.toEqual({ kind: "recorded" });
+    await expect(migration.recordTombstone(projectContext, mappedTombstone))
+      .resolves.toEqual({ kind: "replayed" });
+    const changedMappedTombstone = tombstoneRequest(
+      mappedSource, 8, `migration-tombstone:${suffix}:mapped`, 71,
+    );
+    await expect(migration.recordTombstone(projectContext, changedMappedTombstone))
+      .resolves.toEqual({ kind: "idempotency_conflict" });
+    await expect(migration.resumeMapping(
+      projectContext, resumeRequest(mappedSource, durableWinner),
+    )).resolves.toEqual({ kind: "tombstoned" });
+
+    const deletedBeforeResume = `legacy:qualification:deleted-first:${suffix}`;
+    const deletedFirstTombstone = tombstoneRequest(
+      deletedBeforeResume, 2, `migration-tombstone:${suffix}:deleted-first`, 80,
+    );
+    await expect(migration.recordTombstone(projectContext, deletedFirstTombstone))
+      .resolves.toEqual({ kind: "recorded" });
+    await expect(migration.resumeMapping(projectContext, resumeRequest(
+      deletedBeforeResume, `proposition:${suffix}:must-never-exist`,
+    ))).resolves.toEqual({ kind: "tombstoned" });
+
+    const racingSource = `legacy:qualification:race:${suffix}`;
+    const racingTombstone = tombstoneRequest(
+      racingSource, 3, `migration-tombstone:${suffix}:race`, 90,
+    );
+    const racingResults = await Promise.all([
+      migration.resumeMapping(
+        projectContext, resumeRequest(racingSource, `proposition:${suffix}:race`),
+      ),
+      migration.recordTombstone(projectContext, racingTombstone),
+    ]);
+    expect(["inserted", "tombstoned", "serialization_retryable"])
+      .toContain(racingResults[0].kind);
+    expect(["recorded", "serialization_retryable"])
+      .toContain(racingResults[1].kind);
+    if (racingResults[1].kind === "serialization_retryable") {
+      await expect(migration.recordTombstone(projectContext, racingTombstone))
+        .resolves.toEqual({ kind: "recorded" });
+    }
+    await expect(migration.resumeMapping(
+      projectContext, resumeRequest(racingSource, `proposition:${suffix}:race-late`),
+    )).resolves.toEqual({ kind: "tombstoned" });
+
+    const legacyRows = await ownerSql.unsafe<{
+      mappings: number; tombstones: number; deleted_first_mapping: number; race_tombstones: number;
+    }[]>(`SELECT
+      (SELECT count(*)::int FROM omi_memory.memory_legacy_proposition_mappings
+        WHERE account_id = $1) AS mappings,
+      (SELECT count(*)::int FROM omi_memory.memory_migration_item_tombstones
+        WHERE account_id = $1) AS tombstones,
+      (SELECT count(*)::int FROM omi_memory.memory_legacy_proposition_mappings
+        WHERE account_id = $1 AND legacy_source_id = $2) AS deleted_first_mapping,
+      (SELECT count(*)::int FROM omi_memory.memory_migration_item_tombstones
+        WHERE account_id = $1 AND legacy_source_id = $3) AS race_tombstones`,
+    [accountId, deletedBeforeResume, racingSource]);
+    expect([...legacyRows]).toEqual([{
+      mappings: racingResults[0].kind === "inserted" ? 2 : 1,
+      tombstones: 3, deleted_first_mapping: 0, race_tombstones: 1,
+    }]);
+
+    const rollbackSource = `legacy:qualification:rollback:${suffix}`;
+    try {
+      await ownerSql.unsafe(`
+        CREATE OR REPLACE FUNCTION omi_memory.qualification_reject_legacy_mapping()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'qualification injected legacy mapping rollback'; END
+        $$;
+        DROP TRIGGER IF EXISTS reject_legacy_mapping
+          ON omi_memory.memory_legacy_proposition_mappings;
+        CREATE TRIGGER reject_legacy_mapping
+        AFTER INSERT ON omi_memory.memory_legacy_proposition_mappings
+        FOR EACH ROW EXECUTE FUNCTION omi_memory.qualification_reject_legacy_mapping()
+      `, [], { prepare: false });
+      await expect(migration.resumeMapping(projectContext, resumeRequest(
+        rollbackSource, `proposition:${suffix}:rollback-legacy`,
+      ))).rejects.toMatchObject({ code: "persistence_failed", message: "persistence_failed" });
+      const rolledBackLegacy = await ownerSql.unsafe<{ mappings: number }[]>(`
+        SELECT count(*)::int AS mappings
+        FROM omi_memory.memory_legacy_proposition_mappings
+        WHERE account_id = $1 AND legacy_source_id = $2
+      `, [accountId, rollbackSource]);
+      expect([...rolledBackLegacy]).toEqual([{ mappings: 0 }]);
+    } finally {
+      await ownerSql.unsafe(`
+        DROP TRIGGER IF EXISTS reject_legacy_mapping
+          ON omi_memory.memory_legacy_proposition_mappings;
+        DROP FUNCTION IF EXISTS omi_memory.qualification_reject_legacy_mapping()
+      `, [], { prepare: false }).catch(() => undefined);
+    }
+
+    await expect(ownerSql.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE omi_platform_application");
+      await transaction.unsafe("SELECT set_config('omi.account_id', $1, true)", [accountId]);
+      await transaction.unsafe("SELECT set_config('omi.principal_id', $1, true)", [principalId]);
+      await transaction.unsafe("SELECT set_config('omi.capability', 'memories.project', true)");
+      await transaction.unsafe(
+        "SELECT * FROM omi_memory.resume_legacy_proposition_mapping($1, $2, NULL, NULL)",
+        [`account:foreign:${suffix}`, `legacy:foreign:${suffix}`],
+      );
+    })).rejects.toMatchObject({ code: "P1005" });
+
     const rollbackBorn = birthProductProposition({
       owner_account_id: accountId, proposition_id: `proposition:${suffix}:rollback`,
       birth_claim_lineage_id: claimRevision.claim.claim_lineage_id, origin: "native",
@@ -4433,10 +4605,15 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     await expect(projector.append(projectContext, birth)).resolves.toEqual({
       kind: "authorization_denied", reason: "grant_inactive",
     });
+    await expect(migration.resumeMapping(
+      projectContext, resumeRequest(mappedSource, durableWinner),
+    )).resolves.toEqual({ kind: "authorization_denied", reason: "grant_inactive" });
 
     for (const forbiddenSql of [
       "UPDATE omi_memory.memory_product_propositions SET origin = 'native' WHERE account_id = $1",
       "DELETE FROM omi_memory.memory_product_projection_payloads WHERE account_id = $1",
+      "SELECT * FROM omi_memory.memory_legacy_proposition_mappings WHERE account_id = $1",
+      "SELECT * FROM omi_memory.memory_migration_item_tombstones WHERE account_id = $1",
     ]) {
       await expect(ownerSql.begin(async (transaction) => {
         await transaction.unsafe("SET LOCAL ROLE omi_platform_application");

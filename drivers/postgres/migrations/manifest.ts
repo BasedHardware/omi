@@ -199,4 +199,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0032-listen-attribution-belief-inputs.sql",
     sha256: "c75fd81bf00cefac72c9e652f3c5e0e470f2418ba5a62243a535d44c851f3d78",
   }),
+  Object.freeze({
+    version: 33,
+    name: "legacy-proposition-migration-runtime",
+    fileName: "0033-legacy-proposition-migration-runtime.sql",
+    sha256: "bb218bcb672734902f09eaa287dd7df9fe7a7304e786e2ddb21fd867c25a2fb5",
+  }),
 ]);

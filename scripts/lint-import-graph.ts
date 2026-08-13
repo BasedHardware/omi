@@ -549,6 +549,7 @@ for (const file of files(root)) {
       && shown !== "drivers/postgres/formation-work-input.ts"
       && shown !== "drivers/postgres/predicate-batch-work-input.ts"
       && shown !== "drivers/postgres/product-projection-repository.ts"
+      && shown !== "drivers/postgres/legacy-proposition-migration-repository.ts"
       && shown !== "drivers/postgres/memory-experiment-repository.ts"
       && shown !== "drivers/postgres/memory-query-evaluation-source.ts"
       && shown !== "drivers/postgres/listen-finalization-repository.ts"
