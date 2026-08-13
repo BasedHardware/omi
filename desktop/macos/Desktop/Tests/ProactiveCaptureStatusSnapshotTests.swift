@@ -30,7 +30,7 @@
       XCTAssertTrue(descriptor.sideEffects.contains { $0.contains("app names") })
       XCTAssertEqual(descriptor.params, [])
 
-      let result = await registry.perform("proactive_capture_status_snapshot", params: [:])
+      let result = try await registry.perform("proactive_capture_status_snapshot", params: [:])
       let detail = try XCTUnwrap(result)
       XCTAssertEqual(
         Set(detail.keys),
