@@ -222,12 +222,19 @@ function runForegroundGuarded(command, args, options, outputDir) {
   const guardResult = path.join(outputDir, "foreground-guard.json");
   const stdoutPath = path.join(outputDir, "xcodebuild.stdout");
   const stderrPath = path.join(outputDir, "xcodebuild.stderr");
-  const wrapped = spawnSync(process.execPath, [foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--", command, ...args], { ...options, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024 });
+  const guardArgs = [foregroundGuard, "--result", guardResult, "--stdout", stdoutPath, "--stderr", stderrPath, "--timeout", "300", "--", command, ...args];
+  const wrapped = spawnSync(process.execPath, guardArgs, { ...options, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 310_000, maxBuffer: 16 * 1024 * 1024 });
+  if (wrapped.error?.code === "ETIMEDOUT") throw new Error("iOS semantic foreground guard timed out");
   if (!existsSync(guardResult)) throw new Error("iOS semantic foreground guard produced no terminal receipt");
   const custody = readJson(guardResult, "iOS semantic foreground guard");
   if (custody.schema !== "omi.macos-foreground-guard/v1" || custody.monitor_error !== null || custody.error !== null || custody.status !== 0) throw new Error(`iOS semantic foreground custody failed: ${custody.monitor_error || custody.error || custody.status}`);
   if (wrapped.status !== 0) throw new Error("iOS semantic foreground guard failed");
-  return { status: custody.status, stdout: readFileSync(stdoutPath, "utf8"), stderr: readFileSync(stderrPath, "utf8"), custody };
+  return { status: custody.status, stdout: readFileSync(stdoutPath, "utf8"), stderr: readFileSync(stderrPath, "utf8"), custody, argv: [process.execPath, ...guardArgs] };
+}
+
+function validateForegroundCustody(custody) {
+  if (!custody || custody.schema !== "omi.macos-foreground-guard/v1" || custody.status !== 0 || custody.error !== null || custody.monitor_error !== null) throw new Error("preparation receipt lacks successful foreground custody");
+  if (custody.policy !== "sampled-macos-foreground-custody-20ms-target-250ms-probe-timeout-no-activation-request" || custody.target_interval_milliseconds !== 20 || custody.probe_timeout_milliseconds !== 250 || !Number.isInteger(custody.sample_count) || custody.sample_count < 1 || !Number.isFinite(custody.max_sample_gap_milliseconds) || custody.max_sample_gap_milliseconds < 0) throw new Error("preparation receipt foreground custody policy is malformed");
 }
 
 function relativeCore(file, label) {
@@ -251,6 +258,12 @@ function gateReplay(manifest, manifestPath, inputPath, outputPath, outDir, emitR
   if (input.resolved === output.resolved) throw new Error("--replay-output must differ from --replay-input");
   const inputBytes = readFileSync(input.resolved);
   const document = readJson(input.resolved, "replay input");
+  const preparationPath = path.join(path.dirname(input.resolved), "native-preparation-receipt.json");
+  if (!existsSync(preparationPath)) throw new Error("native semantic replay requires its preparation receipt");
+  const preparation = readJson(preparationPath, "native semantic preparation receipt");
+  validateForegroundCustody(preparation.foreground_custody);
+  const artifactKind = manifest.kind === "ax_snapshot" ? "ax" : "keyboard";
+  if (preparation.schema !== "omi.polish.native-ios-preparation/v1" || preparation.run_id !== manifest.run_id || JSON.stringify(preparation.source_shas) !== JSON.stringify(manifest.source_shas) || preparation.capture_class !== manifest.capture_class || preparation.source_tier !== manifest.source_tier || preparation.artifact_hashes?.[artifactKind] !== sha256(inputBytes)) throw new Error("native semantic preparation receipt does not match manifest or replay artifact");
   const expectedSchema = manifest.kind === "ax_snapshot" ? "omi.polish.ax/v1" : "omi.polish.keyboard/v1";
   if (document.schema !== expectedSchema) throw new Error(`replay input schema must be ${expectedSchema}`);
   const metadata = { domain: manifest.domain, shell: manifest.shell, state: manifest.state, theme: manifest.theme, width: manifest.width, accessibility: manifest.accessibility, run_id: manifest.run_id, source_shas: manifest.source_shas, capture_class: manifest.capture_class, source_tier: manifest.source_tier };
@@ -266,11 +279,13 @@ function gateReplay(manifest, manifestPath, inputPath, outputPath, outDir, emitR
   writeFileSync(output.resolved, inputBytes, { mode: 0o600, flag: "wx" });
   const outputBytes = readFileSync(output.resolved);
   const scriptLocation = relativeCore(path.resolve(fileURLToPath(import.meta.url)), "producer script");
+  const preparationLocation = relativeCore(preparationPath, "preparation receipt");
+  const guardLocation = relativeCore(foregroundGuard, "foreground guard");
   const sourceEntry = inputEntry(input.resolved, input.relative);
   const manifestEntry = inputEntry(manifestLocation.resolved, manifestLocation.relative);
   const scriptEntry = inputEntry(scriptLocation.resolved, scriptLocation.relative);
   const outputHash = sha256(outputBytes);
-  const inputSet = { entries: [manifestEntry, scriptEntry, sourceEntry].sort((left, right) => left.key.localeCompare(right.key)) };
+  const inputSet = { entries: [manifestEntry, scriptEntry, sourceEntry, inputEntry(preparationLocation.resolved, preparationLocation.relative), inputEntry(guardLocation.resolved, guardLocation.relative)].sort((left, right) => left.key.localeCompare(right.key)) };
   inputSet.tree_sha256 = canonicalHash(inputSet.entries);
   inputSet.id = `input-v1-${inputSet.tree_sha256}`;
   const command = `node ${path.relative(coreRoot, path.resolve(fileURLToPath(import.meta.url)))} --manifest ${manifestLocation.relative} --replay-input ${input.relative} --replay-output ${output.relative} --emit-gate-records false`;
@@ -441,7 +456,7 @@ function main() {
       artifacts.keyboardPath && ["keyboard", artifacts.keyboardSha256],
     ].filter(Boolean)),
     xcresult_path: path.relative(coreRoot, resultBundle),
-    command: { argv: ["xcodebuild", ...xcodeArgs], cwd: path.relative(coreRoot, path.join(iosRoot, "app")), exit_code: xcode.status, started_at: xcodeStarted.toISOString(), finished_at: finishedAt.toISOString(), timeout_seconds: 300 },
+    command: { argv: xcode.argv, cwd: path.relative(coreRoot, path.join(iosRoot, "app")), exit_code: xcode.status, started_at: xcodeStarted.toISOString(), finished_at: finishedAt.toISOString(), timeout_seconds: 310 },
     stdout_sha256: sha256(Buffer.from(xcode.stdout || "")),
     stderr_sha256: sha256(Buffer.from(xcode.stderr || "")),
     foreground_custody: xcode.custody,
