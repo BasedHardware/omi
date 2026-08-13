@@ -2,8 +2,8 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Verifies the BYOK-vs-paywall precedence fix: a user with all four BYOK
-/// keys configured locally is never paywalled, regardless of the persisted
+/// Verifies the BYOK-vs-paywall precedence fix: a user with a configured BYOK
+/// key locally is never paywalled, regardless of the persisted
 /// `desktop_isPaywalled` flag.
 @MainActor final class BYOKPaywallTests: XCTestCase {
   private let paywallKey = "desktop_isPaywalled"
@@ -109,7 +109,7 @@ import XCTest
   }
 
   func testPaywallFlagSuppressedWhenByokActive() {
-    // The exact bug: trial-expired flag set, then user adds all 4 BYOK keys.
+    // The exact bug: trial-expired flag set, then user configures BYOK keys.
     UserDefaults.standard.set(true, forKey: paywallKey)
     setAllBYOKKeys()
     XCTAssertFalse(
