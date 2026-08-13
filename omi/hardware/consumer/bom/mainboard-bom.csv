@@ -1,6 +1,6 @@
 ID,SKU,Description,Manufacturer,MPN,Designator,Qty,Board,Category,Populate,LCSC_PN,JLC_Status,Stock_Note
 1,202004235,PCBA;Oni2 Main Board,,,,1,mainboard,pcba-reference,n/a,,,
-2,319016327, ,,,,1,mainboard,assembly-header,n/a,,,
+2,319016327,PCB;Omi2 Mainboard v1.2,,,,1,mainboard,pcb-reference,n/a,,,
 3,303011668,SMD Inductor 2.2nH-0.1nH-500mA;0201,Chilisin,CHQ0603T-2N2B-HU,"L3,L4",2,mainboard,component,yes,,N/A,Other values in series available; find equivalent 2.2nH 0201
 4,306011365,SMD Crystal 40MHz-10pF-10ppm-80R;4P-L1.6*W1.2mm,CJ,CJ17-400001010B20,X3,1,mainboard,component,yes,C2875272,Extended,Out of stock
 5,310091764,SMD IC SD Nand Flash;LGA8_8*6*0.85mm,CS,CSNP4GCR01-DPW,U7,1,mainboard,component,yes,,N/A,Source from manufacturer or Alibaba
