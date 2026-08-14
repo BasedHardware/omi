@@ -1,202 +1,571 @@
-import React, {memo, useCallback, useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
+  AccessibilityInfo,
+  Animated,
+  Easing,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
-import {isNativeModuleInstalled, omiNative, type Device, type NativeSnapshot} from './src/omiNative';
+import ArrowUp from 'lucide-react-native/icons/arrow-up';
+import Brain from 'lucide-react-native/icons/brain';
+import GanttChartSquare from 'lucide-react-native/icons/square-chart-gantt';
+import House from 'lucide-react-native/icons/house';
+import ListChecks from 'lucide-react-native/icons/list-checks';
+import Mic from 'lucide-react-native/icons/mic';
+import Paperclip from 'lucide-react-native/icons/paperclip';
+import {
+  loadChatHistory,
+  sendChatMessage,
+  type ChatMessage,
+} from './src/chatClient';
+import {omiBackend} from './src/omiNative';
 
-type RuntimeState = 'loading' | 'ready' | 'unavailable' | 'error';
+type NavigationIcon = React.ComponentType<{
+  color?: string;
+  size?: number;
+  strokeWidth?: number;
+}>;
 
-function Action({label, onPress, disabled}: {label: string; onPress: () => void; disabled?: boolean}) {
+const navigation: Array<{label: string; icon: NavigationIcon}> = [
+  {label: 'Home', icon: House},
+  {label: 'Conversations', icon: GanttChartSquare},
+  {label: 'Memories', icon: Brain},
+  {label: 'Tasks', icon: ListChecks},
+];
+const quickPrompts = [
+  'What did I talk about today?',
+  'Show my pending tasks',
+  'What should I remember?',
+  'Summarize my recent conversations',
+];
+type Route = 'Home' | 'Conversations' | 'Memories' | 'Tasks';
+
+function NavItem({
+  label,
+  icon: Icon,
+  compact,
+  active,
+  onPress,
+}: {
+  label: string;
+  icon: NavigationIcon;
+  compact: boolean;
+  active: boolean;
+  onPress: () => void;
+}) {
   return (
-    <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[styles.action, disabled && styles.actionDisabled]}>
-      <Text style={styles.actionText}>{label}</Text>
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{selected: active}}
+      onPress={onPress}
+      style={({pressed}) => [
+        styles.navItem,
+        compact && styles.navItemCompact,
+        active && styles.navItemActive,
+        pressed && styles.pressed,
+      ]}>
+      <Icon color={active ? '#141414' : '#888888'} size={20} strokeWidth={2} />
+      <Text
+        numberOfLines={1}
+        style={[styles.navText, active && styles.navTextActive]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
-const DeviceRow = memo(function DeviceRow({device, onPress, busy}: {device: Device; onPress: (device: Device) => void; busy: boolean}) {
+function OmiMark() {
   return (
-    <View style={styles.deviceRow}>
-      <View style={styles.deviceMark}><Text style={styles.deviceMarkText}>omi</Text></View>
-      <View style={styles.deviceCopy}>
-        <Text style={styles.deviceName}>{device.name}</Text>
-        <Text style={styles.muted}>{device.rssi} dBm{device.battery == null ? '' : ` · ${device.battery}%`}</Text>
-      </View>
-      <Action label={device.connected ? 'Disconnect' : 'Connect'} onPress={() => onPress(device)} disabled={busy} />
+    <View accessibilityLabel="Omi" style={styles.mark}>
+      <View style={[styles.markBar, styles.markBarShort]} />
+      <View style={[styles.markBar, styles.markBarTall]} />
+      <View style={[styles.markBar, styles.markBarMedium]} />
+      <View style={[styles.markBar, styles.markBarTall]} />
+      <View style={[styles.markBar, styles.markBarShort]} />
     </View>
   );
-});
+}
+
+function ProjectionPage({route}: {route: Exclude<Route, 'Home'>}) {
+  const copy = {
+    Conversations: 'Conversation history is unavailable in this build.',
+    Memories: 'Memory history is unavailable in this build.',
+    Tasks: 'Task history is unavailable in this build.',
+  }[route];
+
+  return (
+    <View style={styles.projection}>
+      <Text style={styles.projectionTitle}>{route}</Text>
+      <View style={styles.projectionEmpty}>
+        <Text style={styles.projectionEmptyTitle}>Nothing to show yet</Text>
+        <Text style={styles.projectionEmptyCopy}>{copy}</Text>
+      </View>
+    </View>
+  );
+}
 
 function App(): React.JSX.Element {
   const {width} = useWindowDimensions();
-  const [snapshot, setSnapshot] = useState<NativeSnapshot>();
-  const [runtimeState, setRuntimeState] = useState<RuntimeState>('loading');
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const compact = width < 760;
+  const stageOpacity = useRef(new Animated.Value(0)).current;
+  const stageTranslateY = useRef(new Animated.Value(8)).current;
+  const mobileNavOpacity = useRef(new Animated.Value(0)).current;
+  const mobileNavTranslateY = useRef(new Animated.Value(100)).current;
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [route, setRoute] = useState<Route>('Home');
 
-  const refresh = useCallback(async () => {
-    if (!omiNative) {
-      setRuntimeState('unavailable');
-      return;
+  useEffect(() => {
+    let active = true;
+    const backend = omiBackend;
+    if (backend === undefined || backend === null) {
+      return () => undefined;
     }
-    try {
-      setSnapshot(await omiNative.getSnapshot());
-      setRuntimeState('ready');
-      setError(undefined);
-    } catch (reason) {
-      setRuntimeState('error');
-      setError(reason instanceof Error ? reason.message : 'Native adapter did not return a state.');
-    }
+    loadChatHistory(backend)
+      .then(history => {
+        if (active) {
+          setMessages(history);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setChatError('Chat is temporarily unavailable.');
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled().then(enabled => {
+      if (active) {
+        setReduceMotion(enabled);
+      }
+    });
+    const subscription = AccessibilityInfo.addEventListener(
+      'reduceMotionChanged',
+      setReduceMotion,
+    );
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
 
-  const run = useCallback(async (operation: () => Promise<void>) => {
-    setBusy(true);
+  useEffect(() => {
+    stageOpacity.setValue(0);
+    stageTranslateY.setValue(reduceMotion ? 0 : 8);
+    Animated.parallel([
+      Animated.timing(stageOpacity, {
+        duration: reduceMotion ? 1 : 250,
+        easing: Easing.out(Easing.cubic),
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      Animated.timing(stageTranslateY, {
+        duration: reduceMotion ? 1 : 250,
+        easing: Easing.out(Easing.cubic),
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [reduceMotion, route, stageOpacity, stageTranslateY]);
+
+  useEffect(() => {
+    if (!compact) {
+      mobileNavOpacity.setValue(1);
+      mobileNavTranslateY.setValue(0);
+      return;
+    }
+    mobileNavOpacity.setValue(0);
+    mobileNavTranslateY.setValue(reduceMotion ? 0 : 100);
+    Animated.parallel([
+      Animated.timing(mobileNavOpacity, {
+        duration: reduceMotion ? 1 : 200,
+        easing: Easing.out(Easing.cubic),
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      Animated.timing(mobileNavTranslateY, {
+        duration: reduceMotion ? 1 : 200,
+        easing: Easing.out(Easing.cubic),
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [compact, mobileNavOpacity, mobileNavTranslateY, reduceMotion]);
+
+  const nav = (
+    <Animated.View
+      accessibilityRole="tablist"
+      style={[
+        styles.navigation,
+        compact ? styles.bottomNav : styles.rail,
+        compact && {
+          opacity: mobileNavOpacity,
+          transform: [{translateY: mobileNavTranslateY}],
+        },
+      ]}>
+      {!compact && <Text style={styles.wordmark}>omi</Text>}
+      <View style={[styles.navItems, compact && styles.navItemsCompact]}>
+        {navigation.map(item => (
+          <NavItem
+            active={route === item.label}
+            compact={compact}
+            icon={item.icon}
+            key={item.label}
+            label={item.label}
+            onPress={() => setRoute(item.label as Route)}
+          />
+        ))}
+      </View>
+    </Animated.View>
+  );
+
+  const send = async () => {
+    const text = draft.trim();
+    const backend = omiBackend;
+    if (backend === undefined || backend === null || text === '' || chatBusy) {
+      return;
+    }
+    setChatBusy(true);
+    setChatError(null);
     try {
-      await operation();
-      await refresh();
-    } catch (reason) {
-      setRuntimeState('error');
-      setError(reason instanceof Error ? reason.message : 'The native operation did not complete.');
+      const result = await sendChatMessage(backend, text);
+      setMessages(current => [
+        ...current.filter(message => message.id !== result.human.id),
+        result.human,
+        ...(result.assistant === null ? [] : [result.assistant]),
+      ]);
+      setDraft('');
+    } catch {
+      setChatError('Message not sent. Try again.');
+      try {
+        setMessages(await loadChatHistory(backend));
+      } catch {}
     } finally {
-      setBusy(false);
+      setChatBusy(false);
     }
-  }, [refresh]);
+  };
 
-  const scan = useCallback(() => {
-    const native = omiNative;
-    if (native) {
-      run(async () => {
-        await native.startScan(5, []);
-        await new Promise<void>((resolve) => setTimeout(resolve, 5_000));
-        await native.stopScan();
-      });
-    }
-  }, [run]);
-
-  const toggleDevice = useCallback((device: Device) => {
-    const native = omiNative;
-    if (native) {
-      run(async () => {
-        if (device.connected) {
-          await native.disconnectDevice(device.id);
-        } else {
-          await native.connectDevice(device.id);
-        }
-      });
-    }
-  }, [run]);
-
-  const requestPermissions = useCallback(() => {
-    const native = omiNative;
-    if (native) {
-      run(async () => {
-        await native.requestPermissions();
-      });
-    }
-  }, [run]);
-
-  const status = runtimeState === 'loading'
-    ? 'Checking the native platform…'
-    : runtimeState === 'ready'
-      ? snapshot?.lastEvent
-      : runtimeState === 'unavailable'
-        ? 'This platform has no Omi native adapter yet.'
-        : error;
+  const composer = (
+    <View style={styles.composerWrap}>
+      <View style={styles.composer}>
+        <TextInput
+          accessibilityLabel="Ask Omi"
+          multiline
+          onChangeText={setDraft}
+          placeholder="Ask anything..."
+          placeholderTextColor="#888888"
+          style={styles.composerInput}
+          value={draft}
+        />
+        <View style={styles.composerActions}>
+          <Pressable
+            accessibilityLabel="Attach file unavailable"
+            accessibilityRole="button"
+            disabled
+            style={({pressed}) => [
+              styles.iconButton,
+              pressed && styles.pressed,
+            ]}>
+            <Paperclip color="#666666" size={18} strokeWidth={2} />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Dictation unavailable"
+            accessibilityRole="button"
+            disabled
+            style={({pressed}) => [
+              styles.iconButton,
+              pressed && styles.pressed,
+            ]}>
+            <Mic color="#666666" size={18} strokeWidth={2} />
+          </Pressable>
+          <View style={styles.actionSpacer} />
+          <Pressable
+            accessibilityLabel={
+              omiBackend === undefined || omiBackend === null
+                ? 'Send message unavailable'
+                : 'Send message'
+            }
+            accessibilityRole="button"
+            disabled={
+              omiBackend === undefined ||
+              omiBackend === null ||
+              draft.trim() === '' ||
+              chatBusy
+            }
+            onPress={send}
+            style={({pressed}) => [
+              styles.sendButton,
+              pressed && styles.pressed,
+            ]}>
+            <ArrowUp color="#141414" size={18} strokeWidth={2.5} />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <FlatList
-        data={snapshot?.devices ?? []}
-        keyExtractor={(device) => device.id}
-        renderItem={({item}) => <DeviceRow device={item} onPress={toggleDevice} busy={busy} />}
-        contentContainerStyle={styles.content}
-        ListHeaderComponent={
-          <>
-            <View style={styles.frame}>
-              <View style={styles.topBar}>
-                <Text style={styles.wordmark}>omi</Text>
-                <Text style={styles.platform}>React Native</Text>
-              </View>
-              <Text style={styles.eyebrow}>YOUR DAY</Text>
-              <Text style={styles.title}>A quiet place for what matters.</Text>
-              <Text style={styles.subtitle}>Connect Omi to bring your day into view.</Text>
-              <View style={[styles.overview, width >= 760 && styles.overviewWide]}>
-                <View style={[styles.todayCard, width >= 760 && styles.todayCardWide]}>
-                  <Text style={[styles.cardTitle, styles.todayText]}>Today</Text>
-                  <Text style={styles.todayValue}>—</Text>
-                  <Text style={[styles.statusCopy, styles.todayText]}>No moments yet. Connect a real Omi to begin.</Text>
-                </View>
-                <View style={[styles.statusCard, width >= 760 && styles.statusCardWide]}>
-                  <View style={styles.statusHeading}>
-                    <Text style={styles.cardTitle}>Connection</Text>
-                    {runtimeState === 'loading' ? <ActivityIndicator color="#111111" /> : <Text style={styles.statusBadge}>{runtimeState}</Text>}
+    <SafeAreaView style={styles.outer}>
+      <View style={[styles.shell, !compact && styles.shellWide]}>
+        {!compact && nav}
+        <View style={[styles.paneInset, compact && styles.paneInsetCompact]}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={[styles.pane, compact && styles.paneCompact]}>
+            <Animated.View
+              accessibilityLabel={`${route} stage`}
+              style={[
+                styles.stageMotion,
+                {
+                  opacity: stageOpacity,
+                  transform: [{translateY: stageTranslateY}],
+                },
+              ]}>
+              <View style={styles.stage}>
+                {route === 'Home' ? (
+                  <View style={styles.home}>
+                    <OmiMark />
+                    <Text style={styles.greeting}>I’m ready.</Text>
+                    <View style={styles.currents}>
+                      <Text style={styles.sectionLabel}>CURRENTS</Text>
+                      {messages.length === 0 &&
+                      !chatBusy &&
+                      chatError === null ? (
+                        <Text style={styles.empty}>
+                          Nothing’s waiting on you.
+                        </Text>
+                      ) : (
+                        <View style={styles.transcript}>
+                          {messages.map(message => (
+                            <Text
+                              key={message.id}
+                              style={[
+                                styles.message,
+                                message.sender === 'human' &&
+                                  styles.humanMessage,
+                              ]}>
+                              {message.text}
+                            </Text>
+                          ))}
+                          {chatBusy && (
+                            <Text style={styles.empty}>Thinking…</Text>
+                          )}
+                          {chatError !== null && (
+                            <Text style={styles.error}>{chatError}</Text>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.prompts}>
+                      {quickPrompts.map(prompt => (
+                        <Pressable
+                          accessibilityRole="button"
+                          key={prompt}
+                          onPress={() => setDraft(prompt)}
+                          style={({pressed}) => [
+                            styles.promptChip,
+                            pressed && styles.pressed,
+                          ]}>
+                          <Text style={styles.promptText}>{prompt}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
                   </View>
-                  <Text style={styles.statusCopy}>{status}</Text>
-                  {snapshot ? <Text style={styles.muted}>Bluetooth: {snapshot.bluetooth} · Audio: {snapshot.audioRoute}</Text> : null}
-                  <View style={styles.actions}>
-                    <Action label={busy ? 'Scanning…' : 'Find my Omi'} onPress={scan} disabled={!isNativeModuleInstalled || busy} />
-                    <Action label="Permissions" onPress={requestPermissions} disabled={!isNativeModuleInstalled || busy} />
-                  </View>
-                </View>
+                ) : (
+                  <ProjectionPage route={route} />
+                )}
               </View>
-              <View style={styles.sectionHeading}>
-                <Text style={styles.cardTitle}>Nearby Omi devices</Text>
-                <Text style={styles.muted}>{snapshot?.devices.length ?? 0} found</Text>
-              </View>
-            </View>
-          </>
-        }
-        ListEmptyComponent={<Text style={styles.empty}>No nearby Omi devices are available.</Text>}
-      />
+            </Animated.View>
+            {route === 'Home' && composer}
+          </KeyboardAvoidingView>
+        </View>
+        {compact && nav}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {flex: 1, backgroundColor: '#f7f7f5'},
-  content: {alignSelf: 'center', maxWidth: 1120, padding: 24, width: '100%'},
-  frame: {width: '100%'},
-  topBar: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 48},
-  wordmark: {color: '#111111', fontSize: 28, fontWeight: '900', letterSpacing: -1},
-  platform: {color: '#6b6b6b', fontSize: 13, fontWeight: '600'},
-  eyebrow: {color: '#6b6b6b', fontSize: 12, fontWeight: '800', letterSpacing: 1.2},
-  title: {color: '#111111', fontSize: 40, fontWeight: '800', letterSpacing: -1.8, lineHeight: 44, marginTop: 12, maxWidth: 520},
-  subtitle: {color: '#666666', fontSize: 17, lineHeight: 24, marginTop: 12, maxWidth: 440},
-  overview: {gap: 12, marginTop: 32},
-  overviewWide: {flexDirection: 'row'},
-  todayCard: {backgroundColor: '#111111', borderRadius: 20, gap: 12, padding: 20},
-  todayCardWide: {flex: 1},
-  todayText: {color: '#ffffff'},
-  todayValue: {color: '#ffffff', fontSize: 48, fontWeight: '800', letterSpacing: -2},
-  statusCard: {backgroundColor: '#ffffff', borderColor: '#e3e3e0', borderRadius: 20, borderWidth: 1, gap: 12, padding: 20},
-  statusCardWide: {flex: 1},
-  statusHeading: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'},
-  cardTitle: {color: '#111111', fontSize: 18, fontWeight: '800'},
-  statusBadge: {color: '#555555', fontSize: 12, fontWeight: '800', textTransform: 'uppercase'},
-  statusCopy: {color: '#222222', fontSize: 16, lineHeight: 22},
-  muted: {color: '#6b6b6b', fontSize: 13, lineHeight: 18},
-  actions: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4},
-  action: {backgroundColor: '#111111', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10},
-  actionDisabled: {backgroundColor: '#d6d6d3'},
-  actionText: {color: '#ffffff', fontSize: 13, fontWeight: '800'},
-  sectionHeading: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginTop: 28, paddingBottom: 16},
-  empty: {color: '#6b6b6b', fontSize: 15, lineHeight: 22, paddingBottom: 8},
-  deviceRow: {alignItems: 'center', backgroundColor: '#ffffff', borderColor: '#e3e3e0', borderRadius: 16, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 14},
-  deviceMark: {alignItems: 'center', borderColor: '#111111', borderRadius: 24, borderWidth: 1, height: 48, justifyContent: 'center', width: 48},
-  deviceMarkText: {color: '#111111', fontSize: 11, fontWeight: '900'},
-  deviceCopy: {flex: 1, gap: 3},
-  deviceName: {color: '#111111', fontSize: 16, fontWeight: '800'},
+  outer: {backgroundColor: '#141414', flex: 1},
+  shell: {backgroundColor: '#141414', flex: 1},
+  shellWide: {flexDirection: 'row'},
+  navigation: {backgroundColor: '#141414'},
+  rail: {paddingHorizontal: 14, paddingVertical: 20, width: 216},
+  wordmark: {
+    color: '#ffffff',
+    fontSize: 25,
+    fontWeight: '900',
+    letterSpacing: -1,
+    paddingHorizontal: 12,
+  },
+  navItems: {gap: 4, marginTop: 44},
+  navItemsCompact: {flexDirection: 'row', marginTop: 0},
+  navItem: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 48,
+    paddingHorizontal: 14,
+  },
+  navItemCompact: {
+    flex: 1,
+    flexDirection: 'column',
+    gap: 2,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  navItemActive: {backgroundColor: '#ffffff'},
+  navText: {color: '#b0b0b0', fontSize: 14, fontWeight: '600'},
+  navTextActive: {color: '#141414'},
+  bottomNav: {
+    borderTopColor: '#2a2a2a',
+    borderTopWidth: 1,
+    paddingHorizontal: 4,
+    paddingTop: 4,
+  },
+  paneInset: {flex: 1, padding: 12, paddingLeft: 0},
+  paneInsetCompact: {padding: 0},
+  pane: {
+    backgroundColor: '#1a1a1a',
+    borderColor: '#303030',
+    borderRadius: 26,
+    borderWidth: 1,
+    flex: 1,
+    overflow: 'hidden',
+  },
+  paneCompact: {borderRadius: 0, borderWidth: 0},
+  stageMotion: {flex: 1},
+  stage: {flexGrow: 1, paddingBottom: 20, paddingHorizontal: 20},
+  home: {
+    alignSelf: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    maxWidth: 560,
+    minHeight: 500,
+    paddingVertical: 40,
+    width: '100%',
+  },
+  mark: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 3,
+    height: 34,
+  },
+  markBar: {backgroundColor: '#ffffff', borderRadius: 4, width: 5},
+  markBarShort: {height: 11},
+  markBarMedium: {height: 20},
+  markBarTall: {height: 30},
+  greeting: {
+    color: '#ffffff',
+    fontSize: 25,
+    fontWeight: '600',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  currents: {marginTop: 34, width: '100%'},
+  sectionLabel: {
+    color: '#888888',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  prompts: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 28,
+  },
+  promptChip: {
+    alignItems: 'center',
+    backgroundColor: '#252525',
+    borderColor: '#363636',
+    borderRadius: 22,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 14,
+  },
+  promptText: {color: '#e5e5e5', fontSize: 13, fontWeight: '500'},
+  empty: {color: '#666666', fontSize: 12, textAlign: 'center'},
+  transcript: {gap: 10},
+  message: {color: '#e5e5e5', fontSize: 14, lineHeight: 20},
+  humanMessage: {color: '#ffffff', fontWeight: '600'},
+  error: {color: '#d8a0a0', fontSize: 12, textAlign: 'center'},
+  projection: {flex: 1, paddingHorizontal: 28, paddingVertical: 24},
+  projectionTitle: {color: '#ffffff', fontSize: 22, fontWeight: '600'},
+  projectionEmpty: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    paddingBottom: 48,
+  },
+  projectionEmptyTitle: {color: '#e5e5e5', fontSize: 16, fontWeight: '600'},
+  projectionEmptyCopy: {
+    color: '#888888',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  composerWrap: {paddingBottom: 16, paddingHorizontal: 20, paddingTop: 12},
+  composer: {
+    alignSelf: 'center',
+    backgroundColor: '#252525',
+    borderColor: '#3a3a3a',
+    borderRadius: 28,
+    borderWidth: 1,
+    maxWidth: 820,
+    minHeight: 62,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    width: '100%',
+  },
+  composerInput: {
+    color: '#ffffff',
+    fontSize: 16,
+    maxHeight: 140,
+    minHeight: 44,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  composerActions: {alignItems: 'center', flexDirection: 'row'},
+  iconButton: {
+    alignItems: 'center',
+    borderRadius: 20,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  actionSpacer: {flex: 1},
+  sendButton: {
+    alignItems: 'center',
+    backgroundColor: '#555555',
+    borderRadius: 20,
+    height: 44,
+    justifyContent: 'center',
+    opacity: 0.35,
+    width: 44,
+  },
+  pressed: {opacity: 0.72, transform: [{scale: 0.98}]},
 });
 
 export default App;

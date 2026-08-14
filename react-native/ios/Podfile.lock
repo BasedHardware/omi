@@ -1654,6 +1654,55 @@ PODS:
     - React-logger (= 0.79.6)
     - React-perflogger (= 0.79.6)
     - React-utils (= 0.79.6)
+  - RNSVG (15.15.5):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.11.18.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - RNSVG/common (= 15.15.5)
+    - Yoga
+  - RNSVG/common (15.15.5):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.11.18.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
   - SocketRocket (0.7.1)
   - Yoga (0.0.0)
 
@@ -1729,6 +1778,7 @@ DEPENDENCIES:
   - ReactAppDependencyProvider (from `build/generated/ios`)
   - ReactCodegen (from `build/generated/ios`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
+  - RNSVG (from `../node_modules/react-native-svg`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
 SPEC REPOS:
@@ -1875,6 +1925,8 @@ EXTERNAL SOURCES:
     :path: build/generated/ios
   ReactCommon:
     :path: "../node_modules/react-native/ReactCommon"
+  RNSVG:
+    :path: "../node_modules/react-native-svg"
   Yoga:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
@@ -1948,9 +2000,10 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: ae0be24eb18014a031b4b220cb3973d07c3cbaf8
   ReactCodegen: 06cf663b23a161f42a2e14087269753f422885c0
   ReactCommon: 44c86ec3ace664c0f33b7a2ac89aced8304ef25e
+  RNSVG: 7f5a3429d6fdf2dda10f28111ef332b5261451b6
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: dc7c21200195acacb62fa920c588e7c2106de45e
 
 PODFILE CHECKSUM: 0d009e13dfb36289fa0ecd14c874290b62ed862f
 
-COCOAPODS: 1.15.2
+COCOAPODS: 1.17.0
