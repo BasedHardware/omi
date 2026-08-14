@@ -167,7 +167,7 @@ class Conversation(BaseModel):
     finished_at: Optional[datetime]
 
     source: Optional[ConversationSource] = ConversationSource.omi
-    language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
+    language: Optional[str] = None  # applies only to Friend; Friend conversations default to 'en'
 
     structured: Structured
     transcript_segments: List[TranscriptSegment] = []
@@ -212,6 +212,14 @@ class Conversation(BaseModel):
     # Capture-device provenance (optional; absent on legacy conversations).
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+
+    @model_validator(mode='after')
+    def apply_friend_language_default(self):
+        if self.source in (ConversationSource.friend, ConversationSource.friend_com) and (
+            self.language is None or not self.language.strip()
+        ):
+            self.language = 'en'
+        return self
 
     def __init__(self, **data):
         raw_segments = data.get('transcript_segments')
@@ -300,6 +308,14 @@ class CreateConversation(BaseModel):
     # only after process_conversation has already persisted the row.
     external_data: Optional[Dict] = None
 
+    @model_validator(mode='after')
+    def apply_friend_language_default(self):
+        if self.source in (ConversationSource.friend, ConversationSource.friend_com) and (
+            self.language is None or not self.language.strip()
+        ):
+            self.language = 'en'
+        return self
+
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
             self.transcript_segments, include_timestamps=include_timestamps, user_name=user_name, people=people
@@ -326,6 +342,14 @@ class ExternalIntegrationCreateConversation(BaseModel):
 
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+
+    @model_validator(mode='after')
+    def apply_friend_language_default(self):
+        if self.source in (ConversationSource.friend, ConversationSource.friend_com) and (
+            self.language is None or not self.language.strip()
+        ):
+            self.language = 'en'
+        return self
 
     def get_transcript(self, include_timestamps: bool) -> str:
         return self.text
