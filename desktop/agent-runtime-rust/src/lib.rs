@@ -449,8 +449,14 @@ mod tests {
             "omi-deep"
         );
         // No profile at all falls back to the execution-mode heuristic.
-        assert_eq!(select_query_model(None, None, ExecutionMode::Fast), "omi-fast");
-        assert_eq!(select_query_model(None, None, ExecutionMode::Deep), "omi-deep");
+        assert_eq!(
+            select_query_model(None, None, ExecutionMode::Fast),
+            "omi-fast"
+        );
+        assert_eq!(
+            select_query_model(None, None, ExecutionMode::Deep),
+            "omi-deep"
+        );
     }
 
     #[tokio::test]
