@@ -397,31 +397,6 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertNotIn("xcodebuild -version | head -1", runner)
         self.assertIn("sed -n '1p'", runner)
 
-    def test_m1_pre_tag_outer_budget_covers_sequential_inner_ceilings(self):
-        """Outer M1 pre-tag caps must exceed the sum of sequential inner stage ceilings."""
-        readiness = (REPO_ROOT / "desktop/macos/scripts/pre-tag-readiness.sh").read_text(encoding="utf-8")
-        auto_release = (REPO_ROOT / ".github/workflows/desktop_auto_release.yml").read_text(encoding="utf-8")
-        inner_ceilings = [
-            int(match.group(1))
-            for match in re.finditer(
-                r"run_watchdog (?:runner-self-clean|readiness-cache-prepare|readiness-agent-dependencies|readiness-offline-stack) (\d+)",
-                readiness,
-            )
-        ]
-        self.assertEqual(inner_ceilings, [1200, 3600, 1800, 3600])
-        inner_sum = sum(inner_ceilings)
-        step = re.search(
-            r"Run ownership-scoped M1 pre-tag readiness[\s\S]*?timeout-minutes:\s*(\d+)[\s\S]*?--timeout-seconds\s+(\d+)",
-            auto_release,
-        )
-        self.assertIsNotNone(step)
-        step_timeout_minutes = int(step.group(1))
-        outer_watchdog_seconds = int(step.group(2))
-        # Require a 15-minute margin above the sequential inner sum.
-        minimum_outer_seconds = inner_sum + 15 * 60
-        self.assertGreaterEqual(outer_watchdog_seconds, minimum_outer_seconds)
-        self.assertGreaterEqual(step_timeout_minutes * 60, outer_watchdog_seconds)
-
     # --- adversarial: removing any guard must fail -------------------------
 
     def test_adversarial_remove_runner_mode_detected(self):

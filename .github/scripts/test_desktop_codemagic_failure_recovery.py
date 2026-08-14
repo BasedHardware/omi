@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("desktop-codemagic-failure-recovery.py")
@@ -132,6 +134,8 @@ class RecoveryTests(unittest.TestCase):
         self.assertNotIn("csrf-secret", json.dumps(capsule))
         self.assertNotIn("set-cookie-secret", json.dumps(capsule))
         self.assertNotIn("query-secret", json.dumps(capsule))
+        self.assertGreater(len(capsule["log_tail"]), 0)
+        self.assertIn("token=<redacted>", "\n".join(capsule["log_tail"]))
 
     def test_provider_only_failure_does_not_prescribe_local_rehearsal(self) -> None:
         capsule = RECOVERY.build_capsule(
@@ -211,6 +215,25 @@ class RecoveryTests(unittest.TestCase):
         self.assertIn("Do not cut another candidate", summary)
         self.assertIn("codemagic-env.sh", summary)
         self.assertNotIn("not-recorded", summary)
+
+    def test_unclassified_profile_emits_warning_and_embeds_log_tail(self) -> None:
+        log = b"\n".join(f"noise {i} token=super-secret".encode() for i in range(250))
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            capsule = RECOVERY.build_capsule(
+                build_id=BUILD_ID,
+                token="not-recorded",
+                profiles=self.profiles(),
+                opener=self.opener(build_payload("Unknown Codemagic step"), log),
+            )
+        self.assertEqual(capsule["failure_profile"], "unclassified")
+        self.assertIn("::warning::failure_profile unclassified", stdout.getvalue())
+        self.assertEqual(len(capsule["log_tail"]), 200)
+        self.assertIn("token=<redacted>", capsule["log_tail"][-1])
+        self.assertNotIn("super-secret", json.dumps(capsule))
+        summary = RECOVERY.markdown_summary(capsule)
+        self.assertIn("Failed-step log tail", summary)
+        self.assertIn("noise 249 token=<redacted>", summary)
 
 
 if __name__ == "__main__":

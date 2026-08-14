@@ -692,7 +692,7 @@ auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSig
 auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 
 # Each non-production app writes to its own bundle-and-launch log path. Never clear a
-# machine-global log here: another named QA or qualification bundle may still be running.
+# machine-global log here: another named QA bundle may still be running.
 
 if [ "$FAST_ONLY" = "1" ]; then
     # --fast-only already proved that the installed bundle fingerprint matches;
@@ -1414,7 +1414,7 @@ build_launch_env_args() {
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CONTEXT_BUCKETS=$OMI_FORCE_CONTEXT_BUCKETS")
     fi
     # Forward automation token overrides when the caller already pinned them
-    # (e.g. qualify-desktop-beta.sh). Default token discovery prefers Darwin
+    # (e.g. desktop-core-harness.sh). Default token discovery prefers Darwin
     # user temp in harness clients, matching NSTemporaryDirectory().
     if [ -n "${OMI_AUTOMATION_TOKEN_FILE:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_AUTOMATION_TOKEN_FILE=$OMI_AUTOMATION_TOKEN_FILE")
