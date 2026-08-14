@@ -1190,9 +1190,8 @@ class MemoryService:
     def ensure_canonical_mutation_ready(self, uid: str) -> None:
         """Enforce the deployment-wide intake fence without selecting users.
 
-        Reads and privacy deletes remain universal in every mode. ``off`` and
-        ``shadow`` stop product-visible writes so operators can deploy the
-        dual-format reader to every instance before enabling canonical intake.
+        Reads and privacy deletes remain universal in every mode. ``MEMORY_ENABLED=off``
+        (and leftover ``off`` / ``shadow`` aliases) stop product-visible writes.
         """
         if not uid:
             raise HTTPException(status_code=401, detail="Authenticated user required")

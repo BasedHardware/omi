@@ -75,6 +75,14 @@ _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER = 'X-Omi-Memory-Default-Delete-Supported
 _MEMORY_NEXT_CURSOR_HEADER = 'X-Omi-Memory-Next-Cursor'
 
 
+def _normalize_memory_list_cursor(cursor: Optional[str]) -> Optional[str]:
+    """Treat missing/blank cursor as first-page so ``?cursor=`` cannot skip the fallback."""
+    if cursor is None:
+        return None
+    stripped = cursor.strip()
+    return stripped or None
+
+
 class BatchMemoriesRequest(BaseModel):
     memories: List[Memory] = Field(
         description="List of memories to create in a single batch request",
@@ -540,6 +548,7 @@ def get_memories(
 
     # Cursor and legacy offset paging are mutually exclusive. Cursor mode owns
     # accounts beyond the bounded offset compatibility window.
+    cursor = _normalize_memory_list_cursor(cursor)
     if cursor is not None and bounded_offset != 0:
         raise HTTPException(
             status_code=400,

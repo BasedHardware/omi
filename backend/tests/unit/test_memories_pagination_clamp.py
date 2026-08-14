@@ -147,3 +147,36 @@ def test_huge_limit_is_capped():
 def test_negative_limit_is_floored():
     limit, _ = _call(-5, 10)
     assert limit == 1
+
+
+def test_blank_cursor_falls_back_to_offset_read_when_cursor_secret_missing():
+    """GET 503 root cause: first-page read_page needs MEMORY_V3_CURSOR_SECRET.
+
+    MEMORY_V3_GET_ENABLED is unused on the route. A blank ``?cursor=`` must not
+    skip the first-page fallback, or MEMORY_ENABLED=on still 503s list.
+    """
+    from fastapi import HTTPException
+
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(status_code=503, detail="Memory cursor unavailable")
+    service.read.return_value = []
+    scope_request = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    with (
+        patch.object(mem_mod, 'MemoryService', return_value=service),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope_request),
+        patch.object(mem_mod, '_validate_device_scope_request'),
+        patch.object(mem_mod, 'memory_list_response', return_value=[]),
+    ):
+        mem_mod.get_memories(
+            response=MagicMock(),
+            limit=100,
+            offset=0,
+            cursor='  ',
+            uid='uid1',
+            device_scope='all',
+            client_device_id=None,
+            x_app_platform=None,
+            x_device_id_hash=None,
+        )
+    service.read.assert_called_once()
+    service.read_page.assert_called_once()
