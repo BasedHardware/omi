@@ -1802,9 +1802,16 @@ async def mcp_streamable_http(
 
 
 @router.get("/v1/mcp/sse", tags=["mcp"], response_class=Response)
-def mcp_sse_get():
+def mcp_sse_get(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
+):
     """
     GET on the Streamable HTTP endpoint: this server offers no server-initiated stream.
+
+    The two header parameters are accepted and ignored: released app-client OpenAPI
+    contracts describe them on this operation, and removing them reads as a breaking
+    request-shape change to the compatibility checker.
 
     Per the MCP Streamable HTTP transport spec (2025-03-26), a server that does not
     offer server-initiated messages MUST return 405 Method Not Allowed for GET, and
