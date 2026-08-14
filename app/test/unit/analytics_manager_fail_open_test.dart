@@ -122,6 +122,22 @@ void main() {
     expect(AnalyticsManager.queuedEventCountForTesting, 200);
     expect(AnalyticsManager.droppedEventCountForTesting, 5);
   });
+
+  test('account creation uses the first-auth credential boundary', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().accountCreated(authProvider: 'google');
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events.single.eventName, 'Account Created');
+    expect(adapter.events.single.properties, {
+      'is_first_auth': true,
+      'auth_provider': 'google',
+      'acquisition_source': 'mobile_oauth',
+    });
+  });
 }
 
 class _FakeAnalyticsAdapter implements AnalyticsAdapter {
