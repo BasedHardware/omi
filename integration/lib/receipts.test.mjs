@@ -123,20 +123,26 @@ describe("the exact L3 evidence matrix is required, not merely an aggregate", ()
   });
 
   it("RED-PROOF collapsing shell and surface hashes to one worktree stamp is refused", () => {
-    const shellTreeHash = worktreeStamp({ repo: "core-foundation" }).treeHash;
-    const surfaceTreeHash = worktreeStamp({ repo: "core-foundation", artifact: "surfaces-dist" }).treeHash;
-    assert.notEqual(shellTreeHash, surfaceTreeHash);
-    const collapsed = structuredClone(l3Arbiters());
-    for (const row of collapsed.evidenceMatrix.rows) {
-      row.consumer.shellTreeHash = shellTreeHash;
-      row.consumer.surfaceTreeHash = shellTreeHash;
+    const tripwire = join(new URL("../..", import.meta.url).pathname, "integration/.l3-hash-scope-tripwire");
+    writeFileSync(tripwire, "planted\n");
+    try {
+      const shellTreeHash = worktreeStamp({ repo: "core-foundation" }).treeHash;
+      const surfaceTreeHash = worktreeStamp({ repo: "core-foundation", artifact: "surfaces-dist" }).treeHash;
+      assert.notEqual(shellTreeHash, surfaceTreeHash);
+      const collapsed = structuredClone(l3Arbiters());
+      for (const row of collapsed.evidenceMatrix.rows) {
+        row.consumer.shellTreeHash = shellTreeHash;
+        row.consumer.surfaceTreeHash = shellTreeHash;
+      }
+      collapsed.evidenceMatrix.expectedShellTreeHash = shellTreeHash;
+      collapsed.evidenceMatrix.expectedSurfaceTreeHash = shellTreeHash;
+      assert.throws(
+        () => writeReceipt({ lane: "L3", result: "pass", durationMs: 1000, arbiters: collapsed, workspaceRoot }),
+        /stale or mismatched surface tree hash/,
+      );
+    } finally {
+      rmSync(tripwire, { force: true });
     }
-    collapsed.evidenceMatrix.expectedShellTreeHash = shellTreeHash;
-    collapsed.evidenceMatrix.expectedSurfaceTreeHash = shellTreeHash;
-    assert.throws(
-      () => writeReceipt({ lane: "L3", result: "pass", durationMs: 1000, arbiters: collapsed, workspaceRoot }),
-      /stale or mismatched surface tree hash/,
-    );
   });
 
   it("RED-PROOF an aggregate count cannot replace one missing coordinate", () => {
