@@ -20,6 +20,7 @@ def load_app(tmp_path: Path):
 
     os.environ["AUTH_TOKEN"] = "test-token"
     os.environ["DB_PATH"] = str(tmp_path / "omi.db")
+    os.environ["AGENT_VM_WORKSPACE"] = str(tmp_path / "workspace")
     sys.path.insert(0, str(SERVICE))
     sys.modules.pop("main", None)
     module = importlib.import_module("main")
