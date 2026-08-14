@@ -21,6 +21,13 @@ enum CaptureListeningLogic {
     isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
   }
 
+  /// The top-bar / Home listening readout. A session that is only *armed* (Only Meetings, no
+  /// call) is inactive — the mic is paused, so lighting the green dot would lie.
+  static func listeningStatus(appState: AppState) -> HomeStatusState {
+    if appState.transcriptionServiceError != nil { return .blocked }
+    return appState.isLiveCapturing ? .active : .inactive
+  }
+
   static func audioRecordingMode(raw: String) -> AssistantSettings.AudioRecordingMode {
     AssistantSettings.AudioRecordingMode(rawValue: raw) ?? .onlyMeetings
   }

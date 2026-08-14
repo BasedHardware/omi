@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the live transcript expand view so it fills the Conversations panel on glass, and hid the Live card when Only Meetings is waiting for a call"
+}

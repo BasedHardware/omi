@@ -1634,8 +1634,8 @@ struct DashboardPage: View {
           title: transcriptionUnavailable ? "Transcription unavailable" : "Listening",
           systemImage: transcriptionUnavailable
             ? "exclamationmark.triangle.fill"
-            : (appState.isTranscribing ? "waveform.circle.fill" : "mic.circle"),
-          status: transcriptionUnavailable ? .blocked : (appState.isTranscribing ? .active : .inactive),
+            : (appState.isLiveCapturing ? "waveform.circle.fill" : "mic.circle"),
+          status: CaptureListeningLogic.listeningStatus(appState: appState),
           modeTitle: listeningModeTitle,
           isToggling: isTogglingListening,
           action: toggleListening

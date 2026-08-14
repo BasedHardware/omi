@@ -465,6 +465,13 @@ class AppState: ObservableObject {
   var meetingEndFinalizationInProgress = false
   @Published var isAwaitingMeeting = false
 
+  /// Audio is actually reaching STT — not merely that a transcription session is armed.
+  ///
+  /// Only Meetings keeps `isTranscribing` true while waiting for a call so capture can start
+  /// instantly, and sets `isAwaitingMeeting` while the mic is paused. Live UI (the Conversations
+  /// card, the expanded transcript, the top-bar mic dot) must follow this, not `isTranscribing`.
+  var isLiveCapturing: Bool { isTranscribing && !isAwaitingMeeting }
+
   var audioRecordingMode: AssistantSettings.AudioRecordingMode {
     AssistantSettings.shared.audioRecordingMode
   }
