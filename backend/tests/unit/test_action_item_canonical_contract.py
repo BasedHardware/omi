@@ -109,6 +109,38 @@ def test_released_macos_request_shapes_remain_compatible_at_route_boundary():
     assert 'clear_due_at' not in update.storage_payload()
 
 
+def test_owner_change_emits_bounded_assignee_correction_after_durable_update(monkeypatch):
+    existing = {'id': 'task-1', 'description': 'Send budget', 'owner': 'unknown', 'completed': False}
+    updated = {**existing, 'owner': 'user', 'conversation_id': 'conversation-1'}
+    emitted = []
+    monkeypatch.setattr(action_items_router, '_get_valid_action_item', lambda *_: existing)
+    monkeypatch.setattr(action_items_router.action_items_db, 'update_action_item', lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(action_items_router.action_items_db, 'get_action_item', lambda *_: updated)
+    monkeypatch.setattr(action_items_router.task_links, 'validate_task_links', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(action_items_router, 'emit_product_event', lambda **event: emitted.append(event))
+
+    result = action_items_router.update_action_item(
+        'task-1',
+        ActionItemUpdateRequest(owner='user'),
+        uid='user-1',
+    )
+
+    assert result.owner == 'user'
+    assert emitted == [
+        {
+            'uid': 'user-1',
+            'event': 'Task Assignee Corrected',
+            'properties': {
+                'action_item_id': 'task-1',
+                'conversation_id': 'conversation-1',
+                'previous_assignee': 'unknown',
+                'new_assignee': 'user',
+                'field_changed': 'owner',
+            },
+        }
+    ]
+
+
 @pytest.mark.parametrize(
     'payload',
     [
