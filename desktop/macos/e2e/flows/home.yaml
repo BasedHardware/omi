@@ -16,6 +16,9 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatPromptTimeline.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatPromptTimelineModel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollPositionDetector.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatTranscriptGeometry.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryChatCapability.swift
   - desktop/macos/Desktop/Sources/Chat/ChatCitation.swift
 preconditions:
