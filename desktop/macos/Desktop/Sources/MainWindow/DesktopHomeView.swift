@@ -1312,8 +1312,7 @@ struct DesktopHomeView: View {
             ? SidebarNavItem.dashboard.rawValue
             : previousIndexBeforeSettings
         }
-      }
-    )
+      }, appState: appState)
   }
 
   // Main content area. It paints **no background**: the window has no ground at all
