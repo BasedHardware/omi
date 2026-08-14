@@ -35,6 +35,10 @@ import type { MainChatEvent } from '../../shared/types'
 import { DEFAULT_LOCAL_OWNER_ID } from '../agentKernel/controlTools'
 import { personalizationWithFallback, projectKernelEvent, runMainChatTurn } from './mainChat'
 
+function withoutCurrentTime(prompt: string): string {
+  return prompt.replace(/^# Current Time\n[^\n]+ \([^)]+\)\n\n/, '')
+}
+
 const nodeSqliteFactory = DatabaseSync as unknown as DatabaseFactory
 const createdDirs: string[] = []
 const openStores: SqliteAgentStore[] = []
@@ -143,7 +147,8 @@ function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
       ]) {
         sink(event)
       }
-      const gate = options.gates?.get(promptText)
+      const gate =
+        options.gates?.get(promptText) ?? options.gates?.get(withoutCurrentTime(promptText))
       if (gate) {
         await gate.promise
         if (signal.aborted) throw new Error('aborted')
@@ -402,6 +407,29 @@ describe('runMainChatTurn', () => {
     expect(systemPrompt).toContain('You are Omi')
   })
 
+  it('prepends the authoritative current time to each dispatched turn', async () => {
+    let dispatchedPrompt = ''
+    const adapter = fakeAdapter({
+      stream: (prompt) => {
+        dispatchedPrompt = prompt
+        return []
+      },
+      reply: () => 'ok'
+    })
+    const kernel = newKernel(adapter)
+    const now = new Date('2026-07-31T02:30:45Z')
+
+    await runMainChatTurn(
+      { requestId: 'req-time', prompt: 'What day is it?', cleanUserText: 'What day is it?' },
+      () => {},
+      { kernel, ownerId: OWNER, now: () => now, timeZone: () => 'America/New_York' }
+    )
+
+    expect(dispatchedPrompt).toContain(
+      '# Current Time\n2026-07-30T22:30:45-04:00 (America/New_York)\n\nWhat day is it?'
+    )
+  })
+
   it('personalizationWithFallback records a degrade and returns "" when the reader throws', async () => {
     const events: unknown[] = []
     const result = await personalizationWithFallback(
@@ -460,7 +488,7 @@ describe('runMainChatTurn', () => {
     )
 
     // Personalization first, then the user message (turn 1 → no history between).
-    expect(dispatchedPrompt).toBe(`${block}\n\nwhat do you know about me`)
+    expect(withoutCurrentTime(dispatchedPrompt)).toBe(`${block}\n\nwhat do you know about me`)
     // The transcript still records the CLEAN user text, never the contexted prompt.
     const turns = store.allRows('SELECT role, content FROM conversation_turns ORDER BY rowid ASC')
     expect(turns[0]).toMatchObject({ role: 'user', content: 'what do you know about me' })
@@ -486,7 +514,7 @@ describe('runMainChatTurn', () => {
       () => {},
       deps
     )
-    expect(dispatched[0]).toBe(`${block}\n\nfirst question`)
+    expect(withoutCurrentTime(dispatched[0])).toBe(`${block}\n\nfirst question`)
 
     // Turn 2 on the SAME chat: personalization, THEN the history tail, THEN the ask.
     await runMainChatTurn(
@@ -494,7 +522,7 @@ describe('runMainChatTurn', () => {
       () => {},
       deps
     )
-    const second = dispatched[1]
+    const second = withoutCurrentTime(dispatched[1])
     expect(second.startsWith(block)).toBe(true)
     expect(second).toContain('<conversation_history>')
     expect(second.endsWith('second question')).toBe(true)
@@ -553,7 +581,7 @@ describe('runMainChatTurn', () => {
     expect(store.allRows('SELECT run_id FROM runs')).toHaveLength(1)
     expect(store.allRows('SELECT attempt_id FROM run_attempts')).toHaveLength(1)
     // Adapter got the verbatim contexted prompt.
-    expect(dispatchedPrompt).toBe('<<context>>\nthe question')
+    expect(withoutCurrentTime(dispatchedPrompt)).toBe('<<context>>\nthe question')
     // Transcript: clean user turn (main-side record) THEN assistant turn (the run),
     // both on the same conversation. The user turn stores the CLEAN text, not the
     // contexted prompt.
@@ -592,8 +620,8 @@ describe('runMainChatTurn', () => {
       () => {},
       { kernel, ownerId: OWNER }
     )
-    expect(dispatched[0]).toBe('what is the capital of france')
-    expect(dispatched[0]).not.toContain('<conversation_history>')
+    expect(withoutCurrentTime(dispatched[0])).toBe('what is the capital of france')
+    expect(withoutCurrentTime(dispatched[0])).not.toContain('<conversation_history>')
 
     // Turn 2 on the SAME chat-x: turn 1's user + assistant turns are now in the
     // transcript, so they are prepended as a <conversation_history> block, and the
@@ -603,7 +631,7 @@ describe('runMainChatTurn', () => {
       () => {},
       { kernel, ownerId: OWNER }
     )
-    const second = dispatched[1]
+    const second = withoutCurrentTime(dispatched[1])
     expect(second).toContain('<conversation_history>')
     expect(second).toContain('q1') // turn-1 clean user text
     expect(second).toContain('reply-to') // turn-1 assistant text
@@ -616,8 +644,8 @@ describe('runMainChatTurn', () => {
       () => {},
       { kernel, ownerId: OWNER }
     )
-    expect(dispatched[2]).toBe('unrelated question')
-    expect(dispatched[2]).not.toContain('<conversation_history>')
+    expect(withoutCurrentTime(dispatched[2])).toBe('unrelated question')
+    expect(withoutCurrentTime(dispatched[2])).not.toContain('<conversation_history>')
   })
 
   it('isolates concurrent runs — one run’s events never leak into another’s stream', async () => {
@@ -627,7 +655,7 @@ describe('runMainChatTurn', () => {
     ])
     const adapter = fakeAdapter({
       gates,
-      stream: (prompt) => [{ type: 'text_delta', text: `delta:${prompt}` }],
+      stream: (prompt) => [{ type: 'text_delta', text: `delta:${withoutCurrentTime(prompt)}` }],
       reply: (prompt) => `reply:${prompt}`
     })
     const kernel = newKernel(adapter)

@@ -4,6 +4,16 @@ import XCTest
 
 @MainActor
 final class ShortcutSettingsTests: XCTestCase {
+  func testPushToTalkRequiresAtLeastOneModifier() {
+    let bareU = ShortcutSettings.KeyboardShortcut(keyCode: 32, keyDisplay: "U")
+    let commandU = ShortcutSettings.KeyboardShortcut(keyCode: 32, keyDisplay: "U", modifiers: .command)
+    let optionOnly = ShortcutSettings.KeyboardShortcut(modifierOnly: .option)
+
+    XCTAssertFalse(ShortcutSettings.isSafePushToTalkShortcut(bareU))
+    XCTAssertTrue(ShortcutSettings.isSafePushToTalkShortcut(commandU))
+    XCTAssertTrue(ShortcutSettings.isSafePushToTalkShortcut(optionOnly))
+  }
+
   func testAskOmiDefaultShortcutIsCommandO() {
     XCTAssertEqual(ShortcutSettings.defaultAskOmiShortcut, ShortcutSettings.askOmiCommandOShortcut)
     XCTAssertEqual(ShortcutSettings.defaultAskOmiShortcut.displayTokens, ["⌘", "O"])
@@ -27,6 +37,28 @@ final class ShortcutSettingsTests: XCTestCase {
 
     XCTAssertEqual(tokens, ["⇧", "⌘", "↩"])
     XCTAssertEqual(ShortcutHintLayout.visibleTokens(for: tokens), tokens)
+  }
+
+  func testOnboardingFloatingBarPresetPersistsImmediately() {
+    let previousShortcut = ShortcutSettings.shared.askOmiShortcut
+    defer { ShortcutSettings.shared.askOmiShortcut = previousShortcut }
+
+    let preset = ShortcutSettings.askOmiCommandJShortcut
+    OnboardingFloatingBarShortcutStepView.selectPreset(preset, settings: ShortcutSettings.shared)
+
+    XCTAssertEqual(ShortcutSettings.shared.askOmiShortcut, preset)
+    XCTAssertFalse(ShortcutSettings.shared.askOmiUsesCustomShortcut)
+  }
+
+  func testOnboardingVoicePresetPersistsImmediately() {
+    let previousShortcut = ShortcutSettings.shared.pttShortcut
+    defer { ShortcutSettings.shared.pttShortcut = previousShortcut }
+
+    let preset = ShortcutSettings.pttPresets[0]
+    OnboardingVoiceShortcutStepView.selectPreset(preset, settings: ShortcutSettings.shared)
+
+    XCTAssertEqual(ShortcutSettings.shared.pttShortcut, preset)
+    XCTAssertFalse(ShortcutSettings.shared.pttUsesCustomShortcut)
   }
 
   func testExplicitPTTMicrophoneOverridesAutomaticBluetoothFallback() {

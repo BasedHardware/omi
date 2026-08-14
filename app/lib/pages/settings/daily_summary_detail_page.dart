@@ -20,8 +20,9 @@ import 'package:omi/utils/platform/platform_service.dart';
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
   final DailySummary? summary; // Can pass directly if already loaded
+  final TileProvider? tileProvider;
 
-  const DailySummaryDetailPage({super.key, required this.summaryId, this.summary});
+  const DailySummaryDetailPage({super.key, required this.summaryId, this.summary, this.tileProvider});
 
   @override
   State<DailySummaryDetailPage> createState() => _DailySummaryDetailPageState();
@@ -640,6 +641,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                       subdomains: const ['a', 'b', 'c', 'd'],
                       userAgentPackageName: 'me.omi.app',
                       retinaMode: true,
+                      tileProvider: widget.tileProvider,
                     ),
                     MarkerLayer(markers: markers),
                   ],
@@ -653,10 +655,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         ...timelineLocations.asMap().entries.map((entry) {
           final index = entry.key;
           final location = entry.value;
-          final isFirst = index == 0;
-          final isLast = index == timelineLocations.length - 1;
 
-          return _buildTimelineItem(location, isFirst, isLast);
+          return _buildTimelineItem(location, index);
         }),
       ],
     );
@@ -869,7 +869,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
-  Widget _buildTimelineItem(_TimelineLocation location, bool isFirst, bool isLast) {
+  Widget _buildTimelineItem(_TimelineLocation location, int index) {
     final startFormatted = _formatTimeTo12Hour(location.startTime);
     final endFormatted = _formatTimeTo12Hour(location.endTime);
     final timeText = startFormatted.isNotEmpty
@@ -878,90 +878,54 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             : startFormatted)
         : '';
 
-    return GestureDetector(
+    final semanticsLabel = timeText.isEmpty ? location.shortName : '${location.shortName}, $timeText';
+
+    return Semantics(
+      container: true,
+      button: true,
+      excludeSemantics: true,
+      label: semanticsLabel,
       onTap: () => MapsUtil.launchMap(location.latitude, location.longitude),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Timeline line and dot
-            SizedBox(
-              width: 40,
-              child: Column(
-                children: [
-                  // Top line (hidden for first item)
-                  Container(
-                    width: 2,
-                    height: 12,
-                    color: isFirst ? Colors.transparent : Colors.deepPurple.withValues(alpha: 0.4),
-                  ),
-                  // Dot
-                  Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: Colors.deepPurple,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFF0A0A0A), width: 2),
-                      boxShadow: [
-                        BoxShadow(color: Colors.deepPurple.withValues(alpha: 0.4), blurRadius: 6, spreadRadius: 1),
-                      ],
-                    ),
-                  ),
-                  // Bottom line (hidden for last item)
-                  Expanded(
-                    child: Container(
-                      width: 2,
-                      color: isLast ? Colors.transparent : Colors.deepPurple.withValues(alpha: 0.4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Content
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
-                decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(20)),
-                child: Row(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => MapsUtil.launchMap(location.latitude, location.longitude),
+        child: Container(
+          key: ValueKey('daily_summary_location_row_$index'),
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            location.shortName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              height: 1.4,
-                            ),
-                          ),
-                          if (timeText.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade500, size: 12),
-                                const SizedBox(width: 4),
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Text(timeText, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
+                    Text(
+                      location.shortName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
                       ),
                     ),
-                    Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
+                    if (timeText.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade500, size: 12),
+                          const SizedBox(width: 4),
+                          Text(timeText, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
-            ),
-          ],
+              Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
+            ],
+          ),
         ),
       ),
     );

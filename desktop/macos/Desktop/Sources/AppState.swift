@@ -112,6 +112,27 @@ enum DesktopConversationMatchPolicy {
     return true
   }
 
+  /// Remember a newly observed rollover without allowing duplicate stale
+  /// callbacks to evict a different guard entry.
+  static func rememberingRotatedBackendId(
+    _ backendId: String,
+    activeBackendId: String?,
+    ignoredRotatedBackendIds: Set<String>,
+    maxCount: Int
+  ) -> Set<String> {
+    guard let activeBackendId,
+      activeBackendId != backendId,
+      !ignoredRotatedBackendIds.contains(backendId)
+    else { return ignoredRotatedBackendIds }
+
+    var updated = ignoredRotatedBackendIds
+    if updated.count >= maxCount, let evicted = updated.first {
+      updated.remove(evicted)
+    }
+    updated.insert(backendId)
+    return updated
+  }
+
   /// Identified listen sessions may only consume lifecycle events produced by
   /// their own recording. Older backend versions omit `recording_session_id`,
   /// so the matching conversation id remains the compatibility proof.
@@ -123,6 +144,53 @@ enum DesktopConversationMatchPolicy {
     guard let expectedBackendId, !expectedBackendId.isEmpty else { return true }
     guard memoryId == expectedBackendId else { return false }
     return recordingSessionId == nil || recordingSessionId == expectedBackendId
+  }
+
+  /// A completed backend event is telemetry-eligible only when it can be
+  /// attributed to the local recording that just ended. Durable SQLite
+  /// binding is intentionally not required: an exact client conversation id
+  /// or the legacy source/timestamp proof is sufficient.
+  static func acceptsCompletedLocalRecording(
+    memoryId: String,
+    memory: [String: Any]?,
+    recordingSessionId: String?,
+    expectedBackendId: String?,
+    finishedRecordingStartTime: Date?
+  ) -> Bool {
+    guard !memoryId.isEmpty, memoryId != "?" else { return false }
+    guard
+      lifecycleEventBelongsToRecording(
+        memoryId: memoryId,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: expectedBackendId
+      )
+    else {
+      return false
+    }
+
+    if let expectedBackendId, !expectedBackendId.isEmpty {
+      return memoryId == expectedBackendId
+    }
+
+    guard let finishedRecordingStartTime else { return false }
+    return memoryEventMatchesFinishedSession(memory, sessionStartedAt: finishedRecordingStartTime)
+  }
+
+  static func matchingFinishedRecordingIndex(
+    memoryId: String,
+    memory: [String: Any]?,
+    recordingSessionId: String?,
+    pending: [FinishedRecordingEnvelope]
+  ) -> Int? {
+    pending.firstIndex { envelope in
+      acceptsCompletedLocalRecording(
+        memoryId: memoryId,
+        memory: memory,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: envelope.clientConversationId,
+        finishedRecordingStartTime: envelope.startedAt
+      )
+    }
   }
 
   /// Versioned lifecycle envelopes are an ordered protocol. A client only
@@ -200,6 +268,13 @@ enum DesktopConversationMatchPolicy {
   }
 }
 
+struct FinishedRecordingEnvelope: Equatable, Sendable {
+  let sessionId: Int64?
+  let clientConversationId: String?
+  let startedAt: Date
+  let source: ConversationSource
+}
+
 @MainActor
 class AppState: ObservableObject {
   /// Weak reference to the current AppState instance, set on init.
@@ -209,13 +284,22 @@ class AppState: ObservableObject {
   @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
 
   // Transcription state
-  @Published var isTranscribing = false
+  @Published var isTranscribing = false {
+    didSet {
+      // Preferred-mic reconnect must track live Listening even when Settings is closed (#10921).
+      if isTranscribing {
+        preferredMicrophoneReconnectMonitor.start(observing: self)
+      } else {
+        preferredMicrophoneReconnectMonitor.stop()
+      }
+    }
+  }
   /// A terminal live-STT failure reported by `/v4/listen`. Audio capture can
   /// continue into the WAL while the transport reconnects, so this stays
   /// visible until the backend is ready or the active session is reset.
   @Published var transcriptionServiceError: String?
-  /// Monotonically increasing counter — incremented each time a new recording starts.
-  /// Used to detect if a new recording began during the post-stop force-process delay.
+  /// Monotonically increasing counter — incremented for each recording start or stop request.
+  /// Used to prevent asynchronous work from mutating a newer recording decision.
   var recordingGeneration: UInt64 = 0
   @Published var isSavingConversation = false
   // currentTranscript is internal-only (not observed by views), so no @Published needed
@@ -280,6 +364,7 @@ class AppState: ObservableObject {
 
   // Permission states for onboarding
   @Published var hasNotificationPermission = false
+  @Published var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
   @Published var notificationAlertStyle: UNAlertStyle = .none  // .none, .banner, or .alert
   @Published var hasScreenRecordingPermission = false
   /// TCC state captured once at process launch. A grant that arrives while the
@@ -293,14 +378,18 @@ class AppState: ObservableObject {
   var lastNotificationAlertStyle: String?
   var lastNotificationSoundEnabled: Bool?
   var lastNotificationBadgeEnabled: Bool?
+  var notificationPermissionRefreshGeneration = 0
   @Published var isScreenCaptureKitBroken = false  // Capture engine issue; not the source of permission truth
   @Published var isScreenRecordingStale = false  // Deprecated: no longer inferred from capture failures
   var screenRecordingGrantAttempts = 0  // Track how many times user clicked Grant without success
   @Published var hasAutomationPermission = false
-  @Published var automationPermissionError: OSStatus = 0  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound)
-  var isCheckingAutomationPermission = false  // Prevent concurrent checks (retry path has a 1s sleep)
+  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound).
+  @Published var automationPermissionError: OSStatus = 0
+  // Prevent concurrent checks (retry path has a 1s sleep).
+  var isCheckingAutomationPermission = false
   @Published var hasAccessibilityPermission = false
-  @Published var isAccessibilityBroken = false  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs)
+  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs).
+  @Published var isAccessibilityBroken = false
   @Published var hasFullDiskAccess = false
 
   /// Usage-limit popup state. Set by `triggerUsageLimitPopup(reason:)` when the
@@ -354,16 +443,43 @@ class AppState: ObservableObject {
   var captureGateInFlight = false
   var captureReconcilePending = false
   var pendingCoreAudioCaptureRecoveryReason: String?
+  /// While ambient transcription is live, reapply a preferred mic when it reconnects (#10921).
+  let preferredMicrophoneReconnectMonitor = PreferredMicrophoneReconnectMonitor()
   /// Counts CoreAudio rebuilds caused by a zero-sample microphone during one
   /// transcription session. This lives above `AudioCaptureService` because each
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
   var silentMicRecoveryAttempts = 0
+  var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
+  var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
+  var meetingBoundaryInProgress = false
+  var pendingMeetingState: Bool?
+
+  /// The input device a silent-mic fallback healed onto, held for the rest of the session.
+  ///
+  /// Without this the heal is undone by its own recovery: `handleSilentMicFallback` pins
+  /// capture to the built-in mic, then the next watchdog trip rebuilds the CoreAudio stack
+  /// with a plain `AudioCaptureService()`, which re-resolves the *system default* input —
+  /// still the silent Bluetooth device. The two fight until the attempt cap is hit and the
+  /// user gets an alert, then it starts over.
+  var silentMicHealedDeviceID: AudioDeviceID?
   var meetingEndFinalizationInProgress = false
   @Published var isAwaitingMeeting = false
 
-  var effectiveSystemAudioMode: AssistantSettings.SystemAudioCaptureMode {
-    if UserDefaults.standard.bool(forKey: "disableSystemAudioCapture") { return .never }
-    return AssistantSettings.shared.systemAudioCaptureMode
+  /// Audio is actually reaching STT — not merely that a transcription session is armed.
+  ///
+  /// Only Meetings keeps `isTranscribing` true while waiting for a call so capture can start
+  /// instantly, and sets `isAwaitingMeeting` while the mic is paused. Live UI (the Conversations
+  /// card, the expanded transcript, the top-bar mic dot) must follow this, not `isTranscribing`.
+  var isLiveCapturing: Bool { isTranscribing && !isAwaitingMeeting }
+
+  var audioRecordingMode: AssistantSettings.AudioRecordingMode {
+    AssistantSettings.shared.audioRecordingMode
+  }
+
+  /// A hidden developer override may suppress the system tap, but it cannot change the user's
+  /// recording policy or whether the microphone/meeting gate runs.
+  var shouldCaptureSystemAudio: Bool {
+    !UserDefaults.standard.bool(forKey: .disableSystemAudioCapture)
   }
   var vadGateService: VADGateService? {
     get { servicesCoordinator.vadGateService }
@@ -410,6 +526,9 @@ class AppState: ObservableObject {
   }
 
   var currentSessionId: Int64?
+  /// Serializes segment persistence so a local duplicate replacement cannot race
+  /// the original mic segment's upsert in SQLite.
+  var transcriptPersistenceTail: Task<Void, Never>?
   /// True while a bridge-owned hermetic capture session is active (T2 E2E only).
   var automationCaptureTestSessionActive = false
   var currentBackendConversationId: String?
@@ -420,10 +539,11 @@ class AppState: ObservableObject {
   /// Last accepted server event sequence per durable recording session. This
   /// is display state only; Firestore remains the authoritative sequence owner.
   var lifecycleSequenceByRecordingSession: [String: Int] = [:]
+  static let maxLifecycleRecordingSessions = 32
   var ignoredRotatedBackendConversationIds: Set<String> = []
-  var finishedSessionId: Int64?
-  var finishedClientConversationId: String?
-  var finishedRecordingStartTime: Date?
+  static let maxIgnoredRotatedBackendConversationIds = 16
+  var pendingFinishedRecordings: [FinishedRecordingEnvelope] = []
+  static let maxPendingFinishedRecordings = 16
 
   var willTerminateObserver: NSObjectProtocol? {
     get { servicesCoordinator.willTerminateObserver }
@@ -453,9 +573,9 @@ class AppState: ObservableObject {
     get { servicesCoordinator.screenCaptureKitBrokenObserver }
     set { servicesCoordinator.screenCaptureKitBrokenObserver = newValue }
   }
-  var systemAudioCaptureModeObserver: NSObjectProtocol? {
-    get { servicesCoordinator.systemAudioCaptureModeObserver }
-    set { servicesCoordinator.systemAudioCaptureModeObserver = newValue }
+  var audioRecordingModeObserver: NSObjectProtocol? {
+    get { servicesCoordinator.audioRecordingModeObserver }
+    set { servicesCoordinator.audioRecordingModeObserver = newValue }
   }
   var coreAudioCaptureRecoveryObserver: NSObjectProtocol? {
     get { servicesCoordinator.coreAudioCaptureRecoveryObserver }
@@ -463,6 +583,7 @@ class AppState: ObservableObject {
   }
 
   var wasTranscribingBeforeSleep = false
+  var conversationRoleBeforeSleep: MeetingConversationBoundaryPolicy.Role = .ambient
   var lastScreenLockTime: Date?
   var lastScreenUnlockTime: Date?
   var buttonStreamTask: Task<Void, Never>? {
@@ -502,6 +623,11 @@ class AppState: ObservableObject {
   }
 
   init() {
+    // Fold any legacy PTT-only microphone choice into the shared preference before
+    // anything reads it. Running this only from PTT routing meant a user who had picked a
+    // PTT microphone saw "System Default" in Transcription — and was recorded by it —
+    // until they happened to take a push-to-talk turn.
+    ShortcutSettings.migratePTTMicrophoneChoiceIfNeeded()
     // Register as the current instance so background services can check recording state
     AppState.current = self
     ownerChangeObserver = NotificationCenter.default.addObserver(
@@ -687,6 +813,7 @@ class AppState: ObservableObject {
         self.wasTranscribingBeforeSleep = self.isTranscribing
         if self.isTranscribing {
           log("Computer sleeping - stopping transcription (backend handles conversation)")
+          self.conversationRoleBeforeSleep = self.currentConversationRole
           let sessionId = self.currentSessionId
           self.stopAudioCapture()
           if let sessionId {
@@ -716,12 +843,12 @@ class AppState: ObservableObject {
       // Restart transcription if it was active before sleep
       Task { @MainActor in
         guard let self = self else { return }
-        if self.wasTranscribingBeforeSleep && AssistantSettings.shared.transcriptionEnabled {
+        if self.wasTranscribingBeforeSleep && AssistantSettings.shared.audioRecordingMode != .off {
           log("System wake: Restarting transcription (was active before sleep)")
           // Brief delay to let audio subsystem settle after wake
           try? await Task.sleep(for: .seconds(2))
           if !self.isTranscribing {
-            self.startTranscription()
+            self.startTranscription(conversationRole: self.conversationRoleBeforeSleep)
           }
         }
         self.wasTranscribingBeforeSleep = false
@@ -762,14 +889,25 @@ class AppState: ObservableObject {
       }
     }
 
-    // System Audio capture mode changed — re-apply the capture gate live if a recording is armed.
-    systemAudioCaptureModeObserver = NotificationCenter.default.addObserver(
-      forName: .systemAudioCaptureModeDidChange,
+    // One preference owns both intent and meeting gating. Apply every change live so no stale
+    // boolean or secondary picker can disagree with the selected mode.
+    audioRecordingModeObserver = NotificationCenter.default.addObserver(
+      forName: .audioRecordingModeDidChange,
       object: nil,
       queue: .main
     ) { [weak self] _ in
       Task { @MainActor in
-        await self?.reconcileCapture()
+        guard let self else { return }
+        switch AssistantSettings.shared.audioRecordingMode {
+        case .off:
+          self.stopTranscription()
+        case .always, .onlyMeetings:
+          if self.isTranscribing {
+            await self.reconcileCapture()
+          } else {
+            self.startTranscription()
+          }
+        }
       }
     }
 
@@ -849,10 +987,6 @@ extension Notification.Name {
   static let conversationsPageDidLoad = Notification.Name("conversationsPageDidLoad")
   /// Posted when Tasks page finishes loading initial data
   static let tasksPageDidLoad = Notification.Name("tasksPageDidLoad")
-  /// Posted when Focus page finishes loading initial data
-  static let focusPageDidLoad = Notification.Name("focusPageDidLoad")
-  /// Posted when Advice page finishes loading initial data
-  static let insightPageDidLoad = Notification.Name("insightPageDidLoad")
   /// Posted when Apps page finishes loading initial data
   static let appsPageDidLoad = Notification.Name("appsPageDidLoad")
   /// Posted when a goal is auto-created by GoalGenerationService
@@ -881,8 +1015,5 @@ extension Notification.Name {
     "desktopAutomationShowConversationTranscriptRequested")
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
-  /// Posted from Settings to trigger the file indexing sheet
-  static let triggerFileIndexing = Notification.Name("triggerFileIndexing")
   /// Posted from menu bar to toggle transcription (userInfo: ["enabled": Bool])
-  static let toggleTranscriptionRequested = Notification.Name("toggleTranscriptionRequested")
 }

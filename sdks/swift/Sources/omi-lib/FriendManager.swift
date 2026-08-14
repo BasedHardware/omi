@@ -5,7 +5,6 @@
 //  Created by Ash Bhat on 9/28/24.
 //
 
-import UIKit
 import CoreBluetooth
 import Speech
 import AVFoundation

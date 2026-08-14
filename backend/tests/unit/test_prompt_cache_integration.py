@@ -93,6 +93,8 @@ mock_llm.invoke = MagicMock(return_value=MagicMock(content="test"))
 
 clients_mod = _stub_module("utils.llm.clients")
 clients_mod.get_llm = MagicMock(return_value=mock_llm)
+clients_mod.feature_auto_lane_id = lambda feature: f"omi:auto:{feature.replace('_', '-')}"
+clients_mod.should_route_features_through_gateway = MagicMock(return_value=False)
 clients_mod.get_model = MagicMock(return_value="gpt-4.1-mini")
 clients_mod.llm_mini = mock_llm
 clients_mod.llm_mini_stream = mock_llm

@@ -189,6 +189,7 @@ class MemoryAssistantSettings {
     set {
       let isCustom = newValue != MemoryAssistantSettings.defaultAnalysisPrompt
       UserDefaults.standard.set(newValue, forKey: analysisPromptKey)
+      SettingsSyncManager.recordLocalPromptOwner("memory")
       let previewLength = min(newValue.count, 50)
       let preview = String(newValue.prefix(previewLength)) + (newValue.count > 50 ? "..." : "")
       log("Memory analysis prompt updated (\(newValue.count) chars, custom: \(isCustom)): \(preview)")
@@ -197,14 +198,24 @@ class MemoryAssistantSettings {
   }
 
   /// Interval between memory extraction analyses in seconds
+  ///
+  /// Non-positive values are refused on write and healed on read, for the reason spelled out on
+  /// `TaskAssistantSettings.extractionInterval`: normalising only on read let the store hold a
+  /// number the app never honoured, and the next push to the account overwrote the account's own
+  /// value with the local default.
   var extractionInterval: TimeInterval {
     get {
-      let value = UserDefaults.standard.double(forKey: extractionIntervalKey)
-      return value > 0 ? value : defaultExtractionInterval
+      let stored = UserDefaults.standard.double(forKey: extractionIntervalKey)
+      guard stored > 0 else {
+        UserDefaults.standard.set(defaultExtractionInterval, forKey: extractionIntervalKey)
+        return defaultExtractionInterval
+      }
+      return stored
     }
     set {
-      UserDefaults.standard.set(newValue, forKey: extractionIntervalKey)
-      log("Memory extraction interval updated to \(newValue) seconds")
+      let interval = newValue > 0 ? newValue : defaultExtractionInterval
+      UserDefaults.standard.set(interval, forKey: extractionIntervalKey)
+      log("Memory extraction interval updated to \(interval) seconds")
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }

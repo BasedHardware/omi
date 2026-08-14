@@ -1,3 +1,4 @@
+import OmiSupport
 import XCTest
 
 @testable import Omi_Computer
@@ -159,7 +160,10 @@ final class APIClientRoutingTests: XCTestCase {
   }
 
   func testBetaProductionBundleKeepsProductionAuthBackendByDefault() {
-    let url = DesktopBackendEnvironment.authBaseURL(environmentValue: nil)
+    let url = DesktopBackendEnvironment.authBaseURL(
+      bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+      environmentValue: nil
+    )
     XCTAssertEqual(url, "https://api.omi.me/")
   }
 
@@ -250,21 +254,47 @@ final class APIClientRoutingTests: XCTestCase {
       ))
   }
 
+  @MainActor
+  func testProductionFamilyRejectsHostFirebaseAndLocalProfileOverrides() {
+    let hostOverrides = [
+      "FIREBASE_API_KEY": "wrong-key",
+      "FIREBASE_AUTH_EMULATOR_HOST": "127.0.0.1:9099",
+      "FIREBASE_PROJECT_ID": "based-hardware-dev",
+      "OMI_DESKTOP_LOCAL_PROFILE": "1",
+    ]
+    for bundleIdentifier in AppBuild.productionFamilyBundleIdentifiers {
+      for key in hostOverrides.keys {
+        XCTAssertFalse(
+          BundleEnvironment.shouldApplyBundledValue(
+            for: key,
+            launchEnvironment: hostOverrides,
+            bundleIdentifier: bundleIdentifier
+          ))
+      }
+      XCTAssertFalse(DesktopLocalProfile.isEnabled(bundleIdentifier: bundleIdentifier, profileValue: "1"))
+      XCTAssertEqual(
+        AppBuild.firebaseAPIKey(
+          bundleIdentifier: bundleIdentifier,
+          environmentKey: "wrong-key",
+          bundledKey: "signed-production-key"
+        ),
+        "signed-production-key"
+      )
+    }
+    XCTAssertTrue(DesktopLocalProfile.isEnabled(bundleIdentifier: "com.omi.omi-local", profileValue: "1"))
+  }
+
   func testStableProductionBundleKeepsConfiguredRustBackend() {
     let url = DesktopBackendEnvironment.rustBackendURL(
-      useDevelopmentBackends: false,
-      environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app",
-      launchEnvironmentValue: nil
+      useDevelopmentBackends: true,
+      bundleIdentifier: AppBuild.productionBundleIdentifier,
+      environmentValue: "https://evil.example.test",
+      launchEnvironmentValue: "https://evil.example.test"
     )
     XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
   }
 
-  func testBetaProductionChannelUsesProductionBackendRatherThanDevelopment() {
-    XCTAssertFalse(
-      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-        bundleIdentifier: "com.omi.computer-macos",
-        updateChannel: "beta"
-      ))
+  func testStableProductionChannelUsesProductionBackends() {
     XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: "com.omi.computer-macos",
@@ -285,6 +315,20 @@ final class APIClientRoutingTests: XCTestCase {
       ),
       DesktopBackendEnvironment.productionRustBackendURL
     )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        environmentValue: "https://evil.example.test"
+      ),
+      DesktopBackendEnvironment.productionPythonAPIURL
+    )
+  }
+
+  func testBundleEnvironmentNormalizesExportAssignments() {
+    XCTAssertEqual(BundleEnvironment.normalizedKey(from: "export OMI_PYTHON_API_URL"), "OMI_PYTHON_API_URL")
+    XCTAssertEqual(BundleEnvironment.normalizedKey(from: " OMI_DESKTOP_API_URL "), "OMI_DESKTOP_API_URL")
+    XCTAssertNil(BundleEnvironment.normalizedKey(from: "export   "))
   }
 
   func testStableProductionBundleKeepsProductionBackends() {
@@ -295,17 +339,92 @@ final class APIClientRoutingTests: XCTestCase {
       ))
   }
 
-  func testBetaIdentityBundleUsesTheProductionBackend() {
-    // The Omi Beta app is production-family: its isolated app identity does not
-    // create a second backend environment.
-    XCTAssertFalse(
+  func testBetaIdentityUsesDevelopmentServingEndpointsAndProductionAuth() {
+    XCTAssertTrue(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
         updateChannel: "beta"
       ))
     XCTAssertEqual(
-      DesktopBackendEnvironment.pythonBaseURL(useDevelopmentBackends: false, environmentValue: nil),
-      "https://api.omi.me/"
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omi.me/"
+      ),
+      DesktopBackendEnvironment.developmentPythonAPIURL
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.rustBackendURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app/",
+        launchEnvironmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app/"
+      ),
+      DesktopBackendEnvironment.developmentRustBackendURL
+    )
+    XCTAssertTrue(
+      DesktopBackendEnvironment.shouldUseProductionAuth(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier
+      ))
+    XCTAssertEqual(
+      DesktopBackendEnvironment.authBaseURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omiapi.com/"
+      ),
+      DesktopBackendEnvironment.productionPythonAPIURL
+    )
+  }
+
+  func testGeminiAndEmbeddingProxyRespectBetaIdentityRouting() {
+    let contaminatedEndpoint = DesktopBackendEnvironment.productionRustBackendURL
+    XCTAssertEqual(
+      GeminiClient.proxyBaseURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: contaminatedEndpoint,
+        launchEnvironmentValue: contaminatedEndpoint
+      ),
+      DesktopBackendEnvironment.developmentRustBackendURL
+    )
+    XCTAssertEqual(
+      EmbeddingService.proxyBaseURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: contaminatedEndpoint,
+        launchEnvironmentValue: contaminatedEndpoint
+      ),
+      DesktopBackendEnvironment.developmentRustBackendURL
+    )
+  }
+
+  func testBetaKeepsMCPIdentityEndpointsOnProductionWhileServingMCPFromDevelopment() {
+    XCTAssertEqual(
+      MemoryExportDestination.mcpServerURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: DesktopBackendEnvironment.productionPythonAPIURL
+      ),
+      "https://api.omiapi.com/v1/mcp/sse"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.mcpAuthorizeURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omiapi.com/"
+      ),
+      "https://api.omi.me/authorize"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.mcpTokenURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omiapi.com/"
+      ),
+      "https://api.omi.me/token"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.chatgptOAuthClientID(forOAuthBaseURL: "https://api.omi.me/"),
+      "omi-chatgpt-prod"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.chatgptOAuthClientID(forOAuthBaseURL: "https://api.omiapi.com/"),
+      "omi-chatgpt-dev"
     )
   }
 
@@ -504,6 +623,22 @@ final class APIClientRoutingTests: XCTestCase {
       URLCapture.capturedRequests, host: "python-test", port: 9001,
       pathContains: "v1/conversations/test-123", method: "GET",
       label: "getConversation")
+  }
+
+  func testGetOmiCaptureUsesStrictArchiveDetailContract() async {
+    let client = await makeTestClient()
+    _ = try? await client.getOmiCapture(id: "capture-123") as ServerConversation
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/capture-123", method: "GET",
+      label: "getOmiCapture")
+    guard let firstRequest = requests.first else {
+      return XCTFail("Expected getOmiCapture to issue a request")
+    }
+    let queryItems = URLComponents(url: firstRequest.url, resolvingAgainstBaseURL: false)?.queryItems
+    XCTAssertEqual(queryItems?.first(where: { $0.name == "source" })?.value, "omi")
+    XCTAssertEqual(queryItems?.first(where: { $0.name == "include_discarded" })?.value, "false")
   }
 
   func testDeleteConversationRoutesToPython() async {
@@ -752,6 +887,62 @@ final class APIClientRoutingTests: XCTestCase {
       URLCapture.capturedRequests, host: "python-test", port: 9001,
       pathContains: "v1/staged-tasks/st-1", method: "DELETE",
       label: "deleteStagedTask")
+  }
+
+  func testBatchDeleteActionItemsRoutesToPythonWithEverySelectedID() async throws {
+    URLCapture.setResponse(
+      statusCode: 200,
+      body: Data("{\"status\":\"Ok\",\"deleted_count\":2,\"deleted_ids\":[\"task-1\",\"task-2\"]}".utf8)
+    )
+    let client = await makeTestClient()
+
+    try await client.batchDeleteActionItems(ids: ["task-1", "task-2"])
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "python-test", port: 9001,
+      pathContains: "v1/action-items/batch-delete", method: "POST",
+      label: "batchDeleteActionItems")
+    let body = requests.first?.body.flatMap {
+      try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+    }
+    XCTAssertEqual(body?["ids"] as? [String], ["task-1", "task-2"])
+  }
+
+  func testActionItemIdsScopesSelectionToCurrentCompletionBucket() async throws {
+    URLCapture.setResponse(
+      statusCode: 200,
+      body: Data("{\"ids\":[\"task-1\"],\"completed_scope\":true}".utf8)
+    )
+    let client = await makeTestClient()
+
+    let ids = try await client.getActionItemIds(completed: true)
+
+    XCTAssertEqual(ids, ["task-1"])
+    XCTAssertTrue(URLCapture.capturedRequests.first?.url.query?.contains("completed=true") == true)
+  }
+
+  func testScopedActionItemIdsRejectsLegacyUnscopedResponse() async {
+    URLCapture.setResponse(statusCode: 200, body: Data("{\"ids\":[\"todo-1\",\"done-1\"]}".utf8))
+    let client = await makeTestClient()
+
+    do {
+      _ = try await client.getActionItemIds(completed: false)
+      XCTFail("Expected a legacy unscoped response to fail closed")
+    } catch APIError.invalidResponse {
+      // Expected: the previous backend ignores `completed` and returns every ID.
+    } catch {
+      XCTFail("Expected invalidResponse, got \(error)")
+    }
+  }
+
+  func testUnscopedActionItemIdsAcceptsLegacyResponse() async throws {
+    URLCapture.setResponse(statusCode: 200, body: Data("{\"ids\":[\"task-1\"]}".utf8))
+    let client = await makeTestClient()
+
+    let ids = try await client.getActionItemIds()
+
+    XCTAssertEqual(ids, ["task-1"])
   }
 
   // -- Chat sessions (GET, POST, DELETE → Python, migrated from Rust) --

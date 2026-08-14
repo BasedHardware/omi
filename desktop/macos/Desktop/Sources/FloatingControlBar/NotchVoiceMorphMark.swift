@@ -336,10 +336,10 @@ struct NotchVoiceMorphMark: View {
       // in the reply can't flicker the ring between white and status colors.
       let color =
         isListening || speakingPresentation
-        ? Color.white.opacity(0.98)
+        ? NotchGlass.primary.opacity(0.98)
         : dotColors.indices.contains(index)
           ? dotColors[index]
-          : Color.white.opacity(0.96)
+          : NotchGlass.primary.opacity(0.96)
       let rect = CGRect(
         x: position.x - dotDiameter / 2,
         y: position.y - dotDiameter / 2,

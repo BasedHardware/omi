@@ -13,32 +13,29 @@ describe("macOS release CI", () => {
     expect(toolSurfaceScript).not.toContain("tests/runtime-adapter.test.ts");
   });
 
-  it("runs the shared desktop tool-surface guardrail before packaging", () => {
+  it("keeps the shared tool-surface guardrail on PR CI instead of the signed release runner", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
-    const stepStart = codemagic.indexOf("name: Test desktop tool surfaces");
-    expect(stepStart).toBeGreaterThanOrEqual(0);
+    const desktopChecks = readFileSync(
+      new URL("../../../../.github/workflows/desktop-checks.yml", import.meta.url),
+      "utf8"
+    );
 
-    const step = codemagic.slice(stepStart, codemagic.indexOf("- name:", stepStart + 1));
-    expect(step).toContain("scripts/test-tool-surfaces.sh");
-    expect(stepStart).toBeLessThan(codemagic.indexOf("name: Prepare universal ffmpeg"));
+    expect(desktopChecks).toContain("desktop/macos/scripts/test-tool-surfaces.sh");
+    expect(codemagic).not.toContain("name: Test desktop tool surfaces");
+    expect(codemagic).not.toContain("scripts/test-tool-surfaces.sh");
   });
 
   it("bundles pi-mono-extension dependencies into release and local app resources", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
     const runScript = readFileSync(new URL("../../run.sh", import.meta.url), "utf8");
 
-    for (const manifestFile of [
-      "control-tool-manifest.ts",
-      "node-tools.ts",
-      "omi-tool-manifest.ts",
-    ]) {
-      expect(codemagic).toContain(
-        `cp -f agent/src/runtime/${manifestFile} "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"`
-      );
-      expect(runScript).toContain(
-        `cp -f "$AGENT_DIR/src/runtime/${manifestFile}" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"`
-      );
-    }
+    const extension = readFileSync(new URL("../../pi-mono-extension/index.ts", import.meta.url), "utf8");
+    expect(extension).toContain('../agent/dist/runtime/omi-tool-manifest.js');
+    expect(extension).toContain('../agent/dist/runtime/node-tools.js');
+    expect(codemagic).toContain('cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"');
+    expect(runScript).toContain('macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"');
+    expect(codemagic).not.toContain("agent/src/runtime/");
+    expect(runScript).not.toContain('$AGENT_DIR/src/runtime/');
     expect(codemagic).toContain(
       'cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"'
     );

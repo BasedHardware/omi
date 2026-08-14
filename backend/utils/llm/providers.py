@@ -55,6 +55,12 @@ OPENAI_COMPATIBLE_PROVIDERS: Dict[str, OpenAICompatibleProviderConfig] = {
 _llm_cache: Dict[tuple, Any] = {}
 
 
+def get_openai_api_key() -> str:
+    """Return the platform OpenAI credential at the provider boundary."""
+
+    return os.environ.get(OPENAI_COMPATIBLE_PROVIDERS['openai'].api_key_env, '').strip()
+
+
 def _cache_key(provider: str, model_name: str, streaming: bool, options: Dict[str, Any]) -> tuple:
     option_items = tuple(sorted((key, repr(value)) for key, value in options.items()))
     return provider, model_name, streaming, option_items

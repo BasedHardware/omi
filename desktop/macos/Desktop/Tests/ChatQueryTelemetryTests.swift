@@ -87,6 +87,89 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertEqual(detail?.retryable, false)
   }
 
+  func testWorkerRecoveryTelemetryIsBoundedAndExplainsTheNextSendContract() {
+    let failure = AgentRuntimeFailure(
+      code: "adapter_execution_failed",
+      userMessage: "Agent run failed",
+      technicalMessage: "private prompt /Users/person/secret.txt",
+      source: "adapter_execution",
+      adapterId: "pi-mono",
+      retryable: true,
+      recoveryAction: "worker_recycled",
+      recoveryOutcome: "recovered",
+      retryDisposition: "next_send"
+    )
+    let event = ChatQueryTelemetryEvent.failed(
+      ChatQueryTelemetryContext(attemptId: "attempt-recycled", surface: "main_chat", harness: "piMono"),
+      durationMs: 400,
+      errorClass: .agentError,
+      partialResponse: false,
+      detail: .from(BridgeError.agentRuntimeFailure(failure))
+    )
+    let properties = event.analyticsPayload.properties
+    XCTAssertEqual(properties["recovery_action"] as? String, "worker_recycled")
+    XCTAssertEqual(properties["recovery_outcome"] as? String, "recovered")
+    XCTAssertEqual(properties["retry_disposition"] as? String, "next_send")
+    XCTAssertFalse(String(describing: properties).contains("/Users/person"))
+    XCTAssertFalse(String(describing: properties).contains("private prompt"))
+  }
+
+  func testUnknownDaemonAuthFailureReportsClassifierCodeAndIsNotRetryable() {
+    let failure = AgentRuntimeFailure(
+      code: "adapter_execution_failed",
+      failureCode: .unknown,
+      userMessage: "Authentication required",
+      source: "adapter_execution",
+      adapterId: "pi-mono",
+      retryable: true
+    )
+    let error = BridgeError.agentRuntimeFailure(failure)
+    let detail = ChatQueryErrorDetail.from(error)
+
+    XCTAssertEqual(detail?.errorCode, "provider_auth_expired")
+    XCTAssertEqual(detail?.retryable, false)
+    XCTAssertEqual(ChatQueryFailureDisposition.classify(error), .failed(.authentication))
+  }
+
+  func testRecycledWorkerHTTP402ReportsBillingNotUnknownRuntime() {
+    let failure = AgentRuntimeFailure(
+      code: "adapter_execution_failed",
+      userMessage: "The local agent reset its session after an error. Send your message again.",
+      technicalMessage: "HTTP 402 status code (no body)",
+      source: "adapter_execution",
+      adapterId: "pi-mono",
+      retryable: true,
+      recoveryAction: "worker_recycled",
+      recoveryOutcome: "recovered",
+      retryDisposition: "next_send"
+    )
+    let error = BridgeError.agentRuntimeFailure(failure)
+    let detail = ChatQueryErrorDetail.from(error)
+
+    XCTAssertEqual(detail?.errorCode, "provider_billing_exhausted")
+    XCTAssertEqual(detail?.retryable, false)
+    XCTAssertEqual(detail?.recoveryAction, "worker_recycled")
+    XCTAssertEqual(detail?.adapterId, "pi-mono")
+    XCTAssertEqual(ChatQueryFailureDisposition.classify(error), .failed(.quota))
+  }
+
+  func testRuntimeDetailedFailureCodeMustBeInTheAnalyticsAllowlist() {
+    let failure = AgentRuntimeFailure(
+      code: "provider_error_/Users/person/secret.txt",
+      userMessage: "Agent run failed"
+    )
+    let event = ChatQueryTelemetryEvent.failed(
+      ChatQueryTelemetryContext(attemptId: "attempt-private-code", surface: "main_chat", harness: "piMono"),
+      durationMs: 100,
+      errorClass: .agentRuntime,
+      partialResponse: false,
+      detail: .from(BridgeError.agentRuntimeFailure(failure))
+    )
+    let properties = event.analyticsPayload.properties
+    XCTAssertNil(properties["failure_code"])
+    XCTAssertFalse(String(describing: properties).contains("/Users/person"))
+  }
+
   func testAnalyticsPayloadUsesTypedAllowlist() {
     let event = ChatQueryTelemetryEvent.failed(
       ChatQueryTelemetryContext(
@@ -296,6 +379,34 @@ final class ChatQueryTelemetryTests: XCTestCase {
     let ids = ChatProvider.messageIds(forAttemptId: "attempt-123")
     XCTAssertEqual(ids.user, "attempt-123")
     XCTAssertEqual(ids.assistant, "attempt-123-assistant")
+  }
+
+  func testQuestionInteractionContinuityMatchesKernelOwnerConversationScope() {
+    let continuityKey = ChatProvider.questionInteractionContinuityKey(
+      ownerID: "alice",
+      conversationID: "conv_442a0a6004964766830774eb406562e4",
+      questionID: "cold-start:0:step:1",
+      optionID: "cold-start:0:outcome:progress"
+    )
+
+    XCTAssertEqual(continuityKey, "qri_918fa0e3102b91249755bfc291dfb813")
+    XCTAssertEqual(
+      ChatProvider.messageIds(forAttemptId: continuityKey).user,
+      "turn_61f833a2129a50b2"
+    )
+    XCTAssertEqual(
+      ChatProvider.messageIds(forAttemptId: continuityKey).assistant,
+      "turn_c7ec848ab1718b5f"
+    )
+    XCTAssertNotEqual(
+      continuityKey,
+      ChatProvider.questionInteractionContinuityKey(
+        ownerID: "bob",
+        conversationID: "conv_442a0a6004964766830774eb406562e4",
+        questionID: "cold-start:0:step:1",
+        optionID: "cold-start:0:outcome:progress"
+      )
+    )
   }
 
   func testStagedImageAttachmentIsReportedAsImageInput() {

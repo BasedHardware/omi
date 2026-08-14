@@ -111,7 +111,19 @@ jobs:
       - name: Provision .env
         run: cp .env.example .env
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # Electron's postinstall downloads a release archive. Retry only this
+        # idempotent install boundary so a transient CDN socket reset does not
+        # discard the otherwise healthy package/helper smoke run.
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
       - name: Build Linux packages
         run: pnpm run build:linux
       - name: Verify Debian package contents
@@ -121,6 +133,7 @@ jobs:
           dpkg-deb -c dist/*.deb | grep -F 'resources/linux-ocr-helper/omi-ocr-helper'
       - name: Launch unpacked app on X11
         run: |
+          # shellcheck disable=SC2016
           xvfb-run -a bash -euo pipefail -c '
             dist/linux-unpacked/omi-windows --no-sandbox &
             app_pid=$!

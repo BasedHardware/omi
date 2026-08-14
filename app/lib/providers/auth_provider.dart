@@ -9,6 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
+import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications.dart';
@@ -74,21 +75,19 @@ class AuthenticationProvider extends BaseProvider {
           SharedPreferencesUtil().email = user.email ?? '';
           SharedPreferencesUtil().givenName = user.displayName?.split(' ')[0] ?? '';
         }
+        final cutoverOwner = (user != null && !user.isAnonymous) ? user.uid : null;
+        unawaited(AccountCutoverRuntime.instance.bindAuthenticatedOwner(cutoverOwner));
         notifyListeners();
       });
       _idTokenSubscription = _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         AuthService.instance.handleAuthUserChanged(user?.uid);
         if (user == null) {
-          Logger.debug(
-            'User is currently signed out or the token has been revoked!',
-          );
+          Logger.debug('User is currently signed out or the token has been revoked!');
           SharedPreferencesUtil().authToken = '';
           SharedPreferencesUtil().tokenExpirationTime = 0;
           authToken = null;
         } else {
-          Logger.debug(
-            'User is signed in at ${DateTime.now()} with user ${user.uid}',
-          );
+          Logger.debug('User is signed in at ${DateTime.now()} with user ${user.uid}');
           try {
             if (_requiresReauthentication ||
                 SharedPreferencesUtil().authToken.isEmpty ||
@@ -147,9 +146,7 @@ class AuthenticationProvider extends BaseProvider {
         if (PlatformService.isMobile && !useWebAuth) {
           credential = await AuthService.instance.signInWithGoogleMobile();
         } else {
-          credential = await AuthService.instance.authenticateWithProvider(
-            'google',
-          );
+          credential = await AuthService.instance.authenticateWithProvider('google');
         }
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn);
@@ -178,9 +175,7 @@ class AuthenticationProvider extends BaseProvider {
         if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
           credential = await AuthService.instance.signInWithAppleMobile();
         } else {
-          credential = await AuthService.instance.authenticateWithProvider(
-            'apple',
-          );
+          credential = await AuthService.instance.authenticateWithProvider('apple');
         }
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn);
@@ -294,9 +289,7 @@ class AuthenticationProvider extends BaseProvider {
     try {
       final appleProvider = AppleAuthProvider();
       try {
-        await FirebaseAuth.instance.currentUser?.linkWithProvider(
-          appleProvider,
-        );
+        await FirebaseAuth.instance.currentUser?.linkWithProvider(appleProvider);
       } catch (e) {
         if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
           // Get existing user credentials

@@ -32,8 +32,8 @@ struct OnboardingDataSourcesStepView: View {
 
         if let error = coordinator.lastActionError {
           Text(error)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(OmiColors.warning)
+            .inkStyle(InkType.statusLabel, color: PageGlass.warning)
+            .fixedSize(horizontal: false, vertical: true)
         }
 
         HStack(spacing: OmiSpacing.md) {
@@ -43,17 +43,18 @@ struct OnboardingDataSourcesStepView: View {
             Button("Continue") {
               onContinue()
             }
-            .buttonStyle(OmiButtonStyle(.primary))
+            .buttonStyle(InkButtonStyle(kind: .primary))
             .keyboardShortcut(.defaultAction)
-            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            // Opacity only: a capsule this size scaling in reads as a toy.
+            .transition(.opacity)
           } else {
             HStack(spacing: OmiSpacing.sm) {
               ProgressView()
                 .controlSize(.small)
-                .tint(OmiColors.textTertiary)
+                .tint(Ink.secondary)
               Text("Scanning your data sources...")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
           }
         }
@@ -65,6 +66,17 @@ struct OnboardingDataSourcesStepView: View {
         if !coordinator.isResearchComplete {
           await coordinator.startBackgroundInsightsIfNeeded()
         }
+      }
+      .sheet(isPresented: $coordinator.showingGmailAccountPicker) {
+        GmailAccountPickerView(
+          accounts: coordinator.gmailAccounts,
+          selectedCookiePath: GmailSelectionStore.selectedCookiePath,
+          hasMadeChoice: GmailSelectionStore.hasMadeChoice,
+          onSelect: { cookiePath, label in
+            coordinator.selectGmailAccount(cookiePath, label: label)
+          },
+          onCancel: { coordinator.cancelGmailAccountSelection() }
+        )
       }
     }
   }
@@ -83,6 +95,7 @@ struct OnboardingDataSourcesStepView: View {
         isOn: true,
         isDisabled: true,
         scanFinished: coordinator.calendarInsightsFinished,
+        scanDeferred: coordinator.calendarInsightsDeferred,
         scanFailed: coordinator.calendarInsightsFailed
       )
       listDivider
@@ -99,7 +112,16 @@ struct OnboardingDataSourcesStepView: View {
         isOn: true,
         isDisabled: true,
         scanFinished: coordinator.gmailInsightsFinished,
-        scanFailed: coordinator.gmailInsightsFailed
+        scanDeferred: coordinator.gmailInsightsDeferred,
+        scanFailed: coordinator.gmailInsightsFailed,
+        actionTitle: "Choose account",
+        action: {
+          Task {
+            await coordinator.loadGmailAccounts()
+            guard !coordinator.gmailAccounts.isEmpty else { return }
+            coordinator.showingGmailAccountPicker = true
+          }
+        }
       )
       listDivider
 
@@ -158,20 +180,12 @@ struct OnboardingDataSourcesStepView: View {
           .padding(.vertical, OmiSpacing.lg)
       }
     }
-    .background(
-      RoundedRectangle(cornerRadius: 22, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
-        .overlay(
-          RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-    )
+    .glassCard()
   }
 
   private var listDivider: some View {
-    Divider()
+    GlassSeparator()
       .padding(.leading, 66)
-      .background(Color.white.opacity(0.05))
   }
 
   private func compactMemoryLogRow(source: OnboardingMemoryLogSource) -> some View {
@@ -200,25 +214,19 @@ struct OnboardingDataSourcesStepView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Open \(source.displayName), paste the copied prompt, then drop the full response here.")
         .font(.system(size: 13))
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
+        .fixedSize(horizontal: false, vertical: true)
 
       Button("Open \(source.displayName) and Copy Prompt") {
         coordinator.copyPromptAndOpenMemoryLogSource(source)
       }
-      .buttonStyle(OmiButtonStyle(.primary))
+      .buttonStyle(InkButtonStyle(kind: .primary))
 
       ZStack(alignment: .topLeading) {
-        RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-              .stroke(Color.white.opacity(0.08), lineWidth: 1)
-          )
-
         if text.wrappedValue.isEmpty {
           Text("Paste the full \(source.displayName) response here…")
             .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.md)
         }
@@ -226,11 +234,12 @@ struct OnboardingDataSourcesStepView: View {
         TextEditor(text: text)
           .scrollContentBackground(.hidden)
           .font(.system(size: 13))
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .frame(minHeight: 160)
           .padding(OmiSpacing.sm)
       }
       .frame(maxWidth: 560)
+      .glassField()
 
       HStack(spacing: OmiSpacing.md) {
         Button(
@@ -245,7 +254,7 @@ struct OnboardingDataSourcesStepView: View {
             }
           }
         }
-        .buttonStyle(OmiButtonStyle(.primary))
+        .buttonStyle(InkButtonStyle(kind: .primary))
         .disabled(
           coordinator.isImportingMemoryLog(for: source)
             || text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -254,19 +263,12 @@ struct OnboardingDataSourcesStepView: View {
           activeImportSource = nil
         }
         .buttonStyle(.plain)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .font(.system(size: 13, weight: .medium))
       }
     }
     .padding(OmiSpacing.lg)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-    )
+    .glassCard()
   }
 
   private func compactSourceRow(
@@ -276,6 +278,7 @@ struct OnboardingDataSourcesStepView: View {
     isOn: Bool,
     isDisabled: Bool,
     scanFinished: Bool? = nil,
+    scanDeferred: Bool = false,
     scanFailed: Bool = false,
     actionTitle: String? = nil,
     action: (() -> Void)? = nil,
@@ -284,6 +287,7 @@ struct OnboardingDataSourcesStepView: View {
     let status = OnboardingDataSourceRowStatus.resolve(
       metrics: metrics,
       scanFinished: scanFinished,
+      scanDeferred: scanDeferred,
       scanFailed: scanFailed
     )
 
@@ -292,12 +296,11 @@ struct OnboardingDataSourcesStepView: View {
 
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(title)
-          .font(.system(size: 15, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
+          .inkStyle(InkType.rowCopy, color: Ink.primary)
+          .fixedSize(horizontal: false, vertical: true)
 
         Text(status.text)
-          .font(.system(size: 12, weight: .medium))
-          .foregroundColor(status.isError ? OmiColors.warning : OmiColors.textTertiary)
+          .inkStyle(InkType.statusLabel, color: status.isError ? PageGlass.warning : Ink.secondary)
           .monospacedDigit()
           .lineLimit(1)
       }
@@ -309,7 +312,7 @@ struct OnboardingDataSourcesStepView: View {
         Button(actionTitle, action: action)
           .buttonStyle(.plain)
           .font(.system(size: 11, weight: .semibold))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .fixedSize()
       }
 
@@ -351,8 +354,16 @@ struct OnboardingDataSourceRowStatus: Equatable {
   static func resolve(
     metrics: String,
     scanFinished: Bool?,
+    scanDeferred: Bool = false,
     scanFailed: Bool
   ) -> OnboardingDataSourceRowStatus {
+    if scanDeferred {
+      return OnboardingDataSourceRowStatus(
+        text: "Connect in Apps to import",
+        isError: false
+      )
+    }
+
     if scanFailed {
       return OnboardingDataSourceRowStatus(
         text: "Couldn't read - check access",

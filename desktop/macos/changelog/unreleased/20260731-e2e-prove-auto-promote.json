@@ -1,5 +1,0 @@
-{
-  "version": "0.12.149",
-  "date": "2026-07-31",
-  "change": "E2E validation: prove auto-promote pipeline after Nik Terra fix (PR #10942)"
-}

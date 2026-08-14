@@ -92,13 +92,13 @@ struct FilterToggle: View {
       .frame(height: AppsHeaderMetrics.controlHeight)
       .background(
         Capsule(style: .continuous)
-          .fill(Color.white.opacity(isActive ? 0.14 : 0.06))
+          .fill(isActive ? Ink.rowFillHover : Ink.rowFill)
           .overlay(
             Capsule(style: .continuous)
-              .stroke(Color.white.opacity(isActive ? 0.2 : 0.08), lineWidth: 1)
+              .stroke(isActive ? Ink.hairline : Ink.separator, lineWidth: 1)
           )
       )
-      .foregroundColor(isActive ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .foregroundColor(isActive ? Ink.primary : Ink.secondary)
       .fixedSize(horizontal: true, vertical: false)
     }
     .buttonStyle(.plain)
@@ -122,17 +122,17 @@ struct SmallHeaderButton: View {
           .foregroundColor(color)
         Text(label)
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(1)
       }
       .padding(.horizontal, OmiSpacing.md)
       .frame(height: AppsHeaderMetrics.controlHeight)
       .background(
         Capsule(style: .continuous)
-          .fill(Color.white.opacity(isHovering ? 0.12 : 0.06))
+          .fill(isHovering ? Ink.rowFillHover : Ink.rowFill)
           .overlay(
             Capsule(style: .continuous)
-              .stroke(Color.white.opacity(isHovering ? 0.18 : 0.08), lineWidth: 1)
+              .stroke(isHovering ? Ink.hairline : Ink.separator, lineWidth: 1)
           )
       )
       .fixedSize(horizontal: true, vertical: false)

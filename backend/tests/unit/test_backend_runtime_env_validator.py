@@ -40,6 +40,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "OMI_ENV_STAGE", "value": "dev"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
+        {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "off"},
         {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED", "value": "false"},
@@ -53,9 +54,9 @@ def with_memory_env(payload: str) -> str:
         {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
-        {"name": "MEMORY_MODE", "value": "read"},
-        {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
-        {"name": "MEMORY_V3_GET_ENABLED", "value": "true"},
+        {"name": "MEMORY_MODE", "value": "off"},
+        {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},
+        {"name": "MEMORY_V3_CURSOR_SECRET_VERSION", "value": "dev-v1"},
         {"name": "MEMORY_CANONICAL_MAINTENANCE_ENABLED", "value": "false"},
 '''
     return payload.replace(
@@ -97,6 +98,15 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
     )
 
 
+def with_account_cutover_enforcement(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the cutover fence default."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "ACCOUNT_CUTOVER_ENFORCEMENT", "value": "off"},',
+    )
+
+
 def with_listen_finalization_orphan_env(payload: str) -> str:
     """Keep offline Cloud Run state fixtures aligned with the reliability recovery setting."""
     return payload.replace(
@@ -111,8 +121,8 @@ def with_parity_pack_env(payload: str) -> str:
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
-        '        {"name": "OMI_PARITY_PACK_CAPTURE", "value": "1"},\n'
-        '        {"name": "OMI_PARITY_PACK_ALLOWED_PRINCIPALS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},\n'
+        '        {"name": "OMI_PARITY_PACK_CAPTURE", "value": "0"},\n'
+        '        {"name": "OMI_PARITY_PACK_ALLOWED_PRINCIPALS", "value": ""},\n'
         '        {"name": "OMI_PARITY_PACK_ROOT", "value": "/tmp/omi-parity-pack"},\n'
         '        {"name": "OMI_PARITY_PACK_GCS_URI", "value": "gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0"},\n'
         '        {"name": "OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS", "value": "3600"},',
@@ -120,6 +130,7 @@ def with_parity_pack_env(payload: str) -> str:
 
 
 GOOGLE_OAUTH_SECRETS = '''\
+        {"name": "MEMORY_V3_CURSOR_SECRET", "valueFrom": {"secretKeyRef": {"name": "MEMORY_V3_CURSOR_SECRET", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
 
@@ -128,7 +139,9 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
         with_backend_pusher_env(
             with_parity_pack_env(
-                with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+                with_listen_finalization_orphan_env(
+                    with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+                )
             )
         )
     )
@@ -154,18 +167,26 @@ def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Pat
 
 
 STANDARD_CLOUD_RUN_SECRETS = {
+    'MEMORY_V3_CURSOR_SECRET': {'secret': 'MEMORY_V3_CURSOR_SECRET', 'version': 'latest'},
     'GOOGLE_CLIENT_ID': {'secret': 'GOOGLE_CLIENT_ID', 'version': 'latest'},
     'GOOGLE_CLIENT_SECRET': {'secret': 'GOOGLE_CLIENT_SECRET', 'version': 'latest'},
     'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
 }
 
 
-def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false', users: str = '') -> dict:
+def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false') -> dict:
     """Minimal job contract for fixture manifests (keeps validator happy)."""
     return {
         'env': {
+            'OMI_LLM_GATEWAY_URL': {
+                'env_var': 'OMI_LLM_GATEWAY_URL',
+                'default': 'http://127.0.0.1:9',
+                'category': 'service_discovery',
+            },
+            'OMI_LLM_GATEWAY_FEATURE_MODE': {'value': 'gateway', 'category': 'rollout'},
+            'OMI_LLM_CHAT_AGENT_ROUTE': {'value': 'gateway', 'category': 'rollout'},
+            'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'false', 'category': 'rollout'},
             'MEMORY_MODE': {'value': mode, 'category': 'memory_rollout'},
-            'MEMORY_ENABLED_USERS': {'value': users, 'category': 'memory_rollout'},
             'MEMORY_V3_GET_ENABLED': {'value': 'false' if mode == 'off' else 'true', 'category': 'memory_rollout'},
             'MEMORY_CANONICAL_MAINTENANCE_ENABLED': {'value': cron, 'category': 'memory_rollout'},
             'MEMORY_CANONICAL_CONSOLIDATION_ENABLED': {'value': 'true', 'category': 'memory_rollout'},
@@ -173,6 +194,7 @@ def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false', user
         'secrets': {
             'SERVICE_ACCOUNT_JSON': {'secret': 'SERVICE_ACCOUNT_JSON', 'version': 'latest'},
             'ENCRYPTION_SECRET': {'secret': 'ENCRYPTION_SECRET', 'version': 'latest'},
+            'OMI_LLM_GATEWAY_SERVICE_TOKEN': {'secret': 'OMI_LLM_GATEWAY_SERVICE_TOKEN', 'version': 'latest'},
             'OPENAI_API_KEY': {'secret': 'OPENAI_API_KEY', 'version': 'latest'},
             'PINECONE_API_KEY': {'secret': 'PINECONE_API_KEY', 'version': 'latest'},
             'TYPESENSE_HOST': {'secret': 'TYPESENSE_HOST', 'version': 'latest'},
@@ -292,6 +314,35 @@ def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
     ]
 
 
+def test_gke_config_map_contract_rejects_declared_map_name_and_key_drift(tmp_path):
+    validator = load_validator()
+    values_path = tmp_path / 'values.yaml'
+    write_yaml(values_path, {'envFrom': [{'configMapRef': {'name': 'expected-map'}}], 'env': []})
+    env_config = {
+        'gke': {
+            'config_map': {'name': 'expected-map', 'entries': {'REDIS_DB_HOST': {'source': 'environment'}}},
+            'backend-listen': {
+                'values_file': str(values_path),
+                'env': {'REDIS_DB_HOST': {'config_map': {'name': 'wrong-map', 'key': 'MISSING'}}},
+            },
+        }
+    }
+
+    errors = validator._validate_gke(env_config, strict_provisional=True)
+
+    assert (
+        validator.ValidationError(
+            'gke/backend-listen',
+            "env REDIS_DB_HOST ConfigMap name must match declared gke.config_map.name 'expected-map'",
+        )
+        in errors
+    )
+    assert (
+        validator.ValidationError('gke/backend-listen', "env REDIS_DB_HOST ConfigMap key 'MISSING' is undeclared")
+        in errors
+    )
+
+
 def test_repo_cloud_run_workflows_match_manifest():
     validator = load_validator()
 
@@ -333,11 +384,12 @@ def test_workflow_validation_uses_immutable_workflow_root_with_admitted_runtime_
     workflow_path = ROOT.parent / '.github/workflows/gcp_backend.yml'
     admitted_workflow = validator._load_yaml(workflow_path)
     old_admitted_workflow = copy.deepcopy(admitted_workflow)
-    old_admitted_workflow['jobs']['deploy']['steps'] = [
+    deploy_stack = next(
         step
         for step in old_admitted_workflow['jobs']['deploy']['steps']
-        if step.get('name') != 'Checkout workflow-owned deploy-control source'
-    ]
+        if 'deploy-backend-stack' in str(step.get('uses', ''))
+    )
+    deploy_stack['with']['admitted_sha'] = '${{ github.event.workflow_run.head_sha }}'
     assert validator.ValidationError(
         f'cloud_run_workflow/{workflow_path}',
         'backend deploy checkout must remain bound to the readiness-approved commit',
@@ -553,10 +605,10 @@ def test_automatic_firestore_readiness_contract_requires_readiness_admitted_sha_
     validator = load_validator()
     workflow_path = ROOT.parent / '.github/workflows/gcp_backend_auto_dev.yml'
     workflow = validator._load_yaml(workflow_path)
-    deploy_checkout = next(
-        step for step in workflow['jobs']['deploy']['steps'] if step.get('uses') == 'actions/checkout@v7'
+    deploy_stack = next(
+        step for step in workflow['jobs']['deploy']['steps'] if 'deploy-backend-stack' in str(step.get('uses', ''))
     )
-    deploy_checkout['with']['ref'] = '${{ github.event.workflow_run.head_sha }}'
+    deploy_stack['with']['admitted_sha'] = '${{ github.event.workflow_run.head_sha }}'
 
     errors = validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow)
 
@@ -576,11 +628,10 @@ def test_manual_firestore_readiness_contract_allows_one_staged_workflow_control_
 
     assert validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow) == []
 
-    workflow['jobs']['deploy']['steps'] = [
-        step
-        for step in workflow['jobs']['deploy']['steps']
-        if step.get('name') != 'Checkout workflow-owned deploy-control source'
-    ]
+    deploy_stack = next(
+        step for step in workflow['jobs']['deploy']['steps'] if 'deploy-backend-stack' in str(step.get('uses', ''))
+    )
+    deploy_stack['with'].pop('admitted_sha')
     errors = validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow)
 
     assert (
@@ -889,7 +940,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
-            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,parakeet', got 'modulate-velma-2'",
+            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'dg-nova-3,modulate-velma-2,parakeet', got 'modulate-velma-2'",
         ),
     ]
 
@@ -1064,6 +1115,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
@@ -1077,6 +1129,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
@@ -1090,6 +1143,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
@@ -1290,6 +1344,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'OMI_ENV_STAGE': {'value': 'dev'},
                                     'OMI_LLM_GATEWAY_URL': {'value': 'http://custom-manifest-gateway'},
                                     'OMI_LLM_GATEWAY_FEATURE_MODE': {'value': 'gateway'},
+                                    'OMI_LLM_CHAT_AGENT_ROUTE': {'value': 'gateway'},
                                     'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'true'},
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED': {'value': 'false'},
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE': {'value': '1.0'},
@@ -1327,6 +1382,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
@@ -1340,6 +1396,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
@@ -1353,6 +1410,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
@@ -1386,6 +1444,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
@@ -1399,6 +1458,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
@@ -1412,6 +1472,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
@@ -1708,6 +1769,65 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
     assert validator.validate_runtime_env(env='prod') == []
 
 
+def test_memory_maintenance_contract_rejects_retired_promotion_envs_when_new_contract_is_present():
+    validator = load_validator()
+    retired = {
+        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS',
+        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+    }
+    env_config = {
+        'cloud_run': {
+            'jobs': {
+                'memory-maintenance-job': {
+                    'env': {name: {'value': 'true', 'category': 'memory_rollout'} for name in retired}
+                }
+            }
+        }
+    }
+
+    errors = validator.validate_retired_memory_manifest('dev', env_config)
+
+    actual = {(error.scope, error.message) for error in errors}
+    expected = {
+        (
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            f'retired canonical memory env {name} is forbidden; use the minimal maintenance contract',
+        )
+        for name in retired
+    }
+    assert expected <= actual
+
+
+def test_live_cloud_run_state_rejects_retired_promotion_env():
+    validator = load_validator()
+    env_config = {
+        'cloud_run': {
+            'network': {'flags': {}},
+            'services': {'backend': {'env': {}, 'secrets': {}}},
+        }
+    }
+    cloud_run_state = {
+        'services': {
+            'backend': {
+                'env': [{'name': 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED', 'value': 'true'}],
+                'flags': {},
+            }
+        }
+    }
+
+    errors = validator._validate_cloud_run(env_config, cloud_run_state, strict_provisional=False)
+
+    assert (
+        validator.ValidationError(
+            'cloud_run/backend',
+            'retired canonical memory env MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED is forbidden; '
+            'use the minimal maintenance contract',
+        )
+        in errors
+    )
+
+
 def test_memory_maintenance_job_contract_rejects_missing_dev_capacity_flag():
     validator = load_validator()
     job = memory_maintenance_job_block()
@@ -1757,7 +1877,6 @@ def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_c
     notifications_job = manifest['environments']['dev']['cloud_run']['jobs']['notifications-job']
     forbidden_env = {
         'MEMORY_MODE',
-        'MEMORY_ENABLED_USERS',
         'MEMORY_V3_GET_ENABLED',
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
@@ -1797,10 +1916,6 @@ def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_
         'value': 'read',
         'category': 'memory_rollout',
     }
-    manifest['environments']['prod']['cloud_run']['services']['backend']['env']['MEMORY_ENABLED_USERS'] = {
-        'value': 'canary-uid',
-        'category': 'memory_rollout',
-    }
     job['env']['MEMORY_MODE'] = {'value': 'off', 'category': 'memory_rollout'}
     job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
 
@@ -1832,15 +1947,61 @@ def test_memory_maintenance_job_contract_rejects_request_path_cron(tmp_path):
     assert any('request-path surfaces' in error.message for error in errors)
 
 
-def test_memory_maintenance_job_contract_rejects_empty_surface_allowlist(tmp_path):
+def test_runtime_manifest_rejects_retired_per_user_memory_inventory(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     backend_env = manifest['environments']['dev']['cloud_run']['services']['backend']['env']
-    backend_env['MEMORY_ENABLED_USERS'] = {'value': '', 'category': 'memory_rollout'}
+    backend_env['MEMORY_ENABLED_USERS'] = {'value': 'synthetic-surface-user', 'category': 'memory_rollout'}
     path = tmp_path / 'runtime_env.yaml'
     write_yaml(path, manifest)
     errors = validator.validate_runtime_env(env='dev', manifest_path=path)
-    assert any('must match memory-maintenance-job allowlist' in error.message for error in errors)
+    assert any('universal memory has no per-user runtime inventory' in error.message for error in errors)
+
+
+def test_memory_maintenance_job_contract_requires_gateway_luna_bindings_when_enabled(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'true', 'category': 'memory_rollout'}
+    for name in (
+        'OMI_LLM_GATEWAY_URL',
+        'OMI_LLM_GATEWAY_FEATURE_MODE',
+        'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION',
+    ):
+        del job['env'][name]
+    del job['secrets']['OMI_LLM_GATEWAY_SERVICE_TOKEN']
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+
+    messages = {error.message for error in errors}
+    assert {
+        'missing gateway env OMI_LLM_GATEWAY_URL while canonical maintenance is enabled',
+        'missing gateway env OMI_LLM_GATEWAY_FEATURE_MODE while canonical maintenance is enabled',
+        'missing gateway env OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION while canonical maintenance is enabled',
+        'missing gateway secret OMI_LLM_GATEWAY_SERVICE_TOKEN while canonical maintenance is enabled',
+    } <= messages
+
+
+def test_memory_maintenance_job_contract_rejects_pinned_gateway_endpoint_when_enabled(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'true', 'category': 'memory_rollout'}
+    job['env']['OMI_LLM_GATEWAY_URL'] = {'value': 'http://172.16.63.232', 'category': 'service_discovery'}
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+
+    assert (
+        validator.ValidationError(
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint, not pinned directly',
+        )
+        in errors
+    )
 
 
 def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
@@ -1851,6 +2012,9 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     assert "backend/**" in text
     assert 'Dockerfile.memory_maintenance_job' in text
     assert "id-token: 'write'" not in text
+    assert 'id: gateway-serving' in text
+    assert '--lane omi:auto:memory-l2' in text
+    assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in text
     assert (
         'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
         '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'

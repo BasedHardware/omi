@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "మీ ప్లాన్ {date}న పునరుద్ధరించబడుతుంది.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "ఉచిత ప్లాన్",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10567,6 +10557,7 @@
     "syncStatusWaiting": "సింక్ కోసం వేచి ఉంది",
     "syncStatusRetrying": "ప్రాసెస్ చేయలేకపోయింది — మళ్లీ ప్రయత్నిస్తోంది",
     "syncStatusFailed": "విఫలమైంది — Retry నొక్కండి",
+    "syncStatusTooOld": "సింక్ చేయడానికి చాలా పాతది — Omi దీన్ని అంగీకరించలేదు",
     "syncStatusFileUnavailable": "ఫైల్ అందుబాటులో లేదు",
     "syncStatusUploaded": "అప్‌లోడ్ అయింది · Omiలో ప్రాసెస్ అవుతోంది",
     "noRecordingsYet": "ఇంకా రికార్డింగ్‌లు లేవు",
@@ -10766,5 +10757,28 @@
     "whisperModelSizeLarge": "పెద్దది",
     "whisperModelSizeMedium": "మధ్యస్థం",
     "whisperModelSizeSmall": "చిన్నది",
-    "whisperModelSizeTiny": "అతి చిన్నది"
+    "whisperModelSizeTiny": "అతి చిన్నది",
+    "planSheetChooseYourPlan": "అపరిమిత Omi అన్‌లాక్ చేయడానికి మీ ప్లాన్‌ను ఎంచుకోండి.",
+    "availableOnMacMobileWeb": "Mac, మొబైల్ మరియు వెబ్‌లో అందుబాటులో ఉంది",
+    "popularBadge": "ప్రసిద్ధం",
+    "worksOnDesktop": "డెస్క్‌టాప్‌లో పనిచేస్తుంది",
+    "noDesktopAccess": "డెస్క్‌టాప్‌లో పనిచేయదు",
+    "annualBillingSummary": "{months} నెలలు / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 నెల ఉచితం} other{{count} నెలలు ఉచితం}}",
+    "freemiumLimitsIntro": "Omi ఉచితం, కానీ ఉచిత వెర్షన్‌లో మీ అనుభవాన్ని ప్రభావితం చేసే పరిమితులు ఉన్నాయి:",
+    "downgradeLimitDelayNotRealTime": "5-7 సెకన్ల ఆలస్యం (రియల్-టైమ్ కాదు)",
+    "downgradeToFreemiumAction": "ఉచిత వెర్షన్‌కు మారండి",
+    "getFreeUnlimitedAccess": "ఉచిత అపరిమిత యాక్సెస్ పొందండి",
+    "shareDataForTraining": "శిక్షణ కోసం డేటాను భాగస్వామ్యం చేయండి",
+    "yourRequestUnderReview": "మీ అభ్యర్థన సమీక్షలో ఉంది",
+    "pinAsBaseline": "ఆధారంగా పిన్ చేయండి",
+    "unpinAsBaseline": "ఆధారం నుండి అన్‌పిన్ చేయండి",
+    "baselineMemory": "ఆధార మెమరీ",
+    "alwaysInContext": "ఎల్లప్పుడూ సందర్భంలో",
+    "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
+    "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
+    "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
+    "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
+    "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
+    "accountCutoverOpenStore": "स्टोर खोलें"
 }

@@ -24,8 +24,7 @@ defaults delete "$BUNDLE_ID" >/dev/null 2>&1 || true
 defaults write "$BUNDLE_ID" hasCompletedOnboarding -bool true
 defaults write "$BUNDLE_ID" devLazyPermissionsEnabled -bool true
 defaults write "$BUNDLE_ID" screenAnalysisEnabled -bool false
-defaults write "$BUNDLE_ID" transcriptionEnabled -bool false
-defaults write "$BUNDLE_ID" systemAudioCaptureMode -string never
+defaults write "$BUNDLE_ID" audioRecordingMode -string off
 defaults write "$BUNDLE_ID" screenAnalysisAutoStartFixed_v2 -bool true
 defaults write "$BUNDLE_ID" shortcut_floatingBarTypedQuestionVoiceAnswersEnabled -bool false
 

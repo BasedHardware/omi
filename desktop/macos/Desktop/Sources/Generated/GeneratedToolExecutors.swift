@@ -14,6 +14,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case searchConversations = "search_conversations"
   case getMemories = "get_memories"
   case searchMemories = "search_memories"
+  case createMemory = "create_memory"
   case getActionItems = "get_action_items"
   case createActionItem = "create_action_item"
   case updateActionItem = "update_action_item"
@@ -38,6 +39,10 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case listMailMessages = "list_mail_messages"
   case sendMessage = "send_message"
   case runApplescript = "run_applescript"
+  case createCanonicalGoal = "create_canonical_goal"
+  case getCanonicalGoals = "get_canonical_goals"
+  case renderChatBlocks = "render_chat_blocks"
+  case showRewindEvidence = "show_rewind_evidence"
 }
 
 enum GeneratedSwiftToolExecutor: String {
@@ -47,7 +52,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:fadfb80a3b4186f23cc236c65996961dd888d34dca6a20035d349c2a0eec828a"
+  static let manifestDigest = "sha256:d1984d1acd11627c13dc7544ec5e2f2fb36e63f1740aeea0ab639bd55a239b09"
+  static let chatFirstManifestDigest = "sha256:dbbc262a728c6fcffb1ad25a939a44d8513294f1dbef62de48b4e7cc60f714f4"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -68,6 +74,7 @@ enum GeneratedToolExecutors {
     .searchConversations: .chatToolExecutor,
     .getMemories: .chatToolExecutor,
     .searchMemories: .chatToolExecutor,
+    .createMemory: .chatToolExecutor,
     .getActionItems: .chatToolExecutor,
     .createActionItem: .chatToolExecutor,
     .updateActionItem: .chatToolExecutor,
@@ -91,7 +98,11 @@ enum GeneratedToolExecutors {
     .readMessageHistory: .chatToolExecutor,
     .listMailMessages: .chatToolExecutor,
     .sendMessage: .chatToolExecutor,
-    .runApplescript: .chatToolExecutor
+    .runApplescript: .chatToolExecutor,
+    .createCanonicalGoal: .chatToolExecutor,
+    .getCanonicalGoals: .chatToolExecutor,
+    .renderChatBlocks: .chatToolExecutor,
+    .showRewindEvidence: .chatToolExecutor
   ]
 
   static func resolve(_ name: String) -> GeneratedSwiftTool? {
@@ -135,6 +146,7 @@ enum GeneratedToolExecutors {
     case searchConversations
     case getMemories
     case searchMemories
+    case createMemory
     case getActionItems
     case createActionItem
     case updateActionItem
@@ -154,6 +166,10 @@ enum GeneratedToolExecutors {
     case listMailMessages
     case sendMessage
     case runApplescript
+    case createCanonicalGoal
+    case getCanonicalGoals
+    case renderChatBlocks
+    case showRewindEvidence
     case unhandled
   }
 
@@ -174,6 +190,7 @@ enum GeneratedToolExecutors {
     case .searchConversations: return .searchConversations
     case .getMemories: return .getMemories
     case .searchMemories: return .searchMemories
+    case .createMemory: return .createMemory
     case .getActionItems: return .getActionItems
     case .createActionItem: return .createActionItem
     case .updateActionItem: return .updateActionItem
@@ -193,6 +210,10 @@ enum GeneratedToolExecutors {
     case .listMailMessages: return .listMailMessages
     case .sendMessage: return .sendMessage
     case .runApplescript: return .runApplescript
+    case .createCanonicalGoal: return .createCanonicalGoal
+    case .getCanonicalGoals: return .getCanonicalGoals
+    case .renderChatBlocks: return .renderChatBlocks
+    case .showRewindEvidence: return .showRewindEvidence
     default: return .unhandled
     }
   }

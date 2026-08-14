@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import XCTest
 
 @testable import Omi_Computer
@@ -221,6 +222,78 @@ import XCTest
       let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
       let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
       return snapshots.filter { $0["event"] as? String == "user_visible_issue" }
+    }
+
+    // MARK: - The summon chord is not registered twice
+
+    /// Onboarding offers ⌃⌘O as an open chord, and `registerSummonHotkey` already holds ⌃⌘O
+    /// unconditionally with both ids routed to the same `openOmiFromShortcut`. Without this the
+    /// Ask-Omi path re-registers the live chord, Carbon returns `eventHotKeyExistsErr`, and the user
+    /// gets a hard hotkey-registration incident describing a shortcut that works.
+    func testPickingTheSummonChordDoesNotReRegisterOrReportAConflict() throws {
+      let original = savedRegistration()
+      defer { restoreRegistration(original) }
+      settings.updateAskOmiRegistration(enabled: false, shortcut: ShortcutSettings.askOmiCommandJShortcut)
+
+      var attempts: [Attempt] = []
+      var failures: [GlobalShortcutManager.HotKeyRegistrationOutcome] = []
+      let manager = makeManager(
+        registrar: { keyCode, modifiers in
+          attempts.append(Attempt(keyCode: keyCode, modifiers: modifiers))
+          return .testing(status: OSStatus(eventHotKeyExistsErr), reference: nil)
+        },
+        failureRecorder: { _, _, _, outcome in failures.append(outcome) }
+      )
+      defer { manager.stopObservingSettingsForTests() }
+
+      settings.updateAskOmiRegistration(enabled: true, shortcut: GlobalShortcutManager.summonShortcut)
+
+      XCTAssertTrue(attempts.isEmpty, "The summon hotkey already holds ⌃⌘O; a second registration can only fail")
+      XCTAssertTrue(failures.isEmpty, "A working chord must not be reported as a registration failure")
+      XCTAssertEqual(try registrationIncidents().count, 0)
+    }
+
+    /// The guard has to key off the chord, not off "⌃ and ⌘ are involved" — every other combination
+    /// must still register normally.
+    func testAnyOtherChordStillRegistersNormally() {
+      let original = savedRegistration()
+      defer { restoreRegistration(original) }
+      settings.updateAskOmiRegistration(enabled: false, shortcut: GlobalShortcutManager.summonShortcut)
+
+      var attempts: [Attempt] = []
+      let manager = makeManager(registrar: { keyCode, modifiers in
+        attempts.append(Attempt(keyCode: keyCode, modifiers: modifiers))
+        return .testing(status: noErr, reference: .init("other"))
+      })
+      defer { manager.stopObservingSettingsForTests() }
+
+      settings.updateAskOmiRegistration(enabled: true, shortcut: ShortcutSettings.askOmiCommandOShortcut)
+
+      XCTAssertEqual(attempts, [Attempt(keyCode: 31, modifiers: 256)])
+    }
+
+    func testOnboardingValidationSurfacesAConflictingAskOmiChord() {
+      let original = savedRegistration()
+      defer { restoreRegistration(original) }
+      settings.updateAskOmiRegistration(enabled: true, shortcut: ShortcutSettings.askOmiCommandJShortcut)
+
+      var attempts: [Attempt] = []
+      let manager = makeManager(
+        registrar: { keyCode, modifiers in
+          attempts.append(Attempt(keyCode: keyCode, modifiers: modifiers))
+          return .testing(status: OSStatus(eventHotKeyExistsErr), reference: nil)
+        },
+        observesSettings: false
+      )
+      defer { manager.stopObservingSettingsForTests() }
+
+      manager.setRegistrationSuspended(true)
+
+      XCTAssertEqual(
+        manager.validateAskOmiShortcutForOnboarding(),
+        .alreadyInUse,
+        "onboarding must not advance after Carbon rejects the selected chord")
+      XCTAssertEqual(attempts, [Attempt(keyCode: 38, modifiers: 256)])
     }
 
     private func savedRegistration() -> (enabled: Bool, shortcut: ShortcutSettings.KeyboardShortcut) {

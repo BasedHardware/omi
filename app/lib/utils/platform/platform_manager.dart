@@ -68,6 +68,7 @@ class PlatformManager {
 
   String get platform => Platform.operatingSystem;
   String get appVersion => '${_packageInfo.version}+${_packageInfo.buildNumber}';
+  String get appBuild => _packageInfo.buildNumber;
   String get deviceIdHash => _deviceIdHash;
 
   bool get isAnalyticsSupported => PlatformService.isAnalyticsSupported;

@@ -94,6 +94,7 @@ def _build_fakes():
     users_stub = types.ModuleType("database.users")
     users_stub.record_user_platform = MagicMock()
     users_stub.record_client_device = MagicMock()
+    users_stub.get_user_deletion_wipe_status = MagicMock(return_value=None)
 
     fakes = {
         "database": database_pkg,
