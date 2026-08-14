@@ -143,7 +143,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       isAppExcluded: excluded,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
-      cooldown: cooldown,
+      cooldown: SuggestionGatePolicy.cooldown(base: cooldown, frequencyLevel: frequencyLevel),
       dwell: dwell,
       requiredDwell: Self.requiredDwell(frequencyLevel: frequencyLevel),
       evaluationsToday: dailyBudget.countToday(now: now),

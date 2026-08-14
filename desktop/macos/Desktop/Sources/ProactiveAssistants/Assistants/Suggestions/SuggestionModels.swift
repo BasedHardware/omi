@@ -156,6 +156,14 @@ enum SuggestionGatePolicy {
     frequencyLevel >= 5 ? 10 : 30
   }
 
+  /// Between-nudge cooldown, from the user's configured base.
+  ///
+  /// Maximum caps it at 30 s — a user who chose "Maximum" wants back-to-back nudges, not
+  /// one per three minutes. Every other level keeps the configured value untouched.
+  static func cooldown(base: TimeInterval, frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= 5 ? min(base, 30) : base
+  }
+
   /// Ordered cheapest-first, and every branch is free. Switching apps is not evidence that
   /// the user wants advice — people cmd-tab hundreds of times a day — so dwell and the
   /// daily budget do most of the work here, and the caller adds a grounding check before

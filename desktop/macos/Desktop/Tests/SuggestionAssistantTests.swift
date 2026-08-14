@@ -91,6 +91,15 @@ final class SuggestionGatePolicyTests: XCTestCase {
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 0), 30)
   }
 
+  /// Maximum caps the between-nudge cooldown at 30 s; other levels keep the user's
+  /// configured value (180 s default) untouched.
+  func testCooldownCapsAtThirtySecondsOnlyAtMaximumLevel() {
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 5), 30)
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 20, frequencyLevel: 5), 20)
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 4), 180)
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 3), 180)
+  }
+
   func testFirstEverEvaluationIsNotBlockedByAbsentHistory() {
     XCTAssertEqual(decide(lastEvaluationAt: nil, cooldown: 86400), .evaluate)
   }
