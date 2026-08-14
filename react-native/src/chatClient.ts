@@ -88,31 +88,59 @@ export async function sendChatMessage(
       await backend.generationEvents(admission.generation.id, null),
     );
   } catch (error) {
-    if (!isReplayExpired(error)) {
-      throw error;
+    if (isNativeCancellation(error)) {
+      try {
+        terminal = parseTerminal(
+          await backend.generationEvents(admission.generation.id, null),
+        );
+      } catch (replayError) {
+        if (!isReplayExpired(replayError)) {
+          throw replayError;
+        }
+        return reconcileGeneration(admission, await loadChatHistory(backend));
+      }
+    } else {
+      if (!isReplayExpired(error)) {
+        throw error;
+      }
+      return reconcileGeneration(admission, await loadChatHistory(backend));
     }
-    const history = await loadChatHistory(backend);
-    const canonicalHuman = history.find(
-      message => message.id === admission.message.id,
-    );
-    const assistant = history
-      .filter(
-        message =>
-          message.sender === 'ai' &&
-          message.createdAt >= admission.message.createdAt,
-      )
-      .sort((left, right) => left.createdAt - right.createdAt)[0];
-    if (canonicalHuman === undefined || assistant === undefined) {
-      throw new Error(
-        'Generation replay expired before canonical history reconciled',
-      );
-    }
-    return {human: canonicalHuman, assistant};
   }
   if (terminal.kind === 'failed') {
     throw new Error(`Generation failed (${terminal.error.code})`);
   }
   return {human: admission.message, assistant: terminal.message};
+}
+
+function reconcileGeneration(
+  admission: AdmissionEnvelope,
+  history: ChatMessage[],
+): {human: ChatMessage; assistant: ChatMessage} {
+  const canonicalHuman = history.find(
+    message => message.id === admission.message.id,
+  );
+  const assistant = history
+    .filter(
+      message =>
+        message.sender === 'ai' &&
+        message.createdAt >= admission.message.createdAt,
+    )
+    .sort((left, right) => left.createdAt - right.createdAt)[0];
+  if (canonicalHuman === undefined || assistant === undefined) {
+    throw new Error(
+      'Generation replay expired before canonical history reconciled',
+    );
+  }
+  return {human: canonicalHuman, assistant};
+}
+
+function isNativeCancellation(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    error.code === 'OMI_HTTP_CANCELLED'
+  );
 }
 
 export async function cancelChatGeneration(

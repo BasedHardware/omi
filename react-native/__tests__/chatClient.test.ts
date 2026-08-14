@@ -152,3 +152,47 @@ test('durable cancellation leaves terminal reconciliation to the active stream',
   ).resolves.toBeUndefined();
   expect(order).toEqual(['delete']);
 });
+
+test('native observer cancellation reconnects for the canonical terminal frame', async () => {
+  const human = {
+    id: 'desktop-300-3',
+    text: 'Stop',
+    sender: 'human' as const,
+    createdAt: 300,
+    generationOutcome: null,
+  };
+  const assistant = {
+    id: 'assistant-cancelled',
+    text: 'Partial',
+    sender: 'ai' as const,
+    createdAt: 301,
+    generationOutcome: 'cancelled' as const,
+  };
+  let streams = 0;
+  const backend = {
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 201,
+      body: JSON.stringify({message: human, generation: {id: 'generation-3'}}),
+    }),
+    generationEvents: async () => {
+      streams += 1;
+      if (streams === 1) {
+        throw Object.assign(new Error('closed after durable delete'), {
+          code: 'OMI_HTTP_CANCELLED',
+        });
+      }
+      return `event: cancelled\nid: e3\ndata: ${JSON.stringify({
+        kind: 'cancelled',
+        message: assistant,
+      })}\n\n`;
+    },
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+
+  await expect(sendChatMessage(backend, 'Stop', 300)).resolves.toEqual({
+    human,
+    assistant,
+  });
+  expect(streams).toBe(2);
+});

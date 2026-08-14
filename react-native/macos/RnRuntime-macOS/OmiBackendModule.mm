@@ -13,6 +13,7 @@ static NSString *const OmiContractVersion = @"1.0.0";
 @property(nonatomic) BOOL settled;
 @property(nonatomic) NSUInteger reconnects;
 @property(nonatomic, copy) NSString *lastEventId;
+@property(nonatomic, copy) dispatch_block_t reconnectWork;
 - (instancetype)initWithResolve:(RCTPromiseResolveBlock)resolve
                           reject:(RCTPromiseRejectBlock)reject
                          cleanup:(dispatch_block_t)cleanup;
@@ -40,6 +41,7 @@ static NSString *const OmiContractVersion = @"1.0.0";
     if (self.settled) return;
     self.settled = YES;
   }
+  if (self.reconnectWork != nil) dispatch_block_cancel(self.reconnectWork);
   if (value != nil) self.resolve(value);
   else self.reject(code, message, nil);
   [self.task cancel];
@@ -110,19 +112,12 @@ didReceiveResponse:(NSURLResponse *)response
     NSString *kind = [frame[@"kind"] isKindOfClass:NSString.class] ? frame[@"kind"] : nil;
     if ([kind isEqualToString:@"done"] || [kind isEqualToString:@"failed"] ||
         [kind isEqualToString:@"cancelled"]) {
-      NSRange end = [text rangeOfString:@"\n\n" options:0 range:NSMakeRange(0, text.length)];
-      NSUInteger terminalEnd = 0;
-      for (NSUInteger blockIndex = 0; blockIndex <= index; blockIndex += 1) {
-        NSRange boundary = [text rangeOfString:@"\n\n" options:0 range:NSMakeRange(terminalEnd, text.length - terminalEnd)];
-        if (boundary.location == NSNotFound) break;
-        terminalEnd = NSMaxRange(boundary);
-      }
-      if (end.location != NSNotFound && terminalEnd > 0) {
-        [self finishWithValue:[text substringToIndex:terminalEnd] code:nil message:nil];
-      }
+      [self finishWithValue:[blocks[index] stringByAppendingString:@"\n\n"] code:nil message:nil];
       return;
     }
   }
+  NSData *remaining = [blocks.lastObject dataUsingEncoding:NSUTF8StringEncoding];
+  [self.data setData:remaining ?: [NSData data]];
 }
 
 - (void)URLSession:(NSURLSession *)session
@@ -132,12 +127,24 @@ didCompleteWithError:(NSError *)error {
     if (self.settled) return;
   }
   if (self.reconnects < 5) {
+    NSTimeInterval delay = 0.25 * (1 << self.reconnects);
     self.reconnects += 1;
     [self.data setLength:0];
     if (self.lastEventId.length > 0) {
       [self.request setValue:self.lastEventId forHTTPHeaderField:@"last-event-id"];
     }
-    [self start];
+    __weak OmiGenerationDelegate *weakSelf = self;
+    dispatch_block_t reconnect = dispatch_block_create(DISPATCH_BLOCK_INHERIT_QOS_CLASS, ^{
+      OmiGenerationDelegate *strongSelf = weakSelf;
+      if (strongSelf == nil) return;
+      @synchronized(strongSelf) {
+        if (strongSelf.settled) return;
+      }
+      [strongSelf start];
+    });
+    self.reconnectWork = reconnect;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
+                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), reconnect);
     return;
   }
   [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Generation ended without a terminal frame"];
@@ -312,6 +319,10 @@ RCT_REMAP_METHOD(cancelGenerationEvents,
                  cancelGenerationEventsWithId:(NSString *)generationId
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
+  OmiGenerationDelegate *delegate;
+  @synchronized(self.generations) {
+    delegate = self.generations[generationId];
+  }
   NSString *encoded = [generationId stringByAddingPercentEncodingWithAllowedCharacters:
       [NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"]];
   if (generationId.length == 0 || generationId.length > 256 || encoded.length == 0 ||
@@ -334,6 +345,7 @@ RCT_REMAP_METHOD(cancelGenerationEvents,
       reject(@"OMI_HTTP_TRANSPORT", @"Generation cancellation was not accepted", nil);
       return;
     }
+    if (delegate != nil) [delegate cancel];
     resolve(nil);
   }];
   [task resume];
