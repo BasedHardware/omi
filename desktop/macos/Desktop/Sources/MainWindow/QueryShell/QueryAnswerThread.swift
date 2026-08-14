@@ -74,6 +74,7 @@ struct QueryAnswerThread: View {
         chatFirstRichBlockContext: chatFirstRichBlockContext,
         transcriptWindowPolicy: .compactHome,
         verticalContentPadding: OmiSpacing.sm,
+        timelineTrailingInset: 0,
         // **The one thing an empty transcript here is ever allowed to say.** The post-onboarding
         // opener is composed by the provider the moment onboarding finishes — a greeting by name
         // and tappable starters — and its only renderer was the deleted chat page and the legacy
