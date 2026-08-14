@@ -291,6 +291,14 @@ final class ChatCitationTests: XCTestCase {
 
   @MainActor
   func testRewindCitationFocusIsOneShotAndPreservesExactScreenshotID() {
+    // The handoff is owner-scoped, and it reads two owner sources that are ambient here:
+    // `auth_userId` is a persistent UserDefaults value that outlives every suite process on a
+    // CI runner, while `RewindDatabase.currentUserId` starts nil in each one. Pin them to the
+    // same owner so this asserts the one-shot contract, not the runner's leftover defaults.
+    let previousUserID = RewindDatabase.currentUserId
+    defer { RewindDatabase.currentUserId = previousUserID }
+    RewindDatabase.currentUserId = RuntimeOwnerIdentity.currentOwnerId()
+
     RewindCitationFocusState.shared.request(42)
     XCTAssertEqual(RewindCitationFocusState.shared.consume(), 42)
     XCTAssertNil(RewindCitationFocusState.shared.consume())
