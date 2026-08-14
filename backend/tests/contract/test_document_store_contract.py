@@ -594,6 +594,24 @@ def test_batch_update_missing_doc_raises_not_found(store, uid):
         batch.commit()
 
 
+def test_batch_create_inserts_and_collides(store, uid):
+    # cubic PR 10887 (review 4909186286 #1): staged-task recovery pairs batch.create (create-if-absent)
+    # with a guarded delete of the staged marker. The neutral WriteBatch had no create, so the migrated
+    # restore path raised AttributeError on the Mongo-backed facade. create must insert when absent and
+    # raise the neutral AlreadyExists on a collision, on both backends.
+    base = f"users/{uid}/action_items"
+    batch = store.batch()
+    batch.create(f"{base}/a1", {"text": "restored"})
+    batch.commit()
+    assert store.get(f"{base}/a1").to_dict() == {"text": "restored"}
+
+    collide = store.batch()
+    collide.create(f"{base}/a1", {"text": "again"})
+    with pytest.raises(AlreadyExists):
+        collide.commit()
+    assert store.get(f"{base}/a1").to_dict() == {"text": "restored"}  # original preserved
+
+
 def test_run_transaction_update_stale_precondition_raises(store, uid):
     # cubic PR 10887 #11c: a stale if_updated_at inside a transaction must surface PreconditionFailed on
     # both backends (Firestore leaked FailedPrecondition from commit).

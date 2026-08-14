@@ -149,6 +149,11 @@ class _FirestoreBatch:
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         self._batch.set(self._client.document(path), _translate(data), merge=merge)
 
+    def create(self, path: str, data: Dict[str, Any]) -> None:
+        # Create-if-absent inside the atomic batch (staged-task recovery pairs it with a guarded
+        # delete). A collision raises AlreadyExists at commit — mapped to the neutral error below.
+        self._batch.create(self._client.document(path), _translate(data))
+
     def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
         self._batch.update(
             self._client.document(path), _translate_update(data), option=_last_update_option(if_updated_at)
@@ -168,6 +173,10 @@ class _FirestoreBatch:
             # A batch update of a missing doc raises Firestore NotFound at commit — map to the neutral
             # NotFound so callers branch identically to the Mongo adapter (cubic PR 10887 #11b).
             raise NotFound("batch") from exc
+        except (_FirestoreAlreadyExists, _FirestoreConflict) as exc:
+            # A batch create of an existing doc raises AlreadyExists at commit — map to the neutral
+            # AlreadyExists so create-if-absent recovery branches identically on both backends.
+            raise AlreadyExists("batch") from exc
 
 
 class _FirestoreTransaction:

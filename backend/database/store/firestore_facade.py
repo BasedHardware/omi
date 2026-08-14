@@ -514,6 +514,11 @@ class _FacadeBatch:
         del option
         self._batch.set(ref.path, _neutral_data(data), merge=merge)
 
+    def create(self, ref: _DocRef, data: Dict[str, Any]) -> None:
+        # Firestore ``WriteBatch.create`` (staged-task recovery). A collision raises AlreadyExists at
+        # commit, which _firestore_errors() maps to the google AlreadyExists upstream catches.
+        self._batch.create(ref.path, _neutral_data(data))
+
     def update(self, ref: _DocRef, data: Dict[str, Any], option: Any = None) -> None:
         self._batch.update(ref.path, _neutral_data(data), if_updated_at=_precondition_time(option))
 

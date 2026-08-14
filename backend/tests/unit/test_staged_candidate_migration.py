@@ -438,6 +438,56 @@ def test_historical_promotion_accepts_candidate_before_retiring_row(monkeypatch)
     assert events == ['accept', 'retire']
 
 
+def test_restore_legacy_conversation_items_recovers_through_facade_batch_create(monkeypatch):
+    # regression (cubic review 4909186286 #1): restore_legacy_conversation_items builds an atomic
+    # create+delete batch via client.batch().create(...), but the neutral Mongo-backed facade's
+    # WriteBatch had no ``create`` — so on STORAGE_BACKEND=mongo every recovery page raised
+    # AttributeError instead of restoring rows. Exercise the real DB helper against the fake facade
+    # (the ADR-0044 seam) so the create-if-absent recovery path is covered on the neutral backend.
+    from database import staged_tasks as staged_tasks_db
+    from tests.store_fakes import FakeDocumentStore, install_fake_db_client
+
+    store = FakeDocumentStore()
+    install_fake_db_client(monkeypatch, store=store)
+    store._docs['users/user-1/staged_tasks/row-1'] = {
+        'id': 'row-1',
+        'source': 'conversation_migration',
+        'description': 'buy milk',
+    }
+
+    result = staged_tasks_db.restore_legacy_conversation_items(uid='user-1', limit=50, cursor=None)
+
+    assert result['restored'] == 1
+    assert result['skipped_existing'] == 0
+    # action item created (marker/id fields stripped), staged marker atomically deleted.
+    restored = store._docs['users/user-1/action_items/row-1']
+    assert restored['description'] == 'buy milk'
+    assert 'source' not in restored and 'id' not in restored
+    assert 'users/user-1/staged_tasks/row-1' not in store._docs
+
+
+def test_restore_legacy_conversation_items_preserves_existing_action_item(monkeypatch):
+    # The recovery batch must never overwrite a live action item: a collision surfaces the facade's
+    # AlreadyExists (google), which restore counts as skipped_existing and leaves both copies intact.
+    from database import staged_tasks as staged_tasks_db
+    from tests.store_fakes import FakeDocumentStore, install_fake_db_client
+
+    store = FakeDocumentStore()
+    install_fake_db_client(monkeypatch, store=store)
+    store._docs['users/user-1/action_items/row-1'] = {'description': 'already here'}
+    store._docs['users/user-1/staged_tasks/row-1'] = {
+        'id': 'row-1',
+        'source': 'conversation_migration',
+        'description': 'buy milk',
+    }
+
+    result = staged_tasks_db.restore_legacy_conversation_items(uid='user-1', limit=50, cursor=None)
+
+    assert result['restored'] == 0
+    assert result['skipped_existing'] == 1
+    assert store._docs['users/user-1/action_items/row-1'] == {'description': 'already here'}
+
+
 def test_retired_migrate_and_restore_routes_are_inert(monkeypatch):
     monkeypatch.setattr(
         staged_router.staged_tasks_db,

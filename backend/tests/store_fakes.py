@@ -86,6 +86,9 @@ class _FakeBatch:
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         self._ops.append(("set", path, data, merge))
 
+    def create(self, path: str, data: Dict[str, Any]) -> None:
+        self._ops.append(("create", path, data, None))
+
     def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
         self._ops.append(("update", path, data, if_updated_at))
 
@@ -96,6 +99,9 @@ class _FakeBatch:
         for kind, path, data, extra in self._ops:
             if kind == "set":
                 self._store.set(path, data, merge=extra)
+            elif kind == "create":
+                # create-if-absent: raises AlreadyExists on a collision, like both real adapters.
+                self._store.create(path, data)
             elif kind == "update":
                 self._store.update(path, data, if_updated_at=extra)
             else:

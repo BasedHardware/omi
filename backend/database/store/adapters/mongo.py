@@ -31,7 +31,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
-from pymongo import ASCENDING, DESCENDING, DeleteOne, MongoClient, ReplaceOne, UpdateOne
+from pymongo import ASCENDING, DESCENDING, DeleteOne, InsertOne, MongoClient, ReplaceOne, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
 from ..errors import AlreadyExists, NotFound, PreconditionFailed
@@ -158,6 +158,28 @@ class _MongoBatch:
                     UpdateOne({"_id": path}, transform_ops),
                     lambda coll, _o=transform_ops: coll.update_one({"_id": path}, _o),
                 )
+
+    def create(self, path: str, data: Dict[str, Any]) -> None:
+        # Mirror MongoDocumentStore._create: insert the full document, stamping _created_at once. A
+        # duplicate _id raises the neutral AlreadyExists so create-if-absent recovery (staged-task
+        # restore) branches identically to the Firestore batch, which raises AlreadyExists at commit.
+        collection_name, parent, key = _doc_meta(path)
+        plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
+        now = _now()
+        document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": now, "_created_at": now, "d": plain}
+        transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
+
+        def run(coll: Any) -> None:
+            try:
+                coll.insert_one(document)
+            except DuplicateKeyError as exc:
+                raise AlreadyExists(path) from exc
+            if transforms:
+                coll.update_one({"_id": path}, _build_update_ops(transforms))
+
+        # ``checked`` so a duplicate-key collision surfaces per-op — bulk_write's aggregate result
+        # cannot attribute a DuplicateKeyError to one queued op — forcing the sequential commit path.
+        self._append(collection_name, InsertOne(document), run, checked=True)
 
     def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
