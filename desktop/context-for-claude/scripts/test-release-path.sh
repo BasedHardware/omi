@@ -44,6 +44,19 @@ printf '%s\n' "$DRY_RUN_OUTPUT" | grep -qF 'no build, signing, notarization, Git
 printf '%s\n' "$DRY_RUN_OUTPUT" | grep -qF 'permanent download link=https://github.com/BasedHardware/omi/releases/download/context-for-claude-latest/ContextForClaude.dmg' \
     || fail "permanent download link"
 
+# Publication falls back to the shared CI token when the scoped one was never provisioned, and says
+# so — a release that quietly used a broader credential than intended would be worse than a loud one.
+FALLBACK_OUTPUT="$(env -u CONTEXT_GITHUB_TOKEN GH_TOKEN=selection-probe \
+    "$SCRIPT_DIR/release-context.sh" --tag context-for-claude-v1.1.0 --dry-run 2>&1)" \
+    || fail "dry-run with only the shared token"
+printf '%s\n' "$FALLBACK_OUTPUT" | grep -qF 'CONTEXT_GITHUB_TOKEN is unset; publishing with the shared GH_TOKEN' \
+    || fail "shared-token fallback is silent"
+SCOPED_OUTPUT="$(CONTEXT_GITHUB_TOKEN=scoped-probe GH_TOKEN=shared-probe \
+    "$SCRIPT_DIR/release-context.sh" --tag context-for-claude-v1.1.0 --dry-run 2>&1)" \
+    || fail "dry-run with both tokens"
+printf '%s\n' "$SCOPED_OUTPUT" | grep -qF 'publishing with the shared' \
+    && fail "the shared token was used while a scoped one was available"
+
 # That link is maintained with --clobber, so the same namespace rules that protect the feed have to
 # protect it: never another product's release, never a versioned release, never the feed's own.
 if LATEST_TAG="omi-desktop-latest" "$SCRIPT_DIR/release-context.sh" \
