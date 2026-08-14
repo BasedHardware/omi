@@ -6,17 +6,22 @@ import XCTest
 final class AppStateAlertPresentationTests: XCTestCase {
   func testShowAlertPresentsThroughTheNonBlockingSheetSeam() {
     let state = AppState()
-    let presenter = RecordingAlertPresenter()
-    state.alertPresenter = presenter
+    let recorder = SheetPresentationRecorder()
+    let window = NSWindow()
+    state.alertPresenter = AppKitSheetAlertPresenter(
+      shellWindowProvider: { window },
+      appKitOperations: .init(beginSheetModal: recorder.present),
+      revealMainWindow: {})
 
     state.showAlert(title: "Microphone Isn't Capturing Audio", message: "Check your input device and try again.")
 
     XCTAssertEqual(
-      presenter.presentations,
+      recorder.presentations,
       [
         .init(
           title: "Microphone Isn't Capturing Audio",
-          message: "Check your input device and try again.")
+          message: "Check your input device and try again.",
+          window: window)
       ])
   }
 
@@ -162,20 +167,6 @@ final class AppStateAlertPresentationTests: XCTestCase {
     XCTAssertEqual(
       recorder.presentations,
       [.init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window)])
-  }
-}
-
-@MainActor
-private final class RecordingAlertPresenter: DesktopAlertPresenting {
-  struct Presentation: Equatable {
-    let title: String
-    let message: String
-  }
-
-  private(set) var presentations: [Presentation] = []
-
-  func present(title: String, message: String) {
-    presentations.append(.init(title: title, message: message))
   }
 }
 
