@@ -1,0 +1,51 @@
+{
+  "name": "RnRuntime",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "macos": "react-native run-macos",
+    "lint": "eslint .",
+    "start": "react-native start",
+    "test": "jest",
+    "windows": "react-native run-windows"
+  },
+  "dependencies": {
+    "react": "19.0.0",
+    "react-native": "0.79.6",
+    "react-native-macos": "0.79.0",
+    "react-native-windows": "0.79.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@babel/preset-env": "^7.25.3",
+    "@babel/runtime": "^7.25.0",
+    "@react-native-community/cli": "18.0.0",
+    "@react-native-community/cli-platform-android": "18.0.0",
+    "@react-native-community/cli-platform-ios": "18.0.0",
+    "@react-native/babel-preset": "0.79.2",
+    "@react-native/eslint-config": "0.79.2",
+    "@react-native/metro-config": "0.79.2",
+    "@react-native/typescript-config": "0.79.2",
+    "@types/jest": "^29.5.13",
+    "@types/react": "^19.0.0",
+    "@types/react-test-renderer": "^19.0.0",
+    "eslint": "^8.19.0",
+    "jest": "^29.6.3",
+    "prettier": "2.8.8",
+    "react-test-renderer": "19.0.0",
+    "typescript": "5.0.4",
+    "metro-config": "^0.82.5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "react-native-windows": {
+    "init-windows": {
+      "name": "RnRuntime",
+      "namespace": "RnRuntime",
+      "template": "old/uwp-cpp-app"
+    }
+  }
+}
