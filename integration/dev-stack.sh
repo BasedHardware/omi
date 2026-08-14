@@ -75,8 +75,14 @@ stop_local_test_gateway() {
   fi
   [[ "$gateway_pid" =~ ^[0-9]+$ && -n "$identity" ]] || return 0
   now="$(ps -p "$gateway_pid" -o lstart= 2>/dev/null || true)"
+  # process-owner snapshots trim; `ps -o lstart=` pads. Untrimmed compare
+  # refused to kill the exact process this harness started.
+  identity="${identity#"${identity%%[![:space:]]*}"}"
+  identity="${identity%"${identity##*[![:space:]]}"}"
+  now="${now#"${now%%[![:space:]]*}"}"
+  now="${now%"${now##*[![:space:]]}"}"
   [[ "$now" == "$identity" ]] || { rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE"; return 0; }
-  cmd="$(ps -p "$gateway_pid" -o command= 2>/dev/null || true)"
+  cmd="$(ps -www -p "$gateway_pid" -o command= 2>/dev/null || true)"
   [[ "$cmd" == *local-test-gateway.mjs* ]] || { rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE"; return 0; }
   kill -TERM "$gateway_pid" 2>/dev/null || true
   for _ in $(seq 1 20); do
@@ -84,6 +90,8 @@ stop_local_test_gateway() {
     sleep 0.05
   done
   now="$(ps -p "$gateway_pid" -o lstart= 2>/dev/null || true)"
+  now="${now#"${now%%[![:space:]]*}"}"
+  now="${now%"${now##*[![:space:]]}"}"
   if [[ "$now" == "$identity" ]]; then
     kill -KILL "$gateway_pid" 2>/dev/null || true
   fi

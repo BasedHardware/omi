@@ -15,6 +15,21 @@ afterEach(() => {
   for (const listener of listeners) {
     try { listener.kill("SIGKILL"); } catch {}
   }
+  const runRoot = join(scratch, "run-root");
+  const pidPath = join(runRoot, "local-test-gateway.pid");
+  if (existsSync(pidPath)) {
+    const pid = Number(readFileSync(pidPath, "utf8").trim());
+    if (Number.isInteger(pid) && pid > 0) {
+      try { process.kill(pid, "SIGKILL"); } catch {}
+    }
+  }
+  const ownerPath = join(runRoot, "service-owner.json");
+  if (existsSync(ownerPath)) {
+    try {
+      const owner = JSON.parse(readFileSync(ownerPath, "utf8"));
+      if (Number.isInteger(owner.pid) && owner.pid > 0) process.kill(owner.pid, "SIGKILL");
+    } catch {}
+  }
   rmSync(scratch, { recursive: true, force: true });
 });
 
@@ -114,10 +129,8 @@ test("RED-PROOF a claimed raw run id is exclusive and prior evidence is never ov
   assert.deepEqual(portPids(4851), listenersBefore);
 });
 
-test("RED-PROOF mismatched readiness cleans up the exact service and logger process tree", () => {
-  const rootPair = roots();
-  const launcher = join(rootPair.platform, "apps/service/bin/dev-server.ts");
-  writeFileSync(launcher, `
+function writeService(rootPair, runIdExpr) {
+  writeFileSync(join(rootPair.platform, "apps/service/bin/dev-server.ts"), `
     import { writeFileSync } from "node:fs";
     const port = Number(process.env.OMI_PORT);
     Bun.serve({ hostname: "127.0.0.1", port, fetch(request) {
@@ -125,7 +138,7 @@ test("RED-PROOF mismatched readiness cleans up the exact service and logger proc
     }});
     writeFileSync(process.env.OMI_DEV_READY_RECORD, JSON.stringify({
       schema: "omi.dev-service-readiness.v1",
-      runId: "stale-other-run",
+      runId: ${runIdExpr},
       executable: "apps/service/bin/dev-server.ts",
       baseUrl: "http://127.0.0.1:4851",
       databasePath: process.env.OMI_QA_DB,
@@ -136,8 +149,14 @@ test("RED-PROOF mismatched readiness cleans up the exact service and logger proc
     }) + "\\n");
     console.log("token=new-failed-run-secret http://127.0.0.1:4851 Authorization: Bearer new-failed-run-secret");
   `);
+}
+
+test("RED-PROOF mismatched readiness cleans up the exact service and logger process tree", () => {
+  const rootPair = roots();
+  writeService(rootPair, '"stale-other-run"');
   const runRoot = join(scratch, "run-root");
   const listenersBefore = portPids(4851);
+  const gatewayBefore = portPids(8788);
 
   const result = run(["--up", "--run-id", "expected-run"], rootPair);
 
@@ -145,7 +164,33 @@ test("RED-PROOF mismatched readiness cleans up the exact service and logger proc
   assert.match(result.stderr, /wrong runId/);
   assert.doesNotMatch(result.stdout + result.stderr, /service-ready/);
   assert.deepEqual(portPids(4851), listenersBefore);
+  assert.deepEqual(portPids(8788), gatewayBefore);
   assert.deepEqual(processIdsMatching(`${runRoot}/runs/expected-run/logs/service.log`), []);
   assert.equal(existsSync(join(runRoot, "service-owner.json")), false);
   assert.equal(existsSync(join(runRoot, "runs", "expected-run")), false);
+});
+
+test("RED-PROOF --stop frees the local test gateway this harness started", () => {
+  const rootPair = roots();
+  writeService(rootPair, "process.env.OMI_RUN_ID");
+  const gatewayBefore = portPids(8788);
+  const serviceBefore = portPids(4851);
+
+  const up = run(["--up", "--run-id", "run-stop-gateway"], rootPair);
+  assert.equal(up.status, 0, `${up.stdout}${up.stderr}`);
+  assert.match(up.stdout, /service-ready/);
+  assert.ok(portPids(8788).length > 0);
+
+  const stop = run(["--stop"], rootPair);
+  assert.equal(stop.status, 0, `${stop.stdout}${stop.stderr}`);
+  assert.deepEqual(portPids(8788), gatewayBefore);
+  assert.deepEqual(portPids(4851), serviceBefore);
+});
+
+test("RED-PROOF --stop refuses a gateway it did not start", async () => {
+  const listenerPids = await occupy(8788);
+  const result = run(["--stop"]);
+  for (const pid of listenerPids) assert.doesNotThrow(() => process.kill(pid, 0));
+  assert.deepEqual(portPids(8788), listenerPids);
+  void result;
 });
