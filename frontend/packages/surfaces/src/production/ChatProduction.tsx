@@ -76,7 +76,23 @@ function agentCapabilityLabel(message: ChatMessage, locale: Locale): string {
   if (capability?.kind !== "capability_receipt") return t(locale, "chat.agentUnknown");
   if (capability.details.tier === "deterministic-scripted") return t(locale, "chat.agentScripted");
   if (capability.details.tier === "real-provider") return t(locale, "chat.agentProvider");
+  if (
+    capability.details.adapter === "omi-llm-gateway" ||
+    capability.details.adapter === "omi-llm-gateway-injected-transport"
+  ) {
+    return t(locale, "chat.agentLocalTestGateway");
+  }
   return t(locale, "chat.agentUnknown");
+}
+
+function approvalIsPending(
+  events: NonNullable<ChatMessage["agentRun"]>["events"],
+  event: NonNullable<ChatMessage["agentRun"]>["events"][number],
+): boolean {
+  if (event.kind !== "approval_requested") return false;
+  return !events.some((candidate) =>
+    candidate.kind === "approval_resolved" && candidate.sequence > event.sequence
+  );
 }
 
 function isSafeStagedAttachment(attachment: StagedChatAttachment): boolean {
@@ -430,6 +446,10 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
     void run(() => store.cancel(generationId));
   };
 
+  const resolveApproval = (resolution: "approved" | "denied" | "cancelled"): void => {
+    void run(() => store.resolveApproval(resolution));
+  };
+
   const startNewMessage = (failed: Extract<ChatMessage["delivery"], { kind: "failed" }>): void => {
     const original = messages.find((message) =>
       message.role === "user" &&
@@ -574,8 +594,19 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                               {(event.kind === "tool_request" || event.kind === "tool_result" || event.kind === "tool_error") && (
                                 <p className="chat-agent-detail">{t(locale, "chat.agentTool", { name: event.details.toolName })}</p>
                               )}
-                              {event.kind === "approval_requested" && (
-                                <p className="chat-agent-detail">{t(locale, "chat.agentApprovalNoAction")}</p>
+                              {event.kind === "approval_requested" && approvalIsPending(message.agentRun.events, event) && (
+                                <div className="chat-agent-approval" data-approval-pending="true">
+                                  <p className="chat-agent-detail">{event.details.reason}</p>
+                                  <button type="button" data-approval-action="approved" onClick={() => resolveApproval("approved")}>
+                                    {t(locale, "chat.agentApprovalAllow")}
+                                  </button>
+                                  <button type="button" data-approval-action="denied" onClick={() => resolveApproval("denied")}>
+                                    {t(locale, "chat.agentApprovalDeny")}
+                                  </button>
+                                  <button type="button" data-approval-action="cancelled" onClick={() => resolveApproval("cancelled")}>
+                                    {t(locale, "common.cancel")}
+                                  </button>
+                                </div>
                               )}
                               {event.kind === "usage" && (
                                 <p className="chat-agent-detail">{t(locale, "chat.agentUsage", { count: event.details.totalTokens })}</p>

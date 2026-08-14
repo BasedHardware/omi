@@ -186,6 +186,7 @@ private struct Options {
   var json = false
   var help = false
   var selfTest = false
+  var requestTrust = false
 }
 
 private func printHelp() {
@@ -208,6 +209,7 @@ private func printHelp() {
     --require-matrix        Fail unless all matrix bindings and observations are proven
     --keys SPEC             Comma-separated keys, e.g. cmd+k,escape
     --activate              Temporarily activate for keys, then hide and restore prior app
+    --request-trust         Prompt Accessibility for THIS probe binary and open Settings if needed
     --json                  Emit one JSON evidence document
     --self-test              Run deterministic redaction/focus guard tests
     --help                  Show this help
@@ -312,12 +314,16 @@ private func parseOptions(_ arguments: [String]) throws -> Options {
     case "--self-test":
       options.selfTest = true
       index += 1
+    case "--request-trust":
+      options.requestTrust = true
+      index += 1
     default:
       throw ProbeError.usage("unknown option \(argument)")
     }
   }
   if options.help { return options }
   if options.selfTest { return options }
+  if options.requestTrust { return options }
   guard options.pid != nil || options.name != nil else { throw ProbeError.usage("provide --pid or --name") }
   guard valid(options.runId, safeRunID) else { throw ProbeError.usage("--run-id must be a bounded stable identifier") }
   if !options.keys.isEmpty && !options.activate {
@@ -747,6 +753,44 @@ private func selfTest() -> Bool {
   return !sameFocus(nil, nil) && !sameFocus(noIdentity, noIdentity) && sameFocus(sameA, sameB) && !sameFocus(sameA, collision) && allowlistedNameToken("composer") != nil && allowlistedNameToken("arbitrary-user-text") == nil
 }
 
+private func probeExecutablePath() -> String {
+  URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL.path
+}
+
+/// Mirror desktop AppState+Permissions: prompt this process, then open the
+/// Sequoia Accessibility Settings pane when the API no longer shows a dialog.
+private func requestAccessibilityTrust() -> (trusted: Bool, settingsOpened: Bool) {
+  if AXIsProcessTrusted() {
+    return (true, false)
+  }
+  let options =
+    [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+  let trusted = AXIsProcessTrustedWithOptions(options)
+  var settingsOpened = false
+  if !trusted {
+    if let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    {
+      settingsOpened = NSWorkspace.shared.open(url)
+    }
+  }
+  return (AXIsProcessTrusted(), settingsOpened)
+}
+
+private func emitTrustRequest(trusted: Bool, settingsOpened: Bool) {
+  let payload: [String: Any] = [
+    "schema": "omi.native-semantic-trust-request.v1",
+    "axTrusted": trusted,
+    "settingsOpened": settingsOpened,
+    "probePath": probeExecutablePath(),
+  ]
+  if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+    let text = String(data: data, encoding: .utf8)
+  {
+    print(text)
+  }
+}
+
 private func allowlistedNameToken(_ value: String) -> String? {
   let lower = value.lowercased()
   return allowedNames.contains(lower) ? bounded(lower) : nil
@@ -763,6 +807,15 @@ do {
     let passed = selfTest()
     print("{\"schema\":\"omi.native-semantic-self-test.v1\",\"passed\":\(passed ? "true" : "false")}")
     exit(passed ? 0 : 1)
+  }
+  if options.requestTrust {
+    let result = requestAccessibilityTrust()
+    emitTrustRequest(trusted: result.trusted, settingsOpened: result.settingsOpened)
+    if result.trusted {
+      exit(0)
+    }
+    fputs("accessibility-not-trusted: enable this probe in System Settings > Privacy & Security > Accessibility: \(probeExecutablePath())\n", stderr)
+    exit(1)
   }
   do {
     emit(try run(options), json: options.json)

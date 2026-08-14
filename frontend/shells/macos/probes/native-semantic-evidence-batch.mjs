@@ -200,6 +200,18 @@ function safeEnvironment() {
   const allowed = ["PATH", "LANG", "LC_ALL", "DEVELOPER_DIR", "SDKROOT"];
   return Object.fromEntries(allowed.filter((key) => process.env[key]).map((key) => [key, process.env[key]]));
 }
+function ensureProbeAccessibilityTrust(probePath) {
+  const result = spawnSync(probePath, ["--request-trust", "--json"], {
+    cwd: coreRoot,
+    env: safeEnvironment(),
+    encoding: "utf8",
+    timeout: 15_000,
+  });
+  let document = null;
+  try { document = JSON.parse(result.stdout || "{}"); } catch { /* classify below */ }
+  if (document?.axTrusted === true) return;
+  fail(`Accessibility is not trusted for this probe. Enable the compiled probe in System Settings > Privacy & Security > Accessibility. Exact probe path: ${probePath}`);
+}
 function fixtureQuery(coordinate) {
   return new URLSearchParams({ polish: "1", qa: coordinate.domain, state: coordinate.state, platform: "desktop", theme: coordinate.theme, width: coordinate.width, accessibility: coordinate.accessibility, locale: "en-US" }).toString();
 }
@@ -499,6 +511,7 @@ async function capture(args, manifestPath, manifest, outRoot, preparedPath) {
     process.exitCode = 3;
     return;
   }
+  ensureProbeAccessibilityTrust(prepared.probePath);
   const command = commandText(manifestPath, outRoot, preparedPath, offset, limit, Boolean(args.replay_proof), readinessTimeoutMs);
   const records = {}; const replayMembers = {}; const captureRoot = path.join(outRoot, "captures", "macos"); mkdirSync(captureRoot, { recursive: true });
   const stdoutLine = `NATIVE_SEMANTIC_BATCH_COMPLETE members=${limit}\n`;

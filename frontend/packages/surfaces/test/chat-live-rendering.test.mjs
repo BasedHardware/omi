@@ -44,6 +44,7 @@ class RenderedDomainChat {
   active = [];
   sent = [];
   cancelled = [];
+  approvals = [];
   deliveries = [];
   timelines = [];
   dead = [];
@@ -102,6 +103,7 @@ class RenderedDomainChat {
     this.notify();
   }
   async cancelGeneration(generationId) { this.cancelled.push(generationId); }
+  async resolveApproval(resolution) { this.approvals.push(resolution); this.notify(); }
   pushDelta() {
     this.active = [{ ...this.active[0], text: "First second" }];
     this.notify();
@@ -176,6 +178,7 @@ class JournalFirstRaceChatStore {
   async deadLetters() { return []; }
   async discardDeadLetter() {}
   async cancel() {}
+  async resolveApproval() {}
   admitCanonical(text) {
     this.messages = [
       {
@@ -940,12 +943,182 @@ test("agent activity renders safe capability, context, two tools, approval statu
     assert.equal(timeline.querySelectorAll('[data-agent-event="recovery"]').length, 1);
     assert.equal(timeline.querySelectorAll('[data-agent-event="usage"]').length, 1);
     assert.equal(timeline.querySelectorAll('[data-agent-event="terminal"]').length, 1);
-    assert.ok(timeline.textContent.includes(EN_MESSAGES["chat.agentApprovalNoAction"]));
-    assert.equal(timeline.querySelector("button"), null, "approval receipt cannot mint an unratified action");
+    assert.equal(timeline.querySelector("[data-approval-pending]"), null, "resolved approval does not keep Allow/Deny/Cancel");
     assert.doesNotMatch(
       timeline.textContent,
       /callId|approvalId|eventId|runId|opaque|rawArguments|chain.of.thought/iu,
     );
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("successful gateway turn shows Context preview, a local test gateway, and no raw memory ids", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const now = Date.UTC(2026, 7, 7, 12, 0, 0);
+  const store = {
+    status: () => status(),
+    subscribe() { return () => {}; },
+    async refresh() {},
+    async history() {
+      return {
+        messages: [{
+          role: "assistant",
+          text: "Keep the review short.",
+          delivery: {
+            kind: "canonical",
+            serverId: "gateway-success-assistant",
+            clientMessageId: null,
+            generationOutcome: "completed",
+          },
+          attachments: [],
+          agentRun: {
+            state: "complete",
+            events: [
+              {
+                sequence: 1, createdAt: now, kind: "capability_receipt",
+                safeSummary: "Loopback gateway declared",
+                details: { tier: "unknown", adapter: "omi-llm-gateway", deterministic: false },
+              },
+              {
+                sequence: 2, createdAt: now + 1, kind: "context_receipt",
+                safeSummary: "Saved context selected",
+                details: {
+                  sourceKind: "memory",
+                  redactedPreview: "Review checklist preference",
+                  tokenEstimate: 18,
+                  inclusionReason: "Relevant to the handoff question",
+                  policyDecision: "included",
+                },
+              },
+              {
+                sequence: 3, createdAt: now + 2, kind: "terminal",
+                safeSummary: "Response complete",
+                details: {
+                  terminalOutcome: "completed",
+                  terminalCode: "completed",
+                  retryable: false,
+                  recoveryAction: null,
+                },
+              },
+            ],
+          },
+        }],
+        hasOlder: false,
+        olderCursor: null,
+      };
+    },
+    async loadOlder() { return { messages: [], hasOlder: false, olderCursor: null }; },
+    async send() {},
+    capabilities() {
+      return { maxAttachmentsPerMessage: 2, maxAttachmentBytes: 10_000, allowedAttachmentMimeTypes: ["application/pdf"] };
+    },
+    stagingAvailable() { return false; },
+    async stageAttachment() { return null; },
+    async deadLetters() { return []; },
+    async discardDeadLetter() {},
+    async cancel() {},
+    async resolveApproval() {},
+  };
+  const rendered = await renderComponent(ChatProduction, { store });
+  try {
+    const timeline = rendered.container.querySelector(".chat-agent-run");
+    assert.ok(timeline);
+    assert.ok(timeline.textContent.includes(EN_MESSAGES["chat.agentLocalTestGateway"]));
+    assert.equal(timeline.textContent.includes(EN_MESSAGES["chat.agentUnknown"]), false);
+    assert.equal(timeline.textContent.includes(EN_MESSAGES["chat.agentProvider"]), false);
+    assert.equal(timeline.textContent.includes(EN_MESSAGES["chat.agentScripted"]), false);
+    assert.ok(timeline.textContent.includes("Context: Review checklist preference"));
+    assert.doesNotMatch(timeline.textContent, /mem1_|cit1_/u);
+    assert.doesNotMatch(rendered.container.textContent, /mem1_|cit1_/u);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("pending approval shows Allow, Deny, and Cancel that call resolveApproval", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const now = Date.UTC(2026, 7, 7, 12, 0, 0);
+  const resolutions = [];
+  let history = {
+    messages: [{
+      role: "assistant",
+      text: "Waiting for a scoped approval.",
+      delivery: {
+        kind: "canonical",
+        serverId: "approval-pending-assistant",
+        clientMessageId: null,
+        generationOutcome: null,
+      },
+      attachments: [],
+      agentRun: {
+        state: "observing",
+        events: [
+          {
+            sequence: 1, createdAt: now, kind: "capability_receipt",
+            safeSummary: "Loopback gateway declared",
+            details: { tier: "unknown", adapter: "omi-llm-gateway", deterministic: false },
+          },
+          {
+            sequence: 2, createdAt: now + 1, kind: "approval_requested",
+            safeSummary: "Approval requested for a scoped write",
+            details: { reason: "A scoped approval is required.", expiresAt: now + 60_000 },
+          },
+        ],
+      },
+    }],
+    hasOlder: false,
+    olderCursor: null,
+  };
+  const listeners = new Set();
+  const store = {
+    status: () => status(),
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    async refresh() {},
+    async history() { return history; },
+    async loadOlder() { return { messages: [], hasOlder: false, olderCursor: null }; },
+    async send() {},
+    capabilities() {
+      return { maxAttachmentsPerMessage: 2, maxAttachmentBytes: 10_000, allowedAttachmentMimeTypes: ["application/pdf"] };
+    },
+    stagingAvailable() { return false; },
+    async stageAttachment() { return null; },
+    async deadLetters() { return []; },
+    async discardDeadLetter() {},
+    async cancel() {},
+    async resolveApproval(resolution) {
+      resolutions.push(resolution);
+      const events = history.messages[0].agentRun.events;
+      history = {
+        ...history,
+        messages: [{
+          ...history.messages[0],
+          agentRun: {
+            state: "observing",
+            events: [
+              ...events,
+              {
+                sequence: 3, createdAt: now + 2, kind: "approval_resolved",
+                safeSummary: "Approval resolved",
+                details: { resolution },
+              },
+            ],
+          },
+        }],
+      };
+      for (const listener of listeners) listener();
+    },
+  };
+  const rendered = await renderComponent(ChatProduction, { store });
+  try {
+    const pending = rendered.container.querySelector("[data-approval-pending]");
+    assert.ok(pending);
+    assert.equal(pending.querySelector('[data-approval-action="approved"]').textContent, EN_MESSAGES["chat.agentApprovalAllow"]);
+    assert.equal(pending.querySelector('[data-approval-action="denied"]').textContent, EN_MESSAGES["chat.agentApprovalDeny"]);
+    assert.equal(pending.querySelector('[data-approval-action="cancelled"]').textContent, EN_MESSAGES["common.cancel"]);
+    await click(rendered, pending.querySelector('[data-approval-action="denied"]'));
+    assert.deepEqual(resolutions, ["denied"]);
+    assert.equal(rendered.container.querySelector("[data-approval-pending]"), null);
   } finally {
     await rendered.cleanup();
   }

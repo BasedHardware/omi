@@ -76,6 +76,17 @@ test("RED-PROOF fixture and headed click-through cannot enter the registered res
   assert.doesNotMatch(stack, /--fixture|--headed|OMI_HEADED|screencapture|screenshot/);
 });
 
+test("RED-PROOF headed Chat uses a disclosed local test gateway, never production or scripted source", () => {
+  assert.match(stack, /local-test-gateway\.mjs/);
+  assert.match(stack, /OMI_LLM_GATEWAY_URL="\$GATEWAY_URL"/);
+  assert.match(stack, /OMI_LLM_GATEWAY_SERVICE_TOKEN="\$GATEWAY_TOKEN"/);
+  assert.match(stack, /local test gateway/);
+  assert.match(stack, /never a production model, never the production API host/);
+  assert.doesNotMatch(stack, /https:\/\/api\.omi\.me/);
+  assert.doesNotMatch(stack, /createScriptedChatGenerationSource/);
+  assert.equal(existsSync(new URL("./local-test-gateway.mjs", import.meta.url)), true);
+});
+
 test("RED-PROOF native result bytes stay exact and launcher outcomes stay separate", () => {
   assert.doesNotMatch(stack, /stamp-shell/);
   assert.doesNotMatch(evidenceCli, /command === "stamp-shell"/);
