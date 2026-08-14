@@ -420,17 +420,21 @@ enum LocalAgentProviderRouting {
     let effectiveExplicit = explicit ?? (treatRequestedAsExplicit ? requestedProvider : nil)
 
     if let effectiveExplicit {
-      let availability = LocalAgentProviderDetector.availability(
+      let readiness = AgentProviderHealth.report(
         for: effectiveExplicit,
         environment: environment,
         fileManager: fileManager,
         homeDirectory: homeDirectory
       )
-      guard availability.isAvailable else {
+      guard readiness.readiness == .ready else {
         return .setupRequired(
           provider: effectiveExplicit,
-          prompt: availability.setupPrompt,
-          spokenStatus: availability.spokenInstallGuide
+          prompt: readiness.detail.isEmpty
+            ? "I don't see \(effectiveExplicit.displayName) installed. Install it with `\(effectiveExplicit.installCommand)`, then run `\(effectiveExplicit.loginCommand)`."
+            : readiness.detail,
+          spokenStatus: readiness.detail.isEmpty
+            ? "I don't see \(effectiveExplicit.displayName) installed. Check the chat for the installation steps."
+            : readiness.detail
         )
       }
       let resolvedTitle = normalizedTitle(title, provider: effectiveExplicit)
@@ -456,7 +460,7 @@ enum LocalAgentProviderRouting {
 
     let orderedProviders = preferredProviders(for: taskKind)
     let availableProviders = orderedProviders.filter {
-      LocalAgentProviderDetector.isAvailable(
+      AgentProviderHealth.isReady(
         $0,
         environment: environment,
         fileManager: fileManager,
@@ -471,7 +475,7 @@ enum LocalAgentProviderRouting {
     // Exception: if the model's pick isn't installed and we DO have an
     // installed fallback, speak the fallback note so the user knows.
     if taskKind != .general, let requestedProvider,
-      !LocalAgentProviderDetector.isAvailable(
+      !AgentProviderHealth.isReady(
         requestedProvider,
         environment: environment,
         fileManager: fileManager,
@@ -570,7 +574,7 @@ enum LocalAgentProviderRouting {
     }
     let availableHarnesses = preferredProviders(for: taskKind)
       .filter {
-        LocalAgentProviderDetector.isAvailable(
+        AgentProviderHealth.isReady(
           $0,
           environment: environment,
           fileManager: fileManager,

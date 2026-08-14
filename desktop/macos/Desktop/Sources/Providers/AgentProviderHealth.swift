@@ -112,4 +112,26 @@ enum AgentProviderHealth {
   static func reportsForAllProviders() -> [AgentProviderHealthReport] {
     [.codex, .openclaw, .hermes].map { report(for: $0) }
   }
+
+  /// The single readiness predicate for spawn routing, fallback-chain
+  /// construction, and runtime env seeding. Unlike
+  /// `LocalAgentProviderDetector.isAvailable` (binary exists), this is true
+  /// only when the provider is installed AND wired AND authed, so a Codex
+  /// binary with no bridge or no sign-in never gets handed a task the
+  /// adapter would fail on.
+  static func isReady(
+    for provider: AgentPillsManager.DirectedProvider,
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    fileManager: FileManager = .default,
+    homeDirectory: String = NSHomeDirectory(),
+    searchDirectories: [String]? = nil
+  ) -> Bool {
+    report(
+      for: provider,
+      environment: environment,
+      fileManager: fileManager,
+      homeDirectory: homeDirectory,
+      searchDirectories: searchDirectories
+    ).readiness == .ready
+  }
 }

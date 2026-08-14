@@ -2773,8 +2773,11 @@ actor AgentRuntimeProcess {
 
     // The same injected PATH/home contract used by the testable detector feeds
     // the Node registry. PTT receives only the registry projection later; it
-    // never performs a competing executable lookup of its own.
+    // never performs a competing executable lookup of its own. Each adapter is
+    // seeded only when it is health-ready (installed AND wired AND authed), so
+    // a Codex binary with no bridge or no sign-in never gets registered.
     if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      AgentProviderHealth.isReady(for: .hermes, environment: env, homeDirectory: home),
       case .available(command: let hermes) = LocalAgentProviderDetector.availability(
         for: .hermes,
         environment: env,
@@ -2785,6 +2788,7 @@ actor AgentRuntimeProcess {
     }
 
     if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      AgentProviderHealth.isReady(for: .openclaw, environment: env, homeDirectory: home),
       case .available(command: let openClaw) = LocalAgentProviderDetector.availability(
         for: .openclaw,
         environment: env,
@@ -2795,6 +2799,7 @@ actor AgentRuntimeProcess {
     }
 
     if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      AgentProviderHealth.isReady(for: .codex, environment: env, homeDirectory: home),
       case .available(command: let codex) = LocalAgentProviderDetector.availability(
         for: .codex,
         environment: env,

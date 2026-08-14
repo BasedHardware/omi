@@ -332,4 +332,119 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
       plan.selectedProvider, .codex,
       "without explicit intent, task-based ranking should pick codex for coding, not the model's openclaw")
   }
+
+  // MARK: - Health-ready routing
+
+  /// A Codex binary on disk must NOT route to spawn until it is wired and
+  /// authed. `AgentProviderHealth` is the authority: binary + codex-acp
+  /// bridge + credentials, not just "the executable exists".
+  func testCodexBinaryWithoutBridgeOrAuthIsSetupRequired() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("codex-no-bridge-\(UUID().uuidString)", isDirectory: true)
+    let bin = tempDir.appendingPathComponent("bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let codexPath = bin.appendingPathComponent("codex")
+    FileManager.default.createFile(atPath: codexPath.path, contents: Data("#!/bin/sh\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codexPath.path)
+
+    let env = ["PATH": bin.path, "HOME": tempDir.path]
+    let resolution = LocalAgentProviderRouting.resolveSpawn(
+      brief: "write a script",
+      requestedProvider: .codex,
+      userRequestText: "use codex to write a script",
+      title: nil,
+      environment: env,
+      fileManager: FileManager(),
+      homeDirectory: tempDir.path
+    )
+
+    guard case .setupRequired(let provider, let prompt, _) = resolution else {
+      return XCTFail("Expected setupRequired for codex with a bare binary, got \(resolution)")
+    }
+    XCTAssertEqual(provider, .codex)
+    XCTAssertTrue(
+      prompt.contains("codex-acp") || prompt.contains("Codex"),
+      "setup prompt should point at what's missing, got: \(prompt)")
+  }
+
+  /// A wired-and-authed Codex routes to spawn.
+  func testCodexWiredAndAuthedRoutesToSpawn() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("codex-ready-\(UUID().uuidString)", isDirectory: true)
+    let bin = tempDir.appendingPathComponent("bin", isDirectory: true)
+    let home = tempDir.appendingPathComponent("home", isDirectory: true)
+    let codexDotDir = home.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: codexDotDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    for name in ["codex", "codex-acp"] {
+      let path = bin.appendingPathComponent(name)
+      FileManager.default.createFile(atPath: path.path, contents: Data("#!/bin/sh\n".utf8))
+      try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path.path)
+    }
+    FileManager.default.createFile(
+      atPath: codexDotDir.appendingPathComponent("auth.json").path,
+      contents: Data("{}".utf8))
+
+    let env = ["PATH": bin.path, "HOME": home.path]
+    let resolution = LocalAgentProviderRouting.resolveSpawn(
+      brief: "write a script",
+      requestedProvider: .codex,
+      userRequestText: "use codex to write a script",
+      title: nil,
+      environment: env,
+      fileManager: FileManager(),
+      homeDirectory: home.path
+    )
+
+    guard case .spawn(let plan) = resolution else {
+      return XCTFail("Expected spawn for wired+authed codex, got \(resolution)")
+    }
+    XCTAssertEqual(plan.selectedProvider, .codex)
+  }
+
+  /// Auto-routing (no explicit provider) must exclude a bare Codex binary from
+  /// the fallback chain the same way it is excluded from spawn selection.
+  func testAutoRoutingExcludesBareCodexBinaryFromFallbackChain() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("codex-auto-\(UUID().uuidString)", isDirectory: true)
+    let bin = tempDir.appendingPathComponent("bin", isDirectory: true)
+    let home = tempDir.appendingPathComponent("home", isDirectory: true)
+    let hermesDotDir = home.appendingPathComponent(".hermes", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: hermesDotDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    // Hermes is fully ready (binary only — no auth gate).
+    let hermesPath = bin.appendingPathComponent("hermes")
+    FileManager.default.createFile(atPath: hermesPath.path, contents: Data("#!/bin/sh\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hermesPath.path)
+
+    // Codex is a bare binary: present but not wired/authed.
+    let codexPath = bin.appendingPathComponent("codex")
+    FileManager.default.createFile(atPath: codexPath.path, contents: Data("#!/bin/sh\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codexPath.path)
+
+    let env = ["PATH": bin.path, "HOME": home.path]
+    let resolution = LocalAgentProviderRouting.resolveSpawn(
+      brief: "write a script",
+      requestedProvider: nil,
+      userRequestText: "write a script",
+      title: nil,
+      environment: env,
+      fileManager: FileManager(),
+      homeDirectory: home.path
+    )
+
+    guard case .spawn(let plan) = resolution else {
+      return XCTFail("Expected spawn via ready hermes, got \(resolution)")
+    }
+    XCTAssertEqual(plan.selectedProvider, .hermes)
+    XCTAssertFalse(
+      plan.context.fallbackChain.contains(.codex),
+      "bare codex binary must not appear in the fallback chain")
+  }
 }
