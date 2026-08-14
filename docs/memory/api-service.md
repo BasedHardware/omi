@@ -18,6 +18,8 @@ The response identifies `omi_backend`, the canonical `memory_items` collection, 
 
 `GET /v1/memory/platform/search` accepts `query`, `limit`, and `offset`. The authenticated user session determines the tenant. Query strings are limited to 500 characters, `limit` to 500 results (default 100), and `offset` to 100,000.
 
+`limit` and `offset` bound the returned page, not the server-side scan: a search still evaluates the user's canonical `memory_items` to compute the full match set before paging. The parameters are a page-size contract for the response, not a request-cost bound, so very large memory histories still incur a full per-user scan per request. Keep queries scoped and rely on the route rate limit for load control.
+
 ```bash
 curl "https://api.omi.me/v1/memory/platform/search?query=launch&limit=20" \
   -H "Authorization: Bearer $OMI_SESSION"

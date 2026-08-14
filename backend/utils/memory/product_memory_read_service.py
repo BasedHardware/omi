@@ -41,6 +41,10 @@ def fetch_default_product_memory_search(
     authoritative canonical-item iterator internally, while this released
     product seam delegates the final mixed-origin view back to the universal
     repository.
+
+    ``limit``/``offset`` bound only the returned page over the full per-user scan;
+    they are not backend work bounds (keyword matching runs in memory after the
+    authoritative items are streamed).
     """
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)

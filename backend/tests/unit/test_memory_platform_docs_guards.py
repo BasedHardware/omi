@@ -25,6 +25,12 @@ def test_api_service_doc_quotes_the_limit_the_read_service_enforces():
     assert f'`limit` to {match.group(1)} results' in doc
 
 
+def test_api_service_doc_is_explicit_that_limit_bounds_the_page_not_the_scan():
+    doc = (DOCS_DIR / 'api-service.md').read_text()
+    assert 'not the server-side scan' in doc
+    assert 'page-size contract for the response, not a request-cost bound' in doc
+
+
 def test_published_embed_examples_use_a_sandbox_the_frame_cannot_remove():
     for doc in sorted(DOCS_DIR.glob('*.md')):
         for tokens in re.findall(r'sandbox="([^"]*)"', doc.read_text()):
