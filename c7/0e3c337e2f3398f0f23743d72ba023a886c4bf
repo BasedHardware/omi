@@ -1,0 +1,35 @@
+desktop/context-for-claude/Tests/ContextMCPKitTests/ToolsTests.swift
+  s_830a75a8050e25::t_412b0973b507a9 269-284,286-287
+desktop/context-for-claude/Tests/ContextMCPKitTests/CredentialRefreshTests.swift
+  s_830a75a8050e25::t_42940389e0cf67 167-168,172,180-184
+  s_830a75a8050e25::t_cae9e3a7c5f8d7 1-166,169-171,173-179,185-249
+desktop/context-for-claude/Sources/ContextMCPKit/OmiBackend.swift
+  s_830a75a8050e25::t_d5f835cf89fa42 744-749,758
+  s_830a75a8050e25::t_fb985cf4d5c8bc 450,454
+  s_830a75a8050e25::t_2c0e4d49685916 785-793,795,797,800-807
+  s_830a75a8050e25::t_20d2ccaecda5ad 430
+  s_830a75a8050e25::t_7e9eb7d6a3c2c1 831-841,843,849-876
+  s_830a75a8050e25::t_406f75f8be6eb0 69-87
+  s_830a75a8050e25::t_52acdfc20debb9 877,1008-1062,1068,1075,1079-1087,1095,1100
+  s_830a75a8050e25::t_5281036401b25b 197-203
+  s_830a75a8050e25::t_886d02814364fe 124-147
+  s_830a75a8050e25::t_0fbbd7a7cb2ac7 819
+  s_830a75a8050e25::t_de7c2116e2ca10 467-480,483
+  s_830a75a8050e25::t_e4ae48a7dfbb13 878
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c70e3c337e2f3398f0f23743d72ba023a886c4bf",
+  "prompts": {},
+  "sessions": {
+    "s_830a75a8050e25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c76762c9-b116-4248-8786-3ab36dd6ee16",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
