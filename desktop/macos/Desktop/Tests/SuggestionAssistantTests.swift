@@ -82,10 +82,10 @@ final class SuggestionGatePolicyTests: XCTestCase {
     XCTAssertEqual(decision, .skippedExcludedApp)
   }
 
-  /// Maximum (5) is the "nudge me in seconds" demo mode: 10 s dwell. Everything below —
+  /// Maximum (5) is the "nudge me in seconds" demo mode: 4 s dwell. Everything below —
   /// including Balanced (3) — keeps the deliberate 30 s so ordinary use is unchanged.
-  func testDwellIsTenSecondsOnlyAtMaximumLevel() {
-    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 5), 10)
+  func testDwellIsFourSecondsOnlyAtMaximumLevel() {
+    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 5), 4)
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 4), 30)
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 3), 30)
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 0), 30)
@@ -93,8 +93,8 @@ final class SuggestionGatePolicyTests: XCTestCase {
 
   /// Maximum caps the between-nudge cooldown at 30 s; other levels keep the user's
   /// configured value (180 s default) untouched.
-  func testCooldownCapsAtThirtySecondsOnlyAtMaximumLevel() {
-    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 5), 30)
+  func testCooldownCapsAtTwentySecondsOnlyAtMaximumLevel() {
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 5), 20)
     XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 20, frequencyLevel: 5), 20)
     XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 4), 180)
     XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 3), 180)
@@ -799,5 +799,103 @@ final class SuggestionProbeCaptureRaceTests: XCTestCase {
     XCTAssertTrue(allows(before: nil, after: nil))
     XCTAssertTrue(allows(before: "Google Chrome", after: nil))
     XCTAssertFalse(allows(before: nil, after: "1Password"))
+  }
+}
+
+final class SuggestionPacingTests: XCTestCase {
+  /// Maximum (5) is the demo-grade cadence: nudge within seconds, repeat under half a
+  /// minute. Every other level must keep the long-standing calm defaults untouched.
+  func testMaximumLevelPacesFastEveryOtherLevelStaysCalm() {
+    XCTAssertEqual(SuggestionPacing.requiredDwell(frequencyLevel: 5), 4)
+    XCTAssertEqual(SuggestionPacing.settleInterval(frequencyLevel: 5), 2)
+    XCTAssertEqual(SuggestionPacing.cooldown(base: 180, frequencyLevel: 5), 20)
+    XCTAssertEqual(SuggestionPacing.dailyEvaluationBudget(frequencyLevel: 5), 600)
+    XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.85, frequencyLevel: 5), 0.65)
+    XCTAssertEqual(SuggestionPacing.dedupMemory(frequencyLevel: 5), 0)
+
+    for level in [0, 1, 2, 3, 4] {
+      XCTAssertEqual(SuggestionPacing.requiredDwell(frequencyLevel: level), 30)
+      XCTAssertEqual(SuggestionPacing.settleInterval(frequencyLevel: level), 6)
+      XCTAssertEqual(SuggestionPacing.cooldown(base: 180, frequencyLevel: level), 180)
+      XCTAssertEqual(SuggestionPacing.dailyEvaluationBudget(frequencyLevel: level), 40)
+      XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.85, frequencyLevel: level), 0.85)
+      XCTAssertEqual(SuggestionPacing.dedupMemory(frequencyLevel: level), 10)
+    }
+  }
+
+  /// A user-configured value already below the Maximum cap is respected, not raised.
+  func testMaximumCapsNeverRaiseUserConfiguredValues() {
+    XCTAssertEqual(SuggestionPacing.cooldown(base: 10, frequencyLevel: 5), 10)
+    XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.6, frequencyLevel: 5), 0.6)
+  }
+
+  /// Maximum keeps the context armed after an evaluation so staying on one feed keeps
+  /// nudging; calm levels stay one-shot per arrival.
+  func testOnlyMaximumRearmsAfterEvaluation() {
+    XCTAssertTrue(SuggestionPacing.rearmsAfterEvaluation(frequencyLevel: 5))
+    for level in [0, 1, 2, 3, 4] {
+      XCTAssertFalse(SuggestionPacing.rearmsAfterEvaluation(frequencyLevel: level))
+    }
+  }
+
+  /// Maximum forces a real frame every base heartbeat; calm levels keep the preview path.
+  func testOnlyMaximumForcesHeartbeatCapture() {
+    XCTAssertTrue(SuggestionPacing.forcesHeartbeatCapture(frequencyLevel: 5))
+    for level in [0, 1, 2, 3, 4] {
+      XCTAssertFalse(SuggestionPacing.forcesHeartbeatCapture(frequencyLevel: level))
+    }
+  }
+
+  /// Fresh context at Maximum waives leftover cooldown; same-context repeats stay paced,
+  /// and calm levels never waive.
+  func testMaximumWaivesCooldownOnlyForFreshContext() {
+    let last = Date(timeIntervalSince1970: 1_000_000)
+    let freshAnchor = last.addingTimeInterval(5)
+    let staleAnchor = last.addingTimeInterval(-40)
+    XCTAssertNil(
+      SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: last, anchor: freshAnchor, frequencyLevel: 5))
+    XCTAssertEqual(
+      SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: last, anchor: staleAnchor, frequencyLevel: 5), last)
+    XCTAssertEqual(
+      SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: last, anchor: freshAnchor, frequencyLevel: 3), last)
+  }
+
+  /// The trigger's own idle check must honor the level-aware window: at Maximum with
+  /// 120s of stillness a heartbeat capture is still reachable; calm levels skip at 60s.
+  func testMaximumIdleOverrideReachesHeartbeatCaptureAtTwoMinutesStill() {
+    var trigger = ProactiveCaptureTrigger(idleThreshold: 60, heartbeatInterval: 9)
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    // Prime the context (first sight of the app is a capture).
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "TikTok", windowTitle: "For You", idleSeconds: 0, now: t0,
+        forceHeartbeatCapture: true,
+        idleThresholdOverride: SuggestionPacing.captureIdleThreshold(frequencyLevel: 5, base: 60)),
+      .capture)
+    // Two minutes of stillness later: Maximum still captures on heartbeat…
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "TikTok", windowTitle: "For You", idleSeconds: 120, now: t0.addingTimeInterval(10),
+        forceHeartbeatCapture: true,
+        idleThresholdOverride: SuggestionPacing.captureIdleThreshold(frequencyLevel: 5, base: 60)),
+      .capture)
+    // …while a calm level's unchanged 60s threshold skips.
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "TikTok", windowTitle: "For You", idleSeconds: 120, now: t0.addingTimeInterval(20),
+        idleThresholdOverride: SuggestionPacing.captureIdleThreshold(frequencyLevel: 3, base: 60)),
+      .skip)
+  }
+
+  /// Passive watching produces no input; Maximum keeps capture alive for five minutes of
+  /// stillness while calmer levels keep the long-standing 60s gate.
+  func testMaximumExtendsCaptureIdleWindowOnly() {
+    XCTAssertEqual(SuggestionPacing.captureIdleThreshold(frequencyLevel: 5, base: 60), 300)
+    for level in [0, 1, 2, 3, 4] {
+      XCTAssertEqual(SuggestionPacing.captureIdleThreshold(frequencyLevel: level, base: 60), 60)
+    }
   }
 }
