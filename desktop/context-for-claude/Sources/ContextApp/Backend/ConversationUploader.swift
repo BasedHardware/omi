@@ -14,9 +14,19 @@ import Foundation
 /// did not — a queue can retry it, which is not true of a stream.
 ///
 /// **Why `source: "phone"`.** It is the source the backend treats as "a transcript arrived,
-/// process it": memories are extracted immediately. `"desktop"` defers extraction lazily *and*
-/// opts the session into the desktop trial paywall, which can hard-close it — a conversation that
-/// silently never produces memories is worse than no upload at all.
+/// process it": memories are extracted immediately. `"desktop"` can defer that extraction until
+/// the user first opens the conversation, and a conversation that silently never produces memories
+/// is worse than no upload at all.
+///
+/// The deferral is a *cost policy*, not a property of the source: `should_defer_desktop_processing`
+/// only defers for accounts on the free desktop tier without BYOK, so a desktop-entitled plan
+/// (Operator / Architect) runs the identical pipeline under either source. `"desktop"` is therefore
+/// not an escape hatch from a backend refusal that happens during processing — verified live: while
+/// the backend answered `503 Memory writes are globally paused`, one real session posted as
+/// `"desktop"` got the same 503, because `process_conversation` reaches the same fail-closed
+/// `_extract_memories`. The trial paywall that source also opts into is off by default
+/// (`TRIAL_PAYWALL_ENABLED`) and exempts desktop-entitled plans, so it is not the reason to avoid
+/// `"desktop"` — the deferral is.
 ///
 /// Everything else here follows from one rule: **nothing the user said is ever dropped.** Not while
 /// they are signed out, not across a crash, not when the backend is down. The queue is on disk
@@ -582,7 +592,8 @@ private enum UploadPayload {
             UploadRequestBody(
                 transcriptSegments: segments,
                 clientSessionId: clientSessionId,
-                // See the type doc: "phone" is the source that gets memories extracted now.
+                // See the type doc: "phone" is the source that gets memories extracted now, and
+                // "desktop" buys nothing when the backend refuses mid-processing.
                 source: "phone",
                 startedAt: UploadPayload.iso(startedAt),
                 finishedAt: UploadPayload.iso(finishedAt),

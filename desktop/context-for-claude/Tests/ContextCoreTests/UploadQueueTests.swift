@@ -165,6 +165,54 @@ final class UploadQueueTests: XCTestCase {
             [queued])
     }
 
+    // MARK: - What the spine reads
+
+    /// The read the Activity panel composes from, and it answers two questions at once: which
+    /// account conversation a session became, and — the half that was missing — whether a session
+    /// with no conversation yet is still *owed* to an account.
+    ///
+    /// Without the second half the panel could not tell a session waiting on an upload from a
+    /// session nobody is ever going to upload, so it drew both as `Untitled conversation`. A blocked
+    /// queue then buried the day's real titles under placeholders for conversations the account was
+    /// about to name.
+    func testConversationLinksSeparatesLinkedFromStillOwedFromLocal() throws {
+        let linked = try closedSession(at: Fixture.base)
+        let owed = try closedSession(at: Fixture.base + 3600)
+        let parked = try closedSession(at: Fixture.base + 7200)
+        let nothingToUpload = try closedSession(at: Fixture.base + 10800)
+        let neverQueued = try closedSession(at: Fixture.base + 14400)
+
+        try UploadQueue.markPending(store, sessionId: linked, ownerId: owner)
+        try UploadQueue.markUploaded(store, sessionId: linked, conversationIds: ["c1", "c2"])
+        try UploadQueue.markPending(store, sessionId: owed, ownerId: owner)
+        // Captured while signed out: parked rather than owed to anybody, so nothing is coming for it
+        // until a sign-in claims it.
+        try UploadQueue.markPending(store, sessionId: parked, ownerId: nil)
+        try UploadQueue.markPending(store, sessionId: nothingToUpload, ownerId: owner)
+        try UploadQueue.markSkipped(store, sessionId: nothingToUpload, reason: "no transcript")
+
+        let links = try UploadQueue.conversationLinks(store)
+
+        XCTAssertEqual(links[linked], ["c1", "c2"], "the ids the backend handed back, in order")
+        XCTAssertEqual(links[owed], [], "held for an account, nothing back yet")
+        XCTAssertNil(links[parked], "nobody is going to upload this one")
+        XCTAssertNil(links[nothingToUpload], "terminal with nothing in the account to point at")
+        XCTAssertNil(links[neverQueued], "the queue has never heard of it")
+    }
+
+    /// A session that reached the account and was then given up on is still the same talk as the
+    /// conversation it became — the link outlives the entry's state, or the panel draws that
+    /// conversation twice.
+    func testConversationLinksKeepsTheLinkOfASkippedSessionThatAlreadyUploadedAPart() throws {
+        let sessionId = try closedSession(at: Fixture.base)
+        try UploadQueue.markPending(store, sessionId: sessionId, ownerId: owner)
+        try UploadQueue.markPartUploaded(
+            store, sessionId: sessionId, partsDone: 1, conversationId: "c1")
+        try UploadQueue.markSkipped(store, sessionId: sessionId, reason: "rest rejected")
+
+        XCTAssertEqual(try UploadQueue.conversationLinks(store)[sessionId], ["c1"])
+    }
+
     // MARK: - The count and the drain
 
     /// The invariant that makes the next bug of this shape visible instead of silent: whatever

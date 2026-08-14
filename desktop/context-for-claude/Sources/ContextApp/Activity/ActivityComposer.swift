@@ -55,18 +55,23 @@ enum ActivityComposer {
     ///
     /// - Parameters:
     ///   - sessions: every spoken session read so far, any order.
-    ///   - uploads: for each local session the uploader has posted, the Omi conversation ids it
-    ///     became — `UploadQueue.Entry.conversationIds`, keyed by session id. Empty when the caller
-    ///     has not read the queue; see `merge`, which then has only the clock to go on.
+    ///   - uploads: what the queue holds for each session it is answerable for — the Omi
+    ///     conversation ids that session became, or an empty list while it is still owed to an
+    ///     account (`UploadQueue.conversationLinks`, keyed by session id). Empty when the caller has
+    ///     not read the queue; see `merge`, which then has only the clock to go on.
     ///   - account: what the account answered. `.unreachable` contributes nothing and suppresses
     ///     nothing, which is what leaves a signed-out Mac showing the screen moments it does have.
     ///   - screen: per-day screen capture, keyed by the local start of the day.
+    ///   - isAirgapped: whether the upload queue is allowed to drain at all. Injected rather than
+    ///     read here so both answers are drivable in a test, exactly as `OmiActivityFeed` and
+    ///     `ActivityDetail` take it. See `merge` for what it decides.
     static func compose(
         sessions rawSessions: [SessionSummary],
         uploads: [Int64: [String]] = [:],
         account: ActivityAccountFeed = .unreachable,
         screen: [Date: ActivityDayScreen],
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        isAirgapped: () -> Bool = { NetworkEgress.isSuppressed(.conversationUpload) }
     ) -> [ActivityDay] {
         // **Every row id below is derived from a record id, so a repeated record is a repeated
         // SwiftUI identity** — which in a `ForEach` is not a cosmetic duplicate but undefined
@@ -78,7 +83,7 @@ enum ActivityComposer {
         let sessions = uniqued(rawSessions, by: \.id)
         let conversations = merge(
             account: uniqued(account.conversations, by: \.id), sessions: sessions,
-            uploads: uploads)
+            uploads: uploads, isAirgapped: isAirgapped)
 
         var conversationsByDay: [Date: [ActivityConversation]] = [:]
         for conversation in conversations {
@@ -169,17 +174,41 @@ enum ActivityComposer {
     /// **A local session with no counterpart at all survives too.** It is a real thing that happened
     /// on this Mac — the whole reason the store still reads `Queries.sessions` — and dropping it
     /// would make a signed-out user's day claim they had not spoken.
+    ///
+    /// **A session the queue is still holding for an account draws no row at all, and that is the
+    /// one place this differs from "no counterpart".** A local session has no title of its own —
+    /// titles are written by the account when the transcript is uploaded — so it draws
+    /// `ActivityConversation.untitled`, the same string an account conversation nobody named gets.
+    /// For a queued session that string is simply false: it is not untitled, it is *not yet
+    /// uploaded*, and on a Mac whose queue is blocked (a paused backend, a long backlog) the day
+    /// fills with placeholders that bury the conversations that do have titles — fifteen rows where
+    /// the shipping app shows nine, the top of the list all `Untitled conversation`. Each of those
+    /// rows is about to *become* the account conversation underneath it, so drawing it now is
+    /// drawing the same talk twice, once as a placeholder. Its screen moments still draw, on their
+    /// own run, so the stretch of day it happened in is not blank — and the menu bar keeps saying
+    /// "N conversations waiting to upload" (`ConversationUploader.pendingCount`), which is where a
+    /// backlog belongs.
+    ///
+    /// **Only while the queue can actually deliver it**, which is what `isAirgapped` decides. In
+    /// Airgap Mode nothing is ever going to be uploaded, and the account feed is suppressed too, so
+    /// suppressing these rows as well would leave that user an Activity panel with no conversations
+    /// on it whatsoever. Same reasoning as the unowned rows `UploadQueue.conversationLinks` declines
+    /// to report as owed: a session nothing is going to upload is local, and local sessions draw.
     static func merge(
         account: [ActivityAccountConversation],
         sessions: [SessionSummary],
-        uploads: [Int64: [String]] = [:]
+        uploads: [Int64: [String]] = [:],
+        isAirgapped: () -> Bool = { NetworkEgress.isSuppressed(.conversationUpload) }
     ) -> [ActivityConversation] {
         let known = account.map(ActivityConversation.init(account:))
         let accountIDs = Set(known.map(\.id))
         let windows = known.map { $0.startedAt...max($0.startedAt, $0.finishedAt) }
+        let queueCanDeliver = !isAirgapped()
         let unmatched = sessions.filter { session in
-            if let uploaded = uploads[session.id], !uploaded.isEmpty {
-                return !uploaded.contains(where: accountIDs.contains)
+            if let links = uploads[session.id] {
+                if !links.isEmpty { return !links.contains(where: accountIDs.contains) }
+                // Owed to an account and nothing has landed yet: no row of its own.
+                if queueCanDeliver { return false }
             }
             let local = ActivityConversation(session: session)
             let window = local.startedAt...max(local.startedAt, local.finishedAt)

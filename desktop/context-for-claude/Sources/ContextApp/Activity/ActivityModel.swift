@@ -253,13 +253,20 @@ struct ActivityConversation: Identifiable, Equatable, Sendable {
     /// counterpart for.**
     ///
     /// The spine in the main app composes from the account alone, so every row it draws has a title.
-    /// This app hears speech before — and without — an account: a session that has not been uploaded
-    /// yet, or that never will be because nobody is signed in, is still a real thing that happened
-    /// on this Mac, and dropping it would make a signed-out user's day claim they had not spoken.
-    /// So it gets a row, and the row is the plainest possible thing: the same `untitled` string the
-    /// account's own untitled conversations get, with the spoken-line count under it as the one
-    /// thing this half of the world actually knows. Nothing is synthesised — `context.db` stores
-    /// speech, not summaries, and the app the sound came through is not a title.
+    /// This app hears speech without an account: a session nobody is going to upload — because
+    /// nobody is signed in, because Airgap Mode is on, because the queue had nothing uploadable in
+    /// it — is still a real thing that happened on this Mac, and dropping it would make that user's
+    /// day claim they had not spoken. So it gets a row, and the row is the plainest possible thing:
+    /// the same `untitled` string the account's own untitled conversations get, with the spoken-line
+    /// count under it as the one thing this half of the world actually knows. Nothing is
+    /// synthesised — `context.db` stores speech, not summaries, and the app the sound came through
+    /// is not a title.
+    ///
+    /// **A session that is merely *waiting* to be uploaded never reaches this initialiser.** It has
+    /// no title for the same reason as the rest, but the reason is temporary and the string is not:
+    /// see `ActivityComposer.merge`, which leaves it out of the stream until the account has titled
+    /// it, rather than drawing "Untitled conversation" over a conversation that simply has not been
+    /// uploaded yet.
     ///
     /// **The window is derived from `durationSeconds`, not from `endedAt`.** A session that is still
     /// open has no `endedAt`, but it does have a last line, and `Queries.sessions` already resolves

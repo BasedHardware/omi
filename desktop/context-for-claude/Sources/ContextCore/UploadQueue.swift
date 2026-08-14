@@ -368,7 +368,8 @@ public enum UploadQueue {
         }
     }
 
-    /// Which account conversation each uploaded session became, for every session that reached one.
+    /// What the queue holds for each session it is still answerable for: the account conversations
+    /// that session has become so far, **empty while it is still owed to an account**.
     ///
     /// **This is how the spine knows that a session and an account conversation are the same talk.**
     /// The Activity panel composes conversation rows from two sources the reference composes from
@@ -384,7 +385,20 @@ public enum UploadQueue {
     /// A list per session, not one id, because a session past the endpoint's segment ceiling is
     /// uploaded as consecutive conversations; every part names the session it came from.
     ///
-    /// Owner-free on purpose, unlike everything else that reads this table. A conversation id is not
+    /// **The empty list is the second thing this read states, and it is a different fact from
+    /// absence.** A session queued and owed to an account is not an untitled conversation — it is a
+    /// conversation whose title has not been written yet, because the account writes titles and the
+    /// upload has not landed. The spine needs to tell that apart from a session nobody is going to
+    /// upload, and the queue is the only thing that knows. One query answers both halves: an entry
+    /// with ids is linked, an entry with none is still owed, and no entry at all means the queue has
+    /// nothing to say about that session (it was never enqueued, or it was `skipped` with nothing
+    /// uploadable in it — either way the session is local and stays local).
+    ///
+    /// A row with no `ownerId` is deliberately *not* reported as owed. Capture that happened while
+    /// signed out is parked rather than queued for anybody in particular (see `claimOrphans`), and
+    /// nothing is going to turn it into an account conversation until a sign-in claims it.
+    ///
+    /// Otherwise owner-free, unlike everything else that reads this table. A conversation id is not
     /// a credential and this read spends nothing — it only answers "is this row already on screen
     /// under another name". Scoping it to the signed-in account would make a signed-out panel draw
     /// the duplicates instead.
@@ -395,17 +409,17 @@ public enum UploadQueue {
                 db,
                 sql: """
                     SELECT sessionId, conversationIds FROM uploads
-                    WHERE conversationIds IS NOT NULL AND conversationIds <> ''
+                    WHERE (conversationIds IS NOT NULL AND conversationIds <> '')
+                       OR (state IN ('pending', 'failed') AND ownerId IS NOT NULL)
                     """)
             return rows.reduce(into: [Int64: [String]]()) { links, row in
-                guard
-                    let sessionId = row["sessionId"] as Int64?,
-                    let joined = row["conversationIds"] as String?
-                else { return }
+                guard let sessionId = row["sessionId"] as Int64? else { return }
                 // Split exactly as `entry(from:)` joins, so the two readings of this column can
                 // never disagree about what it holds.
-                let ids = joined.split(separator: ",").map(String.init).filter { !$0.isEmpty }
-                guard !ids.isEmpty else { return }
+                let ids = (row["conversationIds"] as String? ?? "")
+                    .split(separator: ",")
+                    .map(String.init)
+                    .filter { !$0.isEmpty }
                 links[sessionId] = ids
             }
         }

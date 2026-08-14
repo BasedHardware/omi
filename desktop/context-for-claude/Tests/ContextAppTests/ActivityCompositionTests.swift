@@ -97,15 +97,18 @@ final class ActivityCompositionTests: XCTestCase {
             id: id, text: text, completed: completed, at: timestamp.timeIntervalSince1970)
     }
 
+    /// - Parameter isAirgapped: stated rather than defaulted so no test in this file consults
+    ///   `ExclusionEngine.shared` — the answer would then depend on the machine the suite runs on.
     private func compose(
         sessions: [SessionSummary] = [],
         uploads: [Int64: [String]] = [:],
         account: ActivityAccountFeed = .unreachable,
-        screen: [Date: ActivityDayScreen] = [:]
+        screen: [Date: ActivityDayScreen] = [:],
+        isAirgapped: Bool = false
     ) -> [ActivityDay] {
         ActivityComposer.compose(
             sessions: sessions, uploads: uploads, account: account, screen: screen,
-            calendar: Self.calendar)
+            calendar: Self.calendar, isAirgapped: { isAirgapped })
     }
 
     /// The id a local session takes in the merged stream, so the assertions below read as the rule
@@ -664,6 +667,74 @@ final class ActivityCompositionTests: XCTestCase {
             "overlapping the wrong conversation is not being that conversation")
     }
 
+    /// **A session the queue is still holding is not untitled, it is not yet uploaded — and the
+    /// stream draws neither a title nor a placeholder for it.** Titles are written by the account
+    /// when the transcript lands, so a queued session can only draw `Untitled conversation`, the
+    /// string that means "nobody named this one". On the Mac this was found on, eighteen of the
+    /// day's twenty sessions were queued behind a paused backend and the panel showed fifteen rows
+    /// where the shipping app showed nine, the whole top of the list untitled and the real titles
+    /// buried underneath. Each of those rows is about to *become* the account conversation, so the
+    /// row is deferred rather than drawn twice.
+    ///
+    /// **What was on screen while it happened still draws**, on a run of its own — the stretch of
+    /// the day is accounted for, and the backlog itself is stated where a backlog belongs, in the
+    /// menu bar's "N conversations waiting to upload".
+    func testASessionTheQueueIsStillHoldingDrawsNoConversationRow() {
+        let start = at(day: 10, hour: 14)
+        let days = compose(
+            sessions: [session(id: 1, start: start, minutes: 30)],
+            // The queue holds it and owes it to an account; nothing has come back yet.
+            uploads: [1: []],
+            account: ActivityAccountFeed(conversations: [], reachable: true),
+            screen: screen(10, [moment(id: 90, at: start.addingTimeInterval(600))]))
+
+        let day = try! XCTUnwrap(days.first)
+        XCTAssertEqual(
+            day.rows.map(\.id), ["shot:90"],
+            "no conversation row — and the frames captured during it are still on the day")
+        XCTAssertEqual(day.conversationCount, 0, "a row that is not drawn is not counted either")
+        XCTAssertFalse(day.rows[0].isAttached, "with no conversation to sit under, the run is loose")
+    }
+
+    /// **The queue saying nothing about a session is the case that keeps its row**, and it is the
+    /// common one: a session captured while signed out is parked with no owner (`claimOrphans`), a
+    /// session `skipped` for having nothing uploadable in it is finished with, and a session that
+    /// predates the queue was never in it. None of them is waiting on a title that is coming, so
+    /// each is a local conversation and draws as one — which is what stops a signed-out day from
+    /// claiming nobody spoke.
+    func testASessionTheQueueIsNotHoldingKeepsItsRow() {
+        let days = compose(
+            sessions: [
+                session(id: 1, start: at(day: 10, hour: 9), minutes: 20),
+                session(id: 2, start: at(day: 10, hour: 17), minutes: 20),
+            ],
+            uploads: [:],
+            account: ActivityAccountFeed(conversations: [], reachable: true))
+
+        XCTAssertEqual(
+            try! XCTUnwrap(days.first).rows.map(\.id), [localRow(2), localRow(1)],
+            "a session no upload is coming for is a conversation this Mac held")
+    }
+
+    /// **Airgap Mode is the queue saying "never", not "not yet".** Nothing is uploaded while the
+    /// switch is on and the account feed is suppressed with it, so a panel that also deferred every
+    /// queued session would show that user no conversations at all — the exact "you did not speak
+    /// today" this whole surface exists to avoid. The entries stay in the queue, the rows stay on
+    /// the day.
+    func testAQueuedSessionKeepsItsRowWhileAirgapModeHoldsTheQueue() {
+        let days = compose(
+            sessions: [session(id: 1, start: at(day: 10, hour: 14), minutes: 30)],
+            uploads: [1: []],
+            isAirgapped: true)
+
+        let rows = try! XCTUnwrap(days.first).rows
+        XCTAssertEqual(rows.map(\.id), [localRow(1)])
+        guard case .conversation(let local) = rows[0].content else {
+            return XCTFail("the surviving row is this Mac's telling")
+        }
+        XCTAssertEqual(local.source, .local)
+    }
+
     /// Memories and tasks are their own rows, grouped by the run they came out of, and a memory the
     /// account named no conversation for **does not attach**: landing inside a conversation's window
     /// is a coincidence, and an attachment drawn from a timestamp is a claim the record does not
@@ -1196,6 +1267,33 @@ extension ActivityCompositionTests {
     private static func settle() async {
         for _ in 0..<20 { await Task.yield() }
         try? await Task.sleep(for: .milliseconds(50))
+    }
+
+    // MARK: - The header's leading control
+
+    /// **`Filter` is bare on a resting row, and that is the whole of the rule.**
+    ///
+    /// The five chips a line below it are pills, so a pill on this control put it in their visual
+    /// class — a sixth kind you could solo, sitting above the five you actually can. The shipping
+    /// Omi Activity page draws the same row's leading control bare for the same reason.
+    ///
+    /// It is a test rather than a screenshot because the two states that *do* fill it are the ones
+    /// a screenshot never catches: a soloed kind, where the fill is the only thing on the row saying
+    /// the list is narrowed at all, and hover, which is the control's only remaining affordance.
+    func testTheFilterControlIsBareUntilItIsCarryingSomething() {
+        XCTAssertFalse(
+            ActivitySurfaceLayout.filterControlIsFilled(kind: .all, isHovering: false),
+            "a resting, unfiltered row draws Filter as its label, not as a sixth chip")
+
+        XCTAssertTrue(
+            ActivitySurfaceLayout.filterControlIsFilled(kind: .all, isHovering: true),
+            "the pointer has to get feedback, or the control is undiscoverable")
+
+        for kind in ActivityKind.chips where kind != .all {
+            XCTAssertTrue(
+                ActivitySurfaceLayout.filterControlIsFilled(kind: kind, isHovering: false),
+                "a soloed \(kind.title) has to show that the list is being narrowed")
+        }
     }
 }
 
