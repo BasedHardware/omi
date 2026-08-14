@@ -4158,7 +4158,10 @@ class FloatingControlBarManager {
       }
     }
 
-    if notificationWasTemporarilyShown && !isEnabled && !window.state.showingAIConversation {
+    // "Hide for 2 hours" keeps `isEnabled` true (it is not the persisted enable
+    // preference), so the snoozed state must arm the re-hide too — otherwise the first
+    // temp-shown nudge would bring the bar back for the rest of the hide window.
+    if notificationWasTemporarilyShown && (!isEnabled || isSnoozed) && !window.state.showingAIConversation {
       window.orderOut(nil)
     }
     notificationWasTemporarilyShown = false

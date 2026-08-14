@@ -147,6 +147,15 @@ enum SuggestionGateDecision: Equatable, Sendable {
 /// model, no I/O — so the cost contract ("no context switch, no Gemini call") is provable
 /// in a unit test.
 enum SuggestionGatePolicy {
+  /// How long the user must sit in a context before it is worth an evaluation.
+  ///
+  /// Maximum (level 5) is an explicit "show me everything, fast": open TikTok and the
+  /// nudge should land in seconds, so dwell drops to 10 s there. Every other level keeps
+  /// the deliberate 30 s — passing through a window is not a request for advice.
+  static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= 5 ? 10 : 30
+  }
+
   /// Ordered cheapest-first, and every branch is free. Switching apps is not evidence that
   /// the user wants advice — people cmd-tab hundreds of times a day — so dwell and the
   /// daily budget do most of the work here, and the caller adds a grounding check before

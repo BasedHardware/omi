@@ -41,11 +41,11 @@ actor SuggestionAssistant: ProactiveAssistant {
   private let geminiClient: GeminiClient
   private let telemetryModel: SuggestionAssistantTelemetry.Model
 
-  /// How long the user must stay in a context before it is worth spending on. People
-  /// switch apps hundreds of times a day and almost none of those are a request for
-  /// advice; half a minute of dwell is the difference between passing through a window and
-  /// working in it.
-  private static let requiredDwell: TimeInterval = 30.0
+  /// Dwell before a context is worth spending on — level-aware, see
+  /// `SuggestionGatePolicy.requiredDwell(frequencyLevel:)` (10 s at Maximum, 30 s otherwise).
+  private static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
+    SuggestionGatePolicy.requiredDwell(frequencyLevel: frequencyLevel)
+  }
 
   /// Hard ceiling on paid evaluations per day, so cost is a number we choose rather than a
   /// function of how much the user alt-tabs.
@@ -132,6 +132,7 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     let enabled = await isEnabled
     let excluded = await MainActor.run { SuggestionAssistantSettings.shared.isAppExcluded(frame.appName) }
+    let frequencyLevel = await MainActor.run { NotificationService.currentFrequencyLevel() }
     let cooldown = await cooldownInterval
 
     let now = Date()
@@ -144,7 +145,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       lastEvaluationAt: lastEvaluationAt,
       cooldown: cooldown,
       dwell: dwell,
-      requiredDwell: Self.requiredDwell,
+      requiredDwell: Self.requiredDwell(frequencyLevel: frequencyLevel),
       evaluationsToday: dailyBudget.countToday(now: now),
       dailyBudget: Self.dailyEvaluationBudget
     )
@@ -637,8 +638,8 @@ actor SuggestionAssistant: ProactiveAssistant {
       now: now,
       lastEvaluationAt: nil,
       cooldown: 0,
-      dwell: Self.requiredDwell,
-      requiredDwell: Self.requiredDwell,
+      dwell: Self.requiredDwell(frequencyLevel: gateState.2),
+      requiredDwell: Self.requiredDwell(frequencyLevel: gateState.2),
       evaluationsToday: dailyBudget.countToday(now: now),
       dailyBudget: Self.dailyEvaluationBudget)
     guard gateState.1, gateState.2 > 0, decision.allowsEvaluation else {
