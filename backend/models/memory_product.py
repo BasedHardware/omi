@@ -77,35 +77,6 @@ class ProductRolloutObservability(ReadRolloutConsumerObservability):
     )
 
 
-class ProductMemorySearchItem(BaseModel):
-    """One row of a product memory search page.
-
-    This is the projection `utils.memory.memory_read_api._product_memory_result`
-    builds, not the authoritative `MemoryItem`. The projection is the product
-    read contract on purpose: it omits the storage-only and access-control fields
-    (`uid`, `version`, `sensitivity_labels`, `user_asserted`, ...) and adds the
-    per-row access accounting (`agent_use`, `access_reason`) a product caller
-    needs. Declaring `MemoryItem` here instead made every non-empty page fail
-    FastAPI response validation with a 500 (issue #11438).
-    """
-
-    memory_id: str = Field(description='Authoritative memory item id.')
-    memory_layer: str = Field(description='Always product_memory for this projection.')
-    tier: str = Field(description='Memory tier value (short_term / long_term / archive).')
-    content: str = Field(description='Memory content text.')
-    lifecycle_status: str = Field(description='Memory item status value.')
-    processing_state: str = Field(description='Memory item processing state value.')
-    confidence: Optional[float] = Field(default=None, description='Reserved; always null today.')
-    visibility: str = Field(description='Memory item visibility value.')
-    visibility_source: str = Field(description='Field the visibility value was read from.')
-    source: Optional[str] = Field(default=None, description='First evidence source id, when evidence exists.')
-    date: str = Field(description='ISO-8601 `updated_at` of the memory item.')
-    evidence: List[Dict[str, Any]] = Field(description='JSON-mode evidence payloads for this row.')
-    agent_use: str = Field(description='Access lane that produced the row (default vs explicit archive).')
-    access_reason: str = Field(description='Why this row was allowed through the access policy.')
-    superseded_by: Optional[str] = Field(default=None, description='Reserved; always null today.')
-
-
 class ProductMemorySearchResponse(BaseModel):
     """Default-visible product memory search response.
 
