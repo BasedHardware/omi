@@ -1,13 +1,17 @@
 import SwiftUI
 
 extension OmiMarkdownContent {
-  /// Extra leading between adjacent chat lines: half the body size.
+  /// Extra leading between adjacent chat lines: 5 pt at the default 14 pt body.
+  ///
+  /// Tracks the chat font-size setting (`fontSize` already includes `fontScale`).
+  /// It does not grow with window size — line leading that followed the panel
+  /// would loosen on a large display and tighten on a small one.
   static func chatLineSpacing(fontSize: CGFloat) -> CGFloat {
-    fontSize * 0.5
+    round(5 * fontSize / 14)
   }
 }
 
-/// Chat prose with the extra half-line of leading the transcript uses everywhere.
+/// Chat prose with the extra 5 pt of leading the transcript uses everywhere.
 struct OmiMarkdownChatText: View {
   private enum Content {
     case attributed(AttributedString)

@@ -6,12 +6,12 @@ import XCTest
 
 @MainActor
 final class OmiMarkdownLineSpacingTests: XCTestCase {
-  func testChatLineSpacingIsHalfTheBodySize() {
-    XCTAssertEqual(OmiMarkdownContent.chatLineSpacing(fontSize: 14), 7)
-    XCTAssertEqual(OmiMarkdownContent.chatLineSpacing(fontSize: 16), 8)
+  func testChatLineSpacingIsFivePointsAtTheDefaultBody() {
+    XCTAssertEqual(OmiMarkdownContent.chatLineSpacing(fontSize: 14), 5)
+    XCTAssertEqual(OmiMarkdownContent.chatLineSpacing(fontSize: 28), 10)
   }
 
-  func testHardBrokenChatLinesIncludeHalfLineLeading() {
+  func testHardBrokenChatLinesIncludeTheExtraLeading() {
     let single = measureHeight("Hello")
     let stacked = measureHeight("Hello\nWorld")
     let extra = stacked - (2 * single)
@@ -19,10 +19,10 @@ final class OmiMarkdownLineSpacingTests: XCTestCase {
       extra,
       OmiMarkdownContent.chatLineSpacing(fontSize: 14),
       accuracy: 1.5,
-      "adjacent chat lines must sit a half-line apart, not flush")
+      "adjacent chat lines must sit 5 pt apart at the default body, not flush")
   }
 
-  func testWrappedChatLinesAreTallerThanASingleLineByAtLeastHalfALine() {
+  func testWrappedChatLinesAreTallerThanASingleLineByAtLeastTheExtraLeading() {
     let long =
       "This completed answer wraps several times so the extra leading between chat lines is visible."
     let wrapped = measureHeight(long, width: 220)
@@ -30,7 +30,7 @@ final class OmiMarkdownLineSpacingTests: XCTestCase {
     XCTAssertGreaterThan(
       wrapped,
       single + OmiMarkdownContent.chatLineSpacing(fontSize: 14),
-      "wrapped chat prose must include the extra half-line of leading")
+      "wrapped chat prose must include the extra 5 pt of leading")
   }
 
   private func measureHeight(_ text: String, width: CGFloat = 400) -> CGFloat {
