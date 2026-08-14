@@ -63,7 +63,7 @@ final class RewindSurfaceLayoutTests: XCTestCase {
     XCTAssertEqual(RewindSurfaceLayout.panelGap, QueryShellLayout.panelGap)
     XCTAssertEqual(RewindSurfaceLayout.panelCornerRadius, InkGlass.cornerRadius)
     XCTAssertEqual(RewindSurfaceLayout.topGap, PageGlassLaneLayout.topGap)
-    XCTAssertEqual(RewindSurfaceLayout.bottomGap, RewindSurfaceLayout.topGap)
+    XCTAssertEqual(RewindSurfaceLayout.bottomGap, 0)
   }
 
   // MARK: - What the mounted panels actually do

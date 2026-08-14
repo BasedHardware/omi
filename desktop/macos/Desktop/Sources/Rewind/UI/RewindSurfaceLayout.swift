@@ -50,9 +50,9 @@ enum RewindSurfaceLayout {
   /// The corner is the shared one — never a second opinion about 22.
   static var panelCornerRadius: CGFloat { RewindSearchLayout.panelCornerRadius }
 
-  /// The air above the first panel, and the margin under the last. `PageGlassLane`'s, so Rewind opens
-  /// at the same distance below the top bar as every destination beside it and closes the same
-  /// distance above the window's bottom edge.
+  /// The air above the first panel. `PageGlassLane`'s, so Rewind opens at the same distance below
+  /// the top bar as every destination beside it. The bottom is flush with the window so resize
+  /// sits on the glass.
   static var topGap: CGFloat { PageGlassLaneLayout.topGap }
   static var bottomGap: CGFloat { PageGlassLaneLayout.bottomGap }
 
