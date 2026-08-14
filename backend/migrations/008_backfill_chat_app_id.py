@@ -36,30 +36,33 @@ import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-try:
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-except ValueError:
-    # App already initialized
-    pass
-except Exception as e:
-    logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
-    logger.error(e)
-    sys.exit(1)
 
-db = firestore.client()
+def _firestore_client():
+    """Return a Firestore client, initializing Firebase Admin on first use.
+
+    Deferred so this migration module keeps import-time purity (the production
+    import-purity gate scans backend/migrations too).
+    """
+    try:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(credentials.ApplicationDefault())
+    except Exception as e:
+        logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
+        logger.error(e)
+        sys.exit(1)
+    return firestore.client()
 
 
-def _backfill_collection(collection_name: str, dry_run: bool, batch_size: int) -> int:
+def _backfill_collection(client, collection_name: str, dry_run: bool, batch_size: int) -> int:
     patched = 0
-    for user_snapshot in db.collection('users').stream():
+    for user_snapshot in client.collection('users').stream():
         uid = user_snapshot.id
-        col = db.collection('users').document(uid).collection(collection_name)
+        col = client.collection('users').document(uid).collection(collection_name)
         # plugin_id-only legacy docs: field set, app_id absent.
         query = col.where('plugin_id', '!=', None).where('app_id', '==', None).limit(500)
         docs = list(query.stream())
         while docs:
-            batch = db.batch()
+            batch = client.batch()
             for doc in docs:
                 data = doc.to_dict() or {}
                 plugin_id = data.get('plugin_id')
@@ -84,9 +87,10 @@ def main() -> int:
 
     if args.uid:
         logger.info("Skipping --uid: this backfill reads a user's subcollections via the users stream.")
+    client = _firestore_client()
     for collection_name in ('messages', 'chat_sessions'):
         start = time.time()
-        patched = _backfill_collection(collection_name, args.dry_run, args.batch_size)
+        patched = _backfill_collection(client, collection_name, args.dry_run, args.batch_size)
         logger.info('%s: %d documents patched in %.1fs', collection_name, patched, time.time() - start)
     return 0
 
