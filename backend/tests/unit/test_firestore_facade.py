@@ -272,3 +272,21 @@ def test_multi_field_order_composite_cursor_paginates():
     assert [s.id for s in q.stream()] == ["c1", "c2", "c3"]
     cursor = {"impact": 3, "created_at": 20, "__name__": c.document("users/u1/conflicts/c1")}
     assert [s.id for s in q.start_after(cursor).stream()] == ["c2", "c3"]  # page 2, no NotImplementedError
+
+
+def test_docref_get_threads_read_timeout_to_store():
+    # Regression (cubic review 4909186286 #2): _DocRef.get used to ``del timeout``, so default-read
+    # rollout's 2s deadline was silently dropped on the Mongo-backed facade (the Mongo adapter maps
+    # timeout -> maxTimeMS). The facade must now thread the read deadline to the store.
+    seen = {}
+
+    class _RecordingStore(FakeDocumentStore):
+        def get(self, path, *, fields=None, timeout=None):
+            seen["timeout"] = timeout
+            return super().get(path, fields=fields, timeout=timeout)
+
+    c = NeutralFirestoreClient(_RecordingStore())
+    c.document("users/u1").set({"v": 1})
+    snap = c.document("users/u1").get(timeout=2)
+    assert snap.to_dict() == {"v": 1}
+    assert seen["timeout"] == 2

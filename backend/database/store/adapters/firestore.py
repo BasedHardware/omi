@@ -219,9 +219,14 @@ class FirestoreDocumentStore:
         self._client = client if client is not None else _boundary_db
 
     # --- point ops ---
-    def get(self, path: str, *, fields: Optional[Sequence[str]] = None) -> StoredDocument:
+    def get(
+        self, path: str, *, fields: Optional[Sequence[str]] = None, timeout: Optional[float] = None
+    ) -> StoredDocument:
         ref = self._client.document(path)
-        snapshot = ref.get(list(fields)) if fields is not None else ref.get()
+        # ``timeout`` (seconds) is the read-RPC deadline; omit the kwarg entirely when None so the
+        # SDK default applies rather than passing ``timeout=None`` (which some retries treat as 0).
+        kw: Dict[str, Any] = {} if timeout is None else {"timeout": timeout}
+        snapshot = ref.get(list(fields), **kw) if fields is not None else ref.get(**kw)
         return _snapshot_to_record(snapshot, path)
 
     def exists(self, path: str) -> bool:

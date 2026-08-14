@@ -81,6 +81,15 @@ def test_set_no_merge_replaces_whole_document(store, uid):
     assert store.get(f"users/{uid}").to_dict() == {"c": 3}
 
 
+def test_get_with_read_timeout_returns_document(store, uid):
+    # cubic review 4909186286 #2: get(timeout=) must thread a real read deadline to the backend
+    # (Firestore RPC timeout / Mongo maxTimeMS) without breaking the happy path — a fast read under
+    # the deadline still returns normally on both backends.
+    store.set(f"users/{uid}", {"language": "en"})
+    doc = store.get(f"users/{uid}", timeout=5)
+    assert doc.exists and doc.to_dict() == {"language": "en"}
+
+
 def test_exists(store, uid):
     assert store.exists(f"users/{uid}") is False
     store.set(f"users/{uid}", {"a": 1})

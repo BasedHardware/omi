@@ -269,10 +269,20 @@ class MongoDocumentStore:
         self._mongo_client.close()
 
     # --- internal ops (shared by the public surface and the transaction handle) ---
-    def _get(self, path: str, *, fields: Optional[Sequence[str]] = None, session: Any = None) -> StoredDocument:
+    def _get(
+        self,
+        path: str,
+        *,
+        fields: Optional[Sequence[str]] = None,
+        session: Any = None,
+        timeout: Optional[float] = None,
+    ) -> StoredDocument:
         collection_name, _, _ = _doc_meta(path)
         projection = {"d." + field: 1 for field in fields} if fields is not None else None
-        doc = self._db[collection_name].find_one({"_id": path}, projection, session=session)
+        # ``timeout`` (seconds) -> Mongo ``maxTimeMS`` so a slow server-side read aborts at the
+        # deadline instead of holding the worker until the (much larger) socket timeout.
+        kw: Dict[str, Any] = {} if timeout is None else {"max_time_ms": int(timeout * 1000)}
+        doc = self._db[collection_name].find_one({"_id": path}, projection, session=session, **kw)
         if not doc:
             return StoredDocument.missing(path)
         return _to_record(doc, path)
@@ -338,8 +348,10 @@ class MongoDocumentStore:
         self._db[collection_name].delete_one({"_id": path}, session=session)
 
     # --- public port surface ---
-    def get(self, path: str, *, fields: Optional[Sequence[str]] = None) -> StoredDocument:
-        return self._get(path, fields=fields)
+    def get(
+        self, path: str, *, fields: Optional[Sequence[str]] = None, timeout: Optional[float] = None
+    ) -> StoredDocument:
+        return self._get(path, fields=fields, timeout=timeout)
 
     def exists(self, path: str) -> bool:
         collection_name, _, _ = _doc_meta(path)

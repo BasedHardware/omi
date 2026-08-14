@@ -146,7 +146,11 @@ class FakeDocumentStore:
         self._updated[path] = datetime.now(timezone.utc) + timedelta(microseconds=next(self._clock))
         self._created.setdefault(path, self._updated[path])  # created stamped once; never bumped on update
 
-    def get(self, path: str, *, fields: Optional[Sequence[str]] = None) -> StoredDocument:
+    def get(
+        self, path: str, *, fields: Optional[Sequence[str]] = None, timeout: Optional[float] = None
+    ) -> StoredDocument:
+        # ``timeout`` accepted for port parity; a local in-memory read cannot block, so it is ignored.
+        del timeout
         if path not in self._docs:
             return StoredDocument.missing(path)
         data = copy.deepcopy(self._docs[path])

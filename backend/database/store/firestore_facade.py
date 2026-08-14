@@ -251,13 +251,14 @@ class _DocRef:
         # Firestore's DocumentReference.get(field_paths=None, transaction=None, ...) takes field_paths
         # as the FIRST positional arg (a projection). Upstream calls ``.get(['subscription'])`` etc.;
         # binding that list to ``transaction`` crashed on the Mongo-backed facade. Route the projection
-        # through the store's ``fields=`` instead. ``timeout``/other read RPC kwargs are network
-        # concerns; a store-port point read is local, so they are accepted and ignored.
-        del timeout
+        # through the store's ``fields=`` instead. ``timeout`` (seconds) is a real read deadline on the
+        # Mongo/Firestore adapters — thread it to the store (a slow read must fail closed, not hang a
+        # worker: e.g. default-read rollout's 2s deadline). A transaction read carries no separate RPC
+        # timeout, so it is not threaded there.
         fields = list(field_paths) if field_paths else None
         if transaction is not None:
             return _Snapshot(self, transaction._read(self.path, fields=fields))
-        return _Snapshot(self, self._client._store.get(self.path, fields=fields))
+        return _Snapshot(self, self._client._store.get(self.path, fields=fields, timeout=timeout))
 
     def set(self, data: Dict[str, Any], merge: bool = False) -> None:
         self._client._store.set(self.path, _neutral_data(data), merge=merge)
