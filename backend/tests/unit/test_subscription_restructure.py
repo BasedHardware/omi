@@ -49,6 +49,13 @@ def _circular_import_fakes():
         "database.users": SimpleNamespace(),
         "database.user_usage": SimpleNamespace(),
         "database.announcements": announcements,
+        # subscription.py imports get_customer_firestore_client at module level; stub the client
+        # accessor so the fresh exec never pulls the real database._client (and its Firestore protos,
+        # which collide on re-registration under load_module_fresh).
+        "database._client": SimpleNamespace(
+            get_customer_firestore_client=lambda: SimpleNamespace(),
+            get_firestore_client=lambda: SimpleNamespace(),
+        ),
     }
 
 
