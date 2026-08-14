@@ -83,6 +83,8 @@ actor ContextVisitCoordinator {
     handles: [WorkHistoryHandle] = [],
     bundleID: String? = nil
   ) async throws -> Transition {
+    let arrivingIdentity = Self.resolvedVisitIdentity(
+      appName: appName, windowTitle: windowTitle, handles: handles, bundleID: bundleID)
     ensureOwnerChangeObserver()
     await waitForTransitionTurn()
     defer { releaseTransitionTurn() }
@@ -99,8 +101,6 @@ actor ContextVisitCoordinator {
     // arriving visit so the abandoned row is not left live indefinitely.
     try await ensureReconciled(now: now)
     let nextGeneration = state.generation + 1
-    let arrivingIdentity = Self.resolvedVisitIdentity(
-      appName: appName, windowTitle: windowTitle, handles: handles, bundleID: bundleID)
     let arriving = try await store.startVisit(
       appName: appName,
       windowTitle: windowTitle,
@@ -163,6 +163,8 @@ actor ContextVisitCoordinator {
     handles: [WorkHistoryHandle] = [],
     bundleID: String? = nil
   ) async throws -> ContextVisitFence {
+    let arrivingIdentity = Self.resolvedVisitIdentity(
+      appName: appName, windowTitle: windowTitle, handles: handles, bundleID: bundleID)
     ensureOwnerChangeObserver()
     await waitForTransitionTurn()
     defer { releaseTransitionTurn() }
@@ -182,8 +184,6 @@ actor ContextVisitCoordinator {
     }
     try await ensureReconciled(now: now)
     let nextGeneration = state.generation + 1
-    let arrivingIdentity = Self.resolvedVisitIdentity(
-      appName: appName, windowTitle: windowTitle, handles: handles, bundleID: bundleID)
     let arriving = try await store.startVisit(
       appName: appName,
       windowTitle: windowTitle,

@@ -18,6 +18,18 @@ final class WorkHistoryHandleTests: XCTestCase {
     XCTAssertEqual(shared, clean)
   }
 
+  func testCredentialQueryIsDroppedFromIdentityAndOutboundJSON() {
+    let handle = WorkHistoryHandle.url(
+      "https://docs.google.com/document/d/abc?access_token=secret&q=proposal")
+    XCTAssertEqual(handle?.value, "https://docs.google.com/document/d/abc?q=proposal")
+    XCTAssertEqual(handle?.jsonObject()["value"], "https://docs.google.com/document/d/abc?q=proposal")
+  }
+
+  func testPreservesPercentEncodedPathIdentity() {
+    let handle = WorkHistoryHandle.url("https://example.com/a%2Fb/?utm_source=x")
+    XCTAssertEqual(handle?.value, "https://example.com/a%2Fb")
+  }
+
   func testBrowserPrefersDocumentURLOverChildAXURL() {
     let snapshot = WorkHistoryFrontmostSnapshot(
       appName: "Safari",

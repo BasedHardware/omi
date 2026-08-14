@@ -15,7 +15,12 @@ struct WorkHistoryHandle: Equatable, Hashable, Codable, Sendable {
   var isDurable: Bool { kind == .url || kind == .file }
 
   func jsonObject() -> [String: String] {
-    ["kind": kind.rawValue, "value": value]
+    ["kind": kind.rawValue, "value": redactedValue]
+  }
+
+  var redactedValue: String {
+    guard kind == .url else { return value }
+    return Self.canonicalizeURL(value) ?? value
   }
 
   static func url(_ raw: String) -> WorkHistoryHandle? {
@@ -64,25 +69,38 @@ struct WorkHistoryHandle: Equatable, Hashable, Codable, Sendable {
     if let port = url.port, !((scheme == "http" && port == 80) || (scheme == "https" && port == 443)) {
       components.port = port
     }
-    var path = url.path
+    let parsed = URLComponents(url: url, resolvingAgainstBaseURL: false)
+    var path = parsed?.percentEncodedPath ?? url.path
     if path.count > 1, path.hasSuffix("/") {
       path.removeLast()
     }
     components.percentEncodedPath = path.isEmpty ? "/" : path
-    if let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {
-      let kept = items.filter { item in
-        let name = item.name.lowercased()
-        return !Self.droppedQueryNames.contains(name) && !name.hasPrefix("utm_")
+    if let encodedQuery = parsed?.percentEncodedQuery, !encodedQuery.isEmpty {
+      let kept = encodedQuery.split(separator: "&").filter { pair in
+        let name =
+          pair.split(separator: "=", maxSplits: 1).first
+          .map(String.init)?
+          .removingPercentEncoding?
+          .lowercased() ?? ""
+        return !shouldDropQueryName(name)
       }
       if !kept.isEmpty {
-        components.queryItems = kept
+        components.percentEncodedQuery = kept.joined(separator: "&")
       }
     }
     return components.string
   }
 
+  private static func shouldDropQueryName(_ name: String) -> Bool {
+    if droppedQueryNames.contains(name) || name.hasPrefix("utm_") { return true }
+    return name.contains("token") || name.contains("secret") || name.contains("password")
+      || name.contains("passwd") || name.contains("session") || name.hasSuffix("sig")
+  }
+
   private static let droppedQueryNames: Set<String> = [
     "usp", "sid", "authuser", "tab", "pli", "hl", "gclid", "fbclid", "igshid",
+    "code", "state", "access_token", "refresh_token", "id_token", "oauth_token",
+    "api_key", "apikey", "authorization", "bearer", "jwt", "client_secret",
   ]
 
   static func canonicalizeFile(_ raw: String) -> String? {
