@@ -180,6 +180,19 @@ def test_update_server_timestamp_sets_a_datetime(store, uid):
     assert isinstance(store.get(f"users/{uid}").to_dict()["touched_at"], datetime)
 
 
+def test_created_at_is_immutable_across_updates(store, uid):
+    # cubic PR 10887 #1: ``created_at`` is the document's insert time and must never move on a
+    # later write, while ``updated_at`` advances. Firestore reports ``create_time`` on the snapshot;
+    # the Mongo adapter stamps ``_created_at`` once via ``$setOnInsert``. Both must agree here.
+    store.set(f"users/{uid}", {"v": 1})
+    first = store.get(f"users/{uid}")
+    assert first.created_at is not None
+    store.update(f"users/{uid}", {"v": 2})
+    second = store.get(f"users/{uid}")
+    assert second.created_at == first.created_at  # creation time frozen
+    assert second.updated_at > first.updated_at  # revision advanced
+
+
 # --- collection ops ----------------------------------------------------------
 
 

@@ -32,14 +32,26 @@ class StoredDocument:
     exists: bool
     data: Optional[Dict[str, Any]] = None
     updated_at: Optional[datetime] = None
+    # Immutable document creation time (Firestore snapshot ``create_time`` / Mongo ``_created_at``,
+    # stamped once on insert and never on update). ``None`` when the backend did not report one.
+    created_at: Optional[datetime] = None
 
     def to_dict(self) -> Optional[Dict[str, Any]]:
         """Return the document body, or ``None`` if it does not exist (snapshot-compatible)."""
         return self.data
 
     @classmethod
-    def present(cls, path: str, data: Dict[str, Any], *, updated_at: Optional[datetime] = None) -> "StoredDocument":
-        return cls(id=path.rsplit("/", 1)[-1], path=path, exists=True, data=data, updated_at=updated_at)
+    def present(
+        cls,
+        path: str,
+        data: Dict[str, Any],
+        *,
+        updated_at: Optional[datetime] = None,
+        created_at: Optional[datetime] = None,
+    ) -> "StoredDocument":
+        return cls(
+            id=path.rsplit("/", 1)[-1], path=path, exists=True, data=data, updated_at=updated_at, created_at=created_at
+        )
 
     @classmethod
     def missing(cls, path: str) -> "StoredDocument":

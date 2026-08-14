@@ -211,7 +211,9 @@ class _Snapshot:
 
     @property
     def create_time(self) -> Any:
-        return self._stored.updated_at
+        # The immutable document creation time (cubic PR 10887 #1). Fall back to updated_at for a legacy
+        # Mongo doc written before _created_at was stamped, so create_time is never None for an existing doc.
+        return self._stored.created_at or self._stored.updated_at
 
     @property
     def update_time(self) -> Any:

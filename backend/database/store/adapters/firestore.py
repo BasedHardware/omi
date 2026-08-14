@@ -120,7 +120,8 @@ def _snapshot_to_record(snapshot: Any, path: str) -> StoredDocument:
     if not getattr(snapshot, "exists", False):
         return StoredDocument.missing(path)
     return StoredDocument(
-        id=snapshot.id, path=path, exists=True, data=snapshot.to_dict(), updated_at=_revision(snapshot)
+        id=snapshot.id, path=path, exists=True, data=snapshot.to_dict(),
+        updated_at=_revision(snapshot), created_at=getattr(snapshot, "create_time", None),
     )
 
 
@@ -128,7 +129,8 @@ def _record_from_query(snapshot: Any) -> StoredDocument:
     reference = getattr(snapshot, "reference", None)
     path = getattr(reference, "path", None) or snapshot.id
     return StoredDocument(
-        id=snapshot.id, path=path, exists=True, data=snapshot.to_dict(), updated_at=_revision(snapshot)
+        id=snapshot.id, path=path, exists=True, data=snapshot.to_dict(),
+        updated_at=_revision(snapshot), created_at=getattr(snapshot, "create_time", None),
     )
 
 

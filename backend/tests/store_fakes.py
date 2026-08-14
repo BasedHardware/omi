@@ -132,11 +132,13 @@ class FakeDocumentStore:
         # same store during the D1 migration (ADR-0022). Absent → a fresh in-memory dict.
         self._docs: Dict[str, Dict[str, Any]] = backing if backing is not None else {}
         self._updated: Dict[str, datetime] = {}
+        self._created: Dict[str, datetime] = {}  # immutable creation time, stamped once per path
         # Strictly-increasing stamps (base + counter) so a later write always has a greater revision.
         self._clock = itertools.count()
 
     def _stamp(self, path: str) -> None:
         self._updated[path] = datetime.now(timezone.utc) + timedelta(microseconds=next(self._clock))
+        self._created.setdefault(path, self._updated[path])  # created stamped once; never bumped on update
 
     def get(self, path: str, *, fields: Optional[Sequence[str]] = None) -> StoredDocument:
         if path not in self._docs:
@@ -144,7 +146,9 @@ class FakeDocumentStore:
         data = copy.deepcopy(self._docs[path])
         if fields is not None:
             data = {k: v for k, v in data.items() if k in set(fields)}
-        return StoredDocument.present(path, data, updated_at=self._updated.get(path))
+        return StoredDocument.present(
+            path, data, updated_at=self._updated.get(path), created_at=self._created.get(path)
+        )
 
     def exists(self, path: str) -> bool:
         return path in self._docs
@@ -184,6 +188,7 @@ class FakeDocumentStore:
             raise PreconditionFailed(path)
         self._docs.pop(path, None)
         self._updated.pop(path, None)
+        self._created.pop(path, None)
 
     # Session-aware private aliases so the neutral db_client facade's transaction (which threads
     # ``session=`` to the store) can run over this fake session-less — hermetic, no real atomicity.
@@ -253,7 +258,10 @@ class FakeDocumentStore:
         if fields is not None:
             keep = set(fields)
             rows = [(p, {k: v for k, v in d.items() if k in keep}) for p, d in rows]
-        return [StoredDocument.present(p, copy.deepcopy(d), updated_at=self._updated.get(p)) for p, d in rows]
+        return [
+            StoredDocument.present(p, copy.deepcopy(d), updated_at=self._updated.get(p), created_at=self._created.get(p))
+            for p, d in rows
+        ]
 
     def _matching_rows(self, collection: str, filters: Optional[Iterable]) -> List[tuple]:
         rows = [(p, d) for p, d in self._docs.items() if p.rsplit("/", 1)[0] == collection]
@@ -312,7 +320,10 @@ class FakeDocumentStore:
             rows = rows[offset:]
         if limit is not None:
             rows = rows[:limit]
-        return [StoredDocument.present(p, copy.deepcopy(d), updated_at=self._updated.get(p)) for p, d in rows]
+        return [
+            StoredDocument.present(p, copy.deepcopy(d), updated_at=self._updated.get(p), created_at=self._created.get(p))
+            for p, d in rows
+        ]
 
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]:
         result = []
@@ -346,6 +357,7 @@ class FakeDocumentStore:
         for key in [k for k in self._docs if k == path or k.startswith(path + "/")]:
             del self._docs[key]
             self._updated.pop(key, None)
+            self._created.pop(key, None)
 
     def run_transaction(self, fn: Callable[[_FakeTransaction], Any], *, attempts: int = 3) -> Any:
         return fn(_FakeTransaction(self))

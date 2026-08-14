@@ -98,6 +98,7 @@ def _to_record(doc: Dict[str, Any], path: str) -> StoredDocument:
         exists=True,
         data=doc.get("d", {}),
         updated_at=doc.get("_updated_at"),
+        created_at=doc.get("_created_at"),
     )
 
 
@@ -124,10 +125,11 @@ class _MongoBatch:
 
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         collection_name, parent, key = _doc_meta(path)
+        now = _now()
         if merge:
             update: Dict[str, Any] = _build_update_ops(data)
-            update.setdefault("$set", {})["_updated_at"] = _now()
-            update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key})
+            update.setdefault("$set", {})["_updated_at"] = now
+            update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key, "_created_at": now})
             self._append(
                 collection_name,
                 UpdateOne({"_id": path}, update, upsert=True),
@@ -135,11 +137,15 @@ class _MongoBatch:
             )
         else:
             plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
-            document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": _now(), "d": plain}
+            # $set the whole payload (non-merge) + $setOnInsert an immutable _created_at (cubic 10887 #1).
+            doc_update = {
+                "$set": {"d": plain, "_parent": parent, "_key": key, "_updated_at": now},
+                "$setOnInsert": {"_created_at": now},
+            }
             self._append(
                 collection_name,
-                ReplaceOne({"_id": path}, document, upsert=True),
-                lambda coll: coll.replace_one({"_id": path}, document, upsert=True),
+                UpdateOne({"_id": path}, doc_update, upsert=True),
+                lambda coll: coll.update_one({"_id": path}, doc_update, upsert=True),
             )
             # A non-merge set can still carry neutral transforms (SERVER_TIMESTAMP/Increment/ArrayUnion).
             # Mirror MongoDocumentStore._set: apply them in a follow-up update right after the replace, or
@@ -252,17 +258,23 @@ class MongoDocumentStore:
     def _set(self, path: str, data: Dict[str, Any], *, merge: bool = False, session: Any = None) -> None:
         collection_name, parent, key = _doc_meta(path)
         collection = self._db[collection_name]
+        now = _now()
         if merge:
             update: Dict[str, Any] = _build_update_ops(data)
-            update.setdefault("$set", {})["_updated_at"] = _now()
-            update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key})
+            update.setdefault("$set", {})["_updated_at"] = now
+            update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key, "_created_at": now})
             collection.update_one({"_id": path}, update, upsert=True, session=session)
             return
-        # merge=False -> full document replace. Plain fields form the payload; any transforms
-        # (rare on a non-merge set) are applied right after so their semantics still hold.
+        # merge=False -> full payload replace. ``$set`` on the whole ``d`` field replaces the payload
+        # (non-merge semantics) while ``$setOnInsert: _created_at`` keeps an immutable creation time across
+        # rewrites (cubic PR 10887 #1). Any transforms (rare on a non-merge set) apply right after.
         plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
-        document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": _now(), "d": plain}
-        collection.replace_one({"_id": path}, document, upsert=True, session=session)
+        collection.update_one(
+            {"_id": path},
+            {"$set": {"d": plain, "_parent": parent, "_key": key, "_updated_at": now}, "$setOnInsert": {"_created_at": now}},
+            upsert=True,
+            session=session,
+        )
         transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
         if transforms:
             collection.update_one({"_id": path}, _build_update_ops(transforms), session=session)
@@ -323,7 +335,8 @@ class MongoDocumentStore:
     def _create(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
         collection_name, parent, key = _doc_meta(path)
         plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
-        document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": _now(), "d": plain}
+        now = _now()
+        document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": now, "_created_at": now, "d": plain}
         try:
             self._db[collection_name].insert_one(document, session=session)
         except DuplicateKeyError as exc:
