@@ -1,0 +1,123 @@
+desktop/context-for-claude/Tests/ContextAppTests/ActivityCompositionTests.swift
+  s_830a75a8050e25::t_a96cbd3acdc455 505-532
+  s_830a75a8050e25::t_defbe4999b3892 102,107-108
+  s_830a75a8050e25::t_ae66e10f68db3d 581,589-664
+  s_830a75a8050e25::t_93ace08b985d48 396-397,401-403,406-442
+  s_830a75a8050e25::t_4615db771e74d8 1,665-666,1155-1213
+desktop/context-for-claude/Sources/ContextApp/Backend/OmiActivityFeed.swift
+  s_830a75a8050e25::t_1066f423f1bdc7 377-384
+desktop/context-for-claude/Sources/ContextCore/UploadQueue.swift
+  s_830a75a8050e25::t_166d2fb1310926 371-413
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityRowViews.swift
+  s_830a75a8050e25::t_c06e2bd47b7b10 9-11
+  s_830a75a8050e25::t_d7e035e2e82de8 503-505,507
+  s_830a75a8050e25::t_bbb0f401ff30e9 370-380,387-401,403-427
+  s_830a75a8050e25::t_1bdc0409beca17 87-94
+  s_830a75a8050e25::t_d23d7b1e449322 124-128
+  s_830a75a8050e25::t_3cb95f116033d9 248-252,254,258-259
+  s_830a75a8050e25::t_ec7fb9f0293ede 438-440,455
+  s_830a75a8050e25::t_0d8208075e6dda 269-275,302-310
+  s_830a75a8050e25::t_c0735ca9710ece 402
+  s_830a75a8050e25::t_b4540ccb2a2328 75-83,428
+  s_830a75a8050e25::t_bdc29bfada6520 323,326-332,338,341-343,347-352
+  s_830a75a8050e25::t_101076085da8c8 429-430
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityModel.swift
+  s_830a75a8050e25::t_5143278806ac65 156-158,160-164,166-167,173-180,186,192-197,202-205,218,223-228,234,245,252-253,255-262,273,285,289,296-306,310-312
+  s_830a75a8050e25::t_7879cfaa432160 360-378
+  s_830a75a8050e25::t_0b881fde45205f 159
+  s_830a75a8050e25::t_21932f46ea0bb8 590-626
+  s_830a75a8050e25::t_ec065be0a903fc 184-185
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityDetailView.swift
+  s_830a75a8050e25::t_bfde5161c4d9e7 162-163,175-179,182-187,189
+  s_830a75a8050e25::t_bee4097126382c 164-174,180-181,188
+  s_830a75a8050e25::t_f70d421a19617f 13,15-35,47,107-114,120-136,160-161,192-195,200-257,262,264-266,283-284,291-310,340,357,359-365,369-370,383,385-386,388-423,428-489,491-513,515-580,582,585,587,596,599-600,610-635,666,668,670-673,675-678,686,689,700-702,734-735,757-910,971-974,977-981,1013-1016,1037-1042
+  s_830a75a8050e25::t_535589b19f836a 190
+desktop/context-for-claude/Tests/ContextAppTests/ActivityRenderHarness.swift
+  s_830a75a8050e25::t_84f64f8e6ce44e 386-390,392
+  s_830a75a8050e25::t_1497abd72612fc 432-434,437
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityDetail.swift
+  s_830a75a8050e25::t_8959063141c446 699
+  s_830a75a8050e25::t_809956e0a34a04 9-18
+  s_830a75a8050e25::t_d3340c71417865 517-524
+  s_830a75a8050e25::t_cee28c5b914d81 333-375
+  s_830a75a8050e25::t_cfe6b5c99794ca 659-698,700-705
+  s_830a75a8050e25::t_96727788153130 609-620,622-626
+  s_830a75a8050e25::t_bf00b1429f12a8 25-34
+  s_830a75a8050e25::t_24cea82c227dcb 539-546,550-561,565-566,570-588
+  s_830a75a8050e25::t_da8351b644fa75 161-210,216-219,222-223,225-231,235-261
+  s_830a75a8050e25::t_6126b85b677853 621
+desktop/context-for-claude/Tests/ContextAppTests/ActivityDetailTests.swift
+  s_830a75a8050e25::t_b4d6854e4ceca1 280-412,434,439,441-448
+  s_830a75a8050e25::t_757ef90a2c7b89 413-433,435-438,440
+  s_830a75a8050e25::t_866d590725a3ed 537-549
+desktop/context-for-claude/Tests/ContextAppTests/RewindTests.swift
+  s_830a75a8050e25::t_b73140c7699aa5 536-547
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityStore.swift
+  s_830a75a8050e25::t_f94d2f88a42c5f 241-243,248-249,255-276
+  s_830a75a8050e25::t_ee7fdfc879b2d4 664-665
+  s_830a75a8050e25::t_b568a410795475 207-209,504,710,715,720-721,809-812
+desktop/context-for-claude/Tests/ContextAppTests/ActivityDetailRenderHarness.swift
+  s_830a75a8050e25::t_70ea15627cb2ce 223
+  s_830a75a8050e25::t_5efdee03a78d7c 311-312,317-339
+  s_830a75a8050e25::t_d159a725c6f113 71-76,78
+  s_830a75a8050e25::t_27415a86c6cf82 305-308
+  s_830a75a8050e25::t_d5cfe8a556f2a7 357-361
+  s_830a75a8050e25::t_853d6660ec5244 51-53,55-61,63-68,70,79-84,86-88,90-93,95-98,100-106,108-113,115-118,120-126,128-130,132,136
+  s_830a75a8050e25::t_01aab948be499f 149
+  s_830a75a8050e25::t_e91cf9f9148585 165
+  s_830a75a8050e25::t_7a0fbc56c91e58 347-348,350
+  s_830a75a8050e25::t_1fda1b06633fe2 54
+  s_830a75a8050e25::t_e0e546d986c17f 62
+  s_830a75a8050e25::t_67d80f00fc09c2 69
+  s_830a75a8050e25::t_dcc850454832ea 77
+  s_830a75a8050e25::t_b80721bd37e6e0 85
+  s_830a75a8050e25::t_1a2cc4b30b54ce 89
+  s_830a75a8050e25::t_2a0540f9421fd5 94
+  s_830a75a8050e25::t_290311c000269f 99
+  s_830a75a8050e25::t_9d26a0f0c23ad2 107
+  s_830a75a8050e25::t_1d9f0d35b8daf1 114
+  s_830a75a8050e25::t_4fabe12c305483 119
+  s_830a75a8050e25::t_669aadcfcb5952 127
+  s_830a75a8050e25::t_eb6fb3bc5f64eb 131
+  s_830a75a8050e25::t_1fdceab81114cd 133-135
+  s_830a75a8050e25::t_f72b62bc8dbc0f 148
+  s_830a75a8050e25::t_87b543e14a667c 166
+  s_830a75a8050e25::t_6c156f33d024de 224
+  s_751a55bc505c1d::t_cd89b95d37d1e5 139
+desktop/context-for-claude/Tests/ContextAppTests/OmiActivityFeedTests.swift
+  s_830a75a8050e25::t_9df6e755e9eebc 331-339
+  s_830a75a8050e25::t_ea041c82d6c3a3 363-371,373-374
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityHourRail.swift
+  s_830a75a8050e25::t_67db8141f64d6a 20
+  s_830a75a8050e25::t_791736f0852455 45-52
+  s_830a75a8050e25::t_841ca7e5f6af10 117-127,132-149
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityComposer.swift
+  s_830a75a8050e25::t_9b13ac25debe56 58-60,66
+  s_830a75a8050e25::t_cc01f0b39028fa 146-150,152-171,173-175,178,180-184,188
+  s_830a75a8050e25::t_6cdc671cfcfc23 80-81
+  s_830a75a8050e25::t_b20841f293f9d2 312-313
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "3af688152dc8eaef15457405f253688b4fda3a5c",
+  "prompts": {},
+  "sessions": {
+    "s_751a55bc505c1d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ab605120162cb99a7",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_830a75a8050e25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c76762c9-b116-4248-8786-3ab36dd6ee16",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
