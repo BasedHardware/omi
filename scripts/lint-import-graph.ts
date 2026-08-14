@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { join, relative, dirname, normalize } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
 // Assemble these tokens so this checker itself remains inside the fence it enforces.
@@ -12,10 +12,18 @@ const forbiddenParentTargets = ["." + "private", "bench" + "mark", "omi" + "-rea
 // files; the dataset names above remain unambiguous substring matches.
 const corpusRoot = new RegExp(`${"corp" + "ora"}[/\\\\]|["'\`]${"corp" + "ora"}["'\`]`);
 const sourceExtensions = new Set([".ts", ".tsx", ".js", ".json"]);
-const files = (directory: string): string[] => readdirSync(directory, { withFileTypes: true })
-  .flatMap((entry) => entry.isDirectory()
-    ? entry.name === "node_modules" ? [] : files(join(directory, entry.name))
-    : sourceExtensions.has(entry.name.slice(entry.name.lastIndexOf("."))) ? [join(directory, entry.name)] : []);
+const skipDirectoryNames = new Set(["node_modules", "dist", ".build", ".git", ".dart_tool", ".turbo"]);
+const files = (directory: string, skipTopLevel: ReadonlySet<string> = new Set()): string[] =>
+  readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) => {
+      if (entry.isDirectory()) {
+        if (skipDirectoryNames.has(entry.name) || skipTopLevel.has(entry.name)) return [];
+        return files(join(directory, entry.name));
+      }
+      return sourceExtensions.has(entry.name.slice(entry.name.lastIndexOf(".")))
+        ? [join(directory, entry.name)]
+        : [];
+    });
 
 /**
  * THE VISIBLE-DERIVATION FENCE.
@@ -496,7 +504,7 @@ const portConstructionSites = new Map<string, string[]>(
 );
 /** Rule 17 bookkeeping: whether each registered path was seen in its own route module. */
 const wirePathServedBySeen = new Set<string>();
-for (const file of files(root)) {
+for (const file of files(root, new Set(["frontend"]))) {
   const text = readFileSync(file, "utf8");
   const shown = relative(root, file);
   if (shown.startsWith("core/") && /from\s+["'][^"']*drivers\//.test(text)) {
@@ -879,6 +887,81 @@ for (const row of WIRE_PATH_REGISTRY) {
       + "row) or the path is gone (delete the row) — a stale row silently disables rule 17 "
       + "for this path.",
     );
+  }
+}
+
+/**
+ * Colocation fences (ruling 8). Frontend stays pnpm; backend stays bun.
+ * Source on either side may not import the other tree — the vendored
+ * `@omi-core/ratified-contracts` package is the only crossing. The integration
+ * harness is allowed to import both; it is the join, not a side.
+ */
+const importSpecPattern =
+  /(?:from\s+|import\s*\(\s*|export\s+(?:type\s+)?(?:\*(?:\s+as\s+\w+)?|\{[^}]*\})\s+from\s+)["']([^"']+)["']/g;
+const backendImportRoots = ["core/", "drivers/", "apps/"];
+const backendSourcePrefixes = ["apps/", "core/", "drivers/", "harness/", "contract-tests/", "spikes/"];
+const resolveRelativeImport = (fromShown: string, spec: string): string | null => {
+  if (!spec.startsWith(".")) return null;
+  const fromDir = dirname(fromShown);
+  return normalize(join(fromDir, spec)).replaceAll("\\", "/");
+};
+const importSpecsIn = (text: string): string[] =>
+  [...withoutComments(text).matchAll(importSpecPattern)].map((match) => match[1]);
+
+const frontendRoot = join(root, "frontend");
+if (existsSync(frontendRoot)) {
+  for (const file of files(frontendRoot)) {
+    const shown = relative(root, file);
+    const text = readFileSync(file, "utf8");
+    for (const spec of importSpecsIn(text)) {
+      const dest = resolveRelativeImport(shown, spec);
+      if (!dest) continue;
+      const hit = backendImportRoots.find((prefix) => dest === prefix.slice(0, -1) || dest.startsWith(prefix));
+      if (hit) {
+        failures.push(
+          `${shown}: frontend source may not import backend ${hit} directly; `
+          + "the vendored @omi-core/ratified-contracts package is the only crossing",
+        );
+      }
+    }
+  }
+  const scanFrontendToolchain = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === ".git" || entry.name === "dist" || entry.name === ".build" || entry.name === ".dart_tool") {
+        continue;
+      }
+      const full = join(directory, entry.name);
+      const shown = relative(root, full);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules") {
+          if (existsSync(join(full, ".bun"))) {
+            failures.push(`${shown}/.bun: bun toolchain is forbidden under frontend/; this tree stays pnpm`);
+          }
+          continue;
+        }
+        scanFrontendToolchain(full);
+        continue;
+      }
+      if (entry.name === "bun.lock" || entry.name === "bun.lockb") {
+        failures.push(`${shown}: bun lockfile is forbidden under frontend/; this tree stays pnpm`);
+      }
+    }
+  };
+  scanFrontendToolchain(frontendRoot);
+}
+
+for (const file of files(root, new Set(["frontend"]))) {
+  const shown = relative(root, file);
+  if (!backendSourcePrefixes.some((prefix) => shown.startsWith(prefix))) continue;
+  const text = readFileSync(file, "utf8");
+  for (const spec of importSpecsIn(text)) {
+    const dest = resolveRelativeImport(shown, spec);
+    if (dest === "frontend" || dest?.startsWith("frontend/")) {
+      failures.push(
+        `${shown}: backend source may not import frontend/ directly; `
+        + "the vendored @omi-core/ratified-contracts package is the only crossing",
+      );
+    }
   }
 }
 
