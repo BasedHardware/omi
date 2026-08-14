@@ -150,6 +150,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
+# Federated social sign-in as seen across auth backends: Firebase provider ids ('*.com') and the
+# conventional Keycloak IdP aliases. Used to decide whether a Twitter link needs an explicit persona.
+_FEDERATED_SOCIAL_PROVIDERS = {'google.com', 'apple.com', 'google', 'apple'}
+
 
 class AppSelectOption(PydanticBaseModel):
     title: str
@@ -1686,8 +1690,9 @@ async def verify_twitter_ownership_tweet(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Neutral auth port: get_user returns a UserProfile whose ``providers`` are already provider-id
-    # strings (was a Firebase UserRecord with ``.provider_data`` objects).
-    provider_data = auth.get_user(uid).providers
+    # strings (was a Firebase UserRecord with ``.provider_data`` objects). Offload the blocking lookup
+    # (Firebase Admin, or two OIDC HTTP round-trips) so it does not stall the event loop (cubic 10887 C3).
+    provider_data = (await run_blocking(critical_executor, auth.get_user, uid)).providers
 
     # Verify handle
     if handle.startswith('@'):
@@ -1697,7 +1702,11 @@ async def verify_twitter_ownership_tweet(
     persona = None
     res = await verify_latest_tweet(username, handle)
     if res['verified']:
-        if not ('google.com' in provider_data or 'apple.com' in provider_data):
+        # Federated social sign-in surfaces as Firebase provider ids ('google.com'/'apple.com') or, on
+        # OIDC, Keycloak IdP aliases (conventionally 'google'/'apple'). Recognize both so an OIDC user
+        # with a linked Google/Apple identity isn't mistaken for a non-federated user (cubic 10887 C2).
+        federated = any(p in _FEDERATED_SOCIAL_PROVIDERS for p in provider_data)
+        if not federated:
             persona = await upsert_persona_from_twitter_profile(username, handle, uid)
         else:
             if persona_id:
