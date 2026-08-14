@@ -114,23 +114,26 @@ class _PerplexityWebSearchToolProxy:
 
     @property
     def args_schema(self):
+        class _FallbackArgsSchema:
+            @classmethod
+            def schema(cls):
+                return {
+                    'properties': {'query': {'type': 'string'}},
+                    'required': ['query'],
+                }
+
         try:
             from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
-
-            return perplexity_web_search_tool.args_schema
         except ModuleNotFoundError as error:
             if error.name != 'langchain_core.tools':
                 raise
-
-            class _FallbackArgsSchema:
-                @classmethod
-                def schema(cls):
-                    return {
-                        'properties': {'query': {'type': 'string'}},
-                        'required': ['query'],
-                    }
-
             return _FallbackArgsSchema
+
+        # Under the LangChain-stub harness the @tool decorator is a passthrough, so the
+        # imported object is a bare function with no args_schema. The real decorator always
+        # supplies one, so falling back here cannot mask a production schema loss.
+        schema = getattr(perplexity_web_search_tool, 'args_schema', None)
+        return schema if schema is not None else _FallbackArgsSchema
 
     async def ainvoke(self, tool_input, config=None):
         from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool

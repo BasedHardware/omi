@@ -132,6 +132,11 @@ tracker_mod.track_usage = MagicMock()
 gateway_mod = _stub_module("utils.llm.gateway_client")
 gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
 gateway_mod.is_auto_lane_id = lambda value: isinstance(value, str) and value.startswith('omi:auto:')
+# perplexity_tools.py is imported under this harness and names the gateway surface
+# it depends on; mirror the real module's members so the import succeeds.
+gateway_mod.feature_auto_lane_id = lambda feature: f"omi:auto:{feature.replace('_', '-')}"
+gateway_mod.get_llm_gateway_base_url = MagicMock(return_value='https://llm-gateway.test')
+gateway_mod.llm_gateway_headers = MagicMock(return_value={})
 gateway_mod.record_chat_extraction_gateway_result = MagicMock()
 gateway_mod.raise_if_gateway_feature_mode_blocks_direct_model_surface = MagicMock()
 
@@ -148,7 +153,30 @@ langchain_runnables_mod = _stub_module("langchain_core.runnables")
 langchain_runnables_mod.RunnableConfig = dict
 langchain_callbacks_mod = _stub_module("langchain_core.callbacks")
 langchain_callbacks_mod.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
+
+
+def _passthrough_tool(target=None, **_kwargs):
+    # Mirrors the langchain @tool decorator shape for module-import compatibility only:
+    # production tool modules (e.g. utils/retrieval/tools/perplexity_tools.py) decorate
+    # their tools with @tool at import time. The harness never invokes these tools, so
+    # the real wrapper is not needed here.
+    if callable(target):
+        return target
+    return lambda fn: fn
+
+
+_langchain_tools_was_stubbed = "langchain_core.tools" not in sys.modules
 langchain_tools_mod = _stub_module("langchain_core.tools")
+# Installed on the stub itself rather than through an autouse fixture. The fixture only ran
+# for tests in this file, so any other module that imports a langchain-@tool-decorated module
+# here (test_chat_agent_provider_retry.py) reached its import-time `from langchain_core.tools
+# import tool` against a bare stub and failed collection with ImportError.
+# Only patched when this file created the stub: when the real langchain_core.tools is already
+# imported, its own @tool works and overwriting it here would leak a passthrough decorator into
+# every production tool module imported afterwards in the same process.
+if _langchain_tools_was_stubbed:
+    langchain_tools_mod.tool = _passthrough_tool
+
 langchain_tools_mod.StructuredTool = MagicMock()
 
 # --- LLMs/memory stubs ---
