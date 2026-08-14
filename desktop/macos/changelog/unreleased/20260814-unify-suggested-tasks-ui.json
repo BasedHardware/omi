@@ -1,0 +1,3 @@
+{
+  "change": "Suggested tasks now use regular task rows with a working checkbox plus Accept and Reject, those actions confirm then fade the row like checking a task, Suggested checkboxes line up with Today/Tomorrow/Later, count badges sit next to category titles, and the old sparkle Suggestions list is gone"
+}
