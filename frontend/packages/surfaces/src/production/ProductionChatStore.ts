@@ -286,13 +286,7 @@ export function createProductionChatStore(
     },
     discardDeadLetter: (opId) => store.discardDeadLetter(opId),
     cancel: (generationId) => store.cancelGeneration(generationId),
-    async resolveApproval(resolution) {
-      const candidate = store as ChatMessagesStore & {
-        resolveApproval?: (value: "approved" | "denied" | "cancelled") => Promise<void>;
-      };
-      if (typeof candidate.resolveApproval !== "function") return;
-      await candidate.resolveApproval(resolution);
-    },
+    resolveApproval: (resolution) => store.resolveApproval(resolution),
   };
 }
 

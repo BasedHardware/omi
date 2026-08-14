@@ -26,10 +26,12 @@ import {
   PLATFORM_CHAT_MESSAGES_PATH,
   admitChatMessageOp,
   cancelChatGeneration,
+  resolveChatAgentApproval,
   fetchChatMessageReconcilePage,
   parseChatGenerationEventStream,
   platformChatGenerationEventsPath,
   platformChatGenerationPath,
+  platformChatAgentApprovalsPath,
   wireToChatHistoryEnvelope,
   wireToChatGenerationFrame,
   wireToChatMessage,
@@ -283,6 +285,11 @@ test("JSON admission is finite and never opens or consumes generation SSE", asyn
     "/v1/chat-generations/generation%2F01/events",
   );
 
+  assert.equal(
+    platformChatAgentApprovalsPath("generation/01"),
+    "/v1/chat-generations/generation%2F01/agent-approvals",
+  );
+
   const human = canonicalMessage("client-message-01", "human", "Read this");
   const http = new ScriptedHttp();
   http.respond({
@@ -347,6 +354,19 @@ test("JSON admission is finite and never opens or consumes generation SSE", asyn
   assert.deepEqual(http.calls[2], {
     method: "DELETE",
     path: "/v1/chat-generations/generation%2F01",
+  });
+
+  http.respond({
+    status: 200,
+    json: { outcome: { kind: "completed", summary: "Scoped write recorded." } },
+  });
+  assert.deepEqual(await resolveChatAgentApproval(http, "generation/01", "approved"), {
+    ok: true,
+  });
+  assert.deepEqual(http.calls[3], {
+    method: "POST",
+    path: "/v1/chat-generations/generation%2F01/agent-approvals",
+    body: { resolution: "approved" },
   });
 });
 

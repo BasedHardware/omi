@@ -32,6 +32,7 @@ import {
   fetchChatMessageIdSnapshot,
   fetchChatMessageReconcilePage,
   cancelChatGeneration,
+  resolveChatAgentApproval,
   observeAgentRun,
   observeChatGeneration,
   parseStoredAgentRunUiEvent,
@@ -342,6 +343,28 @@ export class ChatMessagesStore {
         this.startObservation(current);
       }
     }
+  }
+
+  /**
+   * Resolve the unique pending approval for this Chat surface.
+   * Approval ids stay off the UI; the server matches the pending call for the run.
+   */
+  async resolveApproval(resolution: "approved" | "denied" | "cancelled"): Promise<void> {
+    if (resolution !== "approved" && resolution !== "denied" && resolution !== "cancelled") {
+      throw new Error("approval resolution is invalid");
+    }
+    const pending: string[] = [];
+    for (const timeline of this.agentRuns.values()) {
+      const latest = [...timeline.events].reverse().find((event) =>
+        event.kind === "approval_requested" || event.kind === "approval_resolved");
+      if (latest?.kind === "approval_requested") pending.push(timeline.generationId);
+    }
+    if (pending.length === 0) return;
+    if (pending.length !== 1) {
+      throw new Error("approval request is ambiguous");
+    }
+    const result = await resolveChatAgentApproval(this.http, pending[0]!, resolution);
+    if (!result.ok) throw new Error(result.failure.detail);
   }
 
   /**

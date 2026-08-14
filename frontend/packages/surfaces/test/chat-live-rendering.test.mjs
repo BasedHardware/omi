@@ -1137,6 +1137,17 @@ test("pending approval shows Allow, Deny, and Cancel that call resolveApproval",
   }
 });
 
+test("createProductionChatStore forwards resolveApproval to the domain Chat store", async () => {
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  const store = createProductionChatStore(domain);
+  await store.resolveApproval("approved");
+  assert.deepEqual(domain.approvals, ["approved"]);
+});
+
 test("retained dead send shows authored text and a safe attachment count with discard only", async () => {
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const createProductionChatStore = await loadProductionExport(

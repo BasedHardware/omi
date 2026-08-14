@@ -864,3 +864,62 @@ test("codec keyed patch: rating-only overlay preserves text and reported", () =>
   assert.equal(next.reported, true);
   assert.equal(next.rating, -1);
 });
+
+test("pending approval Allow posts resolution without leaking approval ids", async () => {
+  // red-proof: ProductionChatStore used to duck-type resolveApproval onto
+  // ChatMessagesStore and silently no-op. Allow must POST the generation's
+  // pending approval without putting approvalId on the UI timeline.
+  const disk = new MemoryStore();
+  const env = new ManualEnv();
+  const http = new ScriptedHttp();
+  const scripts: { chunks: readonly string[]; hangs?: boolean }[] = [];
+  const streams = new StoreTestStreamPort(scripts);
+  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http, streams);
+
+  await store.send("need a scoped write");
+  const clientMessageId = (await store.list())[0]!.id;
+  const generationId = `generation-${clientMessageId}`;
+  scripts.push(
+    { chunks: [successfulGeneration(clientMessageId)] },
+    { chunks: [
+      agentRunEvent(generationId, "opaque-accepted", 1, "run_accepted", "Run accepted", {
+        admissionId: "opaque-admission",
+      }) +
+      agentRunEvent(generationId, "opaque-approval", 2, "approval_requested", "Approval requested for a scoped write", {
+        approvalId: "approval:call:write",
+        callId: "call:write",
+        reason: "A scoped approval is required.",
+        expiresAt: 1_786_442_460_002,
+      }),
+    ], hangs: true },
+  );
+  http.respond(...successfulSend(clientMessageId, "need a scoped write"));
+  await env.advance(10);
+  await drainMicrotasks();
+  for (let index = 0; index < 20 && store.agentRunTimelines()[0]?.events.length !== 2; index += 1) {
+    await drainMicrotasks();
+  }
+
+  const timeline = store.agentRunTimelines()[0];
+  assert.equal(timeline?.events.map((event) => event.kind).join(","), "run_accepted,approval_requested");
+  assert.doesNotMatch(
+    JSON.stringify(timeline?.events),
+    /approval:call:write|call:write|opaque-approval/,
+    "approval and call identities never enter the UI event model",
+  );
+
+  http.respond({
+    status: 200,
+    json: { outcome: { kind: "completed", summary: "Scoped write recorded." } },
+  });
+  await store.resolveApproval("approved");
+  const approvalPosts = http.calls.filter((call) =>
+    call.method === "POST" && String(call.path).includes("agent-approvals"));
+  assert.equal(approvalPosts.length, 1);
+  assert.deepEqual(approvalPosts[0], {
+    method: "POST",
+    path: `/v1/chat-generations/${encodeURIComponent(generationId)}/agent-approvals`,
+    body: { resolution: "approved" },
+  });
+  assert.equal("approvalId" in (approvalPosts[0]?.body as object), false);
+});
