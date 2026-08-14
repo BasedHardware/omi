@@ -271,4 +271,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0044-derived-group-recall-read.sql",
     sha256: "f3bd87218375f8363e5d3ee53e13aed96fe753e75ce197a301d1819aa47cec04",
   }),
+  Object.freeze({
+    version: 45,
+    name: "product-projection-row-level-security",
+    fileName: "0045-product-projection-row-level-security.sql",
+    sha256: "01ee0462f89bbae065603c3f9e9490917d748d511715af67896a26e8cf81f234",
+  }),
 ]);

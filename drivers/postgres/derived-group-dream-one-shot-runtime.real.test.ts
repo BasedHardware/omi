@@ -905,6 +905,42 @@ realTest("derived group dream PostgreSQL one-shot runtime", () => {
     ))).toBe(true);
 
     /**
+     * Row-level security fences the ROLE, not only the definer functions.
+     *
+     * `0022` grants the application role a direct `SELECT` on the projection
+     * tables, so before `0045` any code holding that role could read another
+     * account's group rows straight past the `memories.read` capability check.
+     * Read the table directly, under that role, with the session account set
+     * each way.
+     */
+    const directGroupCount = async (sessionAccountId: string): Promise<number> => {
+      const rows = await pool.withTransaction(
+        { isolationLevel: "serializable", accessMode: "read write" },
+        async (connection) => {
+          await connection.query({
+            name: "dream.one_shot.rls.set_role",
+            text: "SET LOCAL ROLE omi_platform_application", values: [],
+          });
+          await connection.query({
+            name: "dream.one_shot.rls.context",
+            text: "SELECT set_config('omi.account_id', $1, true)",
+            values: [sessionAccountId],
+          });
+          return connection.query<{ n: number }>({
+            name: "dream.one_shot.rls.direct_read",
+            text: `SELECT count(*)::int AS n
+                   FROM omi_memory.memory_product_group_projections`,
+            values: [],
+          });
+        },
+      );
+      return rows[0]?.n ?? -1;
+    };
+    expect(await directGroupCount(accountId)).toBe(1);
+    // The bystander holds the same role and sees nothing.
+    expect(await directGroupCount(otherAccountId)).toBe(0);
+
+    /**
      * The module's headline property: a persisted row that no longer rebuilds
      * to the identifier it was stored under must fail closed rather than
      * answer. Tamper each covered surface in turn and require rejection, then
