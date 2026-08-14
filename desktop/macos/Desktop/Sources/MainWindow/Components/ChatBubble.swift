@@ -247,7 +247,8 @@ struct ChatBubble: View {
         groupView(group)
       }
       if message.isStreaming, app != nil {
-        if case .toolCalls(_, let calls) = groupedBlocks.last,
+        if let lastGroup = groupedBlocks.last,
+          case .toolCalls(_, let calls) = lastGroup,
           calls.contains(where: { block in
             if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
             return false
@@ -296,7 +297,26 @@ struct ChatBubble: View {
         if let backgroundAgentSummary {
           BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
         } else if !message.text.isEmpty {
-          messageTextBubble(displayText)
+          if message.sender == .ai, shouldTruncate {
+            // Keep the expansion affordance on the same baseline as the
+            // visible truncation ellipsis. The text gets the remaining width,
+            // so the control cannot fall onto a detached row.
+            HStack(alignment: .lastTextBaseline, spacing: OmiSpacing.xs) {
+              messageTextBubble(displayText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(0)
+              showMoreButton
+            }
+            .frame(
+              maxWidth: .infinity,
+              alignment: .leading
+            )
+          } else if message.isStreaming {
+            StreamingAssistantText(displayText, isStreaming: true, sender: message.sender)
+              .chatMessageBlock(filled: presentation.isFilled)
+          } else {
+            messageTextBubble(displayText)
+          }
         }
 
         if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {

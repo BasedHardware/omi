@@ -1,4 +1,5 @@
 import AppKit
+import FlowToken
 import OmiTheme
 import SwiftUI
 
@@ -127,7 +128,7 @@ struct SBOnboardingView: View {
               messageRow(msg)
             }
             if let streaming = model.streamingText {
-              omiRow(streaming)
+              streamingOmiRow(streaming)
             }
             if model.typing {
               HStack(spacing: 10) {
@@ -247,6 +248,21 @@ struct SBOnboardingView: View {
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: 380, alignment: .leading)
       Spacer(minLength: 0)
+    }
+  }
+
+  @ViewBuilder private func streamingOmiRow(_ text: String) -> some View {
+    if OmiMarkdown.isPlainText(text) {
+      HStack(alignment: .top, spacing: 10) {
+        SBLogo(size: 16, opacity: 0.9)
+        TokenizedText(text, separator: .diff, animation: .fadeIn, animationDuration: 0.18)
+          .inkStyle(InkType.prose, color: Ink.secondary)
+          .frame(maxWidth: 380, alignment: .leading)
+          .textSelection(.disabled)
+        Spacer(minLength: 0)
+      }
+    } else {
+      omiRow(text)
     }
   }
 

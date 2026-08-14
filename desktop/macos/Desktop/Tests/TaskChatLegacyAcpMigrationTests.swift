@@ -12,8 +12,8 @@ final class TaskChatKernelIdentityTests: XCTestCase {
 
   func testTaskChatStateUsesSharedRuntimeNotPerTaskBridge() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+    XCTAssertTrue(source.contains("try await queryOperation("))
     XCTAssertTrue(source.contains("TaskChatRuntime.query("))
-    XCTAssertTrue(source.contains("producingTurnId: aiMessageId"))
     XCTAssertFalse(source.contains("private var agentBridge"))
     XCTAssertFalse(source.contains("ensureBridgeStarted"))
   }
@@ -46,8 +46,9 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
     let runtime = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift")
 
-    XCTAssertTrue(source.contains("prompt: trimmedText"))
-    XCTAssertTrue(source.contains("taskContext: taskContext"))
+    XCTAssertTrue(
+      source.contains("try await queryOperation(\n        trimmedText,\n        workstreamId,\n        aiMessageId,"))
+    XCTAssertTrue(source.contains("taskContext,\n        lease.authorizationSnapshot,"))
     XCTAssertTrue(runtime.contains("source: source"))
     XCTAssertTrue(runtime.contains("expectedContext: snapshot.freshness"))
     XCTAssertFalse(runtime.contains("surfaceContextJson"))
@@ -124,6 +125,8 @@ final class TaskChatKernelIdentityTests: XCTestCase {
 
     XCTAssertTrue(source.contains("if !failedByUserStop {\n            Self.applyFailureTextIfNeeded"))
     XCTAssertTrue(source.contains("terminalStatus: .failed"))
+    XCTAssertTrue(source.contains("disposition: .discard"))
+    XCTAssertTrue(source.contains("disposition: failedByUserStop ? .discard : .accept"))
     XCTAssertFalse(source.contains("failedByUserStop ? .completed : .failed"))
   }
 
@@ -146,6 +149,22 @@ final class TaskChatKernelIdentityTests: XCTestCase {
       return XCTFail("Expected task chat sends to atomically admit both canonical rows")
     }
     XCTAssertLessThan(recordRange.lowerBound, tokenRange.lowerBound)
+  }
+
+  func testTaskThreadAutomationYieldsBeforeCheckingAdmission() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift")
+
+    XCTAssertTrue(source.contains("Task { await state.sendMessage(query) }"))
+    XCTAssertTrue(source.contains("await Task.yield()"))
+    XCTAssertTrue(source.contains("state.localSendToken.generation == sendGenerationBefore"))
+  }
+
+  func testTaskChatRecoversAClaimedTerminalization() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(source.contains("recoverTerminalizedJournalMessage"))
+    XCTAssertTrue(source.contains("producingRunIdentity"))
+    XCTAssertTrue(source.contains("await refreshJournal(lease: lease)"))
   }
 
   func testFailureTranscriptFormatterUsesStructuredProjectionFailure() {

@@ -123,6 +123,65 @@ final class ChatJournalWritePathTests: XCTestCase {
     XCTAssertTrue(coordinator.schedule(messageID: messageID, supersededByTerminalization: false) {})
   }
 
+  func testTerminalizationCancelsPendingStreamingCoalesce() async {
+    let coordinator = ChatJournalWriteCoordinator()
+    var writes = 0
+
+    XCTAssertTrue(
+      coordinator.scheduleStreaming(messageID: "assistant-turn-4", delay: .seconds(60)) {
+        writes += 1
+      })
+
+    let beganTerminalization = await coordinator.beginTerminalization(messageID: "assistant-turn-4")
+    XCTAssertTrue(beganTerminalization)
+    XCTAssertEqual(writes, 0)
+  }
+
+  func testLatestStreamingCoalesceReplacesOlderUpdate() async {
+    let coordinator = ChatJournalWriteCoordinator()
+    var writes: [String] = []
+
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      coordinator.schedule(
+        messageID: "assistant-turn-5",
+        coalescingDelay: .zero
+      ) {
+        writes.append("older")
+      }
+      coordinator.schedule(
+        messageID: "assistant-turn-5",
+        coalescingDelay: .zero
+      ) {
+        writes.append("newer")
+        continuation.resume()
+      }
+    }
+
+    XCTAssertEqual(writes, ["newer"])
+  }
+
+  func testStreamingCoalescePersistsLatestUpdateDuringContinuousScheduling() async {
+    let delay = ManualJournalCoalescingDelay()
+    let coordinator = ChatJournalWriteCoordinator(sleep: { duration in
+      await delay.sleep(for: duration)
+    })
+    var writes: [String] = []
+    let persisted = expectation(description: "latest streaming update persists")
+
+    coordinator.scheduleStreaming(messageID: "assistant-turn-6", delay: .milliseconds(150)) {
+      writes.append("older")
+    }
+    await delay.waitForRequest()
+    coordinator.scheduleStreaming(messageID: "assistant-turn-6", delay: .milliseconds(150)) {
+      writes.append("newer")
+      persisted.fulfill()
+    }
+    delay.resume()
+
+    await fulfillment(of: [persisted], timeout: 2.0)
+    XCTAssertEqual(writes, ["newer"])
+  }
+
   func testTerminalizationRetriesOneFailedIdempotentProjection() async {
     let coordinator = ChatJournalWriteCoordinator()
     var attempts = 0
@@ -302,5 +361,29 @@ final class ChatJournalWritePathTests: XCTestCase {
         "createdAtMs": 1_700_000_000_000 + turnSeq,
         "updatedAtMs": 1_700_000_000_000 + turnSeq,
       ]))
+  }
+}
+
+@MainActor
+private final class ManualJournalCoalescingDelay {
+  private var sleepers: [CheckedContinuation<Void, Never>] = []
+  private var requestCount = 0
+  private var requestWaiter: CheckedContinuation<Void, Never>?
+
+  func sleep(for _: Duration) async -> Bool {
+    requestCount += 1
+    requestWaiter?.resume()
+    requestWaiter = nil
+    await withCheckedContinuation { sleepers.append($0) }
+    return true
+  }
+
+  func waitForRequest() async {
+    guard requestCount == 0 else { return }
+    await withCheckedContinuation { requestWaiter = $0 }
+  }
+
+  func resume() {
+    sleepers.removeFirst().resume()
   }
 }

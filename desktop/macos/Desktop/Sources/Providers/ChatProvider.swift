@@ -1282,6 +1282,11 @@ class ChatProvider: ObservableObject {
   /// Accumulates text and thinking deltas during streaming and flushes them to
   /// the published messages array in batches, reducing SwiftUI re-render frequency.
   private let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.035)
+  private struct PendingSpawnMaterialization: Hashable {
+    let messageID: String
+    let toolUseID: String?
+  }
+  private var pendingSpawnMaterializations: Set<PendingSpawnMaterialization> = []
 
   // MARK: - Filtered Sessions
   var filteredSessions: [ChatSession] {
@@ -1671,7 +1676,6 @@ class ChatProvider: ObservableObject {
   private func preparePromptContextIfNeeded() async {
     await warmupPromptContext()
   }
-
   private func resetSessionStateForAuthChange() {
     // Reachable without a real sign-out: a rejected token refresh or any API
     // 401 invalidates the session, which moves the effective owner and posts
@@ -1680,6 +1684,8 @@ class ChatProvider: ObservableObject {
     revokeActiveTurn(reason: .superseded)
     kernelTurnProjection.invalidateOwnerState()
     journalWriteCoordinator.cancelAll()
+    streamingBuffer.discardAllPendingSegments()
+    pendingSpawnMaterializations.removeAll()
     journalOwnerByMessageID.removeAll()
     pendingMessageRatings.removeAll()
     journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
@@ -3498,13 +3504,12 @@ class ChatProvider: ObservableObject {
     pendingMessageRatings.removeAll()
     resetMessagesPagination()
   }
-
   private func scheduleJournalUpdate(
     messageId: String,
     status: KernelJournalTurnStatus? = nil,
     surface: AgentSurfaceReference? = nil
   ) {
-    guard let message = messages.first(where: { $0.id == messageId }) else { return }
+    guard messages.contains(where: { $0.id == messageId }) else { return }
     guard let ownerID = journalOwnerByMessageID[messageId] ?? runtimeOwnerId else { return }
     let targetSurface = surface ?? mainChatSurfaceReference()
     // A `.streaming` coalesce must never land after the terminal mutation (it
@@ -3513,9 +3518,16 @@ class ChatProvider: ObservableObject {
     // mutation and must remain journalable after the turn terminalizes.
     journalWriteCoordinator.schedule(
       messageID: messageId,
-      supersededByTerminalization: status == .streaming
+      supersededByTerminalization: status == .streaming,
+      coalescingDelay: status == .streaming ? .milliseconds(150) : nil
     ) { @MainActor [weak self] in
       guard let self else { return }
+      // Resolve the snapshot when the coalesced write actually runs. Capturing
+      // the row at schedule time sent a prefix that the reveal ticks had already
+      // moved past, and `updateTurn` refreshes the journal straight back into
+      // `messages` — replacing the newer local text with that stale prefix and
+      // permanently dropping the span in between.
+      guard let message = self.messages.first(where: { $0.id == messageId }) else { return }
       _ = await self.kernelTurnProjection.updateTurn(
         surface: targetSurface,
         message: message,
@@ -4979,6 +4991,7 @@ class ChatProvider: ObservableObject {
         // turn's bridge ownership, or persist a response the user did
         // not accept. Remove only this turn's buffered segments.
         streamingBuffer.discardPendingSegments(messageId: aiMessageId)
+        pendingSpawnMaterializations = pendingSpawnMaterializations.filter { $0.messageID != aiMessageId }
         var hadPartialResponse = false
         if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
           hadPartialResponse =
@@ -5059,9 +5072,43 @@ class ChatProvider: ObservableObject {
         return nil
       }
 
-      // Flush any remaining buffered streaming text before finalizing
+      // Drain the remaining streaming buffers at the metered reveal pace so
+      // a fast/single-chunk success response still renders progressively
+      // instead of jumping to the full settled text.
+      while streamingBuffer.hasPendingSegments {
+        guard
+          ChatQueryResultAuthority.acceptsContinuation(
+            currentGeneration: sendGeneration,
+            turnGeneration: sendGen,
+            turnAcceptsResult: turnLifecycle.acceptsResult
+          )
+        else {
+          throw BridgeError.stopped
+        }
+        flushStreamingBuffer(revealAll: false)
+        if streamingBuffer.hasPendingSegments {
+          try? await Task.sleep(nanoseconds: 35_000_000)
+          guard
+            ChatQueryResultAuthority.acceptsContinuation(
+              currentGeneration: sendGeneration,
+              turnGeneration: sendGen,
+              turnAcceptsResult: turnLifecycle.acceptsResult
+            )
+          else {
+            throw BridgeError.stopped
+          }
+        }
+      }
+      guard
+        ChatQueryResultAuthority.acceptsContinuation(
+          currentGeneration: sendGeneration,
+          turnGeneration: sendGen,
+          turnAcceptsResult: turnLifecycle.acceptsResult
+        )
+      else {
+        throw BridgeError.stopped
+      }
       streamingBuffer.cancelPendingFlush()
-      flushStreamingBuffer()
 
       // Determine the final text to display and save
       let messageText: String
@@ -5288,6 +5335,7 @@ class ChatProvider: ObservableObject {
         turnAcceptsResult: turnLifecycle.acceptsResult
       ) {
         streamingBuffer.discardPendingSegments(messageId: aiMessageId)
+        pendingSpawnMaterializations = pendingSpawnMaterializations.filter { $0.messageID != aiMessageId }
         let watchdogFired =
           sendWatchdogFiredGeneration == sendGen
           || turnLifecycle.revocationReason == .watchdogTimeout
@@ -5906,25 +5954,70 @@ class ChatProvider: ObservableObject {
     return normalized
   }
 
-  /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
-  /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
+  private static func normalizeStreaming(_ message: ChatMessage, _ text: String) -> String {
+    message.sender == .ai ? normalizeAssistantSentenceSpacing(text) : text
+  }
+
+  /// Append text to a streaming message via a buffer that reveals at ~35ms intervals.
+  /// This reduces SwiftUI re-renders from once-per-token while keeping text movement smooth.
   private func appendToMessage(id: String, text: String) {
     streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(revealAll: false)
     }
   }
 
   /// Flush accumulated text and thinking deltas to the published messages array.
-  private func flushStreamingBuffer() {
-    streamingBuffer.flush(messages: &messages) { message, text in
-      if message.sender == .ai {
-        return Self.normalizeAssistantSentenceSpacing(text)
-      }
-      return text
+  private func flushStreamingBuffer(revealAll: Bool = true) {
+    if revealAll {
+      streamingBuffer.flush(messages: &messages, normalizeText: Self.normalizeStreaming)
+    } else {
+      streamingBuffer.flushMetered(
+        messages: &messages,
+        normalizeText: Self.normalizeStreaming,
+        scheduleFlush: { [weak self] in
+          self?.flushStreamingBuffer(revealAll: false)
+        }
+      )
     }
+    materializePendingSpawnProjections()
     for message in messages where message.isStreaming {
       scheduleJournalUpdate(messageId: message.id, status: .streaming)
     }
+  }
+
+  private func materializePendingSpawnProjections() {
+    for target in Array(pendingSpawnMaterializations) {
+      guard let index = messages.firstIndex(where: { $0.id == target.messageID }) else {
+        pendingSpawnMaterializations.remove(target)
+        continue
+      }
+      guard
+        let spawnedAgent = Self.materializeAgentSpawnBlockIfNeeded(
+          in: &messages[index].contentBlocks,
+          toolUseId: target.toolUseID,
+          toolName: "spawn_agent"
+        ), !spawnedAgent.sessionID.isEmpty, !spawnedAgent.runID.isEmpty
+      else { continue }
+      pendingSpawnMaterializations.remove(target)
+      // The transcript and notch must project the same accepted kernel
+      // run. Without this handoff, main-chat spawn receipts render a
+      // structured card while the compact notch still sees an empty
+      // AgentPillsManager (white mark and no hover row).
+      upsertSpawnedAgentPill(spawnedAgent)
+    }
+  }
+
+  private func upsertSpawnedAgentPill(_ spawnedAgent: SpawnedAgentPillProjection) {
+    AgentPillsManager.shared.upsertSpawnedPill(
+      id: spawnedAgent.pillID,
+      query: spawnedAgent.objective,
+      title: spawnedAgent.title,
+      sessionId: spawnedAgent.sessionID,
+      runId: spawnedAgent.runID,
+      attemptId: nil,
+      provider: spawnedAgent.provider,
+      producingJournalSurface: mainChatSurfaceReference()
+    )
   }
 
   /// Add a tool call indicator to a streaming message
@@ -5948,11 +6041,9 @@ class ChatProvider: ObservableObject {
         toolUseId: toolUseId,
         input: input,
         messages: &messages,
-        normalizeText: { message, text in
-          if message.sender == .ai {
-            return Self.normalizeAssistantSentenceSpacing(text)
-          }
-          return text
+        normalizeText: Self.normalizeStreaming,
+        scheduleFlush: { [weak self] in
+          self?.flushStreamingBuffer(revealAll: false)
         }
       )
     else { return }
@@ -5976,11 +6067,9 @@ class ChatProvider: ObservableObject {
         name: name,
         output: output,
         messages: &messages,
-        normalizeText: { message, text in
-          if message.sender == .ai {
-            return Self.normalizeAssistantSentenceSpacing(text)
-          }
-          return text
+        normalizeText: Self.normalizeStreaming,
+        scheduleFlush: { [weak self] in
+          self?.flushStreamingBuffer(revealAll: false)
         }
       )
     else { return }
@@ -5990,24 +6079,13 @@ class ChatProvider: ObservableObject {
       toolUseId: toolUseId,
       extraTexts: [output]
     )
-    if let spawnedAgent = Self.materializeAgentSpawnBlockIfNeeded(
-      in: &messages[index].contentBlocks,
-      toolUseId: toolUseId,
-      toolName: name
-    ), !spawnedAgent.sessionID.isEmpty, !spawnedAgent.runID.isEmpty {
-      // The transcript and notch must project the same accepted kernel
-      // run. Without this handoff, main-chat spawn receipts render a
-      // structured card while the compact notch still sees an empty
-      // AgentPillsManager (white mark and no hover row).
-      AgentPillsManager.shared.upsertSpawnedPill(
-        id: spawnedAgent.pillID,
-        query: spawnedAgent.objective,
-        title: spawnedAgent.title,
-        sessionId: spawnedAgent.sessionID,
-        runId: spawnedAgent.runID,
-        attemptId: nil,
-        provider: spawnedAgent.provider,
-        producingJournalSurface: mainChatSurfaceReference()
+    let normalizedName =
+      name.hasPrefix("mcp__")
+      ? String(name.split(separator: "__").last ?? Substring(name))
+      : name
+    if normalizedName == "spawn_agent" {
+      pendingSpawnMaterializations.insert(
+        PendingSpawnMaterialization(messageID: messageId, toolUseID: toolUseId)
       )
     }
     scheduleJournalUpdate(messageId: messageId, status: .streaming)
@@ -6251,7 +6329,7 @@ class ChatProvider: ObservableObject {
   /// Append thinking text to the streaming message via the shared buffer.
   private func appendThinking(messageId: String, text: String) {
     streamingBuffer.appendThinking(messageId: messageId, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(revealAll: false)
     }
   }
 
@@ -6268,12 +6346,7 @@ class ChatProvider: ObservableObject {
       messageId: messageId,
       terminalStatus: terminalStatus,
       messages: &messages,
-      normalizeText: { message, text in
-        if message.sender == .ai {
-          return Self.normalizeAssistantSentenceSpacing(text)
-        }
-        return text
-      }
+      normalizeText: Self.normalizeStreaming
     )
     if scheduleJournal {
       scheduleJournalUpdate(messageId: messageId)

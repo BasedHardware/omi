@@ -1885,7 +1885,7 @@ struct OnboardingChatBubble: View {
             if message.contentBlocks.isEmpty {
               // Fallback for messages loaded from backend (no contentBlocks, only flat text)
               if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                OmiMarkdown(text: message.text, style: .assistant)
+                StreamingAssistantText(message.text, isStreaming: message.isStreaming)
                   .padding(.horizontal, OmiSpacing.md)
                   .padding(.vertical, OmiSpacing.sm)
                   .glassCard()
@@ -1896,7 +1896,7 @@ struct OnboardingChatBubble: View {
               let allText = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
 
               if !allText.isEmpty {
-                OmiMarkdown(text: allText, style: .assistant)
+                StreamingAssistantText(allText, isStreaming: message.isStreaming)
                   .padding(.horizontal, OmiSpacing.md)
                   .padding(.vertical, OmiSpacing.sm)
                   .glassCard()

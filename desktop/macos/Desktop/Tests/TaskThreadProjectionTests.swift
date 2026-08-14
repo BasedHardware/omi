@@ -274,6 +274,11 @@ import XCTest
   }
 
   @MainActor
+  private final class TaskChatStateBox {
+    weak var value: TaskChatState?
+  }
+
+  @MainActor
   private final class TaskChatOwnerBox {
     var value: String?
 
@@ -570,6 +575,133 @@ import XCTest
       XCTAssertTrue(state.messages.isEmpty)
       XCTAssertFalse(state.isSending)
       XCTAssertEqual(state.errorMessage, "Could not save this message. Try again.")
+    }
+
+    /// A `.streaming` journal coalesce used to capture the assistant row when it
+    /// was *scheduled*. 150 ms later the reveal ticks had already advanced the
+    /// visible text, so the write sent a stale prefix — and `updateTurn`
+    /// refreshes the journal straight back into the transcript, permanently
+    /// dropping every character revealed inside the coalescing window.
+    func testStreamingJournalCoalesceSendsTheTextVisibleWhenItRuns() async {
+      let owner = TaskChatOwnerBox("owner-a")
+      let written = expectation(description: "the coalesced streaming write runs")
+      var writtenText: String?
+      let state = TaskChatState(
+        taskId: "task-coalesce",
+        workstreamId: "workstream-coalesce-\(UUID().uuidString)",
+        workspacePath: "/tmp",
+        ownerIDProvider: { owner.value },
+        updateJournalMessageOperation: { _, _, _, message, _ in
+          writtenText = message.text
+          written.fulfill()
+          throw BridgeError.agentError("journal write stubbed")
+        }
+      )
+      state.messages = [
+        ChatMessage(id: "assistant-coalesce", text: "Hel", sender: .ai, isStreaming: true)
+      ]
+
+      state.scheduleJournalUpdate(messageId: "assistant-coalesce", status: .streaming)
+      // Reveal ticks keep advancing while the 150 ms coalesce is pending.
+      state.messages[0].text = "Hello world"
+
+      await fulfillment(of: [written], timeout: 2.0)
+      XCTAssertEqual(
+        writtenText, "Hello world",
+        "A coalesced streaming write must send the row as it stands when the write runs")
+    }
+
+    /// Stop stays offered until the send lock clears. When the reveal ticks had
+    /// already emptied the buffer before `query()` returned, the drain loop was
+    /// skipped and nothing re-read `isStopping`, so a cancelled turn settled as
+    /// a completed answer.
+    func testStopDuringAnEmptyRevealDrainDoesNotSettleTheSuccessfulAnswer() async {
+      let owner = TaskChatOwnerBox("owner-a")
+      let stopTarget = TaskChatStateBox()
+      let state = TaskChatState(
+        taskId: "task-stop-window",
+        workstreamId: "workstream-stop-\(UUID().uuidString)",
+        workspacePath: "/tmp",
+        ownerIDProvider: { owner.value },
+        recordJournalExchangeOperation: { workstreamId, _, _, writes in
+          AgentRuntimeProcess.JournalOperationResult(
+            operation: "record_exchange",
+            conversationId: "conversation-stop",
+            turn: nil,
+            turns: try writes.map { try Self.acceptedTurn(for: $0, workstreamId: workstreamId) },
+            clearedCount: 0,
+            highWaterTurnSeq: 2,
+            conversationGeneration: 1,
+            generationBaseTurnSeq: 0
+          )
+        },
+        updateJournalMessageOperation: { _, _, _, _, _ in
+          throw BridgeError.agentError("journal write stubbed")
+        },
+        queryOperation: { _, _, _, _, _, _, _, _, _, _, _, _, _ in
+          // The user presses Stop while the query is still awaited; the buffer is
+          // already empty because the reveal ticks drained it.
+          await MainActor.run { stopTarget.value?.isStopping = true }
+          return AgentBridge.QueryResult(
+            text: "STOPPED-BUT-ANSWERED",
+            costUsd: 0,
+            omiSessionId: "session",
+            runId: "run-1",
+            attemptId: "attempt-1",
+            adapterSessionId: nil,
+            terminalStatus: "succeeded",
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0
+          )
+        },
+        terminalizeJournalMessageOperation: { workstreamId, _, _, message, _, _, disposition in
+          XCTAssertEqual(disposition, .discard, "A stopped turn terminalizes as discarded, not accepted")
+          return try Self.acceptedTurn(
+            for: message.journalWrite(origin: "workstream", status: .failed),
+            workstreamId: workstreamId)
+        }
+      )
+      stopTarget.value = state
+
+      await state.sendMessage("Answer then stop")
+
+      let assistant = state.messages.first { $0.sender == .ai }
+      XCTAssertNotEqual(
+        assistant?.text, "STOPPED-BUT-ANSWERED",
+        "A turn stopped before settlement must not be accepted as the completed answer")
+      XCTAssertEqual(assistant?.isStreaming, false)
+    }
+
+    private static func acceptedTurn(
+      for write: KernelJournalTurnWrite,
+      workstreamId: String
+    ) throws -> KernelJournalTurn {
+      let surface = AgentSurfaceReference.workstream(workstreamId: workstreamId)
+      return try XCTUnwrap(
+        KernelJournalTurn(
+          dictionary: [
+            "conversationId": "conversation-stop",
+            "turnId": write.turnId,
+            "turnSeq": write.role == "user" ? 1 : 2,
+            "conversationGeneration": 1,
+            "generationBaseTurnSeq": 0,
+            "producerId": "producer:\(write.turnId)",
+            "payloadHash": "sha256:\(write.turnId)",
+            "role": write.role,
+            "surfaceKind": surface.surfaceKind,
+            "externalRefKind": surface.externalRefKind,
+            "externalRefId": surface.externalRefId,
+            "content": write.content,
+            "origin": write.origin,
+            "status": write.status.rawValue,
+            "contentBlocks": KernelJournalTurnWrite.jsonArray(write.contentBlocksJSON),
+            "resources": KernelJournalTurnWrite.jsonArray(write.resourcesJSON),
+            "metadataJson": write.metadataJSON,
+            "createdAtMs": write.createdAtMs,
+            "updatedAtMs": write.createdAtMs,
+          ]))
     }
 
     func testSuspendedOwnerAJournalPageCannotPublishAfterInvalidation() async throws {

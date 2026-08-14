@@ -296,6 +296,7 @@ final class ToolCallStatusTests: XCTestCase {
       input: ["command": "pwd"],
       messages: &messages
     )
+    buffer.flush(messages: &messages)
 
     XCTAssertEqual(messages[0].contentBlocks.count, 2)
     guard case .text(_, "Before tool.") = messages[0].contentBlocks[0],
@@ -303,6 +304,45 @@ final class ToolCallStatusTests: XCTestCase {
     else {
       return XCTFail("Expected text before the tool call")
     }
+  }
+
+  func testStreamingBufferDefersToolActivityUntilRevealBacklogFlushes() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.1)
+
+    buffer.appendText(messageId: messageId, text: "Before tool.", scheduleFlush: {})
+    buffer.applyToolActivity(
+      messageId: messageId,
+      toolName: "Bash",
+      status: .running,
+      toolUseId: "tool-1",
+      input: ["command": "pwd"],
+      messages: &messages
+    )
+
+    XCTAssertTrue(messages[0].contentBlocks.isEmpty)
+    buffer.flush(messages: &messages)
+    XCTAssertEqual(messages[0].contentBlocks.count, 2)
+  }
+
+  func testStreamingBufferSchedulesToolResultFlush() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.01)
+    let scheduled = expectation(description: "tool result flush should be scheduled")
+
+    buffer.applyToolResult(
+      messageId: messageId,
+      toolUseId: "tool-1",
+      name: "Bash",
+      output: "done",
+      messages: &messages,
+      scheduleFlush: { scheduled.fulfill() }
+    )
+
+    wait(for: [scheduled], timeout: 0.1)
+    buffer.cancelPendingFlush()
   }
 
   func testStreamingBufferPreservesThinkingBeforeTextOrder() {
@@ -374,6 +414,83 @@ final class ToolCallStatusTests: XCTestCase {
 
     wait(for: [staleFlush], timeout: 0.05)
     XCTAssertEqual(messages[0].text, "Before tool.")
+  }
+
+  func testMeteredFlushRevealsBacklogOverMultipleTicks() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.035)
+
+    let text = String(repeating: "a", count: 100)
+    buffer.appendText(messageId: messageId, text: text, scheduleFlush: {})
+    buffer.flushMetered(messages: &messages, scheduleFlush: {})
+
+    XCTAssertGreaterThan(messages[0].text.count, 0)
+    XCTAssertLessThan(messages[0].text.count, text.count)
+    while buffer.hasPendingSegments {
+      buffer.flushMetered(messages: &messages, scheduleFlush: {})
+    }
+
+    XCTAssertEqual(messages[0].text, text)
+    XCTAssertFalse(buffer.hasScheduledFlush)
+  }
+
+  func testMeteredFlushRevealsTextAfterThinkingWithoutDrainingItFirst() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.035)
+
+    buffer.appendThinking(messageId: messageId, text: String(repeating: "t", count: 100), scheduleFlush: {})
+    buffer.appendText(messageId: messageId, text: "Answer", scheduleFlush: {})
+    buffer.flushMetered(messages: &messages, scheduleFlush: {})
+
+    XCTAssertFalse(messages[0].text.isEmpty)
+    guard case .thinking(_, let thinking) = messages[0].contentBlocks.first else {
+      return XCTFail("Expected eager thinking block")
+    }
+    XCTAssertEqual(thinking.count, 100)
+  }
+
+  func testMeteredFlushDropsOrphanBeforeRevealingCurrentSegment() {
+    var messages = [ChatMessage(id: "current", text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.035)
+
+    buffer.appendText(messageId: "orphan", text: String(repeating: "x", count: 100), scheduleFlush: {})
+    buffer.appendText(messageId: "current", text: "Answer", scheduleFlush: {})
+    buffer.flushMetered(messages: &messages, scheduleFlush: {})
+
+    XCTAssertFalse(messages[0].text.isEmpty)
+  }
+
+  func testTargetedDiscardDropsUnrevealedStoppedText() {
+    var messages = [
+      ChatMessage(id: "stopped", text: "", sender: .ai, isStreaming: true),
+      ChatMessage(id: "current", text: "", sender: .ai, isStreaming: true),
+    ]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.035)
+
+    buffer.appendText(messageId: "stopped", text: "Partial answer", scheduleFlush: {})
+    buffer.appendText(messageId: "current", text: "Current answer", scheduleFlush: {})
+    buffer.discardPendingSegments(messageId: "stopped")
+
+    XCTAssertTrue(messages[0].text.isEmpty)
+    XCTAssertTrue(messages[1].text.isEmpty)
+    buffer.flushMetered(messages: &messages, scheduleFlush: {})
+    XCTAssertFalse(messages[1].text.isEmpty)
+  }
+
+  func testTerminalFlushBypassesMeteredReveal() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.035)
+    let text = String(repeating: "a", count: 100)
+
+    buffer.appendText(messageId: messageId, text: text, scheduleFlush: {})
+    buffer.flush(messages: &messages)
+
+    XCTAssertEqual(messages[0].text, text)
+    XCTAssertFalse(buffer.hasPendingSegments)
+    XCTAssertFalse(buffer.hasScheduledFlush)
   }
 
   func testDuplicateStartForSameToolUseIdUpdatesExistingBlock() {

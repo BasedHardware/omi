@@ -186,6 +186,7 @@ final class SBOnboardingModel: ObservableObject {
   /// question never lets an earlier request finish after the user's revision.
   private let answerWriteGate = OnboardingAnswerWriteGate()
   let fileScanRunner: FileScanRunner
+  private let streamSleeper: @Sendable (UInt64) async -> Void
   private let onComplete: (() -> Void)?
   var streamTask: Task<Void, Never>?
   var localFileScanTask: Task<Void, Never>?
@@ -240,12 +241,16 @@ final class SBOnboardingModel: ObservableObject {
         memoryCount: coordinator.localFileMemoriesSaved,
         deniedFolders: outcome.deniedUserFolders)
     },
+    streamSleeper: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
+      try? await Task.sleep(nanoseconds: nanoseconds)
+    },
     onComplete: (() -> Void)?
   ) {
     self.appState = appState
     self.chatProvider = chatProvider
     self.importConnectorStatusStore = importConnectorStatusStore
     self.fileScanRunner = fileScanRunner
+    self.streamSleeper = streamSleeper
     self.onComplete = onComplete
     // Isolate any onboarding chat/voice turns to the throwaway `.onboarding()`
     // journal surface so they never pollute the real Chat tab. Cleared on
@@ -471,23 +476,21 @@ final class SBOnboardingModel: ObservableObject {
     showWidget = false
     typing = true
     let full = message(for: step)
+    let sleep = streamSleeper
     streamTask = Task { [weak self] in
-      try? await Task.sleep(nanoseconds: 700_000_000)
+      await sleep(700_000_000)
       guard let self, !Task.isCancelled else { return }
       self.typing = false
-      self.streamingText = "▍"
-      let words = full.split(separator: " ").map(String.init)
-      var i = 0
-      while i < words.count {
-        i += 1 + Int.random(in: 0...1)
-        let shown = words.prefix(min(i, words.count)).joined(separator: " ")
-        if i < words.count {
-          self.streamingText = shown + " ▍"
-        } else {
-          self.streamingText = full
-        }
-        if Task.isCancelled { return }
-        try? await Task.sleep(nanoseconds: UInt64((55 + Int.random(in: 0...95)) * 1_000_000))
+      // Reveal the reply incrementally: assigning the full string at once
+      // gives the streaming layer one full-string diff, so longer onboarding
+      // replies appear as a single jump instead of a progressive reveal.
+      var revealed = 0
+      while revealed < full.count {
+        guard !Task.isCancelled else { return }
+        let revealStep = SmoothStreamReveal.step(remaining: full.count - revealed, elapsedMs: 40)
+        revealed = min(full.count, revealed + max(1, revealStep))
+        self.streamingText = String(full.prefix(revealed))
+        await sleep(40_000_000)
       }
       guard !Task.isCancelled else { return }
       self.thread.append(Msg(isOmi: true, text: full))

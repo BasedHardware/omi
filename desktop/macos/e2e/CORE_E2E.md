@@ -89,6 +89,7 @@ healthy enough to boot the hermetic T2 stack. Stable nomination and production p
 | `capture-lifecycle` | v2 | typed bridge | 2 | STT seam via `capture_test_transcript` |
 | `rewind-artifact-recovery` | v2 | typed bridge | 2 | Synthetic Rewind → HEVC → SQLite → finalized-video readback, privacy admission, and database reopen |
 | `chat-hermetic` | v2 | typed bridge | 2 | Rust `OMI_LLM_STUB=1` |
+| `task-thread-continuity` | v2 | typed bridge | 2 | Kernel-backed task thread with paced and fast terminal streaming |
 | `floating-bar-functional` | v2 | typed bridge | 2 | Ask Omi open + stubbed turn |
 | `memories` | v2 | typed bridge | 2 | Navigate + snapshot + search step |
 | `tasks` | v2 | typed bridge | 2 | Navigate + snapshot |
