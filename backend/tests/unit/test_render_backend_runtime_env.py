@@ -195,6 +195,7 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     assert 'MEMORY_ENABLED_USERS' not in job_env
 
     assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
+    assert 'GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest' in _job_secret_lines(out, 'backend_sync')
 
     notifications_env = _job_env_block(out, 'notifications_job')
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED' not in notifications_env

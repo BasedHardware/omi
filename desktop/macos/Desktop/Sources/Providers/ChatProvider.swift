@@ -1176,6 +1176,8 @@ class ChatProvider: ObservableObject {
   lazy var kernelTurnProjection = KernelTurnProjection(host: self)
   private let journalWriteCoordinator = ChatJournalWriteCoordinator()
   private var journalOwnerByMessageID: [String: String] = [:]
+  var pendingMessageRatings = ChatMessageRatingQueue()
+  var persistMessageRatingHandler: ((String, Int?) async throws -> Void)?
   private var journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
   private var agentBridgeStarted = false
   /// The root shell supplies one server-authoritative sample before this
@@ -1679,6 +1681,7 @@ class ChatProvider: ObservableObject {
     kernelTurnProjection.invalidateOwnerState()
     journalWriteCoordinator.cancelAll()
     journalOwnerByMessageID.removeAll()
+    pendingMessageRatings.removeAll()
     journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
     // A ChatErrorCard belongs to the session that produced it. Retaining an
     // auth-required card after a successful account switch incorrectly asks
@@ -3492,6 +3495,7 @@ class ChatProvider: ObservableObject {
   func resetJournalProjection(surface: AgentSurfaceReference) {
     guard surface == mainChatSurfaceReference() else { return }
     messages = []
+    pendingMessageRatings.removeAll()
     resetMessagesPagination()
   }
 
@@ -6424,36 +6428,6 @@ class ChatProvider: ObservableObject {
       if changed {
         messages[messageIndex].resources = updatedResources
         scheduleJournalUpdate(messageId: messages[messageIndex].id)
-      }
-    }
-  }
-
-  // MARK: - Message Rating
-
-  /// Rate a message (thumbs up/down)
-  /// - Parameters:
-  ///   - messageId: The message ID to rate
-  ///   - rating: 1 for thumbs up, -1 for thumbs down, nil to clear rating
-  func rateMessage(_ messageId: String, rating: Int?) async {
-    // Update local state immediately for responsive UI
-    if let index = messages.firstIndex(where: { $0.id == messageId }) {
-      messages[index].rating = rating
-    }
-
-    // Persist to backend
-    do {
-      try await APIClient.shared.rateMessage(messageId: messageId, rating: rating)
-      log("Rated message \(messageId) with rating: \(String(describing: rating))")
-
-      // Track analytics
-      if let rating = rating {
-        AnalyticsManager.shared.messageRated(rating: rating)
-      }
-    } catch {
-      logError("Failed to rate message", error: error)
-      // Revert local state on failure
-      if let index = messages.firstIndex(where: { $0.id == messageId }) {
-        messages[index].rating = nil
       }
     }
   }

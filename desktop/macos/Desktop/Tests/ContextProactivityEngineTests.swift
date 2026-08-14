@@ -177,7 +177,6 @@ final class ContextProactivityEngineTests: XCTestCase {
     let allowed = ContextDeliveryGateInput(
       masterEnabled: defaults.bool(forKey: NotificationService.masterEnabledDefaultsKey),
       frequencyLevel: defaults.integer(forKey: NotificationService.frequencyDefaultsKey),
-      snoozed: false,
       paywalled: false,
       cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: 3))
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: allowed), .allowed)
@@ -186,7 +185,6 @@ final class ContextProactivityEngineTests: XCTestCase {
     let rebuilt = ContextDeliveryGateInput(
       masterEnabled: defaults.bool(forKey: NotificationService.masterEnabledDefaultsKey),
       frequencyLevel: defaults.integer(forKey: NotificationService.frequencyDefaultsKey),
-      snoozed: false,
       paywalled: false,
       cooldownSeconds: 0)
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: rebuilt), .masterDisabled)
@@ -196,23 +194,13 @@ final class ContextProactivityEngineTests: XCTestCase {
     let allowed = ContextDeliveryGateInput(
       masterEnabled: true,
       frequencyLevel: 3,
-      snoozed: false,
       paywalled: false,
       cooldownSeconds: 0)
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: allowed), .allowed)
 
-    let snoozed = ContextDeliveryGateInput(
-      masterEnabled: true,
-      frequencyLevel: 3,
-      snoozed: true,
-      paywalled: false,
-      cooldownSeconds: 0)
-    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: snoozed), .snoozed)
-
     let paywalled = ContextDeliveryGateInput(
       masterEnabled: true,
       frequencyLevel: 3,
-      snoozed: false,
       paywalled: true,
       cooldownSeconds: 0)
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: paywalled), .paywalled)
@@ -236,6 +224,23 @@ final class ContextProactivityEngineTests: XCTestCase {
     XCTAssertEqual(json["failure"] as? String, "http_error")
     XCTAssertEqual((json["status"] as? NSNumber)?.intValue, 429)
     XCTAssertNil(json["error_type"])
+  }
+
+  func testQuotaCooldownIsADistinctProvenanceClassFromHttp429() throws {
+    let skipped = ProactiveLaneFailureClassification.classify(
+      ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: 12))
+    XCTAssertEqual(skipped.failure, "quota_cooldown")
+    XCTAssertEqual(skipped.status, 429)
+    XCTAssertEqual(skipped.logDescription, "quota_cooldown status=429")
+    let json = try provenanceObject(skipped.provenanceJSON)
+    XCTAssertEqual(json["failure"] as? String, "quota_cooldown")
+    XCTAssertEqual((json["status"] as? NSNumber)?.intValue, 429)
+    XCTAssertNil(json["error_type"])
+
+    let http = ProactiveLaneFailureClassification.classify(
+      ProactiveLaneClientError.http(status: 429, retryAfterSeconds: 12))
+    XCTAssertNotEqual(skipped.failure, http.failure)
+    XCTAssertEqual(try provenanceObject(http.provenanceJSON)["failure"] as? String, "http_error")
   }
 
   func testDecisionDecodeFailureRecordsADistinctClassFromHttpFailure() throws {
@@ -408,6 +413,26 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
     XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
   }
 
+  func testEngineRecordsQuotaCooldownProvenanceOnSelfSuppressedLaneError() async throws {
+    let deliveryID = try await seedAttemptedDelivery()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0)
+
+    await engine.recordDirectorFailure(
+      deliveryID: deliveryID,
+      error: ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: 30))
+
+    let row = try await fetchDelivery(id: deliveryID)
+    XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    XCTAssertEqual(row["decisionType"] as String?, "silence")
+    let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
+    XCTAssertEqual(provenance["failure"] as? String, "quota_cooldown")
+    XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
+    XCTAssertNil(provenance["error_type"])
+  }
+
   func testEngineRecordsDecodeProvenanceDistinctFromHttpError() async throws {
     let deliveryID = try await seedAttemptedDelivery()
     let engine = ContextProactivityEngine(
@@ -476,7 +501,6 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
       gate: ContextDeliveryGateInput(
         masterEnabled: true,
         frequencyLevel: 5,
-        snoozed: false,
         paywalled: false,
         cooldownSeconds: 0),
       now: now)

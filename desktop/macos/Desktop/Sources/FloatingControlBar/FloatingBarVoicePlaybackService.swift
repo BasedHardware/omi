@@ -637,6 +637,20 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     return true
   }
 
+  /// The system voice must honor the same Voice Speed setting the OpenAI audio path
+  /// applies via `AVAudioPlayer.rate`. It used to hardcode `0.47`, so with the default
+  /// speed of 1.4× every system-voice utterance (spoken notifications, TTS fallbacks)
+  /// crawled at ~1× while push-to-talk answers played at 1.4× — the same reply sounded
+  /// like two different products. `AVSpeechUtterance.rate` is a 0…1 scale where ~0.47 is
+  /// conversational pace, so the user's multiplier scales that base, clamped to the
+  /// framework's legal range.
+  nonisolated static func systemSpeechRate(playbackSpeed: Float) -> Float {
+    let base: Float = 0.47
+    return min(
+      AVSpeechUtteranceMaximumSpeechRate,
+      max(AVSpeechUtteranceMinimumSpeechRate, base * playbackSpeed))
+  }
+
   private func enqueueSystemSpeech(_ text: String) {
     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       if let lease = activePTTLease {
@@ -652,7 +666,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       return
     }
     let utterance = AVSpeechUtterance(string: text)
-    utterance.rate = 0.47
+    utterance.rate = Self.systemSpeechRate(playbackSpeed: playbackRate)
     utterance.pitchMultiplier = 1.02
     utterance.volume = 1.0
     utterance.voice = preferredSystemVoice()

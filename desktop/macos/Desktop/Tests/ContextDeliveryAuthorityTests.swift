@@ -34,7 +34,7 @@ final class ContextDeliveryAuthorityTests: XCTestCase {
     XCTAssertEqual(
       ContextDeliveryBudget.freeGate(
         input: .init(
-          masterEnabled: true, frequencyLevel: 3, snoozed: false, paywalled: false,
+          masterEnabled: true, frequencyLevel: 3, paywalled: false,
           cooldownSeconds: 30 * 60)),
       .allowed)
     XCTAssertEqual(
@@ -53,28 +53,23 @@ final class ContextDeliveryAuthorityTests: XCTestCase {
 
   func testFreeGateBoundariesAndSuppressionInputs() {
     let base = ContextDeliveryGateInput(
-      masterEnabled: true, frequencyLevel: 3, snoozed: false, paywalled: false,
+      masterEnabled: true, frequencyLevel: 3, paywalled: false,
       cooldownSeconds: 30 * 60)
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: base), .allowed)
     XCTAssertEqual(
       ContextDeliveryBudget.freeGate(
         input: .init(
-          masterEnabled: false, frequencyLevel: 3, snoozed: false, paywalled: false,
+          masterEnabled: false, frequencyLevel: 3, paywalled: false,
           cooldownSeconds: 0)), .masterDisabled)
     XCTAssertEqual(
       ContextDeliveryBudget.freeGate(
         input: .init(
-          masterEnabled: true, frequencyLevel: 0, snoozed: false, paywalled: false,
+          masterEnabled: true, frequencyLevel: 0, paywalled: false,
           cooldownSeconds: 0)), .frequencyDisabled)
     XCTAssertEqual(
       ContextDeliveryBudget.freeGate(
         input: .init(
-          masterEnabled: true, frequencyLevel: 3, snoozed: true, paywalled: false,
-          cooldownSeconds: 0)), .snoozed)
-    XCTAssertEqual(
-      ContextDeliveryBudget.freeGate(
-        input: .init(
-          masterEnabled: true, frequencyLevel: 3, snoozed: false, paywalled: true,
+          masterEnabled: true, frequencyLevel: 3, paywalled: true,
           cooldownSeconds: 0)), .paywalled)
   }
 

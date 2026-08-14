@@ -179,13 +179,9 @@ struct OmiMarkdownContent: View, Equatable {
       } else if let s = Self.styledAttributedString(
         from: processed, style: style, fontSize: fontSize, fontScale: fontScale
       ) {
-        Text(s)
-          .if_available_writingToolsNone()
+        OmiMarkdownChatText(s, fontSize: fontSize)
       } else {
-        Text(content)
-          .font(.system(size: fontSize))
-          .foregroundColor(Self.baseColor(for: style))
-          .if_available_writingToolsNone()
+        OmiMarkdownChatText(content, fontSize: fontSize, style: style)
       }
     }
   }
@@ -786,12 +782,14 @@ private struct OmiMarkdownInlineCopyText: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
+    VStack(alignment: .leading, spacing: OmiMarkdownContent.chatLineSpacing(fontSize: fontSize)) {
       ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
         if line.isEmpty {
           Color.clear.frame(height: fontSize * 0.45)
         } else {
-          OmiMarkdownInlineFlowLayout(spacing: 0, lineSpacing: 2) {
+          OmiMarkdownInlineFlowLayout(
+            spacing: 0, lineSpacing: OmiMarkdownContent.chatLineSpacing(fontSize: fontSize)
+          ) {
             ForEach(Array(line.enumerated()), id: \.offset) { _, segment in
               switch segment {
               case .text(let value):
@@ -809,6 +807,7 @@ private struct OmiMarkdownInlineCopyText: View {
   @ViewBuilder
   private func inlineText(_ value: AttributedString) -> some View {
     Text(value)
+      .lineSpacing(OmiMarkdownContent.chatLineSpacing(fontSize: fontSize))
       .fixedSize(horizontal: false, vertical: true)
       .if_available_writingToolsNone()
   }
@@ -974,7 +973,7 @@ private struct OmiMarkdownCitationContent: View {
       let attributed = OmiMarkdownContent.styledAttributedString(
         from: interactiveMask.markdown, style: style, fontSize: fontSize, fontScale: fontScale)
     {
-      VStack(alignment: .leading, spacing: 0) {
+      VStack(alignment: .leading, spacing: OmiMarkdownContent.chatLineSpacing(fontSize: fontSize)) {
         ForEach(
           Array(
             ChatCitationMask.units(
@@ -988,11 +987,14 @@ private struct OmiMarkdownCitationContent: View {
           if line.isEmpty {
             Color.clear.frame(height: fontSize * 0.45)
           } else {
-            OmiMarkdownInlineFlowLayout(spacing: 0, lineSpacing: 2) {
+            OmiMarkdownInlineFlowLayout(
+              spacing: 0, lineSpacing: OmiMarkdownContent.chatLineSpacing(fontSize: fontSize)
+            ) {
               ForEach(Array(line.enumerated()), id: \.offset) { _, unit in
                 switch unit {
                 case .text(let value):
                   Text(value)
+                    .lineSpacing(OmiMarkdownContent.chatLineSpacing(fontSize: fontSize))
                     .fixedSize(horizontal: false, vertical: true)
                     .if_available_writingToolsNone()
                 case .citation(let reference):
@@ -1515,11 +1517,9 @@ private struct OmiMarkdownTableView: View {
           fontScale: fontScale
         )
       } else if let styled {
-        Text(styled)
+        OmiMarkdownChatText(styled, fontSize: fontSize)
       } else {
-        Text(content)
-          .font(.system(size: fontSize))
-          .foregroundColor(OmiMarkdownContent.baseColor(for: style))
+        OmiMarkdownChatText(content, fontSize: fontSize, style: style)
       }
     }
     .fontWeight(row == 0 ? .semibold : .regular)

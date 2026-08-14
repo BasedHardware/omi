@@ -4,7 +4,6 @@ import Foundation
 struct ContextDeliveryGateInput: Equatable, Sendable {
   let masterEnabled: Bool
   let frequencyLevel: Int
-  let snoozed: Bool
   let paywalled: Bool
   let cooldownSeconds: TimeInterval
   let dailyLimit: Int
@@ -13,7 +12,6 @@ struct ContextDeliveryGateInput: Equatable, Sendable {
   init(
     masterEnabled: Bool,
     frequencyLevel: Int,
-    snoozed: Bool,
     paywalled: Bool,
     cooldownSeconds: TimeInterval,
     dailyLimit: Int? = nil,
@@ -21,7 +19,6 @@ struct ContextDeliveryGateInput: Equatable, Sendable {
   ) {
     self.masterEnabled = masterEnabled
     self.frequencyLevel = frequencyLevel
-    self.snoozed = snoozed
     self.paywalled = paywalled
     self.cooldownSeconds = cooldownSeconds
     self.dailyLimit = max(
@@ -122,7 +119,6 @@ enum ContextDeliveryBudget {
   static func freeGate(input: ContextDeliveryGateInput) -> ContextDeliveryGateReason {
     if !input.masterEnabled { return .masterDisabled }
     if input.frequencyLevel == 0 { return .frequencyDisabled }
-    if input.snoozed { return .snoozed }
     if input.paywalled { return .paywalled }
     return .allowed
   }

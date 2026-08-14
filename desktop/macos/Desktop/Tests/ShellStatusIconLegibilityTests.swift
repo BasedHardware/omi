@@ -624,4 +624,16 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
       "listening" overclaims whenever the mode is armed rather than live.
       """)
   }
+
+  func testTheAwaitingMeetingAudioTooltipDoesNotClaimOffOrStart() {
+    let tooltip = ShellStatusTooltip.audio(
+      state: .inactive, mode: "Only Meetings", isAwaitingMeeting: true)
+    XCTAssertTrue(tooltip.hasPrefix("Audio"))
+    XCTAssertTrue(tooltip.contains("waiting for a call"))
+    XCTAssertTrue(tooltip.contains("Only Meetings"))
+    XCTAssertTrue(tooltip.contains("Click to turn off"))
+    XCTAssertFalse(
+      tooltip.contains("Click to start"),
+      "An armed Only Meetings wait is not off; clicking turns listening off, it does not start it.")
+  }
 }

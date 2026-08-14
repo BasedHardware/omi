@@ -23,7 +23,6 @@ enum SuggestionAssistantTelemetry {
     case eligible
     case disabled
     case excludedApp = "excluded_app"
-    case snoozed
     case dwell
     case cooldown
     case dailyBudget = "daily_budget"
@@ -34,7 +33,6 @@ enum SuggestionAssistantTelemetry {
       case .evaluate: self = .eligible
       case .skippedDisabled: self = .disabled
       case .skippedExcludedApp: self = .excludedApp
-      case .skippedSnoozed: self = .snoozed
       case .skippedDwell: self = .dwell
       case .skippedCooldown: self = .cooldown
       case .skippedDailyBudget: self = .dailyBudget

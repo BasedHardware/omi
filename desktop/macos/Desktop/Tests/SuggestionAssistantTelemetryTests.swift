@@ -24,7 +24,7 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
     XCTAssertEqual(
       Set(SuggestionAssistantTelemetry.GateOutcome.allCases.map(\.rawValue)),
       Set([
-        "eligible", "disabled", "excluded_app", "snoozed", "dwell",
+        "eligible", "disabled", "excluded_app", "dwell",
         "cooldown", "daily_budget", "no_grounding",
       ])
     )
