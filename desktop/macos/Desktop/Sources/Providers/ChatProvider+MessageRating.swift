@@ -38,7 +38,7 @@ extension ChatProvider {
     // drained PATCH is in flight, `resetSessionStateForAuthChange` clears the
     // queue and messages, so the stale owner captured here no longer matches
     // and the PATCH is dropped instead of mutating the new owner's session.
-    let ownerAtFlush = runtimeOwnerId
+    let ownerAtFlush = RuntimeOwnerIdentity.currentOwnerId()
     for item in ready {
       Task { [weak self] in
         await self?.persistMessageRating(
@@ -51,7 +51,7 @@ extension ChatProvider {
     // Owner fence: if an auth change happened between the flush drain and this
     // call, the rating belongs to the previous account and must not be written
     // under the new session.
-    if let expectedOwner, runtimeOwnerId != expectedOwner { return }
+    if let expectedOwner, RuntimeOwnerIdentity.currentOwnerId() != expectedOwner { return }
     do {
       if let persistMessageRatingHandler {
         try await persistMessageRatingHandler(messageId, rating)

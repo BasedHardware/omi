@@ -175,6 +175,7 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
     provider.messages = [
       ChatMessage(
         id: localId,
+        clientTurnId: localId,
         text: "I'll look that up.",
         sender: .ai,
         isStreaming: false,
