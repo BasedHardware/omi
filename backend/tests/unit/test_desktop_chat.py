@@ -1577,7 +1577,7 @@ async def test_chat_completions_gateway_config_error_is_http_503(monkeypatch):
 @pytest.mark.asyncio
 async def test_chat_completions_routes_oauth_provider_without_managed_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'get_byok_llm_provider', lambda: 'chatgpt')
     monkeypatch.setattr(desktop_chat, 'get_byok_oauth_credential', lambda: {'provider': 'chatgpt'})
@@ -1648,7 +1648,7 @@ async def test_chat_completions_rejects_oauth_web_search_without_claiming_recove
 @pytest.mark.asyncio
 async def test_chat_completions_streams_oauth_provider_without_managed_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'get_byok_llm_provider', lambda: 'grok')
     monkeypatch.setattr(desktop_chat, 'get_byok_oauth_credential', lambda: {'provider': 'grok'})
