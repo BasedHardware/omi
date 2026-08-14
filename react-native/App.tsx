@@ -1,8 +1,17 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   AccessibilityInfo,
+  ActivityIndicator,
   Animated,
   Easing,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,17 +24,26 @@ import {
 } from 'react-native';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import Brain from 'lucide-react-native/icons/brain';
+import ChevronLeft from 'lucide-react-native/icons/chevron-left';
 import GanttChartSquare from 'lucide-react-native/icons/square-chart-gantt';
 import House from 'lucide-react-native/icons/house';
 import ListChecks from 'lucide-react-native/icons/list-checks';
+import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Mic from 'lucide-react-native/icons/mic';
 import Paperclip from 'lucide-react-native/icons/paperclip';
+import Search from 'lucide-react-native/icons/search';
+import Square from 'lucide-react-native/icons/square';
 import {
+  cancelChatGeneration,
   loadChatHistory,
   sendChatMessage,
   type ChatMessage,
 } from './src/chatClient';
 import {omiBackend} from './src/omiNative';
+import {
+  loadDesktopReads,
+  type DesktopReadProjection,
+} from './src/desktopReadClient';
 
 type NavigationIcon = React.ComponentType<{
   color?: string;
@@ -45,7 +63,9 @@ const quickPrompts = [
   'What should I remember?',
   'Summarize my recent conversations',
 ];
-type Route = 'Home' | 'Conversations' | 'Memories' | 'Tasks';
+type Route = 'Home' | 'Chat' | 'Conversations' | 'Memories' | 'Tasks';
+type ReadRoute = Exclude<Route, 'Home' | 'Chat'>;
+type ProjectionFilter = 'all' | DesktopReadProjection['kind'];
 
 function NavItem({
   label,
@@ -74,7 +94,11 @@ function NavItem({
       <Icon color={active ? '#141414' : '#888888'} size={20} strokeWidth={2} />
       <Text
         numberOfLines={1}
-        style={[styles.navText, active && styles.navTextActive]}>
+        style={[
+          styles.navText,
+          !compact && styles.navTextCollapsed,
+          active && styles.navTextActive,
+        ]}>
         {label}
       </Text>
     </Pressable>
@@ -93,20 +117,123 @@ function OmiMark() {
   );
 }
 
-function ProjectionPage({route}: {route: Exclude<Route, 'Home'>}) {
-  const copy = {
-    Conversations: 'Conversation history is unavailable in this build.',
-    Memories: 'Memory history is unavailable in this build.',
-    Tasks: 'Task history is unavailable in this build.',
-  }[route];
+const filterLabels: Array<{label: string; value: ProjectionFilter}> = [
+  {label: 'All', value: 'all'},
+  {label: 'Conversations', value: 'conversation'},
+  {label: 'Memories', value: 'memory'},
+  {label: 'Tasks', value: 'task'},
+];
 
+function projectionKind(route: ReadRoute): DesktopReadProjection['kind'] {
+  return {
+    Conversations: 'conversation',
+    Memories: 'memory',
+    Tasks: 'task',
+  }[route] as DesktopReadProjection['kind'];
+}
+
+function displayTitle(item: DesktopReadProjection): string {
+  return item.kind === 'memory'
+    ? item.title.replace(/^entity:[^\s]+\s+/, '')
+    : item.title;
+}
+
+function displaySummary(item: DesktopReadProjection): string {
+  return item.kind === 'memory'
+    ? 'Synthesized memory with source citations'
+    : item.summary;
+}
+
+const ProjectionRow = memo(function ProjectionRow({
+  item,
+}: {
+  item: DesktopReadProjection;
+}) {
+  return (
+    <View style={styles.resultRow}>
+      <View style={styles.resultKindRow}>
+        <Text style={styles.resultKind}>{item.kind}</Text>
+        {item.kind === 'conversation' && item.starred && (
+          <Text style={styles.resultMeta}>Starred</Text>
+        )}
+      </View>
+      <Text numberOfLines={2} style={styles.resultTitle}>
+        {displayTitle(item)}
+      </Text>
+      <Text numberOfLines={2} style={styles.resultSummary}>
+        {displaySummary(item)}
+      </Text>
+    </View>
+  );
+});
+
+function ProjectionList({
+  items,
+  loading,
+  error,
+  emptyCopy,
+  header,
+}: {
+  items: DesktopReadProjection[];
+  loading: boolean;
+  error: string | null;
+  emptyCopy: string;
+  header?: React.ReactElement;
+}) {
+  const renderItem = useCallback(
+    ({item}: {item: DesktopReadProjection}) => <ProjectionRow item={item} />,
+    [],
+  );
+  const keyExtractor = useCallback(
+    (item: DesktopReadProjection) => `${item.kind}:${item.id}`,
+    [],
+  );
+  const empty = loading ? (
+    <View style={styles.projectionEmpty}>
+      <ActivityIndicator color="#888888" />
+      <Text style={styles.projectionEmptyCopy}>Loading…</Text>
+    </View>
+  ) : (
+    <View style={styles.projectionEmpty}>
+      <Text style={styles.projectionEmptyTitle}>
+        {error === null ? 'Nothing to show yet' : 'Unable to load'}
+      </Text>
+      <Text style={styles.projectionEmptyCopy}>{error ?? emptyCopy}</Text>
+    </View>
+  );
+
+  return (
+    <FlatList
+      contentContainerStyle={styles.resultList}
+      data={items}
+      keyExtractor={keyExtractor}
+      ListEmptyComponent={empty}
+      ListHeaderComponent={header ?? null}
+      renderItem={renderItem}
+    />
+  );
+}
+
+function ProjectionPage({
+  route,
+  items,
+  loading,
+  error,
+}: {
+  route: ReadRoute;
+  items: DesktopReadProjection[];
+  loading: boolean;
+  error: string | null;
+}) {
   return (
     <View style={styles.projection}>
       <Text style={styles.projectionTitle}>{route}</Text>
-      <View style={styles.projectionEmpty}>
-        <Text style={styles.projectionEmptyTitle}>Nothing to show yet</Text>
-        <Text style={styles.projectionEmptyCopy}>{copy}</Text>
-      </View>
+      <ProjectionList
+        emptyCopy={`No ${route.toLowerCase()} yet.`}
+        error={error}
+        items={items.filter(item => item.kind === projectionKind(route))}
+        loading={loading}
+      />
     </View>
   );
 }
@@ -122,8 +249,17 @@ function App(): React.JSX.Element {
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatBusy, setChatBusy] = useState(false);
+  const [activeGenerationId, setActiveGenerationId] = useState<string | null>(
+    null,
+  );
   const [chatError, setChatError] = useState<string | null>(null);
   const [route, setRoute] = useState<Route>('Home');
+  const [reads, setReads] = useState<DesktopReadProjection[]>([]);
+  const [readsLoading, setReadsLoading] = useState(true);
+  const [readsError, setReadsError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [projectionFilter, setProjectionFilter] =
+    useState<ProjectionFilter>('all');
 
   useEffect(() => {
     let active = true;
@@ -149,6 +285,46 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     let active = true;
+    const backend = omiBackend;
+    if (backend === undefined || backend === null) {
+      setReadsLoading(false);
+      setReadsError('Desktop history is unavailable.');
+      return () => undefined;
+    }
+    loadDesktopReads(backend)
+      .then(items => {
+        if (active) {
+          setReads(items);
+          setReadsError(null);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setReadsError('Desktop history could not be loaded.');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setReadsLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const homeResults = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return reads.filter(
+      item =>
+        (projectionFilter === 'all' || item.kind === projectionFilter) &&
+        (query === '' ||
+          item.searchableText.toLocaleLowerCase().includes(query)),
+    );
+  }, [projectionFilter, reads, searchQuery]);
+
+  useEffect(() => {
+    let active = true;
     AccessibilityInfo.isReduceMotionEnabled().then(enabled => {
       if (active) {
         setReduceMotion(enabled);
@@ -169,14 +345,14 @@ function App(): React.JSX.Element {
     stageTranslateY.setValue(reduceMotion ? 0 : 8);
     Animated.parallel([
       Animated.timing(stageOpacity, {
-        duration: reduceMotion ? 1 : 250,
-        easing: Easing.out(Easing.cubic),
+        duration: reduceMotion ? 1 : 180,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
         toValue: 1,
         useNativeDriver: true,
       }),
       Animated.timing(stageTranslateY, {
-        duration: reduceMotion ? 1 : 250,
-        easing: Easing.out(Easing.cubic),
+        duration: reduceMotion ? 1 : 180,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
         toValue: 0,
         useNativeDriver: true,
       }),
@@ -222,7 +398,10 @@ function App(): React.JSX.Element {
       <View style={[styles.navItems, compact && styles.navItemsCompact]}>
         {navigation.map(item => (
           <NavItem
-            active={route === item.label}
+            active={
+              route === item.label ||
+              (route === 'Chat' && item.label === 'Home')
+            }
             compact={compact}
             icon={item.icon}
             key={item.label}
@@ -243,7 +422,9 @@ function App(): React.JSX.Element {
     setChatBusy(true);
     setChatError(null);
     try {
-      const result = await sendChatMessage(backend, text);
+      const result = await sendChatMessage(backend, text, Date.now(), id => {
+        setActiveGenerationId(id);
+      });
       setMessages(current => [
         ...current.filter(message => message.id !== result.human.id),
         result.human,
@@ -256,7 +437,21 @@ function App(): React.JSX.Element {
         setMessages(await loadChatHistory(backend));
       } catch {}
     } finally {
+      setActiveGenerationId(null);
       setChatBusy(false);
+    }
+  };
+
+  const stopGeneration = async () => {
+    const backend = omiBackend;
+    const generationId = activeGenerationId;
+    if (backend === undefined || backend === null || generationId === null) {
+      return;
+    }
+    try {
+      await cancelChatGeneration(backend, generationId);
+    } catch {
+      setChatError('Could not stop the response.');
     }
   };
 
@@ -296,7 +491,9 @@ function App(): React.JSX.Element {
           <View style={styles.actionSpacer} />
           <Pressable
             accessibilityLabel={
-              omiBackend === undefined || omiBackend === null
+              activeGenerationId !== null
+                ? 'Stop response'
+                : omiBackend === undefined || omiBackend === null
                 ? 'Send message unavailable'
                 : 'Send message'
             }
@@ -304,15 +501,24 @@ function App(): React.JSX.Element {
             disabled={
               omiBackend === undefined ||
               omiBackend === null ||
-              draft.trim() === '' ||
-              chatBusy
+              (activeGenerationId === null && (draft.trim() === '' || chatBusy))
             }
-            onPress={send}
+            onPress={activeGenerationId === null ? send : stopGeneration}
             style={({pressed}) => [
               styles.sendButton,
+              activeGenerationId !== null && styles.stopButton,
               pressed && styles.pressed,
             ]}>
-            <ArrowUp color="#141414" size={18} strokeWidth={2.5} />
+            {activeGenerationId === null ? (
+              <ArrowUp color="#141414" size={18} strokeWidth={2.5} />
+            ) : (
+              <Square
+                color="#141414"
+                fill="#141414"
+                size={13}
+                strokeWidth={2}
+              />
+            )}
           </Pressable>
         </View>
       </View>
@@ -338,7 +544,88 @@ function App(): React.JSX.Element {
               ]}>
               <View style={styles.stage}>
                 {route === 'Home' ? (
+                  <View style={styles.searchHome}>
+                    <ProjectionList
+                      emptyCopy="Nothing matches this search yet."
+                      error={readsError}
+                      header={
+                        <View style={styles.searchHeader}>
+                          <Text style={styles.searchEyebrow}>HOME</Text>
+                          <Text style={styles.searchTitle}>
+                            Search what you’ve seen and heard
+                          </Text>
+                          <View style={styles.searchBox}>
+                            <Search color="#888888" size={18} strokeWidth={2} />
+                            <TextInput
+                              accessibilityLabel="Search Home"
+                              onChangeText={setSearchQuery}
+                              placeholder="Search conversations, memories, and tasks"
+                              placeholderTextColor="#777777"
+                              style={styles.searchInput}
+                              value={searchQuery}
+                            />
+                          </View>
+                          <View style={styles.searchActions}>
+                            <View style={styles.filters}>
+                              {filterLabels.map(filter => (
+                                <Pressable
+                                  accessibilityRole="button"
+                                  key={filter.value}
+                                  onPress={() =>
+                                    setProjectionFilter(filter.value)
+                                  }
+                                  style={[
+                                    styles.filterChip,
+                                    projectionFilter === filter.value &&
+                                      styles.filterChipActive,
+                                  ]}>
+                                  <Text
+                                    style={[
+                                      styles.filterText,
+                                      projectionFilter === filter.value &&
+                                        styles.filterTextActive,
+                                    ]}>
+                                    {filter.label}
+                                  </Text>
+                                </Pressable>
+                              ))}
+                            </View>
+                            <Pressable
+                              accessibilityLabel="Open Chat"
+                              accessibilityRole="button"
+                              onPress={() => setRoute('Chat')}
+                              style={({pressed}) => [
+                                styles.chatPill,
+                                pressed && styles.pressed,
+                              ]}>
+                              <MessageCircle
+                                color="#141414"
+                                size={17}
+                                strokeWidth={2}
+                              />
+                              <Text style={styles.chatPillText}>Chat</Text>
+                            </Pressable>
+                          </View>
+                          <Text style={styles.timelineLabel}>LATEST</Text>
+                        </View>
+                      }
+                      items={homeResults}
+                      loading={readsLoading}
+                    />
+                  </View>
+                ) : route === 'Chat' ? (
                   <View style={styles.home}>
+                    <Pressable
+                      accessibilityLabel="Back to Home"
+                      accessibilityRole="button"
+                      onPress={() => setRoute('Home')}
+                      style={({pressed}) => [
+                        styles.backButton,
+                        pressed && styles.pressed,
+                      ]}>
+                      <ChevronLeft color="#b0b0b0" size={18} strokeWidth={2} />
+                      <Text style={styles.backButtonText}>Home</Text>
+                    </Pressable>
                     <OmiMark />
                     <Text style={styles.greeting}>I’m ready.</Text>
                     <View style={styles.currents}>
@@ -387,11 +674,16 @@ function App(): React.JSX.Element {
                     </View>
                   </View>
                 ) : (
-                  <ProjectionPage route={route} />
+                  <ProjectionPage
+                    error={readsError}
+                    items={reads}
+                    loading={readsLoading}
+                    route={route}
+                  />
                 )}
               </View>
             </Animated.View>
-            {route === 'Home' && composer}
+            {route === 'Chat' && composer}
           </KeyboardAvoidingView>
         </View>
         {compact && nav}
@@ -405,15 +697,15 @@ const styles = StyleSheet.create({
   shell: {backgroundColor: '#141414', flex: 1},
   shellWide: {flexDirection: 'row'},
   navigation: {backgroundColor: '#141414'},
-  rail: {paddingHorizontal: 14, paddingVertical: 20, width: 216},
+  rail: {paddingHorizontal: 8, paddingVertical: 24, width: 72},
   wordmark: {
     color: '#ffffff',
     fontSize: 25,
     fontWeight: '900',
     letterSpacing: -1,
-    paddingHorizontal: 12,
+    paddingHorizontal: 2,
   },
-  navItems: {gap: 4, marginTop: 44},
+  navItems: {gap: 4, marginTop: 32},
   navItemsCompact: {flexDirection: 'row', marginTop: 0},
   navItem: {
     alignItems: 'center',
@@ -421,7 +713,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     minHeight: 48,
-    paddingHorizontal: 14,
+    paddingHorizontal: 18,
   },
   navItemCompact: {
     flex: 1,
@@ -432,6 +724,7 @@ const styles = StyleSheet.create({
   },
   navItemActive: {backgroundColor: '#ffffff'},
   navText: {color: '#b0b0b0', fontSize: 14, fontWeight: '600'},
+  navTextCollapsed: {opacity: 0, width: 0},
   navTextActive: {color: '#141414'},
   bottomNav: {
     borderTopColor: '#2a2a2a',
@@ -439,7 +732,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingTop: 4,
   },
-  paneInset: {flex: 1, padding: 12, paddingLeft: 0},
+  paneInset: {flex: 1, padding: 12},
   paneInsetCompact: {padding: 0},
   pane: {
     backgroundColor: '#1a1a1a',
@@ -452,6 +745,75 @@ const styles = StyleSheet.create({
   paneCompact: {borderRadius: 0, borderWidth: 0},
   stageMotion: {flex: 1},
   stage: {flexGrow: 1, paddingBottom: 20, paddingHorizontal: 20},
+  searchHome: {
+    alignSelf: 'center',
+    flex: 1,
+    maxWidth: 900,
+    width: '100%',
+  },
+  searchHeader: {paddingBottom: 18, paddingTop: 38},
+  searchEyebrow: {
+    color: '#777777',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+  searchTitle: {
+    color: '#ffffff',
+    fontSize: 30,
+    fontWeight: '600',
+    letterSpacing: -0.6,
+    marginTop: 8,
+  },
+  searchBox: {
+    alignItems: 'center',
+    backgroundColor: '#232323',
+    borderColor: '#3a3a3a',
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 24,
+    minHeight: 58,
+    paddingHorizontal: 18,
+  },
+  searchInput: {color: '#ffffff', flex: 1, fontSize: 15, minHeight: 48},
+  searchActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    marginTop: 14,
+  },
+  filters: {flexDirection: 'row', flexWrap: 'wrap', gap: 7},
+  filterChip: {
+    borderColor: '#363636',
+    borderRadius: 18,
+    borderWidth: 1,
+    minHeight: 36,
+    paddingHorizontal: 13,
+    justifyContent: 'center',
+  },
+  filterChipActive: {backgroundColor: '#ffffff', borderColor: '#ffffff'},
+  filterText: {color: '#a0a0a0', fontSize: 12, fontWeight: '600'},
+  filterTextActive: {color: '#141414'},
+  chatPill: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    flexDirection: 'row',
+    gap: 7,
+    minHeight: 40,
+    paddingHorizontal: 15,
+  },
+  chatPillText: {color: '#141414', fontSize: 13, fontWeight: '700'},
+  timelineLabel: {
+    color: '#777777',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginTop: 28,
+  },
   home: {
     alignSelf: 'center',
     flex: 1,
@@ -461,6 +823,17 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     width: '100%',
   },
+  backButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 4,
+    minHeight: 40,
+    paddingHorizontal: 4,
+    position: 'absolute',
+    top: 18,
+  },
+  backButtonText: {color: '#b0b0b0', fontSize: 13, fontWeight: '600'},
   mark: {
     alignItems: 'center',
     alignSelf: 'center',
@@ -526,6 +899,36 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+  resultList: {flexGrow: 1, gap: 8, paddingBottom: 28},
+  resultRow: {
+    backgroundColor: '#202020',
+    borderColor: '#303030',
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  resultKindRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  resultKind: {
+    color: '#777777',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  resultMeta: {color: '#777777', fontSize: 11},
+  resultTitle: {
+    color: '#f2f2f2',
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 20,
+    marginTop: 7,
+  },
+  resultSummary: {color: '#888888', fontSize: 12, lineHeight: 17, marginTop: 5},
   composerWrap: {paddingBottom: 16, paddingHorizontal: 20, paddingTop: 12},
   composer: {
     alignSelf: 'center',
@@ -565,6 +968,7 @@ const styles = StyleSheet.create({
     opacity: 0.35,
     width: 44,
   },
+  stopButton: {opacity: 1},
   pressed: {opacity: 0.72, transform: [{scale: 0.98}]},
 });
 

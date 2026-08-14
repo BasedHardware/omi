@@ -11,6 +11,21 @@ const mockReact = React;
 let mockViewportWidth = 1200;
 let mockReduceMotion = false;
 let mockReduceMotionListener: ((enabled: boolean) => void) | undefined;
+type MockRequest = {body?: string; id: string; method: string; path: string};
+type MockResponse = {body: string | null; id: string; status: number};
+const mockBackend = {
+  cancelGenerationEvents: jest.fn(async (_generationId: string) => undefined),
+  generationEvents: jest.fn(
+    async (_generationId: string, _lastEventId: string | null) => '',
+  ),
+  request: jest.fn<Promise<MockResponse>, [MockRequest]>(
+    async (_request: MockRequest) => ({
+      body: null,
+      id: '',
+      status: 500,
+    }),
+  ),
+};
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -71,7 +86,11 @@ jest.mock('react-native', () => {
       Value: MockAnimatedValue,
       View: component('AnimatedView'),
     },
-    Easing: {cubic: 'cubic', out: jest.fn(value => value)},
+    Easing: {
+      bezier: jest.fn((x1, y1, x2, y2) => [x1, y1, x2, y2]),
+      cubic: 'cubic',
+      out: jest.fn(value => value),
+    },
     FlatList,
     KeyboardAvoidingView: component('KeyboardAvoidingView'),
     NativeModules: {},
@@ -117,6 +136,11 @@ jest.mock(
     mockReact.createElement('Brain', props),
 );
 jest.mock(
+  'lucide-react-native/icons/chevron-left',
+  () => (props: Record<string, unknown>) =>
+    mockReact.createElement('ChevronLeft', props),
+);
+jest.mock(
   'lucide-react-native/icons/square-chart-gantt',
   () => (props: Record<string, unknown>) =>
     mockReact.createElement('GanttChartSquare', props),
@@ -132,6 +156,11 @@ jest.mock(
     mockReact.createElement('ListChecks', props),
 );
 jest.mock(
+  'lucide-react-native/icons/message-circle',
+  () => (props: Record<string, unknown>) =>
+    mockReact.createElement('MessageCircle', props),
+);
+jest.mock(
   'lucide-react-native/icons/mic',
   () => (props: Record<string, unknown>) =>
     mockReact.createElement('Mic', props),
@@ -141,6 +170,26 @@ jest.mock(
   () => (props: Record<string, unknown>) =>
     mockReact.createElement('Paperclip', props),
 );
+jest.mock(
+  'lucide-react-native/icons/search',
+  () => (props: Record<string, unknown>) =>
+    mockReact.createElement('Search', props),
+);
+jest.mock(
+  'lucide-react-native/icons/square',
+  () => (props: Record<string, unknown>) =>
+    mockReact.createElement('Square', props),
+);
+
+jest.mock('../src/omiNative', () => ({
+  omiBackend: {
+    cancelGenerationEvents: (generationId: string) =>
+      mockBackend.cancelGenerationEvents(generationId),
+    generationEvents: (generationId: string, lastEventId: string | null) =>
+      mockBackend.generationEvents(generationId, lastEventId),
+    request: (request: MockRequest) => mockBackend.request(request),
+  },
+}));
 
 import App from '../App';
 
@@ -149,6 +198,60 @@ beforeEach(() => {
   mockViewportWidth = 1200;
   mockReduceMotion = false;
   mockReduceMotionListener = undefined;
+  mockBackend.cancelGenerationEvents.mockResolvedValue(undefined);
+  mockBackend.generationEvents.mockResolvedValue('');
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/chat-messages?limit=50') {
+      return {id: request.id, status: 200, body: '{"messages":[]}'};
+    }
+    if (request.path === '/v1/conversations?limit=50&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'conversation-1',
+            structured: {
+              title: 'QA bridge check',
+              overview: 'A deterministic conversation.',
+            },
+            created_at: '2026-08-07T10:00:00.000Z',
+            updated_at: '2026-08-07T12:00:00.000Z',
+            started_at: '2026-08-07T11:50:00.000Z',
+            finished_at: '2026-08-07T12:00:00.000Z',
+            source: 'omi',
+            status: 'completed',
+            discarded: false,
+            starred: false,
+            visibility: 'private',
+            is_locked: false,
+            folder_id: null,
+          },
+        ]),
+      };
+    }
+    const tasks = request.path === '/v1/tasks';
+    return {
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({
+        contractVersion: '1.0.0',
+        items: [],
+        window: {
+          status: 'complete',
+          complete: true,
+          hasMore: false,
+          nextCursor: null,
+        },
+        completeness: {
+          version: tasks ? 'tasks-completeness-v1' : 'recall-completeness-v1',
+          status: 'complete',
+          reasons: [],
+        },
+        absence: null,
+      }),
+    };
+  });
 });
 
 async function renderApp() {
@@ -160,7 +263,7 @@ async function renderApp() {
   return renderer!;
 }
 
-test('translates the desktop Home resting stage and rail', async () => {
+test('renders the collapsed reference rail and search-first desktop Home', async () => {
   const renderer = await renderApp();
   const output = JSON.stringify(renderer.toJSON());
   const tabs = renderer.root.findAll(
@@ -169,10 +272,12 @@ test('translates the desktop Home resting stage and rail', async () => {
       node.props.accessibilityRole === 'tab',
   );
 
-  expect(output).toContain('I’m ready.');
-  expect(output).toContain('CURRENTS');
-  expect(output).toContain('Nothing’s waiting on you.');
-  expect(output).toContain('Ask anything...');
+  expect(output).toContain('Search what you’ve seen and heard');
+  expect(output).toContain('Search conversations, memories, and tasks');
+  expect(output).toContain('QA bridge check');
+  expect(output).toContain('Open Chat');
+  expect(output).not.toContain('I’m ready.');
+  expect(output).not.toContain('Ask anything...');
   expect(output).not.toContain('Omi connection');
   expect(output).not.toContain('No nearby devices');
   expect(tabs.map(tab => tab.props.children[1].props.children)).toEqual([
@@ -187,14 +292,15 @@ test('translates the desktop Home resting stage and rail', async () => {
   expect(tabs[1].props.accessibilityState).toEqual({
     selected: false,
   });
-  expect(
-    renderer.root.find(
-      node => node.props.accessibilityLabel === 'Send message unavailable',
-    ).props.disabled,
-  ).toBe(true);
+  const tablist = renderer.root.find(
+    node => node.props.accessibilityRole === 'tablist',
+  );
+  expect(tablist.props.style).toEqual(
+    expect.arrayContaining([expect.objectContaining({width: 72})]),
+  );
   expect(Animated.timing).toHaveBeenCalledWith(
     expect.anything(),
-    expect.objectContaining({duration: 250, toValue: 1}),
+    expect.objectContaining({duration: 180, toValue: 1}),
   );
   expect(
     renderer.root.findAll(node => String(node.type) === 'House'),
@@ -208,23 +314,14 @@ test('translates the desktop Home resting stage and rail', async () => {
   expect(
     renderer.root.findAll(node => String(node.type) === 'ListChecks'),
   ).toHaveLength(1);
-  expect(
-    renderer.root.find(node => String(node.type) === 'Paperclip').props.size,
-  ).toBe(18);
-  expect(
-    renderer.root.find(node => String(node.type) === 'Mic').props.size,
-  ).toBe(18);
-  expect(
-    renderer.root.find(node => String(node.type) === 'ArrowUp').props,
-  ).toEqual(expect.objectContaining({size: 18, strokeWidth: 2.5}));
 });
 
-test('navigates to truthful read-unavailable projections and replays the stage transition', async () => {
+test('navigates to rewritten-backend read projections and replays the stage transition', async () => {
   const renderer = await renderApp();
   const destinations = [
-    ['Conversations', 'Conversation history is unavailable in this build.'],
-    ['Memories', 'Memory history is unavailable in this build.'],
-    ['Tasks', 'Task history is unavailable in this build.'],
+    ['Conversations', 'QA bridge check'],
+    ['Memories', 'No memories yet.'],
+    ['Tasks', 'No tasks yet.'],
   ];
 
   for (const [destination, emptyCopy] of destinations) {
@@ -240,7 +337,6 @@ test('navigates to truthful read-unavailable projections and replays the stage t
     });
     const output = JSON.stringify(renderer.toJSON());
     expect(output).toContain(destination);
-    expect(output).toContain('Nothing to show yet');
     expect(output).toContain(emptyCopy);
     expect(output).not.toContain('Ask anything...');
     expect(output).not.toContain('ChatSession');
@@ -253,7 +349,7 @@ test('navigates to truthful read-unavailable projections and replays the stage t
 
   expect(Animated.timing).toHaveBeenCalledWith(
     expect.anything(),
-    expect.objectContaining({duration: 250, toValue: 1}),
+    expect.objectContaining({duration: 180, toValue: 1}),
   );
 });
 
@@ -273,9 +369,9 @@ test('uses a full pane with bottom navigation on mobile', async () => {
     ),
   ).toHaveLength(0);
   expect(
-    renderer.root.find(node => node.props.accessibilityLabel === 'Ask Omi')
-      .props.multiline,
-  ).toBe(true);
+    renderer.root.find(node => node.props.accessibilityLabel === 'Search Home')
+      .props.value,
+  ).toBe('');
   expect(Animated.timing).toHaveBeenCalledWith(
     expect.anything(),
     expect.objectContaining({duration: 200, toValue: 1}),
@@ -312,15 +408,28 @@ test('removes translation and shortens fades when reduced motion is enabled', as
 
 test('fills and preserves the ask pill draft from a quick prompt', async () => {
   const renderer = await renderApp();
-  const prompt = renderer.root
-    .findAll(
-      node =>
-        String(node.type) === 'Pressable' &&
-        node.props.accessibilityRole === 'button',
-    )
-    .find(
-      node => node.props.children.props.children === 'What should I remember?',
-    )!;
+  const openChat = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Open Chat',
+  );
+  await ReactTestRenderer.act(async () => {
+    openChat.props.onPress();
+  });
+  const promptText = renderer.root.find(
+    node =>
+      String(node.type) === 'Text' &&
+      node.props.children === 'What should I remember?',
+  );
+  const prompt = promptText.parent?.parent!;
+
+  expect(
+    renderer.root.find(node => String(node.type) === 'Paperclip').props.size,
+  ).toBe(18);
+  expect(
+    renderer.root.find(node => String(node.type) === 'Mic').props.size,
+  ).toBe(18);
+  expect(
+    renderer.root.find(node => String(node.type) === 'ArrowUp').props,
+  ).toEqual(expect.objectContaining({size: 18, strokeWidth: 2.5}));
 
   await ReactTestRenderer.act(async () => {
     prompt.props.onPress();
@@ -330,4 +439,99 @@ test('fills and preserves the ask pill draft from a quick prompt', async () => {
     renderer.root.find(node => node.props.accessibilityLabel === 'Ask Omi')
       .props.value,
   ).toBe('What should I remember?');
+});
+
+test('offers durable stop while a rewritten-backend generation is active', async () => {
+  let finishGeneration!: (value: string) => void;
+  mockBackend.generationEvents.mockImplementation(
+    () =>
+      new Promise(resolve => {
+        finishGeneration = resolve;
+      }),
+  );
+  mockBackend.request.mockImplementation(async request => {
+    if (request.method === 'POST') {
+      const body = JSON.parse(request.body ?? '');
+      return {
+        id: request.id,
+        status: 201,
+        body: JSON.stringify({
+          message: {
+            id: body.id,
+            text: body.text,
+            sender: 'human',
+            createdAt: body.at,
+            generationOutcome: null,
+          },
+          generation: {id: 'generation-stop'},
+        }),
+      };
+    }
+    if (request.path === '/v1/chat-messages?limit=50') {
+      return {id: request.id, status: 200, body: '{"messages":[]}'};
+    }
+    return {
+      id: request.id,
+      status: 200,
+      body: request.path.startsWith('/v1/conversations')
+        ? '[]'
+        : JSON.stringify({
+            contractVersion: '1.0.0',
+            items: [],
+            window: {
+              status: 'complete',
+              complete: true,
+              hasMore: false,
+              nextCursor: null,
+            },
+            completeness: {
+              version:
+                request.path === '/v1/tasks'
+                  ? 'tasks-completeness-v1'
+                  : 'recall-completeness-v1',
+              status: 'complete',
+              reasons: [],
+            },
+            absence: null,
+          }),
+    };
+  });
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Ask Omi')
+      .props.onChangeText('Stop this');
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send message')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const stop = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Stop response',
+  );
+  await ReactTestRenderer.act(async () => {
+    await stop.props.onPress();
+  });
+  expect(mockBackend.cancelGenerationEvents).toHaveBeenCalledWith(
+    'generation-stop',
+  );
+  await ReactTestRenderer.act(async () => {
+    finishGeneration(
+      'event: cancelled\nid: terminal\ndata: {"kind":"cancelled","message":null}\n\n',
+    );
+    await Promise.resolve();
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Stop response',
+    ),
+  ).toHaveLength(0);
 });
