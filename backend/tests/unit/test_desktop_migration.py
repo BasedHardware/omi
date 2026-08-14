@@ -835,9 +835,12 @@ class TestAcquireChatSession:
 
     def test_creates_new_session_when_none_exists(self):
         """acquire_chat_session creates a new session when no matching session found."""
-        with patch.object(chat_db, 'get_chat_session', return_value=None), patch.object(  # No existing sessions
-            chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}
-        ) as mock_create:
+        with (
+            patch.object(chat_db, 'get_chat_session', return_value=None),
+            patch.object(  # No existing sessions
+                chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}
+            ) as mock_create,
+        ):
             result = chat_db.acquire_chat_session('uid', app_id='my-app')
 
         assert result == 'new-session-id'
