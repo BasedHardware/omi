@@ -16,6 +16,10 @@ import type {
   ChatRole,
   ChatAgentRunTimeline,
 } from "./chat-reconcile.js";
+import {
+  createDevNoopAttachmentScanner,
+  type ChatAttachmentScanTerminal,
+} from "./chat-attachment-scan.js";
 
 export type {
   ChatCapabilities,
@@ -26,6 +30,24 @@ export type {
   ChatAgentRunTimeline,
 };
 export type { StagedChatAttachment } from "@omi-core/contracts";
+export {
+  ATTACHMENT_SCAN_TIMEOUT_MS,
+  DEV_NOOP_SCANNER_ID,
+  asScanTerminal,
+  attachmentsAreAdmissibleForSend,
+  canRemoveTrayAttachment,
+  canRetryAttachmentScan,
+  createDevNoopAttachmentScanner,
+  isAdmissibleForBind,
+  toTrayAttachment,
+} from "./chat-attachment-scan.js";
+export type {
+  ChatAttachmentScanClock,
+  ChatAttachmentScanState,
+  ChatAttachmentScanTerminal,
+  ChatAttachmentScanner,
+  ChatTrayAttachment,
+} from "./chat-attachment-scan.js";
 
 export interface RetainedChatSend {
   readonly opId: string;
@@ -48,6 +70,8 @@ export type ProductionChatStore = {
   capabilities(): ChatCapabilities;
   stagingAvailable(): boolean;
   stageAttachment(): Promise<StagedChatAttachment | null>;
+  /** Development scan only. Identity is always `dev-noop-scanner`; never a real product scanner. */
+  scanAttachment(attachment: StagedChatAttachment): Promise<ChatAttachmentScanTerminal>;
   deadLetters(): Promise<readonly RetainedChatSend[]>;
   discardDeadLetter(opId: string): Promise<void>;
   cancel(generationId: string): Promise<void>;
@@ -250,6 +274,9 @@ export function createProductionChatStore(
         throw new Error("native Chat attachment staging is unavailable");
       }
       return attachmentStaging.pickAndStage();
+    },
+    scanAttachment: async (attachment) => {
+      return createDevNoopAttachmentScanner().scan(attachment);
     },
     async deadLetters() {
       return (await store.deadLetters()).map(retainedChatSend);

@@ -8,6 +8,15 @@ import type {
   StagedChatAttachment,
 } from "./ProductionChatStore.js";
 import {
+  DEV_NOOP_SCANNER_ID,
+  asScanTerminal,
+  attachmentsAreAdmissibleForSend,
+  canRemoveTrayAttachment,
+  canRetryAttachmentScan,
+  toTrayAttachment,
+  type ChatTrayAttachment,
+} from "./chat-attachment-scan.js";
+import {
   attachmentCapState,
   mergeOlderPage,
   messageKey,
@@ -134,11 +143,21 @@ function isValidAttachmentSelection(
 }
 
 function sameAttachmentIds(
-  current: readonly StagedChatAttachment[],
-  submitted: readonly StagedChatAttachment[],
+  current: readonly ChatTrayAttachment[],
+  submitted: readonly ChatTrayAttachment[],
 ): boolean {
   return current.length === submitted.length &&
     current.every((attachment, index) => attachment.id === submitted[index]?.id);
+}
+
+function attachmentScanLabel(state: ChatTrayAttachment["scanState"], locale: Locale): string {
+  if (state === "staged") return t(locale, "chat.attachmentAwaitingCheck");
+  if (state === "scanning") return t(locale, "chat.attachmentScanning");
+  if (state === "clean") return t(locale, "chat.attachmentClean");
+  if (state === "rejected") return t(locale, "chat.attachmentRejected");
+  if (state === "timed_out") return t(locale, "chat.attachmentTimedOut");
+  if (state === "error") return t(locale, "chat.attachmentScanError");
+  return t(locale, "chat.attachmentBound");
 }
 
 export function ChatProduction({ store, fixture, locale = "en", onReady, announcementScheduler }: {
@@ -154,7 +173,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
   const [capabilities, setCapabilities] = useState<ChatCapabilities>(() => store.capabilities());
   const [status, setStatus] = useState(store.status());
   const [draft, setDraft] = useState("");
-  const [attachments, setAttachments] = useState<StagedChatAttachment[]>([]);
+  const [attachments, setAttachments] = useState<ChatTrayAttachment[]>([]);
   const [deadLetters, setDeadLetters] = useState<readonly RetainedChatSend[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [sending, setSending] = useState(false);
@@ -174,7 +193,8 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
   const olderAnchorRef = useRef<ChatScrollAnchor | null>(null);
   const previousMessagesRef = useRef<readonly ChatMessage[]>([]);
   const touchYRef = useRef<number | null>(null);
-  const attachmentsRef = useRef<readonly StagedChatAttachment[]>(attachments);
+  const attachmentsRef = useRef<readonly ChatTrayAttachment[]>(attachments);
+  const scanEpochRef = useRef(new Map<string, number>());
   const capabilitiesRef = useRef(capabilities);
   attachmentsRef.current = attachments;
   capabilitiesRef.current = capabilities;
@@ -324,7 +344,8 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
   const capState = attachmentCapState(capabilities, attachments.length);
   const stagingAvailable = store.stagingAvailable();
   const selectionValid = isValidAttachmentSelection(capabilities, attachments);
-  const canSend = draft.trim().length > 0 && selectionValid && !sending;
+  const scanAdmissible = attachmentsAreAdmissibleForSend(attachments);
+  const canSend = draft.trim().length > 0 && selectionValid && scanAdmissible && !sending;
 
   const send = async (): Promise<void> => {
     if (sendInFlightRef.current) return;
@@ -332,7 +353,10 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
     if (!text) return;
     const submittedDraft = draft;
     const submittedAttachments = [...attachmentsRef.current];
-    if (!isValidAttachmentSelection(capabilitiesRef.current, submittedAttachments)) {
+    if (
+      !isValidAttachmentSelection(capabilitiesRef.current, submittedAttachments) ||
+      !attachmentsAreAdmissibleForSend(submittedAttachments)
+    ) {
       setOperationError(t(locale, "chat.error"));
       return;
     }
@@ -404,6 +428,38 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
     }
   };
 
+  const bumpScanEpoch = (id: string): number => {
+    const next = (scanEpochRef.current.get(id) ?? 0) + 1;
+    scanEpochRef.current.set(id, next);
+    return next;
+  };
+
+  const runScan = async (id: string): Promise<void> => {
+    const epoch = bumpScanEpoch(id);
+    const current = attachmentsRef.current.find((attachment) => attachment.id === id);
+    if (!current) return;
+    const scanning = attachmentsRef.current.map((attachment) =>
+      attachment.id === id ? { ...attachment, scanState: "scanning" as const } : attachment,
+    );
+    attachmentsRef.current = scanning;
+    setAttachments(scanning);
+    let terminal = null as ReturnType<typeof asScanTerminal>;
+    try {
+      terminal = asScanTerminal(await store.scanAttachment(current));
+    } catch {
+      terminal = "error";
+    }
+    if (scanEpochRef.current.get(id) !== epoch) return;
+    const result = terminal ?? "error";
+    setAttachments((existing) => {
+      const updated = existing.map((attachment) =>
+        attachment.id === id ? { ...attachment, scanState: result } : attachment,
+      );
+      attachmentsRef.current = updated;
+      return updated;
+    });
+  };
+
   const attach = async (): Promise<void> => {
     if (
       !stagingAvailable ||
@@ -418,13 +474,15 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
       const staged = await store.stageAttachment();
       if (staged === null) return;
       const current = attachmentsRef.current;
-      const candidate = [...current, staged];
-      if (!isValidAttachmentSelection(capabilitiesRef.current, candidate)) {
+      const candidateHost = [...current, staged];
+      if (!isValidAttachmentSelection(capabilitiesRef.current, candidateHost)) {
         setOperationError(t(locale, "chat.error"));
         return;
       }
+      const candidate = [...current, toTrayAttachment(staged, "scanning")];
       attachmentsRef.current = candidate;
       setAttachments(candidate);
+      await runScan(staged.id);
     } catch {
       setOperationError(t(locale, "chat.error"));
     } finally {
@@ -433,8 +491,18 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
     }
   };
 
+  const retryAttachmentScan = (id: string): void => {
+    if (sendInFlightRef.current) return;
+    const target = attachmentsRef.current.find((attachment) => attachment.id === id);
+    if (!target || !canRetryAttachmentScan(target.scanState)) return;
+    void runScan(id);
+  };
+
   const removeAttachment = (id: string): void => {
     if (sendInFlightRef.current) return;
+    const target = attachmentsRef.current.find((attachment) => attachment.id === id);
+    if (!target || !canRemoveTrayAttachment(target.scanState)) return;
+    bumpScanEpoch(id);
     setAttachments((current) => {
       const next = current.filter((item) => item.id !== id);
       attachmentsRef.current = next;
@@ -697,14 +765,33 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
           {attachments.length > 0 && (
             <ul className="chat-attachments" aria-label={t(locale, "chat.attachments")}>
               {attachments.map((attachment) => (
-                <li key={attachment.id}>
-                  <span>{t(locale, "chat.attachmentReady", {
+                <li
+                  key={attachment.id}
+                  data-attachment-scan={attachment.scanState}
+                  data-attachment-scanner={DEV_NOOP_SCANNER_ID}
+                >
+                  <span className="chat-attachment-meta">{t(locale, "chat.attachmentReady", {
                     mimeType: attachment.mimeType,
                     sizeBytes: attachment.sizeBytes,
                   })}</span>
-                  <button type="button" disabled={sending} onClick={() => removeAttachment(attachment.id)} aria-label={t(locale, "chat.attachmentRemove")}>
-                    {t(locale, "chat.attachmentRemove")}
-                  </button>
+                  <span className="chat-attachment-scan">{attachmentScanLabel(attachment.scanState, locale)}</span>
+                  <span className="chat-attachment-scanner">{t(locale, "chat.attachmentScanner")}</span>
+                  {canRetryAttachmentScan(attachment.scanState) && (
+                    <button
+                      type="button"
+                      data-attachment-scan-retry="true"
+                      disabled={sending}
+                      onClick={() => retryAttachmentScan(attachment.id)}
+                      aria-label={t(locale, "chat.attachmentScanRetry")}
+                    >
+                      {t(locale, "common.retry")}
+                    </button>
+                  )}
+                  {canRemoveTrayAttachment(attachment.scanState) && (
+                    <button type="button" disabled={sending} onClick={() => removeAttachment(attachment.id)} aria-label={t(locale, "chat.attachmentRemove")}>
+                      {t(locale, "chat.attachmentRemove")}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

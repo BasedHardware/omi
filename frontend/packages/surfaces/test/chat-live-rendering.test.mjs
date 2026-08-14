@@ -175,6 +175,7 @@ class JournalFirstRaceChatStore {
   }
   stagingAvailable() { return false; }
   async stageAttachment() { return null; }
+  async scanAttachment() { return "clean"; }
   async deadLetters() { return []; }
   async discardDeadLetter() {}
   async cancel() {}
@@ -529,10 +530,20 @@ test("staged safe metadata renders generically while only ordered opaque ids rea
     await click(rendered, attach);
     await click(rendered, attach);
     assert.deepEqual(
-      [...rendered.container.querySelectorAll(".chat-attachments li span")].map((item) => item.textContent),
+      [...rendered.container.querySelectorAll(".chat-attachments li .chat-attachment-meta")].map((item) => item.textContent),
       ["Attached application/pdf, 100 bytes", "Attached application/pdf, 200 bytes"],
       "staging cannot claim a durable server name that P7 did not return",
     );
+    assert.deepEqual(
+      [...rendered.container.querySelectorAll("[data-attachment-scan]")].map((item) => item.getAttribute("data-attachment-scan")),
+      ["clean", "clean"],
+    );
+    assert.ok(
+      [...rendered.container.querySelectorAll(".chat-attachment-scanner")].every(
+        (item) => item.textContent === EN_MESSAGES["chat.attachmentScanner"],
+      ),
+    );
+    assert.equal(EN_MESSAGES["chat.attachmentScanner"], "dev-noop-scanner");
 
     const textarea = rendered.container.querySelector("textarea.chat-draft");
     const send = rendered.container.querySelector("button.chat-send");
@@ -1015,6 +1026,7 @@ test("successful gateway turn shows Context preview, a local test gateway, and n
     },
     stagingAvailable() { return false; },
     async stageAttachment() { return null; },
+    async scanAttachment() { return "clean"; },
     async deadLetters() { return []; },
     async discardDeadLetter() {},
     async cancel() {},
@@ -1083,6 +1095,7 @@ test("pending approval shows Allow, Deny, and Cancel that call resolveApproval",
     },
     stagingAvailable() { return false; },
     async stageAttachment() { return null; },
+    async scanAttachment() { return "clean"; },
     async deadLetters() { return []; },
     async discardDeadLetter() {},
     async cancel() {},
@@ -1162,6 +1175,159 @@ test("retained dead send shows authored text and a safe attachment count with di
     await click(rendered, discard);
     assert.deepEqual(domain.discarded, ["dead-send-1"]);
     assert.equal(rendered.container.querySelector(".chat-dead-letters"), null);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+function stagedDescriptor(id = "opaque-scan") {
+  return {
+    id,
+    mimeType: "application/pdf",
+    sizeBytes: 100,
+    expiresAt: "2026-08-11T12:00:00.000Z",
+    state: "staged",
+  };
+}
+
+test("scanning attachments stay fail-closed, name the noop scanner, and remain removable", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  const staging = {
+    isAvailable: () => true,
+    async pickAndStage() { return stagedDescriptor(); },
+  };
+  let releaseScan;
+  const store = createProductionChatStore(domain, staging);
+  store.scanAttachment = () => new Promise((resolve) => {
+    releaseScan = () => resolve("clean");
+  });
+  const rendered = await renderComponent(ChatProduction, { store });
+  try {
+    await click(rendered, rendered.container.querySelector("button.chat-attach"));
+    const item = rendered.container.querySelector("[data-attachment-scan]");
+    assert.ok(item);
+    assert.equal(item.getAttribute("data-attachment-scan"), "scanning");
+    assert.equal(item.getAttribute("data-attachment-scanner"), "dev-noop-scanner");
+    assert.equal(item.querySelector(".chat-attachment-scan")?.textContent, EN_MESSAGES["chat.attachmentScanning"]);
+    assert.equal(item.querySelector(".chat-attachment-scanner")?.textContent, "dev-noop-scanner");
+    assert.equal(item.querySelector("[data-attachment-scan-retry]"), null);
+    assert.ok(item.querySelector('[aria-label="' + EN_MESSAGES["chat.attachmentRemove"] + '"]'));
+    const textarea = rendered.container.querySelector("textarea.chat-draft");
+    await setTextarea(rendered, textarea, "Cannot send while scanning");
+    assert.equal(rendered.container.querySelector("button.chat-send").disabled, true);
+    assert.equal(/antivirus|\bmalware\b|\bvirus\b/i.test(rendered.container.textContent), false);
+
+    await click(rendered, item.querySelector('[aria-label="' + EN_MESSAGES["chat.attachmentRemove"] + '"]'));
+    assert.equal(rendered.container.querySelector(".chat-attachments"), null);
+    await rendered.act(async () => {
+      releaseScan();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    assert.equal(rendered.container.querySelector(".chat-attachments"), null, "a removed row ignores a late scan result");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("rejected, timed_out, and error scans retry into scanning and only clean can send", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const labels = {
+    rejected: EN_MESSAGES["chat.attachmentRejected"],
+    timed_out: EN_MESSAGES["chat.attachmentTimedOut"],
+    error: EN_MESSAGES["chat.attachmentScanError"],
+  };
+  for (const failed of ["rejected", "timed_out", "error"]) {
+    const domain = new RenderedDomainChat();
+    const staging = {
+      isAvailable: () => true,
+      async pickAndStage() { return stagedDescriptor(`opaque-${failed}`); },
+    };
+    let nextOutcome = failed;
+    let releaseScan;
+    const store = createProductionChatStore(domain, staging);
+    store.scanAttachment = () => {
+      if (nextOutcome === "hold") {
+        return new Promise((resolve) => {
+          releaseScan = () => resolve("clean");
+        });
+      }
+      return Promise.resolve(nextOutcome);
+    };
+    const rendered = await renderComponent(ChatProduction, { store });
+    try {
+      await click(rendered, rendered.container.querySelector("button.chat-attach"));
+      const item = rendered.container.querySelector("[data-attachment-scan]");
+      assert.ok(item, failed);
+      assert.equal(item.getAttribute("data-attachment-scan"), failed);
+      assert.equal(item.querySelector(".chat-attachment-scan")?.textContent, labels[failed]);
+      assert.equal(item.querySelector(".chat-attachment-scanner")?.textContent, "dev-noop-scanner");
+      const retry = item.querySelector("[data-attachment-scan-retry]");
+      assert.ok(retry, `${failed} must offer retry`);
+      const textarea = rendered.container.querySelector("textarea.chat-draft");
+      await setTextarea(rendered, textarea, "Still blocked");
+      assert.equal(rendered.container.querySelector("button.chat-send").disabled, true);
+      assert.equal(domain.sent.length, 0);
+
+      nextOutcome = "hold";
+      await click(rendered, retry);
+      assert.equal(
+        rendered.container.querySelector("[data-attachment-scan]")?.getAttribute("data-attachment-scan"),
+        "scanning",
+      );
+      assert.equal(rendered.container.querySelector("[data-attachment-scan-retry]"), null);
+      await rendered.act(async () => {
+        releaseScan();
+        for (let index = 0; index < 8; index += 1) await Promise.resolve();
+      });
+      assert.equal(
+        rendered.container.querySelector("[data-attachment-scan]")?.getAttribute("data-attachment-scan"),
+        "clean",
+      );
+      assert.equal(rendered.container.querySelector("button.chat-send").disabled, false);
+      await click(rendered, rendered.container.querySelector("button.chat-send"));
+      assert.deepEqual(domain.sent, [{
+        text: "Still blocked",
+        attachmentIds: [`opaque-${failed}`],
+      }]);
+    } finally {
+      await rendered.cleanup();
+    }
+  }
+});
+
+test("unknown scan outcomes fail closed as error and never claim a bind", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  const staging = {
+    isAvailable: () => true,
+    async pickAndStage() { return stagedDescriptor("opaque-unknown"); },
+  };
+  const store = createProductionChatStore(domain, staging);
+  store.scanAttachment = async () => "antivirus-clean";
+  const rendered = await renderComponent(ChatProduction, { store });
+  try {
+    await click(rendered, rendered.container.querySelector("button.chat-attach"));
+    const item = rendered.container.querySelector("[data-attachment-scan]");
+    assert.equal(item?.getAttribute("data-attachment-scan"), "error");
+    assert.equal(item?.querySelector(".chat-attachment-scan")?.textContent, EN_MESSAGES["chat.attachmentScanError"]);
+    const textarea = rendered.container.querySelector("textarea.chat-draft");
+    await setTextarea(rendered, textarea, "Unknown scanner result");
+    assert.equal(rendered.container.querySelector("button.chat-send").disabled, true);
+    assert.equal(domain.sent.length, 0);
+    assert.equal(rendered.container.textContent.includes("antivirus-clean"), false);
   } finally {
     await rendered.cleanup();
   }

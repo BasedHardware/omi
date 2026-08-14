@@ -7,6 +7,7 @@ import type {
 } from "./chat-reconcile.js";
 import type { ProductionChatStore } from "./ProductionChatStore.js";
 import type { RetainedChatSend } from "./ProductionChatStore.js";
+import { createDevNoopAttachmentScanner } from "./chat-attachment-scan.js";
 
 /** Fixed instant for deterministic chat fixtures (UTC). */
 export const CHAT_FIXED_NOW = Date.UTC(2026, 7, 7, 12, 0, 0);
@@ -271,6 +272,9 @@ export function fixtureChatStore(state: ChatFixtureState): ProductionChatStore {
     },
     async stageAttachment() {
       throw new Error("fixture staging requires an explicitly supplied typed port");
+    },
+    async scanAttachment(attachment) {
+      return createDevNoopAttachmentScanner().scan(attachment);
     },
     async deadLetters() {
       return retained;
