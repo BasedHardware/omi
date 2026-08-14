@@ -63,12 +63,11 @@ def _parse_aware_iso(value: Optional[str]) -> Optional[datetime]:
 
 
 def _memory_in_scope(created_at: Optional[datetime], start_dt: Optional[datetime], end_dt: Optional[datetime]) -> bool:
-    if start_dt or end_dt:
-        if created_at is None:
-            return False
-    if start_dt and created_at < start_dt:
+    if created_at is None:
+        return not (start_dt or end_dt)
+    if start_dt is not None and created_at < start_dt:
         return False
-    if end_dt and created_at > end_dt:
+    if end_dt is not None and created_at > end_dt:
         return False
     return True
 
