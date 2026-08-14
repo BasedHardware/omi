@@ -64,13 +64,19 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       ScreenDerivedContent.untrustedPreamble,
       "Decide whether interrupting now adds concrete value. Return silence unless the validated",
       "facts support a specific, timely action. Use only supplied bucket-entry refs.",
+      "Never announce that meeting notes, a transcript, or a call summary are ready. The",
+      "conversation-finalization lane owns that claim and attaches the exact conversation link.",
       "Use resurface or suggest for an actionable open task supplied below. Entries marked",
       "reference-only are identity context: do not notify about or recreate them yet. Use",
       "task_candidate only when a validated fact explicitly records a new commitment, promise,",
-      "or request with an accountable action, and that commitment is absent from the supplied",
-      "task list. A material change, status update, recommendation, or useful follow-up without",
-      "an explicit commitment, promise, or request is insight or suggest; never infer an owner or",
-      "due date and never create a task candidate from actionability alone.",
+      "or request with an accountable action that the user personally made or accepted (first",
+      "person), and that commitment is absent from the supplied task list. A commitment made by",
+      "another person is never a task candidate, however explicit or well-dated it is; if it",
+      "genuinely bears on the user's tracked work it may at most be insight, and a commitment",
+      "between other parties that does not involve the user is silence. A material change, status",
+      "update, recommendation, or useful follow-up without an explicit commitment, promise, or",
+      "request is insight or suggest; never infer an owner or due date and never create a task",
+      "candidate from actionability alone.",
       "",
       bucket,
       "",
@@ -88,6 +94,26 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     XCTAssertTrue(prompt.contains("== FROZEN RANKED CONTEXT ==\nfrozen:entry-1"))
     XCTAssertTrue(prompt.contains("== RECENT TAIL ==\ntail:entry-2"))
     XCTAssertTrue(prompt.contains("== VALIDATED FACTS ==\nfact:PR-123"))
+  }
+
+  func testDirectorStablePromptRequiresFirstPersonOwnershipForTaskCandidate() {
+    let snapshot = ContextBucketSnapshot(
+      bucketID: "bucket", versionID: 1, version: 1, header: "header",
+      frozenRankedSegment: Data(), tail: [], validatedFacts: ["fact"], notifyWorthiness: 1)
+    let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
+
+    XCTAssertTrue(
+      prompt.contains(
+        "or request with an accountable action that the user personally made or accepted (first"))
+    XCTAssertTrue(
+      prompt.contains(
+        "another person is never a task candidate, however explicit or well-dated it is"))
+    XCTAssertTrue(
+      prompt.contains(
+        "genuinely bears on the user's tracked work it may at most be insight"))
+    XCTAssertTrue(
+      prompt.contains(
+        "between other parties that does not involve the user is silence."))
   }
 
   func testDirectorTaskContextBoundsDescription() {
