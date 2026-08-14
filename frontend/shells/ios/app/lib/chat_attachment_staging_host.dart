@@ -312,11 +312,7 @@ class _StagingOperation {
       return null;
     }
     final attachment = decoded['attachment'];
-    const allowed = {
-      ...ChatAttachmentStagingContract.descriptorFields,
-      'scanState',
-      'scannerId',
-    };
+    const allowed = {...ChatAttachmentStagingContract.descriptorFields, 'scanState', 'scannerId'};
     if (attachment is! Map<String, dynamic> ||
         !ChatAttachmentStagingContract.descriptorFields.every(attachment.containsKey) ||
         !attachment.keys.every(allowed.contains)) {
@@ -345,15 +341,7 @@ class _StagingOperation {
     if (parsedExpiry == null || parsedExpiry.toUtc().toIso8601String() != expiresAt) {
       return null;
     }
-    const allowedScanStates = {
-      'staged',
-      'scanning',
-      'clean',
-      'rejected',
-      'timed_out',
-      'error',
-      'bound',
-    };
+    const allowedScanStates = {'staged', 'scanning', 'clean', 'rejected', 'timed_out', 'error', 'bound'};
     final parsed = <String, Object>{
       'id': attachmentId,
       'mimeType': mimeType,

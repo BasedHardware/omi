@@ -12,25 +12,10 @@ void main() {
     expect(shellThemeModeForSurfaceQuery('theme=unknown'), ThemeMode.system);
     expect(shellThemeModeForSurfaceQuery('%zz'), ThemeMode.system);
 
-    expect(
-      shellBrightnessForSurfaceQuery('theme=light', Brightness.dark),
-      Brightness.light,
-    );
-    expect(
-      shellBrightnessForSurfaceQuery('theme=dark', Brightness.light),
-      Brightness.dark,
-    );
-    expect(
-      shellBrightnessForSurfaceQuery('', Brightness.light),
-      Brightness.light,
-    );
-    expect(
-      shellBackgroundForSurfaceQuery('theme=light', Brightness.dark),
-      const Color(0xFFF5F7F9),
-    );
-    expect(
-      shellBackgroundForSurfaceQuery('theme=dark', Brightness.light),
-      const Color(0xFF0B0B0F),
-    );
+    expect(shellBrightnessForSurfaceQuery('theme=light', Brightness.dark), Brightness.light);
+    expect(shellBrightnessForSurfaceQuery('theme=dark', Brightness.light), Brightness.dark);
+    expect(shellBrightnessForSurfaceQuery('', Brightness.light), Brightness.light);
+    expect(shellBackgroundForSurfaceQuery('theme=light', Brightness.dark), const Color(0xFFF5F7F9));
+    expect(shellBackgroundForSurfaceQuery('theme=dark', Brightness.light), const Color(0xFF0B0B0F));
   });
 }

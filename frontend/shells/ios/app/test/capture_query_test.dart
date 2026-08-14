@@ -8,11 +8,7 @@ const _valid =
 void main() {
   test('capture builds accept one strict mobile fixture query', () {
     expect(
-      surfaceQueryForLaunch(
-        captureOnly: true,
-        compileQuery: 'qa=wrong&platform=mobile',
-        arguments: [_valid],
-      ),
+      surfaceQueryForLaunch(captureOnly: true, compileQuery: 'qa=wrong&platform=mobile', arguments: [_valid]),
       'polish=1&qa=chat&state=error&platform=mobile&theme=dark&width=regular&accessibility=high_contrast&locale=en-US',
     );
   });
@@ -47,11 +43,7 @@ void main() {
           ? <String>[_valid, _valid]
           : <String>['--omi-capture-query=${mutation.value}'];
       expect(
-        () => surfaceQueryForLaunch(
-          captureOnly: true,
-          compileQuery: '',
-          arguments: arguments,
-        ),
+        () => surfaceQueryForLaunch(captureOnly: true, compileQuery: '', arguments: arguments),
         throwsFormatException,
       );
     });
@@ -59,37 +51,20 @@ void main() {
 
   test('capture builds accept the native allowlisted launch arguments', () {
     final query = _valid.substring('--omi-capture-query='.length);
+    expect(surfaceQueryForLaunch(captureOnly: true, compileQuery: '', arguments: [_valid]), query);
     expect(
-      surfaceQueryForLaunch(
-        captureOnly: true,
-        compileQuery: '',
-        arguments: [_valid],
-      ),
-      query,
-    );
-    expect(
-      captureRunIdForLaunch(
-        captureOnly: true,
-        arguments: const ['--omi-capture-run-id=mx-v1-chat-ready'],
-      ),
+      captureRunIdForLaunch(captureOnly: true, arguments: const ['--omi-capture-run-id=mx-v1-chat-ready']),
       'mx-v1-chat-ready',
     );
   });
 
   test('capture launch arguments and run ids fail closed', () {
     expect(
-      () => surfaceQueryForLaunch(
-        captureOnly: true,
-        compileQuery: '',
-        arguments: [_valid, _valid],
-      ),
+      () => surfaceQueryForLaunch(captureOnly: true, compileQuery: '', arguments: [_valid, _valid]),
       throwsFormatException,
     );
     expect(
-      () => captureRunIdForLaunch(
-        captureOnly: true,
-        arguments: const ['--omi-capture-run-id=../unsafe'],
-      ),
+      () => captureRunIdForLaunch(captureOnly: true, arguments: const ['--omi-capture-run-id=../unsafe']),
       throwsFormatException,
     );
   });

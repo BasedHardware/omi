@@ -8,11 +8,7 @@ const _rows = <Map<String, dynamic>>[
   {
     "id": "bodyless-get",
     "scope": "all",
-    "request": {
-      "id": "hc-bodyless-get",
-      "method": "GET",
-      "path": "/v1/tasks?limit=2"
-    },
+    "request": {"id": "hc-bodyless-get", "method": "GET", "path": "/v1/tasks?limit=2"},
     "credential": "fixture-token",
     "expect": {
       "outcome": "dispatch",
@@ -21,11 +17,9 @@ const _rows = <Map<String, dynamic>>[
       "method": "GET",
       "pathAndQuery": "/v1/tasks?limit=2",
       "body": null,
-      "headers": {
-        "authorization": "Bearer fixture-token"
-      },
-      "followRedirects": false
-    }
+      "headers": {"authorization": "Bearer fixture-token"},
+      "followRedirects": false,
+    },
   },
   {
     "id": "body-write-order",
@@ -34,10 +28,8 @@ const _rows = <Map<String, dynamic>>[
       "id": "hc-body-write-order",
       "method": "POST",
       "path": "/v1/tasks",
-      "headers": {
-        "x-trace": "wave-9"
-      },
-      "body": "{\"title\":\"fixture\"}"
+      "headers": {"x-trace": "wave-9"},
+      "body": "{\"title\":\"fixture\"}",
     },
     "credential": "fixture-token",
     "expect": {
@@ -47,14 +39,10 @@ const _rows = <Map<String, dynamic>>[
       "method": "POST",
       "pathAndQuery": "/v1/tasks",
       "body": "{\"title\":\"fixture\"}",
-      "headers": {
-        "authorization": "Bearer fixture-token",
-        "content-type": "application/json",
-        "x-trace": "wave-9"
-      },
+      "headers": {"authorization": "Bearer fixture-token", "content-type": "application/json", "x-trace": "wave-9"},
       "bodyAfterHeaders": true,
-      "followRedirects": false
-    }
+      "followRedirects": false,
+    },
   },
   {
     "id": "forbidden-mixed-case-keeps-safe-header",
@@ -67,8 +55,8 @@ const _rows = <Map<String, dynamic>>[
         "AuThOrIzAtIoN": "Bearer forged",
         "COOKIE": "session=forged",
         "Proxy-Authorization": "Basic forged",
-        "X-Trace": "kept"
-      }
+        "X-Trace": "kept",
+      },
     },
     "credential": "fixture-token",
     "expect": {
@@ -78,26 +66,15 @@ const _rows = <Map<String, dynamic>>[
       "method": "GET",
       "pathAndQuery": "/v1/tasks",
       "body": null,
-      "headers": {
-        "authorization": "Bearer fixture-token",
-        "x-trace": "kept"
-      },
-      "forbiddenDropped": [
-        "authorization",
-        "cookie",
-        "proxy-authorization"
-      ],
-      "followRedirects": false
-    }
+      "headers": {"authorization": "Bearer fixture-token", "x-trace": "kept"},
+      "forbiddenDropped": ["authorization", "cookie", "proxy-authorization"],
+      "followRedirects": false,
+    },
   },
   {
     "id": "relative-query",
     "scope": "all",
-    "request": {
-      "id": "hc-relative-query",
-      "method": "PATCH",
-      "path": "/v1/tasks/task-1?dry_run=true"
-    },
+    "request": {"id": "hc-relative-query", "method": "PATCH", "path": "/v1/tasks/task-1?dry_run=true"},
     "credential": "fixture-token",
     "expect": {
       "outcome": "dispatch",
@@ -106,103 +83,57 @@ const _rows = <Map<String, dynamic>>[
       "method": "PATCH",
       "pathAndQuery": "/v1/tasks/task-1?dry_run=true",
       "body": null,
-      "headers": {
-        "authorization": "Bearer fixture-token"
-      },
-      "followRedirects": false
-    }
+      "headers": {"authorization": "Bearer fixture-token"},
+      "followRedirects": false,
+    },
   },
   {
     "id": "absolute-path-rejected",
     "scope": "all",
-    "request": {
-      "id": "hc-absolute",
-      "method": "GET",
-      "path": "https://evil.example/v1/tasks"
-    },
+    "request": {"id": "hc-absolute", "method": "GET", "path": "https://evil.example/v1/tasks"},
     "credential": "fixture-token",
-    "expect": {
-      "outcome": "failure",
-      "failureReason": "shell-error",
-      "servedDelta": 0,
-      "backendHit": 0
-    }
+    "expect": {"outcome": "failure", "failureReason": "shell-error", "servedDelta": 0, "backendHit": 0},
   },
   {
     "id": "scheme-relative-path-rejected",
     "scope": "all",
-    "request": {
-      "id": "hc-scheme-relative",
-      "method": "GET",
-      "path": "//evil.example/v1/tasks"
-    },
+    "request": {"id": "hc-scheme-relative", "method": "GET", "path": "//evil.example/v1/tasks"},
     "credential": "fixture-token",
-    "expect": {
-      "outcome": "failure",
-      "failureReason": "shell-error",
-      "servedDelta": 0,
-      "backendHit": 0
-    }
+    "expect": {"outcome": "failure", "failureReason": "shell-error", "servedDelta": 0, "backendHit": 0},
   },
   {
     "id": "no-leading-slash-rejected",
     "scope": "all",
-    "request": {
-      "id": "hc-no-leading-slash",
-      "method": "GET",
-      "path": "v1/tasks"
-    },
+    "request": {"id": "hc-no-leading-slash", "method": "GET", "path": "v1/tasks"},
     "credential": "fixture-token",
-    "expect": {
-      "outcome": "failure",
-      "failureReason": "shell-error",
-      "servedDelta": 0,
-      "backendHit": 0
-    }
+    "expect": {"outcome": "failure", "failureReason": "shell-error", "servedDelta": 0, "backendHit": 0},
   },
   {
     "id": "missing-credential",
     "scope": "all",
-    "request": {
-      "id": "hc-no-credential",
-      "method": "GET",
-      "path": "/v1/tasks"
-    },
+    "request": {"id": "hc-no-credential", "method": "GET", "path": "/v1/tasks"},
     "credential": null,
-    "expect": {
-      "outcome": "failure",
-      "failureReason": "not-authenticated",
-      "servedDelta": 0,
-      "backendHit": 0
-    }
+    "expect": {"outcome": "failure", "failureReason": "not-authenticated", "servedDelta": 0, "backendHit": 0},
   },
   {
     "id": "missing-correlation-id",
     "scope": "transport-scoped",
     "missingId": true,
-    "request": {
-      "id": null,
-      "method": "GET",
-      "path": "/v1/tasks"
-    },
+    "request": {"id": null, "method": "GET", "path": "/v1/tasks"},
     "credential": "fixture-token",
     "expect": {
       "outcome": "missing-id",
       "servedDelta": 0,
       "backendHit": 0,
       "swiftReply": "shell-error",
-      "dartReply": "none"
-    }
+      "dartReply": "none",
+    },
   },
   {
     "id": "malformed-message",
     "scope": "transport-scoped",
     "malformed": true,
-    "request": {
-      "id": "hc-malformed",
-      "method": "",
-      "path": ""
-    },
+    "request": {"id": "hc-malformed", "method": "", "path": ""},
     "credential": "fixture-token",
     "expect": {
       "outcome": "malformed",
@@ -210,92 +141,47 @@ const _rows = <Map<String, dynamic>>[
       "servedDelta": 0,
       "backendHit": 0,
       "swiftReply": "shell-error",
-      "dartReply": "shell-error"
-    }
+      "dartReply": "shell-error",
+    },
   },
   {
     "id": "transport-offline",
     "scope": "all",
-    "request": {
-      "id": "hc-offline",
-      "method": "GET",
-      "path": "/v1/tasks"
-    },
+    "request": {"id": "hc-offline", "method": "GET", "path": "/v1/tasks"},
     "credential": "fixture-token",
     "transportFailure": "offline",
-    "expect": {
-      "outcome": "transport-failure",
-      "failureReason": "offline",
-      "servedDelta": 1,
-      "backendHit": 1
-    }
+    "expect": {"outcome": "transport-failure", "failureReason": "offline", "servedDelta": 1, "backendHit": 1},
   },
   {
     "id": "transport-timeout",
     "scope": "all",
-    "request": {
-      "id": "hc-timeout",
-      "method": "GET",
-      "path": "/v1/tasks"
-    },
+    "request": {"id": "hc-timeout", "method": "GET", "path": "/v1/tasks"},
     "credential": "fixture-token",
     "transportFailure": "timeout",
-    "expect": {
-      "outcome": "transport-failure",
-      "failureReason": "timeout",
-      "servedDelta": 1,
-      "backendHit": 1
-    }
+    "expect": {"outcome": "transport-failure", "failureReason": "timeout", "servedDelta": 1, "backendHit": 1},
   },
   {
     "id": "transport-cancelled",
     "scope": "all",
-    "request": {
-      "id": "hc-cancelled",
-      "method": "GET",
-      "path": "/v1/tasks"
-    },
+    "request": {"id": "hc-cancelled", "method": "GET", "path": "/v1/tasks"},
     "credential": "fixture-token",
     "transportFailure": "cancelled",
-    "expect": {
-      "outcome": "transport-failure",
-      "failureReason": "cancelled",
-      "servedDelta": 1,
-      "backendHit": 1
-    }
+    "expect": {"outcome": "transport-failure", "failureReason": "cancelled", "servedDelta": 1, "backendHit": 1},
   },
   {
     "id": "transport-shell-error",
     "scope": "all",
-    "request": {
-      "id": "hc-shell-error",
-      "method": "GET",
-      "path": "/v1/tasks"
-    },
+    "request": {"id": "hc-shell-error", "method": "GET", "path": "/v1/tasks"},
     "credential": "fixture-token",
     "transportFailure": "shell-error",
-    "expect": {
-      "outcome": "transport-failure",
-      "failureReason": "shell-error",
-      "servedDelta": 1,
-      "backendHit": 1
-    }
+    "expect": {"outcome": "transport-failure", "failureReason": "shell-error", "servedDelta": 1, "backendHit": 1},
   },
   {
     "id": "server-422-no-retry",
     "scope": "all",
-    "request": {
-      "id": "hc-422",
-      "method": "POST",
-      "path": "/v1/tasks",
-      "body": "{\"title\":\"invalid\"}"
-    },
+    "request": {"id": "hc-422", "method": "POST", "path": "/v1/tasks", "body": "{\"title\":\"invalid\"}"},
     "credential": "fixture-token",
-    "response": {
-      "status": 422,
-      "body": "{\"detail\":\"invalid\"}",
-      "retryAfterSeconds": null
-    },
+    "response": {"status": 422, "body": "{\"detail\":\"invalid\"}", "retryAfterSeconds": null},
     "expect": {
       "outcome": "response",
       "servedDelta": 1,
@@ -304,24 +190,15 @@ const _rows = <Map<String, dynamic>>[
       "responseStatus": 422,
       "responseBody": "{\"detail\":\"invalid\"}",
       "retryAfterMs": null,
-      "responseHeadersExposed": false
-    }
+      "responseHeadersExposed": false,
+    },
   },
   {
     "id": "server-429-integer-retry-after",
     "scope": "all",
-    "request": {
-      "id": "hc-429",
-      "method": "POST",
-      "path": "/v1/tasks",
-      "body": "{\"title\":\"busy\"}"
-    },
+    "request": {"id": "hc-429", "method": "POST", "path": "/v1/tasks", "body": "{\"title\":\"busy\"}"},
     "credential": "fixture-token",
-    "response": {
-      "status": 429,
-      "body": "{\"detail\":\"busy\"}",
-      "retryAfterSeconds": 3
-    },
+    "response": {"status": 429, "body": "{\"detail\":\"busy\"}", "retryAfterSeconds": 3},
     "expect": {
       "outcome": "response",
       "servedDelta": 1,
@@ -330,23 +207,15 @@ const _rows = <Map<String, dynamic>>[
       "responseStatus": 429,
       "responseBody": "{\"detail\":\"busy\"}",
       "retryAfterMs": 3000,
-      "responseHeadersExposed": false
-    }
+      "responseHeadersExposed": false,
+    },
   },
   {
     "id": "one-way-correlation",
     "scope": "one-way",
-    "request": {
-      "id": "hc-correlation",
-      "method": "GET",
-      "path": "/v1/tasks"
-    },
+    "request": {"id": "hc-correlation", "method": "GET", "path": "/v1/tasks"},
     "credential": "fixture-token",
-    "response": {
-      "status": 200,
-      "body": "[]",
-      "retryAfterSeconds": null
-    },
+    "response": {"status": 200, "body": "[]", "retryAfterSeconds": null},
     "expect": {
       "outcome": "response",
       "servedDelta": 1,
@@ -354,24 +223,16 @@ const _rows = <Map<String, dynamic>>[
       "responseStatus": 200,
       "responseBody": "[]",
       "correlationId": "hc-correlation",
-      "responseHeadersExposed": false
-    }
+      "responseHeadersExposed": false,
+    },
   },
   {
     "id": "one-way-duplicate-is-correlated-by-id",
     "scope": "one-way",
-    "request": {
-      "id": "hc-duplicate",
-      "method": "GET",
-      "path": "/v1/tasks"
-    },
+    "request": {"id": "hc-duplicate", "method": "GET", "path": "/v1/tasks"},
     "credential": "fixture-token",
     "duplicateReply": true,
-    "response": {
-      "status": 200,
-      "body": "[]",
-      "retryAfterSeconds": null
-    },
+    "response": {"status": 200, "body": "[]", "retryAfterSeconds": null},
     "expect": {
       "outcome": "response",
       "servedDelta": 1,
@@ -380,24 +241,15 @@ const _rows = <Map<String, dynamic>>[
       "responseBody": "[]",
       "correlationId": "hc-duplicate",
       "duplicateReplyDroppedBySurface": true,
-      "responseHeadersExposed": false
-    }
+      "responseHeadersExposed": false,
+    },
   },
   {
     "id": "redirect-no-follow",
     "scope": "all",
-    "request": {
-      "id": "hc-redirect",
-      "method": "GET",
-      "path": "/redirect"
-    },
+    "request": {"id": "hc-redirect", "method": "GET", "path": "/redirect"},
     "credential": "fixture-token",
-    "response": {
-      "status": 302,
-      "body": null,
-      "retryAfterSeconds": null,
-      "location": "https://evil.example/"
-    },
+    "response": {"status": 302, "body": null, "retryAfterSeconds": null, "location": "https://evil.example/"},
     "expect": {
       "outcome": "response",
       "servedDelta": 1,
@@ -406,26 +258,19 @@ const _rows = <Map<String, dynamic>>[
       "responseBody": null,
       "followRedirects": false,
       "redirectLocationForwarded": false,
-      "responseHeadersExposed": false
-    }
+      "responseHeadersExposed": false,
+    },
   },
   {
     "id": "response-headers-not-exposed",
     "scope": "all",
-    "request": {
-      "id": "hc-no-response-headers",
-      "method": "GET",
-      "path": "/v1/tasks"
-    },
+    "request": {"id": "hc-no-response-headers", "method": "GET", "path": "/v1/tasks"},
     "credential": "fixture-token",
     "response": {
       "status": 200,
       "body": "[]",
       "retryAfterSeconds": null,
-      "headers": {
-        "set-cookie": "secret=1",
-        "www-authenticate": "Bearer"
-      }
+      "headers": {"set-cookie": "secret=1", "www-authenticate": "Bearer"},
     },
     "expect": {
       "outcome": "response",
@@ -433,9 +278,9 @@ const _rows = <Map<String, dynamic>>[
       "backendHit": 1,
       "responseStatus": 200,
       "responseBody": "[]",
-      "responseHeadersExposed": false
-    }
-  }
+      "responseHeadersExposed": false,
+    },
+  },
 ];
 
 class _RecordingBackend {
@@ -476,9 +321,7 @@ void main() {
         id: requestId!,
         method: request['method'] as String,
         path: request['path'] as String,
-        headers: request['headers'] == null
-            ? <String, String>{}
-            : Map<String, String>.from(request['headers'] as Map),
+        headers: request['headers'] == null ? <String, String>{} : Map<String, String>.from(request['headers'] as Map),
         body: request['body'] as String?,
         baseUrl: Uri.parse('https://api.example'),
         token: row['credential'] as String?,
@@ -497,7 +340,12 @@ void main() {
         expect(expected['outcome'], isNot('failure'), reason: row['id'] as String);
         final prepared = result.request!;
         if (expected['method'] != null) expect(prepared.method, expected['method'], reason: row['id'] as String);
-        if (expected['pathAndQuery'] != null) expect(prepared.url.path + (prepared.url.hasQuery ? '?${prepared.url.query}' : ''), expected['pathAndQuery'], reason: row['id'] as String);
+        if (expected['pathAndQuery'] != null)
+          expect(
+            prepared.url.path + (prepared.url.hasQuery ? '?${prepared.url.query}' : ''),
+            expected['pathAndQuery'],
+            reason: row['id'] as String,
+          );
         expect(prepared.body, expected['body'], reason: row['id'] as String);
         final expectedHeaders = expected['headers'] == null
             ? <String, String>{}
@@ -511,10 +359,12 @@ void main() {
           final rawHeaders = request['headers'];
           if (rawHeaders is Map) {
             for (final entry in rawHeaders.entries) {
-              if (entry.key.toString().toLowerCase() == forbidden && entry.value is String) callerValue = entry.value as String;
+              if (entry.key.toString().toLowerCase() == forbidden && entry.value is String)
+                callerValue = entry.value as String;
             }
           }
-          if (callerValue != null) expect(_headerValue(prepared.headers, forbidden), isNot(callerValue), reason: row['id'] as String);
+          if (callerValue != null)
+            expect(_headerValue(prepared.headers, forbidden), isNot(callerValue), reason: row['id'] as String);
         }
         final applyEvents = <String>[];
         // red-proof: move body before headers in BridgeHttpPreparedRequest.apply
@@ -524,8 +374,18 @@ void main() {
           setHeader: (name, value) => applyEvents.add('header:$name'),
           addBody: (value) => applyEvents.add('body'),
         );
-        if (expected['followRedirects'] != null) expect(applyEvents.first, expected['followRedirects'] == false ? 'redirects-off' : 'redirects-on', reason: row['id'] as String);
-        if (expected['redirectLocationForwarded'] != null) expect(applyEvents.first == 'redirects-on', expected['redirectLocationForwarded'], reason: row['id'] as String);
+        if (expected['followRedirects'] != null)
+          expect(
+            applyEvents.first,
+            expected['followRedirects'] == false ? 'redirects-off' : 'redirects-on',
+            reason: row['id'] as String,
+          );
+        if (expected['redirectLocationForwarded'] != null)
+          expect(
+            applyEvents.first == 'redirects-on',
+            expected['redirectLocationForwarded'],
+            reason: row['id'] as String,
+          );
         if (expected['duplicateReplyDroppedBySurface'] == true) {
           // red-proof: remove the second accept rejection and duplicate-gate
           // conformance fails instead of accepting a late reply. The bounded
@@ -539,12 +399,25 @@ void main() {
           expect(gate.accept(documentId, requestId), isTrue, reason: row['id'] as String);
         }
         if (expected['bodyAfterHeaders'] != null) {
-          expect(applyEvents.last, expected['bodyAfterHeaders'] == true ? 'body' : isNot('body'), reason: row['id'] as String);
-          if (expected['bodyAfterHeaders'] == true) expect(applyEvents.indexOf('body'), greaterThan(applyEvents.indexOf('header:content-type')), reason: row['id'] as String);
+          expect(
+            applyEvents.last,
+            expected['bodyAfterHeaders'] == true ? 'body' : isNot('body'),
+            reason: row['id'] as String,
+          );
+          if (expected['bodyAfterHeaders'] == true)
+            expect(
+              applyEvents.indexOf('body'),
+              greaterThan(applyEvents.indexOf('header:content-type')),
+              reason: row['id'] as String,
+            );
         }
         final transportFailure = row['transportFailure'] as String?;
         if (transportFailure != null) {
-          expect(BridgeHttpHost.transportFailureForConformance(requestId, transportFailure).wire, expected['failureReason'], reason: row['id'] as String);
+          expect(
+            BridgeHttpHost.transportFailureForConformance(requestId, transportFailure).wire,
+            expected['failureReason'],
+            reason: row['id'] as String,
+          );
         }
         final response = row['response'] as Map?;
         if (response != null) {
@@ -557,12 +430,17 @@ void main() {
           expect(normalized.status, expected['responseStatus'], reason: row['id'] as String);
           expect(normalized.body, expected['responseBody'], reason: row['id'] as String);
           expect(normalized.retryAfterMs, expected['retryAfterMs'], reason: row['id'] as String);
-          if (expected['correlationId'] != null) expect(normalized.id, expected['correlationId'], reason: row['id'] as String);
+          if (expected['correlationId'] != null)
+            expect(normalized.id, expected['correlationId'], reason: row['id'] as String);
           final payload = BridgeHttpHostPolicy.responsePayload(normalized);
-          final exposed = payload.containsKey('headers') || payload.containsKey('set-cookie') || payload.containsKey('www-authenticate');
+          final exposed =
+              payload.containsKey('headers') ||
+              payload.containsKey('set-cookie') ||
+              payload.containsKey('www-authenticate');
           // red-proof: add response headers in the live reply factory and this
           // fixture fails instead of treating normalization as sufficient.
-          if (expected['responseHeadersExposed'] != null) expect(exposed, expected['responseHeadersExposed'], reason: row['id'] as String);
+          if (expected['responseHeadersExposed'] != null)
+            expect(exposed, expected['responseHeadersExposed'], reason: row['id'] as String);
         }
       }
       expect(served, expected['servedDelta'], reason: '${row['id']} servedCount delta');

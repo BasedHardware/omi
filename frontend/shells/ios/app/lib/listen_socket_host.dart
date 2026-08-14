@@ -171,8 +171,7 @@ class ListenSocketHost {
     if (id is! String || action is! String) return;
     if (action == 'preflight') {
       final operation = decoded['operation'];
-      if (operation is! String ||
-          !const <String>{'check', 'request-permission', 'open-settings'}.contains(operation)) {
+      if (operation is! String || !const <String>{'check', 'request-permission', 'open-settings'}.contains(operation)) {
         return;
       }
       await _handlePreflight(controller, id, operation);
@@ -260,9 +259,7 @@ class ListenSocketHost {
         _ => 'check',
       };
       final value = await _preflightChannel.invokeMethod<Object?>(method);
-      payload = value is Map
-          ? value.map((key, value) => MapEntry(key.toString(), value))
-          : _unavailablePreflight;
+      payload = value is Map ? value.map((key, value) => MapEntry(key.toString(), value)) : _unavailablePreflight;
     } on MissingPluginException {
       payload = _unavailablePreflight;
     } on PlatformException {
