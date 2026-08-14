@@ -183,7 +183,13 @@ actor SuggestionAssistant: ProactiveAssistant {
     await MainActor.run {
       AnalyticsManager.shared.suggestionAssistantGateOutcome(.eligible)
     }
-    clearPendingContext()
+    // Calm levels consume the context: one evaluation per arrival, then quiet until the
+    // user moves somewhere new. Maximum re-arms so staying on the same feed keeps
+    // producing nudges every cooldown interval — that sustained cadence is the level's
+    // entire point, and cooldown + the daily budget still bound the spend.
+    if !SuggestionPacing.rearmsAfterEvaluation(frequencyLevel: level) {
+      clearPendingContext()
+    }
     lastEvaluationAt = now
     dailyBudget.recordEvaluation(now: now)
     commitmentsInFlight = grounding.openCommitments

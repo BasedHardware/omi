@@ -551,6 +551,13 @@ enum SuggestionPacing {
     frequencyLevel >= maximumLevel ? 2 : 10
   }
 
+  /// Whether an eligible evaluation leaves the context armed. Calm levels evaluate once
+  /// per arrival; Maximum keeps evaluating the same context every cooldown interval for
+  /// as long as the user stays, which is the sustained-nudge cadence the level promises.
+  static func rearmsAfterEvaluation(frequencyLevel: Int) -> Bool {
+    frequencyLevel >= maximumLevel
+  }
+
   /// Idle window before screen capture pauses. Watching a feed or a video produces no
   /// input; at Maximum the user has explicitly asked to be nudged during exactly that,
   /// so capture stays live for five minutes of stillness instead of one.
