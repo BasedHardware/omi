@@ -123,5 +123,10 @@ def mark_all_advice_read(uid: str) -> int:
         if len(page) < BATCH_LIMIT:
             break
     else:
-        logger.warning(f"mark_all_advice_read({uid}) hit the {_MAX_MARK_READ_PAGES}-page cap; stopped at {total}")
+        # for-else: the page budget was exhausted without an early break. That is a FALSE alarm when the
+        # unread count was an exact multiple of BATCH_LIMIT (every page full, yet the last commit still
+        # drained the set) — probe for a genuinely-remaining unread doc before warning (review 4939247683).
+        remaining = list(col.where(filter=FieldFilter('is_read', '==', False)).limit(1).stream())
+        if remaining:
+            logger.warning(f"mark_all_advice_read({uid}) hit the {_MAX_MARK_READ_PAGES}-page cap; stopped at {total}")
     return total

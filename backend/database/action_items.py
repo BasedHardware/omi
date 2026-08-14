@@ -1179,8 +1179,13 @@ def get_scores(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     daily_q = col.where(filter=FieldFilter('due_at', '>=', day_start)).where(filter=FieldFilter('due_at', '<', day_end))
     # Exact-boolean (`is True`) across all three buckets: the overall bucket uses count() aggregations
     # (which can only filter `== True`), so daily/weekly must agree or a non-canonical truthy value would
-    # count differently across buckets (cubic PR 10887 E2). Every in-tree writer stores real booleans, so
-    # this matches today's data; it only disciplines legacy/external non-bool truthy values.
+    # count differently across buckets (cubic PR 10887 E2). Every in-tree writer stores real booleans
+    # (the only ``deleted`` write in this module is ``'deleted': True``), so this matches today's data.
+    # KNOWN, DELIBERATE DIVERGENCE (cubic review 4939247683): the list/count helpers elsewhere use a
+    # truthy check (``if data.get('deleted')``), so a NON-canonical truthy ``deleted`` (e.g. an external
+    # writer storing ``1``) counts as active HERE but is hidden there. This is forced by the count()
+    # aggregation's ``== True`` limit and cannot be unified without either a data migration to bool or
+    # regressing those helpers to unhide such legacy rows; it is latent because in-tree data is always bool.
     daily_completed = daily_total = 0
     for doc in daily_q.stream():
         data: Dict[str, Any] = _typed_doc(doc)

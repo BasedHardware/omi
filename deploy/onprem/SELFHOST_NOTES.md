@@ -235,7 +235,7 @@ hermetic guard; skips when the env is unset, so it is CI-safe):
 docker run --rm --network host \
   -e OMI_EMBEDDINGS_BASE_URL=http://127.0.0.1:11434/v1 \
   -e OMI_EMBEDDINGS_MODEL=bge-m3 -e OMI_EMBEDDINGS_EXPECTED_DIM=1024 \
-  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test \
   python -m pytest tests/contract/test_embeddings_live_contract.py -q -p no:cacheprovider
 # expected: 3 passed  (real vector, correct dim, deterministic, no OpenAI/Google egress)
 ```
@@ -285,7 +285,7 @@ docker run -d --name qdrant --network host qdrant/qdrant:latest    # 127.0.0.1:6
 docker run --rm --network host \
   -e OMI_EMBEDDINGS_BASE_URL=http://127.0.0.1:11434/v1 -e OMI_EMBEDDINGS_MODEL=bge-m3 \
   -e VECTOR_STORE_BACKEND=qdrant -e QDRANT_URL=http://127.0.0.1:6333 -e QDRANT_VECTOR_DIM=1024 \
-  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test \
   python -m pytest tests/contract/test_onprem_search_roundtrip.py -q -p no:cacheprovider
 # expected: 5 passed  (embed -> upsert -> query ranks the right doc first; metadata round-trips)
 ```
@@ -299,7 +299,7 @@ docker run -d --name nllb --network host -e CT2_DEVICE=cpu -e CT2_COMPUTE_TYPE=i
   -e NLLB_MODEL_DIR=/models/nllb-200-distilled-600M-ct2-int8 -v $MODELS:/models omi-nllb:test
 docker run --rm --network host \
   -e HOSTED_TRANSLATION_API_URL=http://127.0.0.1:8080 -e TRANSLATION_SERVICE_MODELS=nllb \
-  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test \
   python -m pytest tests/contract/test_translation_nllb_live_contract.py -q -p no:cacheprovider
 # expected: 4 passed  (en->it/fr/es real translations + en->it->en round-trip via TranslationService)
 ```
@@ -316,7 +316,7 @@ docker build -f backend/diarizer/Dockerfile -t omi-diarizer:onprem-lean \
 docker run -d --name diarizer --network host --device nvidia.com/gpu=all \
   -e HUGGINGFACE_TOKEN=hf_xxx -e HF_HOME=/models/hf -v $MODELS:/models omi-diarizer:onprem-lean
 docker run --rm --network host -e HOSTED_SPEAKER_EMBEDDING_API_URL=http://127.0.0.1:8080 \
-  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test \
   python -m pytest tests/contract/test_speaker_embedding_live_contract.py -q -p no:cacheprovider
 # expected: 2 passed  (real 256-dim wespeaker embedding, deterministic, discriminates two signals)
 # verified 2026-08-03 on the slim image, RTX 5060 Ti (Blackwell sm_120): 2 passed.
@@ -342,7 +342,7 @@ Official quality gates against the running server (WER on LibriSpeech, DER on sy
 # WER: pre-download the tarball outside the hermetic guard, then run (transcribes over loopback)
 python3 -c "import urllib.request;urllib.request.urlretrieve('https://www.openslr.org/resources/12/test-clean.tar.gz','$CACHE/test-clean.tar.gz')"
 docker run --rm --network host -e PARAKEET_URL=http://127.0.0.1:8080 -e LIBRISPEECH_CACHE=/cache \
-  -e WER_MAX_SAMPLES=10 -v $CACHE:/cache -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+  -e WER_MAX_SAMPLES=10 -v $CACHE:/cache -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test \
   python -m pytest tests/container/test_parakeet_wer_gate.py -q -p no:cacheprovider
 # expected: 4 passed  (aggregate WER 13.0% <= 15% on 10 LibriSpeech samples, ~0.1s each)
 

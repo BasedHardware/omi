@@ -103,17 +103,34 @@ def _configure_env(*, project: str) -> None:
     # GOOGLE_CLOUD_PROJECT — so a mismatched credential would silently read/write a different project
     # than --project while the proof still reports --project as its target. Fail closed so an operator
     # cannot run a dev proof against, e.g., production data (cubic review PR 10887).
+    # The credential can arrive either inline (SERVICE_ACCOUNT_JSON) or as a file path
+    # (GOOGLE_APPLICATION_CREDENTIALS) — cover BOTH, and validate the decoded value is an object so a
+    # non-object JSON (e.g. a bare list/number) is a controlled config error, not an AttributeError
+    # crash (cubic review 4939247683).
+    def _project_id_from_json_text(text: str) -> Optional[str]:
+        try:
+            decoded = json.loads(text)
+        except (ValueError, TypeError):
+            return None
+        return decoded.get("project_id") if isinstance(decoded, dict) else None
+
+    credential_project: Optional[str] = None
     sa_json = os.environ.get("SERVICE_ACCOUNT_JSON")
     if sa_json:
-        try:
-            credential_project = json.loads(sa_json).get("project_id")
-        except (ValueError, TypeError):
-            credential_project = None
-        if credential_project and credential_project != project:
-            raise SystemExit(
-                f"credential project {credential_project!r} != --project {project!r}: refusing to run "
-                f"the lifecycle proof against a project the service-account credential does not target"
-            )
+        credential_project = _project_id_from_json_text(sa_json)
+    else:
+        gac_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if gac_path and os.path.exists(gac_path):
+            try:
+                with open(gac_path, encoding="utf-8") as handle:
+                    credential_project = _project_id_from_json_text(handle.read())
+            except OSError:
+                credential_project = None
+    if credential_project and credential_project != project:
+        raise SystemExit(
+            f"credential project {credential_project!r} != --project {project!r}: refusing to run "
+            f"the lifecycle proof against a project the service-account credential does not target"
+        )
     # Force single-item canary isolation for this harness.
     os.environ[BATCH_CAP_ENV] = "1"
     os.environ.setdefault(CONSOLIDATION_ENABLED_ENV, "true")

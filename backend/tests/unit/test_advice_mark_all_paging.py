@@ -91,3 +91,38 @@ def test_page_cap_bounds_a_pathological_unread_flood(monkeypatch):
     install_fake_db_client(monkeypatch, store=_FloodStore())
     total = advice.mark_all_advice_read(_UID)
     assert total == 3 * 2  # stopped at the 3-page cap (BATCH_LIMIT=2), did not spin
+
+
+def test_exact_cap_fully_drained_does_not_warn(monkeypatch, caplog):
+    # cubic review 4939247683: when unread == exactly _MAX_MARK_READ_PAGES*BATCH_LIMIT every page is
+    # full (no early break) so the for-else fires — but the set WAS fully drained. Probe first: no warning.
+    import logging
+
+    monkeypatch.setattr(advice, 'BATCH_LIMIT', 2)
+    monkeypatch.setattr(advice, '_MAX_MARK_READ_PAGES', 2)  # cap = 4 docs
+    store = _RecordingStore()
+    _seed_unread(store, 4)  # exactly the cap; all get drained
+    install_fake_db_client(monkeypatch, store=store)
+
+    with caplog.at_level(logging.WARNING):
+        total = advice.mark_all_advice_read(_UID)
+
+    assert total == 4
+    assert all(d['is_read'] is True for p, d in store._docs.items() if p.startswith(f'users/{_UID}/advice/'))
+    assert 'hit the' not in caplog.text  # no false cap alert — the probe found nothing left
+
+
+def test_cap_with_genuinely_remaining_unread_still_warns(monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setattr(advice, 'BATCH_LIMIT', 2)
+    monkeypatch.setattr(advice, '_MAX_MARK_READ_PAGES', 2)  # cap = 4 docs
+    store = _RecordingStore()
+    _seed_unread(store, 6)  # exceeds the cap -> 2 remain unread after the 2 pages
+    install_fake_db_client(monkeypatch, store=store)
+
+    with caplog.at_level(logging.WARNING):
+        total = advice.mark_all_advice_read(_UID)
+
+    assert total == 4  # only 2 pages * 2 marked
+    assert 'hit the' in caplog.text  # genuine cap: the probe found a remaining unread doc
