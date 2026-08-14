@@ -1777,24 +1777,37 @@ class TestScoreComputation:
             return m
 
         mock_col = MagicMock()
-        # Daily/weekly are filtered streams; overall is now count()-based aggregation (get_scores
-        # totals the collection via count(), not a full stream). filtered.stream() is consumed in
-        # order: daily (empty), weekly (one incomplete), overall's deleted-subset (empty).
-        filtered = MagicMock()
-        filtered.where.return_value = filtered
-        filtered.stream.side_effect = [[], [self._make_mock_doc({'completed': False})], []]
-        filtered.count.return_value = _agg(1)  # overall completed = 1 (a doc completed outside the weekly window)
-        mock_col.where.return_value = filtered
-        # overall total = 2: the weekly-incomplete doc + one completed doc outside the weekly window, so
-        # the counts reconcile with the modeled doc (cubic 10887 D7) instead of claiming 1/1=100% while
-        # the only doc is incomplete.
-        mock_col.count.return_value = _agg(2)
+        # Daily/weekly are filtered streams; overall is count()-based (total, completed, and the deleted
+        # subset all via aggregations, cubic 10887 E3). Route col.where by filter field so the counts are
+        # unambiguous: no deleted docs, overall total=2/completed=1 (50%), weekly one incomplete (0%).
+        daily_q = MagicMock()
+        daily_q.where.return_value = daily_q
+        daily_q.stream.return_value = []
+        weekly_q = MagicMock()
+        weekly_q.where.return_value = weekly_q
+        weekly_q.stream.return_value = [self._make_mock_doc({'completed': False})]
+        completed_q = MagicMock()
+        completed_q.count.return_value = _agg(1)  # overall completed = 1
+        deleted_q = MagicMock()
+        deleted_q.where.return_value = deleted_q
+        deleted_q.count.return_value = _agg(0)  # no deleted docs (deleted_total and deleted_completed = 0)
+
+        # FieldFilter is stubbed in this file's import setup, so route by call ORDER (as the sibling
+        # default_tab tests do), not by filter field. get_scores calls col.where in this order: daily
+        # (1), weekly (2), overall-completed (3), deleted-subset (4).
+        calls = [0]
+
+        def col_where(**kwargs):
+            calls[0] += 1
+            return {1: daily_q, 2: weekly_q, 3: completed_q}.get(calls[0], deleted_q)
+
+        mock_col.where = col_where
+        mock_col.count.return_value = _agg(2)  # overall total = 2
 
         with patch.object(action_items_db, 'db') as patched_db:
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
             result = action_items_db.get_scores('test-uid', date='2025-01-15')
 
-        # daily 0/0, weekly 0/1 (0%), overall 1/2 (50%) -> highest is overall
         assert result['default_tab'] == 'overall'
 
 

@@ -1177,13 +1177,17 @@ def get_scores(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
 
     # Daily: tasks due today
     daily_q = col.where(filter=FieldFilter('due_at', '>=', day_start)).where(filter=FieldFilter('due_at', '<', day_end))
+    # Exact-boolean (`is True`) across all three buckets: the overall bucket uses count() aggregations
+    # (which can only filter `== True`), so daily/weekly must agree or a non-canonical truthy value would
+    # count differently across buckets (cubic PR 10887 E2). Every in-tree writer stores real booleans, so
+    # this matches today's data; it only disciplines legacy/external non-bool truthy values.
     daily_completed = daily_total = 0
     for doc in daily_q.stream():
         data: Dict[str, Any] = _typed_doc(doc)
-        if data.get('deleted'):
+        if data.get('deleted') is True:
             continue
         daily_total += 1
-        if data.get('completed'):
+        if data.get('completed') is True:
             daily_completed += 1
 
     # Weekly: tasks created in last 7 days (matches Rust backend which uses created_at)
@@ -1193,10 +1197,10 @@ def get_scores(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     weekly_completed = weekly_total = 0
     for doc in weekly_q.stream():
         data = _typed_doc(doc)
-        if data.get('deleted'):
+        if data.get('deleted') is True:
             continue
         weekly_total += 1
-        if data.get('completed'):
+        if data.get('completed') is True:
             weekly_completed += 1
 
     # Overall: all non-deleted tasks. Use count() aggregation with a deleted-subset subtraction
@@ -1204,11 +1208,13 @@ def get_scores(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     # into process, which is unbounded in memory/latency for large accounts.
     overall_total = int(col.count().get()[0][0].value)
     overall_completed = int(col.where(filter=FieldFilter('completed', '==', True)).count().get()[0][0].value)
-    deleted_total = deleted_completed = 0
-    for doc in col.where(filter=FieldFilter('deleted', '==', True)).stream():
-        deleted_total += 1
-        if _typed_doc(doc).get('completed'):
-            deleted_completed += 1
+    # Count the deleted subset with aggregations too — streaming it (cubic PR 10887 E3) re-materialized
+    # every soft-deleted task, keeping the exact unbounded memory/latency this block set out to avoid for
+    # large accounts. A single-field filtered count() needs no composite index; the composite
+    # deleted&completed count matches the facade's query support.
+    deleted_q = col.where(filter=FieldFilter('deleted', '==', True))
+    deleted_total = int(deleted_q.count().get()[0][0].value)
+    deleted_completed = int(deleted_q.where(filter=FieldFilter('completed', '==', True)).count().get()[0][0].value)
     overall_total = max(0, overall_total - deleted_total)
     # total and completed come from separate (non-atomic) aggregations, so cap completed at total to
     # keep the pair internally consistent under a concurrent write.
