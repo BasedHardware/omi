@@ -215,21 +215,46 @@ final class FloatingBarLaunchPolicyTests: XCTestCase {
       "an open chat owns its size")
   }
 
+  func testVisibleBarDoesNotGuessAScreenWhileAppKitIsReassigning() {
+    XCTAssertTrue(
+      FloatingBarPlacementScreenPolicy.shouldSkipVisibleBarLayoutUntilScreenReturns(
+        isVisible: true,
+        barScreenMissing: true),
+      "windowDidChangeScreen must wait for NSWindow.screen")
+    XCTAssertFalse(
+      FloatingBarPlacementScreenPolicy.shouldSkipVisibleBarLayoutUntilScreenReturns(
+        isVisible: false,
+        barScreenMissing: true),
+      "initial placement may still choose a screen before the panel is visible")
+    XCTAssertFalse(
+      FloatingBarPlacementScreenPolicy.shouldSkipVisibleBarLayoutUntilScreenReturns(
+        isVisible: true,
+        barScreenMissing: false))
+  }
+
   func testCancelledRetractWhileStillVisibleRestoresFullRevealProgress() {
-    XCTAssertFalse(FloatingBarNotchRevealPolicy.noOpFrameAssertionInvalidatesRevealToken)
     XCTAssertTrue(
       FloatingBarNotchRevealPolicy.shouldRestoreProgressAfterCancelledRetract(
         windowStillVisible: true,
-        retractStillInFlight: false))
+        retractStillInFlight: false,
+        revealStillInFlight: false))
     XCTAssertFalse(
       FloatingBarNotchRevealPolicy.shouldRestoreProgressAfterCancelledRetract(
         windowStillVisible: true,
-        retractStillInFlight: true),
+        retractStillInFlight: true,
+        revealStillInFlight: false),
       "a replacement retract still owns the collapsed scale")
     XCTAssertFalse(
       FloatingBarNotchRevealPolicy.shouldRestoreProgressAfterCancelledRetract(
+        windowStillVisible: true,
+        retractStillInFlight: false,
+        revealStillInFlight: true),
+      "a replacement reveal still owns the grow-in scale")
+    XCTAssertFalse(
+      FloatingBarNotchRevealPolicy.shouldRestoreProgressAfterCancelledRetract(
         windowStillVisible: false,
-        retractStillInFlight: false),
+        retractStillInFlight: false,
+        revealStillInFlight: false),
       "an ordered-out panel does not need a visible-scale restore")
   }
 

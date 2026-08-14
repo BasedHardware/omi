@@ -70,9 +70,23 @@ extension FloatingControlBarWindow {
     guard
       FloatingBarNotchRevealPolicy.shouldRestoreProgressAfterCancelledRetract(
         windowStillVisible: isVisible,
-        retractStillInFlight: notchRetractionCancellation != nil)
+        retractStillInFlight: notchRetractionCancellation != nil,
+        revealStillInFlight: notchRevealCancellation != nil)
     else { return }
     state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+  }
+
+  func scheduleNotchRevealCompletion(generation: Int, after duration: TimeInterval) {
+    notchRevealCancellation?.cancel()
+    notchRevealCancellation = notchRetractionScheduler.schedule(after: duration) { [weak self] in
+      guard let self else { return }
+      guard self.notchRevealGeneration == generation else {
+        self.restoreNotchRevealProgressIfWindowStillVisible()
+        return
+      }
+      self.state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+      self.notchRevealCancellation = nil
+    }
   }
 
   func cancelInFlightNotchReveal() {
@@ -115,10 +129,7 @@ extension FloatingControlBarManager {
   }
 
   private func retractThenRestoreDurablePresentation() {
-    guard let window else {
-      restoreDurableBarAfterOnboardingDemo()
-      return
-    }
+    guard let window else { return }
     window.retractIntoNotch { [weak self, weak window] in
       window?.orderOut(nil)
       self?.restoreDurableBarAfterOnboardingDemo()

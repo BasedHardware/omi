@@ -1,3 +1,5 @@
+import CoreGraphics
+
 /// Product-level launch policy for the floating bar.
 ///
 /// Invariant: normal signed-in Desktop launch must show the floating bar whenever
@@ -104,6 +106,15 @@ enum FloatingBarPlacementScreenPolicy {
     isVisible && barScreenMissing
   }
 
+  /// A visible panel with no `NSWindow.screen` is mid-reassignment. Cursor or
+  /// main-display fallbacks park the island on the wrong monitor.
+  static func shouldSkipVisibleBarLayoutUntilScreenReturns(
+    isVisible: Bool,
+    barScreenMissing: Bool
+  ) -> Bool {
+    isVisible && barScreenMissing
+  }
+
   /// Space changes must rebuild the frame when island mode flips, not only
   /// when the bar is currently in notch mode. An early return after mutating
   /// the SwiftUI flag is what hid the idle chrome in the camera housing.
@@ -118,5 +129,24 @@ enum FloatingBarPlacementScreenPolicy {
   ) -> Bool {
     guard isVisible, !showingAIConversation, !barScreenMissing else { return false }
     return islandModeChanged || frameChanged
+  }
+}
+
+/// Scale of the idle island. Retract animates to `retractedProgress`; anything
+/// that cancels that animation without `orderOut` must land back on
+/// `revealedProgress` or the chrome stays scaled into the camera housing.
+enum FloatingBarNotchRevealPolicy {
+  static let retractedProgress: CGFloat = 0.01
+  static let revealedProgress: CGFloat = 1
+
+  /// A retract whose `orderOut` never ran left the window on-screen at the
+  /// collapsed scale. Restore full scale only when nothing else is still
+  /// retracting or revealing it.
+  static func shouldRestoreProgressAfterCancelledRetract(
+    windowStillVisible: Bool,
+    retractStillInFlight: Bool,
+    revealStillInFlight: Bool
+  ) -> Bool {
+    windowStillVisible && !retractStillInFlight && !revealStillInFlight
   }
 }

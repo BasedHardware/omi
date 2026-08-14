@@ -58,6 +58,28 @@ final class FloatingBarNotchPersistTests: XCTestCase {
     }
   }
 
+  func testStaleRevealCompletionDoesNotSnapAnInFlightRevealToFullScale() {
+    withForcedNotch {
+      let window = makeBarWindow()
+      defer { window.close() }
+      let scheduler = ManualDelayedActionScheduler()
+      window.notchRetractionScheduler = scheduler
+      window.makeKeyAndOrderFront(nil)
+
+      window.playNotchRevealAnimation()
+      window.playNotchRevealAnimation()
+      window.state.notchRevealProgress = FloatingBarNotchRevealPolicy.retractedProgress
+      XCTAssertTrue(scheduler.fireNextIgnoringCancellation())
+      XCTAssertEqual(
+        window.state.notchRevealProgress, FloatingBarNotchRevealPolicy.retractedProgress, accuracy: 0.001,
+        "a stale reveal completion must not cut off the replacement grow-in")
+      XCTAssertTrue(scheduler.fireNext())
+      XCTAssertEqual(
+        window.state.notchRevealProgress, FloatingBarNotchRevealPolicy.revealedProgress, accuracy: 0.001)
+      window.orderOut(nil)
+    }
+  }
+
   func testNoOpFrameAssertionDoesNotCancelAnInFlightRetract() {
     withForcedNotch {
       let window = makeBarWindow()
@@ -221,6 +243,29 @@ final class FloatingBarNotchPersistTests: XCTestCase {
       }
       XCTAssertFalse(window.isVisible, "a disabled bar must stay hidden after demo teardown")
     }
+  }
+
+  func testOnboardingDemoTeardownWithoutAWindowDoesNotMarkTheNotchRevealed() {
+    let manager = FloatingControlBarManager.shared
+    let previousWindow = manager.window
+    let previousEnabled = manager.isEnabled
+    let previousSnooze = manager.snoozedUntil
+    let previousRevealed = manager.hasRevealedNotchThisSession
+    manager.window = nil
+    manager.isEnabled = true
+    manager.snoozedUntil = nil
+    manager.hasRevealedNotchThisSession = false
+    defer {
+      manager.window = previousWindow
+      manager.isEnabled = previousEnabled
+      manager.snoozedUntil = previousSnooze
+      manager.hasRevealedNotchThisSession = previousRevealed
+    }
+
+    manager.hideForOnboardingDemo()
+    XCTAssertFalse(
+      manager.hasRevealedNotchThisSession,
+      "teardown with no panel must not skip a later deferred notched launch")
   }
 
   private func makeBarWindow() -> FloatingControlBarWindow {
