@@ -203,6 +203,12 @@ class ListenSessionRuntime:
             self.state.live_transcription_attempt = LiveSTTAttempt(
                 provider=getattr(self.stt_service, 'value', self.stt_service),
                 platform=self.client_device_context.platform,
+                uid=self.request.uid,
+                recording_id=self.recording_session_id,
+                conversation_id=self.state.current_conversation_id,
+                source=self.request.source,
+                model=self.stt_model,
+                language=self.stt_language,
             )
 
     def capture_client_audio(self, audio: bytes) -> None:

@@ -363,9 +363,10 @@ def test_runtime_emits_speaker_suggestion_event():
 class _LiveSTTAttempt:
     instances = []
 
-    def __init__(self, *, provider, platform):
+    def __init__(self, *, provider, platform, **context):
         self.provider = provider
         self.platform = platform
+        self.context = context
         self.finished = False
         self.terminals = []
         self.__class__.instances.append(self)
@@ -387,6 +388,11 @@ def _live_transcription_runtime(*, close_code=1001, stt_terminal_failure=False, 
         live_transcription_attempt=None,
     )
     runtime.stt_service = STTService.deepgram
+    runtime.stt_model = 'nova-3'
+    runtime.stt_language = 'en'
+    runtime.recording_session_id = 'recording-123'
+    runtime.request = SimpleNamespace(uid='user-123', source='phone')
+    runtime.state.current_conversation_id = 'conversation-123'
     runtime.client_device_context = SimpleNamespace(platform='ios')
     return runtime
 
@@ -406,6 +412,14 @@ def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(m
     assert len(_LiveSTTAttempt.instances) == 1
     assert _LiveSTTAttempt.instances[0].provider == 'deepgram'
     assert _LiveSTTAttempt.instances[0].platform == 'ios'
+    assert _LiveSTTAttempt.instances[0].context == {
+        'uid': 'user-123',
+        'recording_id': 'recording-123',
+        'conversation_id': 'conversation-123',
+        'source': 'phone',
+        'model': 'nova-3',
+        'language': 'en',
+    }
     assert _LiveSTTAttempt.instances[0].terminals == [('success', 'transcript_delivery')]
 
 
