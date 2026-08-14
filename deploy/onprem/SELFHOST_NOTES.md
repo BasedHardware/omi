@@ -572,17 +572,20 @@ Proves the OIDC adapter validates a real provider's token to the same neutral Pr
 (loopback); `firebase` is skipped unless a firebase emulator is wired (the fake is the reference).
 
 ```bash
-# 1. Keycloak + a realm/client/user (see the WP3 handoff for the full curl provisioning)
+# 1. Keycloak importing the COMMITTED realm — provisions realm 'omi' + client 'omi-test' (direct
+#    access) + user 'testuser/testpass' + the `omi-backend` Audience protocol mapper on omi-app/omi-test.
 docker run -d --name kc-contract --network host \
   -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
-  quay.io/keycloak/keycloak:26.0 start-dev --http-port=8080     # wait: curl 127.0.0.1:8080/realms/master -> 200
-# ... provision realm 'omi' + public direct-access client 'omi-test' + user 'testuser' via the Admin API ...
-# 2. Contract suite (mints a token via the password grant, verifies via the adapter's JWKS)
+  -v $(git rev-parse --show-toplevel)/deploy/onprem/keycloak/omi-realm.example.json:/opt/keycloak/data/import/omi-realm.json:ro \
+  quay.io/keycloak/keycloak:26.0 start-dev --http-port=8080 --import-realm   # wait: curl 127.0.0.1:8080/realms/omi -> 200
+# 2. Contract suite (mints a token via the password grant, verifies via the adapter's JWKS). The token
+#    carries aud=omi-backend from the realm's Audience mapper; OIDC_AUDIENCE must match (fail-closed).
 docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
   -e OIDC_ISSUER=http://127.0.0.1:8080/realms/omi \
   -e OIDC_JWKS_URL=http://127.0.0.1:8080/realms/omi/protocol/openid-connect/certs \
   -e OIDC_TEST_TOKEN_URL=http://127.0.0.1:8080/realms/omi/protocol/openid-connect/token \
   -e OIDC_TEST_CLIENT_ID=omi-test -e OIDC_TEST_USERNAME=testuser -e OIDC_TEST_PASSWORD=testpass \
+  -e OIDC_AUDIENCE=omi-backend \
   omi-onprem-backend-test -m pytest -q tests/contract/test_auth_provider_contract.py
 # expected: 5 passed, 4 skipped (firebase cases skipped — no emulator)
 docker rm -f kc-contract    # cleanup
@@ -665,6 +668,14 @@ issuer** (fail-closed) and passes `allowInsecureConnections: true` ONLY for
 `http://localhost`/`127.0.0.1`/`::1` in a **debug** build (local dev). **Put on-prem Keycloak behind
 an HTTPS reverse proxy** (or a self-signed cert trusted by the device). This is the intentional
 posture (option 1, 2026-08-02) — no cleartext escape hatch for LAN issuers.
+
+**Backend audience validation (fail-closed).** The OIDC adapter refuses to start without `OIDC_AUDIENCE`
+(set in `backend.env.prod`), and verifies every token's `aud` against it. Keycloak's default `aud` is
+`account` for every client — useless for cross-client isolation — so the committed realm adds an
+**Audience protocol mapper** (`oidc-audience-mapper`, `included.custom.audience=omi-backend`) to
+`omi-app` and `omi-test`, minting a dedicated `aud=omi-backend`. `OIDC_AUDIENCE=omi-backend` must match
+that mapper; a token whose `aud` differs is rejected (verified live: aud=omi-backend accepted,
+aud≠OIDC_AUDIENCE rejected).
 
 **Native redirect config** (must match `OIDC_REDIRECT_SCHEME`): Android
 `app/android/app/build.gradle` → `manifestPlaceholders += [appAuthRedirectScheme: 'omiauth']`; iOS
