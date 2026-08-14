@@ -42,7 +42,10 @@ import {
 import {omiBackend} from './src/omiNative';
 import {
   loadDesktopReads,
+  type DesktopReadOutcomes,
   type DesktopReadProjection,
+  type DomainReadOutcome,
+  type ReadPageState,
 } from './src/desktopReadClient';
 
 type NavigationIcon = React.ComponentType<{
@@ -173,12 +176,14 @@ function ProjectionList({
   error,
   emptyCopy,
   header,
+  footer,
 }: {
   items: DesktopReadProjection[];
   loading: boolean;
   error: string | null;
   emptyCopy: string;
   header?: React.ReactElement;
+  footer?: React.ReactElement;
 }) {
   const renderItem = useCallback(
     ({item}: {item: DesktopReadProjection}) => <ProjectionRow item={item} />,
@@ -208,29 +213,73 @@ function ProjectionList({
       data={items}
       keyExtractor={keyExtractor}
       ListEmptyComponent={empty}
+      ListFooterComponent={footer ?? null}
       ListHeaderComponent={header ?? null}
       renderItem={renderItem}
     />
   );
 }
 
+function ReadStatus({label, page}: {label: string; page: ReadPageState}) {
+  if (page.complete && page.completenessStatus === 'complete') {
+    return null;
+  }
+  const detail = page.hasMore
+    ? page.nextCursor === null
+      ? `Showing the first 50 ${label.toLowerCase()}. More may be available.`
+      : `More ${label.toLowerCase()} are available.`
+    : page.completenessStatus === 'degraded'
+    ? `${label} may be temporarily incomplete.`
+    : `${label} are incomplete.`;
+  return (
+    <View style={styles.readStatus}>
+      <Text style={styles.readStatusText}>{detail}</Text>
+      {page.reasons.length > 0 && (
+        <Text style={styles.readStatusReason}>{page.reasons.join(', ')}</Text>
+      )}
+    </View>
+  );
+}
+
+function OutcomeStatus({
+  label,
+  outcome,
+}: {
+  label: string;
+  outcome: DomainReadOutcome<DesktopReadProjection>;
+}) {
+  return outcome.status === 'error' ? (
+    <View style={styles.readStatus}>
+      <Text style={styles.readStatusText}>{label} are unavailable.</Text>
+      <Text style={styles.readStatusReason}>{outcome.error}</Text>
+    </View>
+  ) : (
+    <ReadStatus label={label} page={outcome.value.page} />
+  );
+}
+
 function ProjectionPage({
   route,
-  items,
+  outcome,
   loading,
-  error,
 }: {
   route: ReadRoute;
-  items: DesktopReadProjection[];
+  outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
-  error: string | null;
 }) {
+  const items = outcome?.status === 'success' ? outcome.value.items : [];
+  const error = outcome?.status === 'error' ? outcome.error : null;
   return (
     <View style={styles.projection}>
       <Text style={styles.projectionTitle}>{route}</Text>
       <ProjectionList
         emptyCopy={`No ${route.toLowerCase()} yet.`}
         error={error}
+        footer={
+          outcome?.status === 'success' ? (
+            <ReadStatus label={route} page={outcome.value.page} />
+          ) : undefined
+        }
         items={items.filter(item => item.kind === projectionKind(route))}
         loading={loading}
       />
@@ -254,9 +303,10 @@ function App(): React.JSX.Element {
   );
   const [chatError, setChatError] = useState<string | null>(null);
   const [route, setRoute] = useState<Route>('Home');
-  const [reads, setReads] = useState<DesktopReadProjection[]>([]);
+  const [readOutcomes, setReadOutcomes] = useState<DesktopReadOutcomes | null>(
+    null,
+  );
   const [readsLoading, setReadsLoading] = useState(true);
-  const [readsError, setReadsError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [projectionFilter, setProjectionFilter] =
     useState<ProjectionFilter>('all');
@@ -288,19 +338,34 @@ function App(): React.JSX.Element {
     const backend = omiBackend;
     if (backend === undefined || backend === null) {
       setReadsLoading(false);
-      setReadsError('Desktop history is unavailable.');
+      const unavailable = {
+        status: 'error',
+        error: 'Backend unavailable',
+      } as const;
+      setReadOutcomes({
+        conversations: unavailable,
+        memories: unavailable,
+        tasks: unavailable,
+      });
       return () => undefined;
     }
     loadDesktopReads(backend)
-      .then(items => {
+      .then(outcomes => {
         if (active) {
-          setReads(items);
-          setReadsError(null);
+          setReadOutcomes(outcomes);
         }
       })
       .catch(() => {
         if (active) {
-          setReadsError('Desktop history could not be loaded.');
+          const failed = {
+            status: 'error',
+            error: 'Desktop history could not be loaded.',
+          } as const;
+          setReadOutcomes({
+            conversations: failed,
+            memories: failed,
+            tasks: failed,
+          });
         }
       })
       .finally(() => {
@@ -312,6 +377,34 @@ function App(): React.JSX.Element {
       active = false;
     };
   }, []);
+
+  const reads = useMemo(() => {
+    if (readOutcomes === null) {
+      return [];
+    }
+    return [
+      ...(readOutcomes.conversations.status === 'success'
+        ? readOutcomes.conversations.value.items
+        : []),
+      ...(readOutcomes.memories.status === 'success'
+        ? readOutcomes.memories.value.items
+        : []),
+      ...(readOutcomes.tasks.status === 'success'
+        ? readOutcomes.tasks.value.items
+        : []),
+    ];
+  }, [readOutcomes]);
+
+  const routeOutcome = useMemo(() => {
+    if (readOutcomes === null || route === 'Home' || route === 'Chat') {
+      return null;
+    }
+    return {
+      Conversations: readOutcomes.conversations,
+      Memories: readOutcomes.memories,
+      Tasks: readOutcomes.tasks,
+    }[route] as DomainReadOutcome<DesktopReadProjection>;
+  }, [readOutcomes, route]);
 
   const homeResults = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -547,7 +640,25 @@ function App(): React.JSX.Element {
                   <View style={styles.searchHome}>
                     <ProjectionList
                       emptyCopy="Nothing matches this search yet."
-                      error={readsError}
+                      error={null}
+                      footer={
+                        readOutcomes === null ? undefined : (
+                          <View style={styles.readStatuses}>
+                            <OutcomeStatus
+                              label="Conversations"
+                              outcome={readOutcomes.conversations}
+                            />
+                            <OutcomeStatus
+                              label="Memories"
+                              outcome={readOutcomes.memories}
+                            />
+                            <OutcomeStatus
+                              label="Tasks"
+                              outcome={readOutcomes.tasks}
+                            />
+                          </View>
+                        )
+                      }
                       header={
                         <View style={styles.searchHeader}>
                           <Text style={styles.searchEyebrow}>HOME</Text>
@@ -675,9 +786,8 @@ function App(): React.JSX.Element {
                   </View>
                 ) : (
                   <ProjectionPage
-                    error={readsError}
-                    items={reads}
                     loading={readsLoading}
+                    outcome={routeOutcome}
                     route={route}
                   />
                 )}
@@ -899,6 +1009,18 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+  readStatuses: {gap: 8, paddingTop: 12},
+  readStatus: {
+    backgroundColor: '#202020',
+    borderColor: '#303030',
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 3,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  readStatusText: {color: '#b0b0b0', fontSize: 13, fontWeight: '600'},
+  readStatusReason: {color: '#777777', fontSize: 12},
   resultList: {flexGrow: 1, gap: 8, paddingBottom: 28},
   resultRow: {
     backgroundColor: '#202020',

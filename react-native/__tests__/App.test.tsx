@@ -52,11 +52,13 @@ jest.mock('react-native', () => {
   const FlatList = ({
     data,
     ListEmptyComponent,
+    ListFooterComponent,
     ListHeaderComponent,
     renderItem,
   }: {
     data: unknown[];
     ListEmptyComponent: React.ReactNode;
+    ListFooterComponent: React.ReactNode;
     ListHeaderComponent: React.ReactNode;
     renderItem: (item: {item: unknown}) => React.ReactNode;
   }) => (
@@ -66,6 +68,7 @@ jest.mock('react-native', () => {
         <View key={index}>{renderItem({item})}</View>
       ))}
       {data.length === 0 && ListEmptyComponent}
+      {ListFooterComponent}
     </View>
   );
 
@@ -350,6 +353,75 @@ test('navigates to rewritten-backend read projections and replays the stage tran
   expect(Animated.timing).toHaveBeenCalledWith(
     expect.anything(),
     expect.objectContaining({duration: 180, toValue: 1}),
+  );
+});
+
+test('keeps successful reads visible and reports each unavailable domain', async () => {
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/chat-messages?limit=50') {
+      return {id: request.id, status: 200, body: '{"messages":[]}'};
+    }
+    if (request.path === '/v1/conversations?limit=50&offset=0') {
+      return {id: request.id, status: 503, body: null};
+    }
+    const tasks = request.path === '/v1/tasks';
+    return {
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({
+        contractVersion: '1.0.0',
+        items: tasks
+          ? [
+              {
+                id: 'task1_visible',
+                description: 'Keep the successful task',
+                completed: false,
+                completedAt: null,
+                dueAt: null,
+                owner: null,
+                source: 'assistant',
+                provenance: ['assistant:test'],
+                sortOrder: 1,
+                indentLevel: 0,
+                createdAt: 1,
+                updatedAt: 1,
+                revision: 'revision-1',
+              },
+            ]
+          : [],
+        window: {
+          status: tasks ? 'incomplete' : 'complete',
+          complete: !tasks,
+          hasMore: false,
+          nextCursor: null,
+        },
+        completeness: {
+          version: tasks ? 'tasks-completeness-v1' : 'recall-completeness-v1',
+          status: tasks ? 'incomplete' : 'complete',
+          reasons: tasks ? ['pending_writes'] : [],
+        },
+        absence: null,
+      }),
+    };
+  });
+
+  const renderer = await renderApp();
+  const home = JSON.stringify(renderer.toJSON());
+  expect(home).toContain('Keep the successful task');
+  expect(home).toContain('desktop-conversations-read failed (503)');
+  expect(home).toContain('Tasks are incomplete.');
+  expect(home).toContain('pending_writes');
+
+  const conversations = renderer.root
+    .findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    )
+    .find(node => node.props.children[1].props.children === 'Conversations')!;
+  await ReactTestRenderer.act(async () => conversations.props.onPress());
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'desktop-conversations-read failed (503)',
   );
 });
 

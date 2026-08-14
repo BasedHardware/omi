@@ -39,6 +39,30 @@ export type DesktopReadProjection =
   | MemoryProjection
   | TaskProjection;
 
+export type ReadPageState = {
+  windowStatus: 'complete' | 'more' | 'incomplete' | 'unknown';
+  complete: boolean;
+  hasMore: boolean;
+  nextCursor: string | null;
+  completenessStatus: 'complete' | 'incomplete' | 'degraded' | 'unknown';
+  reasons: string[];
+};
+
+export type DomainRead<T extends DesktopReadProjection> = {
+  items: T[];
+  page: ReadPageState;
+};
+
+export type DomainReadOutcome<T extends DesktopReadProjection> =
+  | {status: 'success'; value: DomainRead<T>}
+  | {status: 'error'; error: string};
+
+export type DesktopReadOutcomes = {
+  conversations: DomainReadOutcome<ConversationProjection>;
+  memories: DomainReadOutcome<MemoryProjection>;
+  tasks: DomainReadOutcome<TaskProjection>;
+};
+
 function object(value: unknown, label: string): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${label} is malformed`);
@@ -113,7 +137,7 @@ function validatePage(
   value: unknown,
   label: string,
   completenessVersion: 'recall-completeness-v1' | 'tasks-completeness-v1',
-): Record<string, unknown>[] {
+): {items: Record<string, unknown>[]; page: ReadPageState} {
   const page = object(value, label);
   if (page.contractVersion !== '1.0.0') {
     throw new Error(`${label} contractVersion is malformed`);
@@ -138,7 +162,13 @@ function validatePage(
   if (completeness.version !== completenessVersion) {
     throw new Error(`${label} completeness version is malformed`);
   }
-  string(completeness.status, `${label} completeness status`);
+  const completenessStatus = string(
+    completeness.status,
+    `${label} completeness status`,
+  );
+  if (!['complete', 'incomplete', 'degraded'].includes(completenessStatus)) {
+    throw new Error(`${label} completeness status is malformed`);
+  }
   if (
     !Array.isArray(completeness.reasons) ||
     !completeness.reasons.every(reason => typeof reason === 'string')
@@ -148,14 +178,25 @@ function validatePage(
   if (page.absence !== null) {
     object(page.absence, `${label} absence`);
   }
-  return page.items.map((item, index) =>
-    object(item, `${label} item ${index}`),
-  );
+  return {
+    items: page.items.map((item, index) =>
+      object(item, `${label} item ${index}`),
+    ),
+    page: {
+      windowStatus: windowStatus as ReadPageState['windowStatus'],
+      complete,
+      hasMore,
+      nextCursor: window.nextCursor as string | null,
+      completenessStatus:
+        completenessStatus as ReadPageState['completenessStatus'],
+      reasons: [...completeness.reasons] as string[],
+    },
+  };
 }
 
 export async function loadConversations(
   backend: OmiBackend,
-): Promise<ConversationProjection[]> {
+): Promise<DomainRead<ConversationProjection>> {
   const value = await read(
     backend,
     'desktop-conversations-read',
@@ -164,7 +205,7 @@ export async function loadConversations(
   if (!Array.isArray(value)) {
     throw new Error('Conversations response is malformed');
   }
-  return value.map((entry, index) => {
+  const items = value.map((entry, index) => {
     const record = object(entry, `Conversation ${index}`);
     const structured = object(
       record.structured,
@@ -202,7 +243,7 @@ export async function loadConversations(
       throw new Error(`Conversation ${index} folder_id is malformed`);
     }
     return {
-      kind: 'conversation',
+      kind: 'conversation' as const,
       id,
       title,
       summary,
@@ -212,17 +253,29 @@ export async function loadConversations(
       starred,
     };
   });
+  const hasMore = items.length === 50;
+  return {
+    items,
+    page: {
+      windowStatus: hasMore ? 'unknown' : 'complete',
+      complete: !hasMore,
+      hasMore,
+      nextCursor: null,
+      completenessStatus: hasMore ? 'unknown' : 'complete',
+      reasons: hasMore ? ['limit_reached'] : [],
+    },
+  };
 }
 
 export async function loadMemories(
   backend: OmiBackend,
-): Promise<MemoryProjection[]> {
-  const items = validatePage(
+): Promise<DomainRead<MemoryProjection>> {
+  const validated = validatePage(
     await read(backend, 'desktop-memories-read', '/v1/memories?limit=50'),
     'Memories response',
     'recall-completeness-v1',
   );
-  return items.map((item, index) => {
+  const items = validated.items.map((item, index) => {
     const id = string(item.id, `Memory ${index} id`);
     const text = string(item.text, `Memory ${index} text`);
     const citations = stringArray(item.citations, `Memory ${index} citations`);
@@ -231,7 +284,7 @@ export async function loadMemories(
     string(provenance.inputDigest, `Memory ${index} inputDigest`);
     string(provenance.outputDigest, `Memory ${index} outputDigest`);
     return {
-      kind: 'memory',
+      kind: 'memory' as const,
       id,
       title: text,
       summary: text,
@@ -239,17 +292,18 @@ export async function loadMemories(
       citations,
     };
   });
+  return {items, page: validated.page};
 }
 
 export async function loadTasks(
   backend: OmiBackend,
-): Promise<TaskProjection[]> {
-  const items = validatePage(
+): Promise<DomainRead<TaskProjection>> {
+  const validated = validatePage(
     await read(backend, 'desktop-tasks-read', '/v1/tasks'),
     'Tasks response',
     'tasks-completeness-v1',
   );
-  return items.map((item, index) => {
+  const items = validated.items.map((item, index) => {
     const id = string(item.id, `Task ${index} id`);
     const description = string(item.description, `Task ${index} description`);
     const completed = boolean(item.completed, `Task ${index} completed`);
@@ -272,7 +326,7 @@ export async function loadTasks(
     const updatedAt = integer(item.updatedAt, `Task ${index} updatedAt`);
     string(item.revision, `Task ${index} revision`);
     return {
-      kind: 'task',
+      kind: 'task' as const,
       id,
       title: description,
       summary: completed
@@ -289,15 +343,32 @@ export async function loadTasks(
       updatedAt,
     };
   });
+  return {items, page: validated.page};
 }
 
 export async function loadDesktopReads(
   backend: OmiBackend,
-): Promise<DesktopReadProjection[]> {
-  const [conversations, memories, tasks] = await Promise.all([
+): Promise<DesktopReadOutcomes> {
+  const [conversations, memories, tasks] = await Promise.allSettled([
     loadConversations(backend),
     loadMemories(backend),
     loadTasks(backend),
   ]);
-  return [...conversations, ...memories, ...tasks];
+  const outcome = <T extends DesktopReadProjection>(
+    result: PromiseSettledResult<DomainRead<T>>,
+  ): DomainReadOutcome<T> =>
+    result.status === 'fulfilled'
+      ? {status: 'success', value: result.value}
+      : {
+          status: 'error',
+          error:
+            result.reason instanceof Error
+              ? result.reason.message
+              : 'Desktop read failed',
+        };
+  return {
+    conversations: outcome(conversations),
+    memories: outcome(memories),
+    tasks: outcome(tasks),
+  };
 }

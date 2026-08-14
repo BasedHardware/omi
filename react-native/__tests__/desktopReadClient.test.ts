@@ -98,26 +98,49 @@ test('loads and normalizes all three exact desktop read routes', async () => {
     };
   });
 
-  await expect(loadDesktopReads(backend)).resolves.toEqual([
-    expect.objectContaining({
-      kind: 'conversation',
-      id: 'conversation-1',
-      title: 'Morning walk',
-      summary: 'Discussed the launch.',
-      searchableText: 'Morning walk\nDiscussed the launch.',
-    }),
-    expect.objectContaining({
-      kind: 'memory',
-      id: 'memory1_abc',
-      searchableText: 'The launch is Friday.',
-    }),
-    expect.objectContaining({
-      kind: 'task',
-      id: 'task1_abc',
-      title: 'Prepare launch notes',
-      summary: 'Due 1786000000',
-    }),
-  ]);
+  const result = await loadDesktopReads(backend);
+  expect(result.conversations).toEqual({
+    status: 'success',
+    value: {
+      items: [
+        expect.objectContaining({
+          kind: 'conversation',
+          id: 'conversation-1',
+          title: 'Morning walk',
+          summary: 'Discussed the launch.',
+          searchableText: 'Morning walk\nDiscussed the launch.',
+        }),
+      ],
+      page: expect.objectContaining({complete: true, hasMore: false}),
+    },
+  });
+  expect(result.memories).toEqual({
+    status: 'success',
+    value: {
+      items: [
+        expect.objectContaining({
+          kind: 'memory',
+          id: 'memory1_abc',
+          searchableText: 'The launch is Friday.',
+        }),
+      ],
+      page: expect.objectContaining({completenessStatus: 'complete'}),
+    },
+  });
+  expect(result.tasks).toEqual({
+    status: 'success',
+    value: {
+      items: [
+        expect.objectContaining({
+          kind: 'task',
+          id: 'task1_abc',
+          title: 'Prepare launch notes',
+          summary: 'Due 1786000000',
+        }),
+      ],
+      page: expect.objectContaining({completenessStatus: 'complete'}),
+    },
+  });
   expect(paths.sort()).toEqual(
     [
       '/v1/conversations?limit=50&offset=0',
@@ -170,4 +193,113 @@ test('rejects a malformed page envelope before projecting items', async () => {
   await expect(loadMemories(backend)).rejects.toThrow(
     'window status is malformed',
   );
+});
+
+test('preserves a cursor-backed multi-page memory window', async () => {
+  const response = {
+    ...page([memory], 'recall-completeness-v1'),
+    window: {
+      status: 'more',
+      complete: false,
+      hasMore: true,
+      nextCursor: 'cursor-2',
+    },
+  };
+  const backend = backendFor(() => ({
+    status: 200,
+    body: JSON.stringify(response),
+  }));
+
+  await expect(loadMemories(backend)).resolves.toEqual({
+    items: [expect.objectContaining({id: 'memory1_abc'})],
+    page: {
+      windowStatus: 'more',
+      complete: false,
+      hasMore: true,
+      nextCursor: 'cursor-2',
+      completenessStatus: 'complete',
+      reasons: [],
+    },
+  });
+});
+
+test('preserves an incomplete task projection and its reasons', async () => {
+  const response = {
+    ...page([task], 'tasks-completeness-v1'),
+    window: {
+      status: 'incomplete',
+      complete: false,
+      hasMore: false,
+      nextCursor: null,
+    },
+    completeness: {
+      version: 'tasks-completeness-v1',
+      status: 'incomplete',
+      reasons: ['pending_writes'],
+    },
+  };
+  const backend = backendFor(() => ({
+    status: 200,
+    body: JSON.stringify(response),
+  }));
+
+  await expect(loadTasks(backend)).resolves.toEqual({
+    items: [expect.objectContaining({id: 'task1_abc'})],
+    page: {
+      windowStatus: 'incomplete',
+      complete: false,
+      hasMore: false,
+      nextCursor: null,
+      completenessStatus: 'incomplete',
+      reasons: ['pending_writes'],
+    },
+  });
+});
+
+test('marks a full conversation window as potentially incomplete', async () => {
+  const conversations = Array.from({length: 50}, (_, index) => ({
+    ...conversation,
+    id: `conversation-${index}`,
+  }));
+  const backend = backendFor(() => ({
+    status: 200,
+    body: JSON.stringify(conversations),
+  }));
+
+  const result = await loadConversations(backend);
+  expect(result.items).toHaveLength(50);
+  expect(result.page).toEqual({
+    windowStatus: 'unknown',
+    complete: false,
+    hasMore: true,
+    nextCursor: null,
+    completenessStatus: 'unknown',
+    reasons: ['limit_reached'],
+  });
+});
+
+test('retains successful domains when one desktop read fails', async () => {
+  const backend = backendFor(request => {
+    if (request.path.startsWith('/v1/conversations')) {
+      return {status: 503, body: null};
+    }
+    if (request.path.startsWith('/v1/memories')) {
+      return {
+        status: 200,
+        body: JSON.stringify(page([memory], 'recall-completeness-v1')),
+      };
+    }
+    return {
+      status: 200,
+      body: JSON.stringify(page([task], 'tasks-completeness-v1')),
+    };
+  });
+
+  const result = await loadDesktopReads(backend);
+  expect(result.conversations).toEqual({
+    status: 'error',
+    error: 'desktop-conversations-read failed (503)',
+  });
+  expect(result.memories).toEqual(expect.objectContaining({status: 'success'}));
+  expect(result.tasks).toEqual(expect.objectContaining({status: 'success'}));
 });
