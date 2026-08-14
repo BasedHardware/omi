@@ -140,6 +140,23 @@ fi
 [[ "$APPCAST_TAG" != "$TAG_PREFIX"* ]] \
     || die "appcast holder tag '$APPCAST_TAG' looks like a versioned release tag; the feed must not share a release with artifacts"
 
+# A permanent download link, for humans rather than for Sparkle: a second fixed, mutable release
+# carrying the installer under a *version-less* asset name, replaced in place on every release.
+#
+# GitHub's own `releases/latest/download/<asset>` cannot do this job here. It resolves to the newest
+# release of the entire repository, and this repository publishes Omi Desktop tags several times a
+# day, so such a URL would answer 404 almost always and would name the wrong product the rest of the
+# time. `desktop/windows/docs/release-pipeline.md` rejected that same endpoint for the same reason.
+LATEST_TAG="${LATEST_TAG:-$PRODUCT_SLUG-latest}"
+LATEST_ASSET="$ARTIFACT_PREFIX.dmg"
+LATEST_URL="https://github.com/$GITHUB_REPO/releases/download/$LATEST_TAG/$LATEST_ASSET"
+[[ "$LATEST_TAG" == "$PRODUCT_SLUG"* ]] \
+    || die "latest-installer holder tag '$LATEST_TAG' is outside the '$PRODUCT_SLUG' namespace; refusing to clobber another product's release asset"
+[[ "$LATEST_TAG" != "$TAG_PREFIX"* ]] \
+    || die "latest-installer holder tag '$LATEST_TAG' looks like a versioned release tag; the pointer must not share a release with artifacts"
+[[ "$LATEST_TAG" != "$APPCAST_TAG" ]] \
+    || die "the latest-installer holder must not be the feed holder; one clobbers the other's asset"
+
 get_env() {
     local name="$1"
     printf '%s' "${!name:-}"
@@ -200,6 +217,7 @@ if [[ "$MODE" == "dry-run" ]]; then
     log "dry-run: feed=$FEED_URL"
     log "dry-run: feed asset $APPCAST_ASSET on holder release $APPCAST_TAG in $GITHUB_REPO"
     log "dry-run: enclosure=$ENCLOSURE_URL"
+    log "dry-run: permanent download link=$LATEST_URL"
     log "dry-run: $PUBLIC_KEY_ENV=$PUBLIC_KEY_STATUS; $PRIVATE_KEY_ENV=$PRIVATE_KEY_STATUS"
     log "dry-run: no build, signing, notarization, GitHub release, appcast, or source-file changes"
     exit 0
@@ -430,3 +448,37 @@ else
         --repo "$GITHUB_REPO" --clobber
 fi
 log "feed live at $FEED_URL"
+
+# The permanent download link moves last, and only for a real release. A rehearsal that advanced it
+# would hand everyone who follows that link a build Gatekeeper refuses to open.
+if [[ "$REHEARSAL" -eq 1 ]]; then
+    warn "REHEARSAL: leaving $LATEST_ASSET on '$LATEST_TAG' where it was"
+else
+    # Uploaded from a copy under the version-less name, because the asset name is what the permanent
+    # URL is made of; the versioned DMG keeps its own name on the versioned release.
+    LATEST_STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/micro-app-latest.XXXXXX")"
+    cp "$DMG_PATH" "$LATEST_STAGE_DIR/$LATEST_ASSET"
+    if GH_TOKEN="$GITHUB_TOKEN" gh release view "$LATEST_TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
+        log "pointing $LATEST_ASSET on '$LATEST_TAG' at $VERSION"
+        GH_TOKEN="$GITHUB_TOKEN" gh release upload "$LATEST_TAG" "$LATEST_STAGE_DIR/$LATEST_ASSET" \
+            --repo "$GITHUB_REPO" --clobber \
+            || die "could not update the permanent installer link on '$LATEST_TAG'"
+    else
+        log "creating the permanent installer release $LATEST_TAG"
+        GH_TOKEN="$GITHUB_TOKEN" gh release create "$LATEST_TAG" \
+            --repo "$GITHUB_REPO" \
+            --prerelease \
+            --title "$APP_NAME — latest download" \
+            --notes "Always holds the newest $APP_NAME installer at a stable URL:
+
+$LATEST_URL
+
+The file is replaced in place on every release, so the link never changes. Release notes and
+per-version artifacts live on the $TAG_PREFIX<version> releases. Marked as a prerelease so it never
+becomes the repository's latest release. Updated by scripts/release-micro-app.sh." \
+            "$LATEST_STAGE_DIR/$LATEST_ASSET" \
+            || die "could not create the permanent installer release '$LATEST_TAG'"
+    fi
+    rm -rf "$LATEST_STAGE_DIR"
+    log "permanent download link: $LATEST_URL"
+fi

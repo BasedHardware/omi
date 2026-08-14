@@ -39,6 +39,26 @@ printf '%s\n' "$DRY_RUN_OUTPUT" | grep -qF 'enclosure=https://github.com/BasedHa
 printf '%s\n' "$DRY_RUN_OUTPUT" | grep -qF 'no build, signing, notarization, GitHub release, appcast' \
     || fail "dry-run side-effect promise"
 
+# The permanent download link is version-less on purpose: the asset name is the URL, so a versioned
+# name would change the link on every release and defeat the point.
+printf '%s\n' "$DRY_RUN_OUTPUT" | grep -qF 'permanent download link=https://github.com/BasedHardware/omi/releases/download/context-for-claude-latest/ContextForClaude.dmg' \
+    || fail "permanent download link"
+
+# That link is maintained with --clobber, so the same namespace rules that protect the feed have to
+# protect it: never another product's release, never a versioned release, never the feed's own.
+if LATEST_TAG="omi-desktop-latest" "$SCRIPT_DIR/release-context.sh" \
+    --tag context-for-claude-v1.1.0 --dry-run >/dev/null 2>&1; then
+    fail "a latest-installer tag outside the product namespace was accepted"
+fi
+if LATEST_TAG="context-for-claude-v1.1.0" "$SCRIPT_DIR/release-context.sh" \
+    --tag context-for-claude-v1.1.0 --dry-run >/dev/null 2>&1; then
+    fail "a versioned tag was accepted as the latest-installer holder"
+fi
+if LATEST_TAG="context-for-claude-appcast" "$SCRIPT_DIR/release-context.sh" \
+    --tag context-for-claude-v1.1.0 --dry-run >/dev/null 2>&1; then
+    fail "the feed holder was accepted as the latest-installer holder"
+fi
+
 if CONTEXT_SPARKLE_PUBLIC_KEY="REPLACE_WITH_SUPublicEDKey_FROM_generate_keys" \
     "$SCRIPT_DIR/release-context.sh" --tag context-for-claude-v1.1.0 --dry-run >/dev/null 2>&1; then
     fail "placeholder public key was accepted"
