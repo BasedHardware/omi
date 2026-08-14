@@ -69,6 +69,10 @@ final class OmiBleManager: NSObject {
     private var reconnectAttempt: [String: Int] = [:]
     /// In-flight delayed reconnects — at most one parked connect per peripheral.
     private var pendingReconnectWork: [String: DispatchWorkItem] = [:]
+    /// Deadline + peripheral for delayed reconnects, so a CoreBluetooth wake
+    /// can fire overdue work if `asyncAfter` was lost to suspend.
+    private var pendingReconnectDeadline: [String: Date] = [:]
+    private var pendingReconnectPeripheral: [String: CBPeripheral] = [:]
 
     /// Last battery sample actually written to the plist ring, per peripheral.
     private var lastPersistedBatteryLevel: [String: Int] = [:]
@@ -212,12 +216,38 @@ final class OmiBleManager: NSObject {
     private func cancelPendingReconnect(uuid: String) {
         pendingReconnectWork[uuid]?.cancel()
         pendingReconnectWork.removeValue(forKey: uuid)
+        pendingReconnectDeadline.removeValue(forKey: uuid)
+        pendingReconnectPeripheral.removeValue(forKey: uuid)
     }
 
     private func isTimeoutOrFailToConnectReason(_ reason: String) -> Bool {
         return reason == "connection_timeout" ||
             reason == "fail_to_connect" ||
             reason == "connection_failed_instant_passed"
+    }
+
+    /// Fire overdue delayed reconnects. CoreBluetooth wake / restore / poweredOn
+    /// and foreground entry call this because `DispatchQueue.main.asyncAfter`
+    /// does not wake a suspended process.
+    func flushDueReconnects() {
+        let now = Date()
+        let due = pendingReconnectDeadline.compactMap { uuid, deadline -> String? in
+            now >= deadline ? uuid : nil
+        }
+        for uuid in due {
+            guard let peripheral = pendingReconnectPeripheral[uuid] else {
+                cancelPendingReconnect(uuid: uuid)
+                continue
+            }
+            fireReconnect(uuid: uuid, peripheral: peripheral)
+        }
+    }
+
+    private func fireReconnect(uuid: String, peripheral: CBPeripheral) {
+        cancelPendingReconnect(uuid: uuid)
+        if manuallyDisconnected.contains(uuid) { return }
+        if peripheral.state == .connected { return }
+        centralManager.connect(peripheral, options: nil)
     }
 
     /// At most one parked `central.connect` per peripheral. First drop is
@@ -231,7 +261,7 @@ final class OmiBleManager: NSObject {
         cancelPendingReconnect(uuid: uuid)
 
         let attempt = reconnectAttempt[uuid] ?? 0
-        let isBackground = UIApplication.shared.applicationState == .background
+        let isBackground = UIApplication.shared.applicationState != .active
         let delayMs = OmiBleReconnectPolicy.reconnectDelayMs(
             attempt: attempt,
             isBackground: isBackground,
@@ -241,20 +271,16 @@ final class OmiBleManager: NSObject {
 
         NSLog("[OmiBle] scheduleReconnect uuid=\(uuid) reason=\(reason) attempt=\(attempt) delayMs=\(delayMs) background=\(isBackground)")
 
-        let connect = { [weak self] in
-            guard let self = self else { return }
-            self.pendingReconnectWork.removeValue(forKey: uuid)
-            if self.manuallyDisconnected.contains(uuid) { return }
-            if peripheral.state == .connected { return }
-            self.centralManager.connect(peripheral, options: nil)
-        }
-
         if delayMs <= 0 {
-            connect()
+            fireReconnect(uuid: uuid, peripheral: peripheral)
             return
         }
 
-        let work = DispatchWorkItem(block: connect)
+        pendingReconnectPeripheral[uuid] = peripheral
+        pendingReconnectDeadline[uuid] = Date().addingTimeInterval(Double(delayMs) / 1000.0)
+        let work = DispatchWorkItem { [weak self] in
+            self?.flushDueReconnects()
+        }
         pendingReconnectWork[uuid] = work
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delayMs), execute: work)
     }
@@ -267,6 +293,7 @@ final class OmiBleManager: NSObject {
     /// foreground — `centralManager.connect` is idempotent and pending connects
     /// cost nothing while iOS waits at the chipset level.
     func reconnectStalePeripherals() {
+        flushDueReconnects()
         guard centralManager.state == .poweredOn else { return }
         for (uuid, peripheral) in peripherals {
             guard everConnected.contains(uuid) else { continue }
@@ -673,6 +700,10 @@ extension OmiBleManager: CBCentralManagerDelegate {
         NSLog("[OmiBle] centralManagerDidUpdateState: \(state), flutterApi=\(flutterApi != nil)")
         flutterApi?.onBluetoothStateChanged(state: state) { _ in }
 
+        if central.state == .poweredOn {
+            flushDueReconnects()
+        }
+
         // Execute queued scan if Bluetooth just became ready
         if central.state == .poweredOn, let pending = pendingScan {
             NSLog("[OmiBle] Executing queued scan (timeout=\(pending.timeout))")
@@ -681,6 +712,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        flushDueReconnects()
         // Restore previously connected peripherals after app relaunch
         if let restoredPeripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
             var uuids: [String] = []
@@ -760,6 +792,8 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
 
+        flushDueReconnects()
+
         // Retry previously-connected peripherals — otherwise a failed connect silently
         // drops the user. First attempt is a parked chipset-level connect; later
         // background timeout storms back off instead of 200ms forever.
@@ -798,6 +832,8 @@ extension OmiBleManager: CBCentralManagerDelegate {
         connectionStartTimes.removeValue(forKey: uuid)
 
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
+
+        flushDueReconnects()
 
         // Auto-reconnect unless manually disconnected. Prefer a synchronous
         // parked connect — iOS can suspend before asyncAfter fires.

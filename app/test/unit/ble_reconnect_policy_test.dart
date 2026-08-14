@@ -10,6 +10,31 @@ void main() {
       );
     });
 
+    test('inactive and background are both backgrounded for backoff', () {
+      expect(isBleReconnectBackgrounded(isActive: true), isFalse);
+      expect(isBleReconnectBackgrounded(isActive: false), isTrue);
+    });
+
+    test('overdue delayed reconnects fire after a CoreBluetooth wake', () {
+      final scheduledAt = DateTime.utc(2026, 8, 14, 12);
+      expect(
+        isBleReconnectDelayElapsed(
+          scheduledAt: scheduledAt,
+          delayMs: 2000,
+          now: scheduledAt.add(const Duration(milliseconds: 1999)),
+        ),
+        isFalse,
+      );
+      expect(
+        isBleReconnectDelayElapsed(
+          scheduledAt: scheduledAt,
+          delayMs: 2000,
+          now: scheduledAt.add(const Duration(milliseconds: 2000)),
+        ),
+        isTrue,
+      );
+    });
+
     test('foreground never backs off', () {
       for (final attempt in [1, 2, 8]) {
         expect(

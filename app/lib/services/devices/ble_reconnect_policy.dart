@@ -8,6 +8,20 @@
 const bleReconnectTimeoutBackoffMs = <int>[200, 2000, 10000, 30000, 60000];
 const bleReconnectBackoffCapMs = 60000;
 
+/// iOS `.inactive` (lock / transition) is not foreground: timeout backoff
+/// must apply. Keep in sync with `OmiBleManager.scheduleReconnect`.
+bool isBleReconnectBackgrounded({required bool isActive}) => !isActive;
+
+/// Whether a delayed `central.connect` should fire after a CoreBluetooth wake.
+/// Keep in sync with `OmiBleManager.flushDueReconnects`.
+bool isBleReconnectDelayElapsed({
+  required DateTime scheduledAt,
+  required int delayMs,
+  required DateTime now,
+}) {
+  return !now.isBefore(scheduledAt.add(Duration(milliseconds: delayMs)));
+}
+
 /// Delay before the next `central.connect`.
 ///
 /// [attempt] is 0 for the first reconnect after an unexpected disconnect
