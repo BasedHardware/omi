@@ -138,6 +138,8 @@ langchain_runnables.RunnableConfig = FakeRunnableConfig
 _stub_package("utils")
 _stub_package("utils.retrieval")
 _stub_package("utils.retrieval.tools")
+_stub_package("utils.retrieval.tool_result_boundaries")
+sys.modules["utils.retrieval.tool_result_boundaries"].trusted_tool_result = lambda content, **kw: content
 _stub_package("utils.conversations")
 
 # Stub utils.conversations.render with the REAL tz-resolution behavior so the

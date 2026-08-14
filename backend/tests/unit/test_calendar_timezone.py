@@ -69,6 +69,7 @@ for _name in [
     "utils.log_sanitizer",
     "utils.retrieval",
     "utils.retrieval.tools",
+    "utils.retrieval.tool_result_boundaries",
     "utils.retrieval.tools.integration_base",
     "utils.retrieval.tools.google_utils",
 ]:
