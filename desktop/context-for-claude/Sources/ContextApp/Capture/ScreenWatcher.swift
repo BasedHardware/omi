@@ -192,19 +192,6 @@ final class ScreenWatcher {
         if wasRunning { ContextLog.info("Screen watcher stopped", "screen") }
     }
 
-    // MARK: - Permission
-
-    /// `nonisolated` so the permissions layer can ask from any context; both calls are thread-safe.
-    nonisolated static func hasPermission() -> Bool {
-        CGPreflightScreenCaptureAccess()
-    }
-
-    /// Raises the system prompt. Screen Recording only takes effect after a relaunch, so callers
-    /// must tell the user that rather than waiting on a return value.
-    nonisolated static func requestPermission() {
-        _ = CGRequestScreenCaptureAccess()
-    }
-
     // MARK: - State carried between ticks
 
     /// Perceptual hashes of the last few *distinct* screens — the whole idle-cost story.
