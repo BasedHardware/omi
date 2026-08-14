@@ -7,14 +7,14 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:omi-dev-local",
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
         "android_client_info": {
           "package_name": "com.friend.ios.dev"
         }
       },
       "api_key": [
         {
-          "current_key": "local-firebase-auth-emulator-api-key"
+          "current_key": "AIzaSyDEMOOMILOCALFAKEKEY00000000000000"
         }
       ],
       "services": {
