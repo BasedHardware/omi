@@ -20,7 +20,6 @@ export type ExternalSurfaceToolPolicyDecision =
       | "permission_request_not_authorized"
       | "pill_management_intent_required"
       | "memory_save_not_authorized"
-      | "memory_content_not_in_user_request"
       | "sql_write_rejected";
     message: string;
   };
@@ -153,13 +152,6 @@ export function routeExternalSurfaceTool(
         action: "reject",
         code: "memory_save_not_authorized",
         message: "Saving a memory requires an explicit affirmative current-turn request such as 'remember this' or 'save this'",
-      };
-    }
-    if (!hasMemoryContentInUserRequest(input.toolInput, input.originatingPrompt)) {
-      return {
-        action: "reject",
-        code: "memory_content_not_in_user_request",
-        message: "Memory content must be plainly supplied in the current user request; inferred or rewritten content is not authorized",
       };
     }
   }
@@ -352,65 +344,26 @@ export function hasExplicitMemorySaveIntent(prompt: string): boolean {
   const text = prompt.toLowerCase().trim();
   if (!text) return false;
 
-  // Keep this list in lockstep with the native executor: recall questions and
-  // explicit negations must never become durable-write authority.
-  const rejectedPhrases = [
-    "do you remember",
-    "did you remember",
-    "what do you remember",
-    "what should i remember",
-    "don't remember",
-    "do not remember",
-    "never remember",
-    "not remember",
-    "don't save",
-    "do not save",
-    "don't store",
-    "do not store",
-    "don't add",
-    "do not add",
-    "don't create",
-    "do not create",
-  ];
-  if (rejectedPhrases.some((phrase) => text.includes(phrase))) return false;
+  // Keep these patterns identical to ChatToolExecutor.isExplicitMemorySaveIntent.
+  // Shared cases live in tests/fixtures/memory-save-intent-corpus.json.
+  const negativePattern =
+    /(?:\b(?:don't|do not|never|no longer|without)\b[^.!?]{0,96}\b(?:remember|save|store|keep)\b|\b(?:remember|save|store|keep)\b[^.!?]{0,96}\b(?:not|never)\b)/;
+  if (negativePattern.test(text)) return false;
+  const questionPattern =
+    /^\s*(?:should|would|could|can|do|did|why|what)\b[^.!?]*\b(?:remember|save|store|keep)\b[^.!?]*\?\s*$/;
+  if (!text.includes("please") && questionPattern.test(text)) return false;
 
-  const imperativePhrases = [
-    "remember that",
-    "remember this",
-    "remember: ",
-    "please remember",
-    "save this",
-    "save to memory",
-    "save as a memory",
-    "store this",
-    "store in memory",
-    "add this to memory",
-    "create a memory",
-    "make this a memory",
-    "keep in mind that",
-  ];
-  const startsWithRememberCommand = text.startsWith("remember ")
-    || text.startsWith("remember:")
-    || text.startsWith("remember,");
-  if (!startsWithRememberCommand && !imperativePhrases.some((phrase) => text.includes(phrase))) return false;
-  // A question is only authorized when it contains an explicit polite
-  // request ("please ...?") or starts with the direct "remember" command.
-  if (text.includes("?") && !text.includes("please") && !text.startsWith("remember")) return false;
-  return true;
-}
-
-/**
- * A memory write may only persist text that the user supplied in this turn.
- * Compare normalized text literally rather than allowing a model-proposed
- * paraphrase or an inferred fact to become durable state.
- */
-export function hasMemoryContentInUserRequest(
-  toolInput: Record<string, unknown>,
-  originatingPrompt: string,
-): boolean {
-  const content = normalizeMemoryText(textField(toolInput, "content"));
-  const prompt = normalizeMemoryText(originatingPrompt);
-  return content.length > 0 && prompt.includes(content);
+  const directCommandPattern = /^(?:hey\s+)?(?:please\s+)?(?:remember|save|store|keep)\b/;
+  const sentenceCommandPattern = /(?:^|[.!?,;]\s+)(?:please\s+)?(?:remember|save|store|keep)\b/;
+  const delegatedCommandPattern = /\b(?:want|need|ask)\s+(?:you\s+)?to\s+(?:please\s+)?(?:remember|save|store|keep)\b/;
+  const anaphoricCommandPattern =
+    /\b(?:remember|save|store|keep)\s+(?:this|that|it|my|our|the following)\b/;
+  const hasCommand = directCommandPattern.test(text)
+    || sentenceCommandPattern.test(text)
+    || delegatedCommandPattern.test(text)
+    || anaphoricCommandPattern.test(text);
+  if (!hasCommand) return false;
+  return !/\b(?:i|we|you|they)\s+(?:remember|save|store|keep)\b/.test(text);
 }
 
 function permissionRequest(text: string): { toolName: "check_permission_status" | "request_permission"; type: string } | null {
@@ -476,14 +429,4 @@ function normalizeTarget(value: string): string {
 function textField(input: Record<string, unknown>, key: string): string {
   const value = input[key];
   return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizeMemoryText(value: string): string {
-  // Keep symbols (including emoji and values such as `C++`) intact; only
-  // punctuation and whitespace are presentation differences for this check.
-  const words = value.normalize("NFKC").toLowerCase().replace(/[\p{P}\s]+/gu, " ").trim();
-  // Padding makes the literal containment check word-boundary aware while
-  // still tolerating ordinary punctuation differences (e.g. a comma before
-  // "remember this" or a sentence-final period omitted by the tool).
-  return words ? ` ${words} ` : "";
 }

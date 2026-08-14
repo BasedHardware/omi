@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,7 +15,6 @@ import { handleAgentControlToolCall } from "../src/runtime/control-tools.js";
 import { recordJournalTurn, terminalizeJournalTurn, updateJournalTurn } from "../src/runtime/conversation-journal.js";
 import {
   hasExplicitMemorySaveIntent,
-  hasMemoryContentInUserRequest,
   routeExternalSurfaceTool,
 } from "../src/runtime/external-surface-tool-policy.js";
 import { AgentRuntimeKernel, ExternalSurfaceAuthorityError } from "../src/runtime/kernel.js";
@@ -31,6 +30,9 @@ import {
 import { createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 
 const roots: string[] = [];
+const memorySaveIntentCorpus = JSON.parse(
+  readFileSync(new URL("./fixtures/memory-save-intent-corpus.json", import.meta.url), "utf8"),
+) as { authorized: string[]; unauthorized: string[] };
 
 afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
@@ -430,12 +432,7 @@ describe("external realtime surface authority", () => {
   });
 
   it("requires an affirmative remember/save command before relaying create_memory", () => {
-    for (const prompt of [
-      "I prefer tea.",
-      "Should I save this?",
-      "Please do not remember this.",
-      "I don't want you to save that.",
-    ]) {
+    for (const prompt of memorySaveIntentCorpus.unauthorized) {
       expect(hasExplicitMemorySaveIntent(prompt), prompt).toBe(false);
       expect(routeExternalSurfaceTool({
         toolName: "create_memory",
@@ -444,12 +441,7 @@ describe("external realtime surface authority", () => {
       })).toMatchObject({ action: "reject", code: "memory_save_not_authorized" });
     }
 
-    for (const prompt of [
-      "Remember that I prefer tea.",
-      "Please save this: I prefer tea.",
-      "I prefer tea, remember this.",
-      "I want you to remember that I prefer tea.",
-    ]) {
+    for (const prompt of memorySaveIntentCorpus.authorized) {
       expect(hasExplicitMemorySaveIntent(prompt), prompt).toBe(true);
       expect(routeExternalSurfaceTool({
         toolName: "create_memory",
@@ -464,46 +456,32 @@ describe("external realtime surface authority", () => {
     }
   });
 
-  it("binds create_memory content to the originating user request", () => {
-    expect(hasMemoryContentInUserRequest(
-      { content: "  I  prefer\ttea. " },
-      "Remember that I prefer tea.",
-    )).toBe(true);
-    expect(hasMemoryContentInUserRequest(
-      { content: "C++ 👍" },
-      "Remember this: C++ 👍",
-    )).toBe(true);
+  it("lets create_memory persist a clean standalone fact when save intent is present", () => {
     expect(routeExternalSurfaceTool({
       toolName: "create_memory",
       toolInput: { content: "I prefer tea." },
       originatingPrompt: "Remember this",
-    })).toMatchObject({ action: "reject", code: "memory_content_not_in_user_request" });
+    })).toEqual({
+      action: "execute",
+      toolName: "create_memory",
+      toolInput: { content: "I prefer tea." },
+      recoveredFromDelegation: false,
+    });
     expect(routeExternalSurfaceTool({
       toolName: "create_memory",
       toolInput: { content: "I enjoy tea." },
       originatingPrompt: "Remember that I prefer tea.",
-    })).toMatchObject({ action: "reject", code: "memory_content_not_in_user_request" });
-    expect(routeExternalSurfaceTool({
-      toolName: "create_memory",
-      toolInput: { content: "I prefer tea." },
-      originatingPrompt: "Please save this: I prefer tea.",
     })).toMatchObject({ action: "execute", toolName: "create_memory" });
     expect(routeExternalSurfaceTool({
       toolName: "create_memory",
-      toolInput: { content: "   " },
-      originatingPrompt: "Remember this: I prefer tea.",
-    })).toMatchObject({ action: "reject", code: "memory_content_not_in_user_request" });
-  });
-
-  it("keeps external memory intent aligned with the native conservative command set", () => {
-    expect(hasExplicitMemorySaveIntent("Could you please remember this?")).toBe(true);
-    for (const prompt of [
-      "Can you remember this?",
-      "Please save that I prefer tea.",
-      "Please keep this in mind.",
-    ]) {
-      expect(hasExplicitMemorySaveIntent(prompt), prompt).toBe(false);
-    }
+      toolInput: { content: "David is currently testing proactivity in Omi" },
+      originatingPrompt: "Please remember that I am currently testing proactivity in Omi",
+    })).toMatchObject({ action: "execute", toolName: "create_memory" });
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "Please save this: I prefer tea." },
+      originatingPrompt: "Please save this: I prefer tea.",
+    })).toMatchObject({ action: "execute", toolName: "create_memory" });
   });
 
   it("defaults external spawns to Omi unless the current user selects one provider", () => {

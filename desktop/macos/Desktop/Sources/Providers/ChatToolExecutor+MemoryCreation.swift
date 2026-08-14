@@ -28,15 +28,23 @@ extension ChatToolExecutor {
     let text = userText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard !text.isEmpty else { return false }
 
-    // Keep this validator aligned with the runtime external-surface policy:
+    // Keep this validator in lockstep with hasExplicitMemorySaveIntent in
+    // desktop/macos/agent/src/runtime/external-surface-tool-policy.ts:
     // negations, recall questions, and assistant-authored suggestions are not
-    // authorization for a write.
+    // authorization for a write. Shared cases live in
+    // agent/tests/fixtures/memory-save-intent-corpus.json.
     let negativePattern =
       #"(?:\b(?:don't|do not|never|no longer|without)\b[^.!?]{0,96}\b(?:remember|save|store|keep)\b|\b(?:remember|save|store|keep)\b[^.!?]{0,96}\b(?:not|never)\b)"#
     guard text.range(of: negativePattern, options: .regularExpression) == nil else { return false }
+    // Polite requests ("Could you please remember this?") are commands, not
+    // recall questions. Keep this please exception in lockstep with the
+    // TypeScript runtime matcher; shared cases live in
+    // agent/tests/fixtures/memory-save-intent-corpus.json.
     let questionPattern =
       #"^\s*(?:should|would|could|can|do|did|why|what)\b[^.!?]*\b(?:remember|save|store|keep)\b[^.!?]*\?\s*$"#
-    guard text.range(of: questionPattern, options: .regularExpression) == nil else { return false }
+    if !text.contains("please") {
+      guard text.range(of: questionPattern, options: .regularExpression) == nil else { return false }
+    }
 
     let directCommandPattern = #"^(?:hey\s+)?(?:please\s+)?(?:remember|save|store|keep)\b"#
     let sentenceCommandPattern = #"(?:^|[.!?,;]\s+)(?:please\s+)?(?:remember|save|store|keep)\b"#
@@ -52,25 +60,6 @@ extension ChatToolExecutor {
     return text.range(
       of: #"\b(?:i|we|you|they)\s+(?:remember|save|store|keep)\b"#,
       options: .regularExpression) == nil
-  }
-
-  nonisolated static func isMemoryContentUserSupplied(content: String, userText: String?) -> Bool {
-    guard let userText else { return false }
-    let normalizedContent = normalizeMemoryText(content)
-    let normalizedUserText = normalizeMemoryText(userText)
-    guard !normalizedContent.isEmpty, !normalizedUserText.isEmpty else { return false }
-    return " \(normalizedUserText) ".contains(" \(normalizedContent) ")
-  }
-
-  private nonisolated static func normalizeMemoryText(_ value: String) -> String {
-    value
-      .precomposedStringWithCompatibilityMapping
-      .lowercased()
-      .unicodeScalars
-      .map { CharacterSet.alphanumerics.contains($0) ? String($0) : " " }
-      .joined()
-      .split(whereSeparator: \.isWhitespace)
-      .joined(separator: " ")
   }
 
   nonisolated static func memoryCreationReceipt(_ memory: ServerMemory) -> String {
@@ -137,12 +126,6 @@ extension ChatToolExecutor {
       return [
         #"{"ok":false,"error":{"code":"invalid_memory_content","message":"content must be 1-1000 "#,
         #"non-whitespace characters."}}"#,
-      ].joined()
-    }
-    guard isMemoryContentUserSupplied(content: input.content, userText: originatingUserText) else {
-      return [
-        #"{"ok":false,"error":{"code":"memory_content_not_user_supplied","message":"Memory content must appear in "#,
-        #"the current typed user request."}}"#,
       ].joined()
     }
     guard
