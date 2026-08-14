@@ -1,16 +1,15 @@
 """One product flag: MEMORY_ENABLED=on|off.
 
-Proves intake+list when on, paused creates when off, no maintenance required
-for on, and that the GET 503 fence is the cursor secret — not GET_ENABLED.
+Keeps this file import-light so the fast-unit duration guard stays honest.
+MemoryService intake/list behavior is covered in test_universal_memory_service
+and test_memories_pagination_clamp.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
 
 from config.memory_rollout import (
     memory_enabled_env_value,
@@ -51,20 +50,6 @@ def test_memory_mode_alias_when_product_flag_unset(alias, expected):
     assert rollout_mode_env_value(env) == alias
 
 
-def test_ensure_canonical_mutation_ready_honors_memory_enabled(monkeypatch):
-    from utils.memory.memory_service import MemoryService
-
-    service = MemoryService(db_client=MagicMock())
-    monkeypatch.setenv("MEMORY_ENABLED", "on")
-    service.ensure_canonical_mutation_ready("uid-test")
-
-    monkeypatch.setenv("MEMORY_ENABLED", "off")
-    with pytest.raises(HTTPException) as exc_info:
-        service.ensure_canonical_mutation_ready("uid-test")
-    assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == "Memory writes are globally paused"
-
-
 def test_get_enabled_is_not_the_list_fence(monkeypatch):
     monkeypatch.setenv("MEMORY_ENABLED", "on")
     monkeypatch.setenv("MEMORY_V3_GET_ENABLED", "false")
@@ -73,18 +58,6 @@ def test_get_enabled_is_not_the_list_fence(monkeypatch):
     assert rollout_v3_get_enabled_env_value() is True
     with pytest.raises(UniversalListCursorError, match="missing_cursor_secret"):
         cursor_secret()
-
-
-def test_read_page_503s_memory_cursor_unavailable_without_secret(monkeypatch):
-    from utils.memory.memory_service import MemoryService
-
-    monkeypatch.setenv("MEMORY_ENABLED", "on")
-    monkeypatch.delenv("MEMORY_V3_CURSOR_SECRET", raising=False)
-    service = MemoryService(db_client=MagicMock())
-    with pytest.raises(HTTPException) as exc_info:
-        service.read_page("uid-test", limit=10)
-    assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == "Memory cursor unavailable"
 
 
 def test_dev_overlay_pins_memory_enabled_on_and_prod_stays_off():
