@@ -125,8 +125,10 @@ class TestEffectiveDesktopAccessTier:
             cleared_cache_keys.append(key)
 
         monkeypatch.setattr(subscription_mod, 'TRIAL_PAYWALL_ENABLED', True)
-        monkeypatch.setattr(subscription_mod.users_db, 'get_user_valid_subscription', lambda _uid: post_cutoff_neo)
-        monkeypatch.setattr(subscription_mod.users_db, 'is_byok_active', lambda _uid: False)
+        monkeypatch.setattr(
+            subscription_mod.users_db, 'get_user_valid_subscription', lambda _uid, **_kwargs: post_cutoff_neo
+        )
+        monkeypatch.setattr(subscription_mod.users_db, 'is_byok_active', lambda _uid, **_kwargs: False)
         monkeypatch.setattr(subscription_mod, '_request_has_all_byok_keys', lambda: False)
         monkeypatch.setattr(subscription_mod.redis_db, 'get_generic_cache', lambda _key: next(cache_values))
         monkeypatch.setattr(subscription_mod.redis_db, 'set_generic_cache', lambda *_args, **_kwargs: None)

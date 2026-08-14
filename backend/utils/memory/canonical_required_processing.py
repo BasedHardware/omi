@@ -45,7 +45,7 @@ from models.product_memory import (
     MemoryLayer,
     ProcessingState,
 )
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.required_promotion import (
     REQUIRED_PROCESSING_STATUS_FAILED_RETRYABLE,
     REQUIRED_PROCESSING_STATUS_PENDING,
@@ -190,13 +190,7 @@ def _snapshot_payload(snapshot: Any) -> Dict[str, Any]:
 
 
 def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
-    ref = db_client.document(MemoryCollections(uid=uid).memory_apply_control_state)
-    snapshot = ref.get()
-    if getattr(snapshot, "exists", False):
-        return MemoryControlState(**_snapshot_payload(snapshot))
-    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    ref.set(control.model_dump(mode="json"))
-    return control
+    return ensure_canonical_apply_control_state(uid, db_client=db_client)
 
 
 def _coerce_utc(value: datetime) -> datetime:
@@ -880,8 +874,6 @@ def process_required_memory_item(
     now: Optional[datetime] = None,
 ) -> RequiredMemoryProcessingResult:
     client = db_client if db_client is not None else default_db_client
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
-        return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="not_canonical_cohort")
     snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
     payload = _snapshot_payload(snapshot)
     if not payload:

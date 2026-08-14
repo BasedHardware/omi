@@ -72,7 +72,9 @@ void main() {
 
     expect(provider.groupedConversations[date]![0], same(other));
     expect(
-        provider.groupedConversations[date]!.firstWhere((conversation) => conversation.id == 'c1'), same(enrichment));
+      provider.groupedConversations[date]!.firstWhere((conversation) => conversation.id == 'c1'),
+      same(enrichment),
+    );
   });
 }
 

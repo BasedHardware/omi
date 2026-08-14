@@ -23,7 +23,10 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
     XCTAssertEqual(Set(SuggestionAssistantTelemetry.Setting.allCases.map(\.rawValue)), Set(["enabled"]))
     XCTAssertEqual(
       Set(SuggestionAssistantTelemetry.GateOutcome.allCases.map(\.rawValue)),
-      Set(["eligible", "disabled", "excluded_app", "snoozed", "dwell", "cooldown", "daily_budget", "no_grounding"])
+      Set([
+        "eligible", "disabled", "excluded_app", "dwell",
+        "cooldown", "daily_budget", "no_grounding",
+      ])
     )
     XCTAssertEqual(
       Set(SuggestionAssistantTelemetry.settingChangedPayload(setting: .enabled, value: true).keys),

@@ -1357,11 +1357,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                 ? CachedNetworkImage(
                     imageUrl: widget.app!.getImageUrl(),
                     imageBuilder: (context, imageProvider) {
-                      return CircleAvatar(
-                        backgroundColor: Colors.white,
-                        radius: 12,
-                        backgroundImage: imageProvider,
-                      );
+                      return CircleAvatar(backgroundColor: Colors.white, radius: 12, backgroundImage: imageProvider);
                     },
                     errorWidget: (context, url, error) {
                       return const CircleAvatar(
@@ -1382,10 +1378,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                   )
                 : Container(
                     decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: AssetImage(Assets.images.background.path),
-                        fit: BoxFit.cover,
-                      ),
+                      image: DecorationImage(image: AssetImage(Assets.images.background.path), fit: BoxFit.cover),
                       borderRadius: const BorderRadius.all(Radius.circular(12.0)),
                     ),
                     height: 24,
@@ -1406,11 +1399,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                         Text(
                           widget.app != null ? widget.app!.name.decodeString : context.l10n.unknownApp,
                           maxLines: 1,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
-                            fontSize: 14,
-                          ),
+                          style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 14),
                         ),
                         if (widget.app != null)
                           Text(
@@ -1422,10 +1411,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                       ],
                     ),
                   ),
-                  const SizedBox(
-                    width: 42,
-                    child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
-                  ),
+                  const SizedBox(width: 42, child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20)),
                 ],
               ),
             ),

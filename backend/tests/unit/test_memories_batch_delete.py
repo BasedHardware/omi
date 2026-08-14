@@ -1,453 +1,82 @@
-"""DELETE /v3/memories/batch — safe bulk delete with single-delete authorization parity.
+"""Universal DELETE /v3/memories/batch contract tests."""
 
-Regression goal: the batch route must preserve the EXACT authorization/business semantics
-of DELETE /v3/memories/{memory_id}. The earlier bulk-delete attempt (#7006) validated the
-batch with get_memories_by_ids and only checked existence, so a caller could slip a locked
-(paid-plan) memory into ``memory_ids`` and delete it through the batch route even though the
-single-delete route rejects that with 402. These tests pin the guard back in place:
+from unittest.mock import MagicMock
 
-  * a locked memory anywhere in the selection -> 402, nothing deleted
-  * a missing / not-owned id -> 404, nothing deleted (get_memories_by_ids is uid-scoped)
-  * duplicates are deduped before any DB call
-  * a fully valid selection deletes Firestore docs + Pinecone vectors in one batch each
-  * the canonical cohort mirrors the single-delete canonical path
+import pytest
+from fastapi import HTTPException
+from pydantic import ValidationError
 
-Test isolation: routers.memories imports cleanly, so the handler is called directly with
-monkeypatched DB/vector helpers (no sys.modules mutation, no TestClient).
-"""
-
-import os
-from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
-
-os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
-
-from unittest.mock import MagicMock  # noqa: E402
-
-import pytest  # noqa: E402
-from fastapi import HTTPException  # noqa: E402
-from pydantic import ValidationError  # noqa: E402
-
-from routers import memories as mem_mod  # noqa: E402
-from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState  # noqa: E402
-from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState  # noqa: E402
-from utils.memory import canonical_memory_adapter as canonical_adapter  # noqa: E402
+from routers import memories as mem_mod
 
 
-def _force_legacy(monkeypatch):
-    """Force the legacy cohort where _validate_memory's locked guard applies."""
-    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: False)
+def _service(monkeypatch, *, error=None):
+    service = MagicMock()
+    if error is not None:
+        service.delete_batch.side_effect = error
+    monkeypatch.setattr(mem_mod, "MemoryService", lambda **_kwargs: service)
+    return service
 
 
-def _patch_db(monkeypatch, fetched):
-    get_mock = MagicMock(return_value=fetched)
-    delete_mock = MagicMock()
-    monkeypatch.setattr(mem_mod.memories_db, 'get_memories_by_ids', get_mock)
-    monkeypatch.setattr(mem_mod.memories_db, 'delete_memories_batch', delete_mock)
-    vectors_mock = MagicMock()
-    monkeypatch.setattr(mem_mod, 'delete_memory_vectors_batch', vectors_mock)
-    return get_mock, delete_mock, vectors_mock
-
-
-def _force_canonical(monkeypatch, *, existing_ids):
-    """Force the canonical cohort and stub its atomic batch adapter.
-
-    Pins the post-read-cutover stage (MEMORY_MODE=read) explicitly instead of
-    inheriting whatever the ambient rollout config yields, so these cases stay about
-    batch-vs-single authorization parity. The pre-cutover dual-write stage, where a
-    delete must also clear the legacy read surface (#10446), has its own cases below.
-    """
-    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
-    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: True)
-    existing = set(existing_ids)
-
-    def delete_batch(uid, memory_ids, db_client=None):
-        if any(memory_id not in existing for memory_id in memory_ids):
-            raise canonical_adapter.CanonicalMemoryNotFoundError("canonical memory not found")
-
-    delete_mock = MagicMock(side_effect=delete_batch)
-    monkeypatch.setattr(mem_mod, 'delete_canonical_memories_batch', delete_mock)
-    return delete_mock
-
-
-def _canonical_item(memory_id):
-    now = datetime.now(timezone.utc)
-    return MemoryItem(
-        memory_id=memory_id,
-        uid='u1',
-        version=1,
-        tier=MemoryLayer.short_term,
-        status=MemoryItemStatus.active,
-        processing_state=ProcessingState.processed,
-        content=f'fact {memory_id}',
-        evidence=[
-            MemoryEvidence(
-                evidence_id=f'ev_{memory_id}',
-                source_id='conv-1',
-                source_type='conversation',
-                source_version='v1',
-                artifact_preservation=ArtifactPreservationState.preserved,
-            )
-        ],
-        source_state=SourceState.active,
-        sensitivity_labels=[],
-        visibility='private',
-        user_asserted=False,
-        captured_at=now,
-        updated_at=now,
-        expires_at=now + timedelta(days=30),
-        ledger_commit_id='c1',
-        ledger_sequence=1,
-        item_revision=1,
-        source_commit_id='c1',
-        source_commit_sequence=1,
-        content_hash='h',
-        account_generation=1,
+def test_batch_delete_deduplicates_ids_and_calls_universal_service_once(monkeypatch):
+    service = _service(monkeypatch)
+    result = mem_mod.delete_memories_batch(
+        data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=["a", "a", "b", "a"]), uid="uid-former-cohort"
     )
+    assert result == {"status": "ok"}
+    service.delete_batch.assert_called_once_with("uid-former-cohort", ["a", "b"])
+    service.delete.assert_not_called()
 
 
-class TestBatchDeleteAuthorizationParity:
-    def test_locked_memory_is_rejected_with_402_and_nothing_deleted(self, monkeypatch):
-        _force_legacy(monkeypatch)
-        get_mock, delete_mock, vectors_mock = _patch_db(
-            monkeypatch, [{'id': 'm1', 'is_locked': False}, {'id': 'm2', 'is_locked': True}]
-        )
-        with pytest.raises(HTTPException) as ei:
-            mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['m1', 'm2']), uid='u1')
-        assert ei.value.status_code == 402
-        # All-or-nothing: the locked memory must not create a bypass to delete the others.
-        delete_mock.assert_not_called()
-        vectors_mock.assert_not_called()
-
-    def test_missing_or_unauthorized_memory_is_rejected_with_404(self, monkeypatch):
-        # 'm2' is absent from the uid-scoped fetch -> missing or owned by another user.
-        _force_legacy(monkeypatch)
-        get_mock, delete_mock, vectors_mock = _patch_db(monkeypatch, [{'id': 'm1', 'is_locked': False}])
-        with pytest.raises(HTTPException) as ei:
-            mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['m1', 'm2']), uid='u1')
-        assert ei.value.status_code == 404
-        delete_mock.assert_not_called()
-        vectors_mock.assert_not_called()
-
-    def test_locked_memory_takes_priority_over_visibility_of_others(self, monkeypatch):
-        # A single locked memory anywhere in the selection blocks the whole batch.
-        _force_legacy(monkeypatch)
-        _, delete_mock, vectors_mock = _patch_db(
-            monkeypatch,
-            [{'id': 'm1', 'is_locked': False}, {'id': 'm2', 'is_locked': False}, {'id': 'm3', 'is_locked': True}],
-        )
-        with pytest.raises(HTTPException) as ei:
-            mem_mod.delete_memories_batch(
-                data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['m1', 'm2', 'm3']), uid='u1'
-            )
-        assert ei.value.status_code == 402
-        delete_mock.assert_not_called()
+def test_batch_delete_is_empty_noop_without_service_mutation(monkeypatch):
+    service = _service(monkeypatch)
+    result = mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=[]), uid="uid-any")
+    assert result == {"status": "ok"}
+    service.delete_batch.assert_not_called()
 
 
-class TestBatchDeleteHappyPath:
-    def test_valid_batch_deletes_firestore_docs_and_vectors_once_each(self, monkeypatch):
-        _force_legacy(monkeypatch)
-        get_mock, delete_mock, vectors_mock = _patch_db(
-            monkeypatch, [{'id': 'a', 'is_locked': False}, {'id': 'b', 'is_locked': False}]
-        )
-        result = mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a', 'b']), uid='u1')
-        assert result == {'status': 'ok'}
-        get_mock.assert_called_once_with('u1', ['a', 'b'])
-        delete_mock.assert_called_once_with('u1', ['a', 'b'])
-        vectors_mock.assert_called_once_with('u1', ['a', 'b'])
-
-    def test_duplicates_are_deduped_before_any_db_call(self, monkeypatch):
-        _force_legacy(monkeypatch)
-        get_mock, delete_mock, vectors_mock = _patch_db(
-            monkeypatch, [{'id': 'a', 'is_locked': False}, {'id': 'b', 'is_locked': False}]
-        )
+@pytest.mark.parametrize("status_code", [402, 404, 413])
+def test_batch_delete_preserves_service_error_mapping(monkeypatch, status_code):
+    service = _service(monkeypatch, error=HTTPException(status_code=status_code, detail=f"status-{status_code}"))
+    with pytest.raises(HTTPException) as error:
         mem_mod.delete_memories_batch(
-            data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a', 'a', 'b', 'a']), uid='u1'
+            data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=["valid", "locked-or-missing"]), uid="uid-arbitrary"
         )
-        # Order-preserving dedupe: no double-counting, no redundant Firestore/Pinecone ops.
-        get_mock.assert_called_once_with('u1', ['a', 'b'])
-        delete_mock.assert_called_once_with('u1', ['a', 'b'])
-        vectors_mock.assert_called_once_with('u1', ['a', 'b'])
-
-    def test_empty_batch_is_a_no_op(self, monkeypatch):
-        _force_legacy(monkeypatch)
-        get_mock, delete_mock, vectors_mock = _patch_db(monkeypatch, [])
-        result = mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=[]), uid='u1')
-        assert result == {'status': 'ok'}
-        get_mock.assert_not_called()
-        delete_mock.assert_not_called()
-        vectors_mock.assert_not_called()
-
-    def test_vector_delete_failure_does_not_fail_the_request(self, monkeypatch):
-        # Mirrors single-delete: Firestore delete succeeds, best-effort vector cleanup is logged.
-        _force_legacy(monkeypatch)
-        _, delete_mock, vectors_mock = _patch_db(monkeypatch, [{'id': 'a', 'is_locked': False}])
-        vectors_mock.side_effect = RuntimeError('pinecone down')
-        result = mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a']), uid='u1')
-        assert result == {'status': 'ok'}
-        delete_mock.assert_called_once_with('u1', ['a'])
+    assert error.value.status_code == status_code
+    assert error.value.detail == f"status-{status_code}"
+    service.delete_batch.assert_called_once_with("uid-arbitrary", ["valid", "locked-or-missing"])
 
 
-class TestBatchDeleteCanonicalCohort:
-    def test_canonical_cohort_mirrors_single_delete_canonical_path(self, monkeypatch):
-        # Canonical cohort delegates the full selection to one atomic adapter call and
-        # never takes the legacy get_memories_by_ids path.
-        atomic_delete_mock = _force_canonical(monkeypatch, existing_ids={'a', 'b'})
-        get_mock = MagicMock()
-        delete_mock = MagicMock()
-        monkeypatch.setattr(mem_mod.memories_db, 'get_memories_by_ids', get_mock)
-        monkeypatch.setattr(mem_mod.memories_db, 'delete_memories_batch', delete_mock)
-
-        mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a', 'b']), uid='u1')
-        atomic_delete_mock.assert_called_once_with('u1', ['a', 'b'], db_client=mem_mod.db_client_module.db)
-        get_mock.assert_not_called()
-        delete_mock.assert_not_called()
-
-    def test_canonical_cohort_404_when_memory_not_found_and_nothing_deleted(self, monkeypatch):
-        atomic_delete_mock = _force_canonical(monkeypatch, existing_ids=set())
-        with pytest.raises(HTTPException) as ei:
-            mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a']), uid='u1')
-        assert ei.value.status_code == 404
-        atomic_delete_mock.assert_called_once()
-
-    def test_canonical_cohort_does_not_delete_earlier_valid_id_when_later_id_missing(self, monkeypatch):
-        # Regression for the documented all-or-nothing contract: the route makes one
-        # transactional adapter call, so it has no per-id fallback that could commit
-        # "valid" before discovering "missing".
-        atomic_delete_mock = _force_canonical(monkeypatch, existing_ids={'valid'})
-        with pytest.raises(HTTPException) as ei:
-            mem_mod.delete_memories_batch(
-                data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['valid', 'missing']), uid='u1'
-            )
-        assert ei.value.status_code == 404
-        atomic_delete_mock.assert_called_once_with(
-            'u1',
-            ['valid', 'missing'],
-            db_client=mem_mod.db_client_module.db,
+def test_batch_delete_maps_unexpected_value_error_to_not_found(monkeypatch):
+    service = _service(monkeypatch, error=ValueError("memory not found"))
+    with pytest.raises(HTTPException) as error:
+        mem_mod.delete_memories_batch(
+            data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=["missing"]), uid="uid-arbitrary"
         )
+    assert error.value.status_code == 404
 
-    def test_canonical_batch_adapter_failure_never_falls_back_to_per_id_delete(self, monkeypatch):
-        atomic_delete_mock = _force_canonical(monkeypatch, existing_ids={'a', 'b'})
-        atomic_delete_mock.side_effect = RuntimeError('transaction commit failed')
-        svc_mock = MagicMock()
-        monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kw: svc_mock)
 
-        with pytest.raises(RuntimeError, match='transaction commit failed'):
-            mem_mod.delete_memories_batch(
-                data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a', 'b']),
-                uid='u1',
-            )
+def test_batch_delete_route_has_no_legacy_or_mirror_mutation():
+    source = mem_mod.__file__ and open(mem_mod.__file__, encoding="utf-8").read()
+    start = source.index("def delete_memories_batch")
+    route = source[start : source.index("def delete_memory(", start + 1)]
+    assert "service.delete_batch(uid, memory_ids)" in route
+    assert "service.delete(uid, memory_id)" not in route
+    assert "memories_db" not in route
+    assert "delete_memory_vectors" not in route
+    assert "_mirror_delete" not in source
 
-        atomic_delete_mock.assert_called_once()
-        svc_mock.delete.assert_not_called()
 
-    def test_canonical_internal_validation_error_is_not_mislabeled_as_404(self, monkeypatch):
-        atomic_delete_mock = _force_canonical(monkeypatch, existing_ids={'a'})
-        atomic_delete_mock.side_effect = ValueError('malformed canonical payload')
+def test_batch_delete_request_model_preserves_released_limit_and_empty_contract():
+    assert mem_mod.MEMORIES_BATCH_DELETE_MAX == 100
+    assert len(mem_mod.BatchDeleteMemoriesRequest(memory_ids=[f"m{i}" for i in range(100)]).memory_ids) == 100
+    assert mem_mod.BatchDeleteMemoriesRequest(memory_ids=[]).memory_ids == []
+    with pytest.raises(ValidationError):
+        mem_mod.BatchDeleteMemoriesRequest(memory_ids=[f"m{i}" for i in range(101)])
 
-        with pytest.raises(ValueError, match='malformed canonical payload'):
-            mem_mod.delete_memories_batch(
-                data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a']),
-                uid='u1',
-            )
 
-    def test_atomic_adapter_validates_entire_batch_before_store_call(self, monkeypatch):
-        client = MagicMock()
-        control = SimpleNamespace(
-            head_commit_id='c1',
-            account_generation=1,
-            source_generation=1,
-            commit_sequence=1,
-        )
-        tombstone_store = MagicMock()
-        monkeypatch.setattr(canonical_adapter, '_read_replacement_control', lambda *args, **kwargs: control)
-        monkeypatch.setattr(
-            canonical_adapter,
-            'fetch_authoritative_product_memory_items',
-            lambda **kwargs: [_canonical_item('valid')],
-        )
-        monkeypatch.setattr(canonical_adapter, 'tombstone_memory_items_firestore', tombstone_store)
+def test_batch_delete_rate_limit_and_route_order_are_preserved():
+    from utils.rate_limit_config import RATE_POLICIES
 
-        with pytest.raises(ValueError, match='canonical memory not found: missing'):
-            canonical_adapter.delete_canonical_memories_batch(
-                'u1',
-                ['valid', 'missing'],
-                db_client=client,
-            )
-
-        tombstone_store.assert_not_called()
-
-
-class TestBatchDeleteRequestModel:
-    def test_accepts_up_to_max(self):
-        max_len = mem_mod.MEMORIES_BATCH_DELETE_MAX
-        assert max_len == 100
-        req = mem_mod.BatchDeleteMemoriesRequest(memory_ids=[f'm{i}' for i in range(max_len)])
-        assert len(req.memory_ids) == max_len
-
-    def test_rejects_over_max(self):
-        max_len = mem_mod.MEMORIES_BATCH_DELETE_MAX
-        with pytest.raises(ValidationError):
-            mem_mod.BatchDeleteMemoriesRequest(memory_ids=[f'm{i}' for i in range(max_len + 1)])
-
-    def test_empty_is_allowed(self):
-        req = mem_mod.BatchDeleteMemoriesRequest(memory_ids=[])
-        assert req.memory_ids == []
-
-
-class TestBatchDeleteRateLimitPolicy:
-    def test_policy_exists_with_expected_limits(self):
-        from utils.rate_limit_config import RATE_POLICIES
-
-        assert 'memories:delete_batch' in RATE_POLICIES
-        max_requests, window = RATE_POLICIES['memories:delete_batch']
-        # Tighter than memories:delete (60/hour) — each request removes up to 100 memories.
-        assert max_requests == 10
-        assert window == 3600
-
-
-class TestBatchDeleteRouteOrdering:
-    def test_batch_route_is_registered_before_parametrized_delete(self):
-        # FastAPI matches routes in registration order. /v3/memories/batch MUST be registered
-        # before /v3/memories/{memory_id}, otherwise "batch" is captured as the {memory_id}
-        # path parameter and the endpoint is unreachable.
-        delete_paths = [route.path for route in mem_mod.router.routes if 'DELETE' in getattr(route, 'methods', set())]
-        assert '/v3/memories/batch' in delete_paths
-        assert delete_paths.index('/v3/memories/batch') < delete_paths.index('/v3/memories/{memory_id}')
-
-
-# The atomic canonical regression above intentionally exercises read-before-write ordering.
-
-
-def _canonical_delete_stage(monkeypatch, *, read_cutover_done: bool):
-    """Canonical owns writes; `read_cutover_done` picks the rollout stage.
-
-    False models persisted write readiness before read cutover; True models
-    persisted read readiness, where both sides are canonical.
-    """
-    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
-    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: read_cutover_done)
-    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete=lambda uid, mid: None))
-    legacy_delete = MagicMock()
-    monkeypatch.setattr(mem_mod.memories_db, 'delete_memories_batch', legacy_delete)
-    monkeypatch.setattr(mem_mod, 'delete_memory_vectors_batch', MagicMock())
-    return legacy_delete
-
-
-def test_delete_during_dual_write_also_clears_the_store_the_user_reads(monkeypatch):
-    """#10446: canonical write readiness may precede canonical read cutover. A
-    canonical-only delete is invisible in that window — the client drops the
-    row, the next refresh re-reads legacy where it still exists, and the memory
-    reappears seconds later. Deleting must mirror into legacy until cutover."""
-    legacy_delete = _canonical_delete_stage(monkeypatch, read_cutover_done=False)
-
-    assert mem_mod.delete_memory('mem-1', uid='u1') == {'status': 'ok'}
-
-    legacy_delete.assert_called_once_with('u1', ['mem-1'])
-
-
-def test_delete_after_read_cutover_leaves_legacy_alone(monkeypatch):
-    """After persisted read cutover both sides are canonical, so the mirror must
-    not fire; it exists only to keep the pre-cutover read surface consistent."""
-    legacy_delete = _canonical_delete_stage(monkeypatch, read_cutover_done=True)
-
-    assert mem_mod.delete_memory('mem-1', uid='u1') == {'status': 'ok'}
-
-    legacy_delete.assert_not_called()
-
-
-def test_single_delete_reports_atomic_lineage_limit_as_413(monkeypatch):
-    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *args, **kwargs: True)
-
-    def delete(_uid, _memory_id):
-        raise canonical_adapter.CanonicalBatchMutationLimitError("lineage exceeds transaction limit")
-
-    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete=delete))
-
-    with pytest.raises(HTTPException) as exc_info:
-        mem_mod.delete_memory('mem-large-lineage', uid='u1')
-
-    assert exc_info.value.status_code == 413
-    assert exc_info.value.detail == 'Memory lineage is too large to delete atomically'
-
-
-def _canonical_delete_all_stage(monkeypatch, *, read_cutover_done: bool):
-    """Canonical owns writes for DELETE /v3/memories; pick the rollout stage."""
-    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
-    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: read_cutover_done)
-    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete_all=lambda uid: None))
-    purge = MagicMock()
-    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
-    return purge
-
-
-def _canonical_delete_default_stage(monkeypatch, *, read_cutover_done: bool):
-    """Canonical owns writes for the default-scope delete; pick the rollout stage."""
-    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
-    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: read_cutover_done)
-    delete_default = MagicMock()
-    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete_default=delete_default))
-    purge = MagicMock()
-    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
-    return delete_default, purge
-
-
-def test_default_delete_uses_canonical_scope_and_mirrors_legacy_during_dual_read(monkeypatch):
-    delete_default, purge = _canonical_delete_default_stage(monkeypatch, read_cutover_done=False)
-
-    assert mem_mod.delete_memories(scope='default', uid='u1') == {'status': 'ok'}
-
-    delete_default.assert_called_once_with('u1')
-    purge.assert_called_once_with('u1')
-
-
-def test_default_delete_after_read_cutover_leaves_legacy_alone(monkeypatch):
-    delete_default, purge = _canonical_delete_default_stage(monkeypatch, read_cutover_done=True)
-
-    assert mem_mod.delete_memories(scope='default', uid='u1') == {'status': 'ok'}
-
-    delete_default.assert_called_once_with('u1')
-    purge.assert_not_called()
-
-
-def test_legacy_default_delete_still_purges(monkeypatch):
-    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: False)
-    purge = MagicMock()
-    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
-
-    assert mem_mod.delete_memories(scope='default', uid='u1') == {'status': 'ok'}
-
-    purge.assert_called_once_with('u1')
-
-
-def test_delete_all_during_dual_write_also_wipes_the_store_the_user_reads(monkeypatch):
-    """#10446 follow-up: before persisted read cutover a canonical delete-all is
-    invisible because GET /v3/memories still reads legacy. "Delete everything"
-    would leave the user's whole list intact on the next refresh, so the wipe
-    must reach the store they read."""
-    purge = _canonical_delete_all_stage(monkeypatch, read_cutover_done=False)
-
-    assert mem_mod.delete_memories(uid='u1') == {'status': 'ok'}
-
-    purge.assert_called_once_with('u1')
-
-
-def test_delete_all_after_read_cutover_leaves_legacy_alone(monkeypatch):
-    """Post-cutover both sides are canonical, so the mirror must not touch legacy."""
-    purge = _canonical_delete_all_stage(monkeypatch, read_cutover_done=True)
-
-    assert mem_mod.delete_memories(uid='u1') == {'status': 'ok'}
-
-    purge.assert_not_called()
-
-
-def test_legacy_cohort_delete_all_still_purges(monkeypatch):
-    """The legacy branch keeps its own behaviour after being factored into the helper."""
-    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: False)
-    purge = MagicMock()
-    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
-
-    assert mem_mod.delete_memories(uid='u1') == {'status': 'ok'}
-
-    purge.assert_called_once_with('u1')
+    assert RATE_POLICIES["memories:delete_batch"] == (10, 3600)
+    delete_paths = [route.path for route in mem_mod.router.routes if "DELETE" in getattr(route, "methods", set())]
+    assert delete_paths.index("/v3/memories/batch") < delete_paths.index("/v3/memories/{memory_id}")

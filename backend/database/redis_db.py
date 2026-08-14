@@ -876,6 +876,41 @@ end
 return {current, ttl}
 """)
 
+# Proactive LLM calls need a reversible reservation: provider/schema failures
+# must not consume a user's successful-completion allowance. Unlike the legacy
+# increment-first limiter, a rejected reservation does not inflate the counter,
+# so releasing one admitted request remains exact under concurrency.
+_RATE_LIMIT_RESERVE_LUA = r.register_script("""
+local key = KEYS[1]
+local window = tonumber(ARGV[1])
+local limit = tonumber(ARGV[2])
+local current = tonumber(redis.call('GET', key) or '0')
+local ttl = redis.call('TTL', key)
+if current >= limit then
+    if ttl < 0 then
+        redis.call('EXPIRE', key, window)
+        ttl = window
+    end
+    return {0, current, ttl}
+end
+current = redis.call('INCR', key)
+if current == 1 or ttl < 0 then
+    redis.call('EXPIRE', key, window)
+    ttl = window
+end
+return {1, current, ttl}
+""")
+
+_RATE_LIMIT_RELEASE_LUA = r.register_script("""
+local key = KEYS[1]
+local current = tonumber(redis.call('GET', key) or '0')
+if current <= 1 then
+    redis.call('DEL', key)
+    return 0
+end
+return redis.call('DECR', key)
+""")
+
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
     """Check per-key rate limit using a single atomic Lua call.
@@ -895,6 +930,22 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
     allowed = current <= max_requests
     retry_after = max(0, ttl) if not allowed else 0
     return allowed, remaining, retry_after
+
+
+def reserve_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
+    """Atomically reserve one reversible slot without counting denied attempts."""
+    redis_key = f'rl:{policy}:{key}'
+    admitted, current, ttl = _RATE_LIMIT_RESERVE_LUA(keys=[redis_key], args=[window, max_requests])
+    allowed = bool(admitted)
+    remaining = max(0, max_requests - current)
+    retry_after = max(0, ttl) if not allowed else 0
+    return allowed, remaining, retry_after
+
+
+def release_rate_limit(key: str, policy: str) -> None:
+    """Release one previously admitted reversible rate-limit slot."""
+    redis_key = f'rl:{policy}:{key}'
+    _RATE_LIMIT_RELEASE_LUA(keys=[redis_key], args=[])
 
 
 # Atomic TTS rate-limit: burst (sliding-window ZSET) + daily char counter.

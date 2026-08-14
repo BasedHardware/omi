@@ -12,7 +12,6 @@ final class SuggestionGatePolicyTests: XCTestCase {
   private func decide(
     isEnabled: Bool = true,
     isAppExcluded: Bool = false,
-    isSnoozed: Bool = false,
     lastEvaluationAt: Date? = nil,
     cooldown: TimeInterval = 180,
     dwell: TimeInterval = 999,
@@ -23,7 +22,6 @@ final class SuggestionGatePolicyTests: XCTestCase {
     SuggestionGatePolicy.decide(
       isEnabled: isEnabled,
       isAppExcluded: isAppExcluded,
-      isSnoozed: isSnoozed,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
       cooldown: cooldown,
@@ -48,8 +46,11 @@ final class SuggestionGatePolicyTests: XCTestCase {
     XCTAssertEqual(decide(isAppExcluded: true), .skippedExcludedApp)
   }
 
-  func testSnoozedBarDoesNotEvaluate() {
-    XCTAssertEqual(decide(isSnoozed: true), .skippedSnoozed)
+  /// Hiding the floating bar is about the bar, not delivery: the gate no longer has a
+  /// snooze input at all, so a hidden bar cannot silently mute an hour of nudges the way
+  /// "Disable for 2 hours" once did (the compiler now enforces what this test documents).
+  func testHiddenBarStillEvaluates() {
+    XCTAssertEqual(decide(), .evaluate)
   }
 
   func testCooldownBlocksUntilItHasFullyElapsed() {
@@ -69,17 +70,34 @@ final class SuggestionGatePolicyTests: XCTestCase {
     let decision = decide(
       isEnabled: false,
       isAppExcluded: true,
-      isSnoozed: true,
       lastEvaluationAt: now
     )
     XCTAssertEqual(decision, .skippedDisabled)
   }
 
-  /// A privacy exclusion must outrank snooze and cooldown: "do not look at this app" is a
+  /// A privacy exclusion must outrank cooldown: "do not look at this app" is a
   /// stronger statement than "not right now".
-  func testExclusionTakesPrecedenceOverSnoozeAndCooldown() {
-    let decision = decide(isAppExcluded: true, isSnoozed: true, lastEvaluationAt: now)
+  func testExclusionTakesPrecedenceOverCooldown() {
+    let decision = decide(isAppExcluded: true, lastEvaluationAt: now)
     XCTAssertEqual(decision, .skippedExcludedApp)
+  }
+
+  /// Maximum (5) is the "nudge me in seconds" demo mode: 10 s dwell. Everything below —
+  /// including Balanced (3) — keeps the deliberate 30 s so ordinary use is unchanged.
+  func testDwellIsTenSecondsOnlyAtMaximumLevel() {
+    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 5), 10)
+    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 4), 30)
+    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 3), 30)
+    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 0), 30)
+  }
+
+  /// Maximum caps the between-nudge cooldown at 30 s; other levels keep the user's
+  /// configured value (180 s default) untouched.
+  func testCooldownCapsAtThirtySecondsOnlyAtMaximumLevel() {
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 5), 30)
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 20, frequencyLevel: 5), 20)
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 4), 180)
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 3), 180)
   }
 
   func testFirstEverEvaluationIsNotBlockedByAbsentHistory() {
@@ -692,5 +710,94 @@ final class SuggestionGoalOwnerScopingTests: XCTestCase {
     let snapshot = try XCTUnwrap(authority.capture(ownerID: "owner-a", expectedOwnerID: nil))
     signIn("owner-a")
     XCTAssertFalse(authority.isCurrent(snapshot, ownerID: "owner-a"))
+  }
+}
+
+/// The automation probe falls back to capturing the active window when no frame is pending.
+/// `latestCapturedFrame` is nil whenever the user is moving around — but it is *also* nil
+/// precisely when the frontmost app is privacy-excluded, because the capture gate refuses
+/// those. Without an exclusion check the probe would photograph exactly the apps the user
+/// told Omi never to look at and send them to a model.
+@MainActor
+final class SuggestionProbePrivacyTests: XCTestCase {
+  /// Exclusions live in shared settings, so each test restores what it found. Done inline
+  /// rather than in setUp/tearDown, which are nonisolated and cannot touch MainActor state.
+  private func withExclusions(_ apps: Set<String>, _ body: () -> Void) {
+    let saved = RewindSettings.shared.excludedApps
+    defer { RewindSettings.shared.excludedApps = saved }
+    RewindSettings.shared.excludedApps = apps
+    body()
+  }
+
+  func testExcludedAppIsRefusedByTheProbePredicate() {
+    withExclusions(["1Password"]) {
+      XCTAssertTrue(
+        SuggestionProbePrivacy.isExcluded("1Password"),
+        "the probe must not capture an app the user excluded from recording")
+    }
+  }
+
+  func testNonExcludedAppIsAllowed() {
+    withExclusions(["1Password"]) {
+      XCTAssertFalse(SuggestionProbePrivacy.isExcluded("Google Chrome"))
+    }
+  }
+
+  /// Exclusion is exact-name, so the predicate must not be fooled by a near-miss either way.
+  func testExclusionIsExactName() {
+    withExclusions(["Messages"]) {
+      XCTAssertTrue(SuggestionProbePrivacy.isExcluded("Messages"))
+      XCTAssertFalse(SuggestionProbePrivacy.isExcluded("Messages Beta"))
+    }
+  }
+}
+
+/// Capturing is async, so checking exclusions only before the shutter leaves a window in
+/// which the user can cmd-tab into an excluded app and its pixels come back anyway. Both
+/// ends must be clear.
+final class SuggestionProbeCaptureRaceTests: XCTestCase {
+  private func allows(before: String?, after: String?, excluded: Set<String> = ["1Password"]) -> Bool {
+    SuggestionProbePrivacy.allowsCapture(
+      before: before, after: after, isExcluded: { excluded.contains($0) })
+  }
+
+  func testAllowsWhenBothEndsAreTheSameAllowedApp() {
+    XCTAssertTrue(allows(before: "Google Chrome", after: "Google Chrome"))
+  }
+
+  func testRefusesWhenTheAppWasExcludedBeforeTheCapture() {
+    XCTAssertFalse(allows(before: "1Password", after: "1Password"))
+  }
+
+  /// The race the reviewer caught: allowed at the shutter, excluded by the time the pixels
+  /// arrived.
+  func testRefusesWhenAnExcludedAppBecameFrontmostDuringTheCapture() {
+    XCTAssertFalse(allows(before: "Google Chrome", after: "1Password"))
+  }
+
+  /// Even between two permitted apps, a switch mid-capture means the frame cannot be
+  /// attributed with confidence — and an unattributable frame must not reach a model.
+  func testRefusesWhenTheAppChangedMidCaptureEvenIfBothAreAllowed() {
+    XCTAssertFalse(allows(before: "Google Chrome", after: "Warp"))
+  }
+
+  /// The flicker the window-ID binding exists for: allowed at both ends, excluded in the
+  /// middle. An app-name comparison cannot see this, which is why the probe captures the
+  /// window ID it authorised rather than "whatever is active now" — this test pins that the
+  /// before/after check alone is NOT treated as sufficient.
+  func testBeforeAfterCheckAloneCannotSeeAnAllowedExcludedAllowedFlicker() {
+    // Both observations say Chrome; an excluded app was frontmost only between them.
+    XCTAssertTrue(
+      allows(before: "Google Chrome", after: "Google Chrome"),
+      "the app-name check passes here by construction — the capture must therefore be bound "
+        + "to the pre-authorised window ID, which is what actually prevents the leak")
+  }
+
+  /// An unresolvable app name is not evidence of permission on the excluded side, but it
+  /// must not block an otherwise clean capture either.
+  func testUnknownAppNamesDoNotFabricateAMismatch() {
+    XCTAssertTrue(allows(before: nil, after: nil))
+    XCTAssertTrue(allows(before: "Google Chrome", after: nil))
+    XCTAssertFalse(allows(before: nil, after: "1Password"))
   }
 }
