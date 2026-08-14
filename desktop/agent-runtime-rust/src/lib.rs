@@ -418,6 +418,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn query_model_prefers_explicit_then_session_profile_then_mode_heuristic() {
+        // Per-query modelProfile overrides the session profile.
+        assert_eq!(
+            select_query_model(Some("omi-custom"), Some("omi-deep"), ExecutionMode::Fast),
+            "omi-custom"
+        );
+        // A migrated session profile governs when the query frame omits it.
+        assert_eq!(
+            select_query_model(None, Some("omi-deep"), ExecutionMode::Fast),
+            "omi-deep"
+        );
+        // No profile at all falls back to the execution-mode heuristic.
+        assert_eq!(
+            select_query_model(None, None, ExecutionMode::Fast),
+            "omi-fast"
+        );
+        assert_eq!(
+            select_query_model(None, None, ExecutionMode::Deep),
+            "omi-deep"
+        );
+    }
+
     #[tokio::test]
     async fn fast_subagent_can_receive_messages_and_collect_its_result() {
         let supervisor = SubagentSupervisor::new();
