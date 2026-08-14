@@ -1,0 +1,34 @@
+desktop/context-for-claude/Tests/ContextCoreTests/UploadQueueTests.swift
+  s_830a75a8050e25::t_28f714d31e1960 85-86,88-99
+  s_830a75a8050e25::t_da09e92c4dac8d 1-84,87,100-188
+desktop/context-for-claude/Sources/ContextCore/UploadQueue.swift
+  s_830a75a8050e25::t_22bc71dde9c792 430-434,436
+  s_830a75a8050e25::t_e1fc05b3fa12c1 462-463,465
+  s_830a75a8050e25::t_7f9d22af572e87 296,298-302,304-308,310,332,350,365
+  s_830a75a8050e25::t_58b442850bcd9a 297,303,309,311-322,324,336,341-343,347-349,351-352,356-358,363-364,366-367
+  s_830a75a8050e25::t_23bbfb3d0afc66 479-526,528
+  s_830a75a8050e25::t_05e31b2b998a21 183-190
+  s_830a75a8050e25::t_e7fbe5d237cb06 478,527
+desktop/context-for-claude/Sources/ContextApp/Backend/ConversationUploader.swift
+  s_830a75a8050e25::t_79611de59da833 59-61
+  s_830a75a8050e25::t_87c8fd7b38c452 486-488
+  s_830a75a8050e25::t_6b9d32e8044854 385-394,410,412,421-449,451-453
+  s_830a75a8050e25::t_37d541ad78d626 590-594
+  s_830a75a8050e25::t_a0cdb495654dea 121-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "edf9bf3964ee3455641405bb61244280967a5b93",
+  "prompts": {},
+  "sessions": {
+    "s_830a75a8050e25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c76762c9-b116-4248-8786-3ab36dd6ee16",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
