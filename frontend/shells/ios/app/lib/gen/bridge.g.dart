@@ -32,10 +32,7 @@ class StartListeningParams {
   Map<String, Object?> toJson() => {'sampleRateHz': sampleRateHz, 'language': language};
 
   static StartListeningParams fromJson(Map<String, Object?> json) {
-    return StartListeningParams(
-      sampleRateHz: json['sampleRateHz'] as int,
-      language: json['language'] as String?,
-    );
+    return StartListeningParams(sampleRateHz: json['sampleRateHz'] as int, language: json['language'] as String?);
   }
 }
 
@@ -46,20 +43,28 @@ class ListenSession {
   Map<String, Object?> toJson() => {'sessionId': sessionId};
 
   static ListenSession fromJson(Map<String, Object?> json) {
-    return ListenSession(
-      sessionId: json['sessionId'] as String,
-    );
+    return ListenSession(sessionId: json['sessionId'] as String);
   }
 }
 
 class TranscriptEvent {
-  const TranscriptEvent({required this.sessionId, required this.text, required this.isFinal, required this.shellSentAtMs});
+  const TranscriptEvent({
+    required this.sessionId,
+    required this.text,
+    required this.isFinal,
+    required this.shellSentAtMs,
+  });
   final String sessionId;
   final String text;
   final bool isFinal;
   final int shellSentAtMs;
 
-  Map<String, Object?> toJson() => {'sessionId': sessionId, 'text': text, 'isFinal': isFinal, 'shellSentAtMs': shellSentAtMs};
+  Map<String, Object?> toJson() => {
+    'sessionId': sessionId,
+    'text': text,
+    'isFinal': isFinal,
+    'shellSentAtMs': shellSentAtMs,
+  };
 
   static TranscriptEvent fromJson(Map<String, Object?> json) {
     return TranscriptEvent(
@@ -76,6 +81,7 @@ class TranscriptEvent {
 abstract class OmiShellBridgeHandler {
   /// Surface asks the Flutter shell for current BLE device state. Shell owns BLE lifecycle (see constraints-and-conventions.md).
   Future<DeviceState> getDeviceState();
+
   /// Surface commands the shell to open a capture session. Shell owns audio capture and the /listen socket.
   Future<ListenSession> startListening(StartListeningParams params);
 }
@@ -100,8 +106,7 @@ class OmiShellBridge {
     final envelope = jsonDecode(raw) as Map<String, Object?>;
     final String id = envelope['id'] as String;
     final String method = envelope['method'] as String;
-    final Map<String, Object?> params =
-        (envelope['params'] as Map<String, Object?>?) ?? const <String, Object?>{};
+    final Map<String, Object?> params = (envelope['params'] as Map<String, Object?>?) ?? const <String, Object?>{};
     try {
       final Object? result = await _dispatch(method, params);
       await _reply({'id': id, 'ok': true, 'result': result});
@@ -124,14 +129,12 @@ class OmiShellBridge {
   }
 
   Future<void> _reply(Map<String, Object?> envelope) {
-    return controller.runJavaScript(
-        'window.__omiBridge.__reply(${jsonEncode(jsonEncode(envelope))})');
+    return controller.runJavaScript('window.__omiBridge.__reply(${jsonEncode(jsonEncode(envelope))})');
   }
 
   Future<void> _push(String name, Map<String, Object?> payload) {
     final envelope = jsonEncode({'method': name, 'params': payload});
-    return controller
-        .runJavaScript('window.__omiBridge.__push(${jsonEncode(envelope)})');
+    return controller.runJavaScript('window.__omiBridge.__push(${jsonEncode(envelope)})');
   }
 
   /// Shell pushes transcript segments to the surface. shellSentAtMs is set by the shell for latency measurement.

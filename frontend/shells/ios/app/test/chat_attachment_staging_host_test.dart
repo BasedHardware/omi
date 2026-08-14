@@ -118,13 +118,11 @@ void main() {
         FakeChatNativeHttpResponse(
           statusCode: 201,
           contentType: 'application/json',
-          bytes: Stream<List<int>>.value(utf8.encode(p7Response(
-            size: 3,
-            additions: <String, Object>{
-              'scanState': 'clean',
-              'scannerId': 'dev-noop-scanner',
-            },
-          ))),
+          bytes: Stream<List<int>>.value(
+            utf8.encode(
+              p7Response(size: 3, additions: <String, Object>{'scanState': 'clean', 'scannerId': 'dev-noop-scanner'}),
+            ),
+          ),
         ),
       );
     final scripts = <String>[];
@@ -152,10 +150,9 @@ void main() {
         FakeChatNativeHttpResponse(
           statusCode: 201,
           contentType: 'application/json',
-          bytes: Stream<List<int>>.value(utf8.encode(p7Response(
-            size: 3,
-            additions: <String, Object>{'scanState': 'antivirus-clean'},
-          ))),
+          bytes: Stream<List<int>>.value(
+            utf8.encode(p7Response(size: 3, additions: <String, Object>{'scanState': 'antivirus-clean'})),
+          ),
         ),
       );
     final badScripts = <String>[];

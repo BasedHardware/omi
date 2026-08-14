@@ -99,10 +99,7 @@ void main() {
         't': 'open',
         'id': 's-agent-run',
         'channel': 'chat-agent-run-events',
-        'params': jsonEncode(<String, Object>{
-          'generationId': 'generation/agent',
-          'lastEventId': 'run-before',
-        }),
+        'params': jsonEncode(<String, Object>{'generationId': 'generation/agent', 'lastEventId': 'run-before'}),
         'credit': 2,
       }),
     );

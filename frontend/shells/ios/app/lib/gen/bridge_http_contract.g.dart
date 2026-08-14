@@ -10,8 +10,7 @@ enum BridgeHttpFailureReason {
   timeout('timeout'),
   cancelled('cancelled'),
   shellError('shell-error'),
-  notAuthenticated('not-authenticated'),
-  ;
+  notAuthenticated('not-authenticated');
 
   const BridgeHttpFailureReason(this.wire);
 
@@ -59,11 +58,7 @@ class BridgeHttpContract {
   /// case-insensitively, BEFORE the shell adds its own credential.
   /// Enforced, never trusted: a compromised surface must not be able to
   /// forge or override credentials.
-  static const Set<String> forbiddenHeaders = {
-    'authorization',
-    'cookie',
-    'proxy-authorization',
-  };
+  static const Set<String> forbiddenHeaders = {'authorization', 'cookie', 'proxy-authorization'};
 }
 
 class BridgeStreamContract {
@@ -95,8 +90,8 @@ class BridgeStreamContract {
 enum ChatAttachmentStagingFailureReason {
   cancelled('cancelled'),
   unavailable('unavailable'),
-  shellError('shell-error'),
-  ;
+  shellError('shell-error');
+
   const ChatAttachmentStagingFailureReason(this.wire);
   final String wire;
 }

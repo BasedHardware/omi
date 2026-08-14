@@ -98,8 +98,7 @@ class ChatStreamHost {
 
   Future<void> _open(Map<String, dynamic> frame, String id, String channel) async {
     if (_sessions.containsKey(id)) return;
-    if (channel != BridgeStreamContract.chatGenerationChannel &&
-        channel != BridgeStreamContract.chatAgentRunChannel) {
+    if (channel != BridgeStreamContract.chatGenerationChannel && channel != BridgeStreamContract.chatAgentRunChannel) {
       await _emitError(id, 'invalid-request', _documentEpoch, channel: channel);
       return;
     }
@@ -336,13 +335,7 @@ class _ChatStreamSession {
     host._retire(this);
     _request?.abort();
     await _subscription?.cancel();
-    await host._emitError(
-      id,
-      failure,
-      epoch,
-      channel: channel,
-      documentGeneration: documentGeneration,
-    );
+    await host._emitError(id, failure, epoch, channel: channel, documentGeneration: documentGeneration);
   }
 
   Future<void> cancel() async {
