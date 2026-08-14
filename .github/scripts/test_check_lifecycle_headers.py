@@ -105,6 +105,12 @@ class ValidationTests(unittest.TestCase):
             baseline = write(root, ".github/lifecycle-header-baseline.txt", "")
             self.assertEqual(validate(root, [permanent, one_time], baseline), [])
 
+    def test_absent_backend_tree_with_empty_baseline_is_ok(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = write(root, ".github/lifecycle-header-baseline.txt", "")
+            self.assertEqual(validate(root, ["frontend/AGENTS.md"], baseline), [])
+
 
 if __name__ == "__main__":
     unittest.main()
