@@ -175,10 +175,13 @@ actor ContextProactivityEngine {
         from: TasksStore.shared.incompleteTasks,
         now: currentFrame.captureTime)
     }
+    let recentDeliveries = await store.recentDeliveredForBucket(
+      bucketID: snapshot.bucketID, now: currentFrame.captureTime)
     let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
     let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
       tasks: taskContext,
-      frame: currentFrame)
+      frame: currentFrame,
+      recentDeliveries: recentDeliveries)
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.activeFenceIsValid(fence)
@@ -302,9 +305,9 @@ actor ContextProactivityEngine {
       }
       // Durable canonical candidates must exist before an interactive
       // task_candidate notification can be queued or tapped.
-      var graduationSucceeded = true
+      var graduation = CandidateGraduationReason.graduated
       if decision.decision == "task_candidate" {
-        graduationSucceeded = await CandidateSink.shared.graduateValidatedFacts(
+        graduation = await CandidateSink.shared.graduateValidatedFacts(
           deliveryID: deliveryID,
           factIDs: factIDs,
           authorizationSnapshot: authorizationSnapshot)
@@ -312,15 +315,14 @@ actor ContextProactivityEngine {
       guard
         CandidateSinkDeliveryGate.mayPresentInteractively(
           decisionType: decision.decision,
-          graduationSucceeded: graduationSucceeded)
+          graduation: graduation)
       else {
-        log("Context director suppressed before presentation: candidate_graduation_failed")
-        try await store.completeDelivery(
-          id: deliveryID,
-          decisionType: "silence",
-          provenanceJSON: "{\"failure\":\"candidate_graduation_failed\"}",
+        await recordGraduationFailure(
+          deliveryID: deliveryID,
+          decisionType: decision.decision,
+          provenanceJSON: provenanceJSON,
           message: decision.message,
-          state: "failed")
+          reason: graduation)
         return
       }
       // Graduation and system-surface preflight can both await. Rebuild every
@@ -383,6 +385,25 @@ actor ContextProactivityEngine {
       await recordDirectorFailure(deliveryID: deliveryID, error: error)
       // Network and model failures stay user-silent; provenance carries the class.
     }
+  }
+
+  func recordGraduationFailure(
+    deliveryID: String,
+    decisionType: String,
+    provenanceJSON: String,
+    message: String?,
+    reason: CandidateGraduationReason
+  ) async {
+    log(
+      "Context director suppressed before presentation: candidate_graduation_failed reason=\(reason.rawValue)"
+    )
+    _ = try? await store.completeDelivery(
+      id: deliveryID,
+      decisionType: decisionType,
+      provenanceJSON: CandidateGraduationProvenance.mergingFailure(
+        into: provenanceJSON, reason: reason),
+      message: message,
+      state: "failed")
   }
 
   func recordDirectorFailure(deliveryID: String, error: Error) async {
