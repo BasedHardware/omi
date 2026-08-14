@@ -48,7 +48,14 @@ import {
   type AcceptedDurableMemoryWork,
 } from "../../core/consolidate/state-machine";
 import {
+  attributionEvidenceFactorRef,
+  attributionHypothesisId,
+  buildAttributionBeliefRevision,
+} from "../../core/consolidate/attribution-belief";
+import {
   buildDerivedGroupRecallCandidates,
+  derivedGroupRecallInputFrontierDigest,
+  derivedGroupRecallProjectedContentDigest,
 } from "../../core/retrieve/derived-group-recall-source";
 import {
   identityExpressionLabelsForBeliefs,
@@ -795,22 +802,38 @@ realTest("derived group dream PostgreSQL one-shot runtime", () => {
     expect(candidates[0]?.group_projection_id).toBe(persistedGroup.group_projection_id);
     expect(candidates[0]?.trace_ref).toMatch(/^tr1_[a-f0-9]{64}$/);
 
-    // The kernel request binds the persisted content and frontier digests.
+    /**
+     * The kernel request binds the persisted content and frontier digests.
+     * Asserting only the hex shape would pass for a digest of anything, so
+     * recompute both from the persisted members and require equality.
+     */
     const kernelRequest = derivedGroupRecallKernelRequest({
       question_text: "What happened during launch week?",
       authorization_state_digest: digest("a"),
       reader_projection_digest: digest("c"),
       members,
     });
-    expect(kernelRequest.projected_content_digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(kernelRequest.projected_content_digest)
+      .toBe(derivedGroupRecallProjectedContentDigest(members));
+    expect(kernelRequest.input_frontier_digest)
+      .toBe(derivedGroupRecallInputFrontierDigest(members));
+    // A different group set must not produce the same content digest.
+    expect(derivedGroupRecallProjectedContentDigest([{
+      ...members[0]!, rendered_text: "something else entirely",
+    }])).not.toBe(kernelRequest.projected_content_digest);
 
     // Identity-expression labels come from the beliefs this same run persisted.
     const labels = identityExpressionLabelsForBeliefs([...loadedBeliefs.beliefs]);
     expect(labels).toHaveLength(1);
-    for (const label of labels) {
-      expect(["source_attributed", "abstain"]).toContain(label.label);
-      expect(label.label).not.toBe("certain_owner");
-    }
+    /**
+     * `not.toBe("certain_owner")` alone would be tautological — the emitter has
+     * no path that produces it. Assert the substantive facts instead: the label
+     * is exactly the one this belief's owner mass earns, and it is bound to the
+     * about_ref that was persisted.
+     */
+    expect(labels[0]?.label).toBe("source_attributed");
+    expect(labels[0]?.owner_probability_micros).toBe(0);
+    expect(labels[0]?.about_ref).toBe(loadedBeliefs.beliefs[0]?.about_ref);
     // The dark HTTP/MCP doors stay unmounted; that is asserted without a
     // database in `apps/service/memory-service-app.test.ts`.
 
@@ -853,7 +876,120 @@ realTest("derived group dream PostgreSQL one-shot runtime", () => {
       "SELECT * FROM omi_memory.read_derived_group_projections($1)", [accountId],
     ))).toBe(true);
     expect(await denied(() => ownerSql.unsafe(
-      "SELECT * FROM omi_memory.read_attribution_belief_revisions($1)", [accountId],
+      "SELECT * FROM omi_memory.read_attribution_belief_revisions($1, $2)", [accountId, 8],
     ))).toBe(true);
-  }, 120_000);
+
+    // A valid memories.read context may not name a DIFFERENT account. The
+    // repository always passes its own authority, so this branch is only
+    // reachable by calling the definer function directly.
+    expect(await denied(() => pool.withTransaction(
+      { isolationLevel: "serializable", accessMode: "read write" },
+      async (connection) => {
+        await connection.query({
+          name: "dream.one_shot.foreign_read.set_role",
+          text: "SET LOCAL ROLE omi_platform_application", values: [],
+        });
+        await connection.query({
+          name: "dream.one_shot.foreign_read.context",
+          text: `SELECT set_config('omi.account_id', $1, true),
+                        set_config('omi.principal_id', $2, true),
+                        set_config('omi.capability', 'memories.read', true)`,
+          values: [otherAccountId, `principal:dream-bystander:${otherSuffix}`],
+        });
+        return connection.query({
+          name: "dream.one_shot.foreign_read",
+          text: "SELECT * FROM omi_memory.read_derived_group_projections($1, $2)",
+          values: [accountId, 8],
+        });
+      },
+    ))).toBe(true);
+
+    /**
+     * The module's headline property: a persisted row that no longer rebuilds
+     * to the identifier it was stored under must fail closed rather than
+     * answer. Tamper each covered surface in turn and require rejection, then
+     * restore. Without this the fail-closed claim is an assertion, not
+     * evidence.
+     */
+    const tamper = async (sql: string, values: readonly unknown[]): Promise<void> => {
+      await ownerSql.unsafe(sql, [...values] as never[]);
+    };
+
+    // 1. A field that feeds the content-addressed group id.
+    await tamper(`UPDATE omi_memory.memory_product_group_projections
+      SET input_frontier = 'tampered' WHERE account_id = $1`, [accountId]);
+    expect(await denied(() => recallRead.loadGroupProjections(readContext))).toBe(true);
+    await tamper(`UPDATE omi_memory.memory_product_group_projections
+      SET input_frontier = $2 WHERE account_id = $1`, [accountId, snapshot.input_frontier]);
+    expect((await recallRead.loadGroupProjections(readContext)).kind).toBe("found");
+
+    // 2. Membership: dropping a member changes the id the group rebuilds to.
+    await tamper(`DELETE FROM omi_memory.memory_product_group_members
+      WHERE account_id = $1 AND member_ordinal = 1`, [accountId]);
+    expect(await denied(() => recallRead.loadGroupProjections(readContext))).toBe(true);
+    await tamper(`INSERT INTO omi_memory.memory_product_group_members
+        (account_id, group_projection_id, member_ordinal, proposition_id)
+      VALUES ($1, $2, 1, 'proposition:two')`,
+    [accountId, persistedGroup.group_projection_id]);
+    expect((await recallRead.loadGroupProjections(readContext)).kind).toBe("found");
+
+    /**
+     * 3. A belief that is INTERNALLY CONSISTENT but owned by another account,
+     * filed under this one. Editing `owner_account_id` in place would be caught
+     * by the content-addressed revision id long before the owner check — that
+     * would be a tautological test. So mint a genuinely valid belief for the
+     * bystander account and store it under this account's row, leaving the
+     * column/payload owner disagreement as the only defect.
+     */
+    const persistedBelief = loadedBeliefs.beliefs[0];
+    if (!persistedBelief) throw new Error("dream_belief_missing");
+    // Hypothesis ids and factor refs are owner-derived, so remap them onto the
+    // bystander owner or the builder rejects its own input.
+    const foreignHypothesisId = new Map(persistedBelief.hypotheses.map((hypothesis) => [
+      hypothesis.hypothesis_id,
+      attributionHypothesisId({
+        owner_account_id: otherAccountId,
+        belief_kind: persistedBelief.belief_kind,
+        about_ref: persistedBelief.about_ref,
+        kind: hypothesis.kind,
+        target_ref: hypothesis.target_ref,
+      }),
+    ]));
+    const foreignFactors = persistedBelief.evidence_factors.map((factor) => {
+      const core = {
+        evidence_ref: factor.evidence_ref,
+        independence_group_ref: factor.independence_group_ref,
+        hypothesis_id: foreignHypothesisId.get(factor.hypothesis_id) ?? factor.hypothesis_id,
+        direction: factor.direction,
+        factor_contract_digest: factor.factor_contract_digest,
+      };
+      return { factor_ref: attributionEvidenceFactorRef(core), ...core };
+    }).sort((left, right) => left.factor_ref < right.factor_ref ? -1
+      : left.factor_ref > right.factor_ref ? 1 : 0);
+
+    const foreignBelief = buildAttributionBeliefRevision({
+      owner_account_id: otherAccountId,
+      belief_kind: persistedBelief.belief_kind,
+      about_ref: persistedBelief.about_ref,
+      observation_ref: persistedBelief.observation_ref,
+      observation_content_digest: persistedBelief.observation_content_digest,
+      graph_frontier: persistedBelief.graph_frontier,
+      hypotheses: persistedBelief.hypotheses.map(({ hypothesis_id: _id, ...rest }) => rest),
+      evidence_factors: foreignFactors,
+      attribution_contract_digest: persistedBelief.attribution_contract_digest,
+      aggregation_contract_digest: persistedBelief.aggregation_contract_digest,
+      calibration_contract_digest: persistedBelief.calibration_contract_digest,
+      created_at_event_time: persistedBelief.created_at_event_time,
+      previous_revision: null,
+    });
+    expect(foreignBelief.owner_account_id).toBe(otherAccountId);
+    await tamper(`UPDATE omi_memory.memory_attribution_belief_revisions
+      SET revision_json = ($2::text)::jsonb,
+          belief_revision_id = $3,
+          belief_lineage_id = $4
+      WHERE account_id = $1`,
+    [accountId, JSON.stringify(foreignBelief),
+      foreignBelief.belief_revision_id, foreignBelief.belief_lineage_id]);
+    expect(await denied(() => recallRead.loadAttributionBeliefs(readContext))).toBe(true);
+  }, 180_000);
 });

@@ -269,6 +269,6 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     version: 44,
     name: "derived-group-recall-read",
     fileName: "0044-derived-group-recall-read.sql",
-    sha256: "ff09ba6c782e5f3fa9344ddce33d26de6088aed99c4f62c52ac23a1eb98a88f6",
+    sha256: "f3bd87218375f8363e5d3ee53e13aed96fe753e75ce197a301d1819aa47cec04",
   }),
 ]);

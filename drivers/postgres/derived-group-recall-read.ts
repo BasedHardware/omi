@@ -112,7 +112,17 @@ const parseBeliefRow = (row: BeliefRow, accountId: string): AttributionBeliefRev
   } catch {
     throw new PostgresRepositoryError("persistence_failed");
   }
-  if (belief.belief_revision_id !== row.belief_revision_id
+  /**
+   * Bind the belief's own owner to the reading tenant. The revision id is
+   * content-addressed over `owner_account_id`, so a bare edit of the JSON
+   * already fails — but that check validates the payload against itself, not
+   * against the column it was stored under. Without this line an internally
+   * consistent belief owned by another account, filed under this one, would be
+   * returned as valid. The group path gets this for free by feeding
+   * `row.account_id` into the id recomputation; beliefs need it stated.
+   */
+  if (belief.owner_account_id !== accountId
+    || belief.belief_revision_id !== row.belief_revision_id
     || belief.belief_lineage_id !== row.belief_lineage_id
     || belief.belief_kind !== row.belief_kind
     || belief.graph_frontier !== row.graph_frontier
@@ -168,14 +178,24 @@ export interface PostgresDerivedGroupRecallReadOptions {
   readonly observability?: PostgresTransactionObservability;
 }
 
+/**
+ * Ask PostgreSQL for one row more than we can accept, so overflow is detected
+ * without transferring an unbounded result set, and fail closed on it.
+ *
+ * Returning the first `MAX` rows instead would let recall answer from a
+ * silently partial group set, which is worse than refusing: the product owes a
+ * grounded answer with typed completeness, not a confident subset. Paging this
+ * honestly (a declared `truncated` signal the kernel can turn into stated
+ * incompleteness) is the follow-up; it is a contract change, not a patch.
+ */
 const readGroups = async (
   connection: CheckedOutPostgresConnection,
   accountId: string,
 ): Promise<readonly ProductGroupProjection[]> => {
   const rows = await connection.query<GroupRow>({
     name: "derived-group-recall.groups.read",
-    text: "SELECT * FROM omi_memory.read_derived_group_projections($1)",
-    values: [accountId],
+    text: "SELECT * FROM omi_memory.read_derived_group_projections($1, $2)",
+    values: [accountId, MAX_GROUPS + 1],
   });
   if (rows.length > MAX_GROUPS) throw new PostgresRepositoryError("persistence_failed");
   return Object.freeze(rows.map((row) => parseGroupRow(row, accountId)));
@@ -187,8 +207,8 @@ const readBeliefs = async (
 ): Promise<readonly AttributionBeliefRevision[]> => {
   const rows = await connection.query<BeliefRow>({
     name: "derived-group-recall.beliefs.read",
-    text: "SELECT * FROM omi_memory.read_attribution_belief_revisions($1)",
-    values: [accountId],
+    text: "SELECT * FROM omi_memory.read_attribution_belief_revisions($1, $2)",
+    values: [accountId, MAX_BELIEFS + 1],
   });
   if (rows.length > MAX_BELIEFS) throw new PostgresRepositoryError("persistence_failed");
   return Object.freeze(rows.map((row) => parseBeliefRow(row, accountId)));

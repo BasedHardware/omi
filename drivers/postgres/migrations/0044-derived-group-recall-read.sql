@@ -3,12 +3,27 @@
 -- `persist_derived_group_dream_materialization` (0043) already commits.
 --
 -- This adds no table, no route, no grant issuer, and no scheduler. It is the
--- first SQL surface gated on `memories.read`, which is the scope the dark query
--- doors already declare. Reads stay owner-scoped and append-only-observing:
--- neither function mutates, and neither can widen an account boundary.
+-- first SQL surface to *check* `memories.read`, which is the scope the dark
+-- query doors already declare. Neither function mutates, and neither returns a
+-- row outside the session's own account.
+--
+-- Scope of that guarantee, stated exactly: for
+-- `memory_attribution_belief_revisions` the definer function is the only door,
+-- because 0043 revokes and never grants it. For the group projections it is
+-- NOT the only door — `0022-product-projection-writer-grants.sql` already
+-- grants `omi_platform_application` a direct `SELECT` on
+-- `memory_product_group_projections` and `memory_product_group_members`, and
+-- the schema has no row-level security. So this capability check binds callers
+-- that come through this function; it does not fence the role. Closing that
+-- gap means revoking the direct grant, which is a separate decision.
+--
+-- Both functions take an explicit row bound. Recall must never answer from a
+-- silently truncated group set, so the caller asks for one more row than it
+-- can accept and fails closed on overflow rather than paging blindly.
 
 CREATE FUNCTION omi_memory.read_derived_group_projections(
-  requested_account_id text
+  requested_account_id text,
+  requested_limit integer
 )
 RETURNS TABLE (
   account_id text,
@@ -32,6 +47,10 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'derived group projection read denied';
   END IF;
 
+  IF requested_limit IS NULL OR requested_limit < 1 OR requested_limit > 4096 THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'derived group projection read bound invalid';
+  END IF;
+
   RETURN QUERY
   SELECT
     g.account_id, g.group_projection_id, g.input_frontier,
@@ -45,12 +64,14 @@ BEGIN
     ), ARRAY[]::text[])
   FROM omi_memory.memory_product_group_projections AS g
   WHERE g.account_id = requested_account_id
-  ORDER BY g.group_projection_id;
+  ORDER BY g.group_projection_id
+  LIMIT requested_limit;
 END;
 $$;
 
 CREATE FUNCTION omi_memory.read_attribution_belief_revisions(
-  requested_account_id text
+  requested_account_id text,
+  requested_limit integer
 )
 RETURNS TABLE (
   account_id text,
@@ -74,6 +95,10 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'attribution belief read denied';
   END IF;
 
+  IF requested_limit IS NULL OR requested_limit < 1 OR requested_limit > 4096 THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'attribution belief read bound invalid';
+  END IF;
+
   RETURN QUERY
   SELECT
     b.account_id, b.belief_revision_id, b.belief_lineage_id, b.belief_kind,
@@ -81,14 +106,15 @@ BEGIN
     b.content_hash
   FROM omi_memory.memory_attribution_belief_revisions AS b
   WHERE b.account_id = requested_account_id
-  ORDER BY b.belief_revision_id;
+  ORDER BY b.belief_revision_id
+  LIMIT requested_limit;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION omi_memory.read_derived_group_projections(text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION omi_memory.read_attribution_belief_revisions(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION omi_memory.read_derived_group_projections(text, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION omi_memory.read_attribution_belief_revisions(text, integer) FROM PUBLIC;
 
-GRANT EXECUTE ON FUNCTION omi_memory.read_derived_group_projections(text)
+GRANT EXECUTE ON FUNCTION omi_memory.read_derived_group_projections(text, integer)
   TO omi_platform_application;
-GRANT EXECUTE ON FUNCTION omi_memory.read_attribution_belief_revisions(text)
+GRANT EXECUTE ON FUNCTION omi_memory.read_attribution_belief_revisions(text, integer)
   TO omi_platform_application;
