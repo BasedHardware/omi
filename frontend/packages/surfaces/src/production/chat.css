@@ -176,6 +176,18 @@ html[data-platform="mobile"] .chat-jump-latest {
   content: " · ";
 }
 
+.chat-agent-approval {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+.chat-agent-approval button {
+  margin-top: 0;
+}
+
 .chat-message button {
   margin-top: var(--space-sm);
 }

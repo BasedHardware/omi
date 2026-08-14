@@ -27,6 +27,14 @@ function lockedSessionSkipReason() {
 
 const lockedSession = lockedSessionSkipReason();
 
+test("batch preflight prints the exact probe path when Accessibility is untrusted", () => {
+  const source = readFileSync(wrapper, "utf8");
+  assert.match(source, /function ensureProbeAccessibilityTrust\(probePath\)/);
+  assert.match(source, /--request-trust/);
+  assert.match(source, /Exact probe path: \$\{probePath\}/);
+  assert.match(source, /ensureProbeAccessibilityTrust\(prepared\.probePath\)/);
+});
+
 test("AX readiness persists only after cleanup and cannot mask primary capture errors", () => {
   const source = readFileSync(wrapper, "utf8");
   const cleanup = source.lastIndexOf("await terminateExactChild(child)");
@@ -132,6 +140,10 @@ setInterval(() => {}, 1000);
 function fakeProbe(file, nodeName = "memories", pidDelta = 0) {
   writeFileSync(file, `#!/usr/bin/env node
 const args = process.argv.slice(2); const value = key => args[args.indexOf('--' + key) + 1];
+if (args.includes('--request-trust')) {
+  process.stdout.write(JSON.stringify({ schema:'omi.native-semantic-trust-request.v1', axTrusted:true, settingsOpened:false, probePath:process.argv[1] }));
+  process.exit(0);
+}
 const kind = value('kind'); const keys = (value('keys') || '').split(',').filter(Boolean);
 if (Number(value('pid')) === 999999) { process.stderr.write('external manifest PID was reused\\n'); process.exit(7); }
 try { process.kill(Number(value('pid')), 0); } catch { process.stderr.write('runtime PID is not live\\n'); process.exit(8); }

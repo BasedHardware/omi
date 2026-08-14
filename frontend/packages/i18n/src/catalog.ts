@@ -283,10 +283,12 @@ export const EN_MESSAGES = {
   "chat.agentScripted": "Local scripted response",
   "chat.agentProvider": "External model response",
   "chat.agentUnknown": "Response source not verified",
+  "chat.agentLocalTestGateway": "Local test gateway",
   "chat.agentContext": "Context: {preview}",
   "chat.agentContextReason": "Why it was used: {reason}",
   "chat.agentTool": "Tool: {name}",
-  "chat.agentApprovalNoAction": "Approval status only. This view cannot approve or deny the request.",
+  "chat.agentApprovalAllow": "Allow",
+  "chat.agentApprovalDeny": "Deny",
   "chat.agentUsage": "Usage: {count} tokens",
 
   // Settings / Account.

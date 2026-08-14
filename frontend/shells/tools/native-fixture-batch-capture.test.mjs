@@ -290,6 +290,11 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /fixturePolicy\[coordinate\.domain\]/);
   assert.match(source, /settle simulator compositor/);
   assert.match(source, /warmup\.png/);
+  assert.match(source, /settle-a\.png/);
+  assert.match(source, /settle-b\.png/);
+  assert.match(source, /consecutive canonical SHAs match/);
+  assert.match(source, /never a synthetic image/);
+  assert.match(source, /function settleIosScreenshot/);
   assert.match(appDelegate, /name: "omi\/capture-launch"/);
   assert.match(appDelegate, /capture-ready-invalid/);
   assert.match(appDelegate, /capture-ready-write-failed/);

@@ -301,5 +301,39 @@ export function fixtureChatStore(state: ChatFixtureState): ProductionChatStore {
       };
       notify();
     },
+    async resolveApproval(resolution) {
+      historyPage = {
+        ...historyPage,
+        messages: historyPage.messages.map((message) => {
+          const timeline = message.agentRun;
+          if (!timeline) return message;
+          const pending = [...timeline.events].reverse().find((event) =>
+            event.kind === "approval_requested" || event.kind === "approval_resolved");
+          if (pending?.kind !== "approval_requested") return message;
+          const sequence = Math.max(...timeline.events.map((event) => event.sequence)) + 1;
+          return {
+            ...message,
+            agentRun: {
+              ...timeline,
+              events: [
+                ...timeline.events,
+                {
+                  sequence,
+                  createdAt: CHAT_FIXED_NOW + sequence,
+                  kind: "approval_resolved" as const,
+                  safeSummary: resolution === "approved"
+                    ? "Approval was granted"
+                    : resolution === "denied"
+                      ? "Approval was denied"
+                      : "Approval was cancelled",
+                  details: { resolution },
+                },
+              ],
+            },
+          };
+        }),
+      };
+      notify();
+    },
   };
 }

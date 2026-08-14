@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,19 @@ import test from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(root, "probes/native-semantic-evidence.swift");
+
+test("AX probe can request trust for this binary without targeting Chat", () => {
+  const text = readFileSync(source, "utf8");
+  assert.match(text, /--request-trust/);
+  assert.match(text, /AXIsProcessTrustedWithOptions/);
+  assert.match(text, /x-apple\.systempreferences:com\.apple\.preference\.security\?Privacy_Accessibility/);
+  assert.match(text, /omi\.native-semantic-trust-request\.v1/);
+  assert.match(text, /probePath/);
+  const launcher = readFileSync(join(root, "scripts/dev-run-macos.sh"), "utf8");
+  assert.match(launcher, /OMI_AX_PROBE_PATH/);
+  assert.match(launcher, /native-semantic-evidence\.swift/);
+  assert.match(launcher, /OMI_HEADED/);
+});
 
 function hasNativeToolchain() {
   if (process.platform !== "darwin") return false;
@@ -47,6 +60,7 @@ test(
       assert.equal(help.status, 0, help.stderr);
       assert.match(help.stdout, /AXUIElement/);
       assert.match(help.stdout, /--keys SPEC/);
+      assert.match(help.stdout, /--request-trust/);
       assert.match(help.stdout, /does not take screenshots/);
 
       const missing = spawnSync(binary, ["--name", "__omi-semantic-target-does-not-exist__", "--json"], {

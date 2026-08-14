@@ -276,6 +276,17 @@ fi
 # The token is never echoed, never placed in argv, never in the URL.
 echo "MODE: LIVE — route $route on backend $api_base (reachable, HTTP $code), credential held by the shell."
 
+if [[ "${OMI_HEADED:-}" == "1" ]]; then
+  probe_src="$here/probes/native-semantic-evidence.swift"
+  probe_bin="${OMI_AX_PROBE_PATH:-$OMI_BUILD_DIR/native-semantic-evidence}"
+  if [[ ! -x "$probe_bin" ]]; then
+    mkdir -p "$(dirname "$probe_bin")"
+    swiftc -O -framework AppKit -framework ApplicationServices -framework CoreGraphics \
+      -o "$probe_bin" "$probe_src"
+  fi
+  export OMI_AX_PROBE_PATH="$probe_bin"
+fi
+
 if (( accept )); then
   export OMI_ACCEPTANCE=1 OMI_ACCEPTANCE_EXIT=1
   export OMI_SNAPSHOT_PATH="${OMI_SNAPSHOT_PATH:-$OMI_BUILD_DIR/acceptance.png}"

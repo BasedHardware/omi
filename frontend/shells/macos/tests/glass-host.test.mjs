@@ -82,6 +82,15 @@ test("scratch shell opens at the deterministic comparison frame", async () => {
   // 296 x 278 stale frame and breaks screenshot parity.
 });
 
+test("headed menu spawns the AX probe, not Chat, for capture permissions", async () => {
+  const shell = await read("shell/Sources/OmiShell/main.swift");
+  assert.match(shell, /Prepare AX Capture Permissions/);
+  assert.match(shell, /OMI_AX_PROBE_PATH/);
+  assert.match(shell, /--request-trust/);
+  assert.match(shell, /headed AX grant must spawn the compiled probe, not Chat/);
+  assert.doesNotMatch(shell, /AXIsProcessTrustedWithOptions/);
+});
+
 test("native fixture helpers cannot take focus unless headed mode is explicit", async () => {
   const shell = await read("shell/Sources/OmiShell/main.swift");
   const baseline = await read("probes/native-window-baseline.swift");

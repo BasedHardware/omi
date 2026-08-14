@@ -676,6 +676,53 @@ function imageInfo(file) {
   return { bytes: image.bytes.length, width: image.width, height: image.height, sha256: sha256(image.bytes) };
 }
 
+function canonicalScreenshotHash(file) {
+  const copy = `${file}.canonical-hash.png`;
+  copyFileSync(file, copy);
+  canonicalizeScreenshot(copy);
+  const digest = sha256(decodeRgbaImage(copy).bytes);
+  rmSync(copy, { force: true });
+  return digest;
+}
+
+function captureIosScreenshot(coordinate, artifact, output, timeoutSeconds, label) {
+  runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", output], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: ${label}`);
+}
+
+function settleIosScreenshot(coordinate, artifact, output, timeoutSeconds, monitor, forbiddenForeground) {
+  // Post-ready stability loop: keep capturing real simulator frames until two
+  // consecutive canonical SHAs match, or the settle deadline elapses. The
+  // retained file is always a device screenshot, never a synthetic image.
+  const settleDeadline = Date.now() + 8_000;
+  const first = `${output}.settle-a.png`;
+  const second = `${output}.settle-b.png`;
+  rmSync(first, { force: true });
+  rmSync(second, { force: true });
+  captureIosScreenshot(coordinate, artifact, first, timeoutSeconds, "simulator settle screenshot");
+  assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator settle screenshot`, monitor);
+  let previousHash = canonicalScreenshotHash(first);
+  while (true) {
+    assertForegroundMonitorHealthy(monitor, `${coordinate.run_id}: settle custody`);
+    captureIosScreenshot(coordinate, artifact, second, timeoutSeconds, "simulator settle screenshot");
+    assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator settle screenshot`, monitor);
+    const nextHash = canonicalScreenshotHash(second);
+    if (previousHash === nextHash || Date.now() >= settleDeadline) {
+      copyFileSync(second, output);
+      rmSync(first, { force: true });
+      rmSync(second, { force: true });
+      return;
+    }
+    copyFileSync(second, first);
+    previousHash = nextHash;
+    spawnSync("sleep", ["0.25"], {
+      cwd: coreRoot,
+      env: artifact.env,
+      encoding: "utf8",
+      timeout: 2_000,
+    });
+  }
+}
+
 function canonicalizeScreenshot(file) {
   const image = decodeRgbaImage(file);
   // CoreSimulator's tablet status bar may draw a spinner whose phase changes
@@ -1189,7 +1236,7 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds, m
     runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", warmupOutput], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: settle simulator compositor`);
     assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator warmup screenshot`, monitor);
     rmSync(warmupOutput, { force: true });
-    runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", output], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: simulator screenshot`);
+    settleIosScreenshot(coordinate, artifact, output, timeoutSeconds, monitor, forbiddenForeground);
     assertNoForbiddenForeground(forbiddenForeground, `${coordinate.run_id}: simulator screenshot`, monitor);
   } finally {
     if (launched) terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: cleanup app`);

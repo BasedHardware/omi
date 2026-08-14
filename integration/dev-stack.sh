@@ -12,6 +12,10 @@ read -r CORE_REPO PLATFORM_REPO <<<"$(printf '%s' "$PATHS" | node -e '
 SERVICE_REL="apps/service/bin/dev-server.ts"
 SERVICE_LAUNCHER="$PLATFORM_REPO/$SERVICE_REL"
 SERVICE_URL="http://127.0.0.1:4851"
+GATEWAY_LAUNCHER="$HERE/local-test-gateway.mjs"
+GATEWAY_PORT=8788
+GATEWAY_TOKEN="local-test-gateway-token"
+GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
 MACOS_ORIGIN="http://127.0.0.1:5290"
 SURFACES="$CORE_REPO/core/packages/surfaces"
 MACOS_LAUNCHER="$CORE_REPO/core/shells/macos/scripts/dev-run-macos.sh"
@@ -55,9 +59,41 @@ fi
 RUNDIR="${OMI_DEV_STACK_RUNDIR:-/tmp/omi-dev-stack}"
 OWNERFILE="$RUNDIR/service-owner.json"
 REPORTFILE="$RUNDIR/last-run.json"
+GATEWAY_PID_PATH="$RUNDIR/local-test-gateway.pid"
+GATEWAY_IDENTITY_FILE="$RUNDIR/local-test-gateway-start-identity"
+GATEWAY_PID=""
+GATEWAY_START_IDENTITY=""
 mkdir -p "$RUNDIR"
 
+stop_local_test_gateway() {
+  local gateway_pid identity now cmd
+  gateway_pid="${GATEWAY_PID:-}"
+  identity="${GATEWAY_START_IDENTITY:-}"
+  if [[ ! "$gateway_pid" =~ ^[0-9]+$ || -z "$identity" ]]; then
+    gateway_pid="$(cat "$GATEWAY_PID_PATH" 2>/dev/null || true)"
+    identity="$(cat "$GATEWAY_IDENTITY_FILE" 2>/dev/null || true)"
+  fi
+  [[ "$gateway_pid" =~ ^[0-9]+$ && -n "$identity" ]] || return 0
+  now="$(ps -p "$gateway_pid" -o lstart= 2>/dev/null || true)"
+  [[ "$now" == "$identity" ]] || { rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE"; return 0; }
+  cmd="$(ps -p "$gateway_pid" -o command= 2>/dev/null || true)"
+  [[ "$cmd" == *local-test-gateway.mjs* ]] || { rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE"; return 0; }
+  kill -TERM "$gateway_pid" 2>/dev/null || true
+  for _ in $(seq 1 20); do
+    node "$OWNER_TOOL" snapshot --pid "$gateway_pid" >/dev/null 2>&1 || break
+    sleep 0.05
+  done
+  now="$(ps -p "$gateway_pid" -o lstart= 2>/dev/null || true)"
+  if [[ "$now" == "$identity" ]]; then
+    kill -KILL "$gateway_pid" 2>/dev/null || true
+  fi
+  rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE"
+  GATEWAY_PID=""
+  GATEWAY_START_IDENTITY=""
+}
+
 if (( STOP_ONLY )); then
+  stop_local_test_gateway
   node "$OWNER_TOOL" stop --record "$OWNERFILE"
   exit $?
 fi
@@ -100,6 +136,7 @@ SERVICE_LOGGER_PID=""
 cleanup() {
   local stop_rc=0
   if (( LEAVE_RUNNING )); then return; fi
+  stop_local_test_gateway
   if (( OWNER_WRITTEN )); then
     node "$OWNER_TOOL" stop --record "$OWNERFILE" >/dev/null 2>&1 || stop_rc=$?
   elif [[ "$SERVICE_PID" =~ ^[0-9]+$ ]]; then
@@ -133,6 +170,7 @@ trap 'exit 143' TERM
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing required tool $1" >&2; exit 1; }; }
 for tool in bun node lsof curl mkfifo; do need "$tool"; done
 [[ -f "$SERVICE_LAUNCHER" ]] || { echo "ERROR: required sibling launcher is absent: $SERVICE_LAUNCHER" >&2; exit 1; }
+[[ -f "$GATEWAY_LAUNCHER" ]] || { echo "ERROR: required local test gateway is absent: $GATEWAY_LAUNCHER" >&2; exit 1; }
 node "$OWNER_TOOL" prepare --record "$OWNERFILE" >/dev/null || exit $?
 
 listener() { lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
@@ -140,6 +178,12 @@ occupied=0
 held="$(listener 4851)"
 if [[ -n "$held" ]]; then
   echo "ERROR: required port 4851 is occupied; this harness will not kill it or start a second listener." >&2
+  printf '%s\n' "$held" >&2
+  occupied=1
+fi
+held="$(listener "$GATEWAY_PORT")"
+if [[ -n "$held" ]]; then
+  echo "ERROR: required local test gateway port ${GATEWAY_PORT} is occupied; this harness will not kill it or start a second listener." >&2
   printf '%s\n' "$held" >&2
   occupied=1
 fi
@@ -155,6 +199,29 @@ fi
 
 printf 'run %s\n' "$RUN_ID"
 printf 'service %s with one run-scoped SQLite database\n' "$SERVICE_REL"
+printf 'local test gateway %s (never a production model, never the production API host)\n' "$GATEWAY_URL"
+GATEWAY_READY="$RUN_DIR/local-test-gateway-ready.json"
+rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE" "$GATEWAY_READY"
+( OMI_LOCAL_TEST_GATEWAY_PORT="$GATEWAY_PORT" \
+  OMI_LOCAL_TEST_GATEWAY_TOKEN="$GATEWAY_TOKEN" \
+  OMI_LOCAL_TEST_GATEWAY_READY="$GATEWAY_READY" \
+  exec bun "$GATEWAY_LAUNCHER" ) >/dev/null 2>&1 &
+GATEWAY_PID=$!
+GATEWAY_SNAPSHOT="$(node "$OWNER_TOOL" snapshot --pid "$GATEWAY_PID")" || exit $?
+GATEWAY_START_IDENTITY="$(printf '%s' "$GATEWAY_SNAPSHOT" | node -e '
+  let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).startIdentity))')"
+printf '%s\n' "$GATEWAY_PID" > "$GATEWAY_PID_PATH"
+printf '%s\n' "$GATEWAY_START_IDENTITY" > "$GATEWAY_IDENTITY_FILE"
+gateway_ready=0
+for _ in $(seq 1 80); do
+  if [[ -s "$GATEWAY_READY" ]] && curl -fsS --max-time 1 "$GATEWAY_URL/ready" >/dev/null 2>&1; then gateway_ready=1; break; fi
+  kill -0 "$GATEWAY_PID" 2>/dev/null || break
+  sleep 0.05
+done
+if (( gateway_ready == 0 )); then
+  echo "ERROR: local test gateway emitted no readiness candidate on ${GATEWAY_URL}." >&2
+  exit 1
+fi
 mkfifo "$SERVICE_LOG_PIPE" || { echo "ERROR: could not create the service log sanitizer pipe." >&2; exit 1; }
 ( cd "$PLATFORM_REPO" && \
   OMI_PORT=4851 \
@@ -162,6 +229,8 @@ mkfifo "$SERVICE_LOG_PIPE" || { echo "ERROR: could not create the service log sa
   OMI_RUN_ID="$RUN_ID" \
   OMI_DEV_READY_RECORD="$READINESS_PATH" \
   OMI_DEV_EVIDENCE=1 \
+  OMI_LLM_GATEWAY_URL="$GATEWAY_URL" \
+  OMI_LLM_GATEWAY_SERVICE_TOKEN="$GATEWAY_TOKEN" \
   TZ=UTC \
   exec bun "$SERVICE_REL" ) > "$SERVICE_LOG_PIPE" 2>&1 &
 SERVICE_PID=$!
@@ -224,7 +293,7 @@ OWNER_WRITTEN=1
 
 if (( MODE_UP )); then
   LEAVE_RUNNING=1
-  printf 'service-ready run=%s pid=%s owner=%s\n' "$RUN_ID" "$SERVICE_PID" "$OWNERFILE"
+  printf 'service-ready run=%s pid=%s owner=%s local-test-gateway=%s\n' "$RUN_ID" "$SERVICE_PID" "$OWNERFILE" "$GATEWAY_URL"
   exit 0
 fi
 

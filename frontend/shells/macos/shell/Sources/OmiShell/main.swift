@@ -736,6 +736,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let appMenu = NSMenu()
     appMenu.addItem(withTitle: "About omi-core-tasks-shell", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
     appMenu.addItem(.separator())
+    let headed = ProcessInfo.processInfo.environment["OMI_HEADED"] == "1"
+      && ProcessInfo.processInfo.environment["OMI_SEMANTIC_WINDOW"] != "1"
+    if headed {
+      appMenu.addItem(withTitle: "Prepare AX Capture Permissions", action: #selector(prepareAxCapturePermissions), keyEquivalent: "")
+      appMenu.addItem(.separator())
+    }
     appMenu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     appItem.submenu = appMenu
     main.addItem(appItem)
@@ -760,6 +766,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   @objc private func reload() { controller.webView.reload() }
+
+  /// Spawns the compiled semantic probe so TCC is granted to that binary,
+  /// never to this Chat/fixture app process.
+  @objc private func prepareAxCapturePermissions() {
+    let probe = ProcessInfo.processInfo.environment["OMI_AX_PROBE_PATH"] ?? ""
+    guard !probe.isEmpty else {
+      fputs("OMI_AX_PROBE_PATH is unset; headed AX grant must spawn the compiled probe, not Chat\n", stderr)
+      return
+    }
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: probe)
+    task.arguments = ["--request-trust", "--json"]
+    task.standardOutput = FileHandle.standardError
+    task.standardError = FileHandle.standardError
+    do {
+      try task.run()
+    } catch {
+      fputs("failed to spawn AX probe at \(probe)\n", stderr)
+    }
+  }
 }
 
 MainActor.assumeIsolated {
