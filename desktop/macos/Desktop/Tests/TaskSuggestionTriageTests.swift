@@ -42,6 +42,13 @@ final class TaskSuggestionTriageTests: XCTestCase {
     XCTAssertFalse(task(source: "screenshot", completed: true).isPendingSuggestion)
     XCTAssertFalse(task(source: "screenshot", deleted: true).isPendingSuggestion)
   }
+
+  func testDashboardLanesExcludeUnreviewedAICaptures() {
+    XCTAssertFalse(DashboardTaskLanePolicy.admits(task(source: "screenshot")))
+    XCTAssertFalse(DashboardTaskLanePolicy.admits(task(source: "transcription:omi")))
+    XCTAssertTrue(DashboardTaskLanePolicy.admits(task(source: "manual")))
+    XCTAssertTrue(DashboardTaskLanePolicy.admits(task(source: "recurring")))
+  }
 }
 
 /// Removing the sparkle Suggestions category put leftover AI captures back into

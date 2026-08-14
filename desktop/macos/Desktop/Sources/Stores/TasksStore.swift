@@ -499,9 +499,15 @@ class TasksStore: ObservableObject {
         )
       }
       guard isCurrent(lease) else { return }
-      let sortedOverdue = snapshot.overdue.sorted(by: Self.sortByDueDateThenSource)
-      let sortedToday = snapshot.today.sorted(by: Self.sortByDueDateThenSource)
-      let sortedNoDueDate = snapshot.noDueDate.sorted(by: Self.sortByDueDateThenSource)
+      // Unreviewed AI captures stay out of dashboard / nudge / realtime lanes.
+      // The Tasks page uses incompleteTasks and shows those rows as ordinary
+      // due-date tasks after Candidate review replaced the sparkle list.
+      let sortedOverdue = snapshot.overdue.filter(DashboardTaskLanePolicy.admits)
+        .sorted(by: Self.sortByDueDateThenSource)
+      let sortedToday = snapshot.today.filter(DashboardTaskLanePolicy.admits)
+        .sorted(by: Self.sortByDueDateThenSource)
+      let sortedNoDueDate = snapshot.noDueDate.filter(DashboardTaskLanePolicy.admits)
+        .sorted(by: Self.sortByDueDateThenSource)
       // Only update @Published properties if values actually changed to avoid unnecessary objectWillChange
       if overdueTasks != sortedOverdue { overdueTasks = sortedOverdue }
       if todaysTasks != sortedToday { todaysTasks = sortedToday }
