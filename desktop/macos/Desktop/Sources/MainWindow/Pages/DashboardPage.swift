@@ -1634,9 +1634,10 @@ struct DashboardPage: View {
           title: transcriptionUnavailable ? "Transcription unavailable" : "Listening",
           systemImage: transcriptionUnavailable
             ? "exclamationmark.triangle.fill"
-            : (appState.isTranscribing ? "waveform.circle.fill" : "mic.circle"),
-          status: transcriptionUnavailable ? .blocked : (appState.isTranscribing ? .active : .inactive),
+            : (appState.isLiveCapturing ? "waveform.circle.fill" : "mic.circle"),
+          status: CaptureListeningLogic.listeningStatus(appState: appState),
           modeTitle: listeningModeTitle,
+          isAwaitingMeeting: appState.isAwaitingMeeting,
           isToggling: isTogglingListening,
           action: toggleListening
         )
@@ -3872,8 +3873,23 @@ struct HomeListeningStatusButton: View {
   let systemImage: String
   let status: HomeStatusState
   let modeTitle: String
+  /// Only Meetings wait: the session is armed, the mic is paused, and a click turns
+  /// listening off. Help/VoiceOver must not reuse the "Off" sentence for that.
+  let isAwaitingMeeting: Bool
   let isToggling: Bool
   let action: () -> Void
+
+  /// Hover / VoiceOver copy. An armed Only Meetings wait is inactive (mic paused)
+  /// but not off — a click turns listening off, it does not start it.
+  static func helpText(
+    status: HomeStatusState, modeTitle: String, isAwaitingMeeting: Bool
+  ) -> String {
+    if status == .inactive && isAwaitingMeeting {
+      return
+        "Listening: waiting for a call (\(modeTitle)). Nothing is being transcribed. Click to turn off."
+    }
+    return "Listening: \(status.text), \(modeTitle)"
+  }
 
   // Hover reveals the selected mode, but Settings owns the only picker.
   @State private var isHovering = false
@@ -3917,8 +3933,9 @@ struct HomeListeningStatusButton: View {
       }
       .buttonStyle(.plain)
       .disabled(isToggling)
-      .help("Listening: \(status.text), \(modeTitle)")
-      .accessibilityLabel("Listening \(status.text), \(modeTitle)")
+      .help(Self.helpText(status: status, modeTitle: modeTitle, isAwaitingMeeting: isAwaitingMeeting))
+      .accessibilityLabel(
+        Self.helpText(status: status, modeTitle: modeTitle, isAwaitingMeeting: isAwaitingMeeting))
     }
     .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
     .background(
