@@ -142,7 +142,7 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
 
         async let conversationRows = attempt(
             "conversations", fetchConversations, Self.conversationQuery(limit: bounded))
-        async let memoryRows = attempt("memories", fetchMemories, Self.memoryQuery(limit: bounded))
+        async let memoryRows = attemptMemories(limit: bounded)
         // Tasks are read unwindowed on purpose — the seam says so, and it is right: an open
         // commitment matters today whenever it was written. The endpoint does accept `start_date`
         // and `due_start_date`, but the first bounds *creation* and the second bounds the due date,
@@ -178,7 +178,8 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
             conversations: (conversations.rows ?? []).compactMap { $0.activity(placedAt: placement) },
             memories: (memories.rows ?? []).compactMap { $0.activity(placedAt: placement) },
             tasks: (tasks.rows?.actionItems ?? []).compactMap { $0.activity(placedAt: placement) },
-            answered: answered)
+            answered: answered,
+            memoriesBeginPastHead: memories.beganPastHead)
         // Counts only. Titles, memory content and task text are the user's own words and none of
         // them belong in a log line.
         ContextLog.info(
@@ -187,12 +188,64 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
         return feed
     }
 
+    /// Reads memories, and steps past the first row when the backend cannot serve the first page.
+    ///
+    /// **`offset == 0` and `offset > 0` are two different implementations behind one endpoint**, and
+    /// only one of them is currently working for real accounts. `GET /v3/memories` sends a zero
+    /// offset to `MemoryService.read_page`, which runs a Firestore *keyset* scan; any non-HTTP error
+    /// that scan raises surfaces as `503 Canonical memory unavailable`. A non-zero offset goes to
+    /// `MemoryService.read`, which loads the set and slices it in Python — no keyset query at all.
+    ///
+    /// That is not a theory. The shipping Omi app was observed doing both within four seconds on
+    /// this account: its `offset: 0` auto-refresh failed with that exact 503 at 10:26:37, and its
+    /// `offset > 0` pages returned 100 rows each at 10:26:41, 10:26:52 and 10:26:57. The reason the
+    /// app still looks healthy is that its refresh swallows the failure and keeps the rows it
+    /// already had — a first-run client gets nothing at all, which is precisely where this surface
+    /// was.
+    ///
+    /// So a 503 on the first page is answered by asking again from `offset: 1`. **The cost is exactly
+    /// one row — the newest memory — and it is worth naming rather than hiding**: the alternative on
+    /// this account today is every memory or none. No string matching on the server's message; any
+    /// 503 on the first page buys the one retry, because the branch that fails is selected by the
+    /// offset and nothing else, so the retry is right whatever the message says.
+    ///
+    /// The retry is deliberately *not* a general policy in `attempt`: conversations and action-items
+    /// have no equivalent split, and stepping their offsets would silently drop a row for nothing.
+    private func attemptMemories(limit: Int) async -> SourceOutcome<[WireMemory]> {
+        do {
+            return SourceOutcome(rows: try await fetchMemories(Self.memoryQuery(limit: limit)), failure: nil)
+        } catch {
+            // Only a 503 means the failing branch. A 500, a timeout or a rejection is not the split
+            // above, and re-asking at a different offset would spend a request to be told the same
+            // thing — so those fall through to the shared classification below, unretried.
+            guard case .http(503, _)? = error as? OmiAPIError else {
+                ContextLog.error("Account memories unavailable: \(Self.reason(for: error))", Self.category)
+                return SourceOutcome(rows: nil, failure: Self.classify(error))
+            }
+            ContextLog.info(
+                "Account memories: the first page is unavailable; asking again from the second row",
+                Self.category)
+            let stepped = await attempt(
+                "memories", fetchMemories, Self.memoryQuery(limit: limit, offset: Self.firstPageStep))
+            // Flagged only when the retry actually produced rows: a page that failed twice is not a
+            // page missing its head, it is no page at all.
+            return SourceOutcome(
+                rows: stepped.rows, failure: stepped.failure, beganPastHead: stepped.rows != nil)
+        }
+    }
+
+    /// One row, which is the smallest step that leaves the failing branch.
+    private static let firstPageStep = 1
+
     /// What one source came back with: its rows, or `nil` for "this source did not answer" so the
     /// caller can tell a missing source from an empty one — plus, when it did not, the shape of
     /// failure that decides what the reader is told.
     private struct SourceOutcome<Row: Sendable>: Sendable {
         let rows: Row?
         let failure: SourceFailure?
+        /// True when this page had to start past its own first row to be served. Only memories can
+        /// set it; see `attemptMemories`.
+        var beganPastHead = false
     }
 
     /// Why a source came back with nothing, in the only three shapes anything downstream acts on.
@@ -314,8 +367,8 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
 
     /// `device_scope` is left alone: its default is `all`, which is what this wants, and sending
     /// `current` is what makes the backend 400 for an account without the canonical lifecycle.
-    private static func memoryQuery(limit: Int) -> [String: String] {
-        ["limit": String(limit), "offset": "0"]
+    private static func memoryQuery(limit: Int, offset: Int = 0) -> [String: String] {
+        ["limit": String(limit), "offset": String(offset)]
     }
 }
 
@@ -484,10 +537,18 @@ struct WireActionItem: Decodable, Sendable {
             id: id,
             text: text,
             completed: completed ?? false,
-            // Due date first: a commitment belongs on the day it is owed, and that is the day the
-            // spine is being asked about. Falling back through creation to completion so that a
-            // task with only one of the three is still placeable.
-            at: dueAt?.seconds ?? createdAt?.seconds ?? completedAt?.seconds ?? fallback)
+            // **When it was written, not when it is owed** — `SpineTask.timestamp` is
+            // `task.createdAt` and nothing else, and the reason is visible the moment you do it the
+            // other way. This surface is a record of what happened, ordered newest-first, and a due
+            // date is a date in the *future*: anchoring on it hoisted every dated commitment above
+            // today, so the list opened on "Monday 5 October" — seven weeks out — with today's real
+            // capture buried four day-headers below it, and every task stamped 11:59 PM because
+            // that is what a date with no time means.
+            //
+            // `due_at` is still decoded and still worth showing on the task itself; it is simply not
+            // where the row belongs on a clock. Completion is the last resort for a row that somehow
+            // has neither.
+            at: createdAt?.seconds ?? completedAt?.seconds ?? fallback)
     }
 }
 

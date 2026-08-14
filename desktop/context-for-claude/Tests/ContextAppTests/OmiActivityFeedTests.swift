@@ -504,12 +504,15 @@ final class OmiActivityFeedTests: XCTestCase {
 
         XCTAssertEqual(result.tasks[0].text, "Send the invoice")
         XCTAssertFalse(result.tasks[0].completed)
-        XCTAssertEqual(result.tasks[0].at, Self.utc(2026, 8, 14, 17, 0, 0), accuracy: 0.001)
+        // **Created, not due** — `task-1` carries a `due_at` of 14 August and is placed on 1 August,
+        // when it was written. `SpineTask.timestamp` is `task.createdAt` and nothing else, and
+        // anchoring on the due date instead put every dated commitment in the *future*: the list
+        // opened on a day seven weeks out, with today's capture buried below it, and every task
+        // stamped 11:59 PM because that is what a date with no time means.
+        XCTAssertEqual(result.tasks[0].at, Self.utc(2026, 8, 1, 9, 0, 0), accuracy: 0.001)
 
         XCTAssertTrue(result.tasks[1].completed)
-        XCTAssertEqual(
-            result.tasks[1].at, Self.utc(2026, 8, 2, 9, 0, 0), accuracy: 0.001,
-            "no due date falls back to created")
+        XCTAssertEqual(result.tasks[1].at, Self.utc(2026, 8, 2, 9, 0, 0), accuracy: 0.001)
 
         // A bare number of seconds, the shape the sibling screen-activity rows use.
         XCTAssertEqual(result.tasks[2].at, 1_786_000_000.5, accuracy: 0.001)
@@ -886,4 +889,93 @@ final class OmiActivityFeedTests: XCTestCase {
             queries[source]
         }
     }
+}
+
+// MARK: - The first page of memories is a different backend branch
+
+extension OmiActivityFeedTests {
+
+    /// `offset == 0` and `offset > 0` are two implementations behind one endpoint, and only one of
+    /// them currently works for real accounts.
+    ///
+    /// `GET /v3/memories` sends a zero offset to a Firestore *keyset* scan whose failures surface as
+    /// `503 Canonical memory unavailable`; a non-zero offset loads the set and slices it in Python,
+    /// touching no keyset query at all. Observed live on this account, four seconds apart: the
+    /// shipping Omi app's `offset: 0` refresh 503'd while its `offset > 0` pages returned 100 rows
+    /// each. A client that only ever asks for the first page therefore gets **nothing**, which is
+    /// exactly where this surface was — every memory or none.
+    func testAnUnavailableFirstPageIsAskedAgainFromTheSecondRow() async throws {
+        let asked = AskedQueries()
+        let rows = try Self.decode([WireMemory].self, Self.memoriesJSON)
+        let feed = OmiActivityFeed(
+            isAirgapped: { false },
+            isSignedIn: { true },
+            fetchConversations: { _ in [] },
+            fetchMemories: { query in
+                await asked.record(query)
+                guard query["offset"] != "0" else { throw OmiAPIError.http(503, "Canonical memory unavailable") }
+                return rows
+            },
+            fetchTasks: { _ in Self.emptyPage },
+            now: { Self.placement })
+
+        let result = await feed.read(since: nil, until: nil, limit: 50)
+
+        XCTAssertFalse(result.memories.isEmpty, "a 503 on the first page must not empty the column")
+        XCTAssertTrue(result.reachable)
+        let offsets = await asked.offsets
+        XCTAssertEqual(offsets, ["0", "1"], "asked for the first page, then stepped one row past it")
+    }
+
+    /// One retry, not a ladder. The second refusal is the account's answer, and a surface that
+    /// answered a 503 by walking the offset forward would spend a request per row.
+    func testASecondRefusalIsNotWalkedFurtherForward() async throws {
+        let asked = AskedQueries()
+        let feed = OmiActivityFeed(
+            isAirgapped: { false },
+            isSignedIn: { true },
+            fetchConversations: { _ in try Self.decode([WireConversation].self, Self.conversationsJSON) },
+            fetchMemories: { query in
+                await asked.record(query)
+                throw OmiAPIError.http(503, "Canonical memory unavailable")
+            },
+            fetchTasks: { _ in Self.emptyPage },
+            now: { Self.placement })
+
+        let result = await feed.read(since: nil, until: nil, limit: 50)
+
+        let offsets = await asked.offsets
+        XCTAssertEqual(offsets, ["0", "1"], "exactly two attempts, ever")
+        XCTAssertTrue(result.memories.isEmpty)
+        // Conversations answered, so the feed still carries what it has.
+        XCTAssertTrue(result.reachable)
+    }
+
+    /// Anything that is *not* a 503 is not the branch split, so stepping the offset would spend a
+    /// request to be told the same thing.
+    func testAFailureThatIsNotAFirstPageOutageIsNotRetried() async throws {
+        let asked = AskedQueries()
+        let feed = OmiActivityFeed(
+            isAirgapped: { false },
+            isSignedIn: { true },
+            fetchConversations: { _ in [] },
+            fetchMemories: { query in
+                await asked.record(query)
+                throw OmiAPIError.http(500, "")
+            },
+            fetchTasks: { _ in Self.emptyPage },
+            now: { Self.placement })
+
+        _ = await feed.read(since: nil, until: nil, limit: 50)
+
+        let offsets = await asked.offsets
+        XCTAssertEqual(offsets, ["0"], "a 500 is asked once and reported")
+    }
+}
+
+/// The queries a fetcher was actually handed, in order.
+private actor AskedQueries {
+    private(set) var queries: [[String: String]] = []
+    func record(_ query: [String: String]) { queries.append(query) }
+    var offsets: [String] { queries.map { $0["offset"] ?? "absent" } }
 }

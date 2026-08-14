@@ -315,3 +315,72 @@ final class ActivityAccountLocalNoteTests: XCTestCase {
         XCTAssertEqual(ActivityCount.scope(accountUnreachable: nil), ActivityCount.scope)
     }
 }
+
+// MARK: - A page that had to skip its own first row
+
+extension ActivityLocalMemoriesTests {
+
+    /// The `/v3/memories` first page is currently unservable for real accounts, so a 503 there is
+    /// answered by re-asking from `offset: 1`. The page that comes back is complete *except at the
+    /// head* — and the no-resurrection rule, which is right for a whole page, is wrong for exactly
+    /// the rows above it: they are missing because they were never asked for, not because they were
+    /// deleted somewhere else.
+    func testASyncedRowAboveATruncatedPageIsRestored() {
+        let account = [
+            ActivityAccountMemory(id: "b", content: "second newest", at: 200),
+            ActivityAccountMemory(id: "c", content: "older", at: 100),
+        ]
+        let local = [
+            ActivityAccountMemory(id: "a", content: "the newest, never returned", at: 300),
+            ActivityAccountMemory(id: "b", content: "second newest", at: 200),
+            ActivityAccountMemory(id: "gone", content: "deleted on the phone", at: 150),
+        ]
+
+        let merged = ActivityLocalMemories.merge(
+            account: account, local: local, accountAnswered: true, beginsPastHead: true)
+
+        XCTAssertEqual(
+            Set(merged.map(\.id)), ["a", "b", "c"],
+            "the row above the head comes back; a row deleted inside the page's range does not")
+    }
+
+    /// The bound is the whole point. Without it, "the page is incomplete" would readmit every
+    /// deletion the account has ever made.
+    func testATruncatedPageStillRefusesADeletionInsideItsRange() {
+        let account = [ActivityAccountMemory(id: "b", content: "newest returned", at: 200)]
+        let local = [
+            ActivityAccountMemory(id: "b", content: "newest returned", at: 200),
+            ActivityAccountMemory(id: "gone", content: "deleted on the phone", at: 199),
+        ]
+
+        let merged = ActivityLocalMemories.merge(
+            account: account, local: local, accountAnswered: true, beginsPastHead: true)
+
+        XCTAssertEqual(merged.map(\.id), ["b"], "199 is inside the page, so its absence is meaningful")
+    }
+
+    /// An ordinary complete page is unchanged: a synced row the account did not return stays gone.
+    func testACompletePageIsUnaffectedByTheHeadRule() {
+        let account = [ActivityAccountMemory(id: "b", content: "kept", at: 200)]
+        let local = [
+            ActivityAccountMemory(id: "a", content: "deleted on the phone", at: 300),
+            ActivityAccountMemory(id: "b", content: "kept", at: 200),
+        ]
+
+        let merged = ActivityLocalMemories.merge(
+            account: account, local: local, accountAnswered: true, beginsPastHead: false)
+
+        XCTAssertEqual(merged.map(\.id), ["b"], "no truncation, so absence means deleted")
+    }
+
+    /// A truncated page that came back empty has no head to be past and no range to be inside, so
+    /// every synced local row is above it.
+    func testAnEmptyTruncatedPageRestoresEverythingLocal() {
+        let local = [ActivityAccountMemory(id: "a", content: "kept", at: 300)]
+
+        let merged = ActivityLocalMemories.merge(
+            account: [], local: local, accountAnswered: true, beginsPastHead: true)
+
+        XCTAssertEqual(merged.map(\.id), ["a"])
+    }
+}

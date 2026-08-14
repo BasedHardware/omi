@@ -124,6 +124,16 @@ struct ActivityAccountFeed: Sendable, Equatable {
     /// not synced yet, so a perfectly healthy read still merges some local rows in. The state the
     /// note is about is the other one — in here and *not* in `answered`.
     let locallySourced: Set<ActivityAccountSource>
+    /// True when the memory page had to start *past* its newest row to be served at all.
+    ///
+    /// `GET /v3/memories` at `offset: 0` runs a Firestore keyset scan that is currently failing for
+    /// real accounts, while any non-zero offset takes a different implementation that works — so a
+    /// first page that 503s is re-asked from the second row. The page that comes back is then
+    /// complete except at the head, and the difference matters exactly once: `ActivityLocalMemories`
+    /// treats a synced row the account did not return as *deleted elsewhere* and refuses to
+    /// resurrect it, which is right for a whole page and wrong for a page missing its first row by
+    /// construction. This is the flag that tells the two apart.
+    let memoriesBeginPastHead: Bool
 
     /// **The initialiser a real read uses.** `reachable` is not a parameter — see the note above.
     init(
@@ -131,7 +141,8 @@ struct ActivityAccountFeed: Sendable, Equatable {
         memories: [ActivityAccountMemory] = [],
         tasks: [ActivityAccountTask] = [],
         answered: Set<ActivityAccountSource>,
-        locallySourced: Set<ActivityAccountSource> = []
+        locallySourced: Set<ActivityAccountSource> = [],
+        memoriesBeginPastHead: Bool = false
     ) {
         self.conversations = conversations
         self.memories = memories
@@ -139,6 +150,7 @@ struct ActivityAccountFeed: Sendable, Equatable {
         self.reachable = !answered.isEmpty
         self.answered = answered
         self.locallySourced = locallySourced
+        self.memoriesBeginPastHead = memoriesBeginPastHead
     }
 
     /// The initialiser every preview, fake and composition test uses, where the interesting axis is

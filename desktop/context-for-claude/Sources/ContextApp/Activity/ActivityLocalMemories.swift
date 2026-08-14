@@ -138,7 +138,9 @@ struct ActivityLocalMemories: ActivityAccountReading, ActivityAccountDiagnosing 
         guard !rows.isEmpty else { return account }
 
         let answeredMemories = account.answered.contains(.memories)
-        let merged = Self.merge(account: account.memories, local: rows, accountAnswered: answeredMemories)
+        let merged = Self.merge(
+            account: account.memories, local: rows, accountAnswered: answeredMemories,
+            beginsPastHead: account.memoriesBeginPastHead)
         guard merged.count > account.memories.count else { return account }
 
         // Counts only. The content of a memory is the user's own words and never reaches a log line.
@@ -172,16 +174,33 @@ struct ActivityLocalMemories: ActivityAccountReading, ActivityAccountDiagnosing 
     ///
     ///   **When it did not answer, every local row is added**, because there is no answer for an
     ///   absence to be meaningful against.
+    ///
+    /// - Parameter beginsPastHead: whether the account's page had to start past its own newest row.
+    ///
+    ///   The `/v3/memories` first page is currently unservable for real accounts, so a 503 there is
+    ///   answered by re-asking from `offset: 1` — see `OmiActivityFeed.attemptMemories`. That page is
+    ///   complete *except at the head*, which breaks the reasoning above for exactly the rows above
+    ///   it: they are absent because they were never asked for, not because they were deleted. So a
+    ///   synced local row newer than everything the account returned is added back, and a synced row
+    ///   inside the returned range is still refused. The bound is what keeps this narrow — without
+    ///   it, "the page is incomplete" would readmit every deletion the account has ever made.
     static func merge(
         account: [ActivityAccountMemory],
         local: [ActivityAccountMemory],
-        accountAnswered: Bool
+        accountAnswered: Bool,
+        beginsPastHead: Bool = false
     ) -> [ActivityAccountMemory] {
         let known = Set(account.map(\.id))
+        // Nil when the account returned nothing at all, in which case there is no head to be past
+        // and no range for a row to be inside — every synced row is above an empty page.
+        let newestReturned = account.map(\.at).max()
         let additions = local.filter { row in
             guard !known.contains(row.id) else { return false }
             guard accountAnswered else { return true }
-            return isUnsynced(row.id)
+            if isUnsynced(row.id) { return true }
+            guard beginsPastHead else { return false }
+            guard let newestReturned else { return true }
+            return row.at > newestReturned
         }
         return account + additions
     }
