@@ -1,9 +1,10 @@
 {
-  "eligible_serving": 47,
+  "eligible_serving": 70,
   "raw_unregistered": [
     "0c75b579eb9f7f04",
     "0e08215b6ef5f3a6",
     "103b55b9f0482db6",
+    "1b6cbbd7fe17cf16",
     "22ddf94e28ce6efc",
     "24a4e24a308881dc",
     "2a846099f82aa044",
@@ -35,7 +36,6 @@
     "d2226c85c73787cd",
     "d2bd1198af3f25a1",
     "d3f5a567b8a2363d",
-    "dac5e11c45953ac1",
     "db0f0af923c67e1a",
     "db91448693d164b7",
     "dba3e56194d22a9f",
@@ -45,7 +45,7 @@
     "fbf6a1e1fdc6920e",
     "fcb4a9e8a36ebd5e"
   ],
-  "registered_serving": 1,
+  "registered_serving": 24,
   "schema_version": 1,
   "unsupported": [
     "4a1b611f6580fc78",
