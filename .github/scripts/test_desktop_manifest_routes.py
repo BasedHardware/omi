@@ -61,6 +61,19 @@ class DesktopManifestRoutesTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.manifest = load_manifest(MANIFEST_PATH)
 
+    def test_bare_literal_trigger_matches_only_the_root_file(self) -> None:
+        # The manifest validator requires a bare literal trigger to exist as
+        # that exact path, so the matcher must not right-anchor it onto every
+        # same-named file in the tree: a bare "package.json" trigger once put
+        # the backend Firestore admission check on a core/packages push.
+        self.assertTrue(trigger_matches("package.json", "package.json"))
+        self.assertFalse(
+            trigger_matches("package.json", "core/packages/surfaces/package.json")
+        )
+        self.assertTrue(
+            trigger_matches("**/package.json", "core/packages/surfaces/package.json")
+        )
+
     def test_every_macos_only_check_has_a_real_resolver_fixture(self) -> None:
         macos_checks = [check for check in self.manifest.checks if set(check.platforms) == {"macos"}]
         self.assertGreater(len(macos_checks), 0)
