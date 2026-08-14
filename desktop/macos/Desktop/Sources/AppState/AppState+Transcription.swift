@@ -840,9 +840,14 @@ extension AppState {
       title: "Omi Needs Microphone Access",
       message:
         "macOS is not letting Omi hear the microphone. Enable Omi under "
-        + "System Settings → Privacy & Security → Microphone, then start recording again.")
-    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-      NSWorkspace.shared.open(url)
+        + "System Settings → Privacy & Security → Microphone, then start recording again."
+    ) {
+      // Only send the user to the exact pane once they have seen the alert, so
+      // the non-blocking sheet stays visible instead of being buried under
+      // System Settings.
+      if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+        NSWorkspace.shared.open(url)
+      }
     }
   }
 

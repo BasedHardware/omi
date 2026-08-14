@@ -277,7 +277,14 @@ struct FinishedRecordingEnvelope: Equatable, Sendable {
 
 @MainActor
 protocol DesktopAlertPresenting: AnyObject {
-  func present(title: String, message: String)
+  func present(title: String, message: String, completion: (@MainActor () -> Void)?)
+}
+
+@MainActor
+extension DesktopAlertPresenting {
+  func present(title: String, message: String) {
+    present(title: title, message: message, completion: nil)
+  }
 }
 
 @MainActor
