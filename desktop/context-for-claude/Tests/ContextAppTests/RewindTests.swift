@@ -533,7 +533,18 @@ final class RewindTests: XCTestCase {
         // And an app with no icon anywhere on this machine still gets a badge — the monogram disc, in
         // its own segment colour. Without this, "the icon drew" and "the fallback drew" are the same
         // observation.
-        let unknown = "no-such-app-\(UUID().uuidString)"
+        //
+        // **The name is fixed, and a random one is what made this test flaky.** `RewindPalette`
+        // derives hue and brightness from the string, so a fresh `UUID()` each run drew the disc in a
+        // different colour every time — while `badgeAboveGlyph` samples three points inside a disc
+        // spanning y 13–31, close enough that a constant sliver of antialiased rim blends the read
+        // toward the ground beneath it. The *absolute* error that blend produces scales with how far
+        // the chosen colour sits from that ground, so the tolerance below was a lottery over the
+        // palette rather than a statement about the drawing: observed passing 38 runs and then
+        // failing at 0.148 against 0.116. A fixed name makes the blend a constant, so this assertion
+        // now either holds or does not, reproducibly — which is the only thing a guard is worth.
+        // The name still matches no real app, which is the property the case is about.
+        let unknown = "no-such-app-orientation-fixture"
         let fallback = try Self.render(Self.trackShowing(unknown))
         let disc = try Self.colour(fallback, atPoint: Self.badgeAboveGlyph)
         let expected = try XCTUnwrap(RewindPalette.nsColor(forApp: unknown).usingColorSpace(.sRGB))

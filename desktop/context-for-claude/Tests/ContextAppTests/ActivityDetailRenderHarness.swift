@@ -48,45 +48,95 @@ final class ActivityRenderHarnessDetail: XCTestCase {
 
         NSApplication.shared.setActivationPolicy(.accessory)
 
-        let cases: [(name: String, request: ActivityDetailRequest, state: ActivityDetailModel.State)] = [
-            // The reference screen: emoji, title, timing, category chip, the account's summary, and
-            // the transcript with its speakers. Nobody's voice is claimed as the reader's, because
-            // the account's own response model carries no `is_user`.
-            ("20-conversation-account", Fixtures.accountConversation, .read(Fixtures.accountBody)),
-            // A session only this Mac heard: no emoji, no summary, no category — and the one source
-            // that really does know which voice was yours, which is the only thing that puts a line
-            // on the trailing edge.
-            ("21-conversation-local", Fixtures.localConversation, .read(Fixtures.localBody)),
-            // The read that has not come back yet. The header is already whole — this is what makes
-            // a slow account cost the body and nothing else.
-            ("22-conversation-reading", Fixtures.accountConversation, .reading),
-            // The state the account is actually in a good deal of the time. A sentence somebody can
-            // act on, and a way to ask again.
-            (
-                "23-conversation-rate-limited", Fixtures.accountConversation,
-                .unread(ActivityDetailCopy.rateLimited)
-            ),
-            // The other failures worth looking at: one the user fixes, one that is simply gone.
-            (
-                "24-conversation-signed-out", Fixtures.accountConversation,
-                .unread(ActivityDetailCopy.signedOut)
-            ),
-            // Read, and genuinely empty. Not a failure, and it must not look like one.
-            (
-                "25-conversation-no-transcript", Fixtures.accountConversation,
-                .read(ActivityConversationBody(overview: Fixtures.overview, category: "work"))
-            ),
-            // A memory, with the conversation that was running at the time — and the caveat that
-            // keeps that from being a provenance claim.
-            ("26-memory", Fixtures.memory, .reading),
-            // …and one kept in a minute nothing else was happening in.
-            ("27-memory-alone", Fixtures.memoryAlone, .reading),
-            ("28-task-open", Fixtures.task, .reading),
-            ("29-task-done", Fixtures.taskDone, .reading),
-        ]
+        let cases:
+            [(
+                name: String, request: ActivityDetailRequest, state: ActivityDetailModel.State,
+                transcript: Bool, focused: Set<String>
+            )] = [
+                // **The screen the reference draws, and the one this harness exists to check.** A
+                // conversation opens on its *summary*: the account's overview, the metadata chips,
+                // what an app made of it, and the action items — with the lines behind the header's
+                // control rather than in front of everything else.
+                (
+                    "20-conversation-summary", Fixtures.accountConversation,
+                    .read(Fixtures.accountBody), false, []
+                ),
+                // …and the other pane, which is one press away. Its header is the reference's drawer
+                // header: the word, the count, the way back and the one control from the reference's
+                // toolbar this app can honour.
+                (
+                    "21-conversation-transcript", Fixtures.accountConversation,
+                    .read(Fixtures.accountBody), true, []
+                ),
+                // …and the pane as an action item's `Source` control leaves it: the same transcript,
+                // scrolled to the line the account says the commitment came from and with that line
+                // marked. It is the whole reason a summary-first screen is navigable rather than
+                // merely shorter, and it is reachable only by a press — hence the harness knob.
+                (
+                    "21b-conversation-transcript-focused", Fixtures.accountConversation,
+                    .read(Fixtures.accountBody), true, Fixtures.focusedSegmentIDs
+                ),
+                // A session only this Mac heard: no emoji, no summary, no category, and no second
+                // pane — its lines *are* the conversation, over a sentence saying why. It is also
+                // the one source that really does know which voice was yours, which is the only
+                // thing that puts a line on the trailing edge.
+                (
+                    "22-conversation-local", Fixtures.localConversation, .read(Fixtures.localBody),
+                    false, []
+                ),
+                // The read that has not come back yet. The header is already whole — this is what
+                // makes a slow account cost the body and nothing else.
+                ("23-conversation-reading", Fixtures.accountConversation, .reading, false, []),
+                // The state the account is actually in a good deal of the time. A sentence somebody
+                // can act on, and a way to ask again.
+                (
+                    "24-conversation-rate-limited", Fixtures.accountConversation,
+                    .unread(ActivityDetailCopy.rateLimited), false, []
+                ),
+                // The other failure worth looking at: one the user fixes.
+                (
+                    "25-conversation-signed-out", Fixtures.accountConversation,
+                    .unread(ActivityDetailCopy.signedOut), false, []
+                ),
+                // Read, and genuinely empty. Not a failure, and it must not look like one.
+                (
+                    "26-conversation-no-transcript", Fixtures.accountConversation,
+                    .read(
+                        ActivityConversationBody(
+                            overview: Fixtures.overview, category: "work", source: "Desktop")),
+                    true, []
+                ),
+                // The account finished and made nothing of it. Three chips and a sentence saying so
+                // — the reference's page is never this bare because of sections we dropped.
+                (
+                    "27-conversation-no-summary", Fixtures.accountConversation,
+                    .read(ActivityConversationBody(source: "Desktop", lines: Fixtures.accountBody.lines)),
+                    false, []
+                ),
+                // The account is still working on it, which is why the page is thin.
+                (
+                    "28-conversation-processing", Fixtures.accountConversation,
+                    .read(ActivityConversationBody(source: "Desktop", status: .processing)), false, []
+                ),
+                // …and the account gave up on it, which is a different sentence with no wait in it.
+                (
+                    "29-conversation-failed", Fixtures.accountConversation,
+                    .read(
+                        ActivityConversationBody(
+                            source: "Desktop", status: .failed, lines: Fixtures.accountBody.lines)),
+                    false, []
+                ),
+                // A memory, with the conversation that was running at the time — and the caveat that
+                // keeps that from being a provenance claim.
+                ("30-memory", Fixtures.memory, .reading, false, []),
+                // …and one kept in a minute nothing else was happening in.
+                ("31-memory-alone", Fixtures.memoryAlone, .reading, false, []),
+                ("32-task-open", Fixtures.task, .reading, false, []),
+                ("33-task-done", Fixtures.taskDone, .reading, false, []),
+            ]
 
         var written: [String] = []
-        for (name, request, state) in cases {
+        for (name, request, state, transcript, focused) in cases {
             // Both system appearances, and **the pair is expected to be identical**: `InkGlass.pin`
             // holds this surface light on a Dark Mac, and the Dark pass is what proves the pin.
             for (appearance, suffix) in [
@@ -95,7 +145,8 @@ final class ActivityRenderHarnessDetail: XCTestCase {
                 written.append(
                     try render(
                         name: "\(name)-\(suffix)", request: request, state: state,
-                        appearance: appearance, in: directory))
+                        showsTranscript: transcript, focused: focused, appearance: appearance,
+                        in: directory))
             }
         }
 
@@ -111,6 +162,8 @@ final class ActivityRenderHarnessDetail: XCTestCase {
         name: String,
         request: ActivityDetailRequest,
         state: ActivityDetailModel.State,
+        showsTranscript: Bool,
+        focused: Set<String>,
         appearance: NSAppearance.Name,
         in directory: URL
     ) throws -> String {
@@ -167,7 +220,8 @@ final class ActivityRenderHarnessDetail: XCTestCase {
         let hosting = NSHostingView(
             rootView: SearchGlassPanel {
                 ActivityDetailView(
-                    request: request, model: ActivityDetailModel(state: state), onBack: {}
+                    request: request, model: ActivityDetailModel(state: state), onBack: {},
+                    showsTranscript: showsTranscript, focusedSegmentIDs: focused
                 )
                 .frame(
                     width: Self.surfaceWidth, height: Self.surfaceHeight, alignment: .topLeading)
@@ -248,14 +302,41 @@ extension ActivityRenderHarnessDetail {
 
         static let localConversation = ActivityDetailRequest.conversation(
             ActivityConversation(
-                id: ActivityConversation.localID(7), source: .local, title: "Zoom conversation",
+                // The only title a local session can have — see `ActivityConversation`. A fixture
+                // naming the app would draw a picture of a headline the app cannot produce.
+                id: ActivityConversation.localID(7), source: .local,
+                title: ActivityConversation.untitled,
                 startedAt: started.addingTimeInterval(2 * 3_600), duration: 6 * 60, segmentCount: 6))
 
-        /// A transcript long enough to run past the panel's fold, so the frame shows the scroll
+        /// The whole of what a read buys: the summary half the reference puts first, and a
+        /// transcript long enough to run past the panel's fold so the other pane shows the scroll
         /// rather than a page that happens to fit.
         static let accountBody = ActivityConversationBody(
             overview: overview,
             category: "work",
+            source: "Desktop",
+            actionItems: [
+                // One with the segments the account says it came from, so the frame shows `Source`…
+                ActivityActionItem(
+                    id: "a1", text: "Send the migration plan to Priya before Thursday",
+                    isCompleted: false, sourceSegmentIDs: ["s2"]),
+                // …and one without, which is the far commoner shape and says `Transcript` instead.
+                ActivityActionItem(
+                    id: "a2", text: "Write the rollback steps down", isCompleted: false,
+                    sourceSegmentIDs: []),
+                ActivityActionItem(
+                    id: "a3", text: "Book the room for the beta review", isCompleted: true,
+                    sourceSegmentIDs: []),
+            ],
+            appResults: [
+                ActivityAppResult(
+                    id: "r1",
+                    content:
+                        "Two decisions and one open question. The enterprise tier is held until the "
+                        + "beta ships, the migration plan goes out Thursday, and nobody has said who "
+                        + "owns the rename once the release is out — which is the thread most likely "
+                        + "to be dropped between now and then.")
+            ],
             lines: script.enumerated().map { index, line in
                 ActivityTranscriptLine(
                     id: "s\(index)", speaker: index.isMultiple(of: 2) ? "Priya" : "Marcus",
@@ -263,13 +344,20 @@ extension ActivityRenderHarnessDetail {
             })
 
         /// The local half: `Hit.kind` is exactly the claim "this one was you", so this is the only
-        /// body with a line on the trailing edge.
+        /// body with a line on the trailing edge — and the only field of the summary half a capture
+        /// database can honestly fill is where the lines were heard.
         static let localBody = ActivityConversationBody(
+            source: ActivityDetailCopy.localSourceLabel,
             lines: script.prefix(6).enumerated().map { index, line in
                 ActivityTranscriptLine(
                     id: "l\(index)", speaker: index.isMultiple(of: 2) ? "You" : "Someone else",
                     isYou: index.isMultiple(of: 2), text: line, offset: Double(index) * 17)
             })
+
+        /// The line the first action item above says it came from. The same id the transcript
+        /// fixture gives that line, so the mark lands on the sentence the commitment was made in
+        /// rather than on whichever line happened to be third.
+        static let focusedSegmentIDs: Set<String> = ["s2"]
 
         private static let script = [
             "Where did we land on the enterprise tier?",

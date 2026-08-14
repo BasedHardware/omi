@@ -1,3 +1,4 @@
+import Combine
 import ContextCore
 import XCTest
 
@@ -98,11 +99,13 @@ final class ActivityCompositionTests: XCTestCase {
 
     private func compose(
         sessions: [SessionSummary] = [],
+        uploads: [Int64: [String]] = [:],
         account: ActivityAccountFeed = .unreachable,
         screen: [Date: ActivityDayScreen] = [:]
     ) -> [ActivityDay] {
         ActivityComposer.compose(
-            sessions: sessions, account: account, screen: screen, calendar: Self.calendar)
+            sessions: sessions, uploads: uploads, account: account, screen: screen,
+            calendar: Self.calendar)
     }
 
     /// The id a local session takes in the merged stream, so the assertions below read as the rule
@@ -390,16 +393,53 @@ final class ActivityCompositionTests: XCTestCase {
             "a row with no counts still says when it happened")
 
         // An account conversation is a summary, not a recording: it has no spoken lines to count, so
-        // the clause is dropped rather than printed as "0 spoken lines".
+        // the clause is dropped rather than printed as "0 spoken lines". What it can state is what
+        // it produced — the shipping app's own clause set.
         let fromAccount = ActivityConversation(
             account: accountConversation(id: "a1", start: at(day: 10, hour: 14), minutes: 8.15))
         XCTAssertEqual(fromAccount.subtitle, "8m 9s")
+        XCTAssertEqual(
+            fromAccount.counted(memoryCount: 2, momentCount: 6).subtitle,
+            "8m 9s · 2 memories · 6 screen moments")
         XCTAssertEqual(fromAccount.title, "Team Refines Omi Update Video")
         XCTAssertEqual(fromAccount.emoji, "🎬")
-        XCTAssertNil(
-            ActivityConversation(session: session(id: 4, start: at(day: 10, hour: 9), minutes: 5))
-                .emoji,
-            "a local session has no emoji to show, and must not be given an invented one")
+    }
+
+    /// **A row is never given a title nobody wrote.** This surface used to build one out of the
+    /// capture session's app hint — "Arc conversation", "Warp conversation" — which named the window
+    /// the sound came through rather than what was said, disagreed with what the same conversation is
+    /// called everywhere else in Omi, and was indistinguishable from a real title. The shipping app's
+    /// two fallbacks are the whole vocabulary for an unnamed conversation, and they are the same two
+    /// on both halves of this stream.
+    func testAConversationNobodyTitledSaysSoRatherThanNamingTheApp() {
+        let local = ActivityConversation(
+            session: session(id: 1, start: at(day: 10, hour: 14), minutes: 5, app: "Arc"))
+        XCTAssertEqual(local.title, "Untitled conversation")
+        XCTAssertEqual(local.emoji, "💬")
+        XCTAssertTrue(
+            local.searchText.contains("arc"),
+            "the app the sound came through is still reachable by a typed query, just not a headline")
+
+        // The account's own untitled conversations land on exactly the same two strings.
+        let untitled = ActivityConversation(
+            account: accountConversation(
+                id: "a1", start: at(day: 10, hour: 14), minutes: 5, title: "  ", emoji: " "))
+        XCTAssertEqual(untitled.title, "Untitled conversation")
+        XCTAssertEqual(untitled.emoji, "💬")
+    }
+
+    /// **The overview is search material, not row copy.** It is a paragraph about what the
+    /// conversation was about; the row states what it *was*. The shipping app carries it into
+    /// `searchText` and nowhere else, and a typed query still has to reach it.
+    func testTheOverviewIsSearchableAndIsNotSaidOnTheRow() {
+        let conversation = ActivityConversation(
+            account: accountConversation(
+                id: "a1", start: at(day: 10, hour: 14), minutes: 8.15,
+                overview: "We agreed to hold the enterprise tier until the beta lands.")
+        ).counted(momentCount: 6)
+        XCTAssertTrue(conversation.searchText.contains("enterprise tier"))
+        XCTAssertFalse(conversation.subtitle.contains("enterprise"))
+        XCTAssertEqual(conversation.subtitle, "8m 9s · 6 screen moments")
     }
 
     func testPluralAgreesWithItsCountAndGroupsItsDigits() {
@@ -462,6 +502,34 @@ final class ActivityCompositionTests: XCTestCase {
         XCTAssertNil(ActivityHourRail.footer(conversationCount: 0), "no blank line for no answer")
     }
 
+    /// **The scope line has to fit the column it is drawn in**, and unshortened it does not:
+    /// `ActivityFormat.day` emits `EEEE d MMMM yyyy` outside the current year, whose widest form
+    /// overhangs the 154 pt rail by nearly 30 pt and wraps — orphaning "Wednesday 30" directly above
+    /// the bars, where a bare number-and-word line reads as another count.
+    ///
+    /// The weekday is the one word carrying nothing the date does not already say, so it is what
+    /// goes; everything that fits keeps it. Measured against the column rather than asserted from a
+    /// hand-picked date, which is how the overhang went unseen in the first place.
+    func testTheRailScopeDropsTheWeekdayOnlyWhenTheFullDayWillNotFit() {
+        XCTAssertEqual(
+            ActivityHourRail.headlineScope("Wednesday 30 September 2026"), "30 September 2026",
+            "the formatter's widest output, against a 154 pt column")
+        XCTAssertEqual(
+            ActivityHourRail.headlineScope("Tuesday 22 September 2026"), "22 September 2026")
+
+        XCTAssertEqual(ActivityHourRail.headlineScope("Today"), "Today")
+        XCTAssertEqual(ActivityHourRail.headlineScope("Yesterday"), "Yesterday")
+        XCTAssertEqual(
+            ActivityHourRail.headlineScope("Wednesday 6 August"), "Wednesday 6 August",
+            "fits, so it keeps its weekday")
+
+        XCTAssertEqual(
+            ActivityHourRail.headlineScope("Supercalifragilisticexpialidociously"),
+            "Supercalifragilisticexpialidociously",
+            "a single word there is no weekday to drop from keeps its text rather than losing the day")
+        XCTAssertNil(ActivityHourRail.headlineScope("   "), "no day yet is no scope to claim")
+    }
+
     // MARK: - The kind axis
 
     /// `everything` is the absence of a filter, not a third kind of row. A row that held it would be
@@ -510,12 +578,90 @@ final class ActivityCompositionTests: XCTestCase {
             case .conversation(let fromAccount) = rows[1].content
         else { return XCTFail("both rows are conversations") }
         XCTAssertEqual(survivor.source, .local)
-        XCTAssertEqual(survivor.title, "Slack conversation", "no title means the app, not a guess")
+        XCTAssertEqual(survivor.title, "Untitled conversation", "no title means no title")
         XCTAssertEqual(fromAccount.source, .account)
         XCTAssertEqual(fromAccount.title, "Team Refines Omi Update Video")
         XCTAssertEqual(
             try! XCTUnwrap(days.first).conversationCount, 2,
             "the day counts the conversations it kept, not the records it read")
+    }
+
+    /// **The uploader already knows which account conversation a session became, and that beats the
+    /// clock.** `ConversationUploader` records the ids the backend handed back, so a session and its
+    /// summary can be recognised as one conversation even when their windows do not overlap — which
+    /// is routine, because the account times a conversation from the recording it received and this
+    /// Mac from the first line it heard. Without the link the two clocks disagreeing printed the day
+    /// as a pair: the real title, and an untitled duplicate of the same conversation beside it.
+    func testAnUploadedSessionMergesIntoItsAccountConversationEvenWhenTheClocksDisagree() {
+        let days = compose(
+            sessions: [session(id: 1, start: at(day: 10, hour: 14), minutes: 28)],
+            uploads: [1: ["a1"]],
+            account: ActivityAccountFeed(
+                conversations: [
+                    // Two hours off: the same conversation, timed from the upload rather than from
+                    // the first line heard. Nothing here overlaps.
+                    accountConversation(id: "a1", start: at(day: 10, hour: 16), minutes: 30)
+                ]))
+
+        let rows = try! XCTUnwrap(days.first).rows
+        XCTAssertEqual(rows.map(\.id), ["conv:a1"], "one conversation, one row")
+        guard case .conversation(let only) = rows[0].content else {
+            return XCTFail("the surviving row is the account's telling")
+        }
+        XCTAssertEqual(only.title, "Team Refines Omi Update Video")
+        XCTAssertEqual(only.emoji, "🎬")
+    }
+
+    /// A session split across several uploads became several account conversations, and **any one of
+    /// them being on a loaded page accounts for the session** — the parts are that conversation, so
+    /// drawing the local row beside them would be drawing it a third time.
+    func testASessionSplitAcrossSeveralUploadsIsAccountedForByAnyOfItsParts() {
+        let days = compose(
+            sessions: [session(id: 1, start: at(day: 10, hour: 9), minutes: 120)],
+            uploads: [1: ["a1", "a2"]],
+            account: ActivityAccountFeed(
+                conversations: [
+                    accountConversation(id: "a2", start: at(day: 10, hour: 20), minutes: 30)
+                ]))
+
+        XCTAssertEqual(try! XCTUnwrap(days.first).rows.map(\.id), ["conv:a2"])
+    }
+
+    /// **A session whose account counterpart has not been paged in yet keeps its row.** Same rule as
+    /// a memory naming a conversation the stream is not holding: paging is a matter of timing, and a
+    /// row that vanishes until the page lands is a day that under-reports itself. It merges the
+    /// moment the account answers.
+    func testAnUploadedSessionWhoseConversationIsNotLoadedKeepsItsRow() {
+        let days = compose(
+            sessions: [session(id: 1, start: at(day: 10, hour: 14), minutes: 28)],
+            uploads: [1: ["a1"]],
+            account: ActivityAccountFeed(conversations: [], reachable: true))
+
+        let rows = try! XCTUnwrap(days.first).rows
+        XCTAssertEqual(rows.map(\.id), [localRow(1)])
+        guard case .conversation(let local) = rows[0].content else {
+            return XCTFail("the surviving row is this Mac's telling")
+        }
+        XCTAssertEqual(local.source, .local)
+        XCTAssertEqual(local.title, "Untitled conversation")
+        XCTAssertEqual(local.subtitle, "28m 0s · 4 spoken lines")
+    }
+
+    /// **The link is the stronger rule, and it overrules an accidental overlap.** Two conversations
+    /// can share a stretch of the day — a call while a meeting recording is still running — and the
+    /// clock alone cannot tell that apart from one conversation described twice. The queue can: this
+    /// session became `a2`, so `a1` sitting on top of it is somebody else's row.
+    func testAnUploadedSessionIsNotDroppedForAConversationItDidNotBecome() {
+        let start = at(day: 10, hour: 14)
+        let days = compose(
+            sessions: [session(id: 1, start: start.addingTimeInterval(60), minutes: 28)],
+            uploads: [1: ["a2"]],
+            account: ActivityAccountFeed(
+                conversations: [accountConversation(id: "a1", start: start, minutes: 30)]))
+
+        XCTAssertEqual(
+            try! XCTUnwrap(days.first).rows.map(\.id), [localRow(1), "conv:a1"],
+            "overlapping the wrong conversation is not being that conversation")
     }
 
     /// Memories and tasks are their own rows, grouped by the run they came out of, and a memory the
@@ -1004,5 +1150,64 @@ final class ActivityCompositionTests: XCTestCase {
                 coverage: nil, since: nil, until: nil, calendar: Self.calendar
             ).isEmpty,
             "a machine that has captured nothing has no days to walk")
+    }
+}
+
+// MARK: - Signing in is a repair the ladder cannot make
+
+extension ActivityCompositionTests {
+
+    /// A panel that read the account before the session landed must ask again when it lands.
+    ///
+    /// **This is the one unreachable state the retry ladder is right to refuse.** `healsOnItsOwn`
+    /// classifies `.signedOut` as unhealable, correctly — waiting does not sign anybody in — so
+    /// without an event to hang the re-read on, the first answer is the only answer. On a real
+    /// launch that answer arrived 40 ms too early: the panel opens with the app, `OmiAuth.restore()`
+    /// reads the Keychain off the main actor, and the account was asked and answered "signed out"
+    /// before the restored session existed. The user then sat in front of a signed-in app being told
+    /// to sign in.
+    @MainActor
+    func testSigningInMakesThePanelAskTheAccountAgain() async {
+        let signIns = CurrentValueSubject<Bool, Never>(false)
+        let reads = ReadCounter()
+        let store = ActivityStore(
+            store: { nil },
+            account: CountingAccount(reads: reads),
+            signIns: signIns.eraseToAnyPublisher())
+
+        store.start()
+        await Self.settle()
+        let beforeSignIn = await reads.count
+        XCTAssertEqual(beforeSignIn, 1, "the panel asks once when it opens")
+
+        signIns.send(true)
+        await Self.settle()
+        let afterSignIn = await reads.count
+        XCTAssertEqual(afterSignIn, 2, "and asks again the moment a session appears")
+
+        // Signing out is not a repair and must not spend a read: the copy already on screen is the
+        // right one, and asking again could only confirm it.
+        signIns.send(false)
+        await Self.settle()
+        let afterSignOut = await reads.count
+        XCTAssertEqual(afterSignOut, 2, "signing out asks nothing")
+    }
+
+    private static func settle() async {
+        for _ in 0..<20 { await Task.yield() }
+        try? await Task.sleep(for: .milliseconds(50))
+    }
+}
+
+private actor ReadCounter {
+    private(set) var count = 0
+    func bump() { count += 1 }
+}
+
+private struct CountingAccount: ActivityAccountReading {
+    let reads: ReadCounter
+    func read(since: Double?, until: Double?, limit: Int) async -> ActivityAccountFeed {
+        await reads.bump()
+        return .unreachable
     }
 }

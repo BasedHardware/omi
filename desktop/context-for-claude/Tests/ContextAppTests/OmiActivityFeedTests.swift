@@ -328,7 +328,15 @@ final class OmiActivityFeedTests: XCTestCase {
         XCTAssertEqual(full.finishedAt, Self.utc(2026, 8, 13, 9, 42, 10), accuracy: 0.001)
 
         let blank = result.conversations[1]
-        XCTAssertEqual(blank.title, "Untitled conversation", "a blank title must never render an empty row")
+        // Empty, not the fallback. Both fallbacks live on `ActivityConversation`, applied once for
+        // the account's conversations and this Mac's alike; substituting here would make the model's
+        // own unreachable for every account row and let two conversations in the same state — one
+        // heard here, one the account sent — wear different words. The row is still never blank:
+        // `ActivityConversation.untitled` is what it renders.
+        XCTAssertEqual(blank.title, "", "a blank title is passed through for the model to resolve")
+        XCTAssertEqual(
+            ActivityConversation.untitled, "Untitled conversation",
+            "and the model's fallback is the reference's own")
         XCTAssertNil(blank.overview, "an empty overview is nothing to show, not an empty line")
         XCTAssertEqual(blank.startedAt, Self.placement, "an undated conversation sits at the window edge")
         XCTAssertEqual(blank.finishedAt, Self.placement)
@@ -352,11 +360,18 @@ final class OmiActivityFeedTests: XCTestCase {
             .read(since: nil, until: nil, limit: 50)
 
         XCTAssertEqual(result.conversations[0].emoji, "🎙️", "an emoji the account did send must survive")
+        // **Empty, not a glyph.** The seam passes "the account chose none" through as empty and
+        // `ActivityConversation` substitutes `💬` for both halves of the spine in one place — the
+        // arrangement the reference uses. A fallback applied here would make the model's own
+        // unreachable for every account row, and would let a local conversation with nothing to show
+        // wear a different glyph from an account one in the same state.
         XCTAssertEqual(
-            result.conversations[1].emoji, WireConversation.defaultEmoji,
-            "an empty string is the backend's \"no emoji\", not an emoji")
-        XCTAssertEqual(result.conversations[2].emoji, WireConversation.defaultEmoji, "null falls back too")
-        XCTAssertEqual(WireConversation.defaultEmoji, "🧠", "the same glyph the rest of Omi defaults to")
+            result.conversations[1].emoji, "",
+            "an empty string is the backend's \"no emoji\", and stays empty for the model to resolve")
+        XCTAssertEqual(result.conversations[2].emoji, "", "null is passed through the same way")
+        XCTAssertEqual(
+            ActivityConversation.defaultEmoji, "💬",
+            "and the model's fallback is the reference's own client-side default")
     }
 
     // MARK: - Memories

@@ -6,8 +6,9 @@
 //  hairline between them — because that gutter is what makes the list a clock rather than a stack of
 //  cards.
 //
-//  **Weight, not colour, says what is important.** The conversation is the only row with a filled
-//  card; a memory is a sentence with a dash beside it; a strip of frames is a strip of frames. The
+//  **Weight, not colour, says what is important.** The conversation is the only row the pointer
+//  draws a card around — at rest it is a tile and two lines of type, like everything else here. A
+//  memory is a sentence with a dash beside it; a strip of frames is a strip of frames. The
 //  colours in this file are `RewindPalette`'s per-app hue behind a tile with no picture — the same
 //  colour the timeline already draws that app in — and `Ink.listeningGreen` on a finished task,
 //  which is the app's one "this is done" hue. Nothing else is tinted to mean anything.
@@ -71,15 +72,26 @@ enum ActivityMetrics {
     static let itemGlyphGap: CGFloat = 9
     static let memoryDashWidth: CGFloat = 6
     static let memoryDashHeight: CGFloat = 1
-    /// How far the dash drops to sit on the optical centre of the line beside it. Derived from
-    /// `prose`'s own metrics rather than nudged by hand, so it stays on the line if the role is
-    /// retuned. The task's glyph takes none of it: a 13 pt symbol is already centred in its own box.
-    static var proseGlyphInset: CGFloat { InkType.prose.naturalLineHeight / 2 }
+    /// How far the dash drops to sit on the optical centre of **whichever line it is beside**.
+    ///
+    /// Derived from that line's own role metrics rather than nudged by hand, so a memory that leads
+    /// with a quiet label and one that opens straight into its sentence both line up — and so the
+    /// dash stays on the line if either role is ever retuned. The task's glyph takes none of this: a
+    /// 13 pt symbol is already centred in its own box.
+    static func memoryDashInset(hasLabel: Bool) -> CGFloat {
+        (hasLabel ? InkType.statusLabel : InkType.prose).naturalLineHeight / 2
+    }
     /// The task's tick. A glyph and not a control: `ActivityAccountReading` reads, so there is
     /// nothing here for a press to change.
     static let taskGlyphSize: CGFloat = 13
-    /// Between a memory's or a task's sentence and the time under it, when a soloed row has to say
-    /// its own.
+    /// Between the runs inside one inline item: a memory's label, its sentence, and the time under
+    /// either when a soloed row has to say its own.
+    ///
+    /// Two values a point apart, and they are not one value rounded twice. A memory sets a small
+    /// label directly over the sentence it introduces and the two have to read as one utterance, so
+    /// the gap is the tightest that still separates them; a task has no label, so its only gap is
+    /// between a sentence and a time — two different things, which want the extra point.
+    static let memoryLineGap: CGFloat = 2
     static let itemTimestampGap: CGFloat = 3
     /// How far a memory's or a task's hover fill reaches past the sentence it sits behind.
     ///
@@ -98,9 +110,6 @@ enum ActivityMetrics {
     static let conversationTileSize: CGFloat = 40
     /// Between the tile and the type beside it.
     static let conversationTileGap: CGFloat = 13
-    /// How many lines of the account's own overview a card will carry before it truncates. Two: it
-    /// is a sentence about the conversation, not the conversation.
-    static let overviewLineLimit = 2
 
     /// Where the clock sits inside a row, measured from the top of that row's content, so the
     /// timestamp lands on the first line of whatever the row turned out to be.
@@ -112,9 +121,11 @@ enum ActivityMetrics {
     static let cardGutterInset: CGFloat = 16
     static let inlineGutterInset: CGFloat = 3
 
-    /// The corner a row's card is cut to — the same radius the onboarding permission row uses, so
-    /// the two surfaces read as one product.
-    static let cardCornerRadius: CGFloat = 13
+    /// The corner a row's card is cut to — the panel's own radius rather than the tighter one an
+    /// onboarding permission row wears. A conversation row is the widest thing in the lane and it is
+    /// only drawn at all under the pointer, so it is cut like the glass it appears on rather than
+    /// like a control.
+    static let cardCornerRadius: CGFloat = InkGlass.cornerRadius
     /// The day header's own, a little tighter: it is a band across the lane rather than a card in it.
     static let dayHeaderCornerRadius: CGFloat = 10
 
@@ -234,14 +245,18 @@ struct ActivityRowView: View {
         case .conversation(let summary):
             ActivityConversationRow(summary: summary, onOpen: { onOpen(.conversation(summary)) })
         case .memories(let memories):
-            // A soloed row has nothing above it owning the minute, and a run of several needs to say
-            // which of them was when — one memory in a row is already timed by the gutter beside it.
+            // **Only a soloed row states its own minutes**, and `showsIndent` is what says which
+            // this is. While the whole stream is shown the lane is already a clock — every row on it
+            // is timed by the gutter and the indent says what came out of what — so per-line times
+            // inside a run would be a second clock printed inside the first. Soloed, the indent has
+            // collapsed and the run is on its own.
             ActivityMemoriesRow(
-                memories: memories, showsTimestamps: showsTimestamp,
+                memories: memories, showsTimestamps: showsTimestamp && !showsIndent,
                 onOpen: { onOpen(.memory($0)) })
         case .tasks(let tasks):
             ActivityTasksRow(
-                tasks: tasks, showsTimestamps: showsTimestamp, onOpen: { onOpen(.task($0)) })
+                tasks: tasks, showsTimestamps: showsTimestamp && !showsIndent,
+                onOpen: { onOpen(.task($0)) })
         case .moments(let shown, let total):
             ActivityMomentsRow(
                 moments: shown, total: total, loader: loader, onOpen: onOpenMoment)
@@ -251,7 +266,13 @@ struct ActivityRowView: View {
 
 // MARK: - Conversation
 
-/// The dominant row. A tile, a title, and what the conversation produced.
+/// The dominant row. A tile, a title, and the one line of counts the surface can stand behind.
+///
+/// **Two lines and no third.** The account also writes an overview of most conversations, and it was
+/// set here under the counts; it is not any more. A card carrying a wrapped sentence is twice the
+/// height of one that does not, so a day of conversations became a column of paragraphs with the
+/// titles — the thing the eye is actually scanning for — an inconsistent distance apart. The
+/// overview is what the detail screen opens *for*; a row states what it is and how long it ran.
 struct ActivityConversationRow: View {
     let summary: ActivityConversation
     let onOpen: () -> Void
@@ -260,14 +281,6 @@ struct ActivityConversationRow: View {
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: ActivityMetrics.cardCornerRadius, style: .continuous)
-    }
-
-    /// The account's own sentence about the conversation, when it wrote one and it says something.
-    private var overview: String? {
-        guard let trimmed = summary.overview?.trimmingCharacters(in: .whitespacesAndNewlines),
-            !trimmed.isEmpty
-        else { return nil }
-        return trimmed
     }
 
     var body: some View {
@@ -281,22 +294,20 @@ struct ActivityConversationRow: View {
                 Text(summary.subtitle)
                     .inkStyle(.statusLabel, color: Ink.secondary)
                     .lineLimit(1)
-                // The account's overview, when it gave one. It is under the counts rather than
-                // instead of them: the counts are what this Mac and this surface know, the overview
-                // is what the account thinks it was about, and neither substitutes for the other.
-                if let overview {
-                    Text(overview)
-                        .inkStyle(.statusLabel, color: Ink.secondary)
-                        .lineLimit(ActivityMetrics.overviewLineLimit)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 15)
         .padding(.vertical, 12)
-        .background(shape.fill(isHovering ? Ink.rowFillHover : Ink.rowFill))
-        .overlay(shape.strokeBorder(Ink.separator, lineWidth: 1))
+        // **Nothing at rest, and no outline in either state.** A card is what the pointer draws, not
+        // what the row is: a day of ten conversations filled and hairlined at rest is ten grey slabs
+        // down a lane whose whole argument is that a conversation is a moment on a clock. The wash is
+        // `Ink.rowFill` rather than the heavier `rowFillHover` for the same reason it is the lighter
+        // of the pair everywhere else — hover is an affordance, not a selection.
+        .background(shape.fill(isHovering ? Ink.rowFill : Color.clear))
+        // Colour only. A row that scales or outlines under the pointer reads as having moved, and
+        // this one has a timestamp in the gutter it must stay level with.
+        .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isHovering)
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
         .onHover { hovering in
@@ -307,38 +318,38 @@ struct ActivityConversationRow: View {
         .accessibilityLabel(Text("\(summary.title). \(summary.subtitle)"))
         .accessibilityAddTraits(.isButton)
     }
-
 }
 
-/// The tile: **the account's emoji when it chose one, and the speech mark when nobody did.**
+/// The tile: **the conversation's emoji, always, as text in a disc.**
 ///
 /// Not the app's icon. Every row on this surface is a conversation, and the app the sound came
-/// through is already the first word of the title beside it — and a local session has no emoji to
-/// show, so inventing one would put a glyph on the row that nothing in the record says.
+/// through is already the first word of the title beside it.
+///
+/// There is no second branch for a conversation nobody gave an emoji to. There used to be — an SF
+/// Symbol speech mark — and it is gone because `ActivityConversation` now answers that question
+/// itself, in one place, with `defaultEmoji`: a conversation always has a glyph by the time it
+/// reaches a view. Two fallbacks for one absence is two things to keep in step, and the model's is
+/// the one every other reader of the field already gets.
 ///
 /// A view of its own rather than a property on the row, because the detail screen opens on the same
 /// conversation and has to wear the same disc a size larger — and two copies of a tile is two
 /// opinions about what a conversation looks like.
 struct ActivityConversationTile: View {
-    let emoji: String?
+    let emoji: String
     var size: CGFloat = ActivityMetrics.conversationTileSize
     var emojiSize: CGFloat = ActivityMetrics.conversationEmojiSize
+    /// Vestigial: it sized the speech-mark glyph, and there is no glyph any more. It stays only
+    /// because its one remaining caller is `ActivityDetailView`, which another agent owns — the
+    /// parameter and that argument come out together.
     var glyphSize: CGFloat = ActivityMetrics.conversationGlyphSize
 
     var body: some View {
-        Group {
-            if let emoji {
-                Text(emoji).font(.system(size: emojiSize))
-            } else {
-                Image(systemName: "quote.bubble")
-                    .font(.system(size: glyphSize, weight: .regular))
-                    .foregroundStyle(Ink.secondary)
-            }
-        }
-        .frame(width: size, height: size)
-        .background(Circle().fill(Ink.rowFillHover))
-        .overlay(Circle().strokeBorder(Ink.separator, lineWidth: 1))
-        .accessibilityHidden(true)
+        Text(emoji)
+            .font(.system(size: emojiSize))
+            .frame(width: size, height: size)
+            .background(Circle().fill(Ink.rowFillHover))
+            .overlay(Circle().strokeBorder(Ink.separator, lineWidth: 1))
+            .accessibilityHidden(true)
     }
 }
 
@@ -356,32 +367,64 @@ struct ActivityMemoriesRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ActivityMetrics.itemGap) {
-            ForEach(Array(memories.enumerated()), id: \.element.id) { index, memory in
-                // **The first line of a row is already timed by the gutter beside it**, which prints
-                // the row's anchor — the newest memory in the run, which is this one. Giving it a
-                // timestamp of its own put the same minute on screen twice, one line apart, and read
-                // as a rendering fault. The rest of the run has nothing timing it, so it says its
-                // own.
-                ActivityItemLine(
-                    showsTimestamp: showsTimestamps && index > 0, onOpen: { onOpen(memory) }
-                ) {
-                    Rectangle()
-                        .fill(Ink.secondary)
-                        .frame(
-                            width: ActivityMetrics.memoryDashWidth,
-                            height: ActivityMetrics.memoryDashHeight
-                        )
-                        .padding(.top, ActivityMetrics.proseGlyphInset)
-                } timestamp: {
-                    memory.timestamp
-                } text: {
-                    // Never line-limited: this is the user's own sentence moved, not abbreviated.
-                    Text(memory.text)
-                        .inkStyle(.prose, color: Ink.secondary)
-                }
+            ForEach(memories) { memory in
+                // **A run of one is timed by the gutter beside it and says nothing itself.** The
+                // gutter prints the row's anchor, so a single memory stating its own minute would be
+                // the same minute on screen twice, one line apart. A run of several has one anchor
+                // between them and every line needs to say which of them was when — including the
+                // first, whose time the gutter does print: dropping it there leaves the run reading
+                // as if its second memory were its earliest.
+                ActivityMemoryLine(
+                    memory: memory,
+                    showsTimestamp: showsTimestamps && memories.count > 1,
+                    onOpen: { onOpen(memory) })
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// One memory: what kind of memory it is, quietly, over the sentence that is actually about it.
+///
+/// The split is `ActivityFormat.memoryCopy`'s decision and its doc comment is where the reasoning
+/// lives. What this view adds is the presentation — the repeated half at the small role, the sentence
+/// at the reading role, and the whole thing set to one measure rather than to the width of the panel.
+///
+/// **Nothing else is on this line.** Not the conversation it came out of, not an emoji, not a title:
+/// a memory is a sentence the account kept, and every fixture around it is a second thing to read
+/// before reaching the first. What was happening at the time is what the detail screen opens for.
+private struct ActivityMemoryLine: View {
+    let memory: ActivityMemory
+    let showsTimestamp: Bool
+    let onOpen: () -> Void
+
+    var body: some View {
+        let copy = ActivityFormat.memoryCopy(memory.text)
+        ActivityItemLine(
+            showsTimestamp: showsTimestamp,
+            spacing: ActivityMetrics.memoryLineGap,
+            onOpen: onOpen
+        ) {
+            Rectangle()
+                .fill(Ink.secondary)
+                .frame(
+                    width: ActivityMetrics.memoryDashWidth,
+                    height: ActivityMetrics.memoryDashHeight
+                )
+                .padding(.top, ActivityMetrics.memoryDashInset(hasLabel: copy.label != nil))
+        } timestamp: {
+            memory.timestamp
+        } text: {
+            VStack(alignment: .leading, spacing: ActivityMetrics.memoryLineGap) {
+                // Never line-limited, either of them: this is the user's own copy moved, not
+                // abbreviated, and a label that truncates would be the one thing the split is not
+                // allowed to do.
+                if let label = copy.label {
+                    Text(label).inkStyle(.statusLabel, color: Ink.secondary)
+                }
+                Text(copy.body).inkStyle(.prose, color: Ink.secondary)
+            }
+        }
     }
 }
 
@@ -392,6 +435,9 @@ struct ActivityMemoriesRow: View {
 /// copies of it is two places for the measure, the leading and the timestamp rule to drift.
 private struct ActivityItemLine<Glyph: View, Content: View>: View {
     let showsTimestamp: Bool
+    /// Between the runs stacked inside the line. A memory sets its label a point tighter than a task
+    /// sets its time — see `ActivityMetrics.memoryLineGap`.
+    var spacing: CGFloat = ActivityMetrics.itemTimestampGap
     /// Opens this one thing. A sentence on the spine is worth a click for what a detail can add
     /// around it — when it was kept, and what was happening at the time — never for a larger copy
     /// of the same sentence, which is why the line itself is drawn identically either way.
@@ -406,7 +452,7 @@ private struct ActivityItemLine<Glyph: View, Content: View>: View {
         Button(action: onOpen) {
             HStack(alignment: .top, spacing: ActivityMetrics.itemGlyphGap) {
                 glyph()
-                VStack(alignment: .leading, spacing: ActivityMetrics.itemTimestampGap) {
+                VStack(alignment: .leading, spacing: spacing) {
                     text()
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
@@ -454,9 +500,11 @@ struct ActivityTasksRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ActivityMetrics.itemGap) {
-            ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
+            ForEach(tasks) { task in
+                // The same rule a run of memories follows, for the same reason: one task is timed by
+                // the gutter, several have one anchor between them and each has to say its own.
                 ActivityItemLine(
-                    showsTimestamp: showsTimestamps && index > 0, onOpen: { onOpen(task) }
+                    showsTimestamp: showsTimestamps && tasks.count > 1, onOpen: { onOpen(task) }
                 ) {
                     Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: ActivityMetrics.taskGlyphSize, weight: .medium))

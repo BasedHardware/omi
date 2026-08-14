@@ -277,6 +277,175 @@ final class ActivityDetailTests: XCTestCase {
         XCTAssertEqual(ActivityDetailWire.category("work"), "work")
     }
 
+    // MARK: - The summary half, which is what the click is actually for
+
+    /// **The regression this screen was rebuilt for.** A conversation detail that decodes only the
+    /// overview and the segments can only ever be a transcript with a sentence over it; the account
+    /// sends the action items and the apps' readings in the same response, and the reference
+    /// (`MainWindow/Pages/ConversationDetailView.swift`) puts them on the page ahead of the lines.
+    ///
+    /// Written against `backend/models/conversation.py` and `backend/models/structured.py`:
+    /// `Conversation` carries `source`, `status`, `deferred` and `apps_results`; `Structured`
+    /// carries `action_items`, each with `description`, `completed` and `source_segment_ids`.
+    func testTheSummaryHalfOfAConversationIsDecodedAndNotJustItsTranscript() throws {
+        let json = """
+            {
+              "id": "abc",
+              "source": "desktop",
+              "status": "completed",
+              "structured": {
+                "title": "Pricing", "overview": "We held it.", "category": "work", "emoji": "💸",
+                "action_items": [
+                  {"description": "Send the migration plan", "completed": false,
+                   "source_segment_ids": ["s2"]},
+                  {"description": "Book the room", "completed": true},
+                  {"description": "   "}
+                ],
+                "events": [{"title": "Beta review", "start": "2025-06-12T09:00:00Z"}]
+              },
+              "apps_results": [
+                {"app_id": "app-1", "content": "Three things stood out."},
+                {"app_id": "app-2", "content": "  "}
+              ],
+              "transcript_segments": [
+                {"id": "s2", "text": "Holding it.", "speaker": "SPEAKER_01", "start": 7.4}
+              ]
+            }
+            """
+        let body = try decode(json)
+
+        XCTAssertEqual(body.source, "Desktop")
+        // `completed` is the ordinary case, and the reference draws no badge for it.
+        XCTAssertNil(body.status)
+
+        // The blank item is dropped rather than drawn as an empty row, exactly as a blank segment is.
+        XCTAssertEqual(body.actionItems.map(\.text), ["Send the migration plan", "Book the room"])
+        XCTAssertEqual(body.actionItems.map(\.isCompleted), [false, true])
+        // The link back into the transcript, which is what makes a summary-first screen navigable.
+        XCTAssertEqual(body.actionItems.first?.sourceSegmentIDs, ["s2"])
+        XCTAssertEqual(body.actionItems.last?.sourceSegmentIDs, [])
+
+        XCTAssertEqual(body.appResults.map(\.content), ["Three things stood out."])
+        XCTAssertTrue(body.hasSummary)
+    }
+
+    /// Two identical commitments are two rows. The reference keys its list on the description
+    /// itself, which silently collapses them into one; identity comes from position here so that a
+    /// conversation in which somebody said the same thing twice still reads as twice.
+    func testTwoIdenticalActionItemsStayTwoRows() throws {
+        let json = """
+            {
+              "id": "abc",
+              "structured": {"action_items": [{"description": "Follow up"}, {"description": "Follow up"}]}
+            }
+            """
+        let body = try decode(json)
+        XCTAssertEqual(body.actionItems.count, 2)
+        XCTAssertNotEqual(body.actionItems[0].id, body.actionItems[1].id)
+    }
+
+    /// `deferred` and `processing` are two mechanisms and one sentence — the reference's own
+    /// enrichment branch treats them as one (`deferred || status == .processing`), and the reader is
+    /// being told the same thing either way: the summary is not here yet.
+    func testAnUnfinishedConversationSaysSoAndAFinishedOneDoesNot() {
+        XCTAssertEqual(ActivityDetailWire.status("processing", deferred: false), .processing)
+        XCTAssertEqual(ActivityDetailWire.status("completed", deferred: true), .processing)
+        XCTAssertEqual(ActivityDetailWire.status(nil, deferred: true), .processing)
+        XCTAssertEqual(ActivityDetailWire.status("in_progress", deferred: nil), .inProgress)
+        XCTAssertEqual(ActivityDetailWire.status("merging", deferred: nil), .merging)
+        XCTAssertEqual(ActivityDetailWire.status("failed", deferred: nil), .failed)
+        // The ordinary case, an absent field, and a status this client has never heard of all mean
+        // "no badge" — a badge invented for an unrecognised status is a badge about the client.
+        XCTAssertNil(ActivityDetailWire.status("completed", deferred: false))
+        XCTAssertNil(ActivityDetailWire.status(nil, deferred: nil))
+        XCTAssertNil(ActivityDetailWire.status("quantum_folding", deferred: false))
+        // Only `failed` is the account giving up; everything else is still in flight.
+        XCTAssertTrue(ActivityConversationStatus.processing.isWorking)
+        XCTAssertFalse(ActivityConversationStatus.failed.isWorking)
+    }
+
+    /// The source chip follows the rule the category chip already follows: a value this client has
+    /// no word for is dropped, not rendered as "Unknown". `ConversationSource._missing_` folds every
+    /// unrecognised value into `unknown` on the way out, so this is a chip that would appear on
+    /// perfectly ordinary conversations to say nothing about them.
+    func testTheSourceChipNamesTheDeviceOrIsNotDrawn() {
+        XCTAssertEqual(ActivityDetailWire.sourceLabel("desktop"), "Desktop")
+        XCTAssertEqual(ActivityDetailWire.sourceLabel("phone_call"), "Phone")
+        XCTAssertEqual(ActivityDetailWire.sourceLabel("apple_watch"), "Apple Watch")
+        XCTAssertNil(ActivityDetailWire.sourceLabel("unknown"))
+        XCTAssertNil(ActivityDetailWire.sourceLabel("sdcard"))
+        XCTAssertNil(ActivityDetailWire.sourceLabel(nil))
+    }
+
+    /// A conversation the account finished and made nothing of. Not a failure and not a wait — and
+    /// the distinction is what lets the page say which of the three it is looking at.
+    func testAConversationTheAccountMadeNothingOfHasNoSummary() throws {
+        let body = try decode(
+            """
+            {"id": "abc", "status": "completed",
+             "transcript_segments": [{"id": "s1", "text": "Morning.", "start": 0.0}]}
+            """)
+        XCTAssertFalse(body.hasSummary)
+        XCTAssertNil(body.status)
+        XCTAssertEqual(body.lines.count, 1)
+    }
+
+    // MARK: - Which pane a conversation opens on
+
+    /// **The bug, as a test.** An account conversation opens on its summary and reaches the
+    /// transcript through a control — the reference's architecture — and a click that landed
+    /// straight on a wall of speech was the whole of the report.
+    func testAnAccountConversationOpensOnItsSummary() {
+        XCTAssertEqual(
+            ActivityDetailPane.resolve(isLocal: false, transcriptOpen: false), .summary)
+        XCTAssertEqual(
+            ActivityDetailPane.resolve(isLocal: false, transcriptOpen: true), .transcript)
+    }
+
+    /// …and the one departure, which is forced rather than chosen: a conversation the account never
+    /// saw has no summary half at all, so putting its lines behind a button would be an empty page
+    /// pointing at the only content there is.
+    func testALocalConversationOpensOnItsLinesBecauseItHasNothingElse() {
+        XCTAssertEqual(ActivityDetailPane.resolve(isLocal: true, transcriptOpen: false), .transcript)
+        XCTAssertEqual(ActivityDetailPane.resolve(isLocal: true, transcriptOpen: true), .transcript)
+    }
+
+    /// A conversation only this Mac heard is read from this Mac and **never from the account**, and
+    /// the body it comes back with claims only what a capture database can know: the lines, and that
+    /// they were heard here. An overview, a category or an action item on a conversation the account
+    /// never saw would be this screen inventing the half it exists to show.
+    func testALocalConversationIsReadFromThisMacAndClaimsNothingItCannotKnow() async {
+        let source = ActivityConversationSource(
+            isAirgapped: { false },
+            isSignedIn: { true },
+            fetch: { id in
+                XCTFail("a local conversation must never be fetched from the account (\(id))")
+                throw OmiAPIError.http(404, "")
+            },
+            local: { session in
+                XCTAssertEqual(session, 7)
+                return .body(
+                    ActivityConversationBody(
+                        source: ActivityDetailCopy.localSourceLabel,
+                        lines: ActivityDetailWire.lines(from: [
+                            Hit(kind: "said", at: 0, text: "Morning.", sessionId: session)
+                        ])))
+            })
+
+        let answer = await source.read(
+            conversation(id: ActivityConversation.localID(7), source: .local, start: at(hour: 9), minutes: 4))
+
+        guard case .body(let body) = answer else { return XCTFail("expected a local body") }
+        XCTAssertEqual(body.source, ActivityDetailCopy.localSourceLabel)
+        XCTAssertEqual(body.lines.map(\.text), ["Morning."])
+        XCTAssertNil(body.overview)
+        XCTAssertNil(body.category)
+        XCTAssertNil(body.status)
+        XCTAssertTrue(body.actionItems.isEmpty)
+        XCTAssertTrue(body.appResults.isEmpty)
+        XCTAssertFalse(body.hasSummary)
+    }
+
     /// A local session is the one source that *does* know which voice was the user's — `Hit.kind` is
     /// exactly that claim — and the offsets are measured from the first line rather than from the
     /// epoch.
@@ -364,6 +533,19 @@ final class ActivityDetailTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// One conversation off the wire, through the decoder `OmiAPI` really configures.
+    ///
+    /// `.convertFromSnakeCase` is not decoration: it is what turns `action_items`,
+    /// `source_segment_ids`, `apps_results` and `transcript_segments` into the properties this
+    /// screen reads, and a fixture decoded any other way would pass while the app decoded nothing.
+    private func decode(_ json: String) throws -> ActivityConversationBody {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(
+            ActivityDetailWire.FullConversation.self, from: Data(json.utf8)
+        ).body()
+    }
 
     /// Spins the main actor until the model has settled, rather than sleeping for a guessed number
     /// of milliseconds: the read is a `Task` and the assertion is about what it produced.

@@ -204,6 +204,9 @@ final class ActivityStore: ObservableObject {
     /// Per-day screen capture, keyed by the local start of the day.
     private var screen: [Date: ActivityDayScreen] = [:]
     private var sessions: [SessionSummary] = []
+    /// Session id → the account conversations it was uploaded as. Empty until the opening read
+    /// lands, which is the same state as "nothing has been uploaded yet" and composes the same way.
+    private var uploadLinks: [Int64: [String]] = [:]
     /// What the account last answered, for the window currently open.
     private var accountFeed: ActivityAccountFeed = .unreachable
     /// Whether the account read for the current window has come back at all. Distinct from
@@ -235,16 +238,42 @@ final class ActivityStore: ObservableObject {
     /// counter for the same reason, and it costs one comparison.
     private var generation = 0
 
+    /// Cancelled with the store. Only ever holds the sign-in subscription below.
+    private var cancellables: Set<AnyCancellable> = []
+
     init(
         store: @escaping () -> ContextStore?,
         account: ActivityAccountReading = ActivityAccountAbsent(),
         calendar: Calendar = .current,
-        accountRetryDelays: [Duration] = ActivityStore.accountRetryDelays
+        accountRetryDelays: [Duration] = ActivityStore.accountRetryDelays,
+        signIns: AnyPublisher<Bool, Never>? = nil
     ) {
         self.store = store
         self.account = account
         self.calendar = calendar
         self.accountRetryDelays = accountRetryDelays
+
+        // **Signing in is the one repair the retry ladder must not wait for, and cannot find.**
+        // `healsOnItsOwn` correctly refuses to re-poll a signed-out account — no amount of waiting
+        // signs anybody in — so without this the panel is stuck on whatever it saw the first time it
+        // asked, until the user moves the window. That is not a hypothetical: the panel opens at
+        // launch and `OmiAuth.restore()` reads the Keychain off the main actor, so on a real launch
+        // the account was read **40 ms before the session landed**. The reader saw a signed-out
+        // account, said so honestly, and then never asked again while the app sat there signed in.
+        //
+        // So the repair is an event rather than a timer, the same one `ConversationUploader` already
+        // subscribes to for the same reason. `removeDuplicates` because the publisher is a
+        // `@Published` and republishes on every assignment; `filter` because signing *out* needs no
+        // re-read — the next read would only confirm it, and the copy on screen is already right.
+        (signIns ?? OmiAuth.shared.$isSignedIn.eraseToAnyPublisher())
+            .removeDuplicates()
+            .filter { $0 }
+            .sink { [weak self] _ in
+                guard let self, self.didStart else { return }
+                ContextLog.info("Signed in; re-reading the account", "activity")
+                self.readAccount(generation: self.generation)
+            }
+            .store(in: &cancellables)
     }
 
     /// A store with its answer already in it, for previews and tests. Takes no store and no account,
@@ -472,6 +501,7 @@ final class ActivityStore: ObservableObject {
         guard generation == self.generation else { return }
         if opening.failed { readFailure = Self.readFailureNote }
         sessions = opening.sessions
+        uploadLinks = opening.uploadLinks
         // One frame of an app captured today teaches the whole back catalogue of that app what its
         // bundle id is, which is what resolves an icon for a row captured before the column existed.
         AppIconCache.shared.setBundleIds(opening.bundleIds)
@@ -631,7 +661,8 @@ final class ActivityStore: ObservableObject {
         recomposeTask?.cancel()
         recomposeTask = nil
         composed = ActivityComposer.compose(
-            sessions: sessions, account: accountFeed, screen: screen, calendar: calendar)
+            sessions: sessions, uploads: uploadLinks, account: accountFeed, screen: screen,
+            calendar: calendar)
         // **The corpus is counted from the day headers, not from the rows.** A day header counts
         // every frame of the day; the rows only ever draw the sample. A total summed over the stream
         // would therefore report a five-figure day as the two hundred frames the strips could hold.
@@ -676,15 +707,18 @@ final class ActivityStore: ObservableObject {
             let sessions = try Queries.sessions(
                 store, since: since, until: until, limit: sessionCeiling)
             let bundleIds = try RewindQueries.bundleIdsByApp(store)
+            let uploadLinks = try UploadQueue.conversationLinks(store)
             return ActivityOpeningRead(
                 days: enumerateDays(
                     coverage: coverage, since: since, until: until, calendar: calendar),
                 sessions: sessions,
+                uploadLinks: uploadLinks,
                 bundleIds: bundleIds,
                 failed: false)
         } catch {
             ContextLog.error("activity opening read failed (\(type(of: error)))", "activity")
-            return ActivityOpeningRead(days: [], sessions: [], bundleIds: [:], failed: true)
+            return ActivityOpeningRead(
+                days: [], sessions: [], uploadLinks: [:], bundleIds: [:], failed: true)
         }
     }
 
@@ -772,6 +806,10 @@ final class ActivityStore: ObservableObject {
 struct ActivityOpeningRead: Sendable {
     let days: [Date]
     let sessions: [SessionSummary]
+    /// Which account conversation each uploaded session became. Read here, with the sessions it
+    /// belongs to, so composition never has to reach back into the database to decide whether a row
+    /// it already holds is the same talk as one the account sent.
+    let uploadLinks: [Int64: [String]]
     let bundleIds: [String: String]
     /// True when the read threw. Distinct from "there was nothing", which is the whole point.
     let failed: Bool

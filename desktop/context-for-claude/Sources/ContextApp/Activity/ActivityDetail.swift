@@ -6,14 +6,31 @@
 //  half — the thing a click opens — and it is deliberately three different screens rather than one
 //  generic "record viewer", because the three rows are three different claims:
 //
-//  - **A conversation** is a summary standing in front of a recording. The row shows the title, the
-//    counts and the account's one-sentence overview; the detail is the transcript, which is the only
-//    part a row can never carry. That is what makes the click worth making.
+//  - **A conversation** is a summary standing in front of a recording, and the detail is laid out in
+//    that order — the summary first, the recording behind a button. This is Omi's own conversation
+//    detail (`MainWindow/Pages/ConversationDetailView.swift`) ported rather than re-invented: the
+//    reader lands on the overview, the metadata chips, whatever apps made of it and the action
+//    items, and reaches the transcript through `View Transcript` if they want it. It used to open
+//    *on* the transcript, which was the one thing the reference deliberately tucks away — a wall of
+//    speech is what a conversation was, not what it was about.
+//
+//    The two panes are exclusive, again as the reference has them: at this panel's height a split
+//    view compresses both halves into something neither can be read in.
 //  - **A memory** is already shown whole on the spine — the row never truncates it. So a detail that
 //    only set the same sentence larger would be a click that bought nothing. What it adds instead is
 //    *when* (the day, not just the minute) and *what was happening then*: the conversation whose
 //    window contains it, which is a route from a fact back to the talk it came out of.
 //  - **A task** is the same shape, plus its state.
+//
+//  ## The half the reference does not have
+//
+//  A conversation this Mac heard and never uploaded has no account behind it at all: no overview, no
+//  category, no action items, nothing an app made of it. Its whole content *is* the spoken lines, so
+//  hiding them behind a summary page would be an empty page with a button on it pointing at the only
+//  thing there is. A local conversation therefore opens straight onto its transcript, under a
+//  sentence saying why there is no summary to open first. It is the one place this screen departs
+//  from the reference, and it is forced rather than chosen — the reference has no conversation the
+//  account never saw.
 //
 //  ## Provenance is not invented here
 //
@@ -141,19 +158,107 @@ struct ActivityTranscriptLine: Identifiable, Equatable, Sendable {
     let offset: TimeInterval
 }
 
+/// One thing the account says somebody committed to during the conversation.
+///
+/// `sourceSegmentIDs` is the reference's own field and is the whole reason a summary-first screen
+/// works: an item the reader does not believe is one press away from the lines it was drawn from,
+/// so the transcript stays reachable *from the claim about it* rather than only from the header.
+struct ActivityActionItem: Identifiable, Equatable, Sendable {
+    let id: String
+    let text: String
+    let isCompleted: Bool
+    /// The transcript segment ids the account attributed it to. Routinely empty — an older document,
+    /// or an extraction that did not record where it looked.
+    let sourceSegmentIDs: [String]
+}
+
+/// What one Omi app made of the conversation.
+///
+/// **Deliberately just the prose.** The reference draws each result under the app's icon, name and
+/// author, resolved from the app catalog it keeps loaded; this app has no catalog and no way to get
+/// one, and the reference's own catalog-less branch falls back to the literal word "App" — which
+/// repeated down a column names nothing. So the content is shown and the identity is omitted, on the
+/// same reasoning that numbers an unnamed speaker rather than inventing a name for them.
+struct ActivityAppResult: Identifiable, Equatable, Sendable {
+    let id: String
+    let content: String
+}
+
+/// The account's own word for a conversation it has not finished with.
+///
+/// Only the states worth a badge are modelled: `completed` is the ordinary case and has no badge in
+/// the reference either, so it is spelled `nil` here rather than as a fifth case nothing draws.
+enum ActivityConversationStatus: Equatable, Sendable {
+    case inProgress
+    case processing
+    case merging
+    case failed
+
+    /// The reference's badge text, which is the raw status with its underscores opened out.
+    var label: String {
+        switch self {
+        case .inProgress: return "In Progress"
+        case .processing: return "Processing"
+        case .merging: return "Merging"
+        case .failed: return "Failed"
+        }
+    }
+
+    /// True while the account is still working, which is the case the summary is thin *because* of.
+    var isWorking: Bool { self != .failed }
+}
+
 /// The half of a conversation that only a read can supply.
 ///
 /// The title, the emoji, the counts and the clock all travel on the row already, so none of them are
 /// here: this is exactly what the click bought, which is what makes an empty one worth saying out
 /// loud rather than rendering as a shorter page.
+///
+/// The order of the fields is the order the reference draws them in, and that is not a coincidence —
+/// it is the information architecture, written down once. Overview, then the metadata chips, then
+/// what apps made of it, then the action items, and the lines last and behind a button.
 struct ActivityConversationBody: Equatable, Sendable {
     var overview: String?
-    /// The account's own category for the conversation, e.g. `work`. Shown as a chip beside the
-    /// timing, which is where the reference puts it too.
+    /// The account's own category for the conversation, e.g. `work`. A chip in the metadata row,
+    /// which is where the reference puts it too.
     var category: String?
+    /// Where the account says the conversation was captured — "Desktop", "Phone", "omi". The first
+    /// of the reference's three metadata chips.
+    var source: String?
+    /// Nil once the account has finished with it, which is the overwhelming majority of reads.
+    var status: ActivityConversationStatus?
+    var actionItems: [ActivityActionItem] = []
+    var appResults: [ActivityAppResult] = []
     var lines: [ActivityTranscriptLine] = []
 
     static let empty = ActivityConversationBody()
+
+    /// Whether the summary pane has anything on it beyond the metadata chips.
+    ///
+    /// Not used to hide the pane — the reference renders the chips and stops, and so does this. It
+    /// is what lets the screen say *why* the page is bare when the account is still working on it,
+    /// instead of leaving the reader looking at three chips and no explanation.
+    var hasSummary: Bool {
+        overview != nil || !actionItems.isEmpty || !appResults.isEmpty
+    }
+}
+
+/// Which half of a conversation detail is on screen.
+///
+/// Exclusive, as the reference has them (`ConversationDetailPane`): at this panel's height a summary
+/// and a transcript side by side are two columns neither of which can be read in.
+enum ActivityDetailPane: Equatable, Sendable {
+    case summary
+    case transcript
+
+    /// **A local conversation is always the transcript**, whatever the button says, because a
+    /// conversation the account never saw has no summary half to land on — see the note at the top
+    /// of this file. Everything else follows the reference exactly: summary first, transcript when
+    /// it is asked for.
+    static func resolve(isLocal: Bool, transcriptOpen: Bool) -> ActivityDetailPane {
+        if isLocal { return .transcript }
+        return transcriptOpen ? .transcript : .summary
+    }
 }
 
 /// What one read of a conversation came back with. **Never a throw**, for the reason
@@ -224,6 +329,49 @@ enum ActivityDetailCopy {
     /// A local session that the database has no lines for, which is a different claim again: this
     /// Mac heard it and wrote nothing down.
     static let noLocalTranscript = "This Mac didn't keep any lines from this conversation."
+
+    // The summary pane, ported from the reference section by section.
+
+    static let summaryHeading = "Summary"
+    static let transcriptHeading = "Transcript"
+    static let actionItemsHeading = "Action Items"
+    /// The reference's own words for the section. "Insights" and not "results": what is under it is
+    /// prose an app wrote about the conversation, not a status code.
+    static let appInsightsHeading = "App Insights"
+    /// The control that reaches the other pane, worded as the reference words it.
+    static let viewTranscript = "View Transcript"
+    /// …and the way back from it. The reference closes the drawer with an ✕ in its top-right corner;
+    /// this panel navigates with a leading chip everywhere else, and having one screen do it the
+    /// other way is a second idiom for one control's worth of benefit.
+    static let backToSummary = "Summary"
+
+    /// What an action item's transcript link is called. Two words, because they are two claims: the
+    /// account recorded which lines it drew the item from, or it did not and this is just the way to
+    /// the transcript.
+    static let actionItemSource = "Source"
+    static let actionItemTranscript = "Transcript"
+
+    /// The account is still working, which is why the page is thin. Ported verbatim from the
+    /// reference's deferred-processing block, minus its polling: this screen reads once and offers
+    /// the reader the same `Try again` every other unfinished state on it offers.
+    static let processing = "Processing conversation…"
+    static let processingDetail = "Generating summary and action items"
+    /// The account gave up on it. There is no summary coming, so the sentence does not promise one.
+    static let processingFailed = "Your account couldn't finish processing this conversation."
+    static let processingFailedDetail =
+        "There's no summary for it. The transcript, if one was kept, is still here."
+
+    /// A conversation the account has finished with and made nothing of. Not an error and not a
+    /// wait — some conversations really are too short or too quiet to summarise.
+    static let noSummary = "The account didn't write a summary for this conversation."
+
+    /// The local half, said once at the top of the only pane a local conversation has. It answers
+    /// the question the missing summary raises before the reader has to ask it.
+    static let localOnly =
+        "This Mac heard this conversation and never sent it to your Omi account, so nothing "
+        + "summarised it. These are the lines as they were heard."
+    /// What the metadata row calls a conversation that only this Mac has.
+    static let localSourceLabel = "This Mac"
 
     /// What the memory and task details say where a conversation would be — and the caveat that
     /// keeps the section from becoming a provenance claim the record cannot support.
@@ -366,7 +514,14 @@ struct ActivityConversationSource: ActivityConversationReading {
             ContextLog.error("Could not read a local transcript", category)
             return .unread(ActivityDetailCopy.captureFailed)
         }
-        return .body(ActivityConversationBody(lines: ActivityDetailWire.lines(from: hits)))
+        // Everything else on `ActivityConversationBody` stays nil and empty on purpose: there is no
+        // account behind a local session, so an overview, a category, action items or an app's
+        // reading of it would all have to be invented. The one field this side can honestly fill is
+        // where it came from, and the answer is this machine.
+        return .body(
+            ActivityConversationBody(
+                source: ActivityDetailCopy.localSourceLabel,
+                lines: ActivityDetailWire.lines(from: hits)))
     }
 }
 
@@ -381,16 +536,56 @@ enum ActivityDetailWire {
 
     /// The parts of `Conversation` this screen draws — `structured` for the summary, and the real
     /// `transcript_segments`, which the list form of the same model omits.
+    ///
+    /// **Every field here is rendered by something.** `Conversation` is a large model and most of it
+    /// is not this screen's business: `language`, `geolocation`, `photos`, `audio_files`,
+    /// `visibility`, `starred`, `discarded`, `folder_id` and the rest are all absent because the
+    /// reference's detail draws none of them either, and a decoded field with no reader is a claim
+    /// the screen is silently keeping. `started_at` / `finished_at` are absent for a different
+    /// reason: the row that opened this screen already carries the clock, and the header is drawn
+    /// from the row before any read begins.
     struct FullConversation: Decodable, Sendable {
         let structured: Structured?
         let transcriptSegments: [Segment]?
+        /// `apps_results` — what installed apps made of the conversation. The reference's
+        /// "App Insights" section.
+        let appsResults: [AppResult]?
+        /// `ConversationSource`: which device captured it. The first metadata chip.
+        let source: String?
+        /// `ConversationStatus`. Absent on documents old enough to predate it, which the model
+        /// itself treats as `completed`.
+        let status: String?
+        /// Lazy processing: stored as a raw transcript with no enrichment yet. The reference folds
+        /// it in with `processing` and so does `ActivityDetailWire.status(_:deferred:)` — from the
+        /// reader's side they are the same sentence, "there is no summary yet".
+        let deferred: Bool?
 
         /// `Structured`. `emoji` is a field here and is deliberately not read: the row the reader
         /// opened already carries it, and re-reading it would let the sheet disagree with the row
-        /// that opened it.
+        /// that opened it. `title` is omitted for the same reason. `events` is omitted because the
+        /// reference's detail draws no events section at all.
         struct Structured: Decodable, Sendable {
             let overview: String?
             let category: String?
+            let actionItems: [ActionItem]?
+        }
+
+        /// `ActionItem`, of which this screen reads the three fields the reference's row draws.
+        ///
+        /// The reference also filters on a `deleted` flag; that flag is a desktop-only field its own
+        /// decoder hardcodes to `false` on every REST response, so reading it here would be reading
+        /// a field the backend does not send in order to apply a filter that can never fire.
+        struct ActionItem: Decodable, Sendable {
+            let description: String?
+            let completed: Bool?
+            let sourceSegmentIds: [String]?
+        }
+
+        /// `AppResult`: `app_id` and `content`. Only the prose is carried onto the screen — see
+        /// `ActivityAppResult` for why the id does not become a title.
+        struct AppResult: Decodable, Sendable {
+            let appId: String?
+            let content: String?
         }
 
         /// `TranscriptSegment`: `id`, `text`, `speaker`, `speaker_id`, `is_user`, `person_id`,
@@ -411,6 +606,24 @@ enum ActivityDetailWire {
             return ActivityConversationBody(
                 overview: WireText.presentable(structured?.overview),
                 category: ActivityDetailWire.category(structured?.category),
+                source: ActivityDetailWire.sourceLabel(source),
+                status: ActivityDetailWire.status(status, deferred: deferred),
+                actionItems: (structured?.actionItems ?? []).enumerated()
+                    .compactMap { index, item in
+                        guard let text = WireText.presentable(item.description) else { return nil }
+                        return ActivityActionItem(
+                            // An action item has no id of its own on the wire — the reference keys
+                            // its list on the description, which collapses two identical items onto
+                            // one row. The position cannot.
+                            id: "action-\(index)",
+                            text: text,
+                            isCompleted: item.completed ?? false,
+                            sourceSegmentIDs: item.sourceSegmentIds ?? [])
+                    },
+                appResults: (appsResults ?? []).enumerated().compactMap { index, result in
+                    guard let content = WireText.presentable(result.content) else { return nil }
+                    return ActivityAppResult(id: "app-result-\(index)", content: content)
+                },
                 lines: segments.enumerated().compactMap { index, segment in
                     guard let text = WireText.presentable(segment.text) else { return nil }
                     // `is_user` is declared non-optional on the model, so a row without it is a
@@ -441,6 +654,53 @@ enum ActivityDetailWire {
             return nil
         }
         return trimmed
+    }
+
+    /// The device a conversation was captured on, in the reference's own words for it.
+    ///
+    /// The one departure: `ConversationSource` has cases this table does not name, and it also has
+    /// an explicit `unknown` its `_missing_` hook folds every unrecognised value into. The reference
+    /// renders all of those as the chip "Unknown", which is the source chip's version of the `other`
+    /// category — a chip that occupies a row to say nothing. Nil drops it instead, which is the rule
+    /// the sibling mapper above already follows.
+    static func sourceLabel(_ raw: String?) -> String? {
+        guard let value = WireText.presentable(raw)?.lowercased() else { return nil }
+        switch value {
+        case "desktop": return "Desktop"
+        case "omi": return "omi"
+        case "phone", "phone_call": return "Phone"
+        case "apple_watch": return "Apple Watch"
+        case "workflow": return "Workflow"
+        case "screenpipe": return "Screenpipe"
+        case "friend", "friend_com": return "Friend"
+        case "openglass": return "OpenGlass"
+        case "frame": return "Frame"
+        case "bee": return "Bee"
+        case "limitless": return "Limitless"
+        case "plaud": return "Plaud"
+        default: return nil
+        }
+    }
+
+    /// What the account is still doing with the conversation, or nil when it is done.
+    ///
+    /// **`deferred` and `processing` collapse into one answer**, exactly as the reference's own
+    /// enrichment branch treats them (`conversation.deferred || conversation.status == .processing`).
+    /// They are different mechanisms — one is lazy enrichment that has not started, the other is
+    /// enrichment in flight — and they are the same sentence to the person looking at the page: the
+    /// summary is not here yet.
+    ///
+    /// An unrecognised or absent status is `completed`, which is what the backend model itself
+    /// defaults to; a badge invented for a status this code does not understand would be a badge
+    /// about the client rather than about the conversation.
+    static func status(_ raw: String?, deferred: Bool?) -> ActivityConversationStatus? {
+        switch WireText.presentable(raw)?.lowercased() {
+        case "in_progress": return .inProgress
+        case "processing": return .processing
+        case "merging": return .merging
+        case "failed": return .failed
+        default: return deferred == true ? .processing : nil
+        }
     }
 
     /// What to call an account voice that is not the reader's own.

@@ -363,10 +363,6 @@ struct WireConversation: Decodable, Sendable {
         let emoji: String?
     }
 
-    /// The account's own default when the extractor produced no emoji, kept identical so a
-    /// conversation looks the same here as it does everywhere else in Omi.
-    static let defaultEmoji = "🧠"
-
     /// nil for a row with no id: it cannot be identified, so it cannot be diffed, selected or
     /// scrolled to, and `Identifiable` would collide every one of them onto the same row.
     func activity(placedAt fallback: Double) -> ActivityAccountConversation? {
@@ -378,10 +374,14 @@ struct WireConversation: Decodable, Sendable {
         let begins = started ?? finished ?? createdAt?.seconds ?? fallback
         return ActivityAccountConversation(
             id: id,
-            // The overview is shown directly under the title, so borrowing it for a missing title
-            // would fill the row with the same sentence twice and still say nothing new.
-            title: WireText.presentable(structured?.title) ?? "Untitled conversation",
-            emoji: WireText.presentable(structured?.emoji) ?? Self.defaultEmoji,
+            // Neither fallback is applied here, and that is the reference's own arrangement: an
+            // absent title and an absent emoji are passed through as empty, and
+            // `ActivityConversation` supplies "Untitled conversation" and `💬` in one place for both
+            // halves of the spine. Substituting at this seam instead would mean a local conversation
+            // and an account one with nothing to show wore different glyphs, and would make the
+            // model's own fallback unreachable for every account row.
+            title: WireText.presentable(structured?.title) ?? "",
+            emoji: WireText.presentable(structured?.emoji) ?? "",
             startedAt: begins,
             // A finish before the start is not orderable; the row is drawn from these two.
             finishedAt: max(finished ?? begins, begins),

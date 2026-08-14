@@ -153,34 +153,56 @@ struct ActivityMoment: Identifiable, Equatable, Sendable {
 /// **Two sources, one row shape.** The account is the one that knows what a conversation was *about*
 /// — it carries the title and the emoji the mockup shows — and this Mac is the one that knows a
 /// conversation happened at all when nobody is signed in. Rather than two row kinds, the difference
-/// is one field (`source`) and two optionals, so the stream's ordering, attachment and counting
-/// rules are written once.
+/// is one field (`source`) and the counts each half can state, so the stream's ordering, attachment
+/// and counting rules are written once.
+///
+/// **The title and the emoji are the shipping app's, word for word.** `SpineConversation` in the main
+/// macOS app reads `structured.title` with `"Untitled conversation"` behind it and `structured.emoji`
+/// with `"💬"` behind it, and nothing else is ever put in either. This surface used to synthesise a
+/// headline out of the capture session's app hint — "Arc conversation", "Warp conversation" — which
+/// is not a title anybody wrote, is not what the same conversation is called anywhere else in Omi,
+/// and read as the product having failed to summarise. A row that cannot be titled says so.
 struct ActivityConversation: Identifiable, Equatable, Sendable {
-    /// Who told us about this conversation. It decides one thing on screen — whether the tile is the
-    /// account's emoji or the speech mark — and nothing else.
+    /// Who told us about this conversation. It decides nothing on screen; the detail sheet reads it
+    /// to know which half of the world to ask for the transcript.
     enum Source: Equatable, Sendable {
         case account
         case local
     }
 
+    /// What a conversation nobody titled is called. The shipping app's string, not a second opinion
+    /// about the same absence.
+    static let untitled = "Untitled conversation"
+
+    /// The tile glyph when the account chose none. An empty emoji would render as a blank circle,
+    /// and the app hint is not a glyph, so a speech mark is used — because every row here is one.
+    static let defaultEmoji = "💬"
+
     let id: String
     let source: Source
     let title: String
-    /// The account's emoji. `nil` for a local session, which has no way to know one; the row draws
-    /// the speech mark instead rather than inventing a glyph the account did not choose.
-    let emoji: String?
+    /// Always something drawable: the account's emoji when it chose one, `defaultEmoji` when it did
+    /// not and for every local session, which has no way to know one.
+    let emoji: String
     let startedAt: Date
     let duration: TimeInterval
     /// How many transcript lines this Mac heard. Zero for an account conversation, which is a
     /// summary rather than a recording — the clause is dropped rather than printed as "0".
     let segmentCount: Int
-    /// What the account calls it, when it says anything. Shown under the counts.
+    /// What the account calls it, when it says anything.
+    ///
+    /// **It is search material, not row copy** — `searchText` is the only thing that reads it here,
+    /// exactly as `SpineConversation.searchText` is the only thing that reads `structured.overview`
+    /// in the shipping app. A row states what the conversation *was*; a paragraph about what it was
+    /// about belongs on the conversation itself.
     let overview: String?
     /// What the row was matched against before it was lowercased — the parts a typed query should
     /// reach that the title does not already carry.
     let matchable: String
-    /// How many screen moments fell inside this conversation's window. Filled in by the composer,
-    /// which is the only thing that knows.
+    /// How many memories the account extracted from this conversation, and how many screen moments
+    /// fell inside its window. Both are filled in by the composer, which is the only thing that
+    /// knows, and both are dropped from the subtitle when they are zero.
+    let memoryCount: Int
     let momentCount: Int
 
     init(
@@ -193,17 +215,23 @@ struct ActivityConversation: Identifiable, Equatable, Sendable {
         segmentCount: Int = 0,
         overview: String? = nil,
         matchable: String = "",
+        memoryCount: Int = 0,
         momentCount: Int = 0
     ) {
         self.id = id
         self.source = source
-        self.title = title
-        self.emoji = emoji
+        // The two fallbacks are applied here rather than at each call site, so there is one answer
+        // in the product to "what is a conversation called when nothing named it".
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.title = trimmedTitle.isEmpty ? Self.untitled : trimmedTitle
+        let trimmedEmoji = (emoji ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        self.emoji = trimmedEmoji.isEmpty ? Self.defaultEmoji : trimmedEmoji
         self.startedAt = startedAt
         self.duration = max(0, duration)
         self.segmentCount = segmentCount
         self.overview = overview
         self.matchable = matchable
+        self.memoryCount = memoryCount
         self.momentCount = momentCount
     }
 
@@ -214,18 +242,24 @@ struct ActivityConversation: Identifiable, Equatable, Sendable {
             id: account.id,
             source: .account,
             title: account.title,
-            emoji: account.emoji.isEmpty ? nil : account.emoji,
+            emoji: account.emoji,
             startedAt: started,
             duration: max(0, account.finishedAt - account.startedAt),
             overview: account.overview,
             matchable: account.overview ?? "")
     }
 
-    /// One spoken session as this Mac heard it.
+    /// One spoken session as this Mac heard it, and **the one row shape the shipping app has no
+    /// counterpart for.**
     ///
-    /// There is no server-side title in this database — it stores speech, not summaries — so the app
-    /// that was in front is the most specific true thing available, and "Conversation" is the
-    /// fallback rather than an invented headline.
+    /// The spine in the main app composes from the account alone, so every row it draws has a title.
+    /// This app hears speech before — and without — an account: a session that has not been uploaded
+    /// yet, or that never will be because nobody is signed in, is still a real thing that happened
+    /// on this Mac, and dropping it would make a signed-out user's day claim they had not spoken.
+    /// So it gets a row, and the row is the plainest possible thing: the same `untitled` string the
+    /// account's own untitled conversations get, with the spoken-line count under it as the one
+    /// thing this half of the world actually knows. Nothing is synthesised — `context.db` stores
+    /// speech, not summaries, and the app the sound came through is not a title.
     ///
     /// **The window is derived from `durationSeconds`, not from `endedAt`.** A session that is still
     /// open has no `endedAt`, but it does have a last line, and `Queries.sessions` already resolves
@@ -233,11 +267,10 @@ struct ActivityConversation: Identifiable, Equatable, Sendable {
     /// the clock: it would attach none of the frames captured while it was happening, which is
     /// exactly the conversation a reader is most likely to be looking at.
     init(session: SessionSummary) {
-        let hint = (session.appHint ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         self.init(
             id: ActivityConversation.localID(session.id),
             source: .local,
-            title: hint.isEmpty ? "Conversation" : "\(hint) conversation",
+            title: ActivityConversation.untitled,
             startedAt: Date(timeIntervalSince1970: session.startedAt),
             duration: session.durationSeconds,
             segmentCount: session.lineCount,
@@ -249,23 +282,34 @@ struct ActivityConversation: Identifiable, Equatable, Sendable {
     static func localID(_ sessionID: Int64) -> String { "local:\(sessionID)" }
 
     /// The same conversation, told what the composer worked out about it.
-    func counted(momentCount: Int) -> ActivityConversation {
+    func counted(memoryCount: Int = 0, momentCount: Int = 0) -> ActivityConversation {
         ActivityConversation(
             id: id, source: source, title: title, emoji: emoji, startedAt: startedAt,
             duration: duration, segmentCount: segmentCount, overview: overview,
-            matchable: matchable, momentCount: momentCount)
+            matchable: matchable, memoryCount: memoryCount, momentCount: momentCount)
     }
 
     /// The end of the conversation's window on the clock — and **the same window the frames attach
     /// inside of**.
     var finishedAt: Date { startedAt.addingTimeInterval(duration) }
 
-    /// "8m 9s · 42 spoken lines · 6 screen moments" — and each clause is dropped when its count is
-    /// zero rather than shown as "0 spoken lines", which reads as a defect rather than as an
-    /// absence. With every clause gone the line falls back to the time, so a row is never blank.
+    /// "8m 9s · 2 memories · 6 screen moments" — the shipping app's clause set, in its order, and
+    /// each clause is dropped when its count is zero rather than shown as "0 memories", which reads
+    /// as a defect rather than as an absence. With every clause gone the line falls back to the
+    /// time, so a row is never blank.
+    ///
+    /// **Two clauses of the main app's are missing and only one of them is a choice.** Its
+    /// `N tasks` cannot be stated here: `ActivityAccountTask` carries no conversation id, so no task
+    /// on this surface is ever attributed to a conversation (see `ActivityComposer.composeDay`) and
+    /// the count could only ever be zero. `N spoken lines` is the other direction — it is the one
+    /// thing a local-only row knows about itself, and it stands in the slot the main app gives to
+    /// tasks. An account row has no transcript of its own, so it never prints it.
     var subtitle: String {
         var parts: [String] = []
         if duration >= 1 { parts.append(ActivityFormat.duration(duration)) }
+        if memoryCount > 0 {
+            parts.append(ActivityFormat.plural(memoryCount, "memory", "memories"))
+        }
         if segmentCount > 0 {
             parts.append(ActivityFormat.plural(segmentCount, "spoken line", "spoken lines"))
         }
@@ -311,6 +355,25 @@ struct ActivityMemory: Identifiable, Equatable, Sendable {
             timestamp: Date(timeIntervalSince1970: memory.at),
             conversationID: memory.conversationID)
     }
+}
+
+/// A memory's text, split where it repeats.
+///
+/// Memories are generated, and generated copy runs to a template: four in a row arrive as "Focused on
+/// Omi App: …", "Focused on Omi: …", "Focused on Omi App: …", "Focused on Omi Memories: …". Set as
+/// one sentence in the largest reading role this surface owns, the half that is the *same* every time
+/// is the loudest thing on it, and the half that is actually this memory is what the eye gets to
+/// last.
+///
+/// So the repeated half is presented as a quiet label over the sentence rather than as its opening
+/// words. **Nothing is hidden and nothing is truncated:** `label` and `body` together are the whole
+/// text less the colon that already separated them, and a memory with no such prefix keeps its
+/// sentence whole and has no label at all.
+struct ActivityMemoryCopy: Equatable, Sendable {
+    /// The words before the colon, or nil when the text is a plain sentence.
+    let label: String?
+    /// The rest of it — and the whole of it when there is no label.
+    let body: String
 }
 
 /// One commitment the account extracted or the user wrote down.
@@ -523,6 +586,43 @@ enum ActivityFormat {
     }
 
     static func time(_ date: Date) -> String { timeFormatter.string(from: date) }
+
+    /// The longest prefix that still reads as a category rather than as the first clause of a
+    /// sentence. Past this, splitting stops being a label and becomes a fold through the middle of
+    /// the copy.
+    static let maximumMemoryLabelCharacters = 48
+
+    /// Splits a memory into its repeated category and the sentence that is actually about this
+    /// memory.
+    ///
+    /// Deliberately conservative — a memory that is merely *a sentence containing a colon* keeps its
+    /// sentence. Three things have to be true before the split happens, and each of them is a real
+    /// memory this would otherwise mangle:
+    ///
+    /// - **A space after the colon.** `12:56` and `https://omi.me` both carry one and neither is a
+    ///   category; a separator between a label and a sentence is always followed by a space.
+    /// - **No sentence punctuation in the prefix.** "He asked Dr. Kim: …" is a sentence with a quote
+    ///   in it, not a labelled one.
+    /// - **A prefix under `maximumMemoryLabelCharacters`, and a body left over.** A long prefix is a
+    ///   clause, and a memory that is *only* a prefix has nothing to be a label for.
+    static func memoryCopy(_ text: String) -> ActivityMemoryCopy {
+        let whole = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let colon = whole.firstIndex(of: ":") else {
+            return ActivityMemoryCopy(label: nil, body: whole)
+        }
+        let label = whole[whole.startIndex..<colon].trimmingCharacters(in: .whitespacesAndNewlines)
+        let rest = whole[whole.index(after: colon)...]
+        let body = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard rest.first?.isWhitespace == true,
+            !label.isEmpty,
+            !body.isEmpty,
+            label.count <= maximumMemoryLabelCharacters,
+            !label.contains(where: { ".?!".contains($0) })
+        else {
+            return ActivityMemoryCopy(label: nil, body: whole)
+        }
+        return ActivityMemoryCopy(label: label, body: body)
+    }
 
     /// "Wednesday 6 August" — and "Today" / "Yesterday" for the two days a date is the wrong answer
     /// for, because nobody reads their own morning as a date.

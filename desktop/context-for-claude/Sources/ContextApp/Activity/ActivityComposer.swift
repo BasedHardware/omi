@@ -55,11 +55,15 @@ enum ActivityComposer {
     ///
     /// - Parameters:
     ///   - sessions: every spoken session read so far, any order.
+    ///   - uploads: for each local session the uploader has posted, the Omi conversation ids it
+    ///     became — `UploadQueue.Entry.conversationIds`, keyed by session id. Empty when the caller
+    ///     has not read the queue; see `merge`, which then has only the clock to go on.
     ///   - account: what the account answered. `.unreachable` contributes nothing and suppresses
     ///     nothing, which is what leaves a signed-out Mac showing the screen moments it does have.
     ///   - screen: per-day screen capture, keyed by the local start of the day.
     static func compose(
         sessions rawSessions: [SessionSummary],
+        uploads: [Int64: [String]] = [:],
         account: ActivityAccountFeed = .unreachable,
         screen: [Date: ActivityDayScreen],
         calendar: Calendar = .current
@@ -73,7 +77,8 @@ enum ActivityComposer {
         // first sighting of each and drops the rest here rather than rendering the same row twice.
         let sessions = uniqued(rawSessions, by: \.id)
         let conversations = merge(
-            account: uniqued(account.conversations, by: \.id), sessions: sessions)
+            account: uniqued(account.conversations, by: \.id), sessions: sessions,
+            uploads: uploads)
 
         var conversationsByDay: [Date: [ActivityConversation]] = [:]
         for conversation in conversations {
@@ -138,29 +143,49 @@ enum ActivityComposer {
 
     /// The account's conversations, plus the local sessions the account did not already know about.
     ///
-    /// **A local session whose window overlaps an account conversation is dropped, and the account's
-    /// telling wins.** They are one conversation described twice — this Mac heard the speech, the
-    /// account summarised it — and showing both would print every conversation on the spine as a pair
-    /// the moment somebody signs in, with the honest-looking untitled one directly under the titled
-    /// one. Overlap and not equality, because the two clocks are not the same clock: the account
-    /// timestamps a conversation from the recording it received and this Mac from the first line it
-    /// heard, so they agree about the stretch of the day and not about the second.
+    /// **One conversation, one row.** A session this Mac heard and the account conversation it was
+    /// uploaded into are the same conversation described twice — the Mac heard the speech, the
+    /// account summarised it — so the local telling is dropped and the account's stands, carrying the
+    /// title and the emoji somebody actually wrote. Showing both prints the day as a column of pairs,
+    /// each real title shadowed by an untitled duplicate of itself.
     ///
-    /// **A local session with no counterpart survives.** It is a real thing that happened on this
-    /// Mac — the whole reason the store still reads `Queries.sessions` — and dropping it would make a
-    /// signed-out user's spine claim they had not spoken all day. What it cannot have is a title or
-    /// an emoji: this database stores speech, not summaries, so the row says which app the sound came
-    /// through and draws the speech mark rather than inventing either.
+    /// **The link is the queue's, not the clock's.** `ConversationUploader` records the conversation
+    /// ids the backend handed back for a session (`UploadQueue.Entry.conversationIds`), and that is a
+    /// statement that these two records are the same conversation rather than an inference about
+    /// them. A session that split into several parts became several account conversations, and any
+    /// one of them being on a loaded page is enough: the session is accounted for.
+    ///
+    /// **Overlap is the fallback, for sessions the queue says nothing about.** A row can predate the
+    /// queue, and reconciliation can miss one; for those there is only the clock, and overlap rather
+    /// than equality because the two clocks are not the same clock — the account timestamps a
+    /// conversation from the recording it received and this Mac from the first line it heard, so they
+    /// agree about the stretch of the day and not about the second. It is the weaker rule of the two
+    /// and it is used only where the stronger one has nothing to say.
+    ///
+    /// **A session whose account counterpart is not on a loaded page keeps its row.** Same rule as a
+    /// memory naming a conversation we do not hold: it must not vanish because paging has not reached
+    /// it. It merges the moment the page lands.
+    ///
+    /// **A local session with no counterpart at all survives too.** It is a real thing that happened
+    /// on this Mac — the whole reason the store still reads `Queries.sessions` — and dropping it
+    /// would make a signed-out user's day claim they had not spoken.
     static func merge(
-        account: [ActivityAccountConversation], sessions: [SessionSummary]
+        account: [ActivityAccountConversation],
+        sessions: [SessionSummary],
+        uploads: [Int64: [String]] = [:]
     ) -> [ActivityConversation] {
         let known = account.map(ActivityConversation.init(account:))
+        let accountIDs = Set(known.map(\.id))
         let windows = known.map { $0.startedAt...max($0.startedAt, $0.finishedAt) }
-        let unmatched = sessions.map(ActivityConversation.init(session:)).filter { local in
+        let unmatched = sessions.filter { session in
+            if let uploaded = uploads[session.id], !uploaded.isEmpty {
+                return !uploaded.contains(where: accountIDs.contains)
+            }
+            let local = ActivityConversation(session: session)
             let window = local.startedAt...max(local.startedAt, local.finishedAt)
             return !windows.contains { $0.overlaps(window) }
         }
-        return known + unmatched
+        return known + unmatched.map(ActivityConversation.init(session:))
     }
 
     /// Narrows a composed stream to one kind, one query and one time window.
@@ -284,7 +309,8 @@ enum ActivityComposer {
                 $0.timestamp > $1.timestamp
             }
             attachedMemoryCount += remembered.count
-            let counted = summary.counted(momentCount: stands.forRun(of: attached.count))
+            let counted = summary.counted(
+                memoryCount: remembered.count, momentCount: stands.forRun(of: attached.count))
             rows.append(
                 ActivityRow(
                     id: "conv:\(summary.id)",

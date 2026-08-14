@@ -17,6 +17,7 @@
 //  hue (INV-UI-1).
 //
 
+import AppKit
 import SwiftUI
 
 struct ActivityHourRail: View {
@@ -40,6 +41,14 @@ struct ActivityHourRail: View {
     /// The width every line in this column has to live inside. A named value rather than a literal
     /// in the `frame`, so the copy below can be measured against the column it actually gets.
     nonisolated static let contentWidth: CGFloat = 154
+
+    /// One point of the column held back from the fit test.
+    ///
+    /// `Text` lays out with SwiftUI's typesetter and `scopeWidth` measures with `NSString.size`; they
+    /// agree to well under a point, but a form measuring *exactly* the column width is a coin flip on
+    /// whether it wraps. A point of margin removes the coin flip and costs a handful of extra
+    /// shortened forms.
+    private nonisolated static let scopeFitBudget: CGFloat = contentWidth - 1
 
     /// Labelled hours. Four is enough to orient without turning the rail into an axis.
     static let labelledHours: Set<Int> = [0, 6, 12, 18]
@@ -105,11 +114,39 @@ struct ActivityHourRail: View {
 
     /// The day the headline number belongs to — the rail's half of "state your own scope".
     ///
+    /// **On its own line it still has to fit, and unshortened it does not.** `ActivityFormat.day`
+    /// emits `EEEE d MMMM yyyy` for a day outside the current year, and its widest output —
+    /// "Wednesday 30 September 2026", 183 pt — overhangs this 154 pt column by 29 pt. A scope that
+    /// wraps orphans "Wednesday 30" directly above the bars, where a bare number-and-word line reads
+    /// as another count. So when the full title does not fit, the **weekday is dropped**: it is the
+    /// one word carrying nothing the rest of the line does not already say, the date alone identifies
+    /// the day completely, and the list header to the right is still printing the day in full.
+    ///
+    /// Measured against the column rather than reasoned about from an example date, so a change to
+    /// the day format cannot quietly put the line back over the edge.
+    ///
     /// `nil` when there is no day yet: an empty capture has no scope to claim, and inventing one
     /// would be the confident-zero mistake in a second place.
     nonisolated static func headlineScope(_ dayTitle: String) -> String? {
         let trimmed = dayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        guard !trimmed.isEmpty else { return nil }
+        guard scopeWidth(trimmed) > scopeFitBudget else { return trimmed }
+
+        let words = trimmed.split(separator: " ")
+        guard words.count > 1 else { return trimmed }
+        let withoutWeekday = words.dropFirst().joined(separator: " ")
+        // Only if it actually bought a fitting line. A form no shortening can save keeps its full
+        // text and wraps — a wrapped day is bad, a silently wrong day is worse.
+        return scopeWidth(withoutWeekday) <= scopeFitBudget ? withoutWeekday : trimmed
+    }
+
+    /// The width `statusLabel` — the role both of the rail's secondary lines use — draws `text` at.
+    ///
+    /// Resolved through `InkFonts.role`, the same path `.inkStyle(.statusLabel, …)` takes, so the
+    /// measurement cannot drift from the drawing if that role's size or face ever moves.
+    nonisolated static func scopeWidth(_ text: String) -> CGFloat {
+        let metrics = InkFonts.role(size: InkType.statusLabel.size, weight: .regular).metrics
+        return (text as NSString).size(withAttributes: [.font: metrics]).width
     }
 
     /// An em dash rather than a `0` for the uncounted case: a placeholder that cannot be misread as

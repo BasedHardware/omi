@@ -368,6 +368,49 @@ public enum UploadQueue {
         }
     }
 
+    /// Which account conversation each uploaded session became, for every session that reached one.
+    ///
+    /// **This is how the spine knows that a session and an account conversation are the same talk.**
+    /// The Activity panel composes conversation rows from two sources the reference composes from
+    /// one: the sessions this Mac heard, and the conversations the account holds. Without a link
+    /// between them the same conversation draws twice — once under a title this app invented from
+    /// the app that was frontmost, once under the title the account actually gave it.
+    ///
+    /// The alternative, matching on overlapping clocks, is a guess: an upload's `started_at` is the
+    /// session's, but the account re-times, merges and splits, so two rows that are the same talk can
+    /// disagree about when it happened, and two that merely overlap can look identical. This is not a
+    /// guess — it is the id the backend handed back for that exact session.
+    ///
+    /// A list per session, not one id, because a session past the endpoint's segment ceiling is
+    /// uploaded as consecutive conversations; every part names the session it came from.
+    ///
+    /// Owner-free on purpose, unlike everything else that reads this table. A conversation id is not
+    /// a credential and this read spends nothing — it only answers "is this row already on screen
+    /// under another name". Scoping it to the signed-in account would make a signed-out panel draw
+    /// the duplicates instead.
+    public static func conversationLinks(_ store: ContextStore) throws -> [Int64: [String]] {
+        try store.read { db in
+            guard try db.tableExists("uploads") else { return [:] }
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT sessionId, conversationIds FROM uploads
+                    WHERE conversationIds IS NOT NULL AND conversationIds <> ''
+                    """)
+            return rows.reduce(into: [Int64: [String]]()) { links, row in
+                guard
+                    let sessionId = row["sessionId"] as Int64?,
+                    let joined = row["conversationIds"] as String?
+                else { return }
+                // Split exactly as `entry(from:)` joins, so the two readings of this column can
+                // never disagree about what it holds.
+                let ids = joined.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+                guard !ids.isEmpty else { return }
+                links[sessionId] = ids
+            }
+        }
+    }
+
     public static func entry(_ store: ContextStore, sessionId: Int64) throws -> Entry? {
         try store.read { db in
             guard try db.tableExists("uploads") else { return nil }

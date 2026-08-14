@@ -383,8 +383,13 @@ extension ActivityRenderHarness {
                     (13, 2, 62, "📊", "Pricing review with finance"),
                 ],
                 sessions: [(16, 40, 3.5, nil, 5)],
+                // **One of these carries a category prefix and the others do not**, because that is
+                // what the account really sends: generated memories run to a template, and
+                // `ActivityFormat.memoryCopy` splits the repeated half off as a quiet label over the
+                // sentence. A fixture set of plain sentences would render every memory through the
+                // unlabelled branch and no frame would ever show the split.
                 memories: [
-                    (11, 20, "Prefers async written updates over standups."),
+                    (11, 20, "Working style: prefers async written updates over standups."),
                     (11, 26, "The beta ships behind a flag, so the rename can wait."),
                     (17, 5, "Finance is copied on every invoice from now on."),
                 ],
@@ -424,9 +429,12 @@ extension ActivityRenderHarness {
                 ]),
             Draft(
                 daysAgo: 3,
+                // A labelled memory beside an unlabelled one in the same run, so a soloed frame shows
+                // both branches of the split — and shows that the dash lands on the first line of
+                // each whichever branch it took.
                 memories: [
                     (14, 20, "Reads the weekly digest on Sunday evenings, not Monday."),
-                    (14, 24, "Keeps invoices in the finance folder, never in email."),
+                    (14, 24, "Filing: keeps invoices in the finance folder, never in email."),
                 ]),
             Draft(daysAgo: 4, sessions: [(11, 45, 12, "FaceTime", 30)], runs: [(11, 47, 4, 3)], total: 96),
         ]
