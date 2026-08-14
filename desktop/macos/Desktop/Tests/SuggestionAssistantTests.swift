@@ -85,7 +85,7 @@ final class SuggestionGatePolicyTests: XCTestCase {
   /// Maximum (5) is the "nudge me in seconds" demo mode: 10 s dwell. Everything below —
   /// including Balanced (3) — keeps the deliberate 30 s so ordinary use is unchanged.
   func testDwellIsTenSecondsOnlyAtMaximumLevel() {
-    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 5), 10)
+    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 5), 4)
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 4), 30)
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 3), 30)
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 0), 30)
@@ -93,8 +93,8 @@ final class SuggestionGatePolicyTests: XCTestCase {
 
   /// Maximum caps the between-nudge cooldown at 30 s; other levels keep the user's
   /// configured value (180 s default) untouched.
-  func testCooldownCapsAtThirtySecondsOnlyAtMaximumLevel() {
-    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 5), 30)
+  func testCooldownCapsAtTwentySecondsOnlyAtMaximumLevel() {
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 5), 20)
     XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 20, frequencyLevel: 5), 20)
     XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 4), 180)
     XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 3), 180)
@@ -799,5 +799,33 @@ final class SuggestionProbeCaptureRaceTests: XCTestCase {
     XCTAssertTrue(allows(before: nil, after: nil))
     XCTAssertTrue(allows(before: "Google Chrome", after: nil))
     XCTAssertFalse(allows(before: nil, after: "1Password"))
+  }
+}
+
+final class SuggestionPacingTests: XCTestCase {
+  /// Maximum (5) is the demo-grade cadence: nudge within seconds, repeat under half a
+  /// minute. Every other level must keep the long-standing calm defaults untouched.
+  func testMaximumLevelPacesFastEveryOtherLevelStaysCalm() {
+    XCTAssertEqual(SuggestionPacing.requiredDwell(frequencyLevel: 5), 4)
+    XCTAssertEqual(SuggestionPacing.settleInterval(frequencyLevel: 5), 2)
+    XCTAssertEqual(SuggestionPacing.cooldown(base: 180, frequencyLevel: 5), 20)
+    XCTAssertEqual(SuggestionPacing.dailyEvaluationBudget(frequencyLevel: 5), 600)
+    XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.85, frequencyLevel: 5), 0.75)
+    XCTAssertEqual(SuggestionPacing.dedupMemory(frequencyLevel: 5), 2)
+
+    for level in [0, 1, 2, 3, 4] {
+      XCTAssertEqual(SuggestionPacing.requiredDwell(frequencyLevel: level), 30)
+      XCTAssertEqual(SuggestionPacing.settleInterval(frequencyLevel: level), 6)
+      XCTAssertEqual(SuggestionPacing.cooldown(base: 180, frequencyLevel: level), 180)
+      XCTAssertEqual(SuggestionPacing.dailyEvaluationBudget(frequencyLevel: level), 40)
+      XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.85, frequencyLevel: level), 0.85)
+      XCTAssertEqual(SuggestionPacing.dedupMemory(frequencyLevel: level), 10)
+    }
+  }
+
+  /// A user-configured value already below the Maximum cap is respected, not raised.
+  func testMaximumCapsNeverRaiseUserConfiguredValues() {
+    XCTAssertEqual(SuggestionPacing.cooldown(base: 10, frequencyLevel: 5), 10)
+    XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.6, frequencyLevel: 5), 0.6)
   }
 }

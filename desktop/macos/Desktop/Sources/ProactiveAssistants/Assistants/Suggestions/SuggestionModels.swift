@@ -150,18 +150,19 @@ enum SuggestionGatePolicy {
   /// How long the user must sit in a context before it is worth an evaluation.
   ///
   /// Maximum (level 5) is an explicit "show me everything, fast": open TikTok and the
-  /// nudge should land in seconds, so dwell drops to 10 s there. Every other level keeps
+  /// nudge should land in under ten seconds end-to-end, so dwell drops to 4 s there. Every other level keeps
   /// the deliberate 30 s — passing through a window is not a request for advice.
   static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
-    frequencyLevel >= 5 ? 10 : 30
+    SuggestionPacing.requiredDwell(frequencyLevel: frequencyLevel)
   }
 
   /// Between-nudge cooldown, from the user's configured base.
   ///
-  /// Maximum caps it at 30 s — a user who chose "Maximum" wants back-to-back nudges, not
+  /// Maximum caps it at 20 s — a user who chose "Maximum" wants a nudge under every half
+  /// minute, not
   /// one per three minutes. Every other level keeps the configured value untouched.
   static func cooldown(base: TimeInterval, frequencyLevel: Int) -> TimeInterval {
-    frequencyLevel >= 5 ? min(base, 30) : base
+    SuggestionPacing.cooldown(base: base, frequencyLevel: frequencyLevel)
   }
 
   /// Ordered cheapest-first, and every branch is free. Switching apps is not evidence that
@@ -504,5 +505,49 @@ enum SuggestionDeduplication {
 
   static func isDuplicate(_ candidate: String, of recent: [String]) -> Bool {
     recent.contains { similarity(candidate, $0) >= similarityThreshold }
+  }
+}
+
+/// Pacing knobs for the suggestion assistant, derived from the user's notification
+/// frequency level. Maximum (5) is deliberately relentless — the user asked for a nudge
+/// within seconds of opening a leisure app and another one under half a minute later for
+/// as long as it stays open. Every other level keeps the long-standing calm defaults,
+/// byte-for-byte: this enum is the only place the two regimes are allowed to differ.
+enum SuggestionPacing {
+  static let maximumLevel = 5
+
+  /// How long the user must stay in a context before it is worth spending on.
+  static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= maximumLevel ? 4 : 30
+  }
+
+  /// How long after a switch frames are considered settled enough to analyze.
+  static func settleInterval(frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= maximumLevel ? 2 : 6
+  }
+
+  /// Minimum gap between paid evaluations. Maximum caps the user-configurable base so a
+  /// stale 180s stored setting cannot defeat the level; a base the user already set
+  /// below the cap is respected.
+  static func cooldown(base: TimeInterval, frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= maximumLevel ? min(base, 20) : base
+  }
+
+  /// Paid-evaluation ceiling per day. A 20-second cadence demo would exhaust the calm
+  /// budget in minutes; Maximum is an explicit opt-in to that spend.
+  static func dailyEvaluationBudget(frequencyLevel: Int) -> Int {
+    frequencyLevel >= maximumLevel ? 600 : 40
+  }
+
+  /// Confidence bar. Maximum trades a little precision for cadence; other levels keep
+  /// the user's configured bar untouched.
+  static func minConfidence(base: Double, frequencyLevel: Int) -> Double {
+    frequencyLevel >= maximumLevel ? min(base, 0.75) : base
+  }
+
+  /// How many recent suggestions the dedup window remembers. At Maximum only the last
+  /// two are held, so a small set of open tasks rotates instead of starving the cadence.
+  static func dedupMemory(frequencyLevel: Int) -> Int {
+    frequencyLevel >= maximumLevel ? 2 : 10
   }
 }
