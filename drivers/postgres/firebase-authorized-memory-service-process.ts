@@ -31,7 +31,13 @@ export type ProductionMemoryServiceStartOutcome =
   | Readonly<{ kind: "unavailable" }>;
 
 export type ProductionMemoryServiceStopOutcome =
-  | Readonly<{ kind: "stopped" }>
+  /**
+   * `drained` is false when the shutdown deadline expired with requests still
+   * in flight. The pool is closed either way — the alternative is being
+   * SIGKILLed mid-close — but the two are not the same event and a caller that
+   * cannot tell them apart cannot alarm on repeated undrained shutdowns.
+   */
+  | Readonly<{ kind: "stopped"; drained: boolean }>
   | Readonly<{ kind: "failed" }>;
 
 export interface PostgresFirebaseAuthorizedMemoryServiceProcess {
@@ -45,6 +51,18 @@ export interface PostgresFirebaseAuthorizedMemoryServiceProcessOptions {
   readonly service_options: PostgresFirebaseAuthorizedMemoryServiceAppOptions;
   readonly pool: CloseablePostgresTransactionPool;
   readonly readiness: PostgresProductionRuntimeReadiness;
+  /**
+   * How long `stop()` waits for in-flight requests before closing the pool
+   * anyway, in milliseconds.
+   *
+   * Required, with no default. `stop()` previously awaited the drain with no
+   * bound at all, so a single hung request blocked shutdown until the
+   * supervisor's SIGKILL — which is the one shutdown that strands work leases
+   * and drops requests. A default here would be a deployment policy smuggled
+   * into a driver: the correct value is a property of the supervisor's
+   * termination window, which this module cannot see. The caller states it.
+   */
+  readonly graceful_shutdown_ms: number;
 }
 
 const fail = (): never => { throw new TypeError("invalid PostgreSQL Firebase memory service process options"); };
@@ -123,7 +141,12 @@ const unavailable = (): Response => json({ status: "unavailable" }, 503);
 export const createPostgresFirebaseAuthorizedMemoryServiceProcess = (
   optionsValue: PostgresFirebaseAuthorizedMemoryServiceProcessOptions,
 ): PostgresFirebaseAuthorizedMemoryServiceProcess => {
-  const options = exactRecord(optionsValue, ["pool", "readiness", "service_options"]);
+  const options = exactRecord(optionsValue, [
+    "graceful_shutdown_ms", "pool", "readiness", "service_options",
+  ]);
+  const gracefulShutdownMs = options["graceful_shutdown_ms"];
+  if (!Number.isSafeInteger(gracefulShutdownMs) || (gracefulShutdownMs as number) < 1) fail();
+  const shutdownDeadlineMs = gracefulShutdownMs as number;
   const poolValue = options["pool"];
   if (poolValue === null || typeof poolValue !== "object" || isProxy(poolValue)) fail();
   const closeDescriptor = Object.getOwnPropertyDescriptor(poolValue, "close");
@@ -177,23 +200,41 @@ export const createPostgresFirebaseAuthorizedMemoryServiceProcess = (
     return startPromise;
   };
 
-  const waitForDrain = async (): Promise<void> => {
-    if (inFlight === 0) return;
-    await new Promise<void>((resolve) => drainWaiters.push(resolve));
+  /** Resolves true when in-flight reached zero, false when the deadline won. */
+  const waitForDrain = async (): Promise<boolean> => {
+    if (inFlight === 0) return true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const drained = new Promise<boolean>((resolve) => drainWaiters.push(() => resolve(true)));
+    const expired = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), shutdownDeadlineMs);
+    });
+    try {
+      return await Promise.race([drained, expired]);
+    } finally {
+      // Without this the timer keeps the event loop alive for the full deadline
+      // after a clean drain, which turns a fast shutdown into a slow one.
+      if (timer !== undefined) clearTimeout(timer);
+    }
   };
 
   const stop = (): Promise<ProductionMemoryServiceStopOutcome> => {
     if (stopPromise !== null) return stopPromise;
-    if (phase === "stopped") return Promise.resolve(Object.freeze({ kind: "stopped" as const }));
+    if (phase === "stopped") {
+      return Promise.resolve(Object.freeze({ kind: "stopped" as const, drained: true }));
+    }
     if (phase === "failed") return Promise.resolve(Object.freeze({ kind: "failed" as const }));
     phase = "draining";
     stopPromise = (async () => {
       if (startPromise !== null) await startPromise;
-      await waitForDrain();
+      // Close the pool even when the deadline expires. An undrained close can
+      // abort in-flight transactions, but they are serializable and roll back;
+      // being SIGKILLed instead leaves the pool unclosed and work leases held
+      // until they expire, which is strictly worse.
+      const drained = await waitForDrain();
       try {
         await close();
         phase = "stopped";
-        return Object.freeze({ kind: "stopped" as const });
+        return Object.freeze({ kind: "stopped" as const, drained });
       } catch {
         phase = "failed";
         return Object.freeze({ kind: "failed" as const });

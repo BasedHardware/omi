@@ -84,6 +84,7 @@ const fixture = (input: Readonly<{
       pool,
       service_options,
       readiness: createPostgresProductionRuntimeReadiness(pool, "d".repeat(64)),
+      graceful_shutdown_ms: 4_000,
     },
     closeCalls: () => closeCalls,
   };
@@ -111,7 +112,7 @@ describe("PostgreSQL Firebase production memory service process kernel", () => {
     expect(await memory.text()).toBe('{"error":"unauthorized"}');
     expect(await (await process.fetch(request("/mcp", { method: "POST" }))).text()).toBe("mcp");
 
-    await expect(process.stop()).resolves.toEqual({ kind: "stopped" });
+    await expect(process.stop()).resolves.toEqual({ kind: "stopped", drained: true });
     expect(value.closeCalls()).toBe(1);
     await expect(process.start()).resolves.toEqual({ kind: "unavailable" });
     expect((await process.fetch(request("/ready"))).status).toBe(503);
@@ -134,8 +135,59 @@ describe("PostgreSQL Firebase production memory service process kernel", () => {
     expect(mcpCalls).toBe(1);
     held.resolve(new Response("done"));
     expect(await (await admitted).text()).toBe("done");
-    await expect(stopping).resolves.toEqual({ kind: "stopped" });
+    await expect(stopping).resolves.toEqual({ kind: "stopped", drained: true });
     expect(value.closeCalls()).toBe(1);
+  });
+
+  test("a hung request cannot hold shutdown open past the deadline", async () => {
+    // Before the deadline existed, `stop()` awaited the drain unboundedly, so
+    // this request would have held the process open until the supervisor's
+    // SIGKILL — the one shutdown that strands work leases and drops requests.
+    const neverResolves = deferred<Response>();
+    const value = fixture({ mcp: () => neverResolves.promise });
+    const process = createPostgresFirebaseAuthorizedMemoryServiceProcess({
+      ...value.options, graceful_shutdown_ms: 25,
+    });
+    await process.start();
+    void process.fetch(request("/mcp", { method: "POST" }));
+    await Promise.resolve();
+    expect(process.snapshot().in_flight).toBe(1);
+
+    const started = Date.now();
+    // Resolves at all, reports the truth, and still closes the pool.
+    await expect(process.stop()).resolves.toEqual({ kind: "stopped", drained: false });
+    expect(Date.now() - started).toBeLessThan(4_000);
+    expect(value.closeCalls()).toBe(1);
+    expect(process.snapshot().in_flight).toBe(1);
+    neverResolves.resolve(new Response("late"));
+  });
+
+  test("a clean drain does not wait out the deadline", async () => {
+    // The timer must be cleared on the winning path; otherwise a 25 s deadline
+    // makes every clean shutdown take 25 s.
+    const held = deferred<Response>();
+    const value = fixture({ mcp: () => held.promise });
+    const process = createPostgresFirebaseAuthorizedMemoryServiceProcess({
+      ...value.options, graceful_shutdown_ms: 30_000,
+    });
+    await process.start();
+    const admitted = process.fetch(request("/mcp", { method: "POST" }));
+    await Promise.resolve();
+    const started = Date.now();
+    const stopping = process.stop();
+    held.resolve(new Response("done"));
+    await admitted;
+    await expect(stopping).resolves.toEqual({ kind: "stopped", drained: true });
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  test("the shutdown deadline is required and bounded", async () => {
+    const value = fixture();
+    for (const bad of [undefined, 0, -1, 1.5, Number.NaN, "4000", null]) {
+      expect(() => createPostgresFirebaseAuthorizedMemoryServiceProcess({
+        ...value.options, graceful_shutdown_ms: bad,
+      } as never)).toThrow();
+    }
   });
 
   test("a stop racing readiness can never reopen admission", async () => {
@@ -147,7 +199,7 @@ describe("PostgreSQL Firebase production memory service process kernel", () => {
     expect(process.snapshot().phase).toBe("draining");
     ready.resolve(readinessRows());
     await expect(starting).resolves.toEqual({ kind: "unavailable" });
-    await expect(stopping).resolves.toEqual({ kind: "stopped" });
+    await expect(stopping).resolves.toEqual({ kind: "stopped", drained: true });
     expect((await process.fetch(request("/v1/memories"))).status).toBe(503);
     expect(value.closeCalls()).toBe(1);
   });
@@ -157,7 +209,7 @@ describe("PostgreSQL Firebase production memory service process kernel", () => {
     const first = createPostgresFirebaseAuthorizedMemoryServiceProcess(unavailable.options);
     await expect(first.start()).resolves.toEqual({ kind: "unavailable" });
     expect((await first.fetch(request("/ready"))).status).toBe(503);
-    await expect(first.stop()).resolves.toEqual({ kind: "stopped" });
+    await expect(first.stop()).resolves.toEqual({ kind: "stopped", drained: true });
 
     const broken = fixture({ close: async () => { throw new Error("secret"); } });
     const second = createPostgresFirebaseAuthorizedMemoryServiceProcess(broken.options);
@@ -237,6 +289,7 @@ describe("PostgreSQL Firebase production memory service process kernel", () => {
     };
     const mutableOptions = {
       pool: mutablePool,
+      graceful_shutdown_ms: 4_000,
       readiness: createPostgresProductionRuntimeReadiness(mutablePool, "d".repeat(64)),
       service_options: {
         ...base.service_options,
@@ -253,7 +306,7 @@ describe("PostgreSQL Firebase production memory service process kernel", () => {
     mutablePool.withTransaction = async () => { throw new Error("replacement must not run"); };
     mutablePool.close = async () => { replacementClose += 1; };
     await expect(process.start()).resolves.toEqual({ kind: "ready" });
-    await expect(process.stop()).resolves.toEqual({ kind: "stopped" });
+    await expect(process.stop()).resolves.toEqual({ kind: "stopped", drained: true });
     expect(readinessCalls).toBe(1);
     expect(originalClose).toBe(1);
     expect(replacementClose).toBe(0);
