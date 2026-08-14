@@ -28,7 +28,15 @@ from models.app import App  # noqa: E402
 from routers import apps as apps_mod  # noqa: E402
 
 
-def _app(app_id, name, description='Something', category='productivity', approved=True, private=False):
+def _app(
+    app_id,
+    name,
+    description='Something',
+    category='productivity',
+    approved=True,
+    private=False,
+    capabilities=None,
+):
     return App(
         id=app_id,
         name=name,
@@ -36,7 +44,7 @@ def _app(app_id, name, description='Something', category='productivity', approve
         author='Someone',
         description=description,
         image='http://img',
-        capabilities={'chat'},
+        capabilities=set(capabilities or {'chat'}),
         approved=approved,
         private=private,
     )
@@ -99,6 +107,19 @@ def test_category_filter_applies_over_the_shared_catalog(monkeypatch):
     result = _catalog_search(monkeypatch, catalog, category='cooking')
 
     assert [a['id'] for a in result['data']] == ['a2']
+
+
+def test_capability_filter_matches_any_capability_not_just_the_first(monkeypatch):
+    # The predicate this replaces was Firestore `array_contains`, i.e. membership. Filtering on a
+    # single primary capability would make a multi-capability app unfindable by its secondary ones.
+    catalog = [
+        _app('multi', 'Both', capabilities={'chat', 'memories'}),
+        _app('chat_only', 'Chatter', capabilities={'chat'}),
+    ]
+
+    result = _catalog_search(monkeypatch, catalog, capability='memories')
+
+    assert [a['id'] for a in result['data']] == ['multi']
 
 
 @pytest.mark.parametrize('scope', ['my_apps', 'installed_apps'])

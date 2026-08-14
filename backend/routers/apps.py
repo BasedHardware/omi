@@ -698,7 +698,11 @@ def _public_catalog_for_search(category: str | None, capability: str | None) -> 
     if category:
         apps = [app for app in apps if app.category == category]
     if capability:
-        apps = filter_apps_by_capability(apps, capability)
+        # Membership, matching the `array_contains` this replaces. Not `filter_apps_by_capability`,
+        # which answers a different question for the browse sections: it resolves each app to a
+        # single primary capability by priority order and drops notification apps outside their own
+        # section, so an app would stop being findable by any capability but its first.
+        apps = [app for app in apps if app.has_capability(capability)]
 
     # Copy before returning. These App objects are the cache's own, handed to every request that
     # asks for the catalog, so the caller stamping a per-user `enabled` onto them would publish one
