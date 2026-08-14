@@ -8,62 +8,103 @@ self-host deployment (later WPs add services to the same compose).
 > (outside the `src/omi` source tree). This file instead lives in the source because it is the
 > operational runbook for the compose stack.
 
-## Environments — the authoritative map (ADR-0043)
+## Environments & compose matrix (ADR-0043 / ADR-0046)
 
-**Four environments** — `prod`, `dev`, `test-unit`, `test-e2e`. This section is the single source of
-truth for how they differ (network, inference reach, auth, store, seed, exposure); everything else
-(env `.example` files, `run-*.sh`, the ADRs) defers here. The compose stack is split per environment
-on a common base — **no `docker-compose.yml`, no override** (ADR-0043; studio `compose-environments-onprem`).
+This section is the single source of truth for how the environments differ; everything else (env
+`.example` files, `run-*.sh`, the ADRs) defers here. The stack is composed from **two fragments** +
+**four runnable postures** — **no `docker-compose.yml`, no override**; always pass
+`-f compose.<posture>.yaml` (ADR-0043).
 
-| Dimension | **prod** | **dev** | **test-unit** | **test-e2e** |
+### The two fragments (never run directly)
+
+| Fragment | Holds | Why |
+|---|---|---|
+| `compose.base.yaml` | **only what every posture shares** — `valkey` + `backend` + `api-proxy` (the backend's TLS front) + the `omi`/`edge` networks | so a posture never carries a backend it does not use |
+| `compose.selfhost.yaml` | **every self-hosted backend** — `mongo` (default store) · `keycloak`+`kc-proxy` (auth) · `qdrant` (vector) · `rustfs` (object) · `ntfy`+`ntfy-proxy` (push) · `llm_gateway` + `parakeet`/`diarizer`/`nllb`/`whisper` (inference) + their named volumes | the on-prem replacements for the managed cloud services (ADR-0046) |
+
+A proxy lives where its upstream lives: `api-proxy` fronts the backend → **base**; `kc-proxy`/`ntfy-proxy`
+front keycloak/ntfy → **selfhost**.
+
+### The four postures (runnable)
+
+| Posture | Entrypoint | Includes | `omi` network | Backends |
 |---|---|---|---|---|
-| Entrypoint | `compose.prod.yaml` | `compose.dev.yaml` | **no compose** — file-isolated pytest (ADR-0026) | `compose.dev.yaml` + `testing/e2e/` |
-| `omi` network | `internal: true` — **no egress** (the ADR-0001 proof) | `internal: false` — egress, so the backend can reach **host** inference | n/a (built image + mounted repo) | as dev |
-| Inference (LLM/embeddings/STT) | operator endpoint **on the `omi` net** (`--profile inference`, or an external URL the operator wires) | **host** via `host.docker.internal` (e.g. host Ollama `/v1`) | n/a — fakes/mocks, no network | host (as dev) |
-| Auth | **OIDC/Keycloak real**, `LOCAL_DEVELOPMENT=false` | `LOCAL_DEVELOPMENT=true` → `Bearer dev-token` = **uid 123**, or `ADMIN_KEY`, or real OIDC | uid 123 / `FakeAuthProvider` (no live IdP) | real OIDC (the E2E path) or uid 123 |
-| Store | Mongo (`--profile mongo`) or the Firestore emulator | as prod | `FakeDocumentStore` / `mongomock` (no live DB) | Mongo / emulator, live |
-| Object / vector / push | S3-compat (`objstore`) / Qdrant (`chat`) / ntfy (`push`) — operator services | as prod (host-reachable) | fakes (`FakeObjectStore`/`FakeVectorStore`, in-memory) | live services via profiles |
-| Data seed | operator-provided | **`compose.seed.yaml`** overlay: 5-user MELD/Friends seed via the backend REST API (D35) | n/a | via the API, like seed |
-| API exposure | **none raw** — behind the TLS proxies (`api-proxy`/`kc-proxy`) | published on `:8000` for host `curl` convenience | n/a | via `api-proxy` TLS (device trusts the self-signed CA) |
-| Env file (layered) | `backend.env.base` + `backend.env.prod` | `backend.env.base` + `backend.env.dev` | env set inline by each test | `backend.env.base` + `backend.env.dev` (+ `.seed` for seeding) |
+| **on-prem prod** (hermetic) | `compose.prod.yaml` | base + **selfhost** | `internal: true` — **no egress** (ADR-0001 proof) | self-hosted (see port matrix) |
+| **dev** | `compose.dev.yaml` | base + selfhost (+ Firestore emulator opt-in `--profile firestore`) | egress — backend reaches **host** inference; API on `:8000` | self-hosted; `LOCAL_DEVELOPMENT` dev-auth available |
+| **seed** | `compose.seed.yaml` | base + selfhost | egress | dev + **real OIDC**, drives the MELD 5-user seed (D35) |
+| **cloud prod** | `compose.prod.cloud.yaml` | **base only** (no selfhost) | egress — reaches the cloud | **managed** (Firestore/Pinecone/Firebase/GCS) |
+| test-unit | **no compose** — file-isolated pytest (ADR-0026) | — | none | in-memory fakes (`FakeDocumentStore`/`FakeObjectStore`/`FakeVectorStore`/`FakeAuthProvider`) / `mongomock` |
+| test-e2e | `compose.dev.yaml` + `testing/e2e/` | base + selfhost | egress | live services via profiles (`run-*.sh`, rule 12) |
 
-**Rules that fall out of the matrix:**
-- Always pass `-f compose.<env>.yaml` — there is **no implicit default**. Profiles
-  (`mongo/objstore/push/chat/inference/auth`) are orthogonal feature toggles, added per-run in any env.
-- **`prod` is the hermetic proof** (`omi internal:true`, no egress = ADR-0001); **`dev` is deliberately
-  non-hermetic** (egress on, so RAG can reach host inference). Same code, different posture — the
-  difference is the network + how inference is addressed, nothing in the app.
-- **`test-unit` never uses compose** — file-isolated pytest against the built image with the repo
-  mounted (ADR-0026), driving the neutral seams with in-memory fakes (`FakeDocumentStore`,
-  `FakeObjectStore`, `FakeVectorStore`, `FakeAuthProvider`) or `mongomock`. No live services, no network.
-- **`test-e2e` is `dev` with live services** — the compose dev stack (real Mongo/Keycloak/Qdrant/ntfy),
-  driven end-to-end (OIDC login, seed, chat, push). `run-*.sh` scripts (`run-chat-e2e.sh`,
-  `run-inference-live-tests.sh`) bring up the profile(s) and exercise the real path (rule 12).
+### Backend selection per posture (the neutral-port matrix, ADR-0004)
 
-Copy the env templates once:
+On-prem uses the self-hosted side; cloud uses the managed side. **The on-prem default is the
+self-hosted stack (ADR-0046)** — Mongo is the default store, no profile needed for it.
+
+| Port | on-prem (default) | cloud |
+|---|---|---|
+| storage | **Mongo** — `STORAGE_BACKEND=mongo` (ADR-0002), always on in `selfhost` | **Firestore** — `=firestore`, a **real** Firestore (ADR-0003) |
+| auth | **OIDC/Keycloak** — `AUTH_BACKEND=oidc`, `--profile auth` | **Firebase** — `=firebase` |
+| vector | **Qdrant** — `VECTOR_STORE_BACKEND=qdrant`, `--profile chat` | **Pinecone** — `=pinecone` |
+| object | **S3/RustFS** — `OBJECT_STORE_BACKEND=s3`, `--profile objstore` | **GCS** — `=gcs` |
+| push | **ntfy/UnifiedPush** — `PUSH_NOTIFICATION_BACKEND=unifiedpush`, `--profile push` | **FCM** — `=fcm` |
+
+- **Firestore stays first-class + the reference adapter** (ADR-0003). The Firestore **emulator** is a
+  dev-only convenience (`compose.dev.yaml --profile firestore` + `FIRESTORE_EMULATOR_HOST`), **never**
+  in base/prod; the cloud posture points at a **real** Firestore.
+- Profiles (`auth/chat/objstore/push/inference/firestore`) are orthogonal feature toggles, added
+  per-run. `mongo` is no longer a profile — Mongo is the default and always on in `selfhost`.
+- Because `compose.prod.cloud.yaml` includes **base only**, none of the self-hosted services are even
+  *defined* there — the cloud posture **cannot start one by accident**, even with `--profile`.
+
+### Quick start — the two prod commands
+
 ```bash
 cd deploy/onprem
-for e in base dev prod; do cp backend.env.$e.example backend.env.$e; done   # + seed when seeding (D35)
+# env files (gitignored) + a real secret (both postures share backend.env.base):
+for e in base prod; do cp backend.env.$e.example backend.env.$e; done
 sed -i "s/^ENCRYPTION_SECRET=.*/ENCRYPTION_SECRET=$(openssl rand -hex 32)/" backend.env.base
+
+# ── PROD · on-prem self-hosted (hermetic, no egress) ──────────────────────────
+#   Mongo starts by default; profiles add TLS+OIDC (auth), vector (chat), object (objstore), push.
+docker compose -f compose.prod.yaml --profile auth --profile chat --profile objstore --profile push up -d --build
+docker compose -f compose.prod.yaml ps            # services must become 'healthy'
+
+# ── PROD · cloud (managed Firestore/Pinecone/Firebase/GCS; needs egress + creds) ──
+cp backend.env.prod.cloud.example backend.env.prod.cloud   # fill real creds; mount the GCP SA json
+#   base only (backend + valkey + api-proxy TLS front); no self-hosted service is defined here.
+docker compose -f compose.prod.cloud.yaml --profile auth up -d --build
 ```
+The env `.example` templates are layered `backend.env.base` + `backend.env.<posture>`; copy the ones
+for the posture you run (`dev`/`seed` too when needed). See the port matrix above for the backend
+env each posture sets.
 
-## What the baseline contains (WP0)
+## What each posture contains
 
-Three services (`deploy/onprem/compose.prod.yaml`), network **`internal: true`** (no egress):
+**`base`** — the three services every posture shares:
 
 | Service | Image / build | Role |
 |---|---|---|
 | `backend` | built from `backend/Dockerfile` (base image override, see below) | FastAPI `main:app`, uvicorn :8080 |
-| `firestore-emulator` | built from `deploy/onprem/firestore-emulator/Dockerfile` | Firestore :8085 + Auth :9099 emulators |
 | `valkey` | `valkey/valkey:8-alpine` | cache/queue (wire-compatible with `redis-py`) |
+| `api-proxy` | `nginx:stable-alpine` (`--profile auth`) | TLS front for the backend API (device trusts the self-signed CA) |
 
-Out of WP0 scope (added in later WPs): Pusher, Typesense, Mongo/ArcadeDB, Qdrant,
-RustFS/SeaweedFS, Keycloak, GPU inference.
+**`selfhost`** (on-prem prod/dev, ADR-0046) adds the self-hosted backends, each behind its profile
+except Mongo (default, always on): `mongo` · `keycloak`+`kc-proxy` (`auth`) · `qdrant` (`chat`) ·
+`rustfs` (`objstore`) · `ntfy`+`ntfy-proxy` (`push`) · `llm_gateway`+`parakeet`/`diarizer`/`nllb`/`whisper`
+(`chat`/`inference`).
+
+**cloud** (`compose.prod.cloud.yaml`) adds **nothing** — `base` only, with the backend pointed at the
+managed Firestore/Pinecone/Firebase/GCS via `backend.env.prod.cloud`.
+
+The **Firestore emulator** is a **dev-only** service (`compose.dev.yaml --profile firestore`, Firestore
+:8085 + Auth :9099) for exercising the reference adapter locally; it is never in base/prod (ADR-0046).
 
 ## Data durability (persistent volumes)
 
 Every stateful backend that can hold on-prem data survives `docker compose down`/`up` on a **named
-volume** (compose.base.yaml `volumes:` block): `mongo-data:/data/db` (ADR-0002 datastore),
+volume** (compose.selfhost.yaml `volumes:` block — they live with the self-hosted services, ADR-0046):
+`mongo-data:/data/db` (ADR-0002 datastore),
 `rustfs-data:/data` (ADR-0032 object store, `RUSTFS_VOLUMES=/data`), `qdrant-storage` (ADR-0033
 vectors), `keycloak-data:/opt/keycloak/data`, `ntfy-cache:/var/cache/ntfy` (ADR-0011 push server —
 `NTFY_CACHE_FILE=/var/cache/ntfy/cache.db` SQLite; without it ntfy caches messages in memory only and
@@ -90,21 +131,16 @@ everything is in the containers. The **build** needs internet access (see Deviat
 
 ## Usage
 
+The two prod up-commands are in **Quick start** above (on-prem self-hosted / cloud). Day-to-day:
+
 ```bash
 cd deploy/onprem
-
-# 1. create the env files (gitignored) + a real secret — see the Environments section above:
-for e in base prod; do cp backend.env.$e.example backend.env.$e; done
-sed -i "s/^ENCRYPTION_SECRET=.*/ENCRYPTION_SECRET=$(openssl rand -hex 32)/" backend.env.base
-
-# 2. build + up the PROD (hermetic) stack: no egress
-docker compose -f compose.prod.yaml up -d --build
-docker compose -f compose.prod.yaml ps   # the 3 services must become 'healthy'
-
-# logs / stop
+docker compose -f compose.prod.yaml ps            # services must become 'healthy'
 docker compose -f compose.prod.yaml logs -f backend
-docker compose -f compose.prod.yaml down # add -v to wipe emulator/valkey data
+docker compose -f compose.prod.yaml down          # keeps volumes; add -v to WIPE data (see durability)
 ```
+Swap `compose.prod.yaml` for `compose.dev.yaml` / `compose.seed.yaml` / `compose.prod.cloud.yaml` for
+the other postures. Always pass the same `--profile` flags you brought the stack up with.
 
 ## Verification (WP0 acceptance)
 
@@ -115,10 +151,11 @@ The network is `internal` -> no published port: test from **inside** the contain
 docker compose -f compose.prod.yaml exec -T backend curl -fsS http://localhost:8080/v1/health
 #    expected: {"status":"ok"}
 
-# 2) end-to-end auth + Firestore emulator round-trip (verified)
-docker compose -f compose.prod.yaml exec -T backend curl -sS -o /dev/null -w '%{http_code}\n' \
+# 2) end-to-end auth + store round-trip (dev-auth path; needs LOCAL_DEVELOPMENT=true, i.e. dev/seed)
+docker compose -f compose.dev.yaml exec -T backend curl -sS -o /dev/null -w '%{http_code}\n' \
   http://localhost:8080/v3/memories -H 'Authorization: Bearer dev-token'
-#    expected: 200 (LOCAL_DEVELOPMENT=true -> Bearer dev-token = uid 123; reads from the emulator)
+#    expected: 200 (LOCAL_DEVELOPMENT=true -> Bearer dev-token = uid 123; reads from the store — Mongo
+#    by default, ADR-0046). In real prod (LOCAL_DEVELOPMENT=false) auth is OIDC — use a real token.
 docker compose -f compose.prod.yaml exec -T backend curl -sS -o /dev/null -w '%{http_code}\n' \
   http://localhost:8080/v3/memories
 #    expected: 401 (auth enforced)
