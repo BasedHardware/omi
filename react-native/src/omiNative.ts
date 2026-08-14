@@ -20,6 +20,7 @@ export type NativeHttpResponse = {
   id: string;
   status: number;
   body: string | null;
+  retryAfterSeconds?: number | null;
 };
 
 export type OmiBackend = {
@@ -27,7 +28,7 @@ export type OmiBackend = {
   generationEvents(
     generationId: string,
     lastEventId: string | null,
-  ): Promise<string>;
+  ): Promise<NativeHttpResponse>;
   cancelGenerationEvents(generationId: string): Promise<void>;
 };
 

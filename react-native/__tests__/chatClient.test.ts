@@ -1,5 +1,7 @@
 import {
+  ChatBackendError,
   cancelChatGeneration,
+  chatErrorCopy,
   loadChatHistory,
   parseTerminal,
   sendChatMessage,
@@ -13,7 +15,7 @@ test('loads main Chat history through the native boundary', async () => {
       requests.push(request);
       return {id: request.id, status: 200, body: '{"messages":[]}'};
     },
-    generationEvents: async () => '',
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
     cancelGenerationEvents: async () => {},
   } satisfies OmiBackend;
 
@@ -52,9 +54,9 @@ test('admits one main-scope human message and accepts only a terminal SSE messag
     generationEvents: async (generationId, lastEventId) => {
       expect(generationId).toBe('generation-1');
       expect(lastEventId).toBeNull();
-      return `event: snapshot\nid: e1\ndata: {"kind":"snapshot","text":"H"}\n\nevent: done\nid: e2\ndata: ${JSON.stringify(
+      return {id: generationId, status: 200, body: `event: snapshot\nid: e1\ndata: {"kind":"snapshot","text":"H"}\n\nevent: done\nid: e2\ndata: ${JSON.stringify(
         {kind: 'done', message: assistant},
-      )}\n\n`;
+      )}\n\n`};
     },
     cancelGenerationEvents: async () => {},
   } satisfies OmiBackend;
@@ -118,11 +120,11 @@ test('reconciles canonical history when native reconnect reports replay expiry',
             body: JSON.stringify({messages: [human, assistant]}),
           };
     },
-    generationEvents: async () => {
-      throw Object.assign(new Error('expired'), {
-        code: 'OMI_HTTP_REPLAY_EXPIRED',
-      });
-    },
+    generationEvents: async () => ({
+      id: 'expired',
+      status: 410,
+      body: '{"error":{"code":"generation_replay_expired","retryable":false,"action":"refresh_history"}}',
+    }),
     cancelGenerationEvents: async () => {},
   } satisfies OmiBackend;
 
@@ -140,7 +142,7 @@ test('durable cancellation leaves terminal reconciliation to the active stream',
       status: 200,
       body: JSON.stringify({messages: []}),
     }),
-    generationEvents: async () => '',
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
     cancelGenerationEvents: async generationId => {
       expect(generationId).toBe('generation-cancel');
       order.push('delete');
@@ -182,10 +184,10 @@ test('native observer cancellation reconnects for the canonical terminal frame',
           code: 'OMI_HTTP_CANCELLED',
         });
       }
-      return `event: cancelled\nid: e3\ndata: ${JSON.stringify({
+      return {id: 'generation-3', status: 200, body: `event: cancelled\nid: e3\ndata: ${JSON.stringify({
         kind: 'cancelled',
         message: assistant,
-      })}\n\n`;
+      })}\n\n`};
     },
     cancelGenerationEvents: async () => {},
   } satisfies OmiBackend;
@@ -195,4 +197,25 @@ test('native observer cancellation reconnects for the canonical terminal frame',
     assistant,
   });
   expect(streams).toBe(2);
+});
+
+test('maps ratified public recovery without automatically retrying', () => {
+  expect(
+    chatErrorCopy(
+      new ChatBackendError(401, 'unauthorized', false, 'reauthenticate', null),
+    ),
+  ).toBe('Sign in again to continue.');
+  expect(
+    chatErrorCopy(
+      new ChatBackendError(429, 'rate_limited', true, 'retry', 12),
+    ),
+  ).toBe('Too many requests. Try again in 12 seconds.');
+  expect(
+    chatErrorCopy(
+      new ChatBackendError(503, 'service_unavailable', true, 'retry', 2),
+    ),
+  ).toBe('Omi is temporarily unavailable. Try again.');
+  expect(
+    chatErrorCopy(new ChatBackendError(404, 'not_found', false, 'none', null)),
+  ).toBe('This request cannot be completed.');
 });

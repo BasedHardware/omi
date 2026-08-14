@@ -14,6 +14,9 @@ static NSString *const OmiContractVersion = @"1.0.0";
 @property(nonatomic) NSUInteger reconnects;
 @property(nonatomic, copy) NSString *lastEventId;
 @property(nonatomic, copy) dispatch_block_t reconnectWork;
+@property(nonatomic) NSInteger responseStatus;
+@property(nonatomic) NSInteger retryAfterSeconds;
+@property(nonatomic, copy) NSString *requestId;
 - (instancetype)initWithResolve:(RCTPromiseResolveBlock)resolve
                           reject:(RCTPromiseRejectBlock)reject
                          cleanup:(dispatch_block_t)cleanup;
@@ -42,7 +45,12 @@ static NSString *const OmiContractVersion = @"1.0.0";
     self.settled = YES;
   }
   if (self.reconnectWork != nil) dispatch_block_cancel(self.reconnectWork);
-  if (value != nil) self.resolve(value);
+  if (value != nil) self.resolve(@{
+    @"id": self.requestId,
+    @"status": @(self.responseStatus),
+    @"body": value,
+    @"retryAfterSeconds": self.retryAfterSeconds > 0 ? @(self.retryAfterSeconds) : NSNull.null,
+  });
   else self.reject(code, message, nil);
   [self.task cancel];
   [self.session finishTasksAndInvalidate];
@@ -72,15 +80,11 @@ didReceiveResponse:(NSURLResponse *)response
  completionHandler:(void (^)(NSURLSessionResponseDisposition disposition))completionHandler {
   NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class]
       ? ((NSHTTPURLResponse *)response).statusCode : 0;
-  if (status == 410) {
-    completionHandler(NSURLSessionResponseCancel);
-    [self finishWithValue:nil code:@"OMI_HTTP_REPLAY_EXPIRED" message:@"Generation replay expired"];
-    return;
-  }
-  if (status != 200) {
-    completionHandler(NSURLSessionResponseCancel);
-    [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Native generation transport failed"];
-    return;
+  self.responseStatus = status;
+  if ([response isKindOfClass:NSHTTPURLResponse.class]) {
+    NSString *retryAfter = [(NSHTTPURLResponse *)response valueForHTTPHeaderField:@"Retry-After"];
+    NSInteger parsed = retryAfter.integerValue;
+    if (parsed > 0 && parsed <= 3600) self.retryAfterSeconds = parsed;
   }
   completionHandler(NSURLSessionResponseAllow);
 }
@@ -125,6 +129,11 @@ didReceiveResponse:(NSURLResponse *)response
 didCompleteWithError:(NSError *)error {
   @synchronized(self) {
     if (self.settled) return;
+  }
+  if (self.responseStatus != 200) {
+    NSString *body = [[NSString alloc] initWithData:self.data encoding:NSUTF8StringEncoding];
+    [self finishWithValue:body ?: @"" code:nil message:nil];
+    return;
   }
   if (self.reconnects < 5) {
     NSTimeInterval delay = 0.25 * (1 << self.reconnects);
@@ -255,6 +264,8 @@ RCT_REMAP_METHOD(request,
       return;
     }
     NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+    NSString *retryAfter = [httpResponse valueForHTTPHeaderField:@"Retry-After"];
+    NSInteger retryAfterSeconds = retryAfter.integerValue;
     NSString *responseBody = data.length > 0 ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
     if (data.length > 0 && responseBody == nil) {
       reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP response was not UTF-8", nil);
@@ -264,6 +275,8 @@ RCT_REMAP_METHOD(request,
       @"id": requestId,
       @"status": @(httpResponse.statusCode),
       @"body": responseBody ?: NSNull.null,
+      @"retryAfterSeconds": retryAfterSeconds > 0 && retryAfterSeconds <= 3600
+          ? @(retryAfterSeconds) : NSNull.null,
     });
   }];
   [task resume];
@@ -320,6 +333,7 @@ RCT_REMAP_METHOD(generationEvents,
   queue.maxConcurrentOperationCount = 1;
   delegate.session = [NSURLSession sessionWithConfiguration:configuration delegate:delegate delegateQueue:queue];
   delegate.request = request;
+  delegate.requestId = generationId;
   @synchronized(self.generations) {
     self.generations[generationId] = delegate;
   }

@@ -1,4 +1,4 @@
-import type {OmiBackend} from './omiNative';
+import type {NativeHttpResponse, OmiBackend} from './omiNative';
 
 export type ChatMessage = {
   id: string;
@@ -14,6 +14,36 @@ type TerminalFrame =
   | {kind: 'done'; message: ChatMessage}
   | {kind: 'cancelled'; message: ChatMessage | null}
   | {kind: 'failed'; error: {code: string; retryable: boolean}};
+
+export class ChatBackendError extends Error {
+  constructor(
+    readonly status: number,
+    readonly backendCode: string,
+    readonly retryable: boolean,
+    readonly action: string,
+    readonly retryAfterSeconds: number | null,
+  ) {
+    super(`Chat backend failed (${status}:${backendCode})`);
+  }
+}
+
+export function chatErrorCopy(error: unknown): string {
+  if (!(error instanceof ChatBackendError)) {
+    return 'Message not sent. Check your connection and try again.';
+  }
+  if (error.action === 'reauthenticate' || error.status === 401) {
+    return 'Sign in again to continue.';
+  }
+  if (error.status === 429) {
+    return error.retryAfterSeconds === null
+      ? 'Too many requests. Try again shortly.'
+      : `Too many requests. Try again in ${error.retryAfterSeconds} seconds.`;
+  }
+  if (error.retryable || error.status === 503) {
+    return 'Omi is temporarily unavailable. Try again.';
+  }
+  return 'This request cannot be completed.';
+}
 
 let messageSequence = 0;
 
@@ -37,7 +67,7 @@ export async function loadChatHistory(
     path: '/v1/chat-messages?limit=50',
   });
   if (response.status !== 200) {
-    throw new Error(`Chat history failed (${response.status})`);
+    throwBackendError(response);
   }
   const envelope = parseObject(response.body) as HistoryEnvelope;
   if (!Array.isArray(envelope.messages)) {
@@ -75,7 +105,7 @@ export async function sendChatMessage(
     }),
   });
   if (response.status !== 200 && response.status !== 201) {
-    throw new Error(`Chat send failed (${response.status})`);
+    throwBackendError(response);
   }
   const admission = parseObject(response.body) as AdmissionEnvelope;
   if (typeof admission.generation?.id !== 'string') {
@@ -85,13 +115,13 @@ export async function sendChatMessage(
   let terminal: TerminalFrame;
   try {
     terminal = parseTerminal(
-      await backend.generationEvents(admission.generation.id, null),
+      readGeneration(await backend.generationEvents(admission.generation.id, null)),
     );
   } catch (error) {
     if (isNativeCancellation(error)) {
       try {
         terminal = parseTerminal(
-          await backend.generationEvents(admission.generation.id, null),
+          readGeneration(await backend.generationEvents(admission.generation.id, null)),
         );
       } catch (replayError) {
         if (!isReplayExpired(replayError)) {
@@ -154,8 +184,47 @@ function isReplayExpired(error: unknown): boolean {
   return (
     error !== null &&
     typeof error === 'object' &&
-    'code' in error &&
-    error.code === 'OMI_HTTP_REPLAY_EXPIRED'
+    ((error instanceof ChatBackendError && error.status === 410) ||
+      ('code' in error && error.code === 'OMI_HTTP_REPLAY_EXPIRED'))
+  );
+}
+
+function readGeneration(response: NativeHttpResponse): string {
+  if (response.status !== 200) {
+    throwBackendError(response);
+  }
+  if (response.body === null) {
+    throw new Error('Generation returned an empty stream');
+  }
+  return response.body;
+}
+
+function throwBackendError(response: NativeHttpResponse): never {
+  let code = 'unknown';
+  let retryable = false;
+  let action = 'none';
+  if (response.body !== null) {
+    try {
+      const parsed = JSON.parse(response.body) as {
+        error?: {code?: unknown; retryable?: unknown; action?: unknown};
+      };
+      if (typeof parsed.error?.code === 'string') {
+        code = parsed.error.code;
+      }
+      if (typeof parsed.error?.retryable === 'boolean') {
+        retryable = parsed.error.retryable;
+      }
+      if (typeof parsed.error?.action === 'string') {
+        action = parsed.error.action;
+      }
+    } catch {}
+  }
+  throw new ChatBackendError(
+    response.status,
+    code,
+    retryable,
+    action,
+    response.retryAfterSeconds ?? null,
   );
 }
 

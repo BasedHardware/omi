@@ -32,7 +32,7 @@ test('native HTTP contract exposes only an origin-relative request and normalize
       captured.push(request);
       return {id: request.id, status: 200, body: '{"status":"ok"}'};
     },
-    generationEvents: async () => '',
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
     cancelGenerationEvents: async () => {},
   };
   const request: NativeHttpRequest = {
