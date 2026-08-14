@@ -12,6 +12,7 @@ and non-persisting surfaces cannot drift into sharing state by accident.
 """
 
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -55,6 +56,8 @@ async def generate_reply(
 
     app_id = data.app_id if data.app_id not in ['null', ''] else None
     app_record = get_available_app_by_id(app_id, uid) if app_id else None
+    if app_id and not app_record:
+        raise HTTPException(status_code=404, detail={'error': 'app_not_found'})
     app = App(**app_record) if app_record else None
     resolved_app_id = app.id if app else None
 
@@ -84,16 +87,20 @@ async def generate_reply(
     callback_data: dict[str, Any] = {}
     usage_token = set_usage_context(uid, Features.CHAT)
     try:
-        async for _chunk in execute_chat_stream(
-            uid,
-            messages,
-            app,
-            cited=False,
-            callback_data=callback_data,
-            chat_session=None,
-            platform=x_app_platform,
-        ):
-            continue
+        try:
+            async for _chunk in execute_chat_stream(
+                uid,
+                messages,
+                app,
+                cited=False,
+                callback_data=callback_data,
+                chat_session=None,
+                platform=x_app_platform,
+            ):
+                continue
+        except Exception as exc:
+            logger.error('stateless reply generation raised uid=%s error_type=%s', uid, type(exc).__name__)
+            callback_data['error'] = 'stream_failure'
     finally:
         reset_usage_context(usage_token)
 
@@ -110,4 +117,4 @@ async def generate_reply(
         )
         raise HTTPException(status_code=502, detail={'error': error or 'no_answer'})
 
-    return GenerateReplyResponse(text=answer, app_id=resolved_app_id)
+    return GenerateReplyResponse(text=re.sub(r'\[\d+\]', '', answer), app_id=resolved_app_id)

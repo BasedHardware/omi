@@ -86,6 +86,14 @@ def _failing_stream():
     return _stream
 
 
+def _raising_stream():
+    async def _stream(uid, messages, app=None, **kwargs):
+        raise RuntimeError('provider details must not escape')
+        yield None
+
+    return _stream
+
+
 def test_generate_reply_does_not_write_any_turn_to_chat_history():
     recorded = {}
     client, chat_module, generation_module, saved = _make_chat_client(_answering_stream(recorded))
@@ -109,6 +117,7 @@ def test_generate_reply_does_not_write_any_turn_to_chat_history():
         chat_module.chat_db.add_files_to_chat_session.assert_not_called()
         chat_module.llm_usage_db.record_chat_quota_question.assert_not_called()
         chat_module.llm_executor.submit.assert_not_called()
+        generation_module.record_fallback.assert_not_called()
 
         # Generation still runs through the shared chat path, with no session identity.
         assert recorded['uid'] == 'test-uid'
@@ -117,6 +126,57 @@ def test_generate_reply_does_not_write_any_turn_to_chat_history():
             'hey are we still on for friday?',
             'Draft a reply to Alice',
         ]
+    finally:
+        harness.cleanup(saved)
+
+
+def test_generate_reply_maps_raised_stream_failures_to_the_error_contract():
+    client, chat_module, generation_module, saved = _make_chat_client(_raising_stream())
+    try:
+        response = client.post('/v2/chat/generate-reply', json={'text': 'Draft a reply'})
+
+        assert response.status_code == 502
+        assert response.json()['detail'] == {'error': 'stream_failure'}
+        assert 'provider details' not in response.text
+        chat_module.chat_db.add_message.assert_not_called()
+        generation_module.record_fallback.assert_called_once()
+    finally:
+        harness.cleanup(saved)
+
+
+def test_generate_reply_rejects_an_unavailable_requested_app():
+    recorded = {}
+    client, chat_module, generation_module, saved = _make_chat_client(_answering_stream(recorded))
+    try:
+        generation_module.get_available_app_by_id.return_value = None
+
+        response = client.post(
+            '/v2/chat/generate-reply',
+            json={'text': 'Draft a reply', 'app_id': 'missing-app'},
+        )
+
+        assert response.status_code == 404
+        assert response.json()['detail'] == {'error': 'app_not_found'}
+        assert recorded == {}
+        generation_module.record_fallback.assert_not_called()
+        chat_module.chat_db.add_message.assert_not_called()
+    finally:
+        harness.cleanup(saved)
+
+
+def test_generate_reply_removes_conversation_citations_from_external_drafts():
+    async def cited_stream(uid, messages, app=None, **kwargs):
+        kwargs['callback_data']['answer'] = 'Friday works[1]. Bring the notes[12].'
+        yield ''
+
+    client, chat_module, generation_module, saved = _make_chat_client(cited_stream)
+    try:
+        response = client.post('/v2/chat/generate-reply', json={'text': 'Draft a reply'})
+
+        assert response.status_code == 200
+        assert response.json()['text'] == 'Friday works. Bring the notes.'
+        generation_module.record_fallback.assert_not_called()
+        chat_module.chat_db.add_message.assert_not_called()
     finally:
         harness.cleanup(saved)
 
