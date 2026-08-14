@@ -17,6 +17,7 @@ from ._client import db
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
+_MAX_MARK_READ_PAGES = 1000  # safety bound for mark_all_advice_read: 1000 * BATCH_LIMIT docs
 
 
 def _user_col(uid: str, collection: str) -> Any:
@@ -107,7 +108,10 @@ def mark_all_advice_read(uid: str) -> int:
     # Page the unread set instead of materializing the whole backlog before the first commit
     # (unbounded memory for a large account). Each committed page flips its docs to is_read=True, so
     # the same bounded is_read==False query self-drains: no cursor needed, the mutation advances it.
-    while True:
+    # A hard page cap bounds the loop (cubic PR 10887 E4): termination otherwise depends on the mutation
+    # outpacing concurrent unread-advice creation; if a burst kept every page full the loop could spin
+    # holding the request. _MAX_MARK_READ_PAGES * BATCH_LIMIT is far beyond any real advice backlog.
+    for _ in range(_MAX_MARK_READ_PAGES):
         page = list(col.where(filter=FieldFilter('is_read', '==', False)).limit(BATCH_LIMIT).stream())
         if not page:
             break
@@ -118,4 +122,6 @@ def mark_all_advice_read(uid: str) -> int:
         total += len(page)
         if len(page) < BATCH_LIMIT:
             break
+    else:
+        logger.warning(f"mark_all_advice_read({uid}) hit the {_MAX_MARK_READ_PAGES}-page cap; stopped at {total}")
     return total

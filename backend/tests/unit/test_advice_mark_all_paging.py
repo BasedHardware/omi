@@ -66,3 +66,28 @@ def test_exact_multiple_of_page_size_terminates(monkeypatch):
     assert advice.mark_all_advice_read(_UID) == 4
     # pages of 2, 2 (both full), then one empty query returns [] and stops: 3 queries.
     assert store.query_calls == 3
+
+
+def test_page_cap_bounds_a_pathological_unread_flood(monkeypatch):
+    # cubic PR 10887 E4: if concurrent creation keeps every page full, the self-draining loop could
+    # spin forever holding the request. The page cap bounds it. Model a store whose unread set never
+    # empties (full page every query, the is_read flip ignored).
+    from database.store.records import StoredDocument
+
+    monkeypatch.setattr(advice, 'BATCH_LIMIT', 2)
+    monkeypatch.setattr(advice, '_MAX_MARK_READ_PAGES', 3)
+
+    class _FloodStore(FakeDocumentStore):
+        def query(self, collection, *, filters=None, **kwargs):
+            limit = kwargs.get('limit') or 2
+            return [StoredDocument.present(f'{collection}/a{i}', {'is_read': False}) for i in range(limit)]
+
+        def update(self, path, data, *, if_updated_at=None):
+            pass  # ignore the flip -> the unread set never drains
+
+        def _update(self, path, data, *, if_updated_at=None, session=None):
+            pass
+
+    install_fake_db_client(monkeypatch, store=_FloodStore())
+    total = advice.mark_all_advice_read(_UID)
+    assert total == 3 * 2  # stopped at the 3-page cap (BATCH_LIMIT=2), did not spin
