@@ -115,13 +115,49 @@ function parseReply(raw: unknown, id: string): StagedChatAttachment | null {
   if (reply.ok !== true || !isDescriptor(reply.attachment)) {
     throw new Error("attachment staging host returned an unsafe descriptor");
   }
+  const extras = scanExtrasFromHost(reply.attachment);
   return {
     id: reply.attachment.id,
     mimeType: reply.attachment.mimeType,
     sizeBytes: reply.attachment.sizeBytes,
     expiresAt: reply.attachment.expiresAt,
     state: "staged",
+    ...extras,
   };
+}
+
+const HOST_SCAN_STATES = new Set([
+  "staged",
+  "scanning",
+  "clean",
+  "rejected",
+  "timed_out",
+  "error",
+  "bound",
+]);
+
+function scanExtrasFromHost(attachment: StagedChatAttachment): {
+  scanState?: string;
+  scannerId?: string;
+} {
+  const item = attachment as StagedChatAttachment & Record<string, unknown>;
+  const extras: { scanState?: string; scannerId?: string } = {};
+  if ("scanState" in item) {
+    if (typeof item["scanState"] !== "string" || !HOST_SCAN_STATES.has(item["scanState"])) {
+      throw new Error("attachment staging host returned an unsafe descriptor");
+    }
+    extras.scanState = item["scanState"];
+  }
+  if ("scannerId" in item) {
+    if (
+      typeof item["scannerId"] !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,64}$/u.test(item["scannerId"])
+    ) {
+      throw new Error("attachment staging host returned an unsafe descriptor");
+    }
+    extras.scannerId = item["scannerId"];
+  }
+  return extras;
 }
 
 export function bridgeChatAttachmentStagingPort(): ChatAttachmentStagingPort {

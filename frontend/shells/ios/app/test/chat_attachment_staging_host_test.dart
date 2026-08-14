@@ -111,6 +111,68 @@ void main() {
     await host.close();
   });
 
+  test('platform scan metadata is forwarded and unknown scan states stay fail-closed', () async {
+    final picked = FakePickedChatAttachment(sizeBytes: 3, stream: Stream<List<int>>.value(<int>[1, 2, 3]));
+    final client = FakeChatNativeHttpClient()
+      ..responses.add(
+        FakeChatNativeHttpResponse(
+          statusCode: 201,
+          contentType: 'application/json',
+          bytes: Stream<List<int>>.value(utf8.encode(p7Response(
+            size: 3,
+            additions: <String, Object>{
+              'scanState': 'clean',
+              'scannerId': 'dev-noop-scanner',
+            },
+          ))),
+        ),
+      );
+    final scripts = <String>[];
+    final host = makeHost(
+      client: client,
+      picker: FakeChatAttachmentPicker(picked),
+      scripts: scripts,
+      custody: ShellCredentialCustody('token'),
+    );
+    final reply = await stageAndReply(host, scripts);
+    expect(reply['ok'], isTrue);
+    expect(reply['attachment'], <String, Object>{
+      'id': 'attachment-opaque-01',
+      'mimeType': 'application/pdf',
+      'sizeBytes': 3,
+      'expiresAt': expiry,
+      'state': 'staged',
+      'scanState': 'clean',
+      'scannerId': 'dev-noop-scanner',
+    });
+    await host.close();
+
+    final badClient = FakeChatNativeHttpClient()
+      ..responses.add(
+        FakeChatNativeHttpResponse(
+          statusCode: 201,
+          contentType: 'application/json',
+          bytes: Stream<List<int>>.value(utf8.encode(p7Response(
+            size: 3,
+            additions: <String, Object>{'scanState': 'antivirus-clean'},
+          ))),
+        ),
+      );
+    final badScripts = <String>[];
+    final badHost = makeHost(
+      client: badClient,
+      picker: FakeChatAttachmentPicker(
+        FakePickedChatAttachment(sizeBytes: 3, stream: Stream<List<int>>.value(<int>[1, 2, 3])),
+      ),
+      scripts: badScripts,
+      custody: ShellCredentialCustody('token'),
+    );
+    final badReply = await stageAndReply(badHost, badScripts);
+    expect(badReply, <String, Object>{'ok': false, 'id': 'a1', 'reason': 'shell-error'});
+    expect(badScripts.join(), isNot(contains('antivirus-clean')));
+    await badHost.close();
+  });
+
   test('unsafe P7 descriptors redirects and non-201 responses never expose server metadata', () async {
     final valid = <String, Object>{
       'id': 'attachment-opaque-01',

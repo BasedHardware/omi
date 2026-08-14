@@ -144,15 +144,20 @@ struct StagedChatAttachmentDescriptor {
   let sizeBytes: Int64
   let state: String
   let expiresAt: String
+  let scanState: String?
+  let scannerId: String?
 
   var bridgeValue: [String: Any] {
-    [
+    var value: [String: Any] = [
       "id": id,
       "mimeType": mimeType,
       "sizeBytes": NSNumber(value: sizeBytes),
       "state": state,
       "expiresAt": expiresAt,
     ]
+    if let scanState { value["scanState"] = scanState }
+    if let scannerId { value["scannerId"] = scannerId }
+    return value
   }
 }
 
@@ -199,7 +204,7 @@ enum ChatAttachmentStagingPolicy {
       let object = try? JSONSerialization.jsonObject(with: data),
       let envelope = object as? [String: Any], Set(envelope.keys) == ["attachment"],
       let attachment = envelope["attachment"] as? [String: Any],
-      Set(attachment.keys) == BridgeChatAttachmentStagingContract.descriptorFields,
+      allowedAttachmentKeys(Set(attachment.keys)),
       let id = attachment["id"] as? String,
       id.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"#, options: .regularExpression) != nil,
       let mimeType = attachment["mimeType"] as? String,
@@ -217,9 +222,33 @@ enum ChatAttachmentStagingPolicy {
       let expiresAt = attachment["expiresAt"] as? String,
       canonicalExpiry(expiresAt)
     else { return nil }
+    let allowedScanStates: Set<String> = [
+      "staged", "scanning", "clean", "rejected", "timed_out", "error", "bound",
+    ]
+    var scanState: String?
+    if let rawScan = attachment["scanState"] {
+      guard let rawScan = rawScan as? String, allowedScanStates.contains(rawScan) else { return nil }
+      scanState = rawScan
+    }
+    var scannerId: String?
+    if let rawScanner = attachment["scannerId"] {
+      guard let rawScanner = rawScanner as? String,
+        rawScanner.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,64}$"#, options: .regularExpression) != nil
+      else { return nil }
+      scannerId = rawScanner
+    }
     return StagedChatAttachmentDescriptor(
       id: id, mimeType: mimeType, sizeBytes: sizeNumber.int64Value,
-      state: BridgeChatAttachmentStagingContract.stagedState, expiresAt: expiresAt)
+      state: BridgeChatAttachmentStagingContract.stagedState, expiresAt: expiresAt,
+      scanState: scanState, scannerId: scannerId)
+  }
+
+  private static func allowedAttachmentKeys(_ keys: Set<String>) -> Bool {
+    BridgeChatAttachmentStagingContract.descriptorFields.isSubset(of: keys)
+      && keys.isSubset(of: BridgeChatAttachmentStagingContract.descriptorFields.union([
+        "scanState",
+        "scannerId",
+      ]))
   }
 
   private static func canonicalExpiry(_ value: String) -> Bool {

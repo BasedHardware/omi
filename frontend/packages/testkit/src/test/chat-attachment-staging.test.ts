@@ -64,6 +64,61 @@ test("the exact P7 no-name response succeeds and unsafe extras never surface", a
   assert.deepEqual(Object.keys(requests[0]!).sort(), ["id", "t"]);
 });
 
+test("platform scan extras survive and unknown scan states stay fail-closed", async () => {
+  host[BRIDGE_CHAT_ATTACHMENT_STAGING_CHANNEL] = {
+    postMessage(raw: string): void {
+      const request = JSON.parse(raw) as BridgeChatAttachmentStagingRequest;
+      const reply = host[BRIDGE_CHAT_ATTACHMENT_STAGING_REPLY_FUNCTION] as
+        (id: string, rawReply: string) => void;
+      reply(request.id, JSON.stringify({
+        ok: true,
+        id: request.id,
+        attachment: {
+          id: "opaque-stage-scan",
+          mimeType: "application/pdf",
+          sizeBytes: 12,
+          expiresAt: "2026-08-11T12:00:00.000Z",
+          state: "staged",
+          scanState: "clean",
+          scannerId: "dev-noop-scanner",
+          localPath: "/private/user-secret.pdf",
+        },
+      }));
+    },
+  };
+  const port = bridgeChatAttachmentStagingPort();
+  assert.deepEqual(await port.pickAndStage(), {
+    id: "opaque-stage-scan",
+    mimeType: "application/pdf",
+    sizeBytes: 12,
+    expiresAt: "2026-08-11T12:00:00.000Z",
+    state: "staged",
+    scanState: "clean",
+    scannerId: "dev-noop-scanner",
+  });
+
+  host[BRIDGE_CHAT_ATTACHMENT_STAGING_CHANNEL] = {
+    postMessage(raw: string): void {
+      const request = JSON.parse(raw) as BridgeChatAttachmentStagingRequest;
+      const reply = host[BRIDGE_CHAT_ATTACHMENT_STAGING_REPLY_FUNCTION] as
+        (id: string, rawReply: string) => void;
+      reply(request.id, JSON.stringify({
+        ok: true,
+        id: request.id,
+        attachment: {
+          id: "opaque-stage-bad",
+          mimeType: "application/pdf",
+          sizeBytes: 12,
+          expiresAt: "2026-08-11T12:00:00.000Z",
+          state: "staged",
+          scanState: "antivirus-clean",
+        },
+      }));
+    },
+  };
+  await assert.rejects(bridgeChatAttachmentStagingPort().pickAndStage(), /unsafe descriptor/);
+});
+
 test("cancel and unsafe native metadata never create a staged descriptor", async () => {
   let reply: unknown = { ok: false, id: "a1", reason: "cancelled" };
   host[BRIDGE_CHAT_ATTACHMENT_STAGING_CHANNEL] = {

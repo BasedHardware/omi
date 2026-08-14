@@ -1332,3 +1332,84 @@ test("unknown scan outcomes fail closed as error and never claim a bind", async 
     await rendered.cleanup();
   }
 });
+
+test("platform upload scan extras join the tray without a second local scan", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  const staging = {
+    isAvailable: () => true,
+    async pickAndStage() {
+      return {
+        ...stagedDescriptor("opaque-wire-clean"),
+        scanState: "clean",
+        scannerId: "dev-noop-scanner",
+      };
+    },
+  };
+  const store = createProductionChatStore(domain, staging);
+  let scans = 0;
+  store.scanAttachment = async () => {
+    scans += 1;
+    return "error";
+  };
+  const rendered = await renderComponent(ChatProduction, { store });
+  try {
+    await click(rendered, rendered.container.querySelector("button.chat-attach"));
+    const item = rendered.container.querySelector("[data-attachment-scan]");
+    assert.equal(item?.getAttribute("data-attachment-scan"), "clean");
+    assert.equal(item?.getAttribute("data-attachment-scanner"), "dev-noop-scanner");
+    assert.equal(scans, 0, "a terminal wire scan must not be replaced by a second local scan");
+    const textarea = rendered.container.querySelector("textarea.chat-draft");
+    await setTextarea(rendered, textarea, "Wire already clean");
+    assert.equal(rendered.container.querySelector("button.chat-send").disabled, false);
+    await click(rendered, rendered.container.querySelector("button.chat-send"));
+    assert.deepEqual(domain.sent, [{
+      text: "Wire already clean",
+      attachmentIds: ["opaque-wire-clean"],
+    }]);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("platform rejected scan extras stay fail-closed until local retry", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  const staging = {
+    isAvailable: () => true,
+    async pickAndStage() {
+      return {
+        ...stagedDescriptor("opaque-wire-rejected"),
+        scanState: "rejected",
+        scannerId: "dev-noop-scanner",
+      };
+    },
+  };
+  const store = createProductionChatStore(domain, staging);
+  store.scanAttachment = async () => "clean";
+  const rendered = await renderComponent(ChatProduction, { store });
+  try {
+    await click(rendered, rendered.container.querySelector("button.chat-attach"));
+    const item = rendered.container.querySelector("[data-attachment-scan]");
+    assert.equal(item?.getAttribute("data-attachment-scan"), "rejected");
+    const textarea = rendered.container.querySelector("textarea.chat-draft");
+    await setTextarea(rendered, textarea, "Blocked by wire");
+    assert.equal(rendered.container.querySelector("button.chat-send").disabled, true);
+    await click(rendered, item.querySelector("[data-attachment-scan-retry]"));
+    assert.equal(
+      rendered.container.querySelector("[data-attachment-scan]")?.getAttribute("data-attachment-scan"),
+      "clean",
+    );
+    assert.equal(rendered.container.querySelector("button.chat-send").disabled, false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
