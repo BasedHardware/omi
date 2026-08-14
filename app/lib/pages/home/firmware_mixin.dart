@@ -17,6 +17,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/utils/analytics/firmware_update_telemetry.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/manifest/manifest.dart';
@@ -33,9 +34,11 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   int installProgress = 0;
   bool isLegacySecureDFU = true;
   List<String> otaUpdateSteps = [];
-  late final mcumgr.FirmwareUpdateManagerFactory? managerFactory =
-      firmwareUpdatePolicy.allowsOmiFirmwareUpdate ? mcumgr.FirmwareUpdateManagerFactory() : null;
+  late final mcumgr.FirmwareUpdateManagerFactory? managerFactory = firmwareUpdatePolicy.allowsOmiFirmwareUpdate
+      ? mcumgr.FirmwareUpdateManagerFactory()
+      : null;
   mcumgr.FirmwareUpdateManager? _mcuUpdateManager;
+  FirmwareUpdateTelemetry? _firmwareTelemetry;
 
   /// Process ZIP file and return firmware image list
   Future<List<mcumgr.Image>> processZipFile(Uint8List zipFileData) async {
@@ -87,8 +90,10 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       return;
     }
     if (isLegacySecureDFU) {
+      _firmwareTelemetry = FirmwareUpdateTelemetry.start(device: btDevice, protocol: 'nordic_dfu');
       return startLegacyDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
     }
+    _firmwareTelemetry = FirmwareUpdateTelemetry.start(device: btDevice, protocol: 'mcumgr');
     return startMCUDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
   }
 
@@ -117,6 +122,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     String firmwareFile = zipFilePath ?? '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
     final file = File(firmwareFile);
     if (!await file.exists()) {
+      _firmwareTelemetry?.failed(failureClass: 'firmware_file_missing');
       Logger.debug('Firmware file not found: $firmwareFile');
       if (mounted) {
         setState(() {
@@ -141,6 +147,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
 
     updateStream.listen((state) {
       if (state == mcumgr.FirmwareUpgradeState.success) {
+        _firmwareTelemetry?.completed(toVersion: latestFirmwareDetails['version']?.toString());
         Logger.debug('update success');
         killMcuUpdateManager();
         setState(() {
@@ -162,8 +169,8 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     updateManager.logger.logMessageStream
         .where((log) => log.level.rawValue > 1) // Filter debug messages
         .listen((log) {
-      Logger.debug('dfu log: ${log.message}');
-    });
+          Logger.debug('dfu log: ${log.message}');
+        });
 
     await updateManager.update(images, configuration: configuration);
   }
@@ -199,6 +206,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         });
       },
       onError: (deviceAddress, error, errorType, message) {
+        _firmwareTelemetry?.failed(failureClass: 'native_dfu_error');
         Logger.debug('deviceAddress: $deviceAddress, error: $error, errorType: $errorType, message: $message');
         setState(() {
           isInstalling = false;
@@ -214,6 +222,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       onEnablingDfuMode: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onEnablingDfuMode'),
       onFirmwareValidating: (deviceAddress) => Logger.debug('address: $deviceAddress, onFirmwareValidating'),
       onDfuCompleted: (deviceAddress) {
+        _firmwareTelemetry?.completed(toVersion: latestFirmwareDetails['version']?.toString());
         Logger.debug('deviceAddress: $deviceAddress, onDfuCompleted');
         setState(() {
           isInstalling = false;
