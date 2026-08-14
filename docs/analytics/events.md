@@ -31,6 +31,8 @@ send its payload.
 `omi`, `limitless`, `plaud`, `bee`, `apple`, `fieldlabs`, `friend`,
 `neosapien`, `above`, `utami`, `meta`, or `unknown`.
 
+Every Flutter mobile event is stamped centrally with closed `app_platform` (`ios`, `android`, or `unknown`), semantic `app_version`, and store `app_build`. These canonical fields override conflicting call-site values; PostHog SDK-reserved version fields are not the cross-platform contract.
+
 ## Connection and purchase funnel
 
 | Event | Owning surface | Emission contract and authoritative emitter | Key properties / person properties | Alert |

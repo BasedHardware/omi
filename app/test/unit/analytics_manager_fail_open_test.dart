@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -12,6 +13,13 @@ void main() {
   setUp(() async {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
+    PackageInfo.setMockInitialValues(
+      appName: 'Omi Test',
+      packageName: 'com.omi.test',
+      version: '2.3.4',
+      buildNumber: '567',
+      buildSignature: '',
+    );
     await SharedPreferencesUtil.init();
   });
 
@@ -42,7 +50,12 @@ void main() {
 
     expect(adapter.events, hasLength(1));
     expect(adapter.events.single.eventName, 'Queued Event');
-    expect(adapter.events.single.properties, {'count': 1});
+    expect(adapter.events.single.properties, {
+      'count': 1,
+      'app_platform': 'unknown',
+      'app_version': '2.3.4',
+      'app_build': '567',
+    });
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
   });
 
@@ -54,6 +67,22 @@ void main() {
     AnalyticsManager().pageOpened('Settings');
 
     expect(adapter.interactionContexts, [const _InteractionContext(screenName: 'Settings', target: 'screen')]);
+  });
+
+  test('canonical app context cannot be overridden by a call site', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().track(
+      'Context Event',
+      properties: {'app_platform': 'bad-value', 'app_version': '0.0.0', 'app_build': '0'},
+    );
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events.single.properties, containsPair('app_platform', 'unknown'));
+    expect(adapter.events.single.properties, containsPair('app_version', '2.3.4'));
+    expect(adapter.events.single.properties, containsPair('app_build', '567'));
   });
 
   test('track retries adapter failures without throwing through the caller', () async {
