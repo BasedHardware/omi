@@ -172,7 +172,7 @@ describe('piMonoManagedApiBaseUrl (adds the /v2 segment the OpenAI SDK needs)', 
   })
 })
 
-describe('getPiMonoByokEnv (all-or-nothing, separate from the Firebase session)', () => {
+describe('getPiMonoByokEnv (capability-scoped, separate from the Firebase session)', () => {
   it('injects the complete OMI_BYOK_* set when all four keys are stored', () => {
     const store = new ByokKeyStore(
       join(dir, `byok-full-${Math.random().toString(36).slice(2)}.json`)

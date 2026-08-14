@@ -34,7 +34,7 @@ function backendStub(
 }
 
 describe('enrollByok', () => {
-  it('POSTs lowercase-hex-64 fingerprints and activates when all four validate', async () => {
+  it('POSTs lowercase-hex-64 fingerprints and activates when the configured LLM keys validate', async () => {
     const backend = backendStub()
     const result = await enrollByok({
       keys: fullKeys,
