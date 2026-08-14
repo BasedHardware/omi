@@ -170,7 +170,7 @@ if (/\b(?:EmptyItem|FailedItem|ReadyItem)\b/.test(declaration)) throw new Error(
  * someone retyped here.
  *
  * `DAVID-tasks-read-epoch-and-ci` D2 ratifies "everything
- * frontend/contracts/src/domain/tasks.ts already declares", and says why: parity is
+ * core/contracts/src/domain/tasks.ts already declares", and says why: parity is
  * what makes the flip mechanical, because a narrower surface renders
  * differently and turns a factory-line change into a product event. A hardcoded
  * list of thirteen names here would go stale the day the domain gains a
