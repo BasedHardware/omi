@@ -15,7 +15,7 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
   String get controlCharacteristicUuid => "82a48422-3ca9-4156-ae67-4170f58666e0";
 
   @override
-  String get audioCharacteristicUuid => fieldyAudioCharacteristicUuid;
+  String get audioCharacteristicUuid => "82a48422-3ca9-4156-ae67-4170f58666e0";
 
   @override
   BleAudioCodec get audioCodec => BleAudioCodec.opusFS320;
