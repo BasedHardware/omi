@@ -75,12 +75,12 @@ export type ByokValidationResults = Partial<Record<ByokProvider, ByokKeyValidati
 
 /** Outcome of an enrollment attempt, returned to the renderer Settings UI. */
 export interface ByokEnrollResult {
-  /** True only when all four keys authenticated AND the backend accepted them. */
+  /** True only when at least one LLM key authenticated AND the backend accepted them. */
   active: boolean
   /** Per-provider live-validation results for configured keys. */
   results: ByokValidationResults
   /**
-   * Set only when the keys all validated but the backend enroll call itself
+   * Set only when the configured LLM keys validated but the backend enroll call itself
    * failed (network/HTTP) — distinct from a provider rejecting a key.
    */
   backendError?: string

@@ -2,7 +2,7 @@
 // `BYOKValidator` (desktop/macos/Desktop/Sources/BYOKValidator.swift).
 //
 // We never flip the backend onto the BYOK free plan with a dead key: enrollment
-// live-validates all four keys first. Each ping hits the provider's cheapest
+// live-validates every configured LLM key first. Each ping hits the provider's cheapest
 // auth-gated endpoint; any 2xx means the key at least authenticates (billing
 // problems surface later as a normal inference error — not a key-shape problem
 // we could have caught up front). A 401/403 is a definitive rejection.

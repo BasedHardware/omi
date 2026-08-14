@@ -613,6 +613,50 @@ class TestBYOKActivationValidation:
         assert prod_providers == {'openai', 'anthropic', 'gemini', 'openrouter', 'deepgram'}
 
 
+class TestBYOKSubscriptionEntitlements:
+    def test_llm_only_byok_keeps_the_transcription_limit(self, monkeypatch):
+        from models.users import PlanLimits, PlanType, Subscription
+        from routers import users
+
+        subscription = Subscription(plan=PlanType.basic)
+        byok_key = MagicMock(return_value=None)
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, 'get_byok_key', byok_key)
+        monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
+        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
+        monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
+        monkeypatch.setattr(
+            users,
+            'get_plan_limits',
+            lambda _plan: PlanLimits(transcription_seconds=37, words_transcribed=50, insights_gained=3),
+        )
+        monkeypatch.setattr(users, 'get_plan_features', lambda _plan, simplified: [])
+        monkeypatch.setattr(users, 'should_show_new_plans', lambda _platform, _version: True)
+        monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {})
+        monkeypatch.setattr(users, 'get_paid_plan_definitions', lambda: [])
+        monkeypatch.setattr(users, 'has_ever_purchased', lambda _uid, _subscription: False)
+        monkeypatch.setattr(users, 'filter_plans_for_user', lambda _definitions, _plan, **_kwargs: [])
+        monkeypatch.setattr(users, 'should_hide_subscription_ui', lambda _uid, _platform, _version: False)
+        monkeypatch.setattr(
+            users,
+            'get_phone_call_quota_snapshot',
+            lambda _uid: MagicMock(to_client_dict=lambda: {'has_access': False, 'is_paid': False}),
+        )
+        monkeypatch.setattr(
+            users,
+            'get_chat_quota_snapshot',
+            lambda _uid, platform: {'used': 0, 'unit': 'questions', 'limit': 30, 'allowed': True, 'reset_at': None},
+        )
+        monkeypatch.setattr(users, 'neo_grandfather_until', lambda _subscription: None)
+        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version: plan)
+
+        response = users.get_user_subscription_endpoint(uid='llm-byok-user')
+
+        assert response.subscription.plan == PlanType.basic
+        assert response.transcription_seconds_limit == 37
+        byok_key.assert_called_once_with('deepgram')
+
+
 # ---------------------------------------------------------------------------
 # 11. Cache routing: raw keys never in cache keys
 # ---------------------------------------------------------------------------
@@ -687,6 +731,24 @@ class TestCacheRouting:
         client = clients._create_byok_client('gpt-4.1-mini', 'openai', 'sk-byok-test-key')
         assert isinstance(client, stub_client)
         assert client.model_name == 'gpt-4.1-mini'
+
+    def test_anthropic_byok_routes_generic_features_through_the_user_key(self, monkeypatch):
+        from utils.llm import clients
+
+        client = MagicMock()
+        create_client = MagicMock(return_value=client)
+        monkeypatch.setattr(clients, '_cached_anthropic_chat', create_client)
+        monkeypatch.setattr(
+            clients, 'get_byok_key', lambda provider: 'sk-ant-user-key' if provider == 'anthropic' else None
+        )
+        monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
+
+        assert clients.get_llm('memories') is client
+        create_client.assert_called_once()
+        assert create_client.call_args.args[:2] == ('claude-sonnet-4-6', 'sk-ant-user-key')
+        assert create_client.call_args.args[2]['timeout'] == 120
+        assert 'request_timeout' not in create_client.call_args.args[2]
 
     def test_openrouter_gemini_byok_routes_through_openrouter(self, monkeypatch):
         """OpenRouter BYOK keeps Gemini models on the OpenRouter endpoint."""

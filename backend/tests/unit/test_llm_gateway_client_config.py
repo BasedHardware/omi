@@ -310,6 +310,37 @@ def test_get_llm_feature_gateway_mode_routes_byok_through_gateway_only(monkeypat
     assert legacy.calls == []
 
 
+def test_get_llm_feature_gateway_mode_bypasses_lane_for_provider_switch(monkeypatch):
+    """Provider-switched BYOK must bypass the feature's fixed gateway lane.
+
+    The gateway lane for a feature is pinned to the feature's default provider
+    (e.g. conv_discard → openai). When the user's BYOK enrollment selects a
+    different provider (e.g. OpenRouter-only), forwarding that key to the fixed
+    lane makes the gateway reject the request with missing_byok_key. Route such
+    requests through the direct BYOK client instead.
+    """
+    legacy = FakeChatModel(name='byok-direct', calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(
+        clients,
+        'get_byok_key',
+        lambda provider: 'sk-test-openrouter' if provider == 'openrouter' else None,
+    )
+
+    def fail_gateway(*_args, **_kwargs):
+        raise AssertionError('gateway lane must be bypassed for a provider-switched BYOK call')
+
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm_for_byok', fail_gateway)
+    monkeypatch.setattr(clients, '_create_byok_client', lambda *args, **kwargs: legacy)
+
+    result = clients.get_llm('conv_discard').invoke('hello')
+
+    assert result.content == 'byok-direct response'
+
+
 def test_gateway_feature_mode_is_blocked_in_prod_without_explicit_allow(monkeypatch):
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv('K_SERVICE', 'omi-backend')

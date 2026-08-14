@@ -10,7 +10,6 @@ import stripe
 import database.users as users_db
 import database.user_usage as user_usage_db
 from database import redis_db
-from database._client import get_customer_firestore_client
 from database.announcements import compare_versions
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_keys, get_byok_llm_provider, has_byok_keys, has_validated_byok_keys
@@ -181,13 +180,13 @@ def _request_has_llm_byok_key() -> bool:
 
 
 def _request_has_all_byok_keys() -> bool:
-    """True if the *current request* carries headers for all 4 enrolled BYOK
-    providers.
+    """True if the *current request* carries headers for every enrolled BYOK
+    provider.
 
     Firestore BYOK state is the source of truth for fingerprint validation,
     but it can be temporarily stale — heartbeat just expired, activation
     POST hasn't landed yet, cross-region read replica lag, etc. A user who is
-    literally sending all 4 valid API keys on this request should never be
+    literally sending all valid API keys on this request should never be
     paywalled because of a Firestore sync gap. The actual fingerprint check
     in `utils.byok._check_byok_validity` runs separately and still rejects
     forged headers (mismatched SHA-256 against the enrolled fingerprints) —
@@ -197,7 +196,7 @@ def _request_has_all_byok_keys() -> bool:
     return all(p in keys and keys[p] for p in _BYOK_REQUIRED_PROVIDERS)
 
 
-def _is_trial_expired_uncached(uid: str, *, firestore_client: Any | None = None, provision: bool = True) -> bool:
+def _is_trial_expired_uncached(uid: str) -> bool:
     """Is this user past their 3-day desktop trial?
 
     The trial applies only to the Free Desktop tier. Neo may use that tier for
@@ -206,11 +205,11 @@ def _is_trial_expired_uncached(uid: str, *, firestore_client: Any | None = None,
     a Firebase blip never paywalls a paying user.
     """
     try:
-        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+        subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
         if not desktop_trial_paywall_eligible(plan, subscription):
             return False
-        if users_db.is_byok_active(uid, firestore_client=firestore_client):
+        if users_db.is_byok_active(uid):
             return False
         user_record = _get_user(uid)
         creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
@@ -223,7 +222,7 @@ def _is_trial_expired_uncached(uid: str, *, firestore_client: Any | None = None,
         return False
 
 
-def _is_trial_expired_cached(uid: str, *, firestore_client: Any | None = None, provision: bool = True) -> bool:
+def _is_trial_expired_cached(uid: str) -> bool:
     # Request-level escape hatch: a request carrying all 4 BYOK provider
     # headers is never paywalled, regardless of cached Firestore state. The
     # cache TTL is 5 min and Firestore's BYOK `is_active` heartbeat is 24 h,
@@ -240,9 +239,7 @@ def _is_trial_expired_cached(uid: str, *, firestore_client: Any | None = None, p
         # is not left with a zero-access decision until this key's TTL expires.
         if cached:
             try:
-                subscription = users_db.get_user_valid_subscription(
-                    uid, firestore_client=firestore_client, provision=provision
-                )
+                subscription = users_db.get_user_valid_subscription(uid)
                 plan = subscription.plan if subscription else PlanType.basic
                 if not desktop_trial_paywall_eligible(plan, subscription):
                     clear_trial_paywall_cache(uid)
@@ -270,7 +267,7 @@ def _is_trial_expired_cached(uid: str, *, firestore_client: Any | None = None, p
                 )
                 return False
         return bool(cached)
-    expired = _is_trial_expired_uncached(uid, firestore_client=firestore_client, provision=provision)
+    expired = _is_trial_expired_uncached(uid)
     try:
         redis_db.set_generic_cache(cache_key, expired, ttl=_TRIAL_PAYWALL_CACHE_TTL_SECONDS)
     except Exception as e:
@@ -278,13 +275,7 @@ def _is_trial_expired_cached(uid: str, *, firestore_client: Any | None = None, p
     return expired
 
 
-def is_trial_paywalled(
-    uid: str,
-    platform: Optional[str],
-    *,
-    firestore_client: Any | None = None,
-    provision: bool = True,
-) -> bool:
+def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
     """True iff the request is from a desktop client AND the user has used
     their full 3-day free trial without subscribing or activating BYOK.
 
@@ -296,7 +287,7 @@ def is_trial_paywalled(
         return False  # trial paywall disabled — never block on account age
     if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
         return False
-    return _is_trial_expired_cached(uid, firestore_client=firestore_client, provision=provision)
+    return _is_trial_expired_cached(uid)
 
 
 def clear_trial_paywall_cache(uid: str) -> None:
@@ -801,13 +792,7 @@ def get_plan_display_name(plan: PlanType) -> str:
     return PLAN_DISPLAY_NAMES.get(plan, plan.value.capitalize())
 
 
-def get_chat_quota_snapshot(
-    uid: str,
-    platform: Optional[str] = None,
-    *,
-    firestore_client: Any | None = None,
-    provision: bool = True,
-) -> Dict[str, Any]:
+def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[str, Any]:
     """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
     between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
 
@@ -818,8 +803,8 @@ def get_chat_quota_snapshot(
     # Paywall test override — surface as exhausted Free-plan quota so the
     # client renders the same over-limit popup it shows for normal users
     # past 30/mo.
-    if is_trial_paywalled(uid, platform, firestore_client=firestore_client, provision=provision):
-        usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
+    if is_trial_paywalled(uid, platform):
+        usage = user_usage_db.get_monthly_chat_usage(uid)
         return {
             'plan': PlanType.basic,
             'unit': 'questions',
@@ -829,10 +814,10 @@ def get_chat_quota_snapshot(
             'reset_at': usage['reset_at'],
         }
 
-    subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+    subscription = users_db.get_user_valid_subscription(uid)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
-    usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
+    usage = user_usage_db.get_monthly_chat_usage(uid)
 
     if limits.chat_cost_usd_per_month is not None:
         unit = 'cost_usd'
@@ -889,9 +874,7 @@ def enforce_chat_quota(
     # surfaces that a free user past 30 questions would hit. Desktop only;
     # mobile callers continue down the normal plan path.
     if is_trial_paywalled(uid, platform, firestore_client=firestore_client, provision=provision):
-        snapshot = get_chat_quota_snapshot(
-            uid, platform=platform, firestore_client=firestore_client, provision=provision
-        )
+        snapshot = get_chat_quota_snapshot(uid, platform=platform, firestore_client=firestore_client, provision=provision)
         raise HTTPException(
             status_code=402,
             detail={
@@ -935,39 +918,6 @@ def enforce_chat_quota(
             'limit': snapshot['limit'],
             'reset_at': snapshot['reset_at'],
         },
-    )
-
-
-def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None) -> None:
-    """Quota for the desktop serving plane: production customer data, no Free provision.
-
-    Development desktop-backend ADC stays on the compute project for ``agentVm``.
-    Entitlements read the customer SA (``SERVICE_ACCOUNT_JSON`` or the Auth file).
-    """
-    enforce_chat_quota(
-        uid,
-        platform,
-        firestore_client=get_customer_firestore_client(),
-        provision=False,
-    )
-
-
-def is_desktop_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
-    """Desktop trial gate against the customer Firestore, never a compute-project shadow.
-
-    The decisions that need no Firestore run first: resolving the customer client
-    initializes credentials, so a disabled paywall or a non-desktop platform must
-    neither pay for that nor require ambient ADC to answer "not paywalled".
-    """
-    if not TRIAL_PAYWALL_ENABLED:
-        return False
-    if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
-        return False
-    return is_trial_paywalled(
-        uid,
-        platform,
-        firestore_client=get_customer_firestore_client(),
-        provision=False,
     )
 
 

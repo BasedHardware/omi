@@ -248,9 +248,7 @@ class TestOmniRelayGate:
         ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
             relay, 'extract_byok_from_websocket', return_value={'gemini': 'sk-user'}
         ), patch.object(
-            relay, 'set_byok_keys'
-        ), patch.object(
-            relay, 'validate_byok_websocket', return_value=None
+            relay, 'validate_byok_websocket_keys', return_value=({'gemini': 'sk-user'}, None)
         ), patch.object(
             relay, 'is_trial_paywalled', return_value=False
         ), patch.object(
@@ -278,9 +276,7 @@ class TestOmniRelayGate:
         ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
             relay, 'extract_byok_from_websocket', return_value={'deepgram': 'dg-user'}
         ), patch.object(
-            relay, 'set_byok_keys'
-        ), patch.object(
-            relay, 'validate_byok_websocket', return_value=None
+            relay, 'validate_byok_websocket_keys', return_value=({'deepgram': 'dg-user'}, None)
         ), patch.object(
             relay, 'is_trial_paywalled', return_value=False
         ), patch.object(

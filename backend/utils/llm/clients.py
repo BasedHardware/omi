@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Optional
 import anthropic
 import httpx
 from cachetools import TTLCache
+from langchain_anthropic import ChatAnthropic
 
 try:
     from langchain_core.callbacks import BaseCallbackHandler
@@ -353,6 +354,7 @@ _BYOK_CACHE_TTL_SECONDS = 3600  # 1 hour
 
 _openai_cache: TTLCache = TTLCache(maxsize=_BYOK_CACHE_MAX_SIZE, ttl=_BYOK_CACHE_TTL_SECONDS)
 _anthropic_cache: TTLCache = TTLCache(maxsize=_BYOK_CACHE_MAX_SIZE, ttl=_BYOK_CACHE_TTL_SECONDS)
+_anthropic_chat_cache: TTLCache = TTLCache(maxsize=_BYOK_CACHE_MAX_SIZE, ttl=_BYOK_CACHE_TTL_SECONDS)
 
 
 def _hash_key(api_key: str) -> str:
@@ -378,9 +380,18 @@ def _cached_anthropic(api_key: str) -> anthropic.AsyncAnthropic:
     return inst
 
 
+def _cached_anthropic_chat(model: str, api_key: str, ctor_kwargs: Dict[str, Any]) -> ChatAnthropic:
+    cache_key = f"{model}:{_hash_key(api_key)}:{hash(frozenset((k, repr(v)) for k, v in ctor_kwargs.items()))}"
+    inst = _anthropic_chat_cache.get(cache_key)
+    if inst is None:
+        inst = ChatAnthropic(model=model, api_key=api_key, **ctor_kwargs)
+        _anthropic_chat_cache[cache_key] = inst
+    return inst
+
+
 def _create_byok_client(
     model: str, provider: str, byok_key: str, streaming: bool = False, feature: str = ''
-) -> Optional[ChatOpenAI]:
+) -> Optional[BaseChatModel]:
     """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider."""
     callback_provider = _effective_byok_provider(model, provider)
     kwargs: Dict[str, Any] = _with_llm_callbacks(
@@ -409,6 +420,11 @@ def _create_byok_client(
             byok_key,
             {**kwargs, 'base_url': 'https://openrouter.ai/api/v1', 'default_headers': {'X-Title': 'Omi Chat'}},
         )
+
+    if provider == 'anthropic':
+        anthropic_kwargs = dict(kwargs)
+        anthropic_kwargs['timeout'] = anthropic_kwargs.pop('request_timeout')
+        return _cached_anthropic_chat(model, byok_key, anthropic_kwargs)
 
     return None
 
@@ -479,6 +495,8 @@ def _byok_fallback_model(provider: str) -> str:
         return 'gpt-4o-mini'
     if provider in {'gemini', 'openrouter'}:
         return 'gemini-2.5-flash-lite'
+    if provider == 'anthropic':
+        return 'claude-sonnet-4-6'
     return ''
 
 
@@ -526,6 +544,13 @@ def get_llm(
         )
 
     model, provider = _get_model_config(feature)
+    # The feature lane (feature_auto_lane_id) is pinned to the feature's
+    # resolved provider. When BYOK selection below switches providers, the
+    # gateway lane for this feature still routes to the original provider, so a
+    # provider-switched BYOK request must bypass the fixed lane and use the
+    # direct client — the gateway would otherwise reject the forwarded key
+    # with missing_byok_key. Keep the pre-selection provider to detect the switch.
+    lane_provider = _effective_byok_provider(model, provider)
 
     if provider == 'anthropic' and not gateway_feature_mode and oauth_credential is None:
         raise ValueError(
@@ -555,7 +580,7 @@ def get_llm(
             byok_provider = _effective_byok_provider(model, provider)
     if not byok_key:
         configured_provider = provider
-        for candidate in ('openrouter', 'openai', 'gemini'):
+        for candidate in ('openrouter', 'openai', 'gemini', 'anthropic'):
             candidate_key = get_byok_key(candidate)
             if candidate_key:
                 provider = candidate
@@ -595,12 +620,13 @@ def get_llm(
             model, provider = byok_model, byok_prov
             byok_key = byok_key_for_profile
 
+    effective_provider = _effective_byok_provider(model, provider)
     if oauth_credential:
         result = _create_llm_oauth_client(oauth_credential, streaming, feature)
-    elif byok_key and gateway_feature_mode:
+    elif byok_key and gateway_feature_mode and effective_provider == lane_provider:
         result = get_or_create_omi_gateway_llm_for_byok(
             feature_auto_lane_id(feature),
-            provider=_effective_byok_provider(model, provider),
+            provider=effective_provider,
             api_key=byok_key,
             streaming=streaming,
             feature=feature,
@@ -684,6 +710,7 @@ def get_qos_info() -> Dict[str, Dict[str, str]]:
     all_features = get_all_configured_features()
     for feature in sorted(all_features):
         model, provider = _get_model_config(feature)
+
         info[feature] = {
             'model': model,
             'profile': get_active_profile_name(),
