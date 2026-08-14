@@ -30,6 +30,7 @@ class IntegrationProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _hasLoaded = false;
   int _sessionGeneration = 0;
+  Future<void>? _inFlightLoad;
 
   Map<String, bool> get integrations => _integrations;
   bool get isLoading => _isLoading;
@@ -43,7 +44,20 @@ class IntegrationProvider extends ChangeNotifier {
 
   static String prefKeyFor(String appKey) => '${appKey}_connected';
 
-  Future<void> loadFromBackend() async {
+  bool _isCurrent(int generation) => generation == _sessionGeneration;
+
+  Future<void> loadFromBackend() {
+    final existing = _inFlightLoad;
+    if (existing != null) return existing;
+    late final Future<void> started;
+    started = _loadFromBackendBody().whenComplete(() {
+      if (identical(_inFlightLoad, started)) _inFlightLoad = null;
+    });
+    _inFlightLoad = started;
+    return started;
+  }
+
+  Future<void> _loadFromBackendBody() async {
     final generation = _sessionGeneration;
     _isLoading = true;
     notifyListeners();
@@ -51,20 +65,22 @@ class IntegrationProvider extends ChangeNotifier {
     try {
       final keys = trackedAppKeys;
       final responses = await Future.wait(keys.map(_fetchStatus));
-      if (generation != _sessionGeneration) return;
+      if (!_isCurrent(generation)) return;
 
       for (var i = 0; i < keys.length; i++) {
         final connected = responses[i]?.connected ?? false;
         _integrations[keys[i]] = connected;
         await _persistPref(prefKeyFor(keys[i]), connected);
+        if (!_isCurrent(generation)) return;
       }
 
+      if (!_isCurrent(generation)) return;
       _hasLoaded = true;
     } catch (e) {
-      if (generation != _sessionGeneration) return;
+      if (!_isCurrent(generation)) return;
       Logger.debug('Error loading integrations from backend: $e');
     } finally {
-      if (generation == _sessionGeneration) {
+      if (_isCurrent(generation)) {
         _isLoading = false;
         notifyListeners();
       }
@@ -80,10 +96,11 @@ class IntegrationProvider extends ChangeNotifier {
     final generation = _sessionGeneration;
     try {
       final success = await _saveStatus(appKey, details);
-      if (generation != _sessionGeneration) return false;
+      if (!_isCurrent(generation)) return false;
       if (success) {
         _integrations[appKey] = true;
         await _persistPref(prefKeyFor(appKey), true);
+        if (!_isCurrent(generation)) return false;
         notifyListeners();
       }
       return success;
@@ -97,10 +114,11 @@ class IntegrationProvider extends ChangeNotifier {
     final generation = _sessionGeneration;
     try {
       final success = await _deleteStatus(appKey);
-      if (generation != _sessionGeneration) return false;
+      if (!_isCurrent(generation)) return false;
       if (success) {
         _integrations[appKey] = false;
         await _persistPref(prefKeyFor(appKey), false);
+        if (!_isCurrent(generation)) return false;
         notifyListeners();
       }
       return success;
@@ -114,6 +132,7 @@ class IntegrationProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
+    _inFlightLoad = null;
     _integrations.clear();
     _isLoading = false;
     _hasLoaded = false;

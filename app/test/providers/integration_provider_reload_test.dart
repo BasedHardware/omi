@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -125,5 +127,36 @@ void main() {
     expect(prefs['apple_health_connected'], isFalse);
     expect(prefs['google_calendar_connected'], isFalse);
     expect(prefs['gmail_connected'], isFalse);
+  });
+
+  test('clearUserData mid-load does not resurrect the previous user', () async {
+    final prefs = <String, bool>{};
+    final persistStarted = Completer<void>();
+    final releasePersist = Completer<void>();
+
+    final provider = IntegrationProvider(
+      fetchStatus: (appKey) async => IntegrationResponse(connected: true, appKey: appKey),
+      persistPref: (key, value) async {
+        prefs[key] = value;
+        if (value) {
+          if (!persistStarted.isCompleted) persistStarted.complete();
+          await releasePersist.future;
+        }
+      },
+    );
+    addTearDown(provider.dispose);
+
+    final load = provider.loadFromBackend();
+    await persistStarted.future;
+    provider.clearUserData();
+    releasePersist.complete();
+    await load;
+
+    expect(provider.hasLoaded, isFalse);
+    expect(provider.isLoading, isFalse);
+    for (final app in IntegrationApp.values) {
+      expect(provider.isAppConnected(app), isFalse, reason: '${app.key} leaked after logout');
+      expect(prefs[IntegrationProvider.prefKeyFor(app.key)], isFalse);
+    }
   });
 }
