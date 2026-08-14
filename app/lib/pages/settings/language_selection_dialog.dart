@@ -31,8 +31,12 @@ class LanguageSelectionDialog {
     final languages = homeProvider.availableLanguages.entries.toList();
 
     // Preset the selected language if the user has one
-    String? selectedLanguage = homeProvider.userPrimaryLanguage.isNotEmpty ? homeProvider.userPrimaryLanguage : null;
-    String? selectedLanguageName = selectedLanguage != null ? homeProvider.getLanguageName(selectedLanguage) : null;
+    String? selectedLanguage = homeProvider.userPrimaryLanguage.isNotEmpty
+        ? homeProvider.userPrimaryLanguage
+        : null;
+    String? selectedLanguageName = selectedLanguage != null
+        ? homeProvider.getLanguageName(selectedLanguage)
+        : null;
     String searchQuery = '';
     List<MapEntry<String, String>> filteredLanguages = List.from(languages);
     final ScrollController scrollController = ScrollController();
@@ -69,10 +73,16 @@ class LanguageSelectionDialog {
 
             return AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               title: Text(
                 context.l10n.tellUsPrimaryLanguage,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               content: SizedBox(
                 width: double.maxFinite,
@@ -92,16 +102,27 @@ class LanguageSelectionDialog {
                         decoration: BoxDecoration(
                           color: const Color(0xFF2A2A2A),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF8E8E93).withValues(alpha: 0.3)),
+                          border: Border.all(
+                            color: const Color(
+                              0xFF8E8E93,
+                            ).withValues(alpha: 0.3),
+                          ),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 18),
+                            const Icon(
+                              Icons.info_outline,
+                              color: Color(0xFF8E8E93),
+                              size: 18,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 context.l10n.singleLanguageModeInfo,
-                                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
+                                style: const TextStyle(
+                                  color: Color(0xFF8E8E93),
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                           ],
@@ -115,20 +136,29 @@ class LanguageSelectionDialog {
                       decoration: InputDecoration(
                         hintText: context.l10n.searchLanguageHint,
                         hintStyle: const TextStyle(color: Colors.grey),
-                        prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.grey,
+                        ),
                         filled: true,
                         fillColor: const Color(0xFF2A2A2A),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF35343B)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF35343B),
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF35343B)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF35343B),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.deepPurple),
+                          borderSide: const BorderSide(
+                            color: Colors.deepPurple,
+                          ),
                         ),
                       ),
                     ),
@@ -136,23 +166,36 @@ class LanguageSelectionDialog {
                     Expanded(
                       child: filteredLanguages.isEmpty
                           ? Center(
-                              child: Text(context.l10n.noLanguagesFound, style: const TextStyle(color: Colors.grey)),
+                              child: Text(
+                                context.l10n.noLanguagesFound,
+                                style: const TextStyle(color: Colors.grey),
+                              ),
                             )
                           : ListView.builder(
                               controller: scrollController,
                               itemCount: filteredLanguages.length,
                               itemBuilder: (context, index) {
                                 final language = filteredLanguages[index];
-                                final isSelected = selectedLanguage == language.value;
+                                final isSelected =
+                                    selectedLanguage == language.value;
 
                                 return ListTile(
-                                  title: Text(language.key, style: const TextStyle(color: Colors.white)),
+                                  title: Text(
+                                    language.key,
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
                                   trailing: isSelected
-                                      ? const Icon(Icons.check_circle, color: Colors.deepPurple)
+                                      ? const Icon(
+                                          Icons.check_circle,
+                                          color: Colors.deepPurple,
+                                        )
                                       : null,
                                   selected: isSelected,
-                                  selectedTileColor: Colors.deepPurple.withValues(alpha: 0.2),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  selectedTileColor: Colors.deepPurple
+                                      .withValues(alpha: 0.2),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                   onTap: () {
                                     setState(() {
                                       // Toggle selection - if already selected, unselect it
@@ -177,9 +220,11 @@ class LanguageSelectionDialog {
                             final selectedIndex = filteredLanguages.indexWhere(
                               (lang) => lang.value == selectedLanguage,
                             );
-                            if (selectedIndex != -1 && scrollController.hasClients) {
+                            if (selectedIndex != -1 &&
+                                scrollController.hasClients) {
                               scrollController.animateTo(
-                                selectedIndex * 56.0, // Approximate height of each list item
+                                selectedIndex *
+                                    56.0, // Approximate height of each list item
                                 duration: const Duration(milliseconds: 300),
                                 curve: Curves.easeInOut,
                               );
@@ -204,16 +249,25 @@ class LanguageSelectionDialog {
                   onPressed: selectedLanguage == null
                       ? null
                       : () async {
-                          final successMsg = context.l10n.languageSetTo(selectedLanguageName!);
-                          final failMsg = context.l10n.failedToSetLanguage;
-                          final userProvider = Provider.of<UserProvider>(context, listen: false);
-                          final success = await homeProvider.updateUserPrimaryLanguage(
-                            selectedLanguage!,
-                            userProvider: userProvider,
+                          final successMsg = context.l10n.languageSetTo(
+                            selectedLanguageName!,
                           );
+                          final failMsg = context.l10n.failedToSetLanguage;
+                          final userProvider = Provider.of<UserProvider>(
+                            context,
+                            listen: false,
+                          );
+                          final success = await homeProvider
+                              .updateUserPrimaryLanguage(
+                                selectedLanguage!,
+                                userProvider: userProvider,
+                              );
                           if (!context.mounted) return;
                           if (success) {
-                            Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
+                            Provider.of<CaptureProvider>(
+                              context,
+                              listen: false,
+                            ).onRecordProfileSettingChanged();
                             Navigator.of(context).pop();
                             AppSnackbar.showSnackbarSuccess(successMsg);
                           } else {
@@ -222,7 +276,9 @@ class LanguageSelectionDialog {
                         },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
-                    disabledBackgroundColor: Colors.deepPurple.withValues(alpha: 0.3),
+                    disabledBackgroundColor: Colors.deepPurple.withValues(
+                      alpha: 0.3,
+                    ),
                     foregroundColor: Colors.white,
                   ),
                   child: Text(context.l10n.confirm),
