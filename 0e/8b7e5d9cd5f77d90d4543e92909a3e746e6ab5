@@ -1,0 +1,29 @@
+desktop/context-for-claude/Tests/ContextAppTests/ScreenActivityWireFormatTests.swift
+  s_830a75a8050e25::t_1cf5f20ae62fd7 102-104,111-112
+  s_830a75a8050e25::t_e49ce0511f2ea3 1-101,105-110,113-165
+desktop/context-for-claude/Sources/ContextApp/Backend/OmiAPI.swift
+  s_830a75a8050e25::t_633ae64730d8d4 223-235
+  s_830a75a8050e25::t_1180c69e5ff1ab 503,505-509
+desktop/context-for-claude/Sources/ContextApp/Backend/ScreenActivityUploader.swift
+  s_830a75a8050e25::t_136326946a4acb 681-701,703
+  s_830a75a8050e25::t_06ff73a8e3d800 714
+  s_830a75a8050e25::t_d65bf09cf308d0 702
+desktop/context-for-claude/Sources/ContextApp/Backend/ClientDevice.swift
+  s_830a75a8050e25::t_557b8b72b8ffad 1-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0e8b7e5d9cd5f77d90d4543e92909a3e746e6ab5",
+  "prompts": {},
+  "sessions": {
+    "s_830a75a8050e25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c76762c9-b116-4248-8786-3ab36dd6ee16",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
