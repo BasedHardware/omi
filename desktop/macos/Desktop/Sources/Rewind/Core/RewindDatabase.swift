@@ -1526,6 +1526,12 @@ actor RewindDatabase {
       )
     }
 
+    migrator.registerMigration("addTranscriptionConversationRole") { db in
+      try db.alter(table: "transcription_sessions") { t in
+        t.add(column: "conversationRole", .text).notNull().defaults(to: "ambient")
+      }
+    }
+
     // Migration 11: Create live_notes table for AI-generated notes during recording
     migrator.registerMigration("createLiveNotes") { db in
       try db.create(table: "live_notes") { t in

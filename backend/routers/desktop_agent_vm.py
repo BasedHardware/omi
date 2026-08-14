@@ -43,7 +43,7 @@ from services.agent_vm_read import (
 from utils.executors import db_executor, run_blocking
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import get_current_user_uid
-from utils.subscription import is_trial_paywalled
+from utils.subscription import is_desktop_trial_paywalled
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -105,7 +105,7 @@ def _agent_disabled() -> bool:
 
 
 async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
+    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop"):
         raise HTTPException(status_code=402, detail="trial_expired")
     return uid
 

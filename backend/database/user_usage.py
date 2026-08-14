@@ -50,7 +50,9 @@ def _current_month_llm_usage_docs(llm_usage_ref: Any, now: datetime) -> Iterable
     )
 
 
-def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> Dict[str, Any]:
+def get_monthly_chat_usage(
+    uid: str, now: Optional[datetime] = None, *, firestore_client: Any | None = None
+) -> Dict[str, Any]:
     """Sum current-month chat usage from `users/{uid}/llm_usage/{YYYY-MM-DD}` docs.
 
     Returns keys:
@@ -63,7 +65,7 @@ def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> Dict[str
     """
     now = now or datetime.now(timezone.utc)
 
-    llm_usage_ref = db.collection('users').document(uid).collection('llm_usage')
+    llm_usage_ref = (firestore_client or db).collection('users').document(uid).collection('llm_usage')
     questions = 0
     cost_usd = 0.0
     document_count = 0

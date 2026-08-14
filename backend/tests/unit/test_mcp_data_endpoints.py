@@ -311,20 +311,14 @@ async def test_sse_post_tools_list_ignores_stale_session_id():
     assert 'get_memories' in names
 
 
-@pytest.mark.asyncio
-async def test_sse_get_keepalive_uses_transport_rate_limit():
-    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
-    request = _JsonRequest({})
+def test_sse_get_returns_405_without_holding_a_stream():
+    # GET no longer serves a keepalive SSE stream (it exhausted Cloud Run
+    # concurrency slots; see tests/unit/test_mcp_sse_get_no_stream.py). The
+    # spec-mandated 405 must be immediate: no auth or rate-limit work either.
+    response = sse.mcp_sse_get()
 
-    with (
-        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
-        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
-        patch.object(sse, 'check_rate_limit_inline') as check_rate_limit,
-    ):
-        response = await sse.mcp_sse_get(request, authorization='Bearer token')
-
-    assert response.status_code == 200
-    check_rate_limit.assert_called_once_with(UID, 'mcp:sse')
+    assert response.status_code == 405
+    assert response.headers.get('allow') == 'POST, HEAD, DELETE'
 
 
 def test_sse_tool_security_schemes_match_runtime_scope_map():

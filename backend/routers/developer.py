@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 from enum import Enum
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -67,6 +67,7 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
+from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1133,6 +1134,21 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
     client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
     client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
+    conversation_role: Literal['ambient', 'meeting'] = 'ambient'
+    # Optional for backwards compatibility. When supplied, rotation fragments
+    # are persisted but do not create a notes-ready receipt.
+    conversation_finalization_reason: (
+        Literal[
+            'user_stop',
+            'finish_and_continue',
+            'meeting_started',
+            'meeting_ended',
+            'max_duration_rotation',
+            'crash_recovery',
+            'retry',
+        ]
+        | None
+    ) = None
 
     @field_validator('client_session_id')
     @classmethod
@@ -1550,6 +1566,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                persist_desktop_meeting_arrival_best_effort(uid, existing_conversation)
                 return _conversation_response_from_data(existing_conversation)
 
     resolved_client_device_id = client_device_id or request.client_device_id
@@ -1572,6 +1589,12 @@ def _create_conversation_from_segments(
             external_data={
                 'from_segments_client_session_id': request.client_session_id,
                 'from_segments_claimed_at': datetime.now(timezone.utc),
+                'conversation_role': request.conversation_role,
+                **(
+                    {'conversation_finalization_reason': request.conversation_finalization_reason}
+                    if request.conversation_finalization_reason is not None
+                    else {}
+                ),
             },
             status=ConversationStatus.processing,
         )
@@ -1586,6 +1609,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                persist_desktop_meeting_arrival_best_effort(uid, existing_conversation)
                 return _conversation_response_from_data(existing_conversation)
             raise HTTPException(status_code=409, detail="Conversation creation already in progress")
     else:
@@ -1598,6 +1622,14 @@ def _create_conversation_from_segments(
             source=source,
             client_device_id=resolved_client_device_id,
             client_platform=resolved_client_platform,
+            external_data={
+                'conversation_role': request.conversation_role,
+                **(
+                    {'conversation_finalization_reason': request.conversation_finalization_reason}
+                    if request.conversation_finalization_reason is not None
+                    else {}
+                ),
+            },
         )
 
     # Process conversation. The idempotent (client_session_id) path creates a
@@ -1622,6 +1654,17 @@ def _create_conversation_from_segments(
             conversation.id,
         )
         lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
+
+    conversation.external_data = {
+        **(conversation.external_data or {}),
+        'conversation_role': request.conversation_role,
+        **(
+            {'conversation_finalization_reason': request.conversation_finalization_reason}
+            if request.conversation_finalization_reason is not None
+            else {}
+        ),
+    }
+    persist_desktop_meeting_arrival_best_effort(uid, conversation)
 
     return ConversationResponse(
         id=conversation.id,

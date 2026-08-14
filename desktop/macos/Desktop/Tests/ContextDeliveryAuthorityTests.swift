@@ -34,15 +34,9 @@ final class ContextDeliveryAuthorityTests: XCTestCase {
     XCTAssertEqual(
       ContextDeliveryBudget.freeGate(
         input: .init(
-          masterEnabled: true, frequencyLevel: 3, snoozed: false, paywalled: false, minuteOfDay: 12 * 60,
+          masterEnabled: true, frequencyLevel: 3, paywalled: false,
           cooldownSeconds: 30 * 60)),
       .allowed)
-    XCTAssertEqual(
-      ContextDeliveryBudget.freeGate(
-        input: .init(
-          masterEnabled: true, frequencyLevel: 3, snoozed: false, paywalled: false, minuteOfDay: 23 * 60,
-          cooldownSeconds: 30 * 60)),
-      .quietHours)
     XCTAssertEqual(
       (0...5).map { ContextDeliveryBudget.dailyLimit(frequencyLevel: $0) },
       [0, 10, 20, 40, 60, 100]
@@ -59,138 +53,24 @@ final class ContextDeliveryAuthorityTests: XCTestCase {
 
   func testFreeGateBoundariesAndSuppressionInputs() {
     let base = ContextDeliveryGateInput(
-      masterEnabled: true, frequencyLevel: 3, snoozed: false, paywalled: false,
-      minuteOfDay: 8 * 60, cooldownSeconds: 30 * 60)
+      masterEnabled: true, frequencyLevel: 3, paywalled: false,
+      cooldownSeconds: 30 * 60)
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: base), .allowed)
     XCTAssertEqual(
       ContextDeliveryBudget.freeGate(
         input: .init(
-          masterEnabled: true, frequencyLevel: 3, snoozed: false, paywalled: false,
-          minuteOfDay: 22 * 60, cooldownSeconds: 0)), .quietHours)
+          masterEnabled: false, frequencyLevel: 3, paywalled: false,
+          cooldownSeconds: 0)), .masterDisabled)
     XCTAssertEqual(
       ContextDeliveryBudget.freeGate(
         input: .init(
-          masterEnabled: false, frequencyLevel: 3, snoozed: false, paywalled: false,
-          minuteOfDay: 12 * 60, cooldownSeconds: 0)), .masterDisabled)
+          masterEnabled: true, frequencyLevel: 0, paywalled: false,
+          cooldownSeconds: 0)), .frequencyDisabled)
     XCTAssertEqual(
       ContextDeliveryBudget.freeGate(
         input: .init(
-          masterEnabled: true, frequencyLevel: 0, snoozed: false, paywalled: false,
-          minuteOfDay: 12 * 60, cooldownSeconds: 0)), .frequencyDisabled)
-    XCTAssertEqual(
-      ContextDeliveryBudget.freeGate(
-        input: .init(
-          masterEnabled: true, frequencyLevel: 3, snoozed: true, paywalled: false,
-          minuteOfDay: 12 * 60, cooldownSeconds: 0)), .snoozed)
-    XCTAssertEqual(
-      ContextDeliveryBudget.freeGate(
-        input: .init(
-          masterEnabled: true, frequencyLevel: 3, snoozed: false, paywalled: true,
-          minuteOfDay: 12 * 60, cooldownSeconds: 0)), .paywalled)
-  }
-
-  func testActivePeriodSupportsDaytimeOvernightAndAllDayWindows() {
-    let daytime = NotificationActivePeriod(startMinute: 8 * 60, endMinute: 22 * 60)
-    XCTAssertTrue(daytime.contains(minuteOfDay: 8 * 60))
-    XCTAssertTrue(daytime.contains(minuteOfDay: 21 * 60 + 59))
-    XCTAssertFalse(daytime.contains(minuteOfDay: 22 * 60))
-
-    let overnight = NotificationActivePeriod(startMinute: 20 * 60, endMinute: 6 * 60)
-    XCTAssertTrue(overnight.contains(minuteOfDay: 23 * 60))
-    XCTAssertTrue(overnight.contains(minuteOfDay: 5 * 60 + 59))
-    XCTAssertFalse(overnight.contains(minuteOfDay: 12 * 60))
-
-    let allDayMidnight = NotificationActivePeriod(startMinute: 0, endMinute: 0)
-    XCTAssertTrue(allDayMidnight.isAllDay)
-    XCTAssertTrue(allDayMidnight.contains(minuteOfDay: 0))
-    XCTAssertTrue(allDayMidnight.contains(minuteOfDay: 23 * 60 + 59))
-  }
-
-  func testEqualActivePeriodEndpointsMeanAllDayNotEmptyWindow() {
-    // Setting start == end (including 06:00→06:00) is the explicit all-day encoding,
-    // not a zero-width window and not "only at that minute".
-    let equalSix = NotificationActivePeriod(startMinute: 6 * 60, endMinute: 6 * 60)
-    XCTAssertTrue(equalSix.isAllDay)
-    XCTAssertTrue(equalSix.contains(minuteOfDay: 3 * 60))
-    XCTAssertTrue(equalSix.contains(minuteOfDay: 6 * 60))
-    XCTAssertTrue(equalSix.contains(minuteOfDay: 15 * 60))
-    XCTAssertTrue(equalSix.contains(minuteOfDay: 23 * 60 + 59))
-  }
-
-  func testOvernightActivePeriodPreservesSixToThreeActiveAndQuietComplement() {
-    // Product contract: 06:00→03:00 stays active overnight; 03:00→06:00 is the quiet gap.
-    let active = NotificationActivePeriod(startMinute: 6 * 60, endMinute: 3 * 60)
-    XCTAssertFalse(active.isAllDay)
-    XCTAssertTrue(active.contains(minuteOfDay: 6 * 60))
-    XCTAssertTrue(active.contains(minuteOfDay: 23 * 60))
-    XCTAssertTrue(active.contains(minuteOfDay: 2 * 60 + 59))
-    XCTAssertFalse(active.contains(minuteOfDay: 3 * 60))
-    XCTAssertFalse(active.contains(minuteOfDay: 5 * 60 + 59))
-
-    let quietComplement = NotificationActivePeriod(startMinute: 3 * 60, endMinute: 6 * 60)
-    XCTAssertTrue(quietComplement.contains(minuteOfDay: 3 * 60))
-    XCTAssertTrue(quietComplement.contains(minuteOfDay: 5 * 60 + 59))
-    XCTAssertFalse(quietComplement.contains(minuteOfDay: 6 * 60))
-    XCTAssertFalse(quietComplement.contains(minuteOfDay: 2 * 60))
-  }
-
-  func testActivePeriodAllDayLabelSurfacesEqualEndpoints() {
-    XCTAssertEqual(
-      SettingsControlMetrics.notificationActivePeriodSummaryLabel(
-        startMinute: 6 * 60, endMinute: 6 * 60),
-      "All day")
-    XCTAssertEqual(
-      SettingsControlMetrics.notificationActivePeriodSubtitle(
-        startMinute: 6 * 60, endMinute: 6 * 60),
-      "All day — proactive notifications may appear any time")
-    XCTAssertNil(
-      SettingsControlMetrics.notificationActivePeriodSummaryLabel(
-        startMinute: 6 * 60, endMinute: 3 * 60))
-    XCTAssertEqual(
-      SettingsControlMetrics.notificationActivePeriodSubtitle(
-        startMinute: 6 * 60, endMinute: 3 * 60),
-      "When proactive notifications may appear (24-hour time)")
-  }
-
-  @MainActor
-  func testActivePeriodDefaultsAndPersistenceClampMinutes() {
-    let suiteName = "ContextDeliveryAuthorityTests.\(UUID().uuidString)"
-    guard let defaults = UserDefaults(suiteName: suiteName) else {
-      XCTFail("failed to create isolated defaults suite")
-      return
-    }
-    defer { defaults.removePersistentDomain(forName: suiteName) }
-
-    XCTAssertEqual(NotificationService.currentActivePeriod(defaults: defaults), .defaultValue)
-    defaults.set(-30, forKey: NotificationService.activePeriodStartDefaultsKey)
-    defaults.set(1_500, forKey: NotificationService.activePeriodEndDefaultsKey)
-    XCTAssertEqual(
-      NotificationService.currentActivePeriod(defaults: defaults),
-      NotificationActivePeriod(startMinute: 0, endMinute: 1439))
-  }
-
-  @MainActor
-  func testActivePeriodHelperGatesMinutesOutsideConfiguredWindow() throws {
-    let suiteName = "ContextDeliveryAuthorityTests.activePeriod.\(UUID().uuidString)"
-    guard let defaults = UserDefaults(suiteName: suiteName) else {
-      XCTFail("failed to create isolated defaults suite")
-      return
-    }
-    defer { defaults.removePersistentDomain(forName: suiteName) }
-
-    defaults.set(8 * 60, forKey: NotificationService.activePeriodStartDefaultsKey)
-    defaults.set(22 * 60, forKey: NotificationService.activePeriodEndDefaultsKey)
-
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
-    let noon = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 12, hour: 12)))
-    let late = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 12, hour: 23)))
-
-    XCTAssertTrue(
-      NotificationService.isWithinActivePeriod(now: noon, calendar: calendar, defaults: defaults))
-    XCTAssertFalse(
-      NotificationService.isWithinActivePeriod(now: late, calendar: calendar, defaults: defaults),
-      "active period must suppress proactive paths outside the configured window")
+          masterEnabled: true, frequencyLevel: 3, paywalled: true,
+          cooldownSeconds: 0)), .paywalled)
   }
 
   func testCoolingDownHandlesMissingZeroAndElapsedCooldown() {

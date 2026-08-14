@@ -21,6 +21,7 @@ from urllib import error, request
 DIRECTOR_CASES = {
     "worthy-urgent-commitment",
     "worthy-specific-context-change",
+    "worthy-material-change-no-commitment",
     "worthy-revisit-unresolved-task",
     "worthy-new-actionable-fact",
     "silence-ambient-narrative",

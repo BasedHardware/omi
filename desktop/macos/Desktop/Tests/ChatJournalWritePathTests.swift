@@ -283,21 +283,15 @@ final class ChatJournalWritePathTests: XCTestCase {
     XCTAssertEqual(provider.messages.count, 1)
 
     // The query-completion handler attaches local-only state the journal never
-    // persists: model/token/cost metadata, a user rating, a screenshot.
+    // persists: turn metadata, a user rating, a screenshot.
     let index = try XCTUnwrap(provider.messages.firstIndex { $0.id == "assistant-1" })
     provider.messages[index].metadata = MessageMetadata(
-      model: "claude-sonnet",
-      inputTokens: 100,
-      outputTokens: 42,
-      cacheReadTokens: nil,
-      cacheWriteTokens: nil,
-      costUsd: 0.0123,
-      systemPrompt: nil,
       hasScreenshot: false,
       screenshotSizeBytes: nil,
       toolNames: ["execute_sql"],
       sqlRowsReturned: 7,
-      sqlQueryCount: 2
+      sqlQueryCount: 2,
+      adapterId: "pi-mono"
     )
     provider.messages[index].rating = 1
     let screenshot = Data([0x0A, 0x0B, 0x0C])
@@ -313,8 +307,7 @@ final class ChatJournalWritePathTests: XCTestCase {
     XCTAssertEqual(refreshed.text, "Final answer")
 
     // ...but the local-only fields must survive the wholesale row replace.
-    XCTAssertEqual(refreshed.metadata?.model, "claude-sonnet")
-    XCTAssertEqual(refreshed.metadata?.outputTokens, 42)
+    XCTAssertEqual(refreshed.metadata?.adapterId, "pi-mono")
     XCTAssertEqual(refreshed.metadata?.sqlRowsReturned, 7)
     XCTAssertEqual(refreshed.rating, 1)
     XCTAssertEqual(refreshed.notificationScreenshot, screenshot)

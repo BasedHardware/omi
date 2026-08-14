@@ -141,6 +141,7 @@ _drop_stale_module('utils.conversations.render', BACKEND_DIR / 'utils' / 'conver
 
 import database.conversations as conversations_db  # noqa: E402
 import routers.developer as developer  # noqa: E402
+import utils.task_intelligence.proactive_engine as proactive_engine  # noqa: E402
 from models.conversation import Conversation, CreateConversation  # noqa: E402
 from models.conversation_enums import ConversationStatus  # noqa: E402
 
@@ -186,8 +187,9 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
             finished_at=conversation.finished_at,
             source=conversation.source,
             language=conversation.language,
-            structured={},
+            structured={'title': 'Design review'},
             transcript_segments=conversation.transcript_segments,
+            external_data=None,
             status=ConversationStatus.completed,
         )
 
@@ -196,12 +198,18 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
     monkeypatch.setattr(developer, 'process_conversation', _process)
 
-    response = developer._create_conversation_from_segments('uid1', _request())
+    arrival = MagicMock()
+    monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
+    response = developer._create_conversation_from_segments('uid1', _request(conversation_role='meeting'))
 
     assert response.id == 'random-process-id'
     assert isinstance(captured['conversation'], CreateConversation)
+    assert captured['conversation'].external_data == {'conversation_role': 'meeting'}
     conversations_db.get_conversation.assert_not_called()
     claim.assert_not_called()
+    arrival.assert_called_once_with(
+        'uid1', conversation_id='random-process-id', summary='Design review', is_desktop_meeting=True
+    )
 
 
 def test_client_session_id_uses_stable_conversation_id(monkeypatch):
@@ -257,6 +265,54 @@ def test_client_session_id_persists_when_processor_returns_without_saving(monkey
     assert persisted.call_args.args[1]['id'] == expected_id
 
 
+def test_completed_desktop_meeting_persists_exact_conversation_arrival(monkeypatch):
+    expected_id = developer._from_segments_conversation_id('uid1', 'meeting-session-1')
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+
+    def _process(_uid, _language, conversation):
+        conversation.status = ConversationStatus.completed
+        conversation.structured.title = 'Design review'
+        return conversation
+
+    monkeypatch.setattr(developer, 'process_conversation', _process)
+    arrival = MagicMock()
+    monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
+
+    response = developer._create_conversation_from_segments(
+        'uid1', _request(client_session_id='meeting-session-1', conversation_role='meeting')
+    )
+
+    assert response.id == expected_id
+    arrival.assert_called_once_with(
+        'uid1', conversation_id=expected_id, summary='Design review', is_desktop_meeting=True
+    )
+
+
+def test_postprocess_arrival_adapter_failure_does_not_fail_creation(monkeypatch):
+    expected_id = developer._from_segments_conversation_id('uid1', 'meeting-session-1')
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    persisted = MagicMock()
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
+
+    def _process(_uid, _language, conversation):
+        conversation.status = ConversationStatus.completed
+        conversation.structured.title = 'Design review'
+        return conversation
+
+    monkeypatch.setattr(developer, 'process_conversation', _process)
+    monkeypatch.setattr(developer, 'persist_desktop_meeting_arrival_best_effort', MagicMock())
+
+    response = developer._create_conversation_from_segments(
+        'uid1', _request(client_session_id='meeting-session-1', conversation_role='meeting')
+    )
+
+    assert response.id == expected_id
+    persisted.assert_called_once()
+
+
 def test_client_session_id_retry_returns_existing_without_processing(monkeypatch):
     expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
     monkeypatch.setattr(
@@ -273,6 +329,65 @@ def test_client_session_id_retry_returns_existing_without_processing(monkeypatch
     assert response.status == 'processing'
     assert response.discarded is False
     process.assert_not_called()
+
+
+def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
+    expected_id = developer._from_segments_conversation_id('uid1', 'meeting-session-1')
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(
+            return_value={
+                'id': expected_id,
+                'source': 'desktop',
+                'status': 'completed',
+                'discarded': False,
+                'structured': {'title': 'Design review'},
+                'external_data': {'conversation_role': 'meeting'},
+            }
+        ),
+    )
+    process = MagicMock()
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    arrival = MagicMock()
+    monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
+
+    response = developer._create_conversation_from_segments(
+        'uid1', _request(client_session_id='meeting-session-1', conversation_role='meeting')
+    )
+
+    assert response.id == expected_id
+    process.assert_not_called()
+    arrival.assert_called_once_with(
+        'uid1', conversation_id=expected_id, summary='Design review', is_desktop_meeting=True
+    )
+
+
+def test_completed_ambient_retry_cannot_reclassify_conversation_as_meeting(monkeypatch):
+    expected_id = developer._from_segments_conversation_id('uid1', 'ambient-session-1')
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(
+            return_value={
+                'id': expected_id,
+                'source': 'desktop',
+                'status': 'completed',
+                'discarded': False,
+                'structured': {'title': 'Ambient capture'},
+                'external_data': {'conversation_role': 'ambient'},
+            }
+        ),
+    )
+    monkeypatch.setattr(developer, 'process_conversation', MagicMock())
+    arrival = MagicMock()
+    monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
+
+    developer._create_conversation_from_segments(
+        'uid1', _request(client_session_id='ambient-session-1', conversation_role='meeting')
+    )
+
+    arrival.assert_not_called()
 
 
 def test_client_session_id_concurrent_claim_loser_returns_existing_without_processing(monkeypatch):

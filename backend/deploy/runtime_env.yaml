@@ -917,7 +917,7 @@ environments:
               secret: TYPESENSE_HOST
               version: latest
           flags:
-            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+            --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             --task-timeout: 3600s
             --cpu: '2'
             --memory: 2Gi
@@ -1160,6 +1160,10 @@ environments:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          MEMORY_V3_CURSOR_SECRET:
+            secret:
+              name: prod-omi-backend-secrets
+              key: MEMORY_V3_CURSOR_SECRET
           MCP_OAUTH_CLIENTS_JSON:
             secret:
               name: prod-omi-backend-secrets
@@ -1250,6 +1254,9 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            MEMORY_V3_CURSOR_SECRET:
+              secret: MEMORY_V3_CURSOR_SECRET
               version: latest
             DESKTOP_PREVIEW_PUBLISH_KEY:
               secret: DESKTOP_PREVIEW_PUBLISH_KEY
@@ -1384,6 +1391,9 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
+            MEMORY_V3_CURSOR_SECRET_VERSION:
+              value: prod-v1
+              category: memory_rollout
             MCP_OAUTH_CLAUDE_CLIENT_ID:
               env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
               category: oauth_metadata
@@ -1814,7 +1824,7 @@ environments:
               secret: TYPESENSE_HOST
               version: latest
           flags:
-            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+            --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           env:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL

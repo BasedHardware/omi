@@ -104,4 +104,40 @@ final class ChatTurnFailureNoticeTests: XCTestCase {
     XCTAssertNil(ChatTurnFailureNotice.retainedCard(.noDataFound))
     XCTAssertNil(ChatTurnFailureNotice.retainedCard(nil))
   }
+
+  /// #11464 recycled the poisoned worker and rewrote the user copy to "send
+  /// again". The 402 classifier only saw that wrap, so the transcript invited
+  /// a retry that cannot work. `forTurn` must classify the technical status.
+  func testRecycledWorkerBillingFailureKeepsTheBillingMarker() {
+    let error = BridgeError.agentRuntimeFailure(
+      AgentRuntimeFailure(
+        code: "adapter_execution_failed",
+        userMessage: "The local agent reset its session after an error. Send your message again.",
+        technicalMessage: "HTTP 402 status code (no body)",
+        source: "adapter_execution",
+        adapterId: "pi-mono",
+        retryable: true,
+        recoveryAction: "worker_recycled",
+        recoveryOutcome: "recovered",
+        retryDisposition: "next_send"
+      )
+    )
+    let notice = ChatTurnFailureNotice.forTurn(
+      error: error,
+      watchdogFired: false,
+      toolStallAbortFired: false,
+      timeoutMessage: nil,
+      providerAuthMessage: "Reconnect Claude in Settings."
+    )
+
+    XCTAssertEqual(
+      notice?.text,
+      AgentErrorClassifier.classify("HTTP 402 status code (no body)").userMessage
+    )
+    XCTAssertEqual(notice?.retryable, false)
+    XCTAssertFalse(
+      notice?.text.contains("Send your message again") ?? true,
+      "the recycled-worker wrap must not reach the transcript"
+    )
+  }
 }
