@@ -4,8 +4,9 @@
 // SHA-256 fingerprints). The desktop
 // client sends user-provided provider keys as per-request headers; the backend
 // reads them case-insensitively (`x-byok-{provider}`) but clients send the
-// canonical casing below. The backend enforces ALL-OR-NOTHING enrollment via
-// `has_all_byok_keys()` — a partial set is not a valid BYOK-active state.
+// canonical casing below. The backend fingerprints and validates each enrolled
+// provider independently — a capability-scoped subset is a valid BYOK-active
+// state as long as at least one LLM provider is configured.
 //
 // Pure, browser-safe module: no Node built-ins, no Electron, no I/O. It is
 // imported by BOTH the main process and the renderer (the axios/fetch BYOK
@@ -16,7 +17,7 @@
 /** A provider whose API key a user can bring themselves. */
 export type ByokProvider = 'openrouter' | 'openai' | 'anthropic' | 'gemini' | 'deepgram'
 
-/** The four BYOK providers, in the backend's canonical order. */
+/** The BYOK providers, in the backend's canonical order. */
 export const BYOK_PROVIDERS: readonly ByokProvider[] = [
   'openrouter',
   'openai',

@@ -203,10 +203,10 @@ describe('provider registration', () => {
 })
 
 // ===========================================================================
-// BYOK all-or-nothing (NEW)
+// BYOK capability-scoped header gating
 // ===========================================================================
 describe('BYOK header gating', () => {
-  it('attaches all four X-BYOK-* headers only when all four env keys are present', () => {
+  it('attaches a header for every configured env key that is present', () => {
     process.env.OMI_BYOK_OPENAI = 'oa'
     process.env.OMI_BYOK_ANTHROPIC = 'an'
     process.env.OMI_BYOK_GEMINI = 'ge'
