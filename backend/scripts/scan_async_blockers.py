@@ -187,8 +187,16 @@ def has_await(node: ast.AsyncFunctionDef) -> bool:
     ``async for`` and ``async with`` suspend without an ``ast.Await`` node, and a
     function using either cannot be rewritten as a plain ``def``. Counting only
     ``await`` reported those endpoints as structurally-sync.
+
+    Only the current function's lexical body counts: a nested coroutine that
+    suspends does not make the outer function suspend, so its ``async for`` /
+    ``async with`` must not suppress the outer endpoint's
+    ``no_await_should_be_def`` finding.
     """
+    nested = _collect_nested_func_lines(node)
     for child in _walk_body(node):
+        if _node_lineno(child) in nested:
+            continue
         if isinstance(child, (ast.Await, ast.AsyncFor, ast.AsyncWith)):
             return True
     return False

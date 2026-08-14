@@ -617,3 +617,28 @@ def test_async_with_is_not_a_structural_finding(scanner, tmp_path):
     results = scanner.scan_dirs([str(source_path)])
 
     assert results["no_await_should_be_def"] == []
+
+
+def test_nested_coroutine_does_not_suppress_outer_no_await_finding(scanner, tmp_path):
+    """A nested async def that suspends does not make the outer endpoint suspend.
+
+    The outer function never suspends, so it must still be flagged
+    ``no_await_should_be_def`` even though a nested coroutine drives an
+    ``async for``.
+    """
+    source_path = tmp_path / "wrappers_with_nested_consumer.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            @router.get("/outer")
+            async def outer():
+                async def consume():
+                    async for chunk in produce():
+                        continue
+                return consume()
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert [f["endpoint"] for f in results["no_await_should_be_def"]] == ["outer"]
