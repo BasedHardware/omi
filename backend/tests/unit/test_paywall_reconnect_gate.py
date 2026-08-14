@@ -173,7 +173,7 @@ class TestPlatformFiltering:
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
         filter_pos = fn_body.find('platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS')
-        expiry_pos = fn_body.find('_is_trial_expired_cached(uid)')
+        expiry_pos = fn_body.find('_is_trial_expired_cached(uid')
         assert filter_pos != -1, "is_trial_paywalled must filter non-desktop platforms"
         assert expiry_pos != -1, "is_trial_paywalled must call the cached expiry lookup"
         assert filter_pos < expiry_pos, "platform filtering must happen before the expiry lookup"
@@ -184,7 +184,7 @@ class TestPlatformFiltering:
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
         assert (
-            'return _is_trial_expired_cached(uid)' in fn_body
+            'return _is_trial_expired_cached(uid' in fn_body
         ), "desktop paywall decisions must use the cached expiry lookup"
 
     def test_is_trial_paywalled_uses_lower_for_case_insensitivity(self):
@@ -317,11 +317,13 @@ class TestIsTrialPaywalledBehavioral:
 
     def test_desktop_uid_delegates_to_expiry_cache(self):
         assert self._sub.is_trial_paywalled('uid1', 'desktop') is True
-        self._mock_expired.assert_called_with('uid1')
+        # Routing kwargs (which Firestore client, whether to provision) belong to
+        # the caller; this asserts only that the decision is delegated for this uid.
+        assert self._mock_expired.call_args.args == ('uid1',)
 
     def test_different_desktop_uid_uses_same_expiry_path(self):
         assert self._sub.is_trial_paywalled('uid99', 'desktop') is True
-        self._mock_expired.assert_called_with('uid99')
+        assert self._mock_expired.call_args.args == ('uid99',)
 
     def test_not_expired_returns_false(self):
         self._mock_expired.return_value = False
@@ -457,3 +459,33 @@ class TestByokRequestEscapeHatch:
         )
         meta = self._sub.get_trial_metadata('uid-stale-firestore')
         assert meta.trial_expired is False
+
+
+class TestDesktopTrialGateClientResolution:
+    """`is_desktop_trial_paywalled` reads the customer Firestore, so resolving its
+    client initializes credentials. Decisions that need no Firestore must be made
+    before that: the paywall is off by default, and mobile is never gated.
+    """
+
+    @staticmethod
+    def _subscription_with_exploding_client(monkeypatch):
+        import utils.subscription as sub
+
+        def _explode():
+            raise AssertionError('customer Firestore client resolved without a Firestore decision')
+
+        monkeypatch.setattr(sub, 'get_customer_firestore_client', _explode)
+        return sub
+
+    def test_disabled_paywall_never_resolves_the_customer_client(self, monkeypatch):
+        sub = self._subscription_with_exploding_client(monkeypatch)
+        monkeypatch.setattr(sub, 'TRIAL_PAYWALL_ENABLED', False)
+
+        assert sub.is_desktop_trial_paywalled('uid1', 'desktop') is False
+
+    def test_non_desktop_platform_never_resolves_the_customer_client(self, monkeypatch):
+        sub = self._subscription_with_exploding_client(monkeypatch)
+        monkeypatch.setattr(sub, 'TRIAL_PAYWALL_ENABLED', True)
+
+        assert sub.is_desktop_trial_paywalled('uid1', 'ios') is False
+        assert sub.is_desktop_trial_paywalled('uid1', None) is False

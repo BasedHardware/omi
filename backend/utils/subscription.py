@@ -947,7 +947,16 @@ def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None) -> None
 
 
 def is_desktop_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
-    """Desktop trial gate against the customer Firestore, never a compute-project shadow."""
+    """Desktop trial gate against the customer Firestore, never a compute-project shadow.
+
+    The decisions that need no Firestore run first: resolving the customer client
+    initializes credentials, so a disabled paywall or a non-desktop platform must
+    neither pay for that nor require ambient ADC to answer "not paywalled".
+    """
+    if not TRIAL_PAYWALL_ENABLED:
+        return False
+    if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
+        return False
     return is_trial_paywalled(
         uid,
         platform,
