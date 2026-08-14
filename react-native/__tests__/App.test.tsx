@@ -542,21 +542,35 @@ test('expands the desktop rail to 280 with visible labels and reference timing',
   );
 });
 
-test('applies the exact floating pane shadow only above the pane breakpoint', async () => {
+test('layers floating pane depth without native macOS shadow properties', async () => {
   const renderer = await renderApp();
-  const pane = renderer.root.find(
-    node => node.props.accessibilityLabel === 'Floating pane',
+  const depth = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Floating pane depth',
   );
-  expect(pane.props.style).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        shadowColor: '#000000',
-        shadowOffset: {height: 14, width: 0},
-        shadowOpacity: 0.22,
-        shadowRadius: 26,
-      }),
-    ]),
-  );
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('shadowOffset');
+  expect(React.Children.count(depth.props.children)).toBe(3);
+  expect(
+    React.Children.toArray(depth.props.children).every(
+      child =>
+        React.isValidElement<{style: Array<{bottom?: number; top?: number}>}>(
+          child,
+        ) &&
+        child.props.style.some(
+          style => style?.top === 14 && style?.bottom === -14,
+        ),
+    ),
+  ).toBe(true);
+});
+
+test('removes floating pane depth below 640 pixels', async () => {
+  mockViewportWidth = 639;
+  const renderer = await renderApp();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Floating pane depth',
+    ),
+  ).toHaveLength(0);
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('shadowOffset');
 });
 
 test.each([

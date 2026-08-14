@@ -711,6 +711,16 @@ function App(): React.JSX.Element {
               styles.paneFrame,
               !floatingPane && styles.paneFrameCompact,
             ]}>
+            {floatingPane && (
+              <View
+                accessibilityLabel="Floating pane depth"
+                pointerEvents="none"
+                style={styles.paneDepth}>
+                <View style={[styles.paneDepthLayer, styles.paneDepthWide]} />
+                <View style={[styles.paneDepthLayer, styles.paneDepthMid]} />
+                <View style={[styles.paneDepthLayer, styles.paneDepthNear]} />
+              </View>
+            )}
             <KeyboardAvoidingView
               behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
               style={[styles.pane, !floatingPane && styles.paneCompact]}>
@@ -970,12 +980,27 @@ const styles = StyleSheet.create({
   paneInsetCompact: {padding: 0},
   paneFrame: {
     flex: 1,
-    shadowColor: '#000000',
-    shadowOffset: {height: 14, width: 0},
-    shadowOpacity: 0.22,
-    shadowRadius: 26,
   },
-  paneFrameCompact: {shadowOpacity: 0},
+  paneFrameCompact: {},
+  paneDepth: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  paneDepthLayer: {
+    backgroundColor: '#000000',
+    borderRadius: 26,
+    bottom: -14,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 14,
+  },
+  paneDepthWide: {opacity: 0.05, transform: [{scaleX: 1.015}]},
+  paneDepthMid: {bottom: -10, opacity: 0.07, top: 10},
+  paneDepthNear: {bottom: -6, opacity: 0.1, top: 6},
   pane: {
     backgroundColor: '#1a1a1a',
     borderColor: '#303030',
