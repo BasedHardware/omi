@@ -240,6 +240,25 @@ def test_query_group_start_after_keyset(store, uid):
     assert [d.path for d in page] == [mine[1]]
 
 
+def test_query_start_after_without_order_paginates_by_name(store, uid):
+    # cubic PR 10887 A6: start_after with no explicit order_by paginates by document name instead of
+    # raising (the adapters used to index specs[0] on an empty order list).
+    base = f"users/{uid}/people"
+    for doc_id in ("a", "b", "c", "d"):
+        store.set(f"{base}/{doc_id}", {"n": doc_id})
+    got = [d.id for d in store.query(base, start_after={"value": "b", "id": "b"})]
+    assert got == ["c", "d"]  # documents after 'b' by name, no IndexError / cursor-arity error
+
+
+def test_query_group_order_by_with_start_after_is_unsupported(store, uid):
+    # cubic PR 10887 A7: a document-name keyset supplies one cursor position, so it cannot combine with
+    # an explicit order_by (which would need a value per order field). Both adapters reject it rather
+    # than build an invalid cursor.
+    store.set(f"users/{uid}/gadgets/g1", {"kind": "gg", "rank": 1})
+    with pytest.raises(NotImplementedError):
+        store.query_group("gadgets", order_by="rank", start_after=f"users/{uid}/gadgets/g1")
+
+
 def test_query_array_contains(store, uid):
     base = f"users/{uid}/people"
     store.set(f"{base}/p1", {"name": "p1", "tags": ["persona", "audio"]})

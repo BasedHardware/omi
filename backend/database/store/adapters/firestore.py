@@ -255,14 +255,22 @@ class FirestoreDocumentStore:
         for _field, _dir in specs:
             query = query.order_by(_field, direction=_DIRECTION[_dir])
         if start_after is not None:
-            # Keyset cursor with a document-id tiebreak so ties never skip/duplicate — unless the
-            # caller already ordered by ``__name__`` explicitly (a composite keyset, e.g. the
-            # canonical graph's ``updated_at DESC, __name__ DESC``), where adding it again is a
-            # duplicate-order_by error. The caller's explicit ``__name__`` also fixes the tie order
-            # on the *first* page (no cursor), matching upstream's always-present tiebreak.
-            if not any(_field == '__name__' for _field, _ in specs):
-                query = query.order_by('__name__', direction=_DIRECTION[specs[0][1]])
-            query = query.start_after([start_after['value'], start_after['id']])
+            # Keyset cursor. The number of cursor values must equal the number of order fields, so
+            # branch on what ordering is present (cubic PR 10887 A6):
+            #  - no explicit order  -> order by __name__, cursor is the id alone (an empty specs list
+            #    used to IndexError on specs[0]);
+            #  - order already includes __name__ (a sole __name__, or a (field, __name__) composite like
+            #    the canonical graph's ``updated_at DESC, __name__ DESC``) -> one value per field;
+            #  - a single real field -> append the __name__ tiebreak so ties never skip/duplicate.
+            if not specs:
+                query = query.order_by('__name__')
+                query = query.start_after([start_after['id']])
+            elif any(_field == '__name__' for _field, _ in specs):
+                cursor = [start_after['id']] if len(specs) == 1 else [start_after['value'], start_after['id']]
+                query = query.start_after(cursor)
+            else:
+                query = query.order_by('__name__', direction=_DIRECTION[specs[-1][1]])
+                query = query.start_after([start_after['value'], start_after['id']])
         if fields is not None:
             query = query.select(list(fields))
         if offset is not None:
@@ -296,10 +304,15 @@ class FirestoreDocumentStore:
         for _field, _dir in specs:
             query = query.order_by(_field, direction=_DIRECTION[_dir])
         if start_after is not None:
-            # Document-name keyset: order by __name__ and resume after the cursor path's position.
-            # The cursor is a list of values matching the order fields (here just __name__), whose
-            # value is a DocumentReference — it positions the cursor by path even if the document no
-            # longer exists. Passing the ref bare (not in a list) breaks the SDK cursor normalization.
+            # Document-name keyset: order by __name__ and resume after the cursor path's position. The
+            # cursor is a DocumentReference — it positions by path even if the document no longer exists
+            # (passing it bare, not in a list, breaks the SDK cursor normalization). This keyset supplies
+            # a SINGLE cursor value, so it cannot combine with an explicit order_by (which would need a
+            # value per order field) — reject that rather than build an invalid cursor (cubic 10887 A7).
+            if specs:
+                raise NotImplementedError(
+                    "query_group start_after (document-name keyset) does not support combining with an explicit order_by"
+                )
             query = query.order_by('__name__')
             query = query.start_after([self._client.document(start_after)])
         if offset is not None:

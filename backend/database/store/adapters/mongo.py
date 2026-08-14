@@ -348,18 +348,23 @@ class MongoDocumentStore:
         # order_by is a single field name (str) or a list of (field, direction) tuples.
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         if start_after is not None:
-            # Keyset is single-field (specs has one entry here). Full-path _id tiebreak mirrors
-            # Firestore __name__, so ties on the order_by field neither skip nor duplicate a row.
-            keyset_field, keyset_dir = specs[0]
-            op = "$gt" if keyset_dir == "asc" else "$lt"
-            field_key = "d." + keyset_field
             cursor_id = f"{collection}/{start_after['id']}"
-            keyset = {
-                "$or": [
-                    {field_key: {op: start_after["value"]}},
-                    {"$and": [{field_key: start_after["value"]}, {"_id": {op: cursor_id}}]},
-                ]
-            }
+            if not specs:
+                # No explicit order: keyset purely by document name (_id), ascending — mirrors the
+                # Firestore adapter's __name__-only cursor (cubic PR 10887 A6; specs[0] used to IndexError).
+                keyset = {"_id": {"$gt": cursor_id}}
+            else:
+                # Keyset is single-field. Full-path _id tiebreak mirrors Firestore __name__, so ties on
+                # the order_by field neither skip nor duplicate a row.
+                keyset_field, keyset_dir = specs[0]
+                op = "$gt" if keyset_dir == "asc" else "$lt"
+                field_key = "d." + keyset_field
+                keyset = {
+                    "$or": [
+                        {field_key: {op: start_after["value"]}},
+                        {"$and": [{field_key: start_after["value"]}, {"_id": {op: cursor_id}}]},
+                    ]
+                }
             mongo_filter = {"$and": [mongo_filter, keyset]}
         projection = {"d." + field: 1 for field in fields} if fields is not None else None
         cursor = self._db[_collection_name(collection)].find(mongo_filter, projection, session=None)
@@ -369,6 +374,9 @@ class MongoDocumentStore:
             sort_spec = [("d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs]
             sort_spec.append(("_id", ASCENDING if specs[-1][1] == "asc" else DESCENDING))
             cursor = cursor.sort(sort_spec)
+        elif start_after is not None:
+            # No order field but a keyset cursor: order by _id so the document-name pagination is stable.
+            cursor = cursor.sort([("_id", ASCENDING)])
         if offset is not None:
             cursor = cursor.skip(offset)
         if limit is not None:
@@ -411,6 +419,12 @@ class MongoDocumentStore:
                 mongo_filter.setdefault("d." + field, {})[_OP[op]] = value
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         if start_after is not None:
+            if specs:
+                # The document-name keyset supplies a single position; it cannot combine with an explicit
+                # order_by (parity with the Firestore adapter, cubic PR 10887 A7).
+                raise NotImplementedError(
+                    "query_group start_after (document-name keyset) does not support combining with an explicit order_by"
+                )
             # Document-name keyset: ``_id`` is the full logical path (mirrors Firestore __name__).
             mongo_filter["_id"] = {"$gt": start_after}
         cursor = self._db[group].find(mongo_filter)
