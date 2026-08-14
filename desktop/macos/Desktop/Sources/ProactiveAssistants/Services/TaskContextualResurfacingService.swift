@@ -410,7 +410,6 @@ struct TaskInterruptionEnvironment {
   let ambientFrequencyEligible: Bool
   let taskNotificationsEnabled: Bool
   let focusSuppressed: Bool
-  let snoozed: Bool
   let now: Date
   let calendar: Calendar
 }
@@ -554,8 +553,6 @@ final class ProactiveTaskInterruptionGate {
       reason = .taskDisabled
     } else if environment.focusSuppressed {
       reason = .focusSuppressed
-    } else if environment.snoozed {
-      reason = .snoozed
     } else if candidate.expiresAt <= environment.now {
       reason = .expired
     } else if candidate.canWait {

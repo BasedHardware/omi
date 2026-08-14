@@ -20,8 +20,14 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   var isEnabled: Bool {
     get async {
+      // Deliberately independent of ContextBucketsFeature. The buckets rollout gated this
+      // on `!ContextBucketsFeature.isEnabled`, betting the context director would replace
+      // live suggestions — it delivered almost nothing, and with the flag at 100% of all
+      // users focus nudges went silent fleet-wide with no error logged (Aug 13–14 2026).
+      // If the director is ever meant to replace this assistant again, that must be an
+      // explicit, evidenced change — never a side effect of a rollout flag.
       await MainActor.run {
-        !ContextBucketsFeature.isEnabled && SuggestionAssistantSettings.shared.isEnabled
+        SuggestionAssistantSettings.shared.isEnabled
       }
     }
   }
@@ -41,11 +47,11 @@ actor SuggestionAssistant: ProactiveAssistant {
   private let geminiClient: GeminiClient
   private let telemetryModel: SuggestionAssistantTelemetry.Model
 
-  /// How long the user must stay in a context before it is worth spending on. People
-  /// switch apps hundreds of times a day and almost none of those are a request for
-  /// advice; half a minute of dwell is the difference between passing through a window and
-  /// working in it.
-  private static let requiredDwell: TimeInterval = 30.0
+  /// Dwell before a context is worth spending on — level-aware, see
+  /// `SuggestionGatePolicy.requiredDwell(frequencyLevel:)` (10 s at Maximum, 30 s otherwise).
+  private static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
+    SuggestionGatePolicy.requiredDwell(frequencyLevel: frequencyLevel)
+  }
 
   /// Hard ceiling on paid evaluations per day, so cost is a number we choose rather than a
   /// function of how much the user alt-tabs.
@@ -132,7 +138,7 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     let enabled = await isEnabled
     let excluded = await MainActor.run { SuggestionAssistantSettings.shared.isAppExcluded(frame.appName) }
-    let snoozed = await MainActor.run { FloatingControlBarManager.shared.isSnoozed }
+    let frequencyLevel = await MainActor.run { NotificationService.currentFrequencyLevel() }
     let cooldown = await cooldownInterval
 
     let now = Date()
@@ -141,12 +147,11 @@ actor SuggestionAssistant: ProactiveAssistant {
     let decision = SuggestionGatePolicy.decide(
       isEnabled: enabled,
       isAppExcluded: excluded,
-      isSnoozed: snoozed,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
-      cooldown: cooldown,
+      cooldown: SuggestionGatePolicy.cooldown(base: cooldown, frequencyLevel: frequencyLevel),
       dwell: dwell,
-      requiredDwell: Self.requiredDwell,
+      requiredDwell: Self.requiredDwell(frequencyLevel: frequencyLevel),
       evaluationsToday: dailyBudget.countToday(now: now),
       dailyBudget: Self.dailyEvaluationBudget
     )
@@ -628,7 +633,6 @@ actor SuggestionAssistant: ProactiveAssistant {
     let gateState = await MainActor.run {
       (
         SuggestionAssistantSettings.shared.isAppExcluded(frame.appName),
-        FloatingControlBarManager.shared.isSnoozed,
         NotificationService.areNotificationsEnabled(),
         NotificationService.currentFrequencyLevel()
       )
@@ -637,17 +641,16 @@ actor SuggestionAssistant: ProactiveAssistant {
     let decision = SuggestionGatePolicy.decide(
       isEnabled: assistantEnabled,
       isAppExcluded: gateState.0,
-      isSnoozed: gateState.1,
       now: now,
       lastEvaluationAt: nil,
       cooldown: 0,
-      dwell: Self.requiredDwell,
-      requiredDwell: Self.requiredDwell,
+      dwell: Self.requiredDwell(frequencyLevel: gateState.2),
+      requiredDwell: Self.requiredDwell(frequencyLevel: gateState.2),
       evaluationsToday: dailyBudget.countToday(now: now),
       dailyBudget: Self.dailyEvaluationBudget)
-    guard gateState.2, gateState.3 > 0, decision.allowsEvaluation else {
-      if !gateState.2 { return ["outcome": "skipped_notifications_disabled"] }
-      if gateState.3 == 0 { return ["outcome": "skipped_frequency_off"] }
+    guard gateState.1, gateState.2 > 0, decision.allowsEvaluation else {
+      if !gateState.1 { return ["outcome": "skipped_notifications_disabled"] }
+      if gateState.2 == 0 { return ["outcome": "skipped_frequency_off"] }
       return ["outcome": SuggestionAssistantTelemetry.GateOutcome(decision).rawValue]
     }
 

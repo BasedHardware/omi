@@ -177,7 +177,6 @@ final class ContextProactivityEngineTests: XCTestCase {
     let allowed = ContextDeliveryGateInput(
       masterEnabled: defaults.bool(forKey: NotificationService.masterEnabledDefaultsKey),
       frequencyLevel: defaults.integer(forKey: NotificationService.frequencyDefaultsKey),
-      snoozed: false,
       paywalled: false,
       cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: 3))
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: allowed), .allowed)
@@ -186,7 +185,6 @@ final class ContextProactivityEngineTests: XCTestCase {
     let rebuilt = ContextDeliveryGateInput(
       masterEnabled: defaults.bool(forKey: NotificationService.masterEnabledDefaultsKey),
       frequencyLevel: defaults.integer(forKey: NotificationService.frequencyDefaultsKey),
-      snoozed: false,
       paywalled: false,
       cooldownSeconds: 0)
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: rebuilt), .masterDisabled)
@@ -196,23 +194,13 @@ final class ContextProactivityEngineTests: XCTestCase {
     let allowed = ContextDeliveryGateInput(
       masterEnabled: true,
       frequencyLevel: 3,
-      snoozed: false,
       paywalled: false,
       cooldownSeconds: 0)
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: allowed), .allowed)
 
-    let snoozed = ContextDeliveryGateInput(
-      masterEnabled: true,
-      frequencyLevel: 3,
-      snoozed: true,
-      paywalled: false,
-      cooldownSeconds: 0)
-    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: snoozed), .snoozed)
-
     let paywalled = ContextDeliveryGateInput(
       masterEnabled: true,
       frequencyLevel: 3,
-      snoozed: false,
       paywalled: true,
       cooldownSeconds: 0)
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: paywalled), .paywalled)
@@ -513,7 +501,6 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
       gate: ContextDeliveryGateInput(
         masterEnabled: true,
         frequencyLevel: 5,
-        snoozed: false,
         paywalled: false,
         cooldownSeconds: 0),
       now: now)

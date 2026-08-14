@@ -12,7 +12,6 @@ final class SuggestionGatePolicyTests: XCTestCase {
   private func decide(
     isEnabled: Bool = true,
     isAppExcluded: Bool = false,
-    isSnoozed: Bool = false,
     lastEvaluationAt: Date? = nil,
     cooldown: TimeInterval = 180,
     dwell: TimeInterval = 999,
@@ -23,7 +22,6 @@ final class SuggestionGatePolicyTests: XCTestCase {
     SuggestionGatePolicy.decide(
       isEnabled: isEnabled,
       isAppExcluded: isAppExcluded,
-      isSnoozed: isSnoozed,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
       cooldown: cooldown,
@@ -48,8 +46,11 @@ final class SuggestionGatePolicyTests: XCTestCase {
     XCTAssertEqual(decide(isAppExcluded: true), .skippedExcludedApp)
   }
 
-  func testSnoozedBarDoesNotEvaluate() {
-    XCTAssertEqual(decide(isSnoozed: true), .skippedSnoozed)
+  /// Hiding the floating bar is about the bar, not delivery: the gate no longer has a
+  /// snooze input at all, so a hidden bar cannot silently mute an hour of nudges the way
+  /// "Disable for 2 hours" once did (the compiler now enforces what this test documents).
+  func testHiddenBarStillEvaluates() {
+    XCTAssertEqual(decide(), .evaluate)
   }
 
   func testCooldownBlocksUntilItHasFullyElapsed() {
@@ -69,17 +70,34 @@ final class SuggestionGatePolicyTests: XCTestCase {
     let decision = decide(
       isEnabled: false,
       isAppExcluded: true,
-      isSnoozed: true,
       lastEvaluationAt: now
     )
     XCTAssertEqual(decision, .skippedDisabled)
   }
 
-  /// A privacy exclusion must outrank snooze and cooldown: "do not look at this app" is a
+  /// A privacy exclusion must outrank cooldown: "do not look at this app" is a
   /// stronger statement than "not right now".
-  func testExclusionTakesPrecedenceOverSnoozeAndCooldown() {
-    let decision = decide(isAppExcluded: true, isSnoozed: true, lastEvaluationAt: now)
+  func testExclusionTakesPrecedenceOverCooldown() {
+    let decision = decide(isAppExcluded: true, lastEvaluationAt: now)
     XCTAssertEqual(decision, .skippedExcludedApp)
+  }
+
+  /// Maximum (5) is the "nudge me in seconds" demo mode: 10 s dwell. Everything below —
+  /// including Balanced (3) — keeps the deliberate 30 s so ordinary use is unchanged.
+  func testDwellIsTenSecondsOnlyAtMaximumLevel() {
+    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 5), 10)
+    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 4), 30)
+    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 3), 30)
+    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 0), 30)
+  }
+
+  /// Maximum caps the between-nudge cooldown at 30 s; other levels keep the user's
+  /// configured value (180 s default) untouched.
+  func testCooldownCapsAtThirtySecondsOnlyAtMaximumLevel() {
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 5), 30)
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 20, frequencyLevel: 5), 20)
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 4), 180)
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 3), 180)
   }
 
   func testFirstEverEvaluationIsNotBlockedByAbsentHistory() {

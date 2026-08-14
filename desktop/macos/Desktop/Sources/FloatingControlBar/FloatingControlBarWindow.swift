@@ -2840,21 +2840,14 @@ class FloatingControlBarManager {
     return snoozedUntil > Date()
   }
 
-  /// Hide the bar and suppress notifications for the given duration.
+  /// Hide the bar for the given duration. This is a statement about the BAR only:
+  /// notifications keep flowing and present via the temp-show path (card pops over the
+  /// hidden bar, then the bar re-hides). It used to also drop the queue and gate all
+  /// proactive delivery, which silently muted an hour of movie-watching after one
+  /// right-click on "Disable for 2 hours".
   func snooze(for duration: TimeInterval) {
     let until = Date().addingTimeInterval(duration)
     snoozedUntil = until
-    notificationDismissWorkItem?.cancel()
-    notificationDismissWorkItem = nil
-    Self.recordQueuedInsightOutcomes(pendingNotifications, reason: .snoozed)
-    let droppedCallbacks = pendingNotifications.compactMap {
-      notificationAuthorizationSnapshots.removeValue(forKey: $0.id)
-      return notificationPresentationCallbacks.removeValue(forKey: $0.id)
-    }
-    pendingNotifications.removeAll()
-    for callback in droppedCallbacks {
-      callback.onDropped()
-    }
     if let window, window.state.currentNotification != nil {
       window.dismissNotification(animated: false)
     }
@@ -3425,13 +3418,6 @@ class FloatingControlBarManager {
       return .windowUnavailable
     }
 
-    if isSnoozed {
-      log(
-        "FloatingControlBarManager: dropping notification because bar is snoozed until \(snoozedUntil?.description ?? "?")"
-      )
-      onDropped?()
-      return .suppressed
-    }
     notificationAuthorizationSnapshots[notification.id] = authorizationSnapshot
 
     if !window.state.showingAIConversation {
@@ -3476,7 +3462,6 @@ class FloatingControlBarManager {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
     else { return .rejectedOwnerChange }
     guard window != nil else { return .windowUnavailable }
-    guard !isSnoozed else { return .suppressed }
     return .queued
   }
 
@@ -4173,7 +4158,10 @@ class FloatingControlBarManager {
       }
     }
 
-    if notificationWasTemporarilyShown && !isEnabled && !window.state.showingAIConversation {
+    // "Hide for 2 hours" keeps `isEnabled` true (it is not the persisted enable
+    // preference), so the snoozed state must arm the re-hide too — otherwise the first
+    // temp-shown nudge would bring the bar back for the rest of the hide window.
+    if notificationWasTemporarilyShown && (!isEnabled || isSnoozed) && !window.state.showingAIConversation {
       window.orderOut(nil)
     }
     notificationWasTemporarilyShown = false
