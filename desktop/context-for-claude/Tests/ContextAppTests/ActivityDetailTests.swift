@@ -199,22 +199,32 @@ final class ActivityDetailTests: XCTestCase {
 
     // MARK: - What the wire actually carries
 
-    /// Written against the FastAPI response models in `backend/routers/mcp.py`:
-    /// `FullConversation` = `SimpleConversation` + `transcript_segments`, and `SimpleStructured` is
-    /// `title` / `overview` / `category` — **no `emoji`**, and `SimpleTranscriptSegment` has **no
-    /// `is_user`**. Both absences are load-bearing on this screen, so both are asserted.
-    func testTheAccountsTranscriptNeverClaimsAVoiceIsYours() throws {
+    /// Written against `backend/models/transcript_segment.py`, which is what
+    /// `GET /v1/conversations/{id}` actually serialises: `id`, `text`, `speaker` (`"SPEAKER_00"`),
+    /// `speaker_id`, **`is_user`**, `person_id`, `start`, `end`.
+    ///
+    /// `is_user` is the field this screen moved endpoints for. The MCP projection did not carry it,
+    /// so no account line could ever be attributed to the reader; here it can, and the two claims
+    /// the label makes — "You" for the user's own voice, a number for everyone else's — are both
+    /// asserted. `person_id` is present in the fixture and deliberately not rendered: it is an id,
+    /// not a name, and resolving it is a lookup this screen does not make.
+    func testAnAccountTranscriptNamesTheReadersOwnVoiceAndNumbersTheRest() throws {
         let json = """
             {
               "id": "abc",
               "started_at": "2025-06-11T09:00:00Z",
               "finished_at": "2025-06-11T09:30:00Z",
-              "structured": {"title": "Pricing", "overview": "  We held it.  ", "category": "work"},
+              "structured": {
+                "title": "Pricing", "overview": "  We held it.  ",
+                "category": "work", "emoji": "💸"
+              },
               "transcript_segments": [
-                {"id": "s1", "text": "Where did we land?", "speaker_id": 0, "start": 0.0, "end": 2.0},
-                {"id": "s2", "text": "Holding it.", "speaker_id": 1,
-                 "speaker_name": "Priya", "start": 7.4, "end": 9.0},
-                {"id": "s3", "text": "   ", "speaker_id": 1, "start": 11.0, "end": 12.0}
+                {"id": "s1", "text": "Where did we land?", "speaker": "SPEAKER_00",
+                 "speaker_id": 0, "is_user": true, "start": 0.0, "end": 2.0},
+                {"id": "s2", "text": "Holding it.", "speaker": "SPEAKER_01", "speaker_id": 1,
+                 "is_user": false, "person_id": "p-42", "start": 7.4, "end": 9.0},
+                {"id": "s3", "text": "   ", "speaker": "SPEAKER_01", "speaker_id": 1,
+                 "is_user": false, "start": 11.0, "end": 12.0}
               ]
             }
             """
@@ -228,9 +238,35 @@ final class ActivityDetailTests: XCTestCase {
         XCTAssertEqual(body.category, "work")
         // The blank segment is dropped rather than drawn as an empty bubble.
         XCTAssertEqual(body.lines.count, 2)
-        XCTAssertEqual(body.lines.map(\.speaker), ["Speaker 1", "Priya"])
-        XCTAssertEqual(body.lines.map(\.isYou), [false, false])
+        XCTAssertEqual(body.lines.map(\.speaker), ["You", "Speaker 2"])
+        XCTAssertEqual(body.lines.map(\.isYou), [true, false])
         XCTAssertEqual(body.lines.map(\.offset), [0, 7.4])
+    }
+
+    /// A document written before `is_user` existed, or one where it did not survive whatever wrote
+    /// it. The line is somebody else's, never the reader's: the safe half of the guess is the one
+    /// that does not put words in their mouth.
+    ///
+    /// `speaker_id` is absent here too, so this also pins the fallback to parsing the raw
+    /// `"SPEAKER_03"` label — which is exactly where the backend derives `speaker_id` from.
+    func testALineWithNoIsUserIsSomebodyElsesAndItsNumberComesFromTheRawLabel() throws {
+        let json = """
+            {
+              "id": "abc",
+              "transcript_segments": [
+                {"id": "s1", "text": "Anyone?", "speaker": "SPEAKER_03", "start": 0.0, "end": 1.0},
+                {"id": "s2", "text": "Here.", "start": 2.0, "end": 3.0}
+              ]
+            }
+            """
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let body = try decoder.decode(
+            ActivityDetailWire.FullConversation.self, from: Data(json.utf8)
+        ).body()
+
+        XCTAssertEqual(body.lines.map(\.speaker), ["Speaker 4", "Speaker"])
+        XCTAssertEqual(body.lines.map(\.isYou), [false, false])
     }
 
     /// `other` is the backend's own "we didn't work one out", so a chip saying it is a chip saying

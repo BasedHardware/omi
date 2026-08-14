@@ -196,7 +196,9 @@ enum ActivityDetailCopy {
         "Airgap Mode is on, so this conversation isn't being read from your account. Turn it off in "
         + "Settings to see the transcript."
     static let signedOut = "Sign in to Omi to read this conversation."
-    static let noKey =
+    /// A 401 the session could not survive. `OmiAPI` has already spent its one forced token refresh
+    /// by the time this is reached, so the refusal is the account's answer and not a stale token.
+    static let unauthenticated =
         "Omi couldn't authenticate this Mac, so this conversation can't be read. Sign out and back "
         + "in from the menu bar to reconnect it."
     static let rateLimited =
@@ -229,7 +231,10 @@ enum ActivityDetailCopy {
     static let contextCaveat =
         "Omi doesn't record which conversation this came out of. This is the conversation that was "
         + "running at the time."
-    static let contextNone = "Nothing else on the spine was running at that minute."
+    // "Activity", not "the spine". The latter is what this code calls the chronological list among
+    // itself, and it appears in no other string the user ever sees — while the back chip 40 pt above
+    // this sentence says "Activity".
+    static let contextNone = "Nothing else in Activity was running at that minute."
 }
 
 // MARK: - Reading the account, and this Mac
@@ -237,28 +242,26 @@ enum ActivityDetailCopy {
 /// The production reader: the account for a conversation the account knows about, and this Mac's own
 /// capture database for one only it heard.
 ///
-/// **The credential is the `omi_mcp_…` key, not the signed-in session's token.** Every route in
-/// `backend/routers/mcp.py` — including `GET /v1/mcp/conversations/{id}` — depends on
-/// `get_uid_from_mcp_api_key`, which looks the bearer up in `mcp_api_keys` after an explicit
-/// `startswith("omi_mcp_")`. A Firebase ID token is not found there and comes back `401`. This is the
-/// same path `OmiActivityFeed` reads the spine with, through the same `OmiMCPRead` helper, and a
-/// rejected key buys exactly one re-provision and one retry for the same reason it does there.
+/// **The credential is the signed-in session, and the route is the one the shipping clients read.**
+/// `GET /v1/conversations/{id}` is authenticated by `get_current_user_uid` and returns the full
+/// `Conversation` — the same call the macOS app makes to open a conversation. `OmiActivityFeed`
+/// documents at length why the whole account half moved off `/v1/mcp/*`; the short version is that
+/// the MCP lane is rate-limited fail-closed at 300 requests an hour, needs a second credential that
+/// can be rotated out from under the app, and projects the response through strictly poorer models.
 ///
-/// **What the endpoint actually gives us**, checked against the FastAPI response model rather than
-/// assumed: `FullConversation` is `SimpleConversation` plus `transcript_segments`, and
-/// `SimpleStructured` is `title`, `overview`, `category` — **there is no `emoji` on this route
-/// either**. So the emoji on this screen is the one the row already carried, and what the read adds
-/// is the category and the segments. `SimpleTranscriptSegment` carries `speaker_id`/`speaker_name`
-/// and **no `is_user` flag**, which is why an account transcript never labels a line "You": the
-/// record does not say which voice was the user's, and guessing would put words in their mouth.
+/// **What that buys this screen specifically**, checked against the FastAPI models rather than
+/// assumed: `Conversation.transcript_segments` is a list of real `TranscriptSegment`s, and a
+/// `TranscriptSegment` declares **`is_user`** — which `SimpleTranscriptSegment` did not. So an
+/// account transcript can finally label the reader's own lines "You". It used to be unable to: the
+/// old record did not say which voice was the user's, and guessing would have put words in their
+/// mouth. The trade is `speaker_name`, which the MCP projection resolved and this model does not
+/// carry — it has `speaker` (`"SPEAKER_00"`) and a `person_id` that would need its own lookup — so a
+/// non-user voice is numbered rather than named.
 struct ActivityConversationSource: ActivityConversationReading {
 
     private let isAirgapped: @Sendable () -> Bool
     private let isSignedIn: @Sendable () async -> Bool
-    /// The bearer for the next attempt — `nil` asks for the current key, a rejected key asks for its
-    /// replacement. Same contract as `OmiActivityFeed`'s.
-    private let credential: @Sendable (String?) async -> String?
-    private let fetch: @Sendable (String, String) async throws -> ActivityDetailWire.FullConversation
+    private let fetch: @Sendable (String) async throws -> ActivityDetailWire.FullConversation
     /// The spoken lines of a local session, or the sentence saying why there are none.
     private let local: @Sendable (Int64) async -> ActivityConversationRead
 
@@ -267,15 +270,13 @@ struct ActivityConversationSource: ActivityConversationReading {
         isSignedIn: @escaping @Sendable () async -> Bool = {
             await MainActor.run { OmiAuth.shared.isSignedIn }
         },
-        credential: @escaping @Sendable (String?) async -> String? = { rejected in
-            guard let rejected else { return await MCPKeyProvisioner.shared.key() }
-            return await MCPKeyProvisioner.shared.key(replacing: rejected)
-        },
-        fetch: @escaping @Sendable (String, String) async throws -> ActivityDetailWire.FullConversation = {
-            id, key in
-            try await OmiMCPRead.get(
-                "v1/mcp/conversations/\(id)", key: key, query: [:],
-                as: ActivityDetailWire.FullConversation.self)
+        fetch: @escaping @Sendable (String) async throws -> ActivityDetailWire.FullConversation = { id in
+            // Percent-encoded because the id lands in the path. Conversation ids are UUIDs today,
+            // which need no encoding — this is here so that the day one does not, the request is
+            // still the request rather than a truncated one.
+            let escaped = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+            return try await OmiAPI.shared.get(
+                "v1/conversations/\(escaped)", as: ActivityDetailWire.FullConversation.self)
         },
         local: @escaping @Sendable (Int64) async -> ActivityConversationRead = {
             await ActivityConversationSource.readThisMac(session: $0)
@@ -283,7 +284,6 @@ struct ActivityConversationSource: ActivityConversationReading {
     ) {
         self.isAirgapped = isAirgapped
         self.isSignedIn = isSignedIn
-        self.credential = credential
         self.fetch = fetch
         self.local = local
     }
@@ -312,27 +312,14 @@ struct ActivityConversationSource: ActivityConversationReading {
             return .unread(ActivityDetailCopy.airgapped)
         }
         guard await isSignedIn() else { return .unread(ActivityDetailCopy.signedOut) }
-        guard let key = await credential(nil) else {
-            ContextLog.error("No Omi MCP key for this Mac; a conversation cannot be read", Self.category)
-            return .unread(ActivityDetailCopy.noKey)
-        }
 
+        // One attempt. `OmiAPI` has already spent a forced token refresh on a 401 and up to three
+        // jittered retries on a 429 or 5xx by the time anything throws out here, so a second ladder
+        // would only multiply requests the backend has already refused.
         do {
-            return .body(try await fetch(conversation.id, key).body())
+            return .body(try await fetch(conversation.id).body())
         } catch {
-            guard case .http(401, _)? = error as? OmiAPIError else {
-                return .unread(Self.sentence(for: error))
-            }
-            // One re-provision and one retry, exactly as the spine's own read spends: a key the
-            // account has just issued and immediately refused is the account's answer.
-            guard let replacement = await credential(key), replacement != key else {
-                return .unread(ActivityDetailCopy.noKey)
-            }
-            do {
-                return .body(try await fetch(conversation.id, replacement).body())
-            } catch {
-                return .unread(Self.sentence(for: error))
-            }
+            return .unread(Self.sentence(for: error))
         }
     }
 
@@ -348,7 +335,7 @@ struct ActivityConversationSource: ActivityConversationReading {
         case .transport: return ActivityDetailCopy.noAnswer
         case .http(let status, _):
             switch status {
-            case 401: return ActivityDetailCopy.noKey
+            case 401: return ActivityDetailCopy.unauthenticated
             case 402: return ActivityDetailCopy.locked
             case 404: return ActivityDetailCopy.gone
             case 429: return ActivityDetailCopy.rateLimited
@@ -392,24 +379,30 @@ struct ActivityConversationSource: ActivityConversationReading {
 /// single null must never cost the screen it was going to fill.
 enum ActivityDetailWire {
 
-    /// `FullConversation` = `SimpleConversation` + `transcript_segments`.
+    /// The parts of `Conversation` this screen draws — `structured` for the summary, and the real
+    /// `transcript_segments`, which the list form of the same model omits.
     struct FullConversation: Decodable, Sendable {
         let structured: Structured?
         let transcriptSegments: [Segment]?
 
-        /// `SimpleStructured`: `title`, `overview`, `category`. No `emoji` — see the note on
-        /// `ActivityConversationSource`.
+        /// `Structured`. `emoji` is a field here and is deliberately not read: the row the reader
+        /// opened already carries it, and re-reading it would let the sheet disagree with the row
+        /// that opened it.
         struct Structured: Decodable, Sendable {
             let overview: String?
             let category: String?
         }
 
-        /// `SimpleTranscriptSegment`: `id`, `text`, `speaker_id`, `speaker_name`, `start`, `end`.
+        /// `TranscriptSegment`: `id`, `text`, `speaker`, `speaker_id`, `is_user`, `person_id`,
+        /// `start`, `end`. `speaker` is the raw `"SPEAKER_00"` label and `speaker_id` is the index
+        /// the backend derives from it in `__init__`; both are read because a document written
+        /// before that derivation existed can carry one without the other.
         struct Segment: Decodable, Sendable {
             let id: String?
             let text: String?
+            let speaker: String?
             let speakerId: Int?
-            let speakerName: String?
+            let isUser: Bool?
             let start: Double?
         }
 
@@ -420,16 +413,21 @@ enum ActivityDetailWire {
                 category: ActivityDetailWire.category(structured?.category),
                 lines: segments.enumerated().compactMap { index, segment in
                     guard let text = WireText.presentable(segment.text) else { return nil }
+                    // `is_user` is declared non-optional on the model, so a row without it is a
+                    // document older than the field. Defaulting to false is the safe half of that:
+                    // an unlabelled line reads as somebody else's, never as words in the user's
+                    // mouth that they did not say.
+                    let isYou = segment.isUser ?? false
                     return ActivityTranscriptLine(
                         // The wire id when there is one; the position when there is not. A line with
                         // no identity of its own still has to be diffable, and two blank ids would
                         // collapse two lines onto one row.
                         id: WireText.presentable(segment.id) ?? "segment-\(index)",
-                        speaker: ActivityDetailWire.speaker(
-                            named: segment.speakerName, id: segment.speakerId),
-                        // The account's transcript carries no `is_user`, so no line off it is ever
-                        // claimed as the reader's own voice.
-                        isYou: false,
+                        speaker: isYou
+                            ? "You"
+                            : ActivityDetailWire.speaker(
+                                id: segment.speakerId, rawLabel: segment.speaker),
+                        isYou: isYou,
                         text: text,
                         offset: max(0, segment.start ?? 0))
                 })
@@ -445,13 +443,26 @@ enum ActivityDetailWire {
         return trimmed
     }
 
-    /// What to call an account voice: the name the account resolved, or its diarization index, and
-    /// never "You".
-    static func speaker(named name: String?, id: Int?) -> String {
-        if let named = WireText.presentable(name) { return named }
-        guard let id else { return "Speaker" }
+    /// What to call an account voice that is not the reader's own.
+    ///
+    /// A number, because that is all this record supports. `TranscriptSegment` carries `person_id`
+    /// rather than a resolved name, and inventing a name — or borrowing one from another speaker —
+    /// would attribute somebody's words to a person who may not have said them.
+    ///
+    /// `speaker_id` when the document has it, otherwise the index parsed out of the raw
+    /// `"SPEAKER_00"` label, which is where the backend derives it from anyway.
+    static func speaker(id: Int?, rawLabel: String?) -> String {
+        guard let index = id ?? speakerIndex(inRawLabel: rawLabel) else { return "Speaker" }
         // One-based, because "Speaker 0" reads as a bug to everyone who is not a programmer.
-        return "Speaker \(id + 1)"
+        return "Speaker \(index + 1)"
+    }
+
+    /// The number out of `"SPEAKER_07"`. Nil for a label with no number in it, which is not a
+    /// speaker 0 — it is a label this code does not understand, and saying "Speaker 1" for it would
+    /// be a guess dressed as a fact.
+    private static func speakerIndex(inRawLabel label: String?) -> Int? {
+        guard let label = WireText.presentable(label) else { return nil }
+        return Int(label.drop { !$0.isNumber })
     }
 
     /// What to call a voice this Mac heard for itself.

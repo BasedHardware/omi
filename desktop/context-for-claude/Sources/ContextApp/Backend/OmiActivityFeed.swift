@@ -15,28 +15,42 @@ import Foundation
 ///    reads would cost the sum of three round trips to show one screen.
 /// 3. **One dead source never zeroes the others.** See `reachable` below.
 ///
-/// ## The credential, and why it is not the one the app is signed in with
+/// ## These are the endpoints the shipping Omi clients read, on the credential they read them with
 ///
-/// `/v1/mcp/*` is the one endpoint family a Firebase ID token cannot open. Every route in
-/// `backend/routers/mcp.py` depends on `get_uid_from_mcp_api_key`, which looks the bearer up in the
-/// `mcp_api_keys` collection after an explicit `startswith("omi_mcp_")` — a session token is not
-/// found there, so it comes back `401 {"detail":"Invalid API Key"}`. Reading these three endpoints
-/// through `OmiAPI`, which attaches exactly that session token, therefore failed all three sources
-/// on every tick and rendered a signed-in account as an empty one.
+/// `GET /v1/conversations`, `GET /v3/memories` and `GET /v1/action-items`, carrying the signed-in
+/// session's Firebase ID token — which is to say, exactly what the macOS app and the Flutter app
+/// ask for and exactly how they ask for it. That is not a preference; the alternative was measurably
+/// worse in three separate ways, and this file used to be written against it:
 ///
-/// So this reads with the `omi_mcp_…` key `MCPKeyProvisioner` writes for this Mac, and a rejected
-/// key is repaired rather than reported: **a 401 buys exactly one re-provision and one retry**, per
-/// source, per read. Not more, because a key the account has just issued and immediately rejected is
-/// the account's answer and not a stale file; not silently, because a key that cannot be replaced
-/// makes the feed unreachable — never empty.
+/// - **`/v1/mcp/*` is rate limited and this surface is not the caller it was designed for.** Every
+///   route authenticated by `get_uid_from_mcp_api_key` spends the `mcp:read` policy inside the auth
+///   dependency itself — 300 requests an hour, **fail-closed** — before the handler is reached. That
+///   budget exists for an agent asking occasional questions, not for a panel that re-reads three
+///   sources whenever its window moves, and the panel duly spent it: the whole account rendered as
+///   429 for hours at a time. `get_current_user_uid` performs no rate-limit check at all, and none
+///   of the three routes above opts into one, so the surface the user actually looks at is no longer
+///   competing with the MCP server for the same hourly allowance.
+/// - **The MCP response models are strictly poorer.** `SimpleStructured` is `title`, `overview`,
+///   `category` and carries **no `emoji`** — the row's emoji had to be defaulted to `🧠` for every
+///   conversation, including the ones the account had chosen an emoji for. `Conversation.structured`
+///   is a full `Structured`, whose `emoji` is a real field. `CleanerMemory` carries **no timestamp
+///   whatsoever**, so every memory had to be dropped onto the window's upper edge and none of them
+///   could be placed on the day it happened, or filtered out of a window at all. `MemoryDB` declares
+///   `created_at` and `updated_at` as required, and no exposure mode strips them.
+/// - **It needed a second credential to exist.** The `omi_mcp_…` key is minted for the MCP server,
+///   which is a separate process with no session of its own; the app has never needed it to read its
+///   own user's account. Reading through it meant this file could fail — and did — in ways the app
+///   was otherwise immune to: a key that had been rotated out from under it, a key that had never
+///   been minted, a mint that could not run. All of that is gone. `OmiAPI` attaches the session the
+///   user is already signed in with.
 ///
-/// ## The other refusal: 429
+/// ## Retries live in `OmiAPI`, not here
 ///
-/// A rate-limited account is neither of those things. The key is good, the request is right, and the
-/// account is simply asking us to wait — so it gets its own answer (`.rateLimited`) rather than being
-/// folded into "nobody answered", and it gets a small, jittered retry ladder here rather than being
-/// handed straight back. The ladder is short on purpose and the waiting is somebody else's job: see
-/// `rateLimitRetries` below, and `ActivityStore`'s re-read, which is measured in minutes.
+/// There is no ladder in this file. `OmiAPI` already spends exactly one forced token refresh on a
+/// 401 and up to three jittered retries on a 429 or 5xx, and it does that for every caller in the
+/// app rather than once per feature. What reaches the `catch` below has therefore already been
+/// retried as much as it is going to be, which is why each failure here is final and is classified
+/// rather than re-attempted.
 ///
 /// ## What `reachable` means here
 ///
@@ -47,20 +61,6 @@ import Foundation
 /// only when *no* source answered, which is also the exact shape of every reason the account is
 /// genuinely unavailable: Airgap Mode, signed out, no route, an outage. Those fail all three
 /// together, so the distinction the field exists for survives.
-///
-/// ## What the endpoints actually give us
-///
-/// These are `GET /v1/mcp/{conversations,memories,action-items}`, whose FastAPI `response_model`s
-/// (`SimpleConversation`, `CleanerMemory`, `SimpleActionItem`) *filter* the documents behind them —
-/// a field absent from the model never reaches the wire even when Firestore holds it. Two
-/// consequences shape the mapping below and neither is a guess:
-///
-/// - **`SimpleStructured` carries `title`, `overview` and `category` — no `emoji`.** The seam wants
-///   the emoji the account chose; this route does not send it. It is decoded anyway (free, and the
-///   day the response model gains it this file needs no change) and otherwise falls back to `🧠`,
-///   which is the backend's own default for `ConversationStructureExtraction.emoji`.
-/// - **`CleanerMemory` carries no timestamp at all** — `id`, `content`, `category` and a set of
-///   optional policy flags. `at` is therefore synthesised; see `WireMemory`.
 struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
 
     // Everything that reaches off this file, as replaceable closures with the production wiring as
@@ -70,17 +70,10 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
 
     private let isAirgapped: @Sendable () -> Bool
     private let isSignedIn: @Sendable () async -> Bool
-    /// The bearer for the next attempt. Called with `nil` to ask for the current key, and with a key
-    /// the backend has just rejected to ask for its replacement — a different string means try
-    /// again, `nil` or the same string means there is nothing left to try.
-    private let credential: @Sendable (String?) async -> String?
-    private let fetchConversations: @Sendable (String, [String: String]) async throws -> [WireConversation]
-    private let fetchMemories: @Sendable (String, [String: String]) async throws -> [WireMemory]
-    private let fetchTasks: @Sendable (String, [String: String]) async throws -> [WireActionItem]
+    private let fetchConversations: @Sendable ([String: String]) async throws -> [WireConversation]
+    private let fetchMemories: @Sendable ([String: String]) async throws -> [WireMemory]
+    private let fetchTasks: @Sendable ([String: String]) async throws -> WireActionItemPage
     private let now: @Sendable () -> Double
-    /// How the retry ladder waits. Injected for the same reason the fetchers are: a test that had to
-    /// spend the real backoff to prove there was one would be a test nobody runs.
-    private let sleep: @Sendable (TimeInterval) async -> Void
     /// Why the last read found nothing to read, for the empty copy. A reference so the diagnosis
     /// survives this struct being copied into the task that reads with it.
     private let diagnosis = AccountDiagnosis()
@@ -88,30 +81,23 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
     init(
         isAirgapped: @escaping @Sendable () -> Bool = { NetworkEgress.isSuppressed(.omiAPI) },
         isSignedIn: @escaping @Sendable () async -> Bool = { await MainActor.run { OmiAuth.shared.isSignedIn } },
-        credential: @escaping @Sendable (String?) async -> String? = { rejected in
-            guard let rejected else { return await MCPKeyProvisioner.shared.key() }
-            return await MCPKeyProvisioner.shared.key(replacing: rejected)
+        fetchConversations: @escaping @Sendable ([String: String]) async throws -> [WireConversation] = {
+            try await OmiAPI.shared.get("v1/conversations", query: $0, as: [WireConversation].self)
         },
-        fetchConversations: @escaping @Sendable (String, [String: String]) async throws -> [WireConversation] = {
-            try await OmiMCPRead.get("v1/mcp/conversations", key: $0, query: $1, as: [WireConversation].self)
+        fetchMemories: @escaping @Sendable ([String: String]) async throws -> [WireMemory] = {
+            try await OmiAPI.shared.get("v3/memories", query: $0, as: [WireMemory].self)
         },
-        fetchMemories: @escaping @Sendable (String, [String: String]) async throws -> [WireMemory] = {
-            try await OmiMCPRead.get("v1/mcp/memories", key: $0, query: $1, as: [WireMemory].self)
+        fetchTasks: @escaping @Sendable ([String: String]) async throws -> WireActionItemPage = {
+            try await OmiAPI.shared.get("v1/action-items", query: $0, as: WireActionItemPage.self)
         },
-        fetchTasks: @escaping @Sendable (String, [String: String]) async throws -> [WireActionItem] = {
-            try await OmiMCPRead.get("v1/mcp/action-items", key: $0, query: $1, as: [WireActionItem].self)
-        },
-        now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 },
-        sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }
+        now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }
     ) {
         self.isAirgapped = isAirgapped
         self.isSignedIn = isSignedIn
-        self.credential = credential
         self.fetchConversations = fetchConversations
         self.fetchMemories = fetchMemories
         self.fetchTasks = fetchTasks
         self.now = now
-        self.sleep = sleep
     }
 
     func unreachableReason() async -> ActivityAccountUnreachableReason? {
@@ -119,17 +105,23 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
     }
 
     /// One page per source. The spine shows a window of a day, not an account export, and every one
-    /// of these endpoints will happily serve hundreds of rows to a caller that asks for them.
-    private static let maxPerSource = 200
+    /// of these endpoints will happily serve hundreds of rows to a caller that asks for them — the
+    /// server-side ceilings are 1000, 500 and 500 respectively, all far above anything this panel
+    /// should be pulling to draw one window.
+    ///
+    /// Not private, because `ActivityAccountCache` bounds itself by the same number: a cache of the
+    /// last answer that could hold more rows than an answer is allowed to contain would grow past
+    /// the thing it is a copy of, one 503 at a time.
+    static let maxPerSource = 200
 
     private static let category = "activity"
 
     // MARK: - Reading
 
     func read(since: Double?, until: Double?, limit: Int) async -> ActivityAccountFeed {
-        // Before any URL exists. `OmiMCPRead` enforces Airgap Mode too — that is the guard that
-        // counts — but reaching it means three refusals and three suppression records for one read
-        // of a switch that only the user can flip.
+        // Before any URL exists. `OmiAPI` enforces Airgap Mode too — that is the guard that counts —
+        // but reaching it means three refusals and three suppression records for one read of a
+        // switch that only the user can flip.
         guard !isAirgapped() else {
             // `.degraded` rather than `.dropped`: nothing is lost, the account is simply not being
             // asked, and the same read succeeds when the switch goes off.
@@ -141,16 +133,6 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
             await diagnosis.record(.signedOut)
             return .unreachable
         }
-        // One key for all three sources, fetched once. Asking per source would race three
-        // provisioning runs on a Mac that has never had a key.
-        guard let key = await credential(nil) else {
-            // Signed in, not airgapped, and still no credential: the mint failed or has not been
-            // able to run. It is the same thing to the reader as a rejected key — the account is
-            // there and this Mac cannot open it — so it says the same thing.
-            await diagnosis.record(.keyUnavailable)
-            ContextLog.error("No Omi MCP key for this Mac; the account cannot be read", Self.category)
-            return .unreachable
-        }
 
         let bounded = min(max(limit, 1), Self.maxPerSource)
         // Where a row with no usable timestamp of its own is placed. The upper edge of the window
@@ -159,36 +141,44 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
         let placement = until ?? now()
 
         async let conversationRows = attempt(
-            "conversations", key, fetchConversations,
-            Self.conversationQuery(since: since, until: until, limit: bounded))
-        async let memoryRows = attempt(
-            "memories", key, fetchMemories, Self.memoryQuery(since: since, limit: bounded))
+            "conversations", fetchConversations, Self.conversationQuery(limit: bounded))
+        async let memoryRows = attempt("memories", fetchMemories, Self.memoryQuery(limit: bounded))
         // Tasks are read unwindowed on purpose — the seam says so, and it is right: an open
-        // commitment matters today whenever it was written. The endpoint's only date filters are
-        // `due_start_date`/`due_end_date`, which bound the *due* date rather than when the item
-        // appeared, so windowing here would drop undated commitments entirely.
-        async let taskRows = attempt("action-items", key, fetchTasks, ["limit": String(bounded)])
+        // commitment matters today whenever it was written. The endpoint does accept `start_date`
+        // and `due_start_date`, but the first bounds *creation* and the second bounds the due date,
+        // and windowing by either would drop the undated commitments that matter most.
+        async let taskPage = attempt("action-items", fetchTasks, ["limit": String(bounded)])
 
         let conversations = await conversationRows
         let memories = await memoryRows
-        let tasks = await taskRows
+        let tasks = await taskPage
 
         guard conversations.rows != nil || memories.rows != nil || tasks.rows != nil else {
-            // **Which failure it was decides what the user is told.** A rejection the key could not
-            // survive means "reconnect"; a rate limit means "this will clear on its own"; anything
-            // else means "I couldn't reach it". All three are far from "you have no memories", which
-            // is what an unreasoned empty feed renders as.
+            // **Which failure it was decides what the user is told.** A rejection the session could
+            // not survive means "sign in again"; a rate limit means "this will clear on its own";
+            // anything else means "I couldn't reach it". All three are far from "you have no
+            // memories", which is what an unreasoned empty feed renders as.
             let failures = [conversations.failure, memories.failure, tasks.failure].compactMap { $0 }
             await diagnosis.record(Self.reason(whenNothingAnswered: failures))
             return .unreachable
         }
         await diagnosis.record(nil)
 
+        // **Which sources answered, not merely that one did.** The rows below cannot carry the
+        // distinction on their own — an endpoint that 503'd and an account that holds no memories
+        // both produce an empty array — so it travels beside them. Everything downstream that has to
+        // tell "said nothing" from "said nothing yet" reads this, and `ActivityAccountCaching` in
+        // particular refuses to overwrite the last good answer for a source that is not in it.
+        var answered: Set<ActivityAccountSource> = []
+        if conversations.rows != nil { answered.insert(.conversations) }
+        if memories.rows != nil { answered.insert(.memories) }
+        if tasks.rows != nil { answered.insert(.tasks) }
+
         let feed = ActivityAccountFeed(
             conversations: (conversations.rows ?? []).compactMap { $0.activity(placedAt: placement) },
             memories: (memories.rows ?? []).compactMap { $0.activity(placedAt: placement) },
-            tasks: (tasks.rows ?? []).compactMap { $0.activity(placedAt: placement) },
-            reachable: true)
+            tasks: (tasks.rows?.actionItems ?? []).compactMap { $0.activity(placedAt: placement) },
+            answered: answered)
         // Counts only. Titles, memory content and task text are the user's own words and none of
         // them belong in a log line.
         ContextLog.info(
@@ -199,17 +189,18 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
 
     /// What one source came back with: its rows, or `nil` for "this source did not answer" so the
     /// caller can tell a missing source from an empty one — plus, when it did not, the shape of
-    /// failure that decides what the reader is told and whether asking again is worth anything.
+    /// failure that decides what the reader is told.
     private struct SourceOutcome<Row: Sendable>: Sendable {
-        let rows: [Row]?
+        let rows: Row?
         let failure: SourceFailure?
     }
 
     /// Why a source came back with nothing, in the only three shapes anything downstream acts on.
     private enum SourceFailure: Sendable, Equatable {
-        /// A 401 no fresh key could repair. The account refused this Mac, and only the user can fix it.
+        /// A 401 that survived `OmiAPI`'s one forced token refresh. The account refused this Mac's
+        /// session, and only the user can fix it.
         case rejected
-        /// A 429 that outlived the retry ladder below. Nothing is wrong; the account wants us to wait.
+        /// A 429 that outlived `OmiAPI`'s retries. Nothing is wrong; the account wants us to wait.
         case rateLimited
         /// Everything else: a timeout, a 5xx, a response we could not read, a 4xx that is ours.
         case other
@@ -217,9 +208,15 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
 
     /// Which reason the reader is told when *no* source answered.
     ///
-    /// Ordered by what the reader can do about it. A rejection is the one they can act on
-    /// (reconnect), so it wins even if another source was merely rate limited; a rate limit is the
-    /// one that clears on its own and is worth saying so; everything else is "nobody answered".
+    /// Ordered by what the reader can do about it. A rejection is the one they can act on (sign in
+    /// again), so it wins even if another source was merely rate limited; a rate limit is the one
+    /// that clears on its own and is worth saying so; everything else is "nobody answered".
+    ///
+    /// `.keyRejected` is the seam's name for the first of those and it now names a rejected
+    /// *session* rather than a rejected key — the credential this file reads with changed, the thing
+    /// the reader is told did not. The copy that renders it has never mentioned a key: it says Omi
+    /// could not authenticate this Mac and to sign out and back in, which is exactly the repair for
+    /// a session the backend will not accept.
     private static func reason(whenNothingAnswered failures: [SourceFailure])
         -> ActivityAccountUnreachableReason
     {
@@ -230,130 +227,43 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
 
     // MARK: - One source
 
-    /// How many extra attempts one source spends on a 429, on top of the first.
-    ///
-    /// **The ceiling is two, and hammering is the reason it is not more.** Three sources read in
-    /// parallel, so one read already costs the account three requests; at two retries each the worst
-    /// case is nine, spread over roughly three seconds, and then the read stops and *reports* the
-    /// rate limit instead of asking again. A client that answers a 429 by trying harder is how a
-    /// limit stays tripped — which is exactly the state this file was found in. Waiting a rate limit
-    /// out is `ActivityStore`'s re-read, whose schedule is measured in minutes.
-    private static let rateLimitRetries = 2
-    private static let rateLimitBaseDelay: TimeInterval = 1
-    private static let rateLimitDelayCap: TimeInterval = 5
-
-    /// Runs one source, spending at most one re-provisioned key on a 401 and at most
-    /// `rateLimitRetries` waits on a 429.
-    ///
-    /// Both retries are deliberately here and not inside the HTTP helper. A 401 from `/v1/mcp/*` is
-    /// not a transport problem to be backed off — it is a statement that this Mac's key is no longer
-    /// the account's, and the only thing that can answer it is the half of the product that can mint
-    /// one. Bounded at one attempt because `MCPKeyProvisioner` is where "should another key exist at
-    /// all" is decided; a second retry here would just ask it the same question twice. A 429 is the
-    /// opposite kind of refusal — the credential is fine and time is the whole repair — so it is
-    /// waited on rather than re-credentialled, and the wait is bounded for the reason above.
+    /// Runs one source. One attempt, because by the time anything throws out of `OmiAPI` the retrying
+    /// has already happened: a 401 has cost a forced token refresh and a second try, and a 429 or a
+    /// 5xx has cost up to three jittered retries. A second ladder stacked here would multiply those,
+    /// and a client that answers a refusal by trying harder is how a limit stays tripped — which is
+    /// the state this surface was found in.
     private func attempt<Row: Sendable>(
         _ source: String,
-        _ key: String,
-        _ fetch: @escaping @Sendable (String, [String: String]) async throws -> [Row],
+        _ fetch: @escaping @Sendable ([String: String]) async throws -> Row,
         _ query: [String: String]
     ) async -> SourceOutcome<Row> {
-        var key = key
-        var didReprovision = false
-        var waits = 0
-
-        while true {
-            do {
-                let rows = try await fetch(key, query)
-                if didReprovision {
-                    ContextLog.info("Account \(source) recovered on a freshly provisioned key", Self.category)
-                }
-                return SourceOutcome(rows: rows, failure: nil)
-            } catch {
-                switch Self.classify(error) {
-                case .rejectedKey:
-                    // A second 401 is the account's answer, not a prompt to mint again.
-                    guard !didReprovision, let replacement = await credential(key), replacement != key else {
-                        ContextLog.error(
-                            "Account \(source) unavailable: the key was rejected and not replaced", Self.category)
-                        return SourceOutcome(rows: nil, failure: .rejected)
-                    }
-                    didReprovision = true
-                    key = replacement
-
-                case .rateLimited(let retryAfter):
-                    guard waits < Self.rateLimitRetries,
-                        let delay = Self.rateLimitDelay(attempt: waits + 1, retryAfter: retryAfter)
-                    else {
-                        ContextLog.error("Account \(source) unavailable: rate limited", Self.category)
-                        return SourceOutcome(rows: nil, failure: .rateLimited)
-                    }
-                    waits += 1
-                    ContextLog.info(
-                        "Account \(source) rate limited; retry \(waits)/\(Self.rateLimitRetries) in "
-                            + "\(String(format: "%.2f", delay))s", Self.category)
-                    await sleep(delay)
-
-                case .other:
-                    let after = didReprovision ? " after re-provisioning" : ""
-                    ContextLog.error(
-                        "Account \(source) unavailable\(after): \(Self.reason(for: error))", Self.category)
-                    return SourceOutcome(rows: nil, failure: .other)
-                }
-            }
+        do {
+            return SourceOutcome(rows: try await fetch(query), failure: nil)
+        } catch {
+            let failure = Self.classify(error)
+            ContextLog.error("Account \(source) unavailable: \(Self.reason(for: error))", Self.category)
+            return SourceOutcome(rows: nil, failure: failure)
         }
     }
 
-    /// What a thrown error means to the loop above.
+    /// What a thrown error means to the caller above — the status line and nothing else.
     ///
-    /// **The branch is on the status line and nothing else**, which is not an accident. A 429 on this
-    /// endpoint family comes back from an edge proxy as an HTML error page rather than as the API's
-    /// own `{"detail": …}`, so anything that read the *body* to decide what had happened would report
-    /// a rate limit as an unreadable response and retry none of it. `OmiMCPRead` reads the status
-    /// first and never decodes a failed response, and this is the other half of that promise.
-    ///
-    /// 403 is a key that authenticated and lacks the access, which minting another copy of the same
-    /// thing cannot fix, so it is not a rejection.
-    private static func classify(_ error: Error) -> SourceError {
-        if let limited = error as? OmiMCPRateLimited { return .rateLimited(retryAfter: limited.retryAfter) }
+    /// 403 is a session that authenticated and lacks the access, which signing in again cannot fix,
+    /// so it is not a rejection.
+    private static func classify(_ error: Error) -> SourceFailure {
         guard let apiError = error as? OmiAPIError else { return .other }
         switch apiError {
-        case .http(401, _): return .rejectedKey
-        // Any other thrower of a plain 429 — a caller with its own client, a test's fetcher — is
-        // still a rate limit; it just came without the server's own `Retry-After`.
-        case .http(429, _): return .rateLimited(retryAfter: nil)
+        case .notSignedIn: return .rejected
+        case .http(401, _): return .rejected
+        case .http(429, _): return .rateLimited
         default: return .other
         }
-    }
-
-    private enum SourceError {
-        case rejectedKey
-        case rateLimited(retryAfter: TimeInterval?)
-        case other
-    }
-
-    /// Seconds to wait before re-asking a rate-limited source, or nil to stop now.
-    ///
-    /// `Retry-After` wins when the server sent one — it knows when it will be ready and we do not.
-    /// When it asks for longer than the cap we stop rather than hold the panel's read open for it:
-    /// a wait measured in minutes belongs to `ActivityStore`'s re-read, not to a request in flight.
-    /// Otherwise 1s then 2s with equal jitter (half fixed, half random), for the reason `OmiAPI`
-    /// documents about the same policy: this app's callers are timer-driven, so an unjittered
-    /// backoff brings everything that failed together back together, forever.
-    private static func rateLimitDelay(attempt: Int, retryAfter: TimeInterval?) -> TimeInterval? {
-        if let retryAfter {
-            guard retryAfter <= rateLimitDelayCap else { return nil }
-            return max(0, retryAfter)
-        }
-        let exponential = min(rateLimitDelayCap, rateLimitBaseDelay * pow(2, Double(attempt - 1)))
-        return exponential / 2 + Double.random(in: 0...(exponential / 2))
     }
 
     /// A coarse label, deliberately not the error's own message: `OmiAPIError.http` carries a
     /// server-supplied detail string and `.decoding` names a field, and neither is worth the risk of
     /// putting a fragment of someone's data in the log for a line that only ever asks "why not".
     private static func reason(for error: Error) -> String {
-        if error is OmiMCPRateLimited { return "rate limited" }
         guard let apiError = error as? OmiAPIError else { return "failed" }
         switch apiError {
         case .notSignedIn: return "signed out"
@@ -365,41 +275,48 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
     }
 
     // MARK: - Queries
+    //
+    // Shaped after the requests the shipping macOS client's own version of this screen sends, which
+    // is the answer to a question it is very easy to get wrong.
+    //
+    // **Nothing here is windowed by date, and that is deliberate.** `read(since:until:)` carries a
+    // window and these queries ignore it: every source asks for the newest page and the window is
+    // applied afterwards, to the composed stream, by `ActivityComposer`. The shipping app does
+    // exactly this — its spine passes a nil date range and takes the most recent page, and its
+    // `Filter ›` time control is a post-composition predicate over rows already in hand.
+    //
+    // A date-windowed fetch reads as the more efficient design and is in fact the bug. Two reasons,
+    // and the second one is fatal:
+    //
+    // 1. **`/v3/memories` has no date parameter to window with.** `limit`, `offset`, `cursor`,
+    //    `device_scope` — that is the whole surface. So a windowed memory read can only be done in
+    //    the client, over whatever rows the newest page happened to contain, which is not the same
+    //    set as "the memories from that day" and never will be.
+    // 2. **A memory does not belong to the day it was created.** In the shipping app a memory whose
+    //    `conversation_id` names a conversation on screen is filed under *that conversation's* day,
+    //    not its own timestamp. Filtering by the memory's own instant before composition throws away
+    //    exactly the rows that composition would have re-seated — which is how a day full of
+    //    conversations ends up showing none of the memories those conversations produced.
 
-    /// `start_date`/`end_date` are FastAPI `Optional[datetime]` parameters, so the window is applied
-    /// server-side and the client never pages a day it will not show.
-    private static func conversationQuery(since: Double?, until: Double?, limit: Int) -> [String: String] {
-        var query = ["limit": String(limit)]
-        if let since { query["start_date"] = iso(since) }
-        if let until { query["end_date"] = iso(until) }
-        return query
+    /// `statuses` and `include_discarded` are sent rather than left to the server's defaults because
+    /// the defaults are not what this surface wants: `include_discarded` defaults to `True`, and a
+    /// discarded conversation is one the user threw away — it has no business reappearing on a
+    /// timeline of their day. `sources` is deliberately *not* sent: this shows the account, and
+    /// filtering to this Mac's own uploads would hide everything the phone recorded.
+    private static func conversationQuery(limit: Int) -> [String: String] {
+        [
+            "limit": String(limit),
+            "offset": "0",
+            "statuses": "completed,processing",
+            "include_discarded": "false",
+        ]
     }
 
-    /// Memories can only be bounded below, and only by *update* time: `updated_after` is the single
-    /// date parameter `GET /v1/mcp/memories` accepts. There is no upper bound and, because the rows
-    /// come back without timestamps at all (see `WireMemory`), **no client-side filter is possible
-    /// either** — a memory cannot be excluded from a window it cannot be placed in. So a windowed
-    /// read returns the newest memories touched since `since`, and an unwindowed one the newest
-    /// memories outright. `sort` is pinned rather than left to the endpoint's default so the order
-    /// this file relies on is stated where it is relied upon.
-    private static func memoryQuery(since: Double?, limit: Int) -> [String: String] {
-        var query = ["limit": String(limit), "sort": "created_desc"]
-        if let since { query["updated_after"] = iso(since) }
-        return query
+    /// `device_scope` is left alone: its default is `all`, which is what this wants, and sending
+    /// `current` is what makes the backend 400 for an account without the canonical lifecycle.
+    private static func memoryQuery(limit: Int) -> [String: String] {
+        ["limit": String(limit), "offset": "0"]
     }
-
-    /// Always UTC with an explicit `Z`. A naive datetime string would be read by the backend in
-    /// whatever zone it decided to assume, which is how a window silently slides by hours.
-    private static func iso(_ epochSeconds: Double) -> String {
-        outboundISO.string(from: Date(timeIntervalSince1970: epochSeconds))
-    }
-
-    private static nonisolated(unsafe) let outboundISO: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        return formatter
-    }()
 }
 
 // MARK: - Why the account did not answer
@@ -418,182 +335,6 @@ private actor AccountDiagnosis {
     func reason() -> ActivityAccountUnreachableReason? { last }
 }
 
-// MARK: - Reading /v1/mcp/*
-
-/// The account said 429, and how long it asked us to wait if it said.
-///
-/// Its own type rather than `OmiAPIError.http(429, …)` because that case's second field is a
-/// *server message*, and there is nowhere in it to put a delay that the client is meant to act on
-/// rather than show. Keeping the wait attached to the refusal is what lets the retry ladder honour
-/// `Retry-After` instead of inventing a number the account never asked for.
-struct OmiMCPRateLimited: Error, Sendable, Equatable {
-    /// Seconds the server asked for, when it sent a `Retry-After` at all.
-    let retryAfter: TimeInterval?
-}
-
-/// A GET against `/v1/mcp/*` carrying an `omi_mcp_…` key.
-///
-/// **Separate from `OmiAPI` because the credential is.** `OmiAPI` exists to attach the signed-in
-/// session's Firebase ID token to everything it sends, and that token is precisely what these
-/// endpoints reject; there is no shape of call into it that would carry a different bearer. So this
-/// is the same pattern `MCPKeyProvisioner.retire` already uses for the one verb `OmiAPI` has no
-/// place for — a request built here, with this file's own copy of the two policies that are not
-/// optional: the Airgap guard, and never putting a credential or a row of the user's data in a log.
-///
-/// **One attempt, and the one ladder that matters lives above this.** `OmiAPI`'s backoff exists for
-/// writes that must eventually land; this is a read behind a surface that asks again whenever the
-/// window moves, so a 5xx costs one tick of one column rather than the seconds a retry would hold
-/// the whole panel for. The single exception is 429, which is not a transport hiccup but the account
-/// naming a time — and it is retried by `OmiActivityFeed.attempt`, above the fetcher seam, so the
-/// policy is testable without a network.
-enum OmiMCPRead {
-    private static let category = "activity"
-
-    static func get<T: Decodable>(
-        _ path: String, key: String, query: [String: String], as type: T.Type
-    ) async throws -> T {
-        guard !NetworkEgress.isSuppressed(.omiAPI) else {
-            NetworkEgress.recordSuppression(.omiAPI, outcome: .degraded)
-            throw OmiAPIError.airgapMode
-        }
-
-        let normalized = OmiAPI.normalized(path)
-        guard var components = URLComponents(url: OmiAPI.baseURL, resolvingAgainstBaseURL: false) else {
-            throw OmiAPIError.transport("the base URL is unusable")
-        }
-        let base = components.path.hasSuffix("/") ? components.path : components.path + "/"
-        components.path = base + normalized
-        if !query.isEmpty {
-            // Sorted, so the same call produces the same URL every time and a packet log is
-            // comparable across ticks.
-            components.queryItems = query.sorted { $0.key < $1.key }.map {
-                URLQueryItem(name: $0.key, value: $0.value)
-            }
-        }
-        guard let url = components.url else {
-            throw OmiAPIError.transport("could not build a URL for \(normalized)")
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
-        request.setValue(OmiAPI.deviceIdHash, forHTTPHeaderField: "X-Device-Id-Hash")
-
-        let data: Data
-        let response: HTTPURLResponse
-        do {
-            let (body, urlResponse) = try await session.data(for: request)
-            guard let http = urlResponse as? HTTPURLResponse else {
-                throw OmiAPIError.transport("the server's reply was not HTTP")
-            }
-            data = body
-            response = http
-        } catch let error as OmiAPIError {
-            throw error
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            // **Every request that was made leaves exactly one line.** The line below is written
-            // when a reply arrives, so a request that never got one left no trace of having been
-            // made at all — and a log showing `GET v1/mcp/memories → 429` with no conversations line
-            // beside it reads as though conversations had not been asked for, when what actually
-            // happened was a 30-second timeout on an account that was rate-limiting the other two.
-            // The numeric `URLError` code says which failure it was without quoting a URL or a body.
-            let code = (error as? URLError)?.errorCode
-            ContextLog.error(
-                "GET \(normalized) got no reply (URLError \(code.map(String.init) ?? "none"))", category)
-            let reason = (error as? URLError)?.localizedDescription ?? error.localizedDescription
-            throw OmiAPIError.transport(reason)
-        }
-
-        // Path and status only. The query values are the user's own window and the body is their
-        // conversations; neither belongs in a log line, and nor does the bearer above.
-        ContextLog.info("GET \(normalized) → \(response.statusCode)", category)
-        guard (200...299).contains(response.statusCode) else {
-            // **Judged on the status line, before anything looks at the body** — which is what keeps
-            // a 429 classified as a 429. These come back from an edge proxy as an HTML error page
-            // rather than as the API's own JSON, so a path that tried to read the body first would
-            // call a rate limit an unreadable response.
-            if response.statusCode == 429 {
-                throw OmiMCPRateLimited(retryAfter: Self.retryAfterSeconds(response))
-            }
-            // No server detail carried across: the caller only ever branches on the status, and a
-            // FastAPI `detail` can quote the request back.
-            throw OmiAPIError.http(response.statusCode, "")
-        }
-
-        do {
-            return try decoder.decode(type, from: data)
-        } catch let error as DecodingError {
-            throw OmiAPIError.decoding(describe(error))
-        } catch {
-            throw OmiAPIError.decoding("\(type) could not be read")
-        }
-    }
-
-    /// `Retry-After` is either delta-seconds or an HTTP-date; both are in the wild.
-    ///
-    /// A second copy of the parse `OmiAPI` already does, because that one is private to a client
-    /// this file deliberately does not go through — the credential is the whole reason `OmiMCPRead`
-    /// exists — and a header this small is not worth widening that client's surface for.
-    private static func retryAfterSeconds(_ response: HTTPURLResponse) -> TimeInterval? {
-        guard
-            let raw = response.value(forHTTPHeaderField: "Retry-After")?
-                .trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty
-        else { return nil }
-        if let seconds = TimeInterval(raw) { return max(0, seconds) }
-        guard let date = httpDates.date(from: raw) else { return nil }
-        return max(0, date.timeIntervalSinceNow)
-    }
-
-    private static let httpDates: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
-        // RFC 7231 dates are English and GMT regardless of where this Mac is.
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "GMT")
-        return formatter
-    }()
-
-    /// Names the field, never the value — which field is wrong is the whole diagnosis, and the value
-    /// is the user's data.
-    private static func describe(_ error: DecodingError) -> String {
-        func location(_ context: DecodingError.Context) -> String {
-            let path = context.codingPath.map(\.stringValue).joined(separator: ".")
-            return path.isEmpty ? "the response" : path
-        }
-        switch error {
-        case .keyNotFound(let key, let context): return "missing field \(key.stringValue) in \(location(context))"
-        case .typeMismatch(let type, let context): return "\(location(context)) is not a \(type)"
-        case .valueNotFound(let type, let context): return "\(location(context)) was null, expected \(type)"
-        case .dataCorrupted(let context): return "\(location(context)) is malformed"
-        @unknown default: return "the response did not match what I expected"
-        }
-    }
-
-    private static let session: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 30
-        configuration.timeoutIntervalForResource = 60
-        // Responses are one person's conversations and memories. Nothing about them belongs in a
-        // shared on-disk URL cache.
-        configuration.urlCache = nil
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: configuration)
-    }()
-
-    /// Snake_case in, camelCase out — the same conversion `OmiAPI`'s decoder does, which is what the
-    /// wire shapes below are written against. No date strategy: every timestamp here is a
-    /// `WireInstant`, which reads the three shapes this API actually sends.
-    private static let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return decoder
-    }()
-}
-
 // MARK: - Wire shapes
 //
 // `OmiAPI`'s decoder converts snake_case to camelCase, so the wire's `started_at` is matched by
@@ -602,16 +343,20 @@ enum OmiMCPRead {
 // decoder dislikes must never cost the user the page it was on. Same reasoning as
 // `MCPKeyProvisioner`'s wire shapes, for the same reason.
 
-/// `GET /v1/mcp/conversations` → `SimpleConversation`: `id`, `started_at`, `finished_at`,
-/// `structured`, `language`, `apps_results`. Only the first four are read.
+/// `GET /v1/conversations` → `List[Conversation]`. That model carries some thirty fields; the four
+/// below are the ones a row is drawn from. Locked conversations come back redacted by
+/// `redact_conversations_for_list`, which strips segments, action items and app results and **keeps
+/// the title, overview and emoji** — so a locked row still renders as itself here.
 struct WireConversation: Decodable, Sendable {
     let id: String?
+    let createdAt: WireInstant?
     let startedAt: WireInstant?
     let finishedAt: WireInstant?
     let structured: WireStructured?
 
-    /// `SimpleStructured` is `title`, `overview`, `category`. `emoji` is decoded on spec — the
-    /// conversation document has one, this response model does not expose it.
+    /// `Structured` — the real one, not the MCP route's three-field projection. `emoji` is a
+    /// declared field here, which is the reason this endpoint is worth reading: under `/v1/mcp/*`
+    /// every conversation in the panel wore the same fallback glyph.
     struct WireStructured: Decodable, Sendable {
         let title: String?
         let overview: String?
@@ -628,8 +373,9 @@ struct WireConversation: Decodable, Sendable {
         guard let id, !id.isEmpty else { return nil }
         let started = startedAt?.seconds
         let finished = finishedAt?.seconds
-        let begins = started ?? finished ?? fallback
-        let overview = WireText.presentable(structured?.overview)
+        // `created_at` last, and only as a rescue: it is when the *record* was written, which for an
+        // upload that arrived hours after the fact is not when the conversation happened.
+        let begins = started ?? finished ?? createdAt?.seconds ?? fallback
         return ActivityAccountConversation(
             id: id,
             // The overview is shown directly under the title, so borrowing it for a missing title
@@ -639,35 +385,80 @@ struct WireConversation: Decodable, Sendable {
             startedAt: begins,
             // A finish before the start is not orderable; the row is drawn from these two.
             finishedAt: max(finished ?? begins, begins),
-            overview: overview)
+            overview: WireText.presentable(structured?.overview))
     }
 }
 
-/// `GET /v1/mcp/memories` → `CleanerMemory`: `id`, `content`, `category`, and optional policy flags
-/// (`reviewed`, `manually_added`, `memory_default_memory`, …). **There is no timestamp in that
-/// model**, so `created_at`/`updated_at` are decoded speculatively — they cost nothing, they are what
-/// the underlying documents hold, and they are what this row wants — and when neither arrives the
-/// memory is placed at the window's upper edge.
-///
-/// That placement is a placement, not a claim: the endpoint returns newest-created first and the
-/// mapped array preserves that order, so the sequence is true even where the instants are uniform.
+/// `GET /v3/memories` → `List[MemoryDB]`, which declares `created_at` and `updated_at` as required
+/// and whose serialisation contract strips neither: `MEMORY_INTERNAL_FIELDS` and
+/// `CANONICAL_LIFECYCLE_FIELDS` between them drop a dozen policy fields and no timestamp. Both
+/// shipping clients decode them non-optionally. They are optional here anyway, for the reason every
+/// field in this file is — one malformed row must not cost the page.
 struct WireMemory: Decodable, Sendable {
     let id: String?
     let content: String?
+    let capturedAt: WireInstant?
     let createdAt: WireInstant?
     let updatedAt: WireInstant?
+    /// `MemoryDB.conversation_id` — which conversation the extractor drew this fact out of. Declared
+    /// `Optional[str]` there and stripped by nothing on the way out (`response_model=List[MemoryDB]`),
+    /// so nil here means the account really did not record one: a fact the user wrote down, or one
+    /// old enough to predate the field.
+    let conversationId: String?
 
     func activity(placedAt fallback: Double) -> ActivityAccountMemory? {
         guard let id, !id.isEmpty, let content = WireText.presentable(content) else { return nil }
         return ActivityAccountMemory(
             id: id,
             content: content,
-            at: createdAt?.seconds ?? updatedAt?.seconds ?? fallback)
+            // **`captured_at` first, and this order is not interchangeable.** It is when the thing
+            // was *learned*; `created_at` is when the row was written. For anything that arrived in
+            // a batch — an import, a backfill, a phone that was offline all day — those are hours or
+            // days apart, and ordering by the second one files a memory on the day the server got
+            // round to it rather than the day it happened. This is the same reading the shipping
+            // macOS app takes for the same screen.
+            at: capturedAt?.seconds ?? createdAt?.seconds ?? updatedAt?.seconds ?? fallback,
+            // Empty is the same claim as absent — the backend defaults several of these to `''` —
+            // and an empty id would match no conversation anyway, so it is normalised to nil here
+            // rather than becoming a key the composer looks up and never finds.
+            conversationID: WireText.presentable(conversationId))
     }
 }
 
-/// `GET /v1/mcp/action-items` → `SimpleActionItem`: `id`, `description`, `completed`, `created_at`,
-/// `due_at`, `completed_at`, `conversation_id`.
+/// `GET /v1/action-items` → `ActionItemsResponse`, which is an **object** — `{action_items, has_more}`
+/// — and not a bare array like the other two. `has_more` is decoded and unused: the spine reads one
+/// bounded page per window by design, and a field that exists on the wire is cheaper to name than to
+/// explain the absence of.
+struct WireActionItemPage: Decodable, Sendable {
+    let actionItems: [WireActionItem]
+    let hasMore: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case actionItems
+        case items
+        case hasMore
+    }
+
+    /// `action_items` is what the response model declares, and `items` is what the shipping macOS
+    /// client also accepts. Both are read here for the same reason it reads both: the cost is one
+    /// line, and the failure it avoids is the whole page decoding to nothing.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        actionItems =
+            try container.decodeIfPresent([WireActionItem].self, forKey: .actionItems)
+            ?? container.decodeIfPresent([WireActionItem].self, forKey: .items)
+            ?? []
+        hasMore = try container.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
+    }
+
+    init(actionItems: [WireActionItem], hasMore: Bool = false) {
+        self.actionItems = actionItems
+        self.hasMore = hasMore
+    }
+}
+
+/// One row of that page — `ActionItemResponse`. Its `model_config` is `extra='ignore'`, so the
+/// twenty-odd fields not named here are simply not read.
 struct WireActionItem: Decodable, Sendable {
     let id: String?
     let text: String?
@@ -714,7 +505,7 @@ enum WireText {
 
 /// A timestamp as this API actually sends them, reduced to Unix epoch seconds.
 ///
-/// Three shapes are in the wild across `/v1/mcp/*` and this type absorbs all of them rather than
+/// Three shapes are in the wild across these routes and this type absorbs all of them rather than
 /// letting any one of them throw:
 ///
 /// - ISO-8601 with an offset — what Pydantic serialises a tz-aware `datetime` to.
