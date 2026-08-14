@@ -18,6 +18,7 @@ export type MemoryProjection = {
   summary: string;
   searchableText: string;
   citations: string[];
+  timestamp: number | null;
 };
 
 export type TaskProjection = {
@@ -101,6 +102,14 @@ function integer(value: unknown, label: string): number {
 
 function nullableInteger(value: unknown, label: string): number | null {
   return value === null ? null : integer(value, label);
+}
+
+function optionalTimestamp(
+  record: Record<string, unknown>,
+  label: string,
+): number | null {
+  const value = record.updatedAt ?? record.createdAt;
+  return value === undefined ? null : integer(value, label);
 }
 
 function stringArray(value: unknown, label: string): string[] {
@@ -290,6 +299,7 @@ export async function loadMemories(
       summary: text,
       searchableText: text,
       citations,
+      timestamp: optionalTimestamp(item, `Memory ${index} timestamp`),
     };
   });
   return {items, page: validated.page};

@@ -38,6 +38,7 @@ import Search from 'lucide-react-native/icons/search';
 import Square from 'lucide-react-native/icons/square';
 import {
   cancelChatGeneration,
+  chatErrorCopy,
   loadChatHistory,
   sendChatMessage,
   type ChatMessage,
@@ -52,6 +53,7 @@ import {
 } from './src/desktopReadClient';
 
 type NavigationIcon = React.ComponentType<{
+  accessible?: boolean;
   color?: string;
   size?: number;
   strokeWidth?: number;
@@ -72,6 +74,12 @@ const quickPrompts = [
 type Route = 'Home' | 'Chat' | 'Conversations' | 'Memories' | 'Tasks';
 type ReadRoute = Exclude<Route, 'Home' | 'Chat'>;
 type ProjectionFilter = 'all' | DesktopReadProjection['kind'];
+type ReadsPhase =
+  | 'initial-loading'
+  | 'refreshing'
+  | 'ready'
+  | 'saved-but-refresh-failed'
+  | 'unavailable';
 
 function NavItem({
   label,
@@ -99,7 +107,12 @@ function NavItem({
         active && compact && styles.navItemActive,
         pressed && styles.pressed,
       ]}>
-      <Icon color={active ? '#141414' : '#888888'} size={20} strokeWidth={2} />
+      <Icon
+        accessible={false}
+        color={active ? '#141414' : '#888888'}
+        size={20}
+        strokeWidth={2}
+      />
       <Text
         numberOfLines={1}
         style={[
@@ -129,7 +142,6 @@ const filterLabels: Array<{label: string; value: ProjectionFilter}> = [
   {label: 'All', value: 'all'},
   {label: 'Conversations', value: 'conversation'},
   {label: 'Memories', value: 'memory'},
-  {label: 'Tasks', value: 'task'},
 ];
 
 function projectionKind(route: ReadRoute): DesktopReadProjection['kind'] {
@@ -182,6 +194,8 @@ function ProjectionList({
   emptyCopy,
   header,
   footer,
+  emptyTitle,
+  suppressEmpty,
 }: {
   items: DesktopReadProjection[];
   loading: boolean;
@@ -189,6 +203,8 @@ function ProjectionList({
   emptyCopy: string;
   header?: React.ReactElement;
   footer?: React.ReactElement;
+  emptyTitle?: string;
+  suppressEmpty?: boolean;
 }) {
   const renderItem = useCallback(
     ({item}: {item: DesktopReadProjection}) => <ProjectionRow item={item} />,
@@ -198,7 +214,7 @@ function ProjectionList({
     (item: DesktopReadProjection) => `${item.kind}:${item.id}`,
     [],
   );
-  const empty = loading ? (
+  const empty = suppressEmpty ? null : loading ? (
     <View style={styles.projectionEmpty}>
       <ActivityIndicator color="#888888" />
       <Text style={styles.projectionEmptyCopy}>Loading…</Text>
@@ -206,7 +222,9 @@ function ProjectionList({
   ) : (
     <View style={styles.projectionEmpty}>
       <Text style={styles.projectionEmptyTitle}>
-        {error === null ? 'Nothing to show yet' : 'Unable to load'}
+        {error === null
+          ? emptyTitle ?? 'Nothing to show yet'
+          : 'Unable to load'}
       </Text>
       <Text style={styles.projectionEmptyCopy}>{error ?? emptyCopy}</Text>
     </View>
@@ -316,16 +334,14 @@ function App(): React.JSX.Element {
   const [readOutcomes, setReadOutcomes] = useState<DesktopReadOutcomes | null>(
     null,
   );
-  const [readsLoading, setReadsLoading] = useState(true);
+  const readOutcomesRef = useRef<DesktopReadOutcomes | null>(null);
+  const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
   const [searchQuery, setSearchQuery] = useState('');
   const [projectionFilter, setProjectionFilter] =
     useState<ProjectionFilter>('all');
-  const activeNavigationIndex = Math.max(
-    0,
-    navigation.findIndex(
-      item =>
-        route === item.label || (route === 'Chat' && item.label === 'Home'),
-    ),
+  const searchRef = useRef<TextInput>(null);
+  const activeNavigationIndex = navigation.findIndex(
+    item => route === item.label,
   );
 
   useEffect(() => {
@@ -350,11 +366,9 @@ function App(): React.JSX.Element {
     };
   }, []);
 
-  useEffect(() => {
-    let active = true;
+  const refreshReads = useCallback(async (initial: boolean) => {
     const backend = omiBackend;
     if (backend === undefined || backend === null) {
-      setReadsLoading(false);
       const unavailable = {
         status: 'error',
         error: 'Backend unavailable',
@@ -364,36 +378,71 @@ function App(): React.JSX.Element {
         memories: unavailable,
         tasks: unavailable,
       });
-      return () => undefined;
+      setReadsPhase('unavailable');
+      return;
     }
-    loadDesktopReads(backend)
-      .then(outcomes => {
-        if (active) {
-          setReadOutcomes(outcomes);
+    setReadsPhase(
+      initial && readOutcomesRef.current === null
+        ? 'initial-loading'
+        : 'refreshing',
+    );
+    try {
+      const outcomes = await loadDesktopReads(backend);
+      const previous = readOutcomesRef.current;
+      const hadSavedRows =
+        previous !== null &&
+        [previous.conversations, previous.memories].some(
+          outcome =>
+            outcome.status === 'success' && outcome.value.items.length > 0,
+        );
+      const homeOutcomes = [outcomes.conversations, outcomes.memories];
+      const failed = homeOutcomes.some(outcome => outcome.status === 'error');
+      setReadOutcomes(current => {
+        let next: DesktopReadOutcomes;
+        if (current === null) {
+          next = outcomes;
+        } else {
+          next = {
+            conversations:
+              outcomes.conversations.status === 'success'
+                ? outcomes.conversations
+                : current.conversations,
+            memories:
+              outcomes.memories.status === 'success'
+                ? outcomes.memories
+                : current.memories,
+            tasks:
+              outcomes.tasks.status === 'success'
+                ? outcomes.tasks
+                : current.tasks,
+          };
         }
-      })
-      .catch(() => {
-        if (active) {
-          const failed = {
-            status: 'error',
-            error: 'Desktop history could not be loaded.',
-          } as const;
-          setReadOutcomes({
-            conversations: failed,
-            memories: failed,
-            tasks: failed,
-          });
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setReadsLoading(false);
-        }
+        readOutcomesRef.current = next;
+        return next;
       });
-    return () => {
-      active = false;
-    };
+      const hasSavedRows = homeOutcomes.some(
+        outcome =>
+          outcome.status === 'success' && outcome.value.items.length > 0,
+      );
+      setReadsPhase(
+        failed
+          ? hasSavedRows || hadSavedRows
+            ? 'saved-but-refresh-failed'
+            : 'unavailable'
+          : 'ready',
+      );
+    } catch {
+      setReadsPhase(
+        readOutcomesRef.current === null
+          ? 'unavailable'
+          : 'saved-but-refresh-failed',
+      );
+    }
   }, []);
+
+  useEffect(() => {
+    refreshReads(true).catch(() => undefined);
+  }, [refreshReads]);
 
   const reads = useMemo(() => {
     if (readOutcomes === null) {
@@ -406,10 +455,15 @@ function App(): React.JSX.Element {
       ...(readOutcomes.memories.status === 'success'
         ? readOutcomes.memories.value.items
         : []),
-      ...(readOutcomes.tasks.status === 'success'
-        ? readOutcomes.tasks.value.items
-        : []),
-    ];
+    ].sort((left, right) => {
+      const timestamp = (item: DesktopReadProjection) =>
+        item.kind === 'conversation'
+          ? Date.parse(item.startedAt)
+          : item.kind === 'memory'
+          ? item.timestamp ?? 0
+          : 0;
+      return timestamp(right) - timestamp(left);
+    });
   }, [readOutcomes]);
 
   const routeOutcome = useMemo(() => {
@@ -432,6 +486,13 @@ function App(): React.JSX.Element {
           item.searchableText.toLocaleLowerCase().includes(query)),
     );
   }, [projectionFilter, reads, searchQuery]);
+  const homeFiltering = searchQuery.trim() !== '' || projectionFilter !== 'all';
+
+  useEffect(() => {
+    if (route === 'Home') {
+      searchRef.current?.focus();
+    }
+  }, [route]);
 
   useEffect(() => {
     let active = true;
@@ -494,7 +555,7 @@ function App(): React.JSX.Element {
   }, [compact, mobileNavOpacity, mobileNavTranslateY, reduceMotion]);
 
   useEffect(() => {
-    const value = activeNavigationIndex * 52;
+    const value = Math.max(activeNavigationIndex, 0) * 52;
     if (reduceMotion) {
       activePillTranslateY.setValue(value);
       return;
@@ -565,16 +626,16 @@ function App(): React.JSX.Element {
             importantForAccessibility="no-hide-descendants"
             style={[
               styles.activePill,
-              {transform: [{translateY: activePillTranslateY}]},
+              activeNavigationIndex < 0 && styles.activePillHidden,
+              {
+                transform: [{translateY: activePillTranslateY}],
+              },
             ]}
           />
         )}
         {navigation.map(item => (
           <NavItem
-            active={
-              route === item.label ||
-              (route === 'Chat' && item.label === 'Home')
-            }
+            active={route === item.label}
             compact={compact}
             expanded={railExpanded}
             icon={item.icon}
@@ -605,8 +666,8 @@ function App(): React.JSX.Element {
         ...(result.assistant === null ? [] : [result.assistant]),
       ]);
       setDraft('');
-    } catch {
-      setChatError('Message not sent. Try again.');
+    } catch (error) {
+      setChatError(chatErrorCopy(error));
       try {
         setMessages(await loadChatHistory(backend));
       } catch {}
@@ -737,25 +798,58 @@ function App(): React.JSX.Element {
                   {route === 'Home' ? (
                     <View style={styles.searchHome}>
                       <ProjectionList
-                        emptyCopy="Nothing matches this search yet."
+                        emptyCopy={
+                          homeFiltering
+                            ? 'Clear the search or filters to see saved items.'
+                            : 'Start typing to search what is saved.'
+                        }
+                        emptyTitle={
+                          homeFiltering ? 'No results' : 'Nothing saved yet'
+                        }
                         error={null}
                         footer={
-                          readOutcomes === null ? undefined : (
-                            <View style={styles.readStatuses}>
-                              <OutcomeStatus
-                                label="Conversations"
-                                outcome={readOutcomes.conversations}
-                              />
-                              <OutcomeStatus
-                                label="Memories"
-                                outcome={readOutcomes.memories}
-                              />
-                              <OutcomeStatus
-                                label="Tasks"
-                                outcome={readOutcomes.tasks}
-                              />
-                            </View>
-                          )
+                          <View style={styles.readStatuses}>
+                            {readsPhase !== 'ready' && (
+                              <View style={styles.readStatus}>
+                                <Text style={styles.readStatusText}>
+                                  {readsPhase === 'initial-loading'
+                                    ? 'Loading saved data…'
+                                    : readsPhase === 'refreshing'
+                                    ? 'Refreshing saved data…'
+                                    : readsPhase === 'saved-but-refresh-failed'
+                                    ? 'Showing saved data. Could not refresh.'
+                                    : 'Saved data is unavailable.'}
+                                </Text>
+                                {(readsPhase === 'saved-but-refresh-failed' ||
+                                  readsPhase === 'unavailable') && (
+                                  <Pressable
+                                    accessibilityLabel="Retry saved data"
+                                    accessibilityRole="button"
+                                    onPress={() => refreshReads(false)}
+                                    style={({pressed}) => [
+                                      styles.retryButton,
+                                      pressed && styles.pressed,
+                                    ]}>
+                                    <Text style={styles.retryButtonText}>
+                                      Retry
+                                    </Text>
+                                  </Pressable>
+                                )}
+                              </View>
+                            )}
+                            {readOutcomes !== null && (
+                              <View style={styles.readStatuses}>
+                                <OutcomeStatus
+                                  label="Conversations"
+                                  outcome={readOutcomes.conversations}
+                                />
+                                <OutcomeStatus
+                                  label="Memories"
+                                  outcome={readOutcomes.memories}
+                                />
+                              </View>
+                            )}
+                          </View>
                         }
                         header={
                           <View style={styles.searchHeader}>
@@ -765,18 +859,36 @@ function App(): React.JSX.Element {
                             </Text>
                             <View style={styles.searchBox}>
                               <Search
+                                accessible={false}
                                 color="#888888"
                                 size={18}
                                 strokeWidth={2}
                               />
                               <TextInput
                                 accessibilityLabel="Search Home"
+                                autoFocus
                                 onChangeText={setSearchQuery}
-                                placeholder="Search conversations, memories, and tasks"
+                                placeholder="Search conversations and memories"
                                 placeholderTextColor="#777777"
+                                ref={searchRef}
                                 style={styles.searchInput}
                                 value={searchQuery}
                               />
+                              {searchQuery !== '' && (
+                                <Pressable
+                                  accessibilityLabel="Clear search"
+                                  accessibilityRole="button"
+                                  onPress={() => {
+                                    setSearchQuery('');
+                                    searchRef.current?.focus();
+                                  }}
+                                  style={({pressed}) => [
+                                    styles.clearSearch,
+                                    pressed && styles.pressed,
+                                  ]}>
+                                  <Text style={styles.clearSearchText}>×</Text>
+                                </Pressable>
+                              )}
                             </View>
                             <View style={styles.searchActions}>
                               <View style={styles.filters}>
@@ -823,7 +935,8 @@ function App(): React.JSX.Element {
                           </View>
                         }
                         items={homeResults}
-                        loading={readsLoading}
+                        loading={readsPhase === 'initial-loading'}
+                        suppressEmpty={readsPhase !== 'ready'}
                       />
                     </View>
                   ) : route === 'Chat' ? (
@@ -897,7 +1010,7 @@ function App(): React.JSX.Element {
                     </ScrollView>
                   ) : (
                     <ProjectionPage
-                      loading={readsLoading}
+                      loading={readsPhase === 'initial-loading'}
                       outcome={routeOutcome}
                       route={route}
                     />
@@ -967,6 +1080,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
+  activePillHidden: {opacity: 0},
   navText: {color: '#b0b0b0', fontSize: 14, fontWeight: '600'},
   navTextCollapsed: {opacity: 0, width: 0},
   navTextActive: {color: '#141414'},
@@ -1045,6 +1159,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   searchInput: {color: '#ffffff', flex: 1, fontSize: 15, minHeight: 48},
+  clearSearch: {
+    alignItems: 'center',
+    borderRadius: 22,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  clearSearchText: {color: '#b0b0b0', fontSize: 24, lineHeight: 26},
   searchActions: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1180,6 +1302,17 @@ const styles = StyleSheet.create({
   },
   readStatusText: {color: '#b0b0b0', fontSize: 13, fontWeight: '600'},
   readStatusReason: {color: '#777777', fontSize: 12},
+  retryButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderColor: '#484848',
+    borderRadius: 16,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 18,
+  },
+  retryButtonText: {color: '#ffffff', fontSize: 13, fontWeight: '600'},
   resultList: {flexGrow: 1, gap: 8, paddingBottom: 28},
   resultRow: {
     backgroundColor: '#202020',

@@ -289,7 +289,7 @@ test('renders the collapsed reference rail and search-first desktop Home', async
   );
 
   expect(output).toContain('Search what you’ve seen and heard');
-  expect(output).toContain('Search conversations, memories, and tasks');
+  expect(output).toContain('Search conversations and memories');
   expect(output).toContain('QA bridge check');
   expect(output).toContain('Open Chat');
   expect(output).not.toContain('I’m ready.');
@@ -332,6 +332,131 @@ test('renders the collapsed reference rail and search-first desktop Home', async
   expect(
     renderer.root.findAll(node => String(node.type) === 'ListChecks'),
   ).toHaveLength(1);
+});
+
+test('keeps Home limited to chronological conversations and memories', async () => {
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/chat-messages?limit=50') {
+      return {id: request.id, status: 200, body: '{"messages":[]}'};
+    }
+    if (request.path.startsWith('/v1/conversations')) {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'older-conversation',
+            structured: {title: 'Older conversation', overview: 'Earlier'},
+            created_at: '2026-08-07T09:00:00.000Z',
+            updated_at: '2026-08-07T09:00:00.000Z',
+            started_at: '2026-08-07T09:00:00.000Z',
+            finished_at: '2026-08-07T09:10:00.000Z',
+            source: 'omi',
+            status: 'completed',
+            discarded: false,
+            starred: false,
+            visibility: 'private',
+            is_locked: false,
+            folder_id: null,
+          },
+        ]),
+      };
+    }
+    const tasks = request.path === '/v1/tasks';
+    return {
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({
+        contractVersion: '1.0.0',
+        items: tasks
+          ? []
+          : [
+              {
+                id: 'newer-memory',
+                text: 'Newer memory',
+                citations: [],
+                provenance: {
+                  synthesisVersion: 'v1',
+                  inputDigest: 'input',
+                  outputDigest: 'output',
+                },
+                updatedAt: Date.parse('2026-08-08T09:00:00.000Z'),
+              },
+            ],
+        window: {
+          status: 'complete',
+          complete: true,
+          hasMore: false,
+          nextCursor: null,
+        },
+        completeness: {
+          version: tasks ? 'tasks-completeness-v1' : 'recall-completeness-v1',
+          status: 'complete',
+          reasons: [],
+        },
+        absence: null,
+      }),
+    };
+  });
+
+  const renderer = await renderApp();
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output.indexOf('Newer memory')).toBeLessThan(
+    output.indexOf('Older conversation'),
+  );
+  expect(output).not.toContain('Search conversations, memories, and tasks');
+  const filters = renderer.root
+    .findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'button' &&
+        node.props.accessibilityLabel === undefined,
+    )
+    .map(node => node.props.children.props?.children)
+    .filter(Boolean);
+  expect(filters).toEqual(['All', 'Conversations', 'Memories']);
+  const search = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Search Home',
+  );
+  expect(search.props.autoFocus).toBe(true);
+  await ReactTestRenderer.act(async () => search.props.onChangeText('missing'));
+  expect(JSON.stringify(renderer.toJSON())).toContain('No results');
+  const clear = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Clear search',
+  );
+  await ReactTestRenderer.act(async () => clear.props.onPress());
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Search Home')
+      .props.value,
+  ).toBe('');
+});
+
+test('does not borrow Home active navigation semantics for Chat', async () => {
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  const tabs = renderer.root.findAll(
+    node =>
+      String(node.type) === 'Pressable' &&
+      node.props.accessibilityRole === 'tab',
+  );
+  expect(
+    tabs.every(tab => tab.props.accessibilityState.selected === false),
+  ).toBe(true);
+  expect(
+    tabs.every(tab => tab.props.children[0].props.accessible === false),
+  ).toBe(true);
+  const pill = renderer.root.find(
+    node =>
+      String(node.type) === 'AnimatedView' &&
+      node.props.accessibilityElementsHidden === true,
+  );
+  expect(pill.props.style).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0})]),
+  );
 });
 
 test('navigates to rewritten-backend read projections and replays the stage transition', async () => {
@@ -431,10 +556,10 @@ test('keeps successful reads visible and reports each unavailable domain', async
 
   const renderer = await renderApp();
   const home = JSON.stringify(renderer.toJSON());
-  expect(home).toContain('Keep the successful task');
+  expect(home).not.toContain('Keep the successful task');
   expect(home).toContain('desktop-conversations-read failed (503)');
-  expect(home).toContain('Tasks are incomplete.');
-  expect(home).toContain('pending_writes');
+  expect(home).not.toContain('Tasks are incomplete.');
+  expect(home).not.toContain('pending_writes');
 
   const conversations = renderer.root
     .findAll(
@@ -447,6 +572,19 @@ test('keeps successful reads visible and reports each unavailable domain', async
   expect(JSON.stringify(renderer.toJSON())).toContain(
     'desktop-conversations-read failed (503)',
   );
+
+  const tasks = renderer.root
+    .findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    )
+    .find(node => node.props.children[1].props.children === 'Tasks')!;
+  await ReactTestRenderer.act(async () => tasks.props.onPress());
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'Keep the successful task',
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain('Tasks are incomplete.');
 });
 
 test('uses a full pane with bottom navigation on mobile', async () => {
@@ -642,7 +780,9 @@ test('moves the desktop active pill directly when motion is reduced', async () =
       String(node.type) === 'AnimatedView' &&
       node.props.accessibilityElementsHidden === true,
   );
-  const translateY = activePill.props.style[1].transform[0].translateY;
+  const translateY = activePill.props.style.find(
+    (style: {transform?: unknown}) => style?.transform,
+  ).transform[0].translateY;
   const conversations = renderer.root
     .findAll(
       node =>

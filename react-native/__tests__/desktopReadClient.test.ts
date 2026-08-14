@@ -48,6 +48,7 @@ const memory = {
     inputDigest: 'a'.repeat(64),
     outputDigest: 'b'.repeat(64),
   },
+  updatedAt: 1785900200,
 };
 
 const task = {
@@ -74,7 +75,7 @@ function backendFor(
 ): OmiBackend {
   return {
     request: async request => ({id: request.id, ...responder(request)}),
-    generationEvents: async () => '',
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
     cancelGenerationEvents: async () => {},
   };
 }
@@ -122,6 +123,7 @@ test('loads and normalizes all three exact desktop read routes', async () => {
           kind: 'memory',
           id: 'memory1_abc',
           searchableText: 'The launch is Friday.',
+          timestamp: 1785900200,
         }),
       ],
       page: expect.objectContaining({completenessStatus: 'complete'}),
@@ -148,6 +150,18 @@ test('loads and normalizes all three exact desktop read routes', async () => {
       '/v1/tasks',
     ].sort(),
   );
+});
+
+test('preserves absent memory timestamps without inventing an order', async () => {
+  const result = await loadMemories(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(
+        page([{...memory, updatedAt: undefined}], 'recall-completeness-v1'),
+      ),
+    })),
+  );
+  expect(result.items[0].timestamp).toBeNull();
 });
 
 test.each([
