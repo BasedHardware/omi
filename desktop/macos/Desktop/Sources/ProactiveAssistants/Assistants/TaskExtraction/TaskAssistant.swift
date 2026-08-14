@@ -271,6 +271,12 @@ actor TaskAssistant: ProactiveAssistant {
     for await trigger in triggerStream {
       guard isRunning else { break }
 
+      // A prior capture may have been persisted while offline or left retryable
+      // after a transient delivery failure. Drain that durable outbox before
+      // extracting the new frame so an equivalent new observation can adopt or
+      // coalesce against a leader that has already had another delivery chance.
+      await retryCanonicalOutbox()
+
       let (frame, triggerType): (CapturedFrame, String) = {
         switch trigger {
         case .contextSwitch(let f): return (f, "context_switch")
@@ -603,6 +609,29 @@ actor TaskAssistant: ProactiveAssistant {
           try await StagedTaskStorage.shared.discardCanonicalOutbox(id: localID)
           return
         }
+
+        // The model's duplicate search is advisory. Repeated screenshots can
+        // paraphrase the same visible ask, and canonical exact-description
+        // identity will not merge those variants. Resolve delivery in one DB
+        // transaction so dismiss-vs-reuse and first-writer dual-create cannot
+        // mint two Candidates for the same observation burst.
+        switch try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+          for: localRecord,
+          localOutboxID: localID
+        ) {
+        case .adoptedExistingReceipt(let receipt):
+          log(
+            "Task: Reused canonical capture candidate=\(receipt.candidateID) for semantically equivalent observation"
+          )
+          return
+        case .coalescedIntoDeliveryLeader:
+          log(
+            "Task: Coalesced equivalent capture into older delivery leader; skipping backend create"
+          )
+          return
+        case .proceedAsDeliveryLeader:
+          break
+        }
         let delivery = CanonicalScreenCandidateDelivery(
           client: APICanonicalScreenCandidateClient()
         )
@@ -828,21 +857,7 @@ actor TaskAssistant: ProactiveAssistant {
   /// Normalize (app, window) into a stable dedupe key. Strips Telegram-style trailing
   /// counters and collapses whitespace so the same chat across reopens hashes the same.
   static func analyzedKey(for frame: CapturedFrame) -> String {
-    let app = frame.appName.lowercased()
-    let title = normalizedWindowTitle(frame.windowTitle)
-    return "\(app)::\(title)"
-  }
-
-  private static func normalizedWindowTitle(_ title: String?) -> String {
-    guard let raw = title, !raw.isEmpty else { return "" }
-    var t = raw.lowercased()
-    // Strip Telegram-style trailing message counters: " (247887)" / "(247887)".
-    if let range = t.range(of: #"\s*\(\d+\)\s*$"#, options: .regularExpression) {
-      t.removeSubrange(range)
-    }
-    // Collapse whitespace runs so " foo   bar " == "foo bar".
-    t = t.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
-    return t
+    ContextTitleNormalizer.legacyTaskIdentityKey(appName: frame.appName, windowTitle: frame.windowTitle)
   }
 
   private func pruneStaleDedupeEntries(now: Date, ttl: TimeInterval) {
@@ -1427,6 +1442,36 @@ actor TaskAssistant: ProactiveAssistant {
 
   // MARK: - Prompt Context
 
+  /// Merges legacy staged descriptions with canonical pending/accepted lines for
+  /// extraction dedup context. Reserves slots for canonical identity so a full
+  /// 30-item staged list cannot crowd pending candidates out of the prompt.
+  static func mergeDedupContextDescriptions(
+    staged: [String],
+    canonical: [String],
+    limit: Int = 30
+  ) -> [String] {
+    guard limit > 0 else { return [] }
+
+    func uniqued(_ values: [String], into seen: inout Set<String>) -> [String] {
+      values.filter { seen.insert($0.lowercased()).inserted }
+    }
+
+    var seen = Set<String>()
+    let distinctCanonical = uniqued(canonical, into: &seen)
+    seen.removeAll(keepingCapacity: true)
+    let distinctStaged = uniqued(staged, into: &seen).filter { description in
+      !distinctCanonical.contains { $0.caseInsensitiveCompare(description) == .orderedSame }
+    }
+
+    let reservedCanonical =
+      distinctCanonical.isEmpty ? 0 : min(distinctCanonical.count, max(1, limit / 3))
+    let stagedBudget = max(0, limit - reservedCanonical)
+    let stagedTake = Array(distinctStaged.prefix(stagedBudget))
+    let remaining = max(0, limit - stagedTake.count)
+    let canonicalTake = Array(distinctCanonical.prefix(remaining))
+    return stagedTake + canonicalTake
+  }
+
   /// Renders the task-context evidence block of the extraction prompt. Extracted
   /// as a pure function so the id contract is unit-testable: only ACTIVE TASKS
   /// carry an `[id:…]` the model may target with duplicate_of/refines_task;
@@ -1569,7 +1614,13 @@ actor TaskAssistant: ProactiveAssistant {
     var stagedTaskDescriptions: [String] = []
     do {
       let stagedTasks = try await StagedTaskStorage.shared.getAllStagedTasks(limit: 30)
-      stagedTaskDescriptions = stagedTasks.map { $0.description }
+      let canonicalCandidateDescriptions =
+        try await StagedTaskStorage.shared.getRecentCanonicalCandidateDescriptions(limit: 30)
+      var seen = Set<String>()
+      // Keep canonical candidates ahead of legacy descriptions within the limit.
+      let distinctDescriptions = (canonicalCandidateDescriptions + stagedTasks.map { $0.description })
+        .filter { seen.insert($0.lowercased()).inserted }
+      stagedTaskDescriptions = Array(distinctDescriptions.prefix(30))
     } catch {
       logError("Task: Failed to load staged tasks for context", error: error)
     }

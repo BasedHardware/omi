@@ -32,11 +32,11 @@ from dev_harness.cli import _current_scenario_manifest, _scenario_users_from_see
 
 action, fixture_case, raw_seconds = sys.argv[1:]
 valid_actions = {'prepare', 'snapshot', 'advance'}
-valid_cases = {'enabled', 'question', 'out_of_cohort', 'unreachable_control', 'cold_start'}
+valid_cases = {'enabled', 'question', 'disabled_control', 'unreachable_control', 'cold_start'}
 if action not in valid_actions or fixture_case not in valid_cases:
     raise SystemExit(
         'usage: chat-first-e2e-fixture.sh <prepare|snapshot|advance> '
-        '<enabled|question|out_of_cohort|unreachable_control|cold_start> [seconds]'
+        '<enabled|question|disabled_control|unreachable_control|cold_start> [seconds]'
     )
 if os.environ.get('OMI_ENV_STAGE') not in {'local', 'offline'}:
     raise SystemExit('Chat-first E2E fixture is local/offline only')
@@ -56,7 +56,7 @@ if not scenario or not seeded_users:
 
 principal = (
     'omi-local-emulator-chat-first-disabled-v1'
-    if fixture_case == 'out_of_cohort'
+    if fixture_case == 'disabled_control'
     else 'omi-local-emulator-chat-first-enabled-v1'
 )
 if principal not in seeded_users:

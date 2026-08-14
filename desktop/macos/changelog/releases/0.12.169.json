@@ -1,0 +1,7 @@
+{
+  "version": "0.12.169",
+  "date": "2026-08-13",
+  "changes": [
+    "Improved proactive-notification monitoring so missing analytics configuration is reported accurately"
+  ]
+}

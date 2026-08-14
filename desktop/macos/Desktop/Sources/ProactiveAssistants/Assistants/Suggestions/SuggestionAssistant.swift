@@ -20,7 +20,15 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   var isEnabled: Bool {
     get async {
-      await MainActor.run { SuggestionAssistantSettings.shared.isEnabled }
+      // Deliberately independent of ContextBucketsFeature. The buckets rollout gated this
+      // on `!ContextBucketsFeature.isEnabled`, betting the context director would replace
+      // live suggestions — it delivered almost nothing, and with the flag at 100% of all
+      // users focus nudges went silent fleet-wide with no error logged (Aug 13–14 2026).
+      // If the director is ever meant to replace this assistant again, that must be an
+      // explicit, evidenced change — never a side effect of a rollout flag.
+      await MainActor.run {
+        SuggestionAssistantSettings.shared.isEnabled
+      }
     }
   }
 
@@ -39,11 +47,11 @@ actor SuggestionAssistant: ProactiveAssistant {
   private let geminiClient: GeminiClient
   private let telemetryModel: SuggestionAssistantTelemetry.Model
 
-  /// How long the user must stay in a context before it is worth spending on. People
-  /// switch apps hundreds of times a day and almost none of those are a request for
-  /// advice; half a minute of dwell is the difference between passing through a window and
-  /// working in it.
-  private static let requiredDwell: TimeInterval = 30.0
+  /// Dwell before a context is worth spending on — level-aware, see
+  /// `SuggestionGatePolicy.requiredDwell(frequencyLevel:)` (10 s at Maximum, 30 s otherwise).
+  private static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
+    SuggestionGatePolicy.requiredDwell(frequencyLevel: frequencyLevel)
+  }
 
   /// Hard ceiling on paid evaluations per day, so cost is a number we choose rather than a
   /// function of how much the user alt-tabs.
@@ -130,7 +138,7 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     let enabled = await isEnabled
     let excluded = await MainActor.run { SuggestionAssistantSettings.shared.isAppExcluded(frame.appName) }
-    let snoozed = await MainActor.run { FloatingControlBarManager.shared.isSnoozed }
+    let frequencyLevel = await MainActor.run { NotificationService.currentFrequencyLevel() }
     let cooldown = await cooldownInterval
 
     let now = Date()
@@ -139,12 +147,11 @@ actor SuggestionAssistant: ProactiveAssistant {
     let decision = SuggestionGatePolicy.decide(
       isEnabled: enabled,
       isAppExcluded: excluded,
-      isSnoozed: snoozed,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
-      cooldown: cooldown,
+      cooldown: SuggestionGatePolicy.cooldown(base: cooldown, frequencyLevel: frequencyLevel),
       dwell: dwell,
-      requiredDwell: Self.requiredDwell,
+      requiredDwell: Self.requiredDwell(frequencyLevel: frequencyLevel),
       evaluationsToday: dailyBudget.countToday(now: now),
       dailyBudget: Self.dailyEvaluationBudget
     )
@@ -222,6 +229,7 @@ actor SuggestionAssistant: ProactiveAssistant {
         .map(Self.describeCommitment)
     }
     grounding.openCommitments = Array(alwaysRelevant)
+
     grounding.goals = currentOwnerGoals()
     refreshGoalsIfStale()
 
@@ -350,17 +358,19 @@ actor SuggestionAssistant: ProactiveAssistant {
     let formatter = DateFormatter()
     formatter.dateFormat = "MMM d HH:mm"
     let when = formatter.string(from: screenshot.timestamp)
-    let where_ = screenshot.windowTitle.map { "\(screenshot.appName) — \($0)" } ?? screenshot.appName
-    guard let ocr = screenshot.ocrText, !ocr.isEmpty else { return "\(when) · \(where_)" }
+    let location = screenshot.windowTitle.map { "\(screenshot.appName) — \($0)" } ?? screenshot.appName
+    guard let ocr = screenshot.ocrText, !ocr.isEmpty else { return "\(when) · \(location)" }
     let snippet = ocr.replacingOccurrences(of: "\n", with: " ").prefix(200)
-    return "\(when) · \(where_): \(snippet)"
+    return "\(when) · \(location): \(snippet)"
   }
 
   /// Derive a search term from the window title, which is where the topic or person lives.
   /// Reuses the shared normalizer so spinners, timers and unread counts do not become
   /// search noise.
   private static func groundingSearchTerm(for frame: CapturedFrame) -> String? {
-    guard let normalized = ContextDetection.normalizeWindowTitle(frame.windowTitle) else { return nil }
+    guard let normalized = ContextDetection.normalizeWindowTitle(frame.windowTitle, appName: frame.appName) else {
+      return nil
+    }
     // Must be sanitized before it reaches FTS5 — see SuggestionSearchTerm.
     let sanitized = SuggestionSearchTerm.sanitize(normalized)
     // Very short titles ("Inbox", "New Tab") carry no signal worth searching on.
@@ -617,12 +627,41 @@ actor SuggestionAssistant: ProactiveAssistant {
     frame: CapturedFrame,
     sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
   ) async -> [String: String] {
+    // The probe bypasses only timing gates for intentional QA. It retains every
+    // privacy, user-choice, and spend boundary before the screenshot reaches a model.
+    let assistantEnabled = await isEnabled
+    let gateState = await MainActor.run {
+      (
+        SuggestionAssistantSettings.shared.isAppExcluded(frame.appName),
+        NotificationService.areNotificationsEnabled(),
+        NotificationService.currentFrequencyLevel()
+      )
+    }
+    let now = Date()
+    let decision = SuggestionGatePolicy.decide(
+      isEnabled: assistantEnabled,
+      isAppExcluded: gateState.0,
+      now: now,
+      lastEvaluationAt: nil,
+      cooldown: 0,
+      dwell: Self.requiredDwell(frequencyLevel: gateState.2),
+      requiredDwell: Self.requiredDwell(frequencyLevel: gateState.2),
+      evaluationsToday: dailyBudget.countToday(now: now),
+      dailyBudget: Self.dailyEvaluationBudget)
+    guard gateState.1, gateState.2 > 0, decision.allowsEvaluation else {
+      if !gateState.1 { return ["outcome": "skipped_notifications_disabled"] }
+      if gateState.2 == 0 { return ["outcome": "skipped_frequency_off"] }
+      return ["outcome": SuggestionAssistantTelemetry.GateOutcome(decision).rawValue]
+    }
+
     let grounding = await assembleGrounding(for: frame)
     commitmentsInFlight = grounding.openCommitments
 
     guard !grounding.isEmpty else {
       return ["outcome": "no_grounding", "commitments": "0"]
     }
+
+    dailyBudget.recordEvaluation(now: now)
 
     let result: SuggestionResult?
     do {

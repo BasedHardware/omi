@@ -1,5 +1,36 @@
 import Foundation
 
+enum ProactiveNotificationKind: String, Equatable {
+  case general
+  case suggestion
+  case insight
+  case task
+  case memory
+  case goal
+  case resurface
+
+  static func from(decisionType: String) -> Self {
+    switch decisionType {
+    case "suggest": return .suggestion
+    case "insight": return .insight
+    case "task_candidate": return .task
+    case "resurface": return .resurface
+    default: return .general
+    }
+  }
+
+  static func from(assistantId: String) -> Self {
+    switch assistantId {
+    case "suggestion": return .suggestion
+    case "insight": return .insight
+    case "task": return .task
+    case "memory-extraction": return .memory
+    case "goals": return .goal
+    default: return .general
+    }
+  }
+}
+
 /// Pure INV-6 continuity helpers — prefer these over ad-hoc UI string/resource logic.
 /// Behavioral tests call these APIs; source tripwires guard forbidden dual-write patterns.
 enum ChatContinuityInvariants {
@@ -17,9 +48,21 @@ enum ChatContinuityInvariants {
     "\(proactiveNotificationContinuityKeyPrefix)\(id.uuidString)"
   }
 
+  static func proactiveNotificationContinuityKey(id: UUID, kind: ProactiveNotificationKind) -> String {
+    guard kind != .general else { return proactiveNotificationContinuityKey(id: id) }
+    return "\(proactiveNotificationContinuityKeyPrefix)\(kind.rawValue):\(id.uuidString)"
+  }
+
   static func isProactiveNotification(_ message: ChatMessage) -> Bool {
     guard message.sender != .user, let key = message.clientTurnId else { return false }
     return key.hasPrefix(proactiveNotificationContinuityKeyPrefix)
+  }
+
+  static func proactiveNotificationKind(_ message: ChatMessage) -> ProactiveNotificationKind? {
+    guard isProactiveNotification(message), let key = message.clientTurnId else { return nil }
+    let suffix = key.dropFirst(proactiveNotificationContinuityKeyPrefix.count)
+    guard let separator = suffix.firstIndex(of: ":") else { return .general }
+    return ProactiveNotificationKind(rawValue: String(suffix[..<separator])) ?? .general
   }
 
   /// Collapsed agent-card / list header preview prefers the prompt/objective.

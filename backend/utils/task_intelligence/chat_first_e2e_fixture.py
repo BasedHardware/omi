@@ -13,7 +13,7 @@ from typing import Any
 
 from config.chat_first_e2e_fixture import (
     CHAT_FIRST_E2E_ENABLED_PRINCIPAL,
-    CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL,
+    CHAT_FIRST_E2E_DISABLED_PRINCIPAL,
     fixture_uid_for_principal,
     is_chat_first_e2e_fixture_uid,
     is_chat_first_e2e_harness_runtime,
@@ -70,8 +70,8 @@ def _require_harness(uid: str) -> None:
 def fixture_uid_for_case(fixture_case: ChatFirstE2EFixtureCase) -> str | None:
     """Resolve a case to the only account it may mutate."""
 
-    if fixture_case is ChatFirstE2EFixtureCase.out_of_cohort:
-        return fixture_uid_for_principal(CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL)
+    if fixture_case is ChatFirstE2EFixtureCase.disabled_control:
+        return fixture_uid_for_principal(CHAT_FIRST_E2E_DISABLED_PRINCIPAL)
     return fixture_uid_for_principal(CHAT_FIRST_E2E_ENABLED_PRINCIPAL)
 
 
@@ -205,8 +205,8 @@ def _task_payload(*, now: datetime) -> dict[str, Any]:
         'status': 'active',
         'completed': False,
         'owner': 'user',
-        # This is deliberately the one task provenance which the cohort
-        # archive can resolve. The resulting task-card badge exercises
+        # This is deliberately the one task provenance which the historical
+        # compatibility reader can resolve. The resulting task-card badge exercises
         # the production fail-closed capture-link policy instead of
         # merely asserting its helper against a synthetic Swift value.
         'source': 'transcription:omi',

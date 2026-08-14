@@ -184,7 +184,7 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     let answerThreadSource = try sourceFile("MainWindow/QueryShell/QueryAnswerThread.swift")
     let dashboardSource = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
-    // omi-test-quality: source-inspection -- static contract: the cohort shell must share the modern
+    // omi-test-quality: source-inspection -- static contract: the Chat-first shell must share the modern
     // top-navigation and the single QueryShellHome chat surface, while rich-block capability and
     // visible-transcript lifecycle remain threaded through the shared answer view.
     XCTAssertTrue(shellSource.contains("DesktopTopBar("))

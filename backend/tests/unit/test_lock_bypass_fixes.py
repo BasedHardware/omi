@@ -4,7 +4,7 @@ Verifies that is_locked conversations/memories are properly guarded
 across all previously-bypassed endpoints by calling the real code paths.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, call, patch
 import os
 import pytest
 import sys
@@ -300,7 +300,7 @@ def _force_legacy_memory_paths(module):
     from utils.memory import memory_service
     from utils.memory.memory_system import MemorySystem
 
-    legacy = SimpleNamespace(read_decision=MemoryReadDecision.USE_LEGACY_SAFE, memories=[], text=None)
+    legacy = SimpleNamespace(read_decision=MemoryReadDecision.DENY_MEMORY, memories=[], text=None)
     allowed_write = SimpleNamespace(allowed=True, detail={})
     module.pin_memory_system = MagicMock(return_value=MemorySystem.LEGACY)
     if hasattr(module, 'read_default_read_rollout'):
@@ -664,40 +664,71 @@ class TestMemoryToolFiltering:
 
     def test_get_memories_filters_locked(self):
         """get_memories_tool must exclude locked memories from results."""
-        import database.memories as memory_db
+        from models.memories import MemoryDB
 
-        locked_mem = _make_memory(locked=True)
-        locked_mem['content'] = 'LOCKED_SECRET_CONTENT'
-        unlocked_mem = _make_memory(locked=False, memory_id='mem-2')
-        unlocked_mem['content'] = 'UNLOCKED_VISIBLE_CONTENT'
-        memory_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
+        locked_payload = _make_memory(locked=True)
+        locked_payload['content'] = 'LOCKED_SECRET_CONTENT'
+        unlocked_payload = _make_memory(locked=False, memory_id='mem-2')
+        unlocked_payload['content'] = 'UNLOCKED_VISIBLE_CONTENT'
+        locked_mem = MemoryDB.model_validate(locked_payload)
+        unlocked_mem = MemoryDB.model_validate(unlocked_payload)
 
         from utils.retrieval.tools import memory_tools
         from utils.retrieval.tools.memory_tools import get_memories_tool
 
         config = {'configurable': {'user_id': 'test-uid'}}
-        _force_legacy_memory_paths(memory_tools)
-        result = get_memories_tool.invoke({'limit': 10, 'offset': 0}, config=config)
+        with patch.object(memory_tools, 'MemoryService') as memory_service:
+            memory_service.return_value.read.return_value = [locked_mem, unlocked_mem]
+            result = get_memories_tool.invoke({'limit': 10, 'offset': 0}, config=config)
         # Only unlocked memory content should appear; locked must be filtered
         assert 'UNLOCKED_VISIBLE_CONTENT' in result
         assert 'LOCKED_SECRET_CONTENT' not in result
         assert '1 shown' in result  # Only 1 memory should appear
+        memory_service.return_value.read.assert_called_once_with('test-uid', limit=10, offset=0)
+
+    def test_get_memories_backfills_when_first_page_is_locked(self):
+        """A full filtered page must not hide a later visible memory."""
+        from models.memories import MemoryDB
+        from utils.retrieval.tools import memory_tools
+        from utils.retrieval.tools.memory_tools import get_memories_tool
+
+        locked = MemoryDB.model_validate(_make_memory(locked=True))
+        visible_payload = _make_memory(locked=False, memory_id='visible')
+        visible_payload['content'] = 'LATER_VISIBLE_CONTENT'
+        visible = MemoryDB.model_validate(visible_payload)
+
+        config = {'configurable': {'user_id': 'test-uid'}}
+        with patch.object(memory_tools, 'MemoryService') as memory_service:
+            memory_service.return_value.read.side_effect = [[locked, locked], [visible], []]
+            result = get_memories_tool.invoke({'limit': 2, 'offset': 0}, config=config)
+
+        assert 'LATER_VISIBLE_CONTENT' in result
+        assert memory_service.return_value.read.call_args_list[:2] == [
+            call('test-uid', limit=2, offset=0),
+            call('test-uid', limit=500, offset=2),
+        ]
 
     def test_search_memories_filters_locked(self):
         """search_memories_tool must exclude locked memories from results."""
-        import database.memories as memory_db
-        import database.vector_db as vector_db
-
-        data = [_make_memory(locked=True), _make_memory(locked=True, memory_id='mem-2')]
-        memory_db.get_memories_by_ids = MagicMock(return_value=data)
-        vector_db.find_similar_memories = MagicMock(return_value=[{'id': 'mem-1'}, {'id': 'mem-2'}])
-
+        from models.memories import MemoryDB
+        from utils.memory.memory_service import MemorySearchMatch
+        from utils.retrieval.tools import memory_tools
         from utils.retrieval.tools.memory_tools import search_memories_tool
 
+        locked_payload = _make_memory(locked=True)
+        locked_payload['content'] = 'LOCKED_SEARCH_SECRET'
+        visible_payload = _make_memory(locked=False, memory_id='mem-2')
+        visible_payload['content'] = 'VISIBLE_SEARCH_RESULT'
+        matches = [
+            MemorySearchMatch(memory=MemoryDB.model_validate(locked_payload), score=0.99),
+            MemorySearchMatch(memory=MemoryDB.model_validate(visible_payload), score=0.8),
+        ]
         config = {'configurable': {'user_id': 'test-uid'}}
-        result = search_memories_tool.invoke({'query': 'test'}, config=config)
-        # All memories locked, so result should indicate nothing found
-        assert 'no' in result.lower() or 'mem-1' not in result
+        with patch.object(memory_tools, 'MemoryService') as memory_service:
+            memory_service.return_value.search.return_value = matches
+            result = search_memories_tool.invoke({'query': 'test'}, config=config)
+        assert 'VISIBLE_SEARCH_RESULT' in result
+        assert 'LOCKED_SEARCH_SECRET' not in result
 
 
 # =============================================================================
@@ -850,57 +881,27 @@ class TestMcpSseLockRedaction:
         assert len(convs[1]['structured']['action_items']) == 1
 
     def test_mcp_sse_search_memories_filters_locked_and_backfills_limit(self):
-        """MCP SSE search_memories must match REST filtering before applying the requested limit."""
-        import database.memories as memories_db
-        import database.vector_db as vector_db
-
-        vector_db.find_similar_memories = MagicMock(
-            return_value=[
-                {'score': 1.0},
-                {'memory_id': 'locked', 'score': 0.99},
-                {'memory_id': 'rejected', 'score': 0.98},
-                {'memory_id': 'invalidated', 'score': 0.97},
-                {'memory_id': 'visible-1', 'score': 0.70},
-                {'memory_id': 'visible-2', 'score': 0.60},
-                {'memory_id': 'visible-3', 'score': 0.50},
-            ]
-        )
-        locked = _make_memory(locked=True, memory_id='locked')
-        locked['content'] = 'LOCKED_SECRET_MEMORY'
-        rejected = _make_memory(memory_id='rejected')
-        rejected['content'] = 'REJECTED_MEMORY'
-        rejected['user_review'] = False
-        invalidated = _make_memory(memory_id='invalidated')
-        invalidated['content'] = 'INVALIDATED_MEMORY'
-        invalidated['invalid_at'] = '2026-06-10T00:00:00+00:00'
-        memories_db.get_memories_by_ids = MagicMock(
-            return_value=[
-                locked,
-                rejected,
-                invalidated,
-                _make_memory(memory_id='visible-1'),
-                _make_memory(memory_id='visible-2'),
-                _make_memory(memory_id='visible-3'),
-            ]
-        )
+        """MCP SSE search delegates filtering and limiting to universal authority."""
 
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool
 
         _allow_memory_product_auth(mcp_sse)
-        _force_legacy_memory_paths(mcp_sse)
-        result = execute_tool(
-            'test-uid',
-            'search_memories',
-            {'query': 'memory', 'limit': 2},
-            auth_context=_memory_auth_context(),
-        )
+        visible = [
+            {'id': 'visible-1', 'content': 'visible one', 'category': 'interesting', 'relevance_score': 0.7},
+            {'id': 'visible-2', 'content': 'visible two', 'category': 'interesting', 'relevance_score': 0.6},
+        ]
+        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+            memory_service.return_value.search_mcp.return_value = visible
+            result = execute_tool(
+                'test-uid',
+                'search_memories',
+                {'query': 'memory', 'limit': 2},
+                auth_context=_memory_auth_context(),
+            )
 
         assert [memory['id'] for memory in result['memories']] == ['visible-1', 'visible-2']
-        assert 'LOCKED_SECRET_MEMORY' not in str(result)
-        assert 'REJECTED_MEMORY' not in str(result)
-        assert 'INVALIDATED_MEMORY' not in str(result)
-        vector_db.find_similar_memories.assert_called_once_with('test-uid', 'memory', threshold=0.0, limit=6)
+        memory_service.return_value.search_mcp.assert_called_once_with('test-uid', 'memory', limit=2)
 
     def test_mcp_sse_search_memories_schema_documents_limit_bounds(self):
         """MCP clients should see the same limit bounds enforced by execute_tool."""
@@ -926,19 +927,25 @@ class TestUsersLockEnforcement:
         from routers.users import delete_person_endpoint
         from fastapi import HTTPException
 
-        with patch('routers.users.get_conversation', return_value=_make_conversation(locked=True)):
+        with patch(
+            "routers.users.get_conversation",
+            return_value=_make_conversation(locked=True),
+        ):
             with pytest.raises(HTTPException) as exc_info:
-                delete_person_endpoint(memory_id='conv-1', uid='test-uid')
+                delete_person_endpoint(memory_id="conv-1", uid="test-uid")
             assert exc_info.value.status_code == 402
 
     def test_followup_question_allows_unlocked(self):
         """delete_person_endpoint should proceed for unlocked conversations."""
         from routers.users import delete_person_endpoint
 
-        with patch('routers.users.get_conversation', return_value=_make_conversation(locked=False)):
-            with patch('routers.users.followup_question_prompt', return_value='test result'):
-                result = delete_person_endpoint(memory_id='conv-1', uid='test-uid')
-        assert result['result'] == 'test result'
+        with patch(
+            "routers.users.get_conversation",
+            return_value=_make_conversation(locked=False),
+        ):
+            with patch("routers.users.followup_question_prompt", return_value="test result"):
+                result = delete_person_endpoint(memory_id="conv-1", uid="test-uid")
+        assert result["result"] == "test result"
 
     def test_daily_summary_excludes_locked(self):
         """L3: test_daily_summary must filter locked conversations before processing."""
@@ -948,70 +955,78 @@ class TestUsersLockEnforcement:
 
         data = [
             _make_conversation(locked=True),
-            _make_conversation(locked=False, conversation_id='conv-2'),
-            _make_conversation(locked=True, conversation_id='conv-3'),
+            _make_conversation(locked=False, conversation_id="conv-2"),
+            _make_conversation(locked=True, conversation_id="conv-3"),
         ]
         conversations_db.get_conversations = MagicMock(return_value=data)
         notification_db.get_user_time_zone = MagicMock(return_value=None)
-        notification_db.get_all_tokens = MagicMock(return_value=['token1'])
-        daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
+        notification_db.get_all_tokens = MagicMock(return_value=["token1"])
+        daily_summaries_db.create_daily_summary = MagicMock(return_value="summary-1")
 
         from routers.users import test_daily_summary
 
-        mock_gen = MagicMock(return_value={'headline': 'Test', 'overview': 'Overview'})
-        with patch('routers.users.generate_comprehensive_daily_summary', mock_gen):
-            with patch('routers.users.send_notification'):
-                result = test_daily_summary(uid='test-uid')
+        mock_gen = MagicMock(return_value={"headline": "Test", "overview": "Overview"})
+        with patch("routers.users.generate_comprehensive_daily_summary", mock_gen):
+            with patch("routers.users.send_notification"):
+                result = test_daily_summary(uid="test-uid")
 
         # Verify only unlocked conversations were passed to summary generation
         call_args = mock_gen.call_args
         conversations_passed = call_args[0][1]  # second positional arg
         assert len(conversations_passed) == 1
-        assert conversations_passed[0].id == 'conv-2'
+        assert conversations_passed[0].id == "conv-2"
 
     def test_gdpr_export_includes_locked(self):
         """H6: GDPR export must include locked conversations (Art. 15)."""
         import database.conversations as conversations_db
-        import database.memories as memories_db
         import database.chat as chat_db
 
         locked_conv = _make_conversation(locked=True)
-        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+        unlocked_conv = _make_conversation(locked=False, conversation_id="conv-2")
         conversations_db.iter_all_conversations = MagicMock(return_value=iter([locked_conv, unlocked_conv]))
-        memories_db.get_non_filtered_memories = MagicMock(return_value=[])
         chat_db.iter_all_messages = MagicMock(return_value=iter([]))
+
+        memory_service = MagicMock()
+        exported_memory = MagicMock(model_dump=MagicMock(return_value={"id": "mem-1"}))
+        memory_service.iter_export_memories.return_value = iter([exported_memory])
 
         # The export generator lives in services.users.data_export, which binds
         # these helpers at module level. Patch the service-level symbols so the
         # stub environment returns controlled data instead of MagicMock defaults.
         # Patches must stay active during body consumption since the generator is lazy.
-        with patch('services.users.data_export.get_user_profile', return_value={'name': 'Test'}):
-            with patch('services.users.data_export.get_people', return_value=[]):
-                with patch('services.users.data_export.get_standalone_action_items', return_value=[]):
-                    from routers.users import export_all_user_data
+        with patch("services.users.data_export.get_user_profile", return_value={"name": "Test"}):
+            with patch("services.users.data_export.get_people", return_value=[]):
+                with patch(
+                    "services.users.data_export.get_standalone_action_items",
+                    return_value=[],
+                ):
+                    with patch("services.users.data_export.MemoryService", return_value=memory_service):
+                        from routers.users import export_all_user_data
 
-                    response = export_all_user_data(uid='test-uid')
+                        response = export_all_user_data(uid="test-uid")
 
-                    # Consume body inside patches — the generator is lazy.
-                    # StreamingResponse wraps sync generators as async iterators,
-                    # so iterate the underlying generator directly.
-                    import asyncio
+                        # Consume body inside patches — the generator is lazy.
+                        # StreamingResponse wraps sync generators as async iterators,
+                        # so iterate the underlying generator directly.
+                        import asyncio
 
-                    async def _consume():
-                        parts = []
-                        async for chunk in response.body_iterator:
-                            parts.append(chunk)
-                        return ''.join(parts)
+                        async def _consume():
+                            parts = []
+                            async for chunk in response.body_iterator:
+                                parts.append(chunk)
+                            return "".join(parts)
 
-                    body = asyncio.run(_consume())
+                        body = asyncio.run(_consume())
 
         import json
 
         data = json.loads(body)
         # Both locked and unlocked conversations must be in the export
-        assert len(data['conversations']) == 2
-        assert data['conversations'][0]['is_locked'] is True
-        assert data['conversations'][1]['id'] == 'conv-2'
+        assert len(data["conversations"]) == 2
+        assert data["conversations"][0]["is_locked"] is True
+        assert data["conversations"][1]["id"] == "conv-2"
+        assert data["memories"] == [{"id": "mem-1"}]
+        memory_service.iter_export_memories.assert_called_once_with("test-uid", include_archive=True)
 
 
 # =============================================================================
@@ -1334,43 +1349,43 @@ class TestPromptDataLockFilter:
 
     def test_get_prompt_data_filters_locked_memories(self):
         """get_prompt_data must not include locked memories in prompt context."""
-        import database.memories as memories_db
-        from utils.memory.memory_system import MemorySystem
+        from models.memories import MemoryDB
 
         locked_mem = {
-            'id': 'mem-1',
-            'uid': 'test-uid',
-            'content': 'LOCKED_SECRET',
-            'is_locked': True,
-            'manually_added': False,
-            'category': 'interesting',
-            'created_at': '2024-01-01T00:00:00+00:00',
-            'updated_at': '2024-01-01T00:00:00+00:00',
+            "id": "mem-1",
+            "uid": "test-uid",
+            "content": "LOCKED_SECRET",
+            "is_locked": True,
+            "manually_added": False,
+            "category": "interesting",
+            "created_at": "2024-01-01T00:00:00+00:00",
+            "updated_at": "2024-01-01T00:00:00+00:00",
         }
         unlocked_mem = {
-            'id': 'mem-2',
-            'uid': 'test-uid',
-            'content': 'VISIBLE_CONTENT',
-            'is_locked': False,
-            'manually_added': False,
-            'category': 'interesting',
-            'created_at': '2024-01-01T00:00:00+00:00',
-            'updated_at': '2024-01-01T00:00:00+00:00',
+            "id": "mem-2",
+            "uid": "test-uid",
+            "content": "VISIBLE_CONTENT",
+            "is_locked": False,
+            "manually_added": False,
+            "category": "interesting",
+            "created_at": "2024-01-01T00:00:00+00:00",
+            "updated_at": "2024-01-01T00:00:00+00:00",
         }
-        memories_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
-
         with (
-            patch('utils.llms.memory.resolve_memory_system', return_value=MemorySystem.LEGACY),
-            patch('utils.llms.memory.get_user_name', return_value='Test'),
+            patch(
+                'utils.llms.memory.MemoryService.read',
+                return_value=[MemoryDB(**locked_mem), MemoryDB(**unlocked_mem)],
+            ),
+            patch("utils.llms.memory.get_user_name", return_value="Test"),
         ):
             from utils.llms.memory import get_prompt_data
 
-            _, baseline, user_made, generated = get_prompt_data('test-uid')
+            _, baseline, user_made, generated = get_prompt_data("test-uid")
 
         # Only unlocked memory should appear
         all_mems = baseline + user_made + generated
         assert len(all_mems) == 1
-        assert all_mems[0].content == 'VISIBLE_CONTENT'
+        assert all_mems[0].content == "VISIBLE_CONTENT"
 
 
 # =============================================================================
@@ -1621,82 +1636,64 @@ class TestMcpMemoryLockEnforcement:
     """Gaps 6-7: MCP REST delete/edit must reject locked memories."""
 
     def test_mcp_delete_memory_rejects_locked(self):
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
-
         from routers import mcp
         from routers.mcp import delete_memory
+        from fastapi import HTTPException
 
         _allow_memory_product_auth(mcp)
-        _force_legacy_memory_paths(mcp)
-        try:
-            delete_memory(memory_id='mem-1', auth_context=_memory_auth_context())
-            assert False, "Should have raised HTTPException"
-        except Exception as e:
-            assert e.status_code == 402
+        with patch.object(mcp, 'MemoryService') as memory_service:
+            memory_service.return_value.delete_external_memory.side_effect = HTTPException(
+                status_code=402, detail='A paid plan is required to access this memory.'
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                delete_memory(memory_id='mem-1', auth_context=_memory_auth_context())
+        assert exc_info.value.status_code == 402
 
     def test_mcp_delete_memory_allows_unlocked(self):
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
-        memories_db.delete_memory = MagicMock()
-
         from routers import mcp
         from routers.mcp import delete_memory
 
         _allow_memory_product_auth(mcp)
-        _force_legacy_memory_paths(mcp)
-        with patch('routers.mcp.MemoryService') as memory_service:
+        with patch.object(mcp, 'MemoryService') as memory_service:
             result = delete_memory(memory_id='mem-1', auth_context=_memory_auth_context())
         assert result == {"status": "ok"}
         memory_service.return_value.delete_external_memory.assert_called_once()
 
     def test_mcp_delete_memory_404_missing(self):
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=None)
-
         from routers import mcp
         from routers.mcp import delete_memory
+        from fastapi import HTTPException
 
         _allow_memory_product_auth(mcp)
-        _force_legacy_memory_paths(mcp)
-        try:
-            delete_memory(memory_id='nonexistent', auth_context=_memory_auth_context())
-            assert False, "Should have raised HTTPException"
-        except Exception as e:
-            assert e.status_code == 404
+        with patch.object(mcp, 'MemoryService') as memory_service:
+            memory_service.return_value.delete_external_memory.side_effect = HTTPException(
+                status_code=404, detail='Memory not found'
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                delete_memory(memory_id='nonexistent', auth_context=_memory_auth_context())
+        assert exc_info.value.status_code == 404
 
     def test_mcp_edit_memory_rejects_locked(self):
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
-
         from routers import mcp
         from routers.mcp import edit_memory
+        from fastapi import HTTPException
 
         _allow_memory_product_auth(mcp)
-        _force_legacy_memory_paths(mcp)
-        try:
-            edit_memory(memory_id='mem-1', value='new content', auth_context=_memory_auth_context())
-            assert False, "Should have raised HTTPException"
-        except Exception as e:
-            assert e.status_code == 402
+        with patch.object(mcp, '_validate_mcp_memory', side_effect=HTTPException(status_code=402, detail='locked')):
+            with patch.object(mcp, 'MemoryService') as memory_service:
+                with pytest.raises(HTTPException) as exc_info:
+                    edit_memory(memory_id='mem-1', value='new content', auth_context=_memory_auth_context())
+        assert exc_info.value.status_code == 402
+        memory_service.return_value.update_external_memory_content.assert_not_called()
 
     def test_mcp_edit_memory_allows_unlocked(self):
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
-        memories_db.edit_memory = MagicMock()
-
         from routers import mcp
         from routers.mcp import edit_memory
 
         _allow_memory_product_auth(mcp)
-        _force_legacy_memory_paths(mcp)
-        with patch('routers.mcp.MemoryService') as memory_service:
-            result = edit_memory(memory_id='mem-1', value='new content', auth_context=_memory_auth_context())
+        with patch.object(mcp, '_validate_mcp_memory', return_value=_make_memory(locked=False)):
+            with patch.object(mcp, 'MemoryService') as memory_service:
+                result = edit_memory(memory_id='mem-1', value='new content', auth_context=_memory_auth_context())
         assert result == {"status": "ok"}
         memory_service.return_value.update_external_memory_content.assert_called_once()
 
@@ -1710,87 +1707,78 @@ class TestMcpSseMemoryLockEnforcement:
     """Gaps 8-9: MCP SSE delete/edit must reject locked memories."""
 
     def test_mcp_sse_delete_memory_rejects_locked(self):
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
-
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool, ToolExecutionError
+        from fastapi import HTTPException
 
         _allow_memory_product_auth(mcp_sse)
-        _force_legacy_memory_paths(mcp_sse)
-        try:
-            execute_tool('test-uid', 'delete_memory', {'memory_id': 'mem-1'}, auth_context=_memory_auth_context())
-            assert False, "Should have raised ToolExecutionError"
-        except ToolExecutionError as e:
-            assert e.code == -32002
-            assert 'paid plan' in e.message.lower()
+        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+            memory_service.return_value.delete_external_memory.side_effect = HTTPException(
+                status_code=402, detail='A paid plan is required to access this memory.'
+            )
+            with pytest.raises(ToolExecutionError) as exc_info:
+                execute_tool('test-uid', 'delete_memory', {'memory_id': 'mem-1'}, auth_context=_memory_auth_context())
+        assert exc_info.value.code == -32002
+        assert 'paid plan' in exc_info.value.message.lower()
 
     def test_mcp_sse_delete_memory_allows_unlocked(self):
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
-        memories_db.delete_memory = MagicMock()
-
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool
 
         _allow_memory_product_auth(mcp_sse)
-        _force_legacy_memory_paths(mcp_sse)
-        result = execute_tool('test-uid', 'delete_memory', {'memory_id': 'mem-1'}, auth_context=_memory_auth_context())
+        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+            result = execute_tool(
+                'test-uid', 'delete_memory', {'memory_id': 'mem-1'}, auth_context=_memory_auth_context()
+            )
         assert result == {"success": True}
-        memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
+        memory_service.return_value.delete_external_memory.assert_called_once()
 
     def test_mcp_sse_delete_memory_404_missing(self):
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=None)
-
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool, ToolExecutionError
+        from fastapi import HTTPException
 
         _allow_memory_product_auth(mcp_sse)
-        _force_legacy_memory_paths(mcp_sse)
-        try:
-            execute_tool('test-uid', 'delete_memory', {'memory_id': 'nonexistent'}, auth_context=_memory_auth_context())
-            assert False, "Should have raised ToolExecutionError"
-        except ToolExecutionError as e:
-            assert e.code == -32001
+        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+            memory_service.return_value.delete_external_memory.side_effect = HTTPException(
+                status_code=404, detail='Memory not found'
+            )
+            with pytest.raises(ToolExecutionError) as exc_info:
+                execute_tool(
+                    'test-uid', 'delete_memory', {'memory_id': 'nonexistent'}, auth_context=_memory_auth_context()
+                )
+        assert exc_info.value.code == -32001
 
     def test_mcp_sse_edit_memory_rejects_locked(self):
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
-
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool, ToolExecutionError
+        from fastapi import HTTPException
 
         _allow_memory_product_auth(mcp_sse)
-        _force_legacy_memory_paths(mcp_sse)
-        try:
-            execute_tool(
-                'test-uid', 'edit_memory', {'memory_id': 'mem-1', 'content': 'new'}, auth_context=_memory_auth_context()
+        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+            memory_service.return_value.update_external_memory_content.side_effect = HTTPException(
+                status_code=402, detail='A paid plan is required to access this memory.'
             )
-            assert False, "Should have raised ToolExecutionError"
-        except ToolExecutionError as e:
-            assert e.code == -32002
+            with pytest.raises(ToolExecutionError) as exc_info:
+                execute_tool(
+                    'test-uid',
+                    'edit_memory',
+                    {'memory_id': 'mem-1', 'content': 'new'},
+                    auth_context=_memory_auth_context(),
+                )
+        assert exc_info.value.code == -32002
 
     def test_mcp_sse_edit_memory_allows_unlocked(self):
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
-        memories_db.edit_memory = MagicMock()
-
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool
 
         _allow_memory_product_auth(mcp_sse)
-        _force_legacy_memory_paths(mcp_sse)
-        result = execute_tool(
-            'test-uid', 'edit_memory', {'memory_id': 'mem-1', 'content': 'new'}, auth_context=_memory_auth_context()
-        )
+        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+            result = execute_tool(
+                'test-uid', 'edit_memory', {'memory_id': 'mem-1', 'content': 'new'}, auth_context=_memory_auth_context()
+            )
         assert result == {"success": True}
-        memories_db.edit_memory.assert_called_once_with('test-uid', 'mem-1', 'new')
+        memory_service.return_value.update_external_memory_content.assert_called_once()
 
 
 # =============================================================================

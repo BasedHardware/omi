@@ -4,6 +4,47 @@ import XCTest
 
 final class DashboardCaptureStateTests: XCTestCase {
   @MainActor
+  func testLiveCapturingIsFalseWhileAwaitingAMeeting() {
+    let appState = AppState()
+    appState.isTranscribing = true
+    appState.isAwaitingMeeting = true
+    XCTAssertFalse(
+      appState.isLiveCapturing,
+      "Only Meetings with no call pauses the mic; Live UI must not treat the armed session as capture.")
+
+    appState.isAwaitingMeeting = false
+    XCTAssertTrue(appState.isLiveCapturing)
+
+    appState.isTranscribing = false
+    XCTAssertFalse(appState.isLiveCapturing)
+  }
+
+  @MainActor
+  func testListeningStatusIsInactiveWhileAwaitingAMeeting() {
+    let appState = AppState()
+    appState.isTranscribing = true
+    appState.isAwaitingMeeting = true
+    XCTAssertEqual(CaptureListeningLogic.listeningStatus(appState: appState), .inactive)
+
+    appState.isAwaitingMeeting = false
+    XCTAssertEqual(CaptureListeningLogic.listeningStatus(appState: appState), .active)
+  }
+
+  @MainActor
+  func testHomeListeningHelpDoesNotClaimOffWhileAwaitingAMeeting() {
+    let help = HomeListeningStatusButton.helpText(
+      status: .inactive, modeTitle: "Only Meetings", isAwaitingMeeting: true)
+    XCTAssertTrue(help.contains("waiting for a call"))
+    XCTAssertTrue(help.contains("Only Meetings"))
+    XCTAssertTrue(help.contains("Click to turn off"))
+    XCTAssertFalse(help.contains("Off"))
+    XCTAssertEqual(
+      HomeListeningStatusButton.helpText(
+        status: .inactive, modeTitle: "Always On", isAwaitingMeeting: false),
+      "Listening: Off, Always On")
+  }
+
+  @MainActor
   func testListeningModeTitlePreservesOakleyMetaName() {
     let appState = AppState()
     appState.isTranscribing = true
@@ -62,22 +103,42 @@ final class DashboardCaptureStateTests: XCTestCase {
     )
   }
 
-  func testListeningPillShowsAndTogglesCaptureMode() throws {
+  func testListeningPillReflectsTheUnifiedAudioRecordingMode() throws {
     let source = try dashboardSource()
     let logic = try captureLogicSource()
 
-    XCTAssertTrue(source.contains("@AppStorage(\"systemAudioCaptureMode\")"))
+    XCTAssertTrue(source.contains("@AppStorage(AssistantSettings.audioRecordingModeDefaultsKey)"))
     XCTAssertTrue(source.contains("private var listeningModeTitle: String"))
-    XCTAssertTrue(logic.contains("return appState.isAwaitingMeeting ? \"Meetings only\" : \"In meeting\""))
+    XCTAssertTrue(logic.contains("return appState.isAwaitingMeeting ? \"Only Meetings\" : \"In Meeting\""))
     XCTAssertTrue(source.contains("HomeListeningStatusButton("))
-    XCTAssertTrue(source.contains("modeAction: toggleListeningMode"))
-    XCTAssertTrue(logic.contains("AssistantSettings.shared.systemAudioCaptureMode = nextMode"))
-    XCTAssertTrue(source.contains("Image(systemName: isMeetingsOnly ? \"person.2.fill\" : \"person.fill\")"))
-    XCTAssertTrue(source.contains("private var modeIconColor: Color"))
+    XCTAssertFalse(source.contains("modeAction: toggleListeningMode"))
+    XCTAssertFalse(logic.contains("toggleListeningMode"))
     XCTAssertTrue(source.contains(".frame(height: 34)"))
-    XCTAssertFalse(source.contains("Image(systemName: isMeetingsOnly ? \"person.2.fill\" : \"infinity\")"))
     XCTAssertFalse(source.contains("Circle()\n                    .fill(status.indicator)"))
     XCTAssertFalse(source.contains("OmiColors.purplePrimary"))
+  }
+
+  func testListeningStatusIsSharedAndLiveTranscriptExpandReplacesThePage() throws {
+    let dashboard = try dashboardSource()
+    let logic = try captureLogicSource()
+    let conversations = try source(named: "ConversationsPage.swift")
+    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let shellURL =
+      testsURL
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/QueryShell/ShellStatusIcons.swift")
+    // omi-test-quality: source-inspection -- static contract: which predicate the Live card and listening dot name is not observable from a running view without a window server
+    let shell = try String(contentsOf: shellURL, encoding: .utf8)
+
+    XCTAssertTrue(logic.contains("return appState.isLiveCapturing ? .active : .inactive"))
+    XCTAssertTrue(dashboard.contains("CaptureListeningLogic.listeningStatus(appState: appState)"))
+    XCTAssertTrue(dashboard.contains("isAwaitingMeeting: appState.isAwaitingMeeting"))
+    XCTAssertTrue(shell.contains("CaptureListeningLogic.listeningStatus(appState: appState)"))
+    XCTAssertTrue(conversations.contains("if appState.isLiveCapturing {"))
+    XCTAssertTrue(conversations.contains("if isLiveTranscriptExpanded && appState.isLiveCapturing"))
+    XCTAssertFalse(
+      conversations.contains(".overlay {\n      if isLiveTranscriptExpanded"),
+      "Expanding the live transcript must replace the Conversations page body, not overlay it.")
   }
 
   func testRedesignedHomeUsesResponsiveStageSizing() throws {

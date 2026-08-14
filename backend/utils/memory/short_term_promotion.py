@@ -41,12 +41,12 @@ from utils.memory.canonical_required_processing import (
     run_required_memory_processing,
 )
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector, sync_canonical_memory_vector
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
-from utils.memory.short_term_lifecycle import ShortTermDisposition
-from utils.memory.v3.compatibility_projection_sync import (
-    delete_v3_compatibility_projection_item,
-    upsert_v3_compatibility_projection_item,
+from utils.memory.memory_system import (
+    MemorySystem as MemorySystem,  # compatibility export for legacy test doubles
+    ensure_canonical_apply_control_state,
+    resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
 )
+from utils.memory.short_term_lifecycle import ShortTermDisposition
 
 
 def _coerce_aware_utc(value: datetime) -> datetime:
@@ -115,25 +115,11 @@ def _delete_atom_projection_and_citations(uid: str, memory_id: str, *, db_client
 
 def _canonical_outbox_side_effects(*, db_client: Any) -> CanonicalMemoryOutboxSideEffects:
     def projection_upsert(item: MemoryItem, account_generation: int) -> bool:
-        if not sync_atom_keyword_index_for_item(item, db_client=db_client):
-            return False
-        return upsert_v3_compatibility_projection_item(
-            item,
-            expected_account_generation=account_generation,
-            db_client=db_client,
-        )
+        del account_generation
+        return sync_atom_keyword_index_for_item(item, db_client=db_client)
 
     def projection_delete(uid: str, memory_id: str, account_generation: int) -> bool:
-        # Remove the user-facing compatibility row first. External projection
-        # cleanup remains retryable, while a transient provider failure must
-        # never leave deleted/private content visible through `/v3`.
-        if not delete_v3_compatibility_projection_item(
-            uid,
-            memory_id,
-            expected_account_generation=account_generation,
-            db_client=db_client,
-        ):
-            return False
+        del account_generation
         return _delete_atom_projection_and_citations(uid, memory_id, db_client=db_client)
 
     def vector_upsert(item: MemoryItem, commit_id: str) -> bool:
@@ -257,8 +243,9 @@ def run_canonical_short_term_ttl_lifecycle(
     client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
-        return CanonicalShortTermLifecycleReport(uid=uid, skipped_reason="not_canonical_cohort")
+    # Universal accounts lazily receive the apply ledger.  Integrity failures
+    # propagate and fail this UID closed; they never select a legacy lifecycle.
+    ensure_canonical_apply_control_state(uid, db_client=client)
 
     items = fetch_expired_short_term_memory_items_firestore(
         uid=uid,
@@ -338,8 +325,7 @@ def run_canonical_short_term_maintenance(
 ) -> CanonicalShortTermMaintenanceReport:
     """Drain prior projections, run maintenance phases, then project their commits."""
     client: Any = db_client if db_client is not None else default_db_client
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
-        return CanonicalShortTermMaintenanceReport(uid=uid, skipped_reason="not_canonical_cohort")
+    ensure_canonical_apply_control_state(uid, db_client=client)
 
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     # Settle already-committed invalidations before reading Short-term rows.

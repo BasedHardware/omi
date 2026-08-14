@@ -49,6 +49,72 @@ final class StreamingPCMPlaybackQueue<Buffer: AnyObject> {
   }
 }
 
+private final class DeferredConfigurationRecoveryAction: @unchecked Sendable {
+  let action: () -> Void
+
+  init(_ action: @escaping () -> Void) {
+    self.action = action
+  }
+}
+
+final class DeferredConfigurationRecovery: @unchecked Sendable {
+  typealias MainQueueScheduler = @Sendable (@escaping @Sendable () -> Void) -> Void
+
+  private let lock = NSLock()
+  private let onMainQueue: MainQueueScheduler
+  private var isPending = false
+  private var generation = 0
+
+  init(
+    onMainQueue: @escaping MainQueueScheduler = { action in
+      DispatchQueue.main.async(execute: action)
+    }
+  ) {
+    self.onMainQueue = onMainQueue
+  }
+
+  func schedule(action: @escaping () -> Void) {
+    let scheduledGeneration: Int
+    lock.lock()
+    guard !isPending else {
+      lock.unlock()
+      return
+    }
+    isPending = true
+    generation += 1
+    scheduledGeneration = generation
+    lock.unlock()
+
+    let actionBox = DeferredConfigurationRecoveryAction(action)
+    onMainQueue { [weak self, actionBox] in
+      guard self?.isPendingRecovery(generation: scheduledGeneration) == true else { return }
+      actionBox.action()
+      self?.finishPendingRecovery(generation: scheduledGeneration)
+    }
+  }
+
+  func cancel() {
+    lock.lock()
+    generation += 1
+    isPending = false
+    lock.unlock()
+  }
+
+  private func isPendingRecovery(generation scheduledGeneration: Int) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return isPending && generation == scheduledGeneration
+  }
+
+  private func finishPendingRecovery(generation scheduledGeneration: Int) {
+    lock.lock()
+    if generation == scheduledGeneration {
+      isPending = false
+    }
+    lock.unlock()
+  }
+}
+
 /// Plays streamed mono PCM16 audio incrementally (OpenAI Realtime / Gemini Live
 /// output is 24 kHz). Feed chunks with `enqueue(_:)`; they play back-to-back in
 /// arrival order. Used by `RealtimeHubController` to play the realtime model's
@@ -62,6 +128,7 @@ final class StreamingPCMPlayer: @unchecked Sendable {
   private let format: AVAudioFormat
   private var configObserver: NSObjectProtocol?
   private let playbackQueue = StreamingPCMPlaybackQueue<AVAudioPCMBuffer>()
+  private let configurationRecovery = DeferredConfigurationRecovery()
   private(set) var playbackEpoch = 0
   var onPlaybackScheduled: ((Int) -> Void)?
   var onPlaybackIdle: ((Int) -> Void)?
@@ -95,15 +162,9 @@ final class StreamingPCMPlayer: @unchecked Sendable {
       forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
     ) { [weak self] _ in
       guard let self = self else { return }
-      log("StreamingPCMPlayer: audio config changed — rebuilding engine")
-      let buffersToReplay = self.playbackQueue.buffersToReplayAfterConfigurationChange()
-      self.player.stop()
-      self.engine.stop()
-      self.engine.disconnectNodeOutput(self.player)
-      self.engine.connect(self.player, to: self.engine.mainMixerNode, format: self.format)
-      _ = self.ensureRunning()
-      for buffer in buffersToReplay {
-        self.schedule(buffer)
+      self.configurationRecovery.schedule { [weak self] in
+        guard let self = self else { return }
+        self.rebuildAfterConfigurationChange()
       }
     }
   }
@@ -135,6 +196,19 @@ final class StreamingPCMPlayer: @unchecked Sendable {
       player.play()
     }
     return player.isPlaying
+  }
+
+  private func rebuildAfterConfigurationChange() {
+    log("StreamingPCMPlayer: audio config changed — rebuilding engine")
+    let buffersToReplay = playbackQueue.buffersToReplayAfterConfigurationChange()
+    player.stop()
+    engine.stop()
+    engine.disconnectNodeOutput(player)
+    engine.connect(player, to: engine.mainMixerNode, format: format)
+    _ = ensureRunning()
+    for buffer in buffersToReplay {
+      schedule(buffer)
+    }
   }
 
   /// `data` = little-endian Int16 PCM, mono, at the configured sample rate.
@@ -179,6 +253,7 @@ final class StreamingPCMPlayer: @unchecked Sendable {
 
   func stop() {
     playbackEpoch += 1
+    configurationRecovery.cancel()
     playbackQueue.clearForExplicitStop()
     player.stop()
     engine.stop()

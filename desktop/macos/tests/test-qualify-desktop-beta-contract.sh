@@ -47,7 +47,7 @@ require_text 'Application Support/$BUNDLE_NAME' "$PROFILE_PREP"
 require_text 'defaults write "$BUNDLE_ID" hasCompletedOnboarding -bool true' "$PROFILE_PREP"
 require_text 'defaults write "$BUNDLE_ID" devLazyPermissionsEnabled -bool true' "$PROFILE_PREP"
 require_text 'defaults write "$BUNDLE_ID" screenAnalysisEnabled -bool false' "$PROFILE_PREP"
-require_text 'defaults write "$BUNDLE_ID" transcriptionEnabled -bool false' "$PROFILE_PREP"
+require_text 'defaults write "$BUNDLE_ID" audioRecordingMode -string off' "$PROFILE_PREP"
 require_text '"$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"' "$QUALIFIER"
 require_text 'OMI_SKIP_SETTINGS_SEED=1'
 require_text 'make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice'

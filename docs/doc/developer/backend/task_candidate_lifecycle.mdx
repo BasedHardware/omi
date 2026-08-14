@@ -1,6 +1,6 @@
 ---
 title: Task and Candidate lifecycle
-description: Canonical backend contracts, resolution rules, and rollout compatibility for smart tasks.
+description: Universal backend contracts, resolution rules, and released-client compatibility for smart tasks.
 ---
 
 The backend owns canonical tasks in `users/{uid}/action_items/{task_id}` and reviewable Candidates in
@@ -14,7 +14,8 @@ Goal links, evidence, source surface, and confidence remain on the Candidate env
 inside either payload.
 
 Every Candidate write requires an idempotency key and account generation. The route and the write transaction
-both compare that generation with the per-user control record, and `off`/`shadow` modes reject visible writes.
+both compare that generation with the per-user control record. Persisted workflow modes remain diagnostic metadata;
+they do not gate the universal Candidate/task authority.
 List and point reads expose only the current account generation, including legacy staged by-ID projections, so
 an identifier retained across an account reset cannot retrieve prior evidence.
 
@@ -36,19 +37,18 @@ its task while that deterministic task remains active and still matches the clai
 recurrence, goal, and workstream. Completion, cancellation, deletion, a semantic edit, or a non-accepted terminal
 Candidate releases the claim so the work may recur as a new Candidate.
 
-`GET /v1/candidates?surface=suggested` is the product projection for Suggested Tasks. It is enabled only by the
-composed task-intelligence rollout decision: compatible workflow control **and** canonical-memory cohort eligibility.
-Outside that cohort it returns `404`, which clients treat as a calm disabled state. Inside the cohort it returns at
+`GET /v1/candidates?surface=suggested` is the product projection for Suggested Tasks. It is available to every
+authenticated account and uses workflow control only as an account-generation/proactive-choice fence. It returns at
 most five pending, routeable creates from the current generation that are no more than 14 days old, have evidence,
 and meet both confidence floors. Exact duplicate creates are collapsed. Generic Candidate CRUD remains available
 under the universal contract and is not redefined by this product projection. Active Later/Dismiss attention
 overrides use the same bounded Candidate key as What Matters Now and are removed before the five-card cap, so they
 remain suppressed across devices without under-filling the lane. Accepted or rejected representatives also hide
 exact pending siblings that predate their resolution, preventing a terminal action from immediately resurrecting a
-historical duplicate while still allowing a genuinely new post-resolution occurrence. The route rechecks the composed
-rollout and account generation after its reads, so an account reset cannot publish a prior-generation Candidate.
+historical duplicate while still allowing a genuinely new post-resolution occurrence. The route rechecks the account
+generation after its reads, so an account reset cannot publish a prior-generation Candidate.
 
-What Matters Now uses the same composed rollout gate and a typed-attention shortlist. Overdue work, blockers, near
+What Matters Now uses the same universal generation fence and a typed-attention shortlist. Overdue work, blockers, near
 deadlines, matched local context, review/decision loops, and recent explicit manual intent may enter; recency or topic
 overlap alone may not. The deterministic layer builds a stable kind/workstream-balanced recall set of at most 20,
 then one holistic judgment returns zero to three recommendations. Typed tier reservations prevent an overdue flood
@@ -57,7 +57,7 @@ edits do not revive old work. Empty is a valid default. Opaque raw-context hints
 cache; normalized subject IDs, typed match signals, displayed fields, and evidence identities do. Desktop requests
 use the full header-bound client device ID for both snapshot and evaluation calls. Cache identity also includes the
 prompt, policy, fact-definition, and live-model versions, so any judgment-contract change forces a fresh decision.
-What Matters Now GET, evaluate, and debug reads recheck the composed rollout and generation before returning. Desktop
+What Matters Now GET, evaluate, and debug reads recheck the account generation before returning. Desktop
 async projection, feedback, and contextual-resurfacing work is owner-fenced across account switches; queued local
 events are discarded rather than attributed to the next owner. Merely opening a recommendation or accepting a
 Candidate never fabricates a downstream workstream-success outcome.
@@ -107,58 +107,22 @@ recovery. Rejection and expiry are also idempotent
 terminal transitions. Task/workstream goal links are resolved against the canonical workstream store, and
 workstream Candidate acceptance atomically creates its workstream and anchor task.
 
-The per-user universal-contract mode controls compatibility behavior:
-
-- `off`: staged and action-item behavior remains legacy-only.
-- `shadow`: canonical extraction and the shared capture policy evaluate without Candidate product mutations.
-- `write`: legacy reads/writes remain authoritative while Candidate sidecars and reconciliation run.
-- `read`: Candidates and canonical tasks are authoritative; staged endpoints are compatibility projections and
-  never write `staged_tasks`.
-
-## Single-user Smart Tasks dogfood activation
-
-The universal Candidate contract and task-intelligence control remain operationally independent from the
-canonical-memory cohort. The user-facing Smart Tasks surfaces do not: they require the composed rollout decision
-described above. The approved dogfood account is already the only active canonical-memory whitelist member; to make
-Smart Tasks fully active, an operator must explicitly create `users/{uid}/task_intelligence_control/state` in `read`
-mode. Do not change the canonical-memory list, runtime cohort environment, or any other user's control as part of
-this operation. As canonical memory expands, this composition expands Smart Tasks with it instead of maintaining a
-second product whitelist.
-
-Use the repo-tracked operator tool from a checkout containing the merged activation change. It defaults to a
-dry-run and is permanently restricted to the approved dogfood UID. First inspect the existing state and record
-its account generation (a missing document is the safe default: `off`, generation `0`):
-
-```bash
-cd backend
-python scripts/activate_task_intelligence_dogfood_user.py \
-  --credential-source gcloud-user \
-  --firestore-project based-hardware \
-  --inspect-existing \
-  --expected-account-generation 0
-```
-
-Human Smart Tasks activation is currently paused with no approved dogfood UID.
-Do not run the activation tool until a reviewed cohort change explicitly names
-a replacement canary and restores the associated runtime gates.
-
-The tool writes only `workflow_mode: read` and the unchanged `account_generation`; rerunning after a successful
-activation is a no-op. The explicit `gcloud-user` source obtains a short-lived local user token without printing
-or persisting it, and sends the PATCH with the inspected Firestore document revision as a precondition. It does
-not deploy backend code or mutate production merely by merging this PR. Verify
-the live account's `workflow_mode=read`, matching generation, canonical-memory eligibility, and enabled
-intelligence product/evaluation surfaces before resuming dogfood.
+Candidates and canonical tasks are authoritative for every authenticated UID.
+Persisted historical `workflow_mode` values remain readable for diagnostics and
+generation fencing but never route a user to a second task system. Staged
+endpoints are released-client compatibility projections and do not require an
+enrollment or activation command.
 
 Staged reconciliation is resumable by checkpoint. It imports active rows as pending Candidates and terminal
 promotion history as accepted, rejected, or expired without replaying task mutations or notifications. Reports
 contain stable IDs and counts only—never task content.
 
-Write-mode conversation projections derive task IDs from normalized semantic content rather than extraction
+Conversation projections derive task IDs from normalized semantic content rather than extraction
 order. Reorder and insertion therefore preserve identity; removed projections remain as hidden terminal records
 so accepted receipts do not dangle, and only an extraction-provided update target links the old record to its
 replacement—text similarity alone never establishes identity. A legacy staged promotion returns `503` until its Candidate sidecar reconciles; retrying the same
 promotion heals the already-terminal legacy row instead of returning a permanent `404`.
-Before any write-mode staged promotion creates or deduplicates an action item, it transactionally claims the
+Before any staged promotion creates or deduplicates an action item, it transactionally claims the
 pending Candidate resolution with a single-owner lease. Immediately before the deterministic legacy write, the
 claim advances from `pre_mutation` to `mutation_started` and reserves the exact task ID. A pre-mutation crash is
 reclaimable after lease expiry; once mutation has started, the non-expiring phase fence continues to block

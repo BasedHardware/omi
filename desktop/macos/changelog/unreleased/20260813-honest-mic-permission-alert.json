@@ -1,0 +1,3 @@
+{
+  "change": "The 'Microphone Isn't Capturing Audio' popup is gone. When macOS blocks microphone access Omi asks for permission or points you at the exact setting; a genuinely silent mic just stops recording quietly"
+}

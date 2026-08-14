@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Omi_Computer
@@ -41,6 +42,98 @@ private final class TasksStoreOperationProbe {
 }
 
 final class TasksStoreOwnerBoundaryTests: XCTestCase {
+  @MainActor
+  func testToggleNeverPublishesAnIntervalWithoutTheCanonicalTask() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+    let original = task(id: "published-toggle")
+    let completed = task(id: original.id, completed: true)
+    store.incompleteTasks = [original]
+    var visibility: [Bool] = []
+    let observation = Publishers.CombineLatest(store.$incompleteTasks, store.$completedTasks)
+      .dropFirst()
+      .sink { incomplete, completed in
+        visibility.append((incomplete + completed).contains { $0.id == original.id })
+      }
+
+    await store.toggleTask(
+      original,
+      operationOverrides: TasksStore.ToggleOperationOverrides(
+        updateLocal: { _, _ in completed },
+        refreshDashboard: { _ in },
+        updateRemote: { _, _ in completed },
+        syncRemote: { _, _ in },
+        rollbackLocal: {}
+      )
+    )
+
+    withExtendedLifetime(observation) {
+      XCTAssertFalse(visibility.isEmpty)
+      XCTAssertTrue(visibility.allSatisfy { $0 })
+    }
+  }
+
+  @MainActor
+  func testToggleRollbackNeverPublishesAnIntervalWithoutTheCanonicalTask() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+    let original = task(id: "published-toggle-rollback")
+    let completed = task(id: original.id, completed: true)
+    store.incompleteTasks = [original]
+    var visibility: [Bool] = []
+    let observation = Publishers.CombineLatest(store.$incompleteTasks, store.$completedTasks)
+      .dropFirst()
+      .sink { incomplete, completed in
+        visibility.append((incomplete + completed).contains { $0.id == original.id })
+      }
+
+    await store.toggleTask(
+      original,
+      operationOverrides: TasksStore.ToggleOperationOverrides(
+        updateLocal: { _, _ in completed },
+        refreshDashboard: { _ in },
+        updateRemote: { _, _ in throw TasksStoreOwnerBoundaryFailure.backendRejected },
+        syncRemote: { _, _ in },
+        rollbackLocal: {}
+      )
+    )
+
+    withExtendedLifetime(observation) {
+      XCTAssertFalse(visibility.isEmpty)
+      XCTAssertTrue(visibility.allSatisfy { $0 })
+    }
+    XCTAssertEqual(store.incompleteTasks, [original])
+    XCTAssertTrue(store.completedTasks.isEmpty)
+  }
+
+  @MainActor
+  func testCanonicalTaskResolutionRepublishesCompletedLocalTaskBeforeRemoteFetch() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+    let completed = task(id: "completed-chat-card", completed: true)
+    var remoteFetches = 0
+
+    let resolved = await store.resolveCanonicalTask(
+      id: completed.id,
+      operations: TasksStore.OwnerBoundOperations(
+        fetchTaskDetail: { _, _ in
+          remoteFetches += 1
+          return nil
+        },
+        loadTaskDetail: { id, ownerID in
+          XCTAssertEqual(id, completed.id)
+          XCTAssertEqual(ownerID, "owner-a")
+          return completed
+        }
+      )
+    )
+
+    XCTAssertEqual(resolved, completed)
+    XCTAssertEqual(store.completedTasks, [completed])
+    XCTAssertTrue(store.incompleteTasks.isEmpty)
+    XCTAssertEqual(remoteFetches, 0)
+  }
+
   @MainActor
   func testNoDeadlinePaginationUsesAPIConsumptionOffsetInsteadOfLocalPresentationCount() async {
     let store = TasksStore.shared

@@ -30,7 +30,7 @@ from utils.llm.desktop_llm_stub import (
 )
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import get_current_user_uid
-from utils.subscription import is_trial_paywalled
+from utils.subscription import is_desktop_trial_paywalled
 
 router = APIRouter()
 
@@ -864,7 +864,7 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
 
 
 async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
-    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')
     return uid
 

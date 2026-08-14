@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/l10n/app_localizations_en.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
@@ -17,6 +18,7 @@ class _FakeSyncs {
   int syncWalCalls = 0;
   SyncLocalFilesResponse? nextSyncResult;
   Completer<SyncLocalFilesResponse?>? hangSyncWal;
+  Object? nextError;
 
   _FakeSyncs(this.wals);
 
@@ -33,6 +35,7 @@ class _FakeSyncs {
 
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     syncWalCalls++;
+    if (nextError case final error?) throw error;
     final hang = hangSyncWal;
     if (hang != null) return hang.future;
     final result = nextSyncResult ?? SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
@@ -133,10 +136,11 @@ void main() {
     expect(provider.syncState.isIdle, isTrue);
     expect(wal.status, WalStatus.miss);
     expect(
-      wakes,
-      [WakeTrigger.cooldownElapsed],
-      reason: 'transient localUploadFailures must emit exactly one re-arm wake from _performSync',
-    );
+        wakes,
+        [
+          WakeTrigger.cooldownElapsed,
+        ],
+        reason: 'transient localUploadFailures must emit exactly one re-arm wake from _performSync');
     provider.dispose();
   });
 
@@ -170,7 +174,50 @@ void main() {
     await provider.syncWal(wal);
 
     expect(provider.syncState.hasError, isTrue);
+    expect(provider.syncError, isNot(contains('connection')));
     expect(wakes, isEmpty, reason: 'permanent refusals must not soft-retry via cooldown wake');
+    provider.dispose();
+  });
+
+  test('server upload failure keeps its retry classification without blaming connectivity', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..nextError = Exception('Server is temporarily unavailable');
+    final provider = SyncProvider(walService: _FakeWalService(syncs), startBackgroundSync: false);
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
+    expect(provider.syncError, contains('Server is temporarily unavailable'));
+    expect(provider.syncError, contains('phone audio file'));
+    expect(provider.syncError, isNot(contains('connection')));
+    provider.dispose();
+  });
+
+  test('generic upload failure uses a locale-neutral code with terminal localized failure copy', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..nextError = Exception('Upload failed unexpectedly');
+    final provider = SyncProvider(walService: _FakeWalService(syncs), startBackgroundSync: false);
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
+    expect(provider.syncError, SyncProvider.pendingUploadErrorCode);
+    expect(SyncProvider.isPendingUploadError(provider.syncError), isTrue);
+    // The pages own this mapping so a provider state never ships English. The
+    // terminal error card has an explicit Retry action; it must not claim that
+    // an automatic retry is already in progress.
+    final localizedFailure = AppLocalizationsEn().syncStatusFailed;
+    expect(localizedFailure, contains('Failed'));
+    expect(localizedFailure, isNot(contains('retrying')));
+    expect(provider.syncError, isNot(contains('connection')));
     provider.dispose();
   });
 

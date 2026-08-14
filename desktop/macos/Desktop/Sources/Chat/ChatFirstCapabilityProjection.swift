@@ -1,7 +1,7 @@
 import Foundation
 
 /// Immutable process-local projection of server-owned workflow control.
-/// The cohort shell samples this before resolving Main Chat; no local data or
+/// The Chat-first shell samples this before resolving Main Chat; no local data or
 /// preference may reconstruct it, and absence means capability-off.
 struct ChatFirstCapabilityProjection: Equatable, Sendable {
   let chatFirstUi: Bool

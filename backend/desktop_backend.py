@@ -15,6 +15,7 @@ from routers import (
     desktop_core,
     desktop_deprecated,
     desktop_proxy,
+    desktop_proactivity,
     desktop_realtime,
     desktop_screen_crisp,
     desktop_tts_updates,
@@ -26,8 +27,10 @@ from utils.http_client import close_all_clients
 def _initialize_firebase_admin() -> None:
     """Initialize token verification without selecting the Google data project.
 
-    Development serves production Firebase identities but runs its Cloud Run
-    workload (Firestore and Agent VM control) in the development GCP project.
+    Development serves production Firebase identities. Compute (GCE / ``agentVm``)
+    stays on Cloud Run ADC / ``GOOGLE_CLOUD_PROJECT``. Customer entitlements
+    (plan, usage, quota) use the mounted Auth SA file's ``project_id`` via
+    ``get_customer_firestore_client()`` and must not retarget ADC.
     ``firebase_admin_options`` therefore pins only Firebase Admin's token
     audience; ADC continues to use ``GOOGLE_CLOUD_PROJECT`` independently.
     """
@@ -73,6 +76,7 @@ app.include_router(auth.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
 app.include_router(desktop_proxy.router)
+app.include_router(desktop_proactivity.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(desktop_tts_updates.router)

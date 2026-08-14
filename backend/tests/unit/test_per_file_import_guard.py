@@ -133,7 +133,7 @@ class TestRouterWiring:
         # The drop returns the ghost response before any persistence call.
         persist_idx = create_body.find("create_memory,")
         assert persist_idx == -1 or drop_idx < persist_idx
-        assert "_legacy_memory_response(memory_db)" in create_body[drop_idx:]
+        assert "_memory_response(memory_db)" in create_body[drop_idx:]
 
     def test_batch_filters_per_file_before_building_writes(self):
         src = _read_router()

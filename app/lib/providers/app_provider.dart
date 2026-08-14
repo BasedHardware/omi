@@ -14,7 +14,25 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
+/// The shape of the apps-search request, named once so the test seam can refer to it.
+typedef AppsSearchRequest = Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? filters})>
+    Function({
+  String? query,
+  String? category,
+  double? minRating,
+  String? capability,
+  String? sort,
+  bool? myApps,
+  bool? installedApps,
+  int offset,
+  int limit,
+});
+
 class AppProvider extends BaseProvider {
+  /// Test seam — overrides [retrieveAppsSearch] in [performServerSearch].
+  @visibleForTesting
+  AppsSearchRequest? searchAppsOverride;
+
   /// Test seam — overrides [enableAppServer] in [toggleApp].
   @visibleForTesting
   Future<bool> Function(String appId)? enableAppOverride;
@@ -229,6 +247,10 @@ class AppProvider extends BaseProvider {
     searchQuery = query.toLowerCase();
 
     if (query.trim().isEmpty && !_hasServerSideFilters()) {
+      // Emptying the box is a search change like any other. Without its own
+      // revision, a request already in flight would still count as current and
+      // would land its results on top of the cleared list.
+      _latestSearchRevision++;
       searchResults = [];
       isSearching = false;
       filterApps();
@@ -246,86 +268,115 @@ class AppProvider extends BaseProvider {
         filters.containsKey('Apps');
   }
 
-  String _pendingSearchQuery = '';
+  /// Identifies the newest search the user has asked for.
+  ///
+  /// A revision rather than the query text, because the text is not what makes a
+  /// search unique: narrowing by category while the same word is still loading
+  /// changes the results completely and changes the text not at all. Anything
+  /// keyed on the text alone cannot tell those two requests apart, and answers
+  /// the second with the first one's unfiltered results.
+  int _latestSearchRevision = 0;
+
+  bool _isDrainingSearchQueue = false;
 
   Future<void> performServerSearch() async {
-    // Always update pending query to the latest
-    _pendingSearchQuery = searchQuery;
+    // Every call is a fresh statement of what the user wants, whether the text or
+    // the filters moved.
+    final revision = ++_latestSearchRevision;
 
-    if (isSearching) {
+    // A run already under way will pick this revision up when its current request
+    // returns. Starting a second one would race it for the results.
+    if (_isDrainingSearchQueue) {
       return;
     }
 
-    final queryBeingSearched = searchQuery;
+    _isDrainingSearchQueue = true;
+    isSearching = true;
+    notifyListeners();
 
     try {
-      isSearching = true;
+      // Drain the queue inside one run rather than ending and restarting per
+      // request. Ending in between would publish "not searching" with the results
+      // of a search the user has already moved past — which the apps screen
+      // renders as "No apps found" for a search that is still outstanding.
+      var revisionBeingSearched = revision;
+      while (true) {
+        await _runOneSearch(revisionBeingSearched);
+        if (_latestSearchRevision == revisionBeingSearched) {
+          break;
+        }
+        revisionBeingSearched = _latestSearchRevision;
+      }
+    } finally {
+      _isDrainingSearchQueue = false;
+      isSearching = false;
       notifyListeners();
+    }
+  }
 
-      String? categoryFilter;
-      if (filters.containsKey('Category') && filters['Category'] is Category) {
-        categoryFilter = (filters['Category'] as Category).id;
-      }
+  /// Runs one search request and publishes it only if it is still the current one.
+  Future<void> _runOneSearch(int revisionBeingSearched) async {
+    // Read the query and filters this request is for before awaiting, so a change
+    // made while it is in flight cannot be mistaken for what it asked the server.
+    final queryBeingSearched = searchQuery;
 
-      // Get rating filter if active
-      double? minRating;
-      if (filters.containsKey('Rating') && filters['Rating'] is String) {
-        String ratingStr = (filters['Rating'] as String).replaceAll('+ Stars', '');
-        minRating = double.tryParse(ratingStr);
-      }
+    // Nothing to ask the server: an empty box with no filter narrowing it. Reached
+    // when clearing the box supersedes a request that was already in flight;
+    // searchApps has cleared the results for that case already.
+    if (queryBeingSearched.trim().isEmpty && !_hasServerSideFilters()) {
+      return;
+    }
 
-      // Get capability filter if active
-      String? capabilityFilter;
-      if (filters.containsKey('Capabilities') && filters['Capabilities'] is AppCapability) {
-        capabilityFilter = (filters['Capabilities'] as AppCapability).id;
-      }
-
-      // Get "My Apps" filter
-      bool? myAppsFilter;
-      if (filters.containsKey('Apps') && filters['Apps'] == 'My Apps') {
-        myAppsFilter = true;
-      }
-
-      // Get "Installed Apps" filter
-      bool? installedAppsFilter;
-      if (filters.containsKey('Apps') && filters['Apps'] == 'Installed Apps') {
-        installedAppsFilter = true;
-      }
-
-      final result = await retrieveAppsSearch(
+    try {
+      final result = await (searchAppsOverride ?? retrieveAppsSearch)(
         query: queryBeingSearched.isEmpty ? null : queryBeingSearched,
-        category: categoryFilter,
-        minRating: minRating,
-        capability: capabilityFilter,
-        myApps: myAppsFilter,
-        installedApps: installedAppsFilter,
+        category: _selectedCategoryId(),
+        minRating: _selectedMinRating(),
+        capability: _selectedCapabilityId(),
+        myApps: _isAppsFilter('My Apps'),
+        installedApps: _isAppsFilter('Installed Apps'),
         offset: 0,
         limit: 100,
       );
 
-      if (queryBeingSearched == _pendingSearchQuery) {
-        searchResults = result.apps;
-        filteredApps = result.apps;
+      // The user changed the search while this was in flight; these results are stale.
+      if (revisionBeingSearched != _latestSearchRevision) {
+        return;
+      }
 
-        // Track search if there was a query
-        if (queryBeingSearched.isNotEmpty) {
-          PlatformManager.instance.analytics.appsSearched(
-            searchTerm: queryBeingSearched,
-            resultCount: result.apps.length,
-          );
-        }
+      searchResults = result.apps;
+      filteredApps = result.apps;
+
+      // Track search if there was a query
+      if (queryBeingSearched.isNotEmpty) {
+        PlatformManager.instance.analytics.appsSearched(
+          searchTerm: queryBeingSearched,
+          resultCount: result.apps.length,
+        );
       }
     } catch (e) {
       filterApps();
-    } finally {
-      isSearching = false;
-      notifyListeners();
-
-      if (_pendingSearchQuery != queryBeingSearched) {
-        performServerSearch();
-      }
     }
   }
+
+  String? _selectedCategoryId() {
+    final category = filters['Category'];
+    return category is Category ? category.id : null;
+  }
+
+  double? _selectedMinRating() {
+    final rating = filters['Rating'];
+    return rating is String ? double.tryParse(rating.replaceAll('+ Stars', '')) : null;
+  }
+
+  String? _selectedCapabilityId() {
+    final capability = filters['Capabilities'];
+    return capability is AppCapability ? capability.id : null;
+  }
+
+  /// True only when the Apps filter is set to [value], matching the server's
+  /// mutually exclusive `my_apps` / `installed_apps` flags.
+  bool? _isAppsFilter(String value) => filters['Apps'] == value ? true : null;
 
   Future<void> applyFilters() async {
     if (isSearchActive() || _hasServerSideFilters()) {

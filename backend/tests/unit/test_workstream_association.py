@@ -18,7 +18,6 @@ from models.workstream_association import (
     RecurrenceInboxReceipt,
     RecurrenceInboxStatus,
 )
-from utils.memory.memory_system import MemorySystem
 from utils.memory.canonical_consolidation import (
     CONSOLIDATION_AGENT_PROMPT,
     ConsolidationAgentBatch,
@@ -49,7 +48,6 @@ def _workstream(payload: dict) -> Workstream:
 
 @pytest.fixture
 def enabled(monkeypatch):
-    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         association.workstreams_db,
         'get_task_workflow_control',
@@ -72,7 +70,7 @@ def test_golden_association_fixtures_append_only_material_intent_match(enabled):
             return SimpleNamespace(event_id=f'event-{case["id"]}')
 
         judgment = case['recorded_judgment']
-        outcome = association.associate_canonical_evidence(
+        outcome = association.associate_workflow_evidence(
             'uid-1',
             AssociationEvidence(evidence_id=case['id'], **case['evidence']),
             firestore_client=object(),
@@ -113,7 +111,7 @@ def test_retrieval_hydrates_authority_and_purges_missing_or_closed_hits(enabled)
     purged: list[str] = []
     seen_candidates: list[str] = []
 
-    outcome = association.associate_canonical_evidence(
+    outcome = association.associate_workflow_evidence(
         'uid-1',
         AssociationEvidence(
             evidence_id='memory-1',
@@ -166,8 +164,8 @@ def test_retry_coalesces_same_evidence_into_one_event_key(enabled):
         ),
         'append_event': append,
     }
-    first = association.associate_canonical_evidence('uid-1', evidence, **kwargs)
-    second = association.associate_canonical_evidence('uid-1', evidence, **kwargs)
+    first = association.associate_workflow_evidence('uid-1', evidence, **kwargs)
+    second = association.associate_workflow_evidence('uid-1', evidence, **kwargs)
 
     assert len(events) == 1
     assert first.event_id == second.event_id
@@ -178,7 +176,7 @@ def test_material_event_uses_minimized_adjudicator_summary_not_memory_content(en
     appended = []
     raw_memory = 'Sarah said the exact confidential pricing is 12345 and asked us to change the draft.'
 
-    association.associate_canonical_evidence(
+    association.associate_workflow_evidence(
         'uid-1',
         AssociationEvidence(
             evidence_id='memory-1',
@@ -215,7 +213,7 @@ def test_persisted_shadow_mode_cannot_suppress_canonical_association(enabled, mo
     )
     record = _workstream({'workstream_id': 'ws-1', 'objective': 'Send update', 'current_state_summary': 'Drafting'})
     appended = []
-    outcome = association.associate_canonical_evidence(
+    outcome = association.associate_workflow_evidence(
         'uid-1',
         AssociationEvidence(
             evidence_id='memory-1',
@@ -241,7 +239,7 @@ def test_persisted_shadow_mode_cannot_suppress_canonical_association(enabled, mo
 def test_verbatim_material_summary_fails_closed_without_append(enabled):
     record = _workstream({'workstream_id': 'ws-1', 'objective': 'Send update', 'current_state_summary': 'Drafting'})
     appended = []
-    outcome = association.associate_canonical_evidence(
+    outcome = association.associate_workflow_evidence(
         'uid-1',
         AssociationEvidence(
             evidence_id='memory-1',
@@ -274,15 +272,14 @@ def test_adjudication_reason_requires_consistent_selection_shape():
         AssociationJudgment(material=False, reason=AssociationReason.immaterial)
 
 
-def test_noncanonical_user_executes_no_retrieval_or_recurrence_mutation(monkeypatch):
-    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
+def test_universal_user_executes_retrieval_and_recurrence_mutation(enabled):
     calls: list[str] = []
     evidence = AssociationEvidence(
         evidence_id='memory-1',
         summary='Something changed',
         evidence_refs=[EvidenceRef(kind=EvidenceKind.memory_item, id='memory-1', scope=EvidenceScope.canonical)],
     )
-    outcome = association.associate_canonical_evidence(
+    outcome = association.associate_workflow_evidence(
         'uid-1',
         evidence,
         retrieve_ids=lambda *args, **kwargs: calls.append('retrieve') or [],
@@ -290,12 +287,14 @@ def test_noncanonical_user_executes_no_retrieval_or_recurrence_mutation(monkeypa
     recurrence = association.consume_recurrence_signal(
         'uid-1',
         _recurrence_signal(distinct_days=3),
-        create_candidate=lambda *args, **kwargs: calls.append('candidate'),
+        account_generation=7,
+        create_candidate=lambda *args, **kwargs: calls.append('candidate')
+        or SimpleNamespace(candidate_id='candidate-1'),
     )
 
-    assert outcome.outcome == AssociationOutcomeKind.not_canonical_cohort
-    assert recurrence.outcome == RecurrenceOutcomeKind.not_canonical_cohort
-    assert calls == []
+    assert outcome.outcome == AssociationOutcomeKind.no_candidates
+    assert recurrence.outcome == RecurrenceOutcomeKind.candidate_created
+    assert calls == ['retrieve', 'candidate']
 
 
 def _recurrence_signal(*, distinct_days: int) -> CanonicalRecurrenceSignal:
@@ -325,7 +324,6 @@ def test_canonical_consolidation_emits_neutral_recurrence_contract_only():
 def test_maintenance_orchestrator_hands_recurrence_to_workflow_callback(monkeypatch):
     signal = _recurrence_signal(distinct_days=3)
     monkeypatch.setenv('MEMORY_CANONICAL_MAINTENANCE_ENABLED', 'true')
-    monkeypatch.setattr(maintenance_cron, 'list_canonical_cohort_uids', lambda: ['uid-1'])
     maintenance_kwargs = {}
 
     def run_maintenance(uid, **kwargs):
@@ -338,10 +336,11 @@ def test_maintenance_orchestrator_hands_recurrence_to_workflow_callback(monkeypa
     monkeypatch.setattr(maintenance_cron, 'run_canonical_short_term_maintenance', run_maintenance)
     consumed: list[CanonicalRecurrenceSignal] = []
 
-    summary = maintenance_cron.run_canonical_short_term_maintenance_for_cohort(
+    summary = maintenance_cron.run_universal_short_term_maintenance(
         db_client=object(),
         now=NOW,
         run_id='run-1',
+        uid_inventory=lambda _db, _limit: ['uid-1'],
         recurrence_signal_persister=lambda *args, **kwargs: 1,
         recurrence_signal_consumer=lambda uid, signals, firestore_client=None: (
             consumed.extend(signals) or len(signals)
@@ -390,7 +389,6 @@ def test_recurrence_requires_multiple_days_and_is_idempotent_across_retries(enab
 
 
 def test_persisted_shadow_mode_cannot_suppress_canonical_recurrence_candidate(monkeypatch):
-    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         association.workstreams_db,
         'get_task_workflow_control',
@@ -501,7 +499,6 @@ def test_recurrence_contract_rejects_impossible_temporal_counts():
 
 
 def test_index_rebuild_resets_and_indexes_only_open_authoritative_workstreams(monkeypatch):
-    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         workstream_index.workstreams_db,
         'get_task_workflow_control',
@@ -529,7 +526,7 @@ def test_index_rebuild_resets_and_indexes_only_open_authoritative_workstreams(mo
     assert report.indexed_count == 1
 
 
-def test_index_refresh_upserts_open_deletes_closed_and_skips_noncanonical(monkeypatch):
+def test_index_refresh_upserts_open_deletes_closed_for_every_authenticated_user(monkeypatch):
     open_record = _workstream(
         {'workstream_id': 'open-1', 'objective': 'Ship update', 'current_state_summary': 'Drafting'}
     )
@@ -537,7 +534,6 @@ def test_index_refresh_upserts_open_deletes_closed_and_skips_noncanonical(monkey
     indexed: list[str] = []
     deleted: list[str] = []
 
-    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         workstream_index.workstreams_db,
         'get_task_workflow_control',
@@ -560,15 +556,9 @@ def test_index_refresh_upserts_open_deletes_closed_and_skips_noncanonical(monkey
         delete_index=lambda uid, workstream_id, **kwargs: deleted.append(workstream_id) is None or True,
     )
 
-    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
-    assert not workstream_index.refresh_workstream_association_index(
-        'uid-1',
-        'legacy-1',
-        hydrate=lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('must not hydrate')),
-    )
     report = workstream_index.rebuild_workstream_association_index(
         'uid-1',
-        list_source=lambda uid, **kwargs: (_ for _ in ()).throw(AssertionError('must not list')),
+        list_source=lambda uid, **kwargs: [],
     )
 
     assert indexed == ['open-1']
