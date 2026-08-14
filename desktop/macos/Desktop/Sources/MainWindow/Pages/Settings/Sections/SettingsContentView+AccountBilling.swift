@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import Sparkle
 import SwiftUI
@@ -5,6 +6,102 @@ import UniformTypeIdentifiers
 import WebKit
 
 extension SettingsContentView {
+  var messagingChannelsCard: some View {
+    settingsCard(settingId: "account.messaging-channels") {
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "message.and.waveform")
+            .scaledFont(size: OmiType.title)
+            .foregroundColor(Ink.secondary)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Messaging channels")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+            Text("Use the same Omi core chat from Telegram, iMessage, or SMS.")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+          Spacer()
+        }
+
+        ForEach(["telegram", "imessage", "sms"], id: \.self) { channel in
+          HStack(spacing: OmiSpacing.md) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text(channel == "imessage" ? "iMessage" : channel.capitalized)
+                .scaledFont(size: OmiType.body, weight: .medium)
+                .foregroundColor(Ink.primary)
+              Text(
+                channelStatus?.bindings.contains(where: { $0.channel == channel }) == true
+                  ? "Connected" : "Not connected"
+              )
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+            }
+
+            Spacer()
+
+            Button(channelLinkLoading == channel ? "Generating…" : "Generate code") {
+              generateChannelLink(channel)
+            }
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .disabled(channelLinkLoading != nil)
+          }
+        }
+
+        if let channelLink {
+          Divider().overlay(Ink.separator)
+          Text(channelLink.instructions)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+          HStack(spacing: OmiSpacing.md) {
+            Text(channelLink.code)
+              .scaledFont(size: OmiType.body, weight: .semibold)
+              .foregroundColor(Ink.primary)
+              .textSelection(.enabled)
+            Spacer()
+            Button {
+              NSPasteboard.general.clearContents()
+              NSPasteboard.general.setString(channelLink.code, forType: .string)
+            } label: {
+              Image(systemName: "doc.on.doc")
+            }
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          }
+        }
+
+        if let channelLinkError {
+          Text(channelLinkError)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(SettingsInk.notice)
+        }
+      }
+    }
+  }
+
+  func loadChannelStatus() {
+    Task {
+      do {
+        channelStatus = try await APIClient.shared.getChannelStatus()
+      } catch {
+        channelStatus = nil
+      }
+    }
+  }
+
+  func generateChannelLink(_ channel: String) {
+    channelLinkLoading = channel
+    channelLinkError = nil
+    Task {
+      do {
+        channelLink = try await APIClient.shared.createChannelLink(channel: channel)
+      } catch {
+        channelLinkError = "Could not generate a link code. Try again."
+      }
+      channelLinkLoading = nil
+    }
+  }
+
   var accountSection: some View {
     VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "account.account") {
@@ -98,6 +195,8 @@ extension SettingsContentView {
           "This cannot be undone. Your account, chat history, and all server data will be permanently deleted. Local data for this account will be cleared and you'll return to onboarding."
         )
       }
+
+      messagingChannelsCard
 
       //            settingsCard {
       //                HStack(spacing: OmiSpacing.lg) {

@@ -16,6 +16,11 @@ def _reuse_parsed_repo_manifest(monkeypatch):
     monkeypatch.setitem(_MODULE, '_load_yaml', lambda _path: _MANIFEST)
 
 
+@pytest.fixture(autouse=True)
+def _set_required_runtime_env(monkeypatch):
+    monkeypatch.setenv('TWILIO_NUMBER', '+15551234567')
+
+
 def _job_env_block(out: str, job_prefix: str) -> str:
     start = out.index(f'{job_prefix}_env_vars<<')
     end = out.index(f'{job_prefix}_secrets<<')
@@ -165,6 +170,15 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
     }
+
+
+def test_render_dev_backend_uses_registered_oauth_authority(monkeypatch):
+    monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
+    backend_env = _MANIFEST['environments']['dev']['cloud_run']['services']['backend']['env']
+    rendered = _MODULE['_render_env_vars'](backend_env)
+
+    assert 'BASE_API_URL=https://api.omiapi.com' in rendered
+    assert 'CHANNEL_SIGN_IN_URL=https://web-channels-dev---omi-web-app-dt5lrfkkoa-uc.a.run.app/login' in rendered
 
 
 def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypatch):

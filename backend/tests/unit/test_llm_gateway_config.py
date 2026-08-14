@@ -96,6 +96,13 @@ def test_translation_uses_the_gateway_translation_capability():
     assert lane.capabilities.structured_output.value == 'json_schema'
 
 
+def test_openglass_uses_the_gateway_image_input_capability():
+    config = load_gateway_config(prod_mode=True)
+
+    assert config.lanes['omi:auto:openglass'].capabilities.image_input is True
+    assert config.lanes['omi:auto:chat-structured'].capabilities.image_input is False
+
+
 def test_translation_capability_requires_json_schema_output():
     with pytest.raises(ValueError, match='translation lanes require json_schema'):
         Capabilities(

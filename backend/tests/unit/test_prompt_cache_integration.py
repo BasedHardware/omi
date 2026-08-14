@@ -343,6 +343,7 @@ def _get_agentic_module():
         "get_apple_health_summary_tool",
         "search_files_tool",
         "manage_daily_summary_tool",
+        "manage_messaging_channels",
         "create_chart_tool",
         "get_screen_activity_tool",
         "search_screen_activity_tool",
@@ -582,10 +583,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_26_tools():
-    """CORE_TOOLS must contain exactly 26 tools (web search is now a built-in server tool)."""
+def test_core_tools_has_27_tools():
+    """CORE_TOOLS must contain exactly 27 tools (web search is now a built-in server tool)."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 26, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 26"
+    assert len(agentic_mod.CORE_TOOLS) == 27, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 27"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -608,9 +609,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 27
-    assert len(tools_b) == 26
-    assert len(agentic_mod.CORE_TOOLS) == 26, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 28
+    assert len(tools_b) == 27
+    assert len(agentic_mod.CORE_TOOLS) == 27, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -641,6 +642,7 @@ def test_core_tools_order_matches_exports():
         "get_apple_health_summary_tool",
         "search_files_tool",
         "manage_daily_summary_tool",
+        "manage_messaging_channels",
         "create_chart_tool",
         "get_screen_activity_tool",
         "search_screen_activity_tool",
@@ -994,6 +996,21 @@ def test_system_prompt_is_time_invariant():
     # The microsecond-precision live timestamp must not appear anywhere in the prompt.
     assert "123456" not in prompt_early, "Live timestamp leaked into the cached system prompt"
     assert "654321" not in prompt_late, "Live timestamp leaked into the cached system prompt"
+
+
+def test_channel_media_prompt_instructions_allow_trusted_vision_context():
+    chat_mod = _get_chat_module()
+    message = MagicMock(
+        from_external_integration=True,
+        message_source="channel:telegram",
+        text="What is this?\n\n[Vision analysis for image attachment: photo.jpg (image/jpeg)]\nA pendant.",
+    )
+
+    section = chat_mod._get_channel_media_section([message])
+
+    assert "trusted visual context" in section
+    assert "Do not say that you lack image processing" in section
+    assert chat_mod._get_channel_media_section([]) == ""
 
 
 def test_current_datetime_block_carries_live_time():

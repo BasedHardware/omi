@@ -52,6 +52,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
+        {"name": "CHANNEL_SIGN_IN_URL", "value": "https://web-channels-dev---omi-web-app-dt5lrfkkoa-uc.a.run.app/login"},
+        {"name": "TWILIO_NUMBER", "value": "+15551234567"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "MEMORY_MODE", "value": "off"},
@@ -71,6 +73,16 @@ def with_backend_pusher_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         r'\1\n        {"name": "HOSTED_PUSHER_API_URL", "value": "http://pusher.omiapi.com"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
+def with_backend_oauth_authority_env(payload: str) -> str:
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "BASE_API_URL", "value": "https://api.omiapi.com"},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -132,15 +144,25 @@ def with_parity_pack_env(payload: str) -> str:
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "MEMORY_V3_CURSOR_SECRET", "valueFrom": {"secretKeyRef": {"name": "MEMORY_V3_CURSOR_SECRET", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
-        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
+        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
+        {"name": "TELEGRAM_BOT_TOKEN", "valueFrom": {"secretKeyRef": {"name": "TELEGRAM_BOT_TOKEN", "key": "latest"}}},
+        {"name": "TELEGRAM_WEBHOOK_SECRET", "valueFrom": {"secretKeyRef": {"name": "TELEGRAM_WEBHOOK_SECRET", "key": "latest"}}},
+        {"name": "SENDBLUE_API_KEY_ID", "valueFrom": {"secretKeyRef": {"name": "SENDBLUE_API_KEY_ID", "key": "latest"}}},
+        {"name": "SENDBLUE_API_KEY_SECRET", "valueFrom": {"secretKeyRef": {"name": "SENDBLUE_API_KEY_SECRET", "key": "latest"}}},
+        {"name": "SENDBLUE_NUMBER", "valueFrom": {"secretKeyRef": {"name": "SENDBLUE_NUMBER", "key": "latest"}}},
+        {"name": "SENDBLUE_WEBHOOK_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "SENDBLUE_WEBHOOK_SIGNING_SECRET", "key": "latest"}}},
+        {"name": "SENDBLUE_WEBHOOK_PATH_TOKEN", "valueFrom": {"secretKeyRef": {"name": "SENDBLUE_WEBHOOK_PATH_TOKEN", "key": "latest"}}},
+        {"name": "TWILIO_SMS_NUMBER", "valueFrom": {"secretKeyRef": {"name": "TWILIO_SMS_NUMBER", "key": "latest"}}},'''
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(
-            with_parity_pack_env(
-                with_listen_finalization_orphan_env(
-                    with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+        with_backend_oauth_authority_env(
+            with_backend_pusher_env(
+                with_parity_pack_env(
+                    with_listen_finalization_orphan_env(
+                        with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+                    )
                 )
             )
         )
@@ -171,6 +193,14 @@ STANDARD_CLOUD_RUN_SECRETS = {
     'GOOGLE_CLIENT_ID': {'secret': 'GOOGLE_CLIENT_ID', 'version': 'latest'},
     'GOOGLE_CLIENT_SECRET': {'secret': 'GOOGLE_CLIENT_SECRET', 'version': 'latest'},
     'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
+    'TELEGRAM_BOT_TOKEN': {'secret': 'TELEGRAM_BOT_TOKEN', 'version': 'latest'},
+    'TELEGRAM_WEBHOOK_SECRET': {'secret': 'TELEGRAM_WEBHOOK_SECRET', 'version': 'latest'},
+    'SENDBLUE_API_KEY_ID': {'secret': 'SENDBLUE_API_KEY_ID', 'version': 'latest'},
+    'SENDBLUE_API_KEY_SECRET': {'secret': 'SENDBLUE_API_KEY_SECRET', 'version': 'latest'},
+    'SENDBLUE_NUMBER': {'secret': 'SENDBLUE_NUMBER', 'version': 'latest'},
+    'SENDBLUE_WEBHOOK_SIGNING_SECRET': {'secret': 'SENDBLUE_WEBHOOK_SIGNING_SECRET', 'version': 'latest'},
+    'SENDBLUE_WEBHOOK_PATH_TOKEN': {'secret': 'SENDBLUE_WEBHOOK_PATH_TOKEN', 'version': 'latest'},
+    'TWILIO_SMS_NUMBER': {'secret': 'TWILIO_SMS_NUMBER', 'version': 'latest'},
 }
 
 
@@ -1341,7 +1371,9 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                             'backend': {
                                 'env': {
                                     'GOOGLE_CLOUD_PROJECT': {'value': 'based-hardware'},
+                                    'BASE_API_URL': {'value': 'https://api.omiapi.com'},
                                     'OMI_ENV_STAGE': {'value': 'dev'},
+                                    'CHANNEL_SIGN_IN_URL': {'value': 'https://app.example/login'},
                                     'OMI_LLM_GATEWAY_URL': {'value': 'http://custom-manifest-gateway'},
                                     'OMI_LLM_GATEWAY_FEATURE_MODE': {'value': 'gateway'},
                                     'OMI_LLM_CHAT_AGENT_ROUTE': {'value': 'gateway'},

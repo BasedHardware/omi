@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-identity-fallback-probe-resolves-foreign-owner",
+  "violated_contract": "A binding lookup keyed by an identity must resolve exactly that identity. When the stored document id hashes only the identity, probing a fallback identity after a miss returns a document owned by a different principal, and the caller treats it as the requested one. A Telegram/Sendblue group with no binding of its own fell through to the sender's personal DM binding, so the router answered from that person's private account, with their private context, into a shared group, and a group unlink revoked their personal binding.",
+  "canonical_prevention": "Resolve one identity per lookup and reject a document whose stored identity is not the one asked for, rather than probing alternates in sequence. A behavioral test must drive the production lookup for a group whose binding is absent while a member's personal binding exists, and assert the lookup returns nothing.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_channels.py"
+  ],
+  "evidence_prs": [
+    11032
+  ],
+  "scope_hints": [
+    "backend/database/channels.py",
+    "backend/tests/unit/test_channels.py"
+  ],
+  "status": "open"
+}

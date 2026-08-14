@@ -174,6 +174,15 @@ SCHEMA_GROUPS = {
             'TokenResponse',
         ),
     },
+    'channels': {
+        'output': DEFAULT_OUTPUT_DIR / 'channels_wire.g.dart',
+        'schemas': (
+            'ChannelBindingResponse',
+            'ChannelStatusResponse',
+            'ChannelRevokeResponse',
+            'LinkChannelResponse',
+        ),
+    },
     'people': {
         'output': DEFAULT_OUTPUT_DIR / 'people_wire.g.dart',
         'schemas': ('Person',),

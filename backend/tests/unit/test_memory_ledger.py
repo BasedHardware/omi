@@ -20,7 +20,7 @@ import pytest
 
 from database import firestore_transaction_retry
 from testing.import_isolation import load_module_fresh, stub_modules
-from tests.unit.fake_firestore import FakeFirestore
+from tests.unit.simple_firestore_fakes import FakeFirestore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 

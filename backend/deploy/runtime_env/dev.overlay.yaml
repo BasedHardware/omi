@@ -192,6 +192,8 @@ overlay:
           source: environment
         TWILIO_TWIML_APP_SID:
           source: environment
+        TWILIO_NUMBER:
+          source: environment
         X_OAUTH_CLIENT_ID:
           source: environment
         X_OAUTH_REDIRECT_URI:
@@ -212,6 +214,12 @@ overlay:
         env:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
+          BASE_API_URL:
+            value: https://api.omiapi.com
+            category: oauth_metadata
+          CHANNEL_SIGN_IN_URL:
+            value: https://web-channels-dev---omi-web-app-dt5lrfkkoa-uc.a.run.app/login
+            category: oauth_metadata
           OMI_PARITY_PACK_CAPTURE:
             value: '0'
             category: replay_capture

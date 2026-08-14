@@ -930,6 +930,21 @@ export interface CaptureLinkSpec {
 
 export type CategoryEnum = "personal" | "education" | "health" | "finance" | "legal" | "philosophy" | "spiritual" | "science" | "entrepreneurship" | "parenting" | "romantic" | "travel" | "inspiration" | "technology" | "business" | "social" | "work" | "sports" | "politics" | "literature" | "history" | "architecture" | "music" | "weather" | "news" | "entertainment" | "psychology" | "real" | "design" | "family" | "economics" | "environment" | "other";
 
+export interface ChannelBindingResponse {
+  channel: string;
+  linked_at: string;
+}
+
+export interface ChannelRevokeResponse {
+  revoked: number;
+  status: string;
+}
+
+export interface ChannelStatusResponse {
+  bindings: Array<ChannelBindingResponse>;
+  phone_registered: boolean;
+}
+
 export interface ChartData {
   chart_type: "line" | "bar";
   datasets: Array<ChartDataset>;
@@ -994,6 +1009,10 @@ export interface CheckVerificationRequest {
 export interface CheckVerificationResponse {
   phone_number_id?: string | null;
   verified: boolean;
+}
+
+export interface ClaimChannelRequest {
+  code: string;
 }
 
 export interface CleanerMemory {
@@ -2207,6 +2226,13 @@ export interface LegacyProactiveIntent {
 
 export interface LinkCalendarEventRequest {
   event_id: string;
+}
+
+export interface LinkChannelResponse {
+  channel: string;
+  code: string;
+  expires_at: string;
+  instructions: string;
 }
 
 export interface LlmTotalCostResponse {
@@ -4179,6 +4205,9 @@ export interface OmiApiSchemas {
   "CanonicalKnowledgeGraphResponse": CanonicalKnowledgeGraphResponse;
   "CaptureLinkSpec": CaptureLinkSpec;
   "CategoryEnum": CategoryEnum;
+  "ChannelBindingResponse": ChannelBindingResponse;
+  "ChannelRevokeResponse": ChannelRevokeResponse;
+  "ChannelStatusResponse": ChannelStatusResponse;
   "ChartData": ChartData;
   "ChartDataPoint": ChartDataPoint;
   "ChartDataset": ChartDataset;
@@ -4190,6 +4219,7 @@ export interface OmiApiSchemas {
   "ChatUsageQuota": ChatUsageQuota;
   "CheckVerificationRequest": CheckVerificationRequest;
   "CheckVerificationResponse": CheckVerificationResponse;
+  "ClaimChannelRequest": ClaimChannelRequest;
   "CleanerMemory": CleanerMemory;
   "ClickUpListsResponse": ClickUpListsResponse;
   "ClickUpSpacesResponse": ClickUpSpacesResponse;
@@ -4355,6 +4385,7 @@ export interface OmiApiSchemas {
   "LegacyMaterializePromptsResponse": LegacyMaterializePromptsResponse;
   "LegacyProactiveIntent": LegacyProactiveIntent;
   "LinkCalendarEventRequest": LinkCalendarEventRequest;
+  "LinkChannelResponse": LinkChannelResponse;
   "LlmTotalCostResponse": LlmTotalCostResponse;
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
   "LlmUsageRecordResponse": LlmUsageRecordResponse;
@@ -5519,6 +5550,47 @@ export interface OmiApiPaths {
       operationId: "reject_candidate_v1_candidates__candidate_id__reject_post";
       responses: {
         "200": CandidateResolutionReceipt;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/channels": {
+    get: {
+      operationId: "get_channel_status_v1_channels_get";
+      responses: {
+        "200": ChannelStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/channels/{channel}": {
+    delete: {
+      operationId: "revoke_channel_v1_channels__channel__delete";
+      responses: {
+        "200": ChannelRevokeResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/channels/{channel}/claim": {
+    post: {
+      operationId: "claim_channel_link_v1_channels__channel__claim_post";
+      responses: {
+        "200": ChannelBindingResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/channels/{channel}/link": {
+    post: {
+      operationId: "issue_channel_link_v1_channels__channel__link_post";
+      responses: {
+        "200": LinkChannelResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -10458,6 +10530,84 @@ export async function reject_candidate_v1_candidates__candidate_id__reject_post(
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_channel_status_v1_channels_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChannelStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/channels`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function revoke_channel_v1_channels__channel__delete(path: { channel: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChannelRevokeResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/channels/${path.channel}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function claim_channel_link_v1_channels__channel__claim_post(path: { channel: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ClaimChannelRequest, init?: OmiApiClientInit): Promise<ChannelBindingResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/channels/${path.channel}/claim`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function issue_channel_link_v1_channels__channel__link_post(path: { channel: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<LinkChannelResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/channels/${path.channel}/link`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -16576,4 +16726,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 401 client methods generated.
+// Total: 405 client methods generated.

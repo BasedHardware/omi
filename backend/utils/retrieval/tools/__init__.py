@@ -43,6 +43,9 @@ from .file_tools import (
 from .notification_settings_tools import (
     manage_daily_summary_tool,
 )
+from .channel_tools import (
+    manage_messaging_channels,
+)
 from .chart_tools import (
     create_chart_tool,
 )
@@ -81,6 +84,7 @@ __all__ = [
     'get_apple_health_summary_tool',
     'search_files_tool',
     'manage_daily_summary_tool',
+    'manage_messaging_channels',
     'create_chart_tool',
     'get_screen_activity_tool',
     'search_screen_activity_tool',

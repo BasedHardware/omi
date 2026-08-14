@@ -243,6 +243,8 @@ env:
     value: "false"
   - name: STT_SERVICE_MODELS
     value: "dg-nova-3,modulate-velma-2,parakeet"
+  - name: CHANNEL_SIGN_IN_URL
+    value: "https://web-channels-dev---omi-web-app-dt5lrfkkoa-uc.a.run.app/login"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL

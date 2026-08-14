@@ -7,7 +7,7 @@ from utils.memory.v3.account_generation_source import (
     V3TrustedAccountGenerationReadError,
     read_memory_v3_trusted_account_generation,
 )
-from tests.unit.fake_firestore import FakeFirestore as _FakeDb
+from tests.unit.simple_firestore_fakes import FakeFirestore as _FakeDb
 
 
 def _head_doc(**overrides):

@@ -50,6 +50,14 @@ def _get_client() -> Client:
     return _client
 
 
+def send_sms(to_number: str, body: str) -> str:
+    sender = os.getenv('TWILIO_SMS_NUMBER', '').strip()
+    if not sender:
+        raise ValueError('TWILIO_SMS_NUMBER must be set')
+    message = _get_client().messages.create(body=body, from_=sender, to=to_number)
+    return str(message.sid)
+
+
 def generate_access_token(uid: str, ttl: int = 3600) -> Dict[str, Any]:
     """
     Generate a Twilio Access Token with Voice grant for the given user.
@@ -124,6 +132,14 @@ def check_caller_id_verified(phone_number: str) -> bool:
     client = _get_client()
     outgoing_caller_ids = client.outgoing_caller_ids.list(phone_number=phone_number)
     return len(outgoing_caller_ids) > 0
+
+
+def check_twilio_voice_number(phone_number: str) -> bool:
+    client = _get_client()
+    numbers = client.incoming_phone_numbers.list(phone_number=phone_number)
+    if any(bool((getattr(number, 'capabilities', None) or {}).get('voice')) for number in numbers):
+        return True
+    return bool(client.outgoing_caller_ids.list(phone_number=phone_number))
 
 
 def get_caller_id(phone_number: str) -> Optional[Dict[str, Any]]:

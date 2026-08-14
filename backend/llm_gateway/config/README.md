@@ -12,6 +12,9 @@ provider request options such as `reasoning_effort` or Anthropic `effort`.
 Generated lanes use `openai.chat_completions`, including `chat_agent`, which is pinned to the OpenAI-compatible Luna
 route. Anthropic Messages remains a separate provider surface for lanes that explicitly select Anthropic.
 
+The generated `openglass` lane also advertises image input. Channel media sends its downloaded image as an OpenAI
+`image_url` content part through that lane; other generated lanes remain text-only.
+
 ## Runtime credential and readiness contract
 
 The managed Anthropic `/v1/messages` path is active when an active generated route uses an Anthropic primary. In

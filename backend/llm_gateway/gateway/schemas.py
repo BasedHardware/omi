@@ -101,6 +101,7 @@ class BenchmarkSource(str, Enum):
 
 class Capabilities(StrictBaseModel):
     text_input: bool
+    image_input: bool = False
     streaming: bool
     structured_output: StructuredOutputMode
     tools: bool

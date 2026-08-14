@@ -1,4 +1,11 @@
-"""Minimal in-memory Firestore fakes shared by memory unit tests."""
+"""Minimal in-memory Firestore fakes shared by memory unit tests.
+
+This module is deliberately not named ``fake_firestore``: that is the import
+name of the installed ``fake_firestore`` distribution whose ``MockFirestore``
+models the real Firestore surface (transactions, queries, snapshot
+references). A same-named module under ``tests/unit`` shadows that package for
+anyone running pytest with ``tests/unit`` on ``PYTHONPATH``.
+"""
 
 from __future__ import annotations
 
