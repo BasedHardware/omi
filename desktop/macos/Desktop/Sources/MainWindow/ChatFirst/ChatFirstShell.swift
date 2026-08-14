@@ -65,7 +65,7 @@ struct ChatFirstShell: View {
       destination
         .id(navigation.route.stableName)
     }
-    // The hidden title bar puts the traffic lights over the content view.
+    // The top bar occupies the hidden title-bar band; the window's top edge is the glass.
     .padding(.top, GlassShell.titlebarClearance)
     .environmentObject(navigation)
     .onAppear {

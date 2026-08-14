@@ -97,7 +97,8 @@ struct DesktopTopBar: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .frame(height: TopNavigationLayoutMetrics.barHeight)
-    .padding(.vertical, OmiSpacing.sm)
+    // Gap below the bar only: padding above it would put the top resize handle on empty air.
+    .padding(.bottom, OmiSpacing.sm)
     // The compact fallback's menu is the one surface here that draws outside the bar. Elevation
     // belongs to the shared top-bar component so every shell and exported preview paints it above the
     // destination sibling rather than relying on each call site to remember (INV-NAV-1).
@@ -170,9 +171,9 @@ enum TopNavigationLayoutMetrics {
   /// `PageGlassLaneLayout.laneWidth` both delegate here, so the bar and whatever is under it cannot
   /// drift apart.
   ///
-  /// The lane **fills the window** minus the resize-rim inset on each side. The 900 pt readable
-  /// cap is a window-max (`DesktopWindowLayoutPolicy.maximumContentWidth`), not an internal inset:
-  /// capping here inside a larger window is what drew the invisible click border around the glass.
+  /// The lane fills the window. The 900 pt readable cap is a window-max
+  /// (`DesktopWindowLayoutPolicy.maximumContentWidth`), not an internal inset: capping here
+  /// inside a larger window is what drew the invisible click border around the glass.
   static func contentLaneWidth(for availableWidth: CGFloat) -> CGFloat {
     max(0, availableWidth - (DesktopWindowLayoutPolicy.windowInset * 2))
   }

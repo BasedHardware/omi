@@ -1381,7 +1381,7 @@ struct DesktopHomeView: View {
       }
     }
     .onEscapeKey(priority: .navigation) { navigateHomeOnEscapeIfNeeded() }
-    // The hidden title bar puts the traffic lights over the content view.
+    // The top bar occupies the hidden title-bar band; the window's top edge is the glass.
     .padding(.top, GlassShell.titlebarClearance)
   }
 

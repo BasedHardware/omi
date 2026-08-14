@@ -410,15 +410,14 @@ final class TopNavigationBarLayoutTests: XCTestCase {
   }
 
   func testNavigationLaneMatchesFullChatWidthAndPageInsets() {
-    // The 900 pt readable cap lives on the window, not inside the lane. At any
-    // given window width the glass fills it minus the resize-rim inset per side —
-    // including a hypothetical 1400 pt host that bypassed the window max.
+    // The 900 pt readable cap lives on the window, not inside the lane. The glass fills
+    // the window horizontally — including a hypothetical 1400 pt host that bypassed the max.
     XCTAssertEqual(
       TopNavigationLayoutMetrics.contentLaneWidth(for: DesktopWindowLayoutPolicy.maximumContentWidth),
       ChatComposerLayout.contentLaneMaxWidth)
-    XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 1_400), 1_384)
-    XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 800), 784)
-    XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 40), 24)
+    XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 1_400), 1_400)
+    XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 800), 800)
+    XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 40), 40)
   }
 
   /// The bar's *glass* is the lane and its controls are inset inside it — so the inset has to leave a

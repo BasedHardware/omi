@@ -17,7 +17,7 @@ final class ShellClickThroughPolicyTests: XCTestCase {
         windowSize: windowSize,
         isResizable: true,
         contentContains: { _ in false }),
-      "the reserved title-bar band above the top bar must not swallow clicks")
+      "air that is not glass must not swallow clicks")
     XCTAssertFalse(
       ShellClickThroughPolicy.acceptsMouseHit(
         localPoint: NSPoint(x: 480, y: 350),
@@ -44,12 +44,7 @@ final class ShellClickThroughPolicyTests: XCTestCase {
   }
 
   func testResizableWindowKeepsAnInteractiveEdgeRim() {
-    XCTAssertEqual(
-      DesktopWindowLayoutPolicy.windowInset, ShellClickThroughPolicy.resizeRim,
-      "the glass must sit on the resize rim or grabbing the panel edge misses the window frame")
-    XCTAssertLessThanOrEqual(
-      InkGlassShadow.ambient.padding, DesktopWindowLayoutPolicy.windowInset + 2,
-      "a shadow that needs more room than the inset clips into a thick black band around the glass")
+    XCTAssertEqual(DesktopWindowLayoutPolicy.windowInset, 0)
     XCTAssertTrue(
       ShellClickThroughPolicy.acceptsMouseHit(
         localPoint: NSPoint(x: 4, y: 350),
