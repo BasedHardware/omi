@@ -207,4 +207,22 @@ git -C "$REPO" add -A
 expect_refusal "unpinned web dir"
 test "$(cat "$REPO/web/unpinned/src/a.ts")" = "const x = {b:1}"
 
+# --- A staged web file with unstaged edits is refused instead of sweeping them in ---
+mkdir -p "$REPO/web/admin/src"
+printf '{\n  "devDependencies": {\n    "prettier": "^2.8.8",\n    "prettier-plugin-tailwindcss": "^0.3.0"\n  }\n}\n' >"$REPO/web/admin/package.json"
+make_prettier_lock "$REPO/web/admin" 2.8.8
+make_prettier_stub "$REPO/web/admin" 2.8.8
+make_prettier_plugin "$REPO/web/admin" 0.3.0
+printf 'const staged = {b:1}\n' >"$REPO/web/admin/src/a.ts"
+git -C "$REPO" add web/admin/src/a.ts
+printf 'const staged = {b:1}\nconst unstaged = 2\n' >"$REPO/web/admin/src/a.ts"
+expect_refusal "web file with unstaged edits"
+test "$(cat "$REPO/web/admin/src/a.ts")" = "const staged = {b:1}
+const unstaged = 2"
+git -C "$REPO" add web/admin/src/a.ts
+rm -rf "$REPO/web/unpinned"
+git -C "$REPO" reset -q -- web/unpinned
+run_hook >/dev/null
+grep -q 'PRETTIER_2.8.8_FORMATTED' "$REPO/web/admin/src/a.ts"
+
 echo "pre-commit pinned-toolchain refusal tests passed"
