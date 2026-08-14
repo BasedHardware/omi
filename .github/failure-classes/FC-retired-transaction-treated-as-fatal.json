@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-retired-transaction-treated-as-fatal",
+  "violated_contract": "A Firestore commit rejected because its transaction id was retired wrote nothing and is recoverable; the storage boundary must restart it on a new transaction rather than raise a failure its caller cannot distinguish from a real write error.",
+  "canonical_prevention": "Run @firestore.transactional callables through database._client.run_transactional, which starts a fresh transaction on 'The referenced transaction has expired or is no longer valid' and re-raises every other InvalidArgument on the first attempt.",
+  "evidence_prs": [
+    10721
+  ],
+  "scope_hints": [
+    "backend/database/**"
+  ],
+  "canonical_prevention_artifact": [
+    "backend/database/_client.py"
+  ],
+  "status": "open"
+}

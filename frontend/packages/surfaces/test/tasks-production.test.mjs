@@ -1,0 +1,140 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const read = (relative) => readFile(resolve(root, relative), "utf8");
+
+test("task fixtures cover the truthful lifecycle and queue matrix", async () => {
+  // RETAINED-SOURCE-ASSERTION: fixture catalog completeness and injected-clock wiring are structural QA inventory.
+  const source = await read("src/production/task-fixtures.ts");
+  for (const state of ["loading", "empty", "unavailable", "saved-failed", "queued", "sending", "retrying", "needs-auth", "dead", "normal", "long", "operation-failed"]) {
+    assert.match(source, new RegExp('"' + state + '"'));
+  }
+  assert.match(source, /FIXED_NOW = Date\.UTC/);
+  assert.match(source, /fixtureStore\(state: FixtureState, now = FIXED_NOW\)/);
+  assert.match(source, /parseRecordId/);
+  assert.match(source, /completed:/);
+  assert.match(source, /dueAt:/);
+  assert.match(source, /provenance:/);
+  assert.doesNotMatch(source, /Date\.now\(\)/);
+  // red-proof: replacing the injected now with Date.now() makes group
+  // boundaries and screenshots drift with the wall clock.
+});
+
+test("tasks derive UTC urgency groups and preserve no-due tasks separately", async () => {
+  // RETAINED-SOURCE-ASSERTION: calendar injection and the closed group union are structural grouping constraints.
+  const source = await read("src/production/TasksProduction.tsx");
+  assert.match(source, /calendarDay\?:/);
+  assert.match(source, /groupFor\(task, now, dayFormatter\)/);
+  assert.match(source, /if \(task\.dueAt === null\) return "noDeadline"/);
+  assert.match(source, /if \(task\.dueAt < now\) return "overdue"/);
+  assert.ok(source.indexOf('if (task.dueAt < now) return "overdue"') < source.indexOf('if (due === current) return "today"'));
+  assert.match(source, /86_400_000/);
+  assert.match(source, /type GroupKey = "overdue" \| "today" \| "tomorrow" \| "later" \| "noDeadline"/);
+  assert.match(source, /tasks\.noDueDate/);
+  assert.doesNotMatch(source, /new Date\(\)\.getDate/);
+  // red-proof: replacing groupFor with a fixed bucket would put tomorrow and
+  // unscheduled rows in Today and make the fixture matrix visually untestable.
+});
+
+test("task discovery filters the loaded snapshot without claiming backend search", async () => {
+  // RETAINED-SOURCE-ASSERTION: forbidden backend-search capabilities and loaded-snapshot filtering are port boundaries.
+  const source = await read("src/production/TasksProduction.tsx");
+  assert.match(source, /<ProductionSearchField/);
+  assert.match(source, /tasks\.filterSavedPlaceholder/);
+  assert.match(source, /task\.description\.toLocaleLowerCase\(locale\)\.includes\(needle\)/);
+  assert.doesNotMatch(source, /store\.search|searchTasks|fetchSearch/);
+  // red-proof: routing the field through a fabricated store.search capability
+  // fails this test because the ratified task store only exposes list/create/patch/delete.
+});
+
+test("task actions stay within the task contract", async () => {
+  // RETAINED-SOURCE-ASSERTION: allowed store calls and forbidden legacy fields define the task contract boundary.
+  const source = await read("src/production/TasksProduction.tsx");
+  assert.match(source, /store\.create\(description, dueAt\)/);
+  assert.match(source, /const patch: TaskPatch = \{\}/);
+  assert.match(source, /patch\.description = description/);
+  assert.match(source, /patch\.dueAt = dueAt/);
+  assert.match(source, /store\.patch\(task\.id, patch\)/);
+  assert.match(source, /store\.patch\(task\.id, \{ completed: !task\.completed \}/);
+  assert.match(source, /store\.delete\(task\.id\)/);
+  assert.match(source, /store\.discardDeadLetter\(view\.opId\)/);
+  assert.doesNotMatch(source, /goal|priority|appName|backendGroup/i);
+  // red-proof: adding a goal/priority/backend grouping branch would claim a
+  // capability absent from the current task contract.
+});
+
+test("source and provenance are localized or suppressed, never leaked", async () => {
+  // RETAINED-SOURCE-ASSERTION: raw backend-field absence must hold over every branch, not only rendered fixtures.
+  const source = await read("src/production/TasksProduction.tsx");
+  assert.doesNotMatch(source, /\{task\.source\}/);
+  assert.doesNotMatch(source, /\{task\.provenance\}/);
+  assert.doesNotMatch(source, /task\.source|task\.provenance|failure\.detail|letter\.summary/);
+  // red-proof: rendering task.source or provenance directly would expose raw
+  // backend values, including blank/unknown provenance, as product copy.
+});
+
+test("mutation failures stay localized and dead letters remain discardable", async () => {
+  // RETAINED-SOURCE-ASSERTION: backend-detail absence and discard-only wiring are cross-branch structural constraints.
+  const source = await read("src/production/TasksProduction.tsx");
+  const fixtures = await read("src/production/task-fixtures.ts");
+  assert.match(source, /setOperationError\(translate\("lifecycle\.error"\)\)/);
+  assert.match(source, /store\.discardDeadLetter\(view\.opId\)/);
+  // The dead-letter row binding was renamed `letter` -> `view` when the panel
+  // started routing through `deadLetterView`. Both spellings are banned here
+  // now: a rename must not be able to defang this check a second time, which
+  // is exactly what it did the first time — the patterns went vacuously green
+  // against a panel that had simply stopped using the old identifier.
+  assert.doesNotMatch(source, /letter\.failure|view\.failure|failure\.detail|letter\.summary|view\.summary/);
+  assert.match(fixtures, /state === "operation-failed"/);
+  assert.match(fixtures, /refreshFailuresRemaining/);
+  assert.match(source, /return true/);
+  assert.match(source, /current\.trim\(\) === description/);
+  // red-proof: rendering a dead-letter backend detail or swallowing a failed
+  // fixture operation would make terminal failures invisible to the user.
+});
+
+test("tasks keep stable boot and date parsing internals", async () => {
+  // RETAINED-SOURCE-ASSERTION: one-shot readiness and the ban on Date.parse are implementation-boundary rules.
+  const source = await read("src/production/TasksProduction.tsx");
+  assert.match(source, /import "\.\/tasks\.css"/);
+  assert.match(source, /readyRef\.current/);
+  assert.match(source, /parseDateInput/);
+  assert.doesNotMatch(source, /Date\.parse\(/);
+  // STRUCTURAL LIFECYCLE ASSERTION: readyRef is the implementation guard against
+  // repeated effects and local-date parsing deliberately avoids Date.parse.
+  // Rendered callback count, shell, and chrome are covered in tasks-rendering.
+});
+
+test("all task UI copy is translator-backed and desktop/mobile affordances exist", async () => {
+  // RETAINED-SOURCE-ASSERTION: translator keys and host-selected CSS branches are static localization/layout inventory.
+  const source = await read("src/production/TasksProduction.tsx");
+  const styles = await read("src/production/tasks.css");
+  assert.match(source, /translate: Translate/);
+  assert.match(styles, /html\[data-platform="desktop"\]/);
+  assert.match(styles, /html\[data-platform="mobile"\]/);
+  assert.match(styles, /tasks-mobile-fab/);
+  assert.match(styles, /task-card\.is-completed/);
+  assert.match(styles, /task-card\.is-selected/);
+  assert.match(styles, /task-card\.is-indent-3/);
+  assert.match(source, /confirm\(translate\("tasks\.deleteConfirm"\)\)/);
+  assert.doesNotMatch(styles, /#(?:[0-9a-f]{3,8})\b/i);
+  assert.doesNotMatch(styles, /@media\s*\(/);
+  // STRUCTURAL TRANSLATION/CSS ASSERTION: source typing, confirmation routing,
+  // host-selected layouts, and semantic-token use are not computed by jsdom.
+  // The translated shortcuts, FAB, and indent DOM execute in tasks-rendering.
+});
+
+test("task polish keeps rows scannable and create, edit, and focus flows accessible", async () => {
+  // RETAINED-SOURCE-ASSERTION: CSS density rules remain structural; their interactive counterparts render separately.
+  const styles = await read("src/production/tasks.css");
+  assert.match(styles, /tasks-create\.is-open/);
+  assert.match(styles, /task-check\[aria-pressed="true"\]/);
+  assert.match(styles, /task-card:not\(\.is-selected\) \.task-actions/);
+  assert.match(styles, /tasks-shortcuts \{ position: sticky/);
+  // STRUCTURAL CSS ASSERTION: jsdom cannot prove the sticky and visibility
+  // layout. Counts, expansion, focus, keyboard movement, and date inputs render.
+});

@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "@omi-core/ratified-contracts",
+    "version": "0.8.0"
+  },
+  "repository": "BasedHardware/omi",
+  "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
+  "rulings": [
+    "ADR-004",
+    "ADR-008",
+    "WS-006",
+    "M-001",
+    "DIV-MEM-004",
+    "FEAT-MEM-001",
+    "FEAT-MEM-002",
+    "FC-AUTH-003",
+    "FEAT-AUTH-011",
+    "COORD-contract-evolution-policy",
+    "COORD-write-path-rulings",
+    "COORD-cross-generation-writes",
+    "COORD-fable-rulings-wave2",
+    "DAVID-tasks-read-epoch-and-ci",
+    "FABLE-R26-task-field-vocabulary-signed"
+  ],
+  "compiler": {
+    "name": "typescript",
+    "version": "5.9.3"
+  },
+  "inputs": [
+    {
+      "path": "fixtures/clean-consumer/conformance.mjs",
+      "sha256": "05404bfab65b43623f38c87a1a1ec7ad0c80d5b7133b8eeaa8e491db167a35de",
+      "bytes": 9074
+    },
+    {
+      "path": "fixtures/clean-consumer/consumer.ts",
+      "sha256": "fa4ac48f893ede966d2374c5e19d783d89886027446fadb12d2ba21f19ce78c6",
+      "bytes": 19902
+    },
+    {
+      "path": "fixtures/clean-consumer/tsconfig.json",
+      "sha256": "d4aa4e8b31dcbec3294d703a579ca0c463d6548cf56c516204934901bedb8e63",
+      "bytes": 171
+    },
+    {
+      "path": "fixtures/forbidden-public-fields.mjs",
+      "sha256": "a7282e3827ade03cd349f488190e4f094a4199f07bfd4483ab1edb1c536dbaf6",
+      "bytes": 532
+    },
+    {
+      "path": "fixtures/manifest.json",
+      "sha256": "0da729c355c84ee74e99455fb71fead757d24a5a956f78b0cbd81c69b6a00b40",
+      "bytes": 313
+    },
+    {
+      "path": "fixtures/page-conformance.json",
+      "sha256": "91a6d345a07538a85f75db7c42615e4ea93622c280932e96a464c302f87ab6cb",
+      "bytes": 5748
+    },
+    {
+      "path": "fixtures/read-page-windows.json",
+      "sha256": "8a93f2667c7bdd7d1f6c7dfd93fa180cf8703a984c4c9eccf6226b8b936f30d0",
+      "bytes": 1240
+    },
+    {
+      "path": "fixtures/recall-completeness.json",
+      "sha256": "540898b43897e48fd5888bc24c44a25db413f7c5f5a54d9cce3003f24be065d9",
+      "bytes": 14767
+    },
+    {
+      "path": "fixtures/recall-trace.json",
+      "sha256": "7c8df186eb74cfcc41c36125b15dff308602a74d7faa4d321387bab9f4ad2696",
+      "bytes": 9312
+    },
+    {
+      "path": "fixtures/status-matrix.json",
+      "sha256": "43d73698915f4da482b7d656b70adfde6d61d096455840acc73e73d2dd2a0bbb",
+      "bytes": 1930
+    },
+    {
+      "path": "fixtures/tasks-read-conformance.json",
+      "sha256": "8b349e78c42f91d27f8c3098a9cf2d8bdd710fdf36df4e26fbba58c1dd9e1417",
+      "bytes": 49613
+    },
+    {
+      "path": "fixtures/tasks-read-shape.json",
+      "sha256": "93f67dfd01df73afe89bdb7f0d18320a861050e5a6ecda3f619482227aa7f38f",
+      "bytes": 3114
+    },
+    {
+      "path": "fixtures/write-ops-conformance.json",
+      "sha256": "1d8697dc7de947c0a09eeb3dabf1e9c474bb162273a80dfdfb64c4d764b26247",
+      "bytes": 11671
+    },
+    {
+      "path": "fixtures/write-ops-outcomes.json",
+      "sha256": "efe14a7e91cd04d29cc2e0700b1597bab8367e502ee1cdc540aa87787a44d963",
+      "bytes": 2620
+    },
+    {
+      "path": "package.json",
+      "sha256": "726906eb7dc26f1643acefd83dc1e4838dd876eaa55ab763576cf17eba7e4ccf",
+      "bytes": 2412
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "9747995ee6c20d5990a84006b6353d66070f7a2bb23b92133c1c81e02a1e5693",
+      "bytes": 439
+    },
+    {
+      "path": "README.md",
+      "sha256": "a5574d89bf29c24a4a687fed163e0e411ff410c034cf1b23fdfb91e60280cc35",
+      "bytes": 11846
+    },
+    {
+      "path": "scripts/check-domain-markers.mjs",
+      "sha256": "5e46a993bdf029c87b5157529f95d5338e66eee627339e035c7bfd9fdb553a81",
+      "bytes": 2205
+    },
+    {
+      "path": "scripts/clean.mjs",
+      "sha256": "fc3d04823ac4badd5fbeecee577dedeb6af4480d1c5e9965dde0d4dedbb14135",
+      "bytes": 155
+    },
+    {
+      "path": "scripts/package-boundary.mjs",
+      "sha256": "188c5eaf7c4ee692f887ad91fca8e296b17d56ed6d00f2859f5a5bc8030c7085",
+      "bytes": 16082
+    },
+    {
+      "path": "scripts/provenance.mjs",
+      "sha256": "8348e93122f9a8a2505d75a9fca4b4cb590e277a8de3c56ad6c65d36e63429df",
+      "bytes": 5122
+    },
+    {
+      "path": "scripts/verify-ci.mjs",
+      "sha256": "c4177c11bc430dd1dc943ced4b672bbfa9c0ea95df8aa199496f23316b41346f",
+      "bytes": 819
+    },
+    {
+      "path": "src/pagination/cursor.ts",
+      "sha256": "b112180e017c4ea4f62dd531e2a57e3a14f29848abf4436378cf0be64f9fe894",
+      "bytes": 508
+    },
+    {
+      "path": "src/projections/synthesized.ts",
+      "sha256": "a244b79435627f8888fe00c08cd044ba48c381df070d8e895943e8af6f5bfd4b",
+      "bytes": 21464
+    },
+    {
+      "path": "src/projections/tasks.ts",
+      "sha256": "a53f82e2c58e7be39d5e83f90d0ee71977ab020032e9b5ce20ac2e17559edf8c",
+      "bytes": 27411
+    },
+    {
+      "path": "src/recall/trace.ts",
+      "sha256": "c03859605b6c918a43edf9d9762f9d457e9c36ce00706d73b0a8fbcada4b137f",
+      "bytes": 6768
+    },
+    {
+      "path": "src/wire/json.ts",
+      "sha256": "ce1bc985ae476270cab3715393d22851eab9b0572da7c5ad3cf12fdb9253fa77",
+      "bytes": 5747
+    },
+    {
+      "path": "src/write/ops.ts",
+      "sha256": "3dc0cf2e7e89b54773288135afcb7fcae9ff26c3f36380714695b3a6a52c9c75",
+      "bytes": 19607
+    },
+    {
+      "path": "test/contracts.test.mjs",
+      "sha256": "ade7dcb1c74a5c9c20e7d48a7f5384d5192a5a844bf41500c4f919e17cb78cb1",
+      "bytes": 36294
+    },
+    {
+      "path": "tsconfig.base.json",
+      "sha256": "834b77bf73d7d71ed7fa4d80e77a395b902cdcc66f1612def5a6c4febe5ecb93",
+      "bytes": 518
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "008e71c487fb6040ef87de46b534f669bf75f21ebeb69429a77fec61ba6e75aa",
+      "bytes": 133
+    }
+  ],
+  "sourceDigest": "d7c345d3903e9e144c496337a5199589e15d6566b2fcd34bcc3241270889588f"
+}

@@ -1,0 +1,42 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../contracts"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../sync"
+    },
+    {
+      "path": "../adapters-legacy"
+    },
+    {
+      "path": "../adapters-platform"
+    },
+    {
+      "path": "../domain"
+    },
+    {
+      "path": "../wire-listen"
+    },
+    {
+      "path": "../bridge-web"
+    },
+    {
+      "path": "../dev-recall-stub"
+    }
+  ]
+}

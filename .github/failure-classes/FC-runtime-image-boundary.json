@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-runtime-image-boundary",
+  "violated_contract": "Every deployable runtime image must contain the reachable first-party source modules and installed third-party modules required by its declared entrypoint.",
+  "canonical_prevention": "Maintain one runtime-image registry, check final-stage COPY source closure before push, and smoke built images offline before publication and in pull-request CI.",
+  "evidence_prs": [9141],
+  "scope_hints": ["backend/**", "plugins/**", ".github/workflows/gcp_*.yml"],
+  "status": "open"
+}

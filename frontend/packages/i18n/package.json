@@ -1,0 +1,23 @@
+{
+  "name": "@omi-core/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Typed production-surface messages with explicit English fallback coverage.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "node --test test/*.test.mjs",
+    "lint": "echo i18n:no-lint-yet"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

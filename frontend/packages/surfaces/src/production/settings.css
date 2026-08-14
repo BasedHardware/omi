@@ -1,0 +1,329 @@
+.settings-production-shell {
+  max-width: 720px;
+  margin: 0 auto;
+  color: var(--content-primary);
+}
+
+.settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-xl);
+  margin: var(--space-xl) 0 var(--space-lg);
+}
+
+.settings-header h1 {
+  margin: var(--space-xs) 0;
+  font-family: var(--type-title-family, var(--type-display-family));
+  font-size: var(--type-title-size, var(--type-display-size));
+  font-weight: var(--type-title-weight, var(--type-display-weight));
+}
+
+.settings-header p,
+.settings-empty-copy,
+.settings-state-copy,
+.settings-local-note {
+  margin: var(--space-xs) 0;
+  color: var(--content-secondary);
+}
+
+.settings-state-title {
+  margin: 0;
+  color: var(--content-primary);
+  font-weight: 600;
+}
+
+.settings-eyebrow {
+  color: var(--content-tertiary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+}
+
+.settings-save-notice,
+.surface-notices .status-notice,
+.surface-notices .queue-notice,
+.surface-notices .operation-error {
+  margin: var(--space-sm) 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+}
+
+.surface-notices .status-notice.saved-but-refresh-failed { border: 1px solid var(--warning); }
+.surface-notices .status-notice.unavailable,
+.surface-notices .operation-error { border: 1px solid var(--danger); }
+.surface-notices .queue-notice.needs-auth { border: 1px solid var(--warning); }
+.surface-notices .operation-error { color: var(--danger); }
+
+.settings-section {
+  display: grid;
+  gap: var(--space-md);
+  margin: var(--space-xxl) 0;
+  padding: var(--space-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel, var(--radius-control));
+  background: var(--surface-raised);
+}
+
+.settings-section h2 {
+  margin: 0;
+  font-family: var(--type-title-family, var(--type-display-family));
+  font-size: var(--type-body-size);
+  font-weight: var(--type-title-weight, 600);
+}
+
+.settings-account-panel,
+.settings-plan-details,
+.settings-identity-details {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.settings-account-panel.is-signed-out,
+.settings-account-panel.is-loading,
+.settings-plan-absent {
+  color: var(--content-secondary);
+}
+
+.settings-account-panel.is-unavailable {
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+}
+
+.settings-signed-in {
+  margin: 0;
+  color: var(--content-primary);
+  font-weight: 600;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  min-height: var(--min-tap-target);
+}
+
+.settings-row-copy {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.settings-row-title {
+  color: var(--content-primary);
+  font-weight: 600;
+}
+
+.settings-row-description,
+.settings-disabled-explanation {
+  margin: 0;
+  color: var(--content-secondary);
+  font-size: var(--type-label-size);
+}
+
+.settings-identity-details dt,
+.settings-plan-details dt {
+  color: var(--content-tertiary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+}
+
+.settings-identity-details dd,
+.settings-plan-details dd {
+  margin: 0;
+  color: var(--content-secondary);
+}
+
+.settings-sign-out,
+.settings-sign-in,
+.settings-upgrade,
+.settings-retry,
+.settings-select-wrap select {
+  min-height: var(--min-tap-target);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--content-primary);
+  background: var(--surface-elevated);
+  font: inherit;
+}
+
+.settings-sign-out,
+.settings-upgrade,
+.settings-retry {
+  width: fit-content;
+}
+
+.settings-sign-in:disabled,
+.settings-sign-out:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settings-appearance-section .settings-local-note {
+  margin: 0;
+  color: var(--content-tertiary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+}
+
+.settings-select-wrap {
+  position: relative;
+  flex: 0 1 16rem;
+  min-width: 11rem;
+}
+
+.settings-select-wrap::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: var(--space-md);
+  inset-block-start: 50%;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: translateY(-70%) rotate(45deg);
+  color: var(--content-secondary);
+  pointer-events: none;
+}
+
+.settings-select-wrap select {
+  width: 100%;
+  padding-inline-end: calc(var(--space-xl) + var(--space-sm));
+  appearance: none;
+  cursor: pointer;
+}
+
+.settings-select-wrap select:disabled {
+  cursor: wait;
+}
+
+.settings-plan-details {
+  gap: 0;
+}
+
+.settings-fact-row {
+  padding-block: var(--space-sm);
+  border-block-start: 1px solid var(--border);
+}
+
+.settings-fact-row:last-child {
+  border-block-end: 1px solid var(--border);
+}
+
+.settings-fact-row dd {
+  text-align: end;
+  color: var(--content-primary);
+  font-weight: 600;
+}
+
+.settings-limit-notice {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+}
+
+.settings-limit-notice.is-reached-no-upgrade {
+  border-color: var(--border);
+}
+
+.settings-limit-title {
+  margin: 0;
+  color: var(--content-primary);
+  font-weight: 600;
+}
+
+.settings-upgrade-unavailable {
+  margin: 0;
+  color: var(--content-secondary);
+}
+
+html[data-platform="mobile"] .settings-header {
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+html[data-platform="mobile"] .settings-production-shell.is-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  align-items: end;
+  max-width: none;
+  padding: 0;
+}
+
+html[data-platform="mobile"] .settings-sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--surface-scrim) 72%, transparent);
+}
+
+html[data-platform="mobile"] .settings-sheet-panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - var(--space-xl));
+  overflow: auto;
+  padding: var(--space-md) var(--space-lg) calc(var(--space-xl) + env(safe-area-inset-bottom, 0px));
+  border: 1px solid var(--border);
+  border-block-end: 0;
+  border-radius: var(--radius-window) var(--radius-window) 0 0;
+  background: var(--surface-raised);
+  box-shadow: 0 calc(var(--space-xl) * -1) var(--space-xxxl) var(--surface-scrim);
+}
+
+.settings-sheet-toolbar { display: flex; justify-content: flex-end; }
+.settings-sheet-close { display: inline-flex; min-height: var(--min-tap-target); align-items: center; gap: var(--space-xs); padding: 0 var(--space-sm); border-radius: var(--radius-control); color: var(--content-primary); text-decoration: none; }
+
+html[data-platform="mobile"] .settings-section {
+  padding: var(--space-md);
+}
+
+html[data-platform="mobile"] .settings-sign-out,
+html[data-platform="mobile"] .settings-sign-in,
+html[data-platform="mobile"] .settings-upgrade,
+html[data-platform="mobile"] .settings-retry,
+html[data-platform="mobile"] .settings-select-wrap,
+html[data-platform="mobile"] .settings-select-wrap select {
+  width: 100%;
+}
+
+html[data-platform="mobile"] .settings-account-panel .production-disabled-control-wrap {
+  width: 100%;
+}
+
+html[data-platform="mobile"] .settings-row {
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+html[data-platform="mobile"] .settings-fact-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+html[data-platform="mobile"] .settings-fact-row dd {
+  overflow-wrap: anywhere;
+}
+
+html[data-platform="desktop"] .settings-header .settings-eyebrow,
+html[data-platform="desktop"] .settings-header > div > p:last-child {
+  display: none;
+}
+
+html[data-platform="desktop"] .settings-production-shell .desktop-page-panel {
+  padding: var(--space-lg);
+}

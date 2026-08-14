@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-customer-data-plane-divergence",
+  "violated_contract": "A production-family artifact must not select a customer data plane different from stable, regardless of release cohort, build flag, update channel, preference, or runtime environment.",
+  "canonical_prevention": "Bind every production-family artifact to canonical production API, agent, desktop API, and Firebase/Firestore identity in build configuration and runtime resolution; mutation-test the protected settings and verify signed artifacts before publishing. Require a separate non-production identity plus explicit migration review for any exception.",
+  "evidence_prs": [
+    10090,
+    10214
+  ],
+  "scope_hints": [
+    "codemagic.yaml",
+    "app/lib/env/**",
+    "app/lib/main.dart",
+    "app/lib/startup_routing.dart",
+    "desktop/macos/Desktop/Sources/AppBuild.swift",
+    "desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift",
+    "desktop/macos/Desktop/Sources/GoogleService-Info*.plist"
+  ],
+  "status": "open"
+}

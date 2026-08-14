@@ -1,0 +1,31 @@
+{
+  "name": "@omi-core/wire-listen",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Generated /listen WebSocket decoders from contracts/wire/listen. Hand-rolled-free; unknown frames return Degraded via degrade() (INV-LISTEN-006).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./fixtures/corpus.json": "./fixtures/corpus.json"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "generate:check": "node scripts/generate.mjs --check",
+    "build": "tsc -b",
+    "test": "echo wire-listen:tested-via-testkit",
+    "lint": "echo wire-listen:no-lint-yet"
+  },
+  "dependencies": {
+    "@omi-core/contracts": "workspace:*",
+    "@omi-core/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5.7.2"
+  }
+}
