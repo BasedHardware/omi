@@ -457,12 +457,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   @State private var duplicateMessageIDs: Set<String> = []
   var body: some View {
     ScrollViewReader { proxy in
-      // Anchored to the trailing edge, not the middle. A floating control with
-      // nothing under it in the centre of a panel reads as a stray object; on the
-      // corner it reads as chrome belonging to the scroll view it commands.
-      ZStack(alignment: .bottomTrailing) {
+      // Rail first, jump-to-latest on top of it. The rail is a full-height
+      // trailing strip; stacking the disc underneath it ate the click.
+      ZStack {
         scrollContent(proxy: proxy)
-        scrollToBottomButton(proxy: proxy)
       }
       .overlay(alignment: .trailing) {
         if enablesPromptTimeline {
@@ -474,6 +472,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             }
           )
         }
+      }
+      .overlay(alignment: .bottomTrailing) {
+        scrollToBottomButton(proxy: proxy)
       }
       .onGeometryChange(for: CGSize.self) {
         $0.size
@@ -571,6 +572,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       .padding(.trailing, trailingContentInset)
       .padding(.vertical, verticalContentPadding)
       .frame(maxWidth: .infinity)
+      .coordinateSpace(name: ChatTranscriptSpace.content)
       // Do not enable text selection on the whole stack. SelectionOverlay on every
       // chrome Text (agent card headers, tool summaries, timestamps) can peg the
       // main thread in GraphHost layout. Message bodies opt in via OmiMarkdown.
@@ -660,6 +662,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // while a server load is still in flight, or the expand would clear the
     // original anchor and recapture the newly revealed oldest row.
     .onChange(of: transcriptWindowPresentation) { _, presentation in
+      transcriptGeometry.setMessages(visibleTranscriptMessages)
       guard presentation == .expanded, !isLoadingMoreMessages else { return }
       restorePrependAnchor(proxy: proxy)
     }
@@ -703,6 +706,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       hasActivityBelow = false
       trackedConversationId = conversationIdentity
       refreshDuplicateMessageIDs()
+      transcriptGeometry.reset()
       transcriptGeometry.setMessages(visibleTranscriptMessages)
       if !isLoadingInitial, !messages.isEmpty {
         handleInitialRestore(proxy: proxy)
@@ -902,6 +906,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       item.cancel()
     }
     initialScrollWorkItems.removeAll()
+    if ChatTranscriptPrependPreservation.shouldReleasePreserveLatchAfterCancellingRestore(
+      isPreservingPrepend: isPreservingPrepend,
+      prependAnchorId: prependAnchorId
+    ) {
+      isPreservingPrepend = false
+    }
   }
 
   /// Explicit reader input cancels launch placement and makes the current
@@ -993,6 +1003,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         )
         .padding(.top, ChatTranscriptLayout.topAdjustment(at: index, in: displayMessages))
         .id(message.id)
+        .onGeometryChange(for: CGFloat.self) {
+          $0.frame(in: .named(ChatTranscriptSpace.content)).minY
+        } action: { minY in
+          guard message.sender == .user else { return }
+          transcriptGeometry.setRowOffset(minY, for: message.id)
+        }
       }
     }
   }

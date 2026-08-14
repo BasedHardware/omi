@@ -163,7 +163,7 @@ struct ChatPromptTimeline: View {
   let trailingInset: CGFloat
 
   @State private var cursorY: CGFloat?
-  @State private var hoveredIndex: Int?
+  @State private var hoveredMarkID: String?
   @State private var previewHeight: CGFloat = 0
 
   /// `hoveredIndex` seeds the hover the rail would otherwise only reach through
@@ -182,7 +182,9 @@ struct ChatPromptTimeline: View {
     self.gutter = gutter
     self.onSelect = onSelect
     self.trailingInset = trailingInset
-    _hoveredIndex = State(initialValue: hoveredIndex)
+    _hoveredMarkID = State(
+      initialValue: hoveredIndex.flatMap { marks.indices.contains($0) ? marks[$0].id : nil }
+    )
   }
 
   var body: some View {
@@ -199,7 +201,7 @@ struct ChatPromptTimeline: View {
 
         ForEach(Array(marks.enumerated()), id: \.element.id) { index, mark in
           let position = positions.indices.contains(index) ? positions[index] : 0
-          markView(mark, at: position, index: index)
+          markView(mark, at: position)
         }
       }
       // The card is an overlay, never a sibling. A 236pt card inside the stack
@@ -215,13 +217,20 @@ struct ChatPromptTimeline: View {
         case .active(let location):
           OmiMotion.withGated(ChatPromptTimelineMetrics.proximityAnimation) {
             cursorY = location.y
-            hoveredIndex = ChatPromptTimelineMetrics.index(nearest: location.y, positions: positions)
+            hoveredMarkID = Self.markID(nearest: location.y, marks: marks, positions: positions)
           }
         case .ended:
           OmiMotion.withGated(ChatPromptTimelineMetrics.exitAnimation) {
             cursorY = nil
-            hoveredIndex = nil
+            hoveredMarkID = nil
           }
+        }
+      }
+      .onChange(of: marks.map(\.id)) { _, ids in
+        if let cursorY {
+          hoveredMarkID = Self.markID(nearest: cursorY, marks: marks, positions: positions)
+        } else if let hoveredMarkID, !ids.contains(hoveredMarkID) {
+          self.hoveredMarkID = nil
         }
       }
       .onTapGesture { location in
@@ -238,9 +247,18 @@ struct ChatPromptTimeline: View {
     .accessibilityHidden(true)
   }
 
+  private static func markID(nearest y: CGFloat, marks: [ChatPromptMark], positions: [CGFloat])
+    -> String?
+  {
+    guard let index = ChatPromptTimelineMetrics.index(nearest: y, positions: positions),
+      marks.indices.contains(index)
+    else { return nil }
+    return marks[index].id
+  }
+
   @ViewBuilder
-  private func markView(_ mark: ChatPromptMark, at position: CGFloat, index: Int) -> some View {
-    let isHovered = hoveredIndex == index
+  private func markView(_ mark: ChatPromptMark, at position: CGFloat) -> some View {
+    let isHovered = hoveredMarkID == mark.id
     let isActive = activeMarkID == mark.id
     let proximity =
       cursorY.map { ChatPromptTimelineMetrics.proximity(distance: abs($0 - position)) } ?? 0
@@ -264,7 +282,8 @@ struct ChatPromptTimeline: View {
 
   @ViewBuilder
   private func preview(positions: [CGFloat], railHeight: CGFloat) -> some View {
-    if let index = hoveredIndex, marks.indices.contains(index),
+    if let hoveredMarkID, let index = marks.firstIndex(where: { $0.id == hoveredMarkID }),
+      marks.indices.contains(index),
       positions.indices.contains(index)
     {
       VStack(alignment: .trailing, spacing: OmiSpacing.hairline) {

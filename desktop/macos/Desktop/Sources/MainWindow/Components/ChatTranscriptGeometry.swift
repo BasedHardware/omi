@@ -116,9 +116,14 @@ final class ChatTranscriptGeometry: ObservableObject {
   /// Follows the scroll controller's explicit intent rather than waiting for a
   /// layout pass to prove the bottom position. That prevents the final prompt
   /// from briefly lighting the penultimate mark after initial restore or a new
-  /// message.
+  /// message. Entering live-follow also drops a rail pin: Jump to latest is an
+  /// outright choice of the newest turn, even if the follow flag was already true.
   func setFollowingLiveEdge(_ isFollowing: Bool) {
-    guard isFollowingLiveEdge != isFollowing else { return }
+    let pinCleared = isFollowing && pinnedMarkID != nil
+    if isFollowing {
+      pinnedMarkID = nil
+    }
+    guard isFollowingLiveEdge != isFollowing || pinCleared else { return }
     isFollowingLiveEdge = isFollowing
     refreshActiveMark()
   }

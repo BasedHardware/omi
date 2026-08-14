@@ -446,6 +446,21 @@ final class ChatTranscriptGeometrySelectionTests: XCTestCase {
     withExtendedLifetime(subscription) {}
   }
 
+  /// Jump to latest is an outright choice of the newest turn. A pin from a
+  /// prior rail click must not keep lighting a historical prompt at the live edge.
+  func testJumpingToLatestReleasesAPinnedHistoricalPrompt() {
+    let geometry = loadedGeometry()
+    geometry.setContent(height: documentHeight, scrollTop: 0)
+    XCTAssertEqual(geometry.marks.map(\.id), ["q0", "q1", "q2"])
+    geometry.selectMark("q0")
+    XCTAssertEqual(geometry.activeMarkID, "q0")
+
+    geometry.setFollowingLiveEdge(true)
+    geometry.setFollowingLiveEdge(true)
+
+    XCTAssertEqual(geometry.activeMarkID, "q2")
+  }
+
   /// Switching conversations retires the ids a pin was holding.
   func testAChoiceDoesNotSurviveTheConversationItWasMadeIn() {
     let geometry = loadedGeometry()

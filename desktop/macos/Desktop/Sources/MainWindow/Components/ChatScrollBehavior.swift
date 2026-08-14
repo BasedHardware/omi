@@ -527,6 +527,16 @@ enum ChatTranscriptPrependPreservation {
     userIsScrolling && !isPreservingPrepend
   }
 
+  /// Restore work items clear the latch when they finish. If a later gesture
+  /// cancels them first, that cleanup never runs. The load-more click still
+  /// holds an anchor, so it must not be treated as a cancelled restore.
+  static func shouldReleasePreserveLatchAfterCancellingRestore(
+    isPreservingPrepend: Bool,
+    prependAnchorId: String?
+  ) -> Bool {
+    isPreservingPrepend && prependAnchorId == nil
+  }
+
   static func restoredScrollTop(
     previousDocumentHeight: CGFloat,
     previousScrollTop: CGFloat,

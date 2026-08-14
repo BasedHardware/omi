@@ -384,9 +384,13 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     let harness = try makeHarness(messageCount: 80)
     defer { harness.tearDown() }
     harness.settleInitialPlacement()
-
-    harness.performUpwardGesture(events: 80)
-    XCTAssertLessThan(harness.scrollTop, 80, "precondition: the reader is at the top of history")
+    harness.beginLiveScroll()
+    harness.scrollClipToTop()
+    XCTAssertLessThan(
+      harness.scrollTop, 80,
+      "precondition: the reader is at the top of history (scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))"
+    )
+    harness.endLiveScroll()
     let heightBefore = harness.documentHeight
     let topBefore = harness.scrollTop
 
@@ -408,7 +412,7 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     )
     XCTAssertGreaterThan(
       harness.scrollTop, 100,
-      "the viewport is still sitting on the newly loaded oldest rows")
+      "restore left the reader at the newly loaded oldest rows (scrollTop=\(harness.scrollTop))")
   }
 
   // MARK: - Harness
@@ -540,7 +544,14 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     // MARK: Gestures
 
     /// Outlives every delay in `ChatScrollLiveEdge.initialRestoreSettlingDelays`.
-    func settleInitialPlacement() { pump(1.2) }
+    func settleInitialPlacement() {
+      pump(1.2)
+      if let discovered = Self.firstScrollView(in: hostingView) { scrollView = discovered }
+    }
+
+    func scrollClipToTop() {
+      setClipTop(0)
+    }
 
     func performUpwardGesture(
       events: Int, deltaPerEvent: CGFloat = 40, pumpPerEvent: TimeInterval = 0,

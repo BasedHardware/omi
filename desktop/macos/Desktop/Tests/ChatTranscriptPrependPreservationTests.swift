@@ -47,21 +47,61 @@ final class ChatTranscriptPrependPreservationTests: XCTestCase {
     )
   }
 
+  func testCancellingRestoreReleasesTheLatchOnlyAfterTheAnchorIsConsumed() {
+    XCTAssertFalse(
+      ChatTranscriptPrependPreservation.shouldReleasePreserveLatchAfterCancellingRestore(
+        isPreservingPrepend: true,
+        prependAnchorId: "still-loading"
+      ),
+      "the load-more click still holds the anchor; clearing the latch would abort restore"
+    )
+    XCTAssertTrue(
+      ChatTranscriptPrependPreservation.shouldReleasePreserveLatchAfterCancellingRestore(
+        isPreservingPrepend: true,
+        prependAnchorId: nil
+      )
+    )
+    XCTAssertFalse(
+      ChatTranscriptPrependPreservation.shouldReleasePreserveLatchAfterCancellingRestore(
+        isPreservingPrepend: false,
+        prependAnchorId: nil
+      )
+    )
+  }
+
+  @MainActor
+  func testApplyMovesANonFlippedClipViewByTheInsertedHeight() {
+    assertApplyMovesClipView(
+      document: NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 1_000))
+    )
+  }
+
   @MainActor
   func testApplyMovesAFlippedClipViewByTheInsertedHeight() {
-    let document = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 1_000))
+    assertApplyMovesClipView(
+      document: FlippedDocumentView(frame: NSRect(x: 0, y: 0, width: 400, height: 1_000))
+    )
+  }
+
+  @MainActor
+  private func assertApplyMovesClipView(document: NSView) {
     let clip = NSClipView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
     clip.documentView = document
     let scrollView = NSScrollView(frame: clip.frame)
     scrollView.contentView = clip
     scrollView.documentView = document
-    clip.scroll(to: NSPoint(x: 0, y: 40))
+    let initialTop: CGFloat = 40
+    let originY =
+      document.isFlipped
+      ? initialTop
+      : document.frame.height - initialTop - clip.bounds.height
+    clip.scroll(to: NSPoint(x: 0, y: originY))
     scrollView.reflectScrolledClipView(clip)
 
     document.setFrameSize(NSSize(width: 400, height: 1_800))
     let applied = ChatTranscriptPrependPreservation.apply(
       to: scrollView,
-      snapshot: .init(documentHeight: 1_000, scrollTop: 40)
+      snapshot: .init(documentHeight: 1_000, scrollTop: initialTop)
     )
 
     XCTAssertTrue(applied)
@@ -76,4 +116,8 @@ final class ChatTranscriptPrependPreservationTests: XCTestCase {
       accuracy: 1
     )
   }
+}
+
+private final class FlippedDocumentView: NSView {
+  override var isFlipped: Bool { true }
 }

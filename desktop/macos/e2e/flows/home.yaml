@@ -76,3 +76,9 @@ steps:
     expect:
       text_visible:
         - Settings
+
+  - id: S6
+    name: Prompt rail and older messages
+    do: "In a long conversation, hover the trailing-edge hairline marks and verify a preview shows the prompt, the start of the reply, and a timestamp. Click a mark and verify the transcript jumps to that prompt. Scroll to the top, click Show older messages or Load earlier messages, and verify the same rows stay in view rather than jumping to the newly loaded oldest message."
+    expect:
+      interactive_count: { min: 2 }
