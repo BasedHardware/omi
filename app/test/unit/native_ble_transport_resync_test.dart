@@ -60,7 +60,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(received, [
-      [1, 2, 3],
+      [1, 2, 3]
     ]);
   });
 
