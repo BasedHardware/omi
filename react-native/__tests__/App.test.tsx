@@ -655,7 +655,9 @@ test('renders memory body separately from provenance and searches only loaded ro
   await ReactTestRenderer.act(async () => memories.props.onPress());
   const rendered = JSON.stringify(renderer.toJSON());
   expect(rendered).toContain('The launch is Friday.');
-  expect(rendered).toContain('Provenance · quiet-river-lantern · synthesis-v1');
+  expect(rendered).toContain('Synthesized memory');
+  expect(rendered).not.toContain('quiet-river-lantern');
+  expect(rendered).not.toContain('synthesis-v1');
   expect(rendered).not.toContain('citation-v1:launch');
   expect(rendered).not.toContain('quiet-river-lantern: The launch is Friday.');
   const beforeSearch = paths.length;

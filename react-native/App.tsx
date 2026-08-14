@@ -647,13 +647,7 @@ function MemoriesPage({
           </Text>
         </View>
         <Text style={styles.memoryBody}>{item.summary}</Text>
-        <Text style={styles.memoryProvenance}>
-          {`Provenance · ${
-            item.provenance.label === null
-              ? item.provenance.synthesisVersion
-              : `${item.provenance.label} · ${item.provenance.synthesisVersion}`
-          }`}
-        </Text>
+        <Text style={styles.memoryProvenance}>Synthesized memory</Text>
       </View>
     ),
     [],
