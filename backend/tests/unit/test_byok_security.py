@@ -22,7 +22,7 @@ os.environ.setdefault('DEEPGRAM_API_KEY', 'dg-test-fake-for-unit-tests')
 os.environ.setdefault('GOOGLE_API_KEY', 'goog-test-fake-for-unit-tests')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'ant-test-fake-for-unit-tests')
 
-from testing.import_isolation import AutoMockModule, stub_modules
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 warnings.filterwarnings('ignore', message='.*stream_options.*')
 
@@ -79,7 +79,11 @@ def _byok_isolation():
         # per-test fast-unit CPU-time guard doesn't charge cold-start cost to the
         # first cache-routing test. Uses a distinct key so no assertion is affected.
         from utils.llm.clients import _cached_openai_chat
-        import utils.subscription
+
+        # Force a fresh load against the stubs: another test module may already have
+        # imported the real utils.subscription (and bound the real database._client),
+        # so a plain `import` would reuse the cached module and bypass the fakes.
+        load_module_fresh('utils.subscription', str(_BACKEND / 'utils' / 'subscription.py'))
 
         _cached_openai_chat('gpt-4.1-mini', 'sk-warmup-timing-guard-not-asserted', {})
         yield
