@@ -651,6 +651,8 @@ def _chat_message_notification(
     return NotificationMessage(
         id=message_id,
         text=message,
+        plugin_id=app_id,
+        app_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',

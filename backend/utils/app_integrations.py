@@ -1029,6 +1029,7 @@ def _build_app_notification_payload(
     ai_message = NotificationMessage(
         text=message,
         plugin_id=app_id,
+        app_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',

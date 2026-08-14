@@ -9,6 +9,7 @@ class NotificationMessage(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(tz=timezone.utc).isoformat())
     sender: str = Field(default='ai')
     plugin_id: Optional[str] = None
+    app_id: Optional[str] = None
     from_integration: str
     type: str
     notification_type: str
@@ -25,6 +26,10 @@ class NotificationMessage(BaseModel):
         # Remove 'plugin_id' if it is None
         if message.plugin_id is None:
             del message_dict['plugin_id']
+
+        # Remove 'app_id' if it is None
+        if message.app_id is None:
+            del message_dict['app_id']
 
         if message.navigate_to is None:
             del message_dict['navigate_to']
