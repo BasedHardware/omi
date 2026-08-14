@@ -1,6 +1,4 @@
-import CryptoKit
 import Foundation
-import IOKit
 
 /// Everything that can go wrong between here and `api.omi.me`.
 ///
@@ -222,6 +220,19 @@ final class OmiAPI: @unchecked Sendable {
             // words), never a token, never a body.
             ContextLog.info(
                 "\(method) \(path) → \(response.statusCode) in \(Int(elapsedMs.rounded()))ms", Self.logCategory)
+            // **The server's own words, but only when the server is describing itself.** A 5xx body
+            // is the backend naming which of its dependencies failed — `infrastructure_failure`,
+            // `Service temporarily unavailable`, `account_deletion_state_unavailable` — and without
+            // it a 503 is indistinguishable from every other 503, which is exactly the position this
+            // app was in while a whole source silently returned nothing. Restricted to 5xx on
+            // purpose: a 4xx detail is FastAPI quoting *our request* back, and our requests carry
+            // the user's own search window and ids.
+            if response.statusCode >= 500 {
+                let detail = Self.detail(from: data, response: response)
+                if !detail.isEmpty {
+                    ContextLog.error("\(method) \(path) → \(response.statusCode): \(detail)", Self.logCategory)
+                }
+            }
 
             // Exactly one forced refresh per request. A second 401 is an answer, not a prompt to
             // keep asking: looping here is how a client with a genuinely rejected identity turns
@@ -489,60 +500,11 @@ final class OmiAPI: @unchecked Sendable {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
     private static let appBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
 
-    private static let fallbackDeviceIdKey = "context-for-claude.device-id"
-
-    /// A stable, non-reversible name for this Mac.
+    /// A stable, non-reversible name for this Mac, in the exact shape the backend will accept.
     ///
-    /// **It must not change between launches.** The backend keys capture provenance, deduplication
-    /// and per-device rate limiting off this value: if it rotated, every restart would look like a
-    /// brand-new Mac joining the account — the same conversation could be ingested twice under two
-    /// device ids, "recorded on this Mac" would stop being answerable, and per-device limits would
-    /// never bind because no device would ever be seen twice.
-    ///
-    /// The hardware UUID is the right root for that: it survives reinstalls, upgrades and disk
-    /// wipes, and it is the same identity the Omi desktop app already reports for this machine.
-    /// It is hashed rather than sent, because the raw `IOPlatformUUID` is a global hardware serial
-    /// and nothing off-machine has any business holding it.
-    ///
-    /// `static let` gives us the "computed once" for free — Swift initialises it lazily, exactly
-    /// once, and the IOKit lookup never runs again for the life of the process.
-    static let deviceIdHash: String = makeDeviceIdHash()
-
-    private static func makeDeviceIdHash() -> String {
-        if let hardwareUUID = platformUUID() {
-            return truncatedSHA256(of: hardwareUUID)
-        }
-        // IOKit could not answer. A random UUID kept in UserDefaults is still stable for this
-        // install, which is what the header actually promises; it is hashed the same way so the
-        // wire format never reveals which path produced it.
-        ContextLog.error("No IOPlatformUUID; using the persisted device id instead", logCategory)
-        let defaults = UserDefaults.standard
-        if let existing = defaults.string(forKey: fallbackDeviceIdKey), !existing.isEmpty {
-            return truncatedSHA256(of: existing)
-        }
-        let fresh = UUID().uuidString
-        defaults.set(fresh, forKey: fallbackDeviceIdKey)
-        return truncatedSHA256(of: fresh)
-    }
-
-    /// 32 hex characters — 128 bits, far past collision range for the number of Macs alive, and
-    /// short enough to read whole in a log line.
-    private static func truncatedSHA256(of value: String) -> String {
-        let digest = SHA256.hash(data: Data(value.utf8))
-        return String(digest.map { String(format: "%02x", $0) }.joined().prefix(32))
-    }
-
-    private static func platformUUID() -> String? {
-        let service = IOServiceGetMatchingService(
-            kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"))
-        guard service != 0 else { return nil }
-        defer { IOObjectRelease(service) }
-        guard
-            let property = IORegistryEntryCreateCFProperty(
-                service, kIOPlatformUUIDKey as CFString, kCFAllocatorDefault, 0),
-            let uuid = property.takeRetainedValue() as? String,
-            !uuid.isEmpty
-        else { return nil }
-        return uuid
-    }
+    /// Forwarded from `ClientDevice`, which owns the contract and explains it. It is re-exported
+    /// here rather than having callers reach past this client because `X-Device-Id-Hash` is a
+    /// *header* — it is this file's business what goes in the header set, and every caller that
+    /// wanted the value was already asking `OmiAPI` for it.
+    static let deviceIdHash = ClientDevice.deviceIdHash
 }

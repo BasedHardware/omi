@@ -678,9 +678,29 @@ final class ScreenActivityUploader: ObservableObject {
         }
     }
 
-    private static let rfc3339: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
+    /// `yyyy-MM-dd HH:mm:ss.SSS`, UTC — the format the backend stores and **sorts by as a string**,
+    /// not a preference.
+    ///
+    /// The server writes `row["timestamp"]` into Firestore verbatim and then range-filters it with
+    /// `>=` / `<=` against `strftime('%Y-%m-%d %H:%M:%S.000')` (`backend/database/screen_activity.py`).
+    /// Those comparisons are lexicographic, so the separator is load-bearing: this used to send
+    /// RFC-3339 (`2026-08-14T12:08:49Z`), and `'T'` (0x54) sorts above `' '` (0x20). Every row this
+    /// app wrote therefore sorted *after* every row the Omi desktop app wrote on the same day — an
+    /// `end_date` on that day excluded all of ours, and an intra-day `start_date` admitted all of
+    /// them whatever their real time. Confirmed in live data: 71 Omi rows from 04:57Z, then all 64
+    /// of ours through 12:08Z, with no interleaving at all.
+    ///
+    /// The Omi desktop app never had this bug because it never formats anything: its `screenshots`
+    /// row holds a `Date`, GRDB persists a `Date` as exactly this string in UTC, and its sync
+    /// service forwards the stored text unchanged (`ScreenActivitySyncService.payloadRow`). Our
+    /// `frames.capturedAt` is epoch seconds, so the same string has to be produced here.
+    ///
+    /// `en_US_POSIX` because a fixed-format formatter must not follow the user's region: without it
+    /// a Japanese or Buddhist calendar locale silently emits a different era and year.
+    private static let storageTimestamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         return formatter
     }()
@@ -691,7 +711,7 @@ final class ScreenActivityUploader: ObservableObject {
         let wire = rows.map { row in
             WireRow(
                 id: row.id,
-                timestamp: Self.rfc3339.string(from: Date(timeIntervalSince1970: row.capturedAt)),
+                timestamp: Self.storageTimestamp.string(from: Date(timeIntervalSince1970: row.capturedAt)),
                 appName: row.appName,
                 windowTitle: row.windowTitle,
                 ocrText: row.ocrText,
