@@ -7,7 +7,6 @@ allowing clients to connect without running a local MCP server.
 Implements the MCP 2025-03-26 Streamable HTTP Transport specification.
 """
 
-import asyncio
 import json
 import logging
 import os
@@ -1803,44 +1802,23 @@ async def mcp_streamable_http(
 
 
 @router.get("/v1/mcp/sse", tags=["mcp"], response_class=Response)
-async def mcp_sse_get(
-    request: Request,
-    authorization: Optional[str] = Header(None, alias="Authorization"),
-    mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
-):
+def mcp_sse_get():
     """
-    SSE endpoint for server-initiated messages (optional).
+    GET on the Streamable HTTP endpoint: this server offers no server-initiated stream.
 
-    Clients can GET this endpoint to listen for server-initiated notifications.
-    This is optional per the MCP spec and mainly used for long-polling scenarios.
+    Per the MCP Streamable HTTP transport spec (2025-03-26), a server that does not
+    offer server-initiated messages MUST return 405 Method Not Allowed for GET, and
+    clients MUST NOT treat that as an error.
+
+    This used to return an infinite keepalive-ping SSE stream that carried no protocol
+    data (this transport is stateless; nothing is ever pushed, and the deprecated
+    HTTP+SSE transport's required ``endpoint`` event was never sent). Every connected
+    MCP client parked one such stream for the full Cloud Run request timeout (3600s),
+    which exhausted the service's concurrency slots while CPU sat idle and drove
+    tool-call tail latency to minutes ("no available instance" aborts). Do not
+    reintroduce a long-lived GET stream here without accounting for that capacity.
     """
-    # Authenticate
-    auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)
-    if not auth_context:
-        raise invalid_mcp_auth_exception()
-
-    await run_blocking(critical_executor, check_rate_limit_inline, auth_context.uid, "mcp:sse")
-
-    # For backwards compatibility, also support the old SSE flow
-    # Return an empty SSE stream that just sends keepalives
-    async def event_generator():
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                yield f"event: ping\ndata: {{}}\n\n"
-                await asyncio.sleep(30)
-        except asyncio.CancelledError:
-            # Normal cancellation when client disconnects
-            pass
-        except Exception as e:
-            logging.warning(f"MCP SSE event generator error: {e}")
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
+    return Response(status_code=405, headers={"Allow": "POST, HEAD, DELETE"})
 
 
 @router.head("/v1/mcp/sse", tags=["mcp"], response_class=Response)
