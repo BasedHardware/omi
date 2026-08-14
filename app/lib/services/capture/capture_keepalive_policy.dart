@@ -27,7 +27,10 @@ bool isBleAudioCharacteristicUuid(String characteristicUuid) {
   final c = characteristicUuid.toLowerCase();
   return c == audioDataStreamCharacteristicUuid.toLowerCase() ||
       c == friendPendantAudioCharacteristicUuid.toLowerCase() ||
-      c == limitlessRxCharUuid.toLowerCase();
+      c == limitlessRxCharUuid.toLowerCase() ||
+      c == beeAudioCharacteristicUuid.toLowerCase() ||
+      c == fieldyAudioCharacteristicUuid.toLowerCase() ||
+      c == plaudNotifyCharUuid.toLowerCase();
 }
 
 bool isLiveCaptureRecordingState(RecordingState state) {
@@ -36,8 +39,23 @@ bool isLiveCaptureRecordingState(RecordingState state) {
       state == RecordingState.systemAudioRecord;
 }
 
+/// Phone-mic (`record`) and system-audio own AVAudioSession for the whole
+/// session, including Transcribe Later batch (no Dart frames). Wearable
+/// `deviceRecord` is the BLE path that may configure-and-deactivate Bluetooth.
+bool isSessionLongCaptureForegroundState(RecordingState state) {
+  return state == RecordingState.record || state == RecordingState.systemAudioRecord;
+}
+
+bool isBluetoothCaptureForegroundOwner(RecordingState state) {
+  return state == RecordingState.deviceRecord;
+}
+
 /// Hold flutter_foreground_task / iOS audio session only while capture is
 /// actually running and audio is flowing (or still within startup grace).
+///
+/// Phone-mic and system-audio own the session for the whole recording — a
+/// talk gap must not flap FGS or deactivate AVAudioSession under them.
+/// Wearable `deviceRecord` holds during startup grace or while frames flow.
 bool shouldHoldCaptureForegroundTask({
   required RecordingState recordingState,
   required DateTime? lastAudioFrameAt,
@@ -47,6 +65,9 @@ bool shouldHoldCaptureForegroundTask({
   if (!isLiveCaptureRecordingState(recordingState)) {
     return false;
   }
+  if (isSessionLongCaptureForegroundState(recordingState)) {
+    return true;
+  }
   if (recordingStartedAt != null && now.difference(recordingStartedAt) <= captureForegroundStartGrace) {
     return true;
   }
@@ -54,6 +75,24 @@ bool shouldHoldCaptureForegroundTask({
     return false;
   }
   return now.difference(lastAudioFrameAt) <= captureForegroundAudioStaleAfter;
+}
+
+/// After wearable FGS is released for stale audio, a new frame must re-sync
+/// or the keep-alive stays off for the rest of the session.
+bool shouldResyncCaptureForegroundOnAudioFrame({
+  required bool currentlyHeld,
+  required RecordingState recordingState,
+}) {
+  return !currentlyHeld && isLiveCaptureRecordingState(recordingState);
+}
+
+/// Drop the previous session's last-frame timestamp when entering or leaving
+/// live capture so a new/stopped session cannot inherit a 15s keep-alive hit.
+bool shouldClearCaptureAudioTimestamp({
+  required bool wasLive,
+  required bool isLive,
+}) {
+  return !isLive || !wasLive;
 }
 
 /// Whether the 15s STT keep-alive should open a new websocket.

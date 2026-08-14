@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
 
@@ -110,6 +111,38 @@ void main() {
         hostApi.subscribed.where((s) => s.contains(audioChar)).length,
         afterFirstSilence,
         reason: 'do not tight-loop resubscribe after the single retry',
+      );
+    });
+  });
+
+  test('Bee audio UUID silence after reconnect still schedules one CCCD retry', () {
+    fakeAsync((async) {
+      transport.dispose();
+      final hostApi = _FakeBleHostApi();
+      transport = NativeBleTransport(uuid, hostApi: hostApi);
+
+      final audioServices = [
+        BleService(uuid: beeServiceUuid, characteristicUuids: [beeAudioCharacteristicUuid]),
+      ];
+
+      BleBridge.instance.onDeviceReady(uuid, audioServices);
+      transport.getCharacteristicStream(beeServiceUuid, beeAudioCharacteristicUuid).listen((_) {});
+      async.flushMicrotasks();
+
+      BleBridge.instance.onPeripheralDisconnected(uuid, null);
+      BleBridge.instance.onDeviceReady(uuid, audioServices);
+      async.flushMicrotasks();
+
+      final subscribesBeforeWatch =
+          hostApi.subscribed.where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase())).length;
+      expect(subscribesBeforeWatch, greaterThanOrEqualTo(1));
+
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(
+        hostApi.subscribed.where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase())).length,
+        subscribesBeforeWatch + 1,
+        reason: 'Bee audio UUID must be recognized so CCCD retry arms',
       );
     });
   });

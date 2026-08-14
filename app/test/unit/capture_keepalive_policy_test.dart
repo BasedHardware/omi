@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:geolocator/geolocator.dart';
 
 import 'package:omi/services/capture/capture_keepalive_policy.dart';
 import 'package:omi/services/devices/models.dart';
@@ -8,16 +7,17 @@ import 'package:omi/utils/enums.dart';
 void main() {
   test('location permission alone does not start the foreground keep-alive', () {
     expect(shouldStartForegroundTaskFromLocationPermission(), isFalse);
-    // The production HomePage used to start FGS for these two values.
-    expect(LocationPermission.always, isNot(LocationPermission.denied));
-    expect(LocationPermission.whileInUse, isNot(LocationPermission.denied));
   });
 
-  test('identifies Omi / pendant / Limitless audio characteristics', () {
+  test('identifies Omi, pendant, Limitless, Bee, Fieldy, and Plaud audio characteristics', () {
     expect(isBleAudioCharacteristicUuid(audioDataStreamCharacteristicUuid), isTrue);
     expect(isBleAudioCharacteristicUuid(friendPendantAudioCharacteristicUuid), isTrue);
     expect(isBleAudioCharacteristicUuid(limitlessRxCharUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(beeAudioCharacteristicUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(fieldyAudioCharacteristicUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(plaudNotifyCharUuid), isTrue);
     expect(isBleAudioCharacteristicUuid(batteryLevelCharacteristicUuid), isFalse);
+    expect(isBleAudioCharacteristicUuid(plaudWriteCharUuid), isFalse);
   });
 
   group('shouldHoldCaptureForegroundTask', () {
@@ -67,10 +67,10 @@ void main() {
       );
     });
 
-    test('holds while recent audio frames are flowing', () {
+    test('holds while recent wearable audio frames are flowing', () {
       expect(
         shouldHoldCaptureForegroundTask(
-          recordingState: RecordingState.record,
+          recordingState: RecordingState.deviceRecord,
           lastAudioFrameAt: started.add(const Duration(seconds: 10)),
           recordingStartedAt: started,
           now: started.add(const Duration(seconds: 12)),
@@ -79,7 +79,7 @@ void main() {
       );
     });
 
-    test('releases the keep-alive when audio has gone stale', () {
+    test('releases wearable keep-alive when audio has gone stale', () {
       expect(
         shouldHoldCaptureForegroundTask(
           recordingState: RecordingState.deviceRecord,
@@ -90,6 +90,65 @@ void main() {
         isFalse,
       );
     });
+
+    test('re-acquires wearable keep-alive when frames resume after silence', () {
+      final resumed = started.add(const Duration(seconds: 20));
+      expect(
+        shouldHoldCaptureForegroundTask(
+          recordingState: RecordingState.deviceRecord,
+          lastAudioFrameAt: resumed,
+          recordingStartedAt: started,
+          now: resumed,
+        ),
+        isTrue,
+      );
+    });
+
+    test('holds phone-mic and system-audio for the whole session without frames', () {
+      for (final state in [RecordingState.record, RecordingState.systemAudioRecord]) {
+        expect(
+          shouldHoldCaptureForegroundTask(
+            recordingState: state,
+            lastAudioFrameAt: null,
+            recordingStartedAt: started,
+            now: started.add(const Duration(minutes: 2)),
+          ),
+          isTrue,
+          reason: '$state',
+        );
+      }
+    });
+  });
+
+  test('audio resume after silence must re-sync when FGS is not held', () {
+    expect(
+      shouldResyncCaptureForegroundOnAudioFrame(
+        currentlyHeld: false,
+        recordingState: RecordingState.deviceRecord,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldResyncCaptureForegroundOnAudioFrame(
+        currentlyHeld: true,
+        recordingState: RecordingState.deviceRecord,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldResyncCaptureForegroundOnAudioFrame(
+        currentlyHeld: false,
+        recordingState: RecordingState.stop,
+      ),
+      isFalse,
+    );
+  });
+
+  test('clears inherited audio timestamps at session boundaries', () {
+    expect(shouldClearCaptureAudioTimestamp(wasLive: true, isLive: false), isTrue);
+    expect(shouldClearCaptureAudioTimestamp(wasLive: false, isLive: true), isTrue);
+    expect(shouldClearCaptureAudioTimestamp(wasLive: true, isLive: true), isFalse);
+    expect(shouldClearCaptureAudioTimestamp(wasLive: false, isLive: false), isTrue);
   });
 
   group('shouldReconnectSttKeepAlive', () {
