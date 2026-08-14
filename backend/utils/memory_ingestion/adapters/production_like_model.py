@@ -778,7 +778,7 @@ def _frame_polarity(memory: ProductionLikeMemory) -> Literal["negative", "neutra
 _memory_llm_logged = False  # module-level flag: has the LLM endpoint been logged?
 
 
-def _memory_llm(temperature: float | None = 0.0):
+def _memory_llm(temperature: float | None = None):
     global _memory_llm_logged
     # Log resolved endpoint once for debuggability — catches credential mismatches early
     if not _memory_llm_logged:

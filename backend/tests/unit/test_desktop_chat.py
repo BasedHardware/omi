@@ -832,7 +832,7 @@ async def test_stream_schedules_terminal_usage_when_cancelled_after_message_delt
 @pytest.mark.asyncio
 async def test_chat_completions_routes_public_web_search_to_direct_anthropic(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -879,7 +879,7 @@ async def test_chat_completions_routes_public_web_search_to_direct_anthropic(mon
 @pytest.mark.asyncio
 async def test_chat_completions_routes_pi_public_web_policy_to_direct_anthropic(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -930,7 +930,7 @@ async def test_chat_completions_routes_pi_public_web_policy_to_direct_anthropic(
 @pytest.mark.asyncio
 async def test_chat_completions_records_usage_when_pause_turn_limit_is_exhausted(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
@@ -970,7 +970,7 @@ async def test_chat_completions_records_usage_when_pause_turn_limit_is_exhausted
 @pytest.mark.asyncio
 async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1028,7 +1028,7 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
 @pytest.mark.asyncio
 async def test_gateway_rejection_does_not_record_quota_question(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
@@ -1066,7 +1066,7 @@ async def test_gateway_rejection_does_not_record_quota_question(monkeypatch):
 
 def _wire_direct_lane(monkeypatch, quota_calls):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
@@ -1187,7 +1187,7 @@ async def test_direct_json_upstream_error_does_not_record_quota_question(monkeyp
 @pytest.mark.asyncio
 async def test_chat_completions_rejects_unknown_explicit_model_before_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1209,7 +1209,7 @@ async def test_chat_completions_rejects_unknown_explicit_model_before_gateway(mo
 @pytest.mark.asyncio
 async def test_chat_completions_rejects_explicit_null_model_before_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1283,8 +1283,39 @@ def test_specialist_haiku_requests_bypass_managed_chat_agent():
     assert not desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
     assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-sonnet-4-6'})
+    assert desktop_chat._uses_managed_chat_agent({'model': 'omi:auto:chat-agent'})
+    assert desktop_chat._uses_managed_chat_agent({'model': 'omi-luna'})
+    assert desktop_chat._uses_managed_chat_agent({'model': ''})
     assert desktop_chat._uses_managed_chat_agent({})
     assert not desktop_chat._uses_managed_chat_agent({'model': 'client-model'})
+
+
+def test_structured_aliases_route_to_the_structured_lane_not_chat():
+    for alias in ('omi-structured', 'OMI-Structured', 'omi:auto:chat-structured'):
+        assert desktop_chat._uses_managed_chat_agent({'model': alias})
+        assert desktop_chat._managed_lane_id({'model': alias}) == 'omi:auto:chat-structured'
+
+    # Conversational and omitted models keep the chat-agent lane.
+    for alias in ('omi-luna', 'omi-auto', 'claude-sonnet-4-6', ''):
+        assert desktop_chat._managed_lane_id({'model': alias}) == 'omi:auto:chat-agent'
+    assert desktop_chat._managed_lane_id({}) == 'omi:auto:chat-agent'
+
+
+def test_structured_lane_traffic_is_attributed_to_its_own_feature():
+    """Structured-lane calls must not land in the ledger as chat-agent traffic."""
+    assert desktop_chat._gateway_feature_for_lane('omi:auto:chat-structured') == 'chat_structured'
+    assert desktop_chat._gateway_feature_for_lane('omi:auto:chat-agent') == 'chat_agent'
+    assert desktop_chat._gateway_request_headers(
+        'req-1', 'omi:auto:chat-structured'
+    ) != desktop_chat._gateway_request_headers('req-1', 'omi:auto:chat-agent')
+
+
+def test_gateway_body_stamps_the_selected_lane():
+    request = {'model': 'omi-structured', 'messages': [{'role': 'user', 'content': 'plan this'}]}
+    lane = desktop_chat._managed_lane_id(request)
+    assert desktop_chat._gateway_body(request, lane)['model'] == 'omi:auto:chat-structured'
+    # Default stays the chat lane for callers that do not pass one.
+    assert desktop_chat._gateway_body(request)['model'] == 'omi:auto:chat-agent'
 
 
 def test_gateway_body_normalizes_openai_tool_history_content():
@@ -1404,7 +1435,7 @@ async def test_stream_gateway_records_usage_from_sse(monkeypatch):
 @pytest.mark.asyncio
 async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1476,7 +1507,7 @@ async def test_chat_completions_specialist_models_bypass_managed_gateway(
     monkeypatch, requested_model, translated_model
 ):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)

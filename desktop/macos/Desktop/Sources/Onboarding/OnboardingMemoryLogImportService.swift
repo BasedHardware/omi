@@ -77,29 +77,6 @@ actor OnboardingMemoryLogImportService {
     let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return .noDurableMemories }
 
-    let importPrompt = """
-      Analyze this exported \(source.displayName) memory log and extract persistent facts about the user.
-
-      MEMORY LOG:
-      \(String(trimmed.prefix(40_000)))
-
-      Respond ONLY with valid JSON (no markdown, no code fences):
-      {
-        "memories": [
-          "clear factual statement about the user"
-        ],
-        "profile": "2-3 sentence summary of what this memory log says about the user"
-      }
-
-      RULES:
-      - Extract 12-18 memories grounded in the provided memory log
-      - Keep only durable, user-specific facts, preferences, relationships, projects, interests, and goals
-      - Deduplicate overlapping memories
-      - Exclude tool details, implementation notes, and meta-instructions
-      - Each memory should be one concise factual statement
-      - Preserve any leading recency tag the log provides — an exact date ("[2024-05-01]") or a coarse tier ("[recent]", "[earlier]", "[long-term]"). Drop bare "[date unknown]"/"[unknown]" tags; they carry no signal
-      """
-
     let extracted: ExtractedMemoryLog
     if let extractedFixture {
       guard AppBuild.isNonProduction else {
@@ -108,29 +85,12 @@ actor OnboardingMemoryLogImportService {
       extracted = extractedFixture
     } else {
       do {
-        let result = try await AgentClient.run(
-          surface: .onboarding(),
-          prompt: importPrompt,
-          model: ModelQoS.Claude.synthesis,
-          systemPrompt:
-            "You convert memory-log exports into concise durable user memories. Output only valid JSON.",
-          onTextDelta: { @Sendable _ in },
-          onToolCall: { @Sendable _, _, _ in "" },
-          onToolActivity: { @Sendable _, _, _, _ in }
-        )
-
-        let responseText = Self.extractJSONObject(from: result.text)
-        guard
-          let jsonData = responseText.data(using: .utf8),
-          let parsed = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-        else {
-          log("OnboardingMemoryLogImportService: Failed to parse \(source.displayName) response")
-          return .failed
-        }
+        let response = try await APIClient.shared.extractMemoryLog(
+          text: String(trimmed.prefix(40_000)),
+          textSource: source.rawValue)
         extracted = ExtractedMemoryLog(
-          memories: parsed["memories"] as? [String] ?? [],
-          profileSummary: parsed["profile"] as? String ?? ""
-        )
+          memories: response.memories,
+          profileSummary: response.profile)
       } catch {
         log("OnboardingMemoryLogImportService: \(source.displayName) import failed: \(error)")
         return .failed
@@ -177,25 +137,5 @@ actor OnboardingMemoryLogImportService {
       return .failed
     }
     return .imported(memories: saveResult.saved, profileSummary: extracted.profileSummary)
-  }
-
-  private static func extractJSONObject(from text: String) -> String {
-    var responseText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    if responseText.hasPrefix("```") {
-      if let firstNewline = responseText.firstIndex(of: "\n") {
-        responseText = String(responseText[responseText.index(after: firstNewline)...])
-      }
-      if responseText.hasSuffix("```") {
-        responseText = String(responseText.dropLast(3)).trimmingCharacters(
-          in: .whitespacesAndNewlines)
-      }
-    }
-
-    if let braceIndex = responseText.firstIndex(of: "{") {
-      responseText = String(responseText[braceIndex...])
-    }
-
-    return responseText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

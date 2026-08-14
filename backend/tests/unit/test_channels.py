@@ -447,7 +447,7 @@ def test_describe_image_preserves_mime_type_in_data_url(monkeypatch):
     captured = {}
 
     class FakeVisionModel:
-        async def ainvoke(self, messages, *, config):
+        async def ainvoke(self, messages, *, config=None, max_completion_tokens=None):
             captured.update({'messages': messages, 'config': config})
             return SimpleNamespace(content='A test image.')
 

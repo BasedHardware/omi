@@ -55,7 +55,7 @@ def validate_chat_completion_request(
     if 'tool_choice' in request and request.get('tool_choice') not in (None, 'none') and not lane.capabilities.tools:
         raise GatewayCapabilityMismatchError('tool_choice is not supported for this lane', param='tool_choice')
 
-    messages = _validate_messages(request.get('messages'))
+    messages = _validate_messages(request.get('messages'), image_input=lane.capabilities.image_input)
     response_format = _validate_response_format(request.get('response_format'), lane)
     forwarded_params = _validate_forwarded_params(request)
 
@@ -67,7 +67,7 @@ def validate_chat_completion_request(
     )
 
 
-def _validate_messages(value: object) -> list[Mapping[str, Any]]:
+def _validate_messages(value: object, *, image_input: bool) -> list[Mapping[str, Any]]:
     if not isinstance(value, list) or not value:
         raise GatewayInvalidRequestError('messages must be a non-empty list', param='messages')
 
@@ -87,19 +87,19 @@ def _validate_messages(value: object) -> list[Mapping[str, Any]]:
                 typed_message = {**dict(typed_message), 'content': ''}
             else:
                 raise GatewayInvalidRequestError('message content is required', param=f'{param}.content')
-        _validate_text_content(typed_message.get('content'), param=f'{param}.content')
+        _validate_text_content(typed_message.get('content'), param=f'{param}.content', image_input=image_input)
         validated.append(typed_message)
     return validated
 
 
-def _validate_text_content(content: object, *, param: str) -> None:
+def _validate_text_content(content: object, *, param: str, image_input: bool) -> None:
     if isinstance(content, str):
         return
 
     if (
         isinstance(content, list)
         and content
-        and all(_is_supported_content_part(part) for part in cast(list[object], content))
+        and all(_is_supported_content_part(part, image_input=image_input) for part in cast(list[object], content))
     ):
         return
 
@@ -108,8 +108,8 @@ def _validate_text_content(content: object, *, param: str) -> None:
     )
 
 
-def _is_supported_content_part(part: object) -> bool:
-    return _is_text_content_part(part) or _is_image_url_content_part(part)
+def _is_supported_content_part(part: object, *, image_input: bool) -> bool:
+    return _is_text_content_part(part) or (image_input and _is_image_url_content_part(part))
 
 
 def _is_text_content_part(part: object) -> bool:

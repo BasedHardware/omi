@@ -14,6 +14,11 @@ image:
   # Build-specific; CI/manual deploy must pass --set-string image.tag=<short-sha>.
   tag: ""
 
+# GKE host / image project. Chart defaults keep GOOGLE_CLOUD_PROJECT aligned with
+# composed runtime_env gke.backend-listen (compute). Customer Firestore must not
+# rely on this env: database/_client.py pins SERVICE_ACCOUNT_JSON + its
+# project_id (based-hardware). Deploy may still --set runtimeGcpProjectId from
+# vars.RUNTIME_GCP_PROJECT_ID (manifest runtime_gcp_project = based-hardware).
 gcpProjectId: based-hardware-dev
 runtimeGcpProjectId: based-hardware-dev
 
@@ -30,8 +35,9 @@ serviceAccount:
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
   # Annotations to add to the service account.
-  # Development-only parity-pack exporter GSA (WI). Runtime JSON SA remains
-  # nik-164 via SERVICE_ACCOUNT_JSON; both have objectAdmin on the pack bucket.
+  # Development-only parity-pack exporter GSA (WI). Customer-data Firestore and
+  # Firebase Admin must use nik-164 via SERVICE_ACCOUNT_JSON — never this pack
+  # WI identity. Both have objectAdmin on the pack bucket for cassette export.
   annotations:
     iam.gke.io/gcp-service-account: dev-omi-listen-parity-pack@based-hardware-dev.iam.gserviceaccount.com
   # The name of the service account to use.
@@ -170,8 +176,6 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_MODE
     value: "off"
-  - name: MEMORY_ENABLED_USERS
-    value: ""
   - name: MEMORY_V3_GET_ENABLED
     value: "false"
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
@@ -238,7 +242,7 @@ env:
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,dg-nova-3,parakeet"
+    value: "dg-nova-3,modulate-velma-2,parakeet"
   - name: CHANNEL_SIGN_IN_URL
     value: "https://web-channels-dev---omi-web-app-dt5lrfkkoa-uc.a.run.app/login"
   - name: NO_SOCKET_TIMEOUT
@@ -341,6 +345,7 @@ env:
         name: dev-omi-backend-secrets
         key: SERVICE_ACCOUNT_JSON
   - name: GOOGLE_CLOUD_PROJECT
+    # Template substitutes runtimeGcpProjectId (chart default = compute project).
     value: "based-hardware-dev"
   - name: GCP_LOCATION
     value: "us-central1"

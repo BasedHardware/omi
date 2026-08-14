@@ -51,6 +51,8 @@ final class AgentErrorClassifierTests: XCTestCase {
       "HTTP 402 status code (no body)",
       "402 Payment Required",
       "Request failed: http/402",
+      "status 402",
+      "status code: 402",
     ] {
       let classified = AgentErrorClassifier.classify(raw)
       XCTAssertEqual(classified.code, .providerBillingExhausted, "unclassified: \(raw)")
@@ -62,6 +64,24 @@ final class AgentErrorClassifierTests: XCTestCase {
         classified.userMessage.lowercased().contains("try again"),
         "copy must not prescribe retries for an unretryable billing error: \(raw)")
     }
+  }
+
+  /// Live pi-mono recycle wraps the 402 as "send again" and parks the status
+  /// on `technicalMessage`. Classifying only `userMessage` is how the billing
+  /// fix never reached the transcript.
+  func testRecycledWorkerWrapStillClassifiesTheTechnicalHTTP402() {
+    let classified = AgentErrorClassifier.classify(
+      AgentRuntimeFailure(
+        code: "adapter_execution_failed",
+        userMessage: "The local agent reset its session after an error. Send your message again.",
+        technicalMessage: "HTTP 402 status code (no body)",
+        retryable: true,
+        recoveryAction: "worker_recycled"
+      )
+    )
+    XCTAssertEqual(classified.code, .providerBillingExhausted)
+    XCTAssertFalse(classified.retryable)
+    XCTAssertFalse(classified.userMessage.lowercased().contains("try again"))
   }
 
   /// The status-shaped match must not swallow ordinary numbers that merely

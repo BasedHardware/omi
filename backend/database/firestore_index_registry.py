@@ -181,12 +181,6 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('appName'), _asc('timestamp'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
-        'candidates_generation_created',
-        'candidates',
-        'COLLECTION',
-        (_asc('account_generation'), _desc('created_at'), _desc('__name__')),
-    ),
-    FirestoreIndexRequirement(
         'candidates_status_generation_created',
         'candidates',
         'COLLECTION',
@@ -240,6 +234,14 @@ ACTIVE_ATTENTION_OVERRIDE_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('expires_at', '>', 'now'),
     ),
     index_fields=(_asc('account_generation'), _asc('expires_at'), _asc('__name__')),
+)
+
+CANDIDATES_COMPATIBILITY_QUERY = FirestoreQuerySpec(
+    identifier='candidates_generation_created',
+    collection_group='candidates',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('account_generation', '==', 'account_generation'),),
+    index_fields=(_asc('account_generation'), _desc('created_at'), _desc('__name__')),
 )
 
 LEGACY_CONVERSATION_RECOVERY_QUERY = FirestoreQuerySpec(
@@ -334,6 +336,39 @@ CANONICAL_MEMORY_ATLAS_READ_QUERY = FirestoreQuerySpec(
         _desc('updated_at'),
         _desc('__name__'),
     ),
+)
+
+# Collection-scoped newest-first scan for universal mixed list cursor paging.
+# Equality filters are intentionally empty: access/device/pending/archive are
+# applied after each bounded raw page so filtered rows still advance the keyset.
+# Firestore manages the single-field updated_at index (plus automatic __name__
+# tie-break) itself — this spec records the serving query contract only.
+UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_universal_list_scan',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(),
+    index_fields=(_desc('updated_at'), _asc('__name__')),
+)
+
+# Historical dual-stream keysets for effective updated_at-or-created_at order.
+# Docs with updated_at ride the updated stream; created stream skips those
+# duplicates in Python so each document is emitted once. Single-field+__name__
+# indexes stay out of the composite manifest.
+UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY = FirestoreQuerySpec(
+    identifier='memories_universal_list_scan_updated_at',
+    collection_group='memories',
+    query_scope='COLLECTION',
+    filters=(),
+    index_fields=(_desc('updated_at'), _asc('__name__')),
+)
+
+UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY = FirestoreQuerySpec(
+    identifier='memories_universal_list_scan_created_at',
+    collection_group='memories',
+    query_scope='COLLECTION',
+    filters=(),
+    index_fields=(_desc('created_at'), _asc('__name__')),
 )
 
 CONVERSATION_SOURCE_MEMORY_QUERY = FirestoreQuerySpec(
@@ -539,6 +574,7 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    CANDIDATES_COMPATIBILITY_QUERY,
     CHANNEL_BINDINGS_BY_UID_CHANNEL_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
@@ -550,6 +586,10 @@ QUERY_SPECS = (
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
     CANONICAL_GRAPH_READ_QUERY,
+    CANONICAL_MEMORY_ATLAS_READ_QUERY,
+    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+    UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
+    UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,

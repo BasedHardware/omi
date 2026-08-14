@@ -157,8 +157,10 @@ def test_rejects_invalid_messages():
 
 
 def test_accepts_image_url_message_content():
-    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    lane = load_gateway_config(prod_mode=True).lanes[VISION_LANE_ID]
     request = valid_request(
+        model=VISION_LANE_ID,
+        response_format=None,
         messages=[
             {
                 'role': 'user',
@@ -167,7 +169,7 @@ def test_accepts_image_url_message_content():
                     {'type': 'image_url', 'image_url': {'url': 'https://example.com/image.png'}},
                 ],
             }
-        ]
+        ],
     )
 
     validated = validate_chat_completion_request(request, lane)
@@ -250,6 +252,25 @@ def test_rejects_malformed_image_content_for_vision_lane():
         model=VISION_LANE_ID,
         response_format=None,
         messages=[{'role': 'user', 'content': [{'type': 'image_url', 'image_url': {}}]}],
+    )
+
+    with pytest.raises(GatewayCapabilityMismatchError, match='text or image_url message content'):
+        validate_chat_completion_request(request, lane)
+
+
+def test_rejects_image_content_for_text_only_lane():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    assert lane.capabilities.image_input is False
+    request = valid_request(
+        messages=[
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'describe'},
+                    {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,encoded'}},
+                ],
+            }
+        ]
     )
 
     with pytest.raises(GatewayCapabilityMismatchError, match='text or image_url message content'):

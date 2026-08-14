@@ -24,11 +24,10 @@ struct SettingsPage: View {
     Group {
       if let page = selectedSection.presentedPage {
         // A section that presents a whole established page mounts it directly. Not inside the
-        // shared scroll view: `PermissionsPage` owns a `ScrollView` of its own and `HelpPage` is a
-        // web view that has to fill the pane, so nesting either one inside this page's scroller
-        // gives the pane two scrollbars and collapses the web view to nothing. Both already draw
-        // their own pane heading and `SettingsGlassMetrics.pane*` padding, so the shared header is
-        // skipped too rather than stacked on top of theirs.
+        // shared scroll view: `PermissionsPage` owns a `ScrollView` of its own, so nesting it
+        // inside this page's scroller gives the pane two scrollbars. It already draws its own pane
+        // heading and `SettingsGlassMetrics.pane*` padding, so the shared header is skipped too
+        // rather than stacked on top of its own.
         presentedPage(page)
       } else {
         sectionScrollView
@@ -68,8 +67,6 @@ struct SettingsPage: View {
     switch page {
     case .permissions:
       PermissionsPage(appState: appState)
-    case .help:
-      HelpPage()
     default:
       EmptyView()
     }
@@ -200,10 +197,9 @@ struct SettingsContentView: View {
   @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
   var chatScreenshotSharingEnabled: Bool = true
 
-  // Transcription state
-  @State var isTranscribing: Bool
-  @State var isTogglingTranscription: Bool = false
-  @State var transcriptionError: String?
+  // The sole ambient-audio preference. Runtime activity remains on AppState.
+  @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) var audioRecordingModeRaw =
+    AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
 
   // Log export state
 
@@ -280,8 +276,10 @@ struct SettingsContentView: View {
   // so this glides freely while only the hour component is persisted.
   @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
     forHour: 22, referenceDate: Date())
-  @State var notificationsEnabled: Bool = true
-  @State var notificationFrequency: Int = 3
+  @State var notificationsEnabled: Bool = NotificationService.areNotificationsEnabled()
+  // Start from the synchronous persisted mirror so reopening Settings never flashes
+  // Balanced while the authoritative backend value is still hydrating.
+  @State var notificationFrequency: Int = NotificationService.currentFrequencyLevel()
 
   // Privacy settings (from backend)
   @State var recordingPermissionEnabled: Bool = false
@@ -359,12 +357,12 @@ struct SettingsContentView: View {
   @State var transcriptionAutoDetect: Bool = true
   @State var transcriptionLanguage: String = "en"
   @State var vadGateEnabled: Bool = false
-  @State var systemAudioCaptureMode: AssistantSettings.SystemAudioCaptureMode = .always
 
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
   @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
+  @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
@@ -409,26 +407,24 @@ struct SettingsContentView: View {
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
     case about = "About"
-    /// The two established pages that had no door. Both were only ever written by the sidebar the
-    /// glass shell stopped rendering, so `PermissionsPage` and `HelpPage` kept working with nothing
-    /// on screen that reached them. They are sections rather than a new pill because they were
-    /// already dressed as settings panes — both lay themselves out in `SettingsGlassMetrics.pane*`
-    /// padding and the settings card corner — and because the bar's gear already promises
-    /// "permissions, capture, account". See `presentedPage`.
+    /// The established page that had no door. It was only ever written by the sidebar the glass
+    /// shell stopped rendering, so `PermissionsPage` kept working with nothing on screen that
+    /// reached it. It is a section rather than a new pill because it was already dressed as a
+    /// settings pane — it lays itself out in `SettingsGlassMetrics.pane*` padding and the settings
+    /// card corner — and because the bar's gear already promises "permissions, capture, account".
+    /// See `presentedPage`.
     case permissions = "Permissions"
-    case help = "Help"
 
     /// The established page this section presents *whole*, instead of a column of settings rows.
     ///
     /// This is the value `ShellDestination.unreachable()` checks, and the reason a row here is a
     /// door rather than a second version of the page (INV-NAV-1): the section mounts the same
-    /// `PermissionsPage` / `HelpPage` the shell's own route does, never a trimmed copy of it.
-    /// `SettingsPage` reads it to skip the shared scroll view and pane heading, which those two
-    /// pages already carry themselves.
+    /// `PermissionsPage` the shell's own route does, never a trimmed copy of it. `SettingsPage`
+    /// reads it to skip the shared scroll view and pane heading, which that page already carries
+    /// itself.
     var presentedPage: ShellDestination? {
       switch self {
       case .permissions: return .permissions
-      case .help: return .help
       default: return nil
       }
     }
@@ -505,7 +501,7 @@ struct SettingsContentView: View {
       case .stats: return "chart.bar"
       case .focusAssistant: return "eye.fill"
       case .taskAssistant: return "checklist"
-      case .insightAssistant: return "lightbulb.fill"
+      case .insightAssistant: return ProactiveNotificationBadge.insightSystemImage
       case .memoryAssistant: return "brain.head.profile"
       case .analysisThrottle: return "clock.arrow.2.circlepath"
       case .goals: return "target"
@@ -531,6 +527,10 @@ struct SettingsContentView: View {
   @State var gmailMemoriesSaved: Int = 0
   @State var gmailReadError: String?
   @State var gmailLastFetched: Date?
+  @State var gmailReadGeneration = 0
+  @State var gmailAccounts: [GmailAccountOption] = []
+  @State var isProbingGmailAccounts: Bool = false
+  @State var showingGmailAccountPicker: Bool = false
 
   // Calendar Sync states
   @State var calendarEvents: [CalendarEvent] = []
@@ -571,7 +571,6 @@ struct SettingsContentView: View {
     let settings = AssistantSettings.shared
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
     _screenCaptureHealth = State(initialValue: ProactiveAssistantsPlugin.shared.screenCaptureHealth)
-    _isTranscribing = State(initialValue: appState.isTranscribing)
     _glowOverlayEnabled = State(initialValue: settings.glowOverlayEnabled)
     _analysisDelay = State(initialValue: settings.analysisDelay)
     _liveSuggestionsEnabled = State(initialValue: SuggestionAssistantSettings.shared.isEnabled)
@@ -601,18 +600,14 @@ struct SettingsContentView: View {
     _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
     _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
     _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
-    _systemAudioCaptureMode = State(initialValue: settings.systemAudioCaptureMode)
   }
 
-  /// Computed status text for notifications
+  /// Computed status text for notifications — OS permission/banner mirror only.
+  /// Product proactive enablement is owned by Notifications & Privacy.
   var notificationStatusText: String {
-    if !appState.hasNotificationPermission {
-      return "Notifications are disabled"
-    } else if appState.isNotificationBannerDisabled {
-      return "Enabled but banners are off"
-    } else {
-      return "Proactive alerts enabled"
-    }
+    SettingsControlMetrics.generalNotificationPermissionStatusText(
+      hasPermission: appState.hasNotificationPermission,
+      bannersDisabled: appState.isNotificationBannerDisabled)
   }
 
   /// Divider header used when two legacy sections are stacked on one merged
@@ -658,7 +653,7 @@ struct SettingsContentView: View {
           advancedSection
         case .about:
           aboutSection
-        case .permissions, .help:
+        case .permissions:
           // Presenting sections never reach here — `SettingsPage` mounts the whole page they
           // present before it builds this pane. Listed explicitly rather than under a `default`
           // so a new section still has to say what it renders.
@@ -676,8 +671,6 @@ struct SettingsContentView: View {
       loadBackendSettings()
       loadSubscriptionInfo()
       loadChannelStatus()
-      // Sync transcription state with appState
-      isTranscribing = appState.isTranscribing
       // Sync floating bar state with persisted preference (not transient visibility)
       showAskOmiBar = FloatingControlBarManager.shared.isEnabled
       playwrightExtensionToken =
@@ -693,9 +686,6 @@ struct SettingsContentView: View {
         isMonitoring = state
       }
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
-    }
-    .onChange(of: appState.isTranscribing) { _, newValue in
-      isTranscribing = newValue
     }
     .onChange(of: selectedSection) { _, newValue in
       if AppBuild.isProductionBundle && newValue == .aiChat {
@@ -725,7 +715,7 @@ struct SettingsContentView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Refresh notification permission when app becomes active (user may have changed it in System Settings)
-      appState.checkNotificationPermission()
+      appState.refreshNotificationPermissionAfterSystemSettings()
     }
     .sheet(item: $activeBillingWebFlow) { flow in
       BillingWebFlowSheet(flow: flow) { outcome in

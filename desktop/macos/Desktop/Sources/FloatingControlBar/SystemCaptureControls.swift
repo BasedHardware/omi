@@ -37,7 +37,7 @@ enum SystemCaptureControls {
   }
 
   static var isAudioRecordingOn: Bool {
-    !AppState.isPaywalledEffective && AssistantSettings.shared.transcriptionEnabled
+    !AppState.isPaywalledEffective && AssistantSettings.shared.audioRecordingMode != .off
   }
 
   // MARK: - Transitions
@@ -84,13 +84,8 @@ enum SystemCaptureControls {
       return .blockedPaywall
     }
 
-    AssistantSettings.shared.transcriptionEnabled = enabled
-    // Starting/stopping transcription needs AppState, which lives on the main view.
-    NotificationCenter.default.post(
-      name: .toggleTranscriptionRequested,
-      object: nil,
-      userInfo: ["enabled": enabled]
-    )
+    let current = AssistantSettings.shared.audioRecordingMode
+    AssistantSettings.shared.audioRecordingMode = enabled ? (current == .off ? .onlyMeetings : current) : .off
     return enabled ? .enabled : .disabled
   }
 }

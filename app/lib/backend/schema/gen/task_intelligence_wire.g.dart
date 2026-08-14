@@ -350,10 +350,39 @@ class GeneratedGoalMetric {
   }
 }
 
+class GeneratedCandidateCompatibilityMetadata {
+  final String? category;
+  final String? metadata;
+  final int? relevanceScore;
+
+  const GeneratedCandidateCompatibilityMetadata({
+    this.category,
+    this.metadata,
+    this.relevanceScore,
+  });
+
+  factory GeneratedCandidateCompatibilityMetadata.fromJson(Map<String, dynamic> json) {
+    return GeneratedCandidateCompatibilityMetadata(
+      category: _readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: true),
+      metadata: _readFieldValue<String>(_readField(json, const ["metadata"]), "metadata", _readString, requiredField: false, nullable: true),
+      relevanceScore: _readFieldValue<int>(_readField(json, const ["relevance_score"]), "relevance_score", _readInt, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'category': category,
+      'metadata': metadata,
+      'relevance_score': relevanceScore,
+    };
+  }
+}
+
 class GeneratedCandidateRecord {
   final int accountGeneration;
   final String candidateId;
   final double captureConfidence;
+  final GeneratedCandidateCompatibilityMetadata? compatibility;
   final DateTime createdAt;
   final List<GeneratedEvidenceRef> evidenceRefs;
   final String? goalId;
@@ -376,6 +405,7 @@ class GeneratedCandidateRecord {
     required this.accountGeneration,
     required this.candidateId,
     required this.captureConfidence,
+    this.compatibility,
     required this.createdAt,
     required this.evidenceRefs,
     this.goalId,
@@ -400,6 +430,7 @@ class GeneratedCandidateRecord {
       accountGeneration: _required(_readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt, requiredField: true, nullable: false), "account_generation"),
       candidateId: _required(_readFieldValue<String>(_readField(json, const ["candidate_id"]), "candidate_id", _readString, requiredField: true, nullable: false), "candidate_id"),
       captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: true, nullable: false), "capture_confidence"),
+      compatibility: _readFieldValue<GeneratedCandidateCompatibilityMetadata>(_readField(json, const ["compatibility"]), "compatibility", (value) => _readObject(value, GeneratedCandidateCompatibilityMetadata.fromJson), requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       evidenceRefs: _required(_readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: true, nullable: false), "evidence_refs"),
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
@@ -425,6 +456,7 @@ class GeneratedCandidateRecord {
       'account_generation': accountGeneration,
       'candidate_id': candidateId,
       'capture_confidence': captureConfidence,
+      'compatibility': compatibility?.toJson(),
       'created_at': createdAt.toUtc().toIso8601String(),
       'evidence_refs': evidenceRefs.map((value) => value.toJson()).toList(),
       'goal_id': goalId,
@@ -566,6 +598,7 @@ class GeneratedCandidateCreate {
 
 class GeneratedTaskCreateCandidate {
   final double captureConfidence;
+  final GeneratedCandidateCompatibilityMetadata? compatibility;
   final List<GeneratedEvidenceRef> evidenceRefs;
   final String? goalId;
   final double ownershipConfidence;
@@ -577,6 +610,7 @@ class GeneratedTaskCreateCandidate {
 
   const GeneratedTaskCreateCandidate({
     required this.captureConfidence,
+    this.compatibility,
     required this.evidenceRefs,
     this.goalId,
     required this.ownershipConfidence,
@@ -590,6 +624,7 @@ class GeneratedTaskCreateCandidate {
   factory GeneratedTaskCreateCandidate.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskCreateCandidate(
       captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: true, nullable: false), "capture_confidence"),
+      compatibility: _readFieldValue<GeneratedCandidateCompatibilityMetadata>(_readField(json, const ["compatibility"]), "compatibility", (value) => _readObject(value, GeneratedCandidateCompatibilityMetadata.fromJson), requiredField: false, nullable: true),
       evidenceRefs: _required(_readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: true, nullable: false), "evidence_refs"),
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
@@ -604,6 +639,7 @@ class GeneratedTaskCreateCandidate {
   Map<String, dynamic> toJson() {
     return {
       'capture_confidence': captureConfidence,
+      'compatibility': compatibility?.toJson(),
       'evidence_refs': evidenceRefs.map((value) => value.toJson()).toList(),
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
@@ -618,6 +654,7 @@ class GeneratedTaskCreateCandidate {
 
 class GeneratedTaskUpdateCandidate {
   final double captureConfidence;
+  final GeneratedCandidateCompatibilityMetadata? compatibility;
   final List<GeneratedEvidenceRef> evidenceRefs;
   final String? goalId;
   final double ownershipConfidence;
@@ -630,6 +667,7 @@ class GeneratedTaskUpdateCandidate {
 
   const GeneratedTaskUpdateCandidate({
     required this.captureConfidence,
+    this.compatibility,
     required this.evidenceRefs,
     this.goalId,
     required this.ownershipConfidence,
@@ -644,6 +682,7 @@ class GeneratedTaskUpdateCandidate {
   factory GeneratedTaskUpdateCandidate.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskUpdateCandidate(
       captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: true, nullable: false), "capture_confidence"),
+      compatibility: _readFieldValue<GeneratedCandidateCompatibilityMetadata>(_readField(json, const ["compatibility"]), "compatibility", (value) => _readObject(value, GeneratedCandidateCompatibilityMetadata.fromJson), requiredField: false, nullable: true),
       evidenceRefs: _required(_readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: true, nullable: false), "evidence_refs"),
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
@@ -659,6 +698,7 @@ class GeneratedTaskUpdateCandidate {
   Map<String, dynamic> toJson() {
     return {
       'capture_confidence': captureConfidence,
+      'compatibility': compatibility?.toJson(),
       'evidence_refs': evidenceRefs.map((value) => value.toJson()).toList(),
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
@@ -674,6 +714,7 @@ class GeneratedTaskUpdateCandidate {
 
 class GeneratedTaskCompleteCandidate {
   final double captureConfidence;
+  final GeneratedCandidateCompatibilityMetadata? compatibility;
   final List<GeneratedEvidenceRef> evidenceRefs;
   final String? goalId;
   final double ownershipConfidence;
@@ -686,6 +727,7 @@ class GeneratedTaskCompleteCandidate {
 
   const GeneratedTaskCompleteCandidate({
     required this.captureConfidence,
+    this.compatibility,
     required this.evidenceRefs,
     this.goalId,
     required this.ownershipConfidence,
@@ -700,6 +742,7 @@ class GeneratedTaskCompleteCandidate {
   factory GeneratedTaskCompleteCandidate.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskCompleteCandidate(
       captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: true, nullable: false), "capture_confidence"),
+      compatibility: _readFieldValue<GeneratedCandidateCompatibilityMetadata>(_readField(json, const ["compatibility"]), "compatibility", (value) => _readObject(value, GeneratedCandidateCompatibilityMetadata.fromJson), requiredField: false, nullable: true),
       evidenceRefs: _required(_readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: true, nullable: false), "evidence_refs"),
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
@@ -715,6 +758,7 @@ class GeneratedTaskCompleteCandidate {
   Map<String, dynamic> toJson() {
     return {
       'capture_confidence': captureConfidence,
+      'compatibility': compatibility?.toJson(),
       'evidence_refs': evidenceRefs.map((value) => value.toJson()).toList(),
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
@@ -730,6 +774,7 @@ class GeneratedTaskCompleteCandidate {
 
 class GeneratedTaskCancelCandidate {
   final double captureConfidence;
+  final GeneratedCandidateCompatibilityMetadata? compatibility;
   final List<GeneratedEvidenceRef> evidenceRefs;
   final String? goalId;
   final double ownershipConfidence;
@@ -742,6 +787,7 @@ class GeneratedTaskCancelCandidate {
 
   const GeneratedTaskCancelCandidate({
     required this.captureConfidence,
+    this.compatibility,
     required this.evidenceRefs,
     this.goalId,
     required this.ownershipConfidence,
@@ -756,6 +802,7 @@ class GeneratedTaskCancelCandidate {
   factory GeneratedTaskCancelCandidate.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskCancelCandidate(
       captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: true, nullable: false), "capture_confidence"),
+      compatibility: _readFieldValue<GeneratedCandidateCompatibilityMetadata>(_readField(json, const ["compatibility"]), "compatibility", (value) => _readObject(value, GeneratedCandidateCompatibilityMetadata.fromJson), requiredField: false, nullable: true),
       evidenceRefs: _required(_readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: true, nullable: false), "evidence_refs"),
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
@@ -771,6 +818,7 @@ class GeneratedTaskCancelCandidate {
   Map<String, dynamic> toJson() {
     return {
       'capture_confidence': captureConfidence,
+      'compatibility': compatibility?.toJson(),
       'evidence_refs': evidenceRefs.map((value) => value.toJson()).toList(),
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
@@ -786,6 +834,7 @@ class GeneratedTaskCancelCandidate {
 
 class GeneratedTaskSupersedeCandidate {
   final double captureConfidence;
+  final GeneratedCandidateCompatibilityMetadata? compatibility;
   final List<GeneratedEvidenceRef> evidenceRefs;
   final String? goalId;
   final double ownershipConfidence;
@@ -798,6 +847,7 @@ class GeneratedTaskSupersedeCandidate {
 
   const GeneratedTaskSupersedeCandidate({
     required this.captureConfidence,
+    this.compatibility,
     required this.evidenceRefs,
     this.goalId,
     required this.ownershipConfidence,
@@ -812,6 +862,7 @@ class GeneratedTaskSupersedeCandidate {
   factory GeneratedTaskSupersedeCandidate.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskSupersedeCandidate(
       captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: true, nullable: false), "capture_confidence"),
+      compatibility: _readFieldValue<GeneratedCandidateCompatibilityMetadata>(_readField(json, const ["compatibility"]), "compatibility", (value) => _readObject(value, GeneratedCandidateCompatibilityMetadata.fromJson), requiredField: false, nullable: true),
       evidenceRefs: _required(_readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: true, nullable: false), "evidence_refs"),
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
@@ -827,6 +878,7 @@ class GeneratedTaskSupersedeCandidate {
   Map<String, dynamic> toJson() {
     return {
       'capture_confidence': captureConfidence,
+      'compatibility': compatibility?.toJson(),
       'evidence_refs': evidenceRefs.map((value) => value.toJson()).toList(),
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
@@ -1254,6 +1306,7 @@ class GeneratedWorkstream {
 
 class GeneratedWorkstreamCreateCandidate {
   final double captureConfidence;
+  final GeneratedCandidateCompatibilityMetadata? compatibility;
   final List<GeneratedEvidenceRef> evidenceRefs;
   final String? goalId;
   final double ownershipConfidence;
@@ -1265,6 +1318,7 @@ class GeneratedWorkstreamCreateCandidate {
 
   const GeneratedWorkstreamCreateCandidate({
     required this.captureConfidence,
+    this.compatibility,
     required this.evidenceRefs,
     this.goalId,
     required this.ownershipConfidence,
@@ -1278,6 +1332,7 @@ class GeneratedWorkstreamCreateCandidate {
   factory GeneratedWorkstreamCreateCandidate.fromJson(Map<String, dynamic> json) {
     return GeneratedWorkstreamCreateCandidate(
       captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: true, nullable: false), "capture_confidence"),
+      compatibility: _readFieldValue<GeneratedCandidateCompatibilityMetadata>(_readField(json, const ["compatibility"]), "compatibility", (value) => _readObject(value, GeneratedCandidateCompatibilityMetadata.fromJson), requiredField: false, nullable: true),
       evidenceRefs: _required(_readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: true, nullable: false), "evidence_refs"),
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
@@ -1292,6 +1347,7 @@ class GeneratedWorkstreamCreateCandidate {
   Map<String, dynamic> toJson() {
     return {
       'capture_confidence': captureConfidence,
+      'compatibility': compatibility?.toJson(),
       'evidence_refs': evidenceRefs.map((value) => value.toJson()).toList(),
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
