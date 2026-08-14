@@ -588,6 +588,7 @@ def test_async_for_consumption_is_not_a_structural_finding(scanner, tmp_path):
     source_path = tmp_path / "streaming_consumer.py"
     source_path.write_text(
         textwrap.dedent("""
+            @router.get("/stream")
             async def consume_stream():
                 async for chunk in produce():
                     continue
@@ -605,6 +606,7 @@ def test_async_with_is_not_a_structural_finding(scanner, tmp_path):
     source_path = tmp_path / "context_consumer.py"
     source_path.write_text(
         textwrap.dedent("""
+            @router.get("/context")
             async def use_context():
                 async with acquire() as handle:
                     return handle

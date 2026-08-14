@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from models.app import App
 from models.chat import GenerateReplyRequest, GenerateReplyResponse, Message, MessageSender, MessageType
 from utils.apps import get_available_app_by_id
+from utils.executors import db_executor, run_blocking
 from utils.llm.usage_tracker import Features, reset_usage_context, set_usage_context
 from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
@@ -52,10 +53,10 @@ async def generate_reply(
     stream stages alongside ``callback_data['error']`` are never returned as reply
     text. A failed generation is an HTTP 502 with ``{'error': <reason>}``.
     """
-    enforce_chat_quota(uid, platform=x_app_platform)
+    await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
     app_id = data.app_id if data.app_id not in ['null', ''] else None
-    app_record = get_available_app_by_id(app_id, uid) if app_id else None
+    app_record = await run_blocking(db_executor, get_available_app_by_id, app_id, uid) if app_id else None
     if app_id and not app_record:
         raise HTTPException(status_code=404, detail={'error': 'app_not_found'})
     app = App(**app_record) if app_record else None

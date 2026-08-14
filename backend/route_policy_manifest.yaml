@@ -1837,11 +1837,11 @@ routes:
         placement: dependency
         scopes:
           - exact_chat_owner
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: chat:send_message
         key_subject: uid
-        enforcement: fail_closed
+        enforcement: fail_open
         placement: wrapper
       timeout_class: default_method
       surface: first_party_app
