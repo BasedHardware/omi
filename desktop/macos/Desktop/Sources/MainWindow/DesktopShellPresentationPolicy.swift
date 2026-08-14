@@ -4,6 +4,28 @@ enum DesktopShellPresentationPolicy {
     if case .chatFirst = capabilityVariant { return true }
     return false
   }
+
+  /// The floating "Try asking" popup belongs to the legacy shell. Chat-first owns its starter
+  /// prompts inside the main chat and must never expose the notch as a primary text-entry surface.
+  static func usesLegacyPostOnboardingPopup(
+    _ useLegacyHomeDesign: Bool,
+    _ capabilityVariant: ChatFirstShellVariant
+  ) -> Bool {
+    !usesChatFirst(useLegacyHomeDesign, capabilityVariant)
+  }
+}
+
+@MainActor
+enum FloatingPrimaryTextInputRouting {
+  private(set) static var routesToMainApp = false
+
+  static func configure(routesToMainApp: Bool) {
+    self.routesToMainApp = routesToMainApp
+  }
+
+  static func shouldRouteAgentExitToMainApp(hasMainConversation: Bool) -> Bool {
+    routesToMainApp && !hasMainConversation
+  }
 }
 
 /// Whether the Home stage — `HomeStageMode`'s hub / chat / connect — is mounted at all, and therefore

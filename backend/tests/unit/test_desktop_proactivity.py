@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -108,11 +109,12 @@ def test_facade_rejects_gateway_content_that_breaks_requested_schema():
 
 @pytest.mark.asyncio
 async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
-    async def run_blocking(_, function, *args):
-        return function(*args)
+    async def run_blocking(_, function, *args, **kwargs):
+        return function(*args, **kwargs)
 
     monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda _uid: None)
+    monkeypatch.setattr(desktop_proactivity, "get_customer_firestore_client", MagicMock())
+    monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_proactivity.redis_db, "reserve_rate_limit", lambda *_: (False, 0, 19))
     with pytest.raises(desktop_proactivity.HTTPException) as exhausted:
         await desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
@@ -140,15 +142,16 @@ async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
 async def test_quota_matches_expanded_director_budget(monkeypatch, operation, expected_limit):
     observed = {}
 
-    async def run_blocking(_, function, *args):
-        return function(*args)
+    async def run_blocking(_, function, *args, **kwargs):
+        return function(*args, **kwargs)
 
     def reserve_rate_limit(uid, key, limit, window_seconds):
         observed.update(uid=uid, key=key, limit=limit, window_seconds=window_seconds)
         return True, 1, 0
 
     monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda _uid: None)
+    monkeypatch.setattr(desktop_proactivity, "get_customer_firestore_client", MagicMock())
+    monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_proactivity.redis_db, "reserve_rate_limit", reserve_rate_limit)
 
     await desktop_proactivity._consume_quota("user-1", operation)

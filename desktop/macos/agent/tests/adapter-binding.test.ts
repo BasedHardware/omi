@@ -188,6 +188,48 @@ describe("AgentRuntimeKernel adapter binding resolution", () => {
     store.close();
   });
 
+  it("recycles the pi-mono worker after HTTP 402 without inviting a retry", async () => {
+    const makeAdapter = () => {
+      const adapter = new FakeRuntimeAdapter("pi-mono");
+      Object.assign(adapter.capabilities, {
+        resumeFidelity: "none",
+        supportsNativeResume: false,
+        requiresPinnedWorker: true,
+        restartBehavior: "process_local_bindings_stale",
+      });
+      return adapter;
+    };
+    const { store, adapter, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "pi-mono",
+      1,
+      undefined,
+      undefined,
+      makeAdapter,
+    );
+    adapter.failNextExecutionError = new Error("HTTP 402 status code (no body)");
+
+    const failed = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-billing",
+    });
+    expect(failed.terminalStatus).toBe("failed");
+    expect(adapter.stopped).toBe(1);
+    expect(JSON.parse(failed.run.resultJson!)).toMatchObject({
+      failure: {
+        code: "adapter_execution_failed",
+        failureCode: "quota_exceeded",
+        retryable: false,
+        recoveryAction: "worker_recycled",
+        technicalMessage: "HTTP 402 status code (no body)",
+      },
+    });
+    expect(JSON.parse(failed.run.resultJson!).failure.userMessage).not.toContain("Send your message again");
+    store.close();
+  });
+
   it("unwraps a stale-binding execution failure and retries on a fresh pi-mono worker", async () => {
     const adapters: FakeRuntimeAdapter[] = [];
     const makeAdapter = () => {

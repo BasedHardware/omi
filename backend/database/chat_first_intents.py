@@ -533,6 +533,7 @@ def fetch_ready_intents(
     *,
     account_generation: int,
     limit: int = 8,
+    exclude_block_types: set[str] | frozenset[str] | None = None,
     firestore_client: Any = None,
 ) -> list[ProactiveIntent]:
     """Return ready intents only; this never changes delivery or writes Chat."""
@@ -549,6 +550,12 @@ def fetch_ready_intents(
     for snapshot in query.stream():
         intent = _intent_from_snapshot(snapshot)
         if intent.account_generation != account_generation:
+            continue
+        # Apply compatibility filtering before the delivery window is bounded.
+        # Legacy clients cannot acknowledge newer block types, so letting those
+        # rows consume the first ``limit`` results would permanently starve the
+        # legacy-compatible intents behind them.
+        if exclude_block_types and any(block.type in exclude_block_types for block in intent.blocks):
             continue
         ready.append(intent)
     ready.sort(key=lambda intent: (intent.created_at, intent.intent_id))

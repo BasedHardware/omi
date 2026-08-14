@@ -2,12 +2,15 @@
 
 from datetime import datetime, timezone
 import logging
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
 import utils.task_intelligence.proactive_engine as engine
 from models.chat_first import (
     ChatFirstSubject,
+    ConversationLinkSpec,
     QuestionCardSpec,
     QuestionOption,
 )
@@ -77,6 +80,39 @@ def test_sparse_cold_start_suppresses_agent_tier_without_calling_the_judge(monke
     assert judge.calls == 0
 
 
+def test_agent_judgment_cannot_mint_a_conversation_link(monkeypatch):
+    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        engine.intent_db,
+        'admit_agent_judgment',
+        lambda *args, **kwargs: SimpleNamespace(existing_intent=None, newly_reserved=True),
+    )
+    monkeypatch.setattr(engine.intent_db, 'release_agent_judgment_admission', MagicMock())
+    create_intent = MagicMock()
+    monkeypatch.setattr(engine.intent_db, 'create_intent', create_intent)
+    judge = _Judge(
+        engine.ProactiveSelection(
+            blocks=[
+                _question(),
+                ConversationLinkSpec(
+                    type='conversationLink', conversation_id='ambient-1', summary='Meeting notes ready'
+                ),
+            ]
+        )
+    )
+
+    result = engine.wake_after_commit(
+        'user-1',
+        _trigger(),
+        judge=judge,
+        now=NOW,
+        eligibility_resolver=lambda _uid: ChatFirstEligibility(enabled=True, account_generation=7),
+    )
+
+    assert result.outcome == 'declined'
+    create_intent.assert_not_called()
+
+
 def test_capability_off_wake_has_zero_feature_store_provider_and_metric_work(monkeypatch):
     monkeypatch.setattr(
         engine.intent_db,
@@ -140,6 +176,82 @@ def test_capture_arrival_is_failure_isolated_and_bounds_the_persisted_summary(mo
 
     assert result is None
     assert created[0]['blocks'][0].summary == 'x' * 200
+
+
+def test_desktop_meeting_arrival_persists_exact_conversation_link(monkeypatch):
+    created = []
+    monkeypatch.setattr(
+        engine.intent_db,
+        'create_intent',
+        lambda *args, **kwargs: created.append(kwargs) or (SimpleNamespace(), True),
+    )
+    monkeypatch.setattr(engine, '_meter', lambda *args: None)
+
+    engine.persist_capture_arrival_intent(
+        'user-1',
+        conversation_id='conversation-1',
+        summary='Weekly planning',
+        is_desktop_meeting=True,
+        now=NOW,
+        eligibility_resolver=lambda _uid: ChatFirstEligibility(enabled=True, account_generation=7),
+    )
+
+    assert created[0]['continuity_key'] == 'capture:conversation-1'
+    assert created[0]['blocks'][0].model_dump() == {
+        'type': 'conversationLink',
+        'conversation_id': 'conversation-1',
+        'summary': 'Weekly planning',
+    }
+
+    engine.persist_capture_arrival_intent(
+        'user-1',
+        conversation_id='conversation-2',
+        summary='',
+        is_desktop_meeting=True,
+        now=NOW,
+        eligibility_resolver=lambda _uid: ChatFirstEligibility(enabled=True, account_generation=7),
+    )
+
+    assert created[1]['blocks'][0].summary == 'Your meeting notes are ready.'
+
+
+def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotation(monkeypatch):
+    persist = MagicMock()
+    monkeypatch.setattr(engine, 'persist_capture_arrival_intent', persist)
+    ambient = {
+        'id': 'ambient-1',
+        'source': 'desktop',
+        'status': 'completed',
+        'discarded': False,
+        'structured': {'title': 'Ambient capture'},
+        'external_data': {'conversation_role': 'ambient'},
+    }
+    meeting = {
+        **ambient,
+        'id': 'meeting-1',
+        'structured': {'title': 'Design review'},
+        'external_data': {'conversation_role': 'meeting'},
+    }
+
+    engine.persist_desktop_meeting_arrival('user-1', ambient)
+    persist.assert_not_called()
+
+    engine.persist_desktop_meeting_arrival('user-1', meeting)
+    persist.assert_called_once_with(
+        'user-1', conversation_id='meeting-1', summary='Design review', is_desktop_meeting=True
+    )
+
+    persist.reset_mock()
+    rotation = {
+        **meeting,
+        'id': 'meeting-rotation',
+        'external_data': {
+            'conversation_role': 'meeting',
+            'conversation_finalization_reason': 'max_duration_rotation',
+        },
+    }
+    engine.persist_desktop_meeting_arrival('user-1', rotation)
+    persist.assert_not_called()
 
 
 def test_proactive_failure_logs_redact_authenticated_uid(monkeypatch, caplog):

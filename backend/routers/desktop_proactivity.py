@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from jsonschema import Draft202012Validator, SchemaError, ValidationError
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from database._client import get_customer_firestore_client
 from database import redis_db, users as users_db
 from models.users import PlanType, Subscription
 from utils.env_loader import EnvStage, resolve_stage_from_env
@@ -29,7 +30,7 @@ from utils.subscription import (
     DESKTOP_ACCESS_TIER_ARCHITECT,
     DESKTOP_ACCESS_TIER_FULL,
     effective_desktop_access_tier,
-    is_trial_paywalled,
+    is_desktop_trial_paywalled,
 )
 
 router = APIRouter()
@@ -183,15 +184,27 @@ class ProactiveCompletionEnvelope(BaseModel):
 
 
 async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
+    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop"):
         raise HTTPException(status_code=402, detail="trial_expired")
     return uid
+
+
+def _customer_subscription(uid: str) -> Subscription | None:
+    return users_db.get_user_valid_subscription(
+        uid,
+        firestore_client=get_customer_firestore_client(),
+        provision=False,
+    )
 
 
 async def _consume_quota(uid: str, operation: ProactiveOperation) -> None:
     operation_value = operation.value
     try:
-        subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
+        subscription = await run_blocking(
+            db_executor,
+            _customer_subscription,
+            uid,
+        )
         limit = _quota_limit_for_subscription(operation, subscription)
         allowed, _, retry_after = await run_blocking(
             critical_executor,

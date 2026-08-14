@@ -62,6 +62,11 @@ overlay:
           value: 'off'
         MEMORY_V3_GET_ENABLED:
           value: 'false'
+        # Canonical graph and /v3/memories first-page cursors fail closed without this HMAC.
+        MEMORY_V3_CURSOR_SECRET:
+          secret:
+            name: prod-omi-backend-secrets
+            key: MEMORY_V3_CURSOR_SECRET
         MCP_OAUTH_CLIENTS_JSON:
           secret:
             name: prod-omi-backend-secrets
@@ -194,6 +199,10 @@ overlay:
             value: 'off'
           MEMORY_V3_GET_ENABLED:
             value: 'false'
+          # `/v1/knowledge-graph` and signed memory cursors fail closed until this binding is present.
+          MEMORY_V3_CURSOR_SECRET_VERSION:
+            value: prod-v1
+            category: memory_rollout
           MCP_OAUTH_CLAUDE_CLIENT_ID:
             env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
             category: oauth_metadata
@@ -204,6 +213,9 @@ overlay:
             env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
             category: oauth_metadata
         secrets:
+          MEMORY_V3_CURSOR_SECRET:
+            secret: MEMORY_V3_CURSOR_SECRET
+            version: latest
           DESKTOP_PREVIEW_PUBLISH_KEY:
             secret: DESKTOP_PREVIEW_PUBLISH_KEY
             version: latest

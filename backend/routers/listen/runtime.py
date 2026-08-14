@@ -706,6 +706,17 @@ class ListenSessionRuntime:
                     conversation = await self.persistence.call(
                         conversations_db.get_conversation, self.request.uid, conversation_id
                     )
+                    finalization_reason = getattr(self.state, 'finalization_reason', None)
+                    if conversation and finalization_reason:
+                        external_data = dict(conversation.get('external_data') or {})
+                        external_data['conversation_finalization_reason'] = finalization_reason
+                        await self.persistence.call(
+                            conversations_db.update_conversation,
+                            self.request.uid,
+                            conversation_id,
+                            {'external_data': external_data},
+                        )
+                        conversation['external_data'] = external_data
                     if (
                         conversation
                         and self.state.close_code == 1000

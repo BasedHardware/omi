@@ -188,13 +188,12 @@ class OmiDeviceConnection extends DeviceConnection {
 
         for (int i = 0; i < totalEntries; i++) {
           int baseIndex = i * 4;
-          var result =
-              ((storageValue[baseIndex] |
-                          (storageValue[baseIndex + 1] << 8) |
-                          (storageValue[baseIndex + 2] << 16) |
-                          (storageValue[baseIndex + 3] << 24)) &
-                      0xFFFFFFFF)
-                  .toSigned(32);
+          var result = ((storageValue[baseIndex] |
+                      (storageValue[baseIndex + 1] << 8) |
+                      (storageValue[baseIndex + 2] << 16) |
+                      (storageValue[baseIndex + 3] << 24)) &
+                  0xFFFFFFFF)
+              .toSigned(32);
           storageLengths.add(result);
         }
       }
@@ -779,20 +778,18 @@ class OmiDeviceConnection extends DeviceConnection {
 
             for (int i = 0; i < 6; i++) {
               int baseIndex = i * 8;
-              var result =
-                  ((value[baseIndex] |
-                              (value[baseIndex + 1] << 8) |
-                              (value[baseIndex + 2] << 16) |
-                              (value[baseIndex + 3] << 24)) &
-                          0xFFFFFFFF)
-                      .toSigned(32);
-              var temp =
-                  ((value[baseIndex + 4] |
-                              (value[baseIndex + 5] << 8) |
-                              (value[baseIndex + 6] << 16) |
-                              (value[baseIndex + 7] << 24)) &
-                          0xFFFFFFFF)
-                      .toSigned(32);
+              var result = ((value[baseIndex] |
+                          (value[baseIndex + 1] << 8) |
+                          (value[baseIndex + 2] << 16) |
+                          (value[baseIndex + 3] << 24)) &
+                      0xFFFFFFFF)
+                  .toSigned(32);
+              var temp = ((value[baseIndex + 4] |
+                          (value[baseIndex + 5] << 8) |
+                          (value[baseIndex + 6] << 16) |
+                          (value[baseIndex + 7] << 24)) &
+                      0xFFFFFFFF)
+                  .toSigned(32);
               double axisValue = result + (temp / 1000000);
               accelerometerData.add(axisValue);
             }

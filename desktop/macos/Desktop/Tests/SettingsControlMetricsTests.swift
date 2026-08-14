@@ -104,10 +104,4 @@ final class SettingsControlMetricsTests: XCTestCase {
       enabledCopy.lowercased().contains("proactive"),
       "General Notifications must not claim product proactive delivery is on")
   }
-
-  func testNotificationPeriodLabelUsesClamped24HourTime() {
-    XCTAssertEqual(SettingsControlMetrics.notificationPeriodLabel(forMinute: 0), "00:00")
-    XCTAssertEqual(SettingsControlMetrics.notificationPeriodLabel(forMinute: 20 * 60 + 45), "20:45")
-    XCTAssertEqual(SettingsControlMetrics.notificationPeriodLabel(forMinute: 1_500), "23:59")
-  }
 }

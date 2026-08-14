@@ -88,6 +88,13 @@ final class OnboardingGlassChromeTests: XCTestCase {
       "a step without dots must reserve the same strip or the copy shifts by 40 pt between cards")
   }
 
+  func testScrollContentKeepsAFullBandOfClearanceAboveTheProgressBand() {
+    XCTAssertGreaterThan(
+      OnboardingGlass.scrollContentBottomPadding,
+      InkLayout.progressBandHeight,
+      "the scroll sentinel needs more room than the band itself to avoid covering the last control")
+  }
+
   // MARK: - Behaviour: the step transition
 
   /// The drift is a fraction of the card, not a fixed number of points: the same modifier has to read
@@ -128,6 +135,9 @@ final class OnboardingGlassChromeTests: XCTestCase {
     XCTAssertTrue(
       body.contains("OnboardingProgressBand("),
       "the live current-step container must consume the fixed progress reservation")
+    XCTAssertTrue(
+      body.contains("OnboardingGlass.scrollContentBottomPadding"),
+      "the live scroll content must leave structural clearance above the progress band")
     XCTAssertFalse(
       body.contains("Color.clear.frame(height: 14)"),
       "the old ad hoc footer is not the tested fixed progress band")

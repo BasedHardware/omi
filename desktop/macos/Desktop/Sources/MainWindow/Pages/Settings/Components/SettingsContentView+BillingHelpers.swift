@@ -607,42 +607,6 @@ extension SettingsContentView {
     AssistantSettings.shared.screenAnalysisEnabled = enabled
   }
 
-  func toggleTranscription(enabled: Bool) {
-    // Check microphone permission
-    if enabled && !appState.hasMicrophonePermission {
-      transcriptionError = "Microphone permission required"
-      isTranscribing = false
-      return
-    }
-
-    transcriptionError = nil
-    isTogglingTranscription = true
-
-    // Track setting change
-    AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
-
-    if enabled {
-      appState.startTranscription()
-      isTogglingTranscription = false
-      isTranscribing = true
-    } else {
-      appState.stopTranscription()
-      isTogglingTranscription = false
-      isTranscribing = false
-    }
-
-    // Persist the setting
-    AssistantSettings.shared.transcriptionEnabled = enabled
-  }
-
-  func setSystemAudioCaptureMode(_ mode: AssistantSettings.SystemAudioCaptureMode) {
-    AnalyticsManager.shared.settingToggled(
-      setting: "system_audio_capture_mode_\(mode.rawValue)", enabled: mode != .never)
-    // Persisting posts .systemAudioCaptureModeDidChange; AppState re-applies the gate live for
-    // any in-progress recording.
-    AssistantSettings.shared.systemAudioCaptureMode = mode
-  }
-
   func startGlowPreview() {
     isPreviewRunning = true
 
@@ -772,8 +736,6 @@ extension SettingsContentView {
     let notificationSettingsPendingAtLoadStart =
       NotificationService.hasPendingNotificationSettingsSync()
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
-    systemAudioCaptureMode = AssistantSettings.shared.systemAudioCaptureMode
-
     Task {
       do {
         // Load all settings in parallel

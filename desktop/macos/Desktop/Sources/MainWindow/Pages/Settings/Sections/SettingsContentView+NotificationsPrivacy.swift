@@ -34,57 +34,6 @@ extension SettingsContentView {
 
             GlassSeparator()
 
-            settingRow(
-              title: "Active Period",
-              subtitle: SettingsControlMetrics.notificationActivePeriodSubtitle(
-                startMinute: notificationActiveStartMinute,
-                endMinute: notificationActiveEndMinute),
-              settingId: "notifications.activeperiod"
-            ) {
-              HStack(spacing: OmiSpacing.sm) {
-                if let allDayLabel = SettingsControlMetrics.notificationActivePeriodSummaryLabel(
-                  startMinute: notificationActiveStartMinute,
-                  endMinute: notificationActiveEndMinute)
-                {
-                  Text(allDayLabel)
-                    .scaledFont(size: OmiType.caption, weight: .semibold)
-                    .foregroundColor(Ink.primary)
-                    .padding(.horizontal, OmiSpacing.sm)
-                    .padding(.vertical, OmiSpacing.xxs)
-                    .background(
-                      RoundedRectangle(
-                        cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous
-                      )
-                      .fill(Ink.accent.opacity(0.16))
-                    )
-                    .accessibilityLabel("Active period is all day")
-                }
-
-                notificationActivePeriodPicker(
-                  selection: $notificationActiveStartMinute,
-                  accessibilityLabel: "Active period start"
-                )
-                .onChange(of: notificationActiveStartMinute) { _, _ in
-                  saveNotificationActivePeriod()
-                }
-
-                Image(systemName: "arrow.right")
-                  .font(.system(size: OmiType.caption, weight: .semibold))
-                  .foregroundColor(Ink.secondary)
-
-                notificationActivePeriodPicker(
-                  selection: $notificationActiveEndMinute,
-                  accessibilityLabel: "Active period end"
-                )
-                .onChange(of: notificationActiveEndMinute) { _, _ in
-                  saveNotificationActivePeriod()
-                }
-              }
-              .padding(.horizontal, OmiSpacing.sm)
-              .padding(.vertical, OmiSpacing.xs)
-              .settingsGlassWell(radius: SettingsGlassMetrics.controlRadius)
-            }
-
             // Sits under the master toggle and the frequency slider because both gate it:
             // frequency caps how often any proactive card is delivered, and this decides
             // whether live suggestions are generated at all.
@@ -230,43 +179,6 @@ extension SettingsContentView {
     taskNotificationsEnabled = TaskAssistantSettings.shared.notificationsEnabled
     insightNotificationsEnabled = InsightAssistantSettings.shared.notificationsEnabled
     memoryNotificationsEnabled = MemoryAssistantSettings.shared.notificationsEnabled
-  }
-
-  func notificationActivePeriodPicker(
-    selection: Binding<Int>, accessibilityLabel: String
-  ) -> some View {
-    Menu {
-      ForEach(Array(stride(from: 0, to: 24 * 60, by: 15)), id: \.self) { minute in
-        Button {
-          selection.wrappedValue = minute
-        } label: {
-          if selection.wrappedValue == minute {
-            Label(
-              SettingsControlMetrics.notificationPeriodLabel(forMinute: minute),
-              systemImage: "checkmark")
-          } else {
-            Text(SettingsControlMetrics.notificationPeriodLabel(forMinute: minute))
-          }
-        }
-      }
-    } label: {
-      Text(SettingsControlMetrics.notificationPeriodLabel(forMinute: selection.wrappedValue))
-        .monospacedDigit()
-        .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(Ink.primary)
-        .frame(minWidth: 52)
-    }
-    .menuStyle(.borderlessButton)
-    .menuIndicator(.hidden)
-    .buttonStyle(.plain)
-    .fixedSize()
-    .accessibilityLabel(accessibilityLabel)
-  }
-
-  func saveNotificationActivePeriod() {
-    NotificationService.updateActivePeriod(
-      startMinute: notificationActiveStartMinute,
-      endMinute: notificationActiveEndMinute)
   }
 
   // MARK: - Privacy Section

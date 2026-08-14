@@ -14,7 +14,7 @@ from database._client import get_firestore_client
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
-from utils.subscription import is_trial_paywalled
+from utils.subscription import is_desktop_trial_paywalled
 
 router = APIRouter()
 
@@ -184,7 +184,7 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
     voice_id = request.voice_id.strip()
     if not _is_allowed_openai_voice(voice_id):
         raise HTTPException(status_code=400, detail="voice_id is not supported")
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
+    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop"):
         raise HTTPException(status_code=403, detail="A paid subscription is required")
     api_key = get_byok_key("openai") or os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
