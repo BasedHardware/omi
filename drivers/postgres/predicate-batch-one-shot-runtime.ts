@@ -10,6 +10,8 @@ import {
   type ConsolidationWorkAdapter,
   type ConsolidationWorkKind,
 } from "../../apps/service/workers/consolidation-work-service";
+import type { PredicateBatchPromptBudget } from
+  "../../apps/service/workers/predicate-batch-contract";
 import {
   definePredicateBatchConsolidationWorkAdapter,
 } from "../../apps/service/workers/predicate-batch-work-adapter";

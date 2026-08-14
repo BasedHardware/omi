@@ -2861,6 +2861,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         predicateModelCalls += 1;
         return { assertions: [] };
       }),
+      prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
       model_pipeline_exclusivity: createPostgresProductionModelPipelineExclusivity(modelLockPool, QUALIFICATION_MANIFEST_RECEIPT),
       resolve_model_pipeline_resource: async () => Object.freeze({
         version: MODEL_PIPELINE_RESOURCE_VERSION,
@@ -3000,6 +3001,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           ],
         }] };
       }),
+      prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
       model_pipeline_exclusivity: createPostgresProductionModelPipelineExclusivity(modelLockPool, QUALIFICATION_MANIFEST_RECEIPT),
       resolve_model_pipeline_resource: async () => Object.freeze({
         version: MODEL_PIPELINE_RESOURCE_VERSION,
