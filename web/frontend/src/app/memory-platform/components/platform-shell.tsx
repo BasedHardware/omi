@@ -22,8 +22,8 @@ interface PlatformShellProps {
  */
 export default function PlatformShell({ active, children }: PlatformShellProps) {
   return (
-    <div className="dark min-h-screen bg-[#0a0a0a] pt-16 text-neutral-100 antialiased">
-      <div className="sticky top-16 z-30 border-b border-white/10 bg-[#0a0a0a]/80 backdrop-blur">
+    <div className="dark min-h-screen bg-[#0a0a0a] pt-[6.5rem] text-neutral-100 antialiased md:pt-28">
+      <div className="sticky top-[4.5rem] z-30 border-b border-white/10 bg-[#0a0a0a]/80 backdrop-blur md:top-20">
         <div className="mx-auto flex max-w-6xl items-center gap-6 px-5 py-4 md:px-8">
           <Link
             href="/memory-platform"
