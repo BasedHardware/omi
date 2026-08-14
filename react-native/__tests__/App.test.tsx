@@ -46,6 +46,7 @@ jest.mock('react-native', () => {
     }
   }
   const timing = jest.fn(() => ({start: jest.fn()}));
+  const spring = jest.fn(() => ({start: jest.fn()}));
   const parallel = jest.fn((animations: Array<{start: () => void}>) => ({
     start: () => animations.forEach(animation => animation.start()),
   }));
@@ -85,6 +86,7 @@ jest.mock('react-native', () => {
     ActivityIndicator: component('ActivityIndicator'),
     Animated: {
       parallel,
+      spring,
       timing,
       Value: MockAnimatedValue,
       View: component('AnimatedView'),
@@ -100,6 +102,7 @@ jest.mock('react-native', () => {
     Platform: {OS: 'ios'},
     Pressable: component('Pressable'),
     SafeAreaView: component('SafeAreaView'),
+    ScrollView: component('ScrollView'),
     StyleSheet: {create: <T,>(styles: T) => styles},
     Text,
     TextInput: component('TextInput'),
@@ -172,6 +175,16 @@ jest.mock(
   'lucide-react-native/icons/paperclip',
   () => (props: Record<string, unknown>) =>
     mockReact.createElement('Paperclip', props),
+);
+jest.mock(
+  'lucide-react-native/icons/panel-left',
+  () => (props: Record<string, unknown>) =>
+    mockReact.createElement('PanelLeft', props),
+);
+jest.mock(
+  'lucide-react-native/icons/panel-left-close',
+  () => (props: Record<string, unknown>) =>
+    mockReact.createElement('PanelLeftClose', props),
 );
 jest.mock(
   'lucide-react-native/icons/search',
@@ -299,7 +312,9 @@ test('renders the collapsed reference rail and search-first desktop Home', async
     node => node.props.accessibilityRole === 'tablist',
   );
   expect(tablist.props.style).toEqual(
-    expect.arrayContaining([expect.objectContaining({width: 72})]),
+    expect.arrayContaining([
+      expect.objectContaining({width: expect.objectContaining({value: 72})}),
+    ]),
   );
   expect(Animated.timing).toHaveBeenCalledWith(
     expect.anything(),
@@ -353,6 +368,15 @@ test('navigates to rewritten-backend read projections and replays the stage tran
   expect(Animated.timing).toHaveBeenCalledWith(
     expect.anything(),
     expect.objectContaining({duration: 180, toValue: 1}),
+  );
+  expect(Animated.spring).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({
+      damping: 42,
+      stiffness: 520,
+      toValue: 156,
+      useNativeDriver: true,
+    }),
   );
 });
 
@@ -450,6 +474,123 @@ test('uses a full pane with bottom navigation on mobile', async () => {
   );
 });
 
+test('resizes pane and rail at their independent reference breakpoints', async () => {
+  mockViewportWidth = 700;
+  const tablet = await renderApp();
+  const tabletTablist = tablet.root.find(
+    node => node.props.accessibilityRole === 'tablist',
+  );
+  const tabletPane = tablet.root.find(
+    node => String(node.type) === 'KeyboardAvoidingView',
+  );
+  expect(tabletTablist.props.style).toEqual(
+    expect.arrayContaining([expect.objectContaining({borderTopWidth: 1})]),
+  );
+  expect(tabletPane.props.style).toEqual(
+    expect.arrayContaining([expect.objectContaining({borderRadius: 26})]),
+  );
+  await ReactTestRenderer.act(async () => tablet.unmount());
+
+  mockViewportWidth = 1000;
+  const intermediate = await renderApp();
+  expect(
+    intermediate.root.find(node => node.props.accessibilityRole === 'tablist')
+      .props.style,
+  ).toEqual(
+    expect.arrayContaining([expect.objectContaining({borderTopWidth: 1})]),
+  );
+  await ReactTestRenderer.act(async () => intermediate.unmount());
+
+  mockViewportWidth = 1024;
+  const desktop = await renderApp();
+  expect(
+    desktop.root.find(node => node.props.accessibilityRole === 'tablist').props
+      .style,
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({width: expect.objectContaining({value: 72})}),
+    ]),
+  );
+});
+
+test('expands the desktop rail to 280 with visible labels and reference timing', async () => {
+  const renderer = await renderApp();
+  const expand = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Expand sidebar',
+  );
+
+  await ReactTestRenderer.act(async () => expand.props.onPress());
+
+  expect(Animated.timing).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({
+      duration: 200,
+      toValue: 280,
+      useNativeDriver: false,
+    }),
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Collapse sidebar',
+    ),
+  ).toBeDefined();
+  const homeLabel = renderer.root.find(
+    node => String(node.type) === 'Text' && node.props.children === 'Home',
+  );
+  expect(homeLabel.props.style).not.toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0, width: 0})]),
+  );
+});
+
+test('applies the exact floating pane shadow only above the pane breakpoint', async () => {
+  const renderer = await renderApp();
+  const pane = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Floating pane',
+  );
+  expect(pane.props.style).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        shadowColor: '#000000',
+        shadowOffset: {height: 14, width: 0},
+        shadowOpacity: 0.22,
+        shadowRadius: 26,
+      }),
+    ]),
+  );
+});
+
+test.each([
+  [700, 640],
+  [1000, 720],
+  [1300, 820],
+])(
+  'a %ipx window keeps Chat scrollable with a %ipx composer',
+  async (width, maxWidth) => {
+    mockViewportWidth = width;
+    const renderer = await renderApp();
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Open Chat')
+        .props.onPress();
+    });
+
+    expect(
+      renderer.root.find(
+        node => node.props.accessibilityLabel === 'Chat scroll region',
+      ),
+    ).toBeDefined();
+    const composer = renderer.root.find(
+      node =>
+        String(node.type) === 'View' &&
+        Array.isArray(node.props.style) &&
+        node.props.style.some(
+          (style: {maxWidth?: number}) => style?.maxWidth === maxWidth,
+        ),
+    );
+    expect(composer).toBeDefined();
+  },
+);
+
 test('removes translation and shortens fades when reduced motion is enabled', async () => {
   mockViewportWidth = 390;
   mockReduceMotion = true;
@@ -474,8 +615,50 @@ test('removes translation and shortens fades when reduced motion is enabled', as
     stage.props.style[1].transform[0].translateY.setValue,
   ).toHaveBeenCalledWith(0);
   expect(
-    tablist.props.style[2].transform[0].translateY.setValue,
+    tablist.props.style.find((style: {transform?: unknown}) => style?.transform)
+      .transform[0].translateY.setValue,
   ).toHaveBeenCalledWith(0);
+});
+
+test('moves the desktop active pill directly when motion is reduced', async () => {
+  mockReduceMotion = true;
+  const renderer = await renderApp();
+  const activePill = renderer.root.find(
+    node =>
+      String(node.type) === 'AnimatedView' &&
+      node.props.accessibilityElementsHidden === true,
+  );
+  const translateY = activePill.props.style[1].transform[0].translateY;
+  const conversations = renderer.root
+    .findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    )
+    .find(node => node.props.children[1].props.children === 'Conversations')!;
+
+  await ReactTestRenderer.act(async () => conversations.props.onPress());
+
+  expect(translateY.setValue).toHaveBeenCalledWith(52);
+});
+
+test('resizes the desktop rail directly when motion is reduced', async () => {
+  mockReduceMotion = true;
+  const renderer = await renderApp();
+  const tablist = renderer.root.find(
+    node => node.props.accessibilityRole === 'tablist',
+  );
+  const width = tablist.props.style.find(
+    (style: {width?: {setValue?: jest.Mock}}) => style?.width?.setValue,
+  ).width;
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Expand sidebar')
+      .props.onPress();
+  });
+
+  expect(width.setValue).toHaveBeenCalledWith(280);
 });
 
 test('fills and preserves the ask pill draft from a quick prompt', async () => {

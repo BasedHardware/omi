@@ -16,6 +16,7 @@ import {
   Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -30,6 +31,8 @@ import House from 'lucide-react-native/icons/house';
 import ListChecks from 'lucide-react-native/icons/list-checks';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Mic from 'lucide-react-native/icons/mic';
+import PanelLeft from 'lucide-react-native/icons/panel-left';
+import PanelLeftClose from 'lucide-react-native/icons/panel-left-close';
 import Paperclip from 'lucide-react-native/icons/paperclip';
 import Search from 'lucide-react-native/icons/search';
 import Square from 'lucide-react-native/icons/square';
@@ -75,12 +78,14 @@ function NavItem({
   icon: Icon,
   compact,
   active,
+  expanded,
   onPress,
 }: {
   label: string;
   icon: NavigationIcon;
   compact: boolean;
   active: boolean;
+  expanded: boolean;
   onPress: () => void;
 }) {
   return (
@@ -91,7 +96,7 @@ function NavItem({
       style={({pressed}) => [
         styles.navItem,
         compact && styles.navItemCompact,
-        active && styles.navItemActive,
+        active && compact && styles.navItemActive,
         pressed && styles.pressed,
       ]}>
       <Icon color={active ? '#141414' : '#888888'} size={20} strokeWidth={2} />
@@ -99,7 +104,7 @@ function NavItem({
         numberOfLines={1}
         style={[
           styles.navText,
-          !compact && styles.navTextCollapsed,
+          !compact && !expanded && styles.navTextCollapsed,
           active && styles.navTextActive,
         ]}>
         {label}
@@ -289,12 +294,17 @@ function ProjectionPage({
 
 function App(): React.JSX.Element {
   const {width} = useWindowDimensions();
-  const compact = width < 760;
+  const compact = width < 1024;
+  const floatingPane = width >= 640;
+  const composerMaxWidth = width >= 1280 ? 820 : width >= 768 ? 720 : 640;
   const stageOpacity = useRef(new Animated.Value(0)).current;
   const stageTranslateY = useRef(new Animated.Value(8)).current;
   const mobileNavOpacity = useRef(new Animated.Value(0)).current;
   const mobileNavTranslateY = useRef(new Animated.Value(100)).current;
+  const activePillTranslateY = useRef(new Animated.Value(0)).current;
+  const railWidth = useRef(new Animated.Value(72)).current;
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [railExpanded, setRailExpanded] = useState(false);
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatBusy, setChatBusy] = useState(false);
@@ -310,6 +320,13 @@ function App(): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const [projectionFilter, setProjectionFilter] =
     useState<ProjectionFilter>('all');
+  const activeNavigationIndex = Math.max(
+    0,
+    navigation.findIndex(
+      item =>
+        route === item.label || (route === 'Chat' && item.label === 'Home'),
+    ),
+  );
 
   useEffect(() => {
     let active = true;
@@ -476,19 +493,82 @@ function App(): React.JSX.Element {
     ]).start();
   }, [compact, mobileNavOpacity, mobileNavTranslateY, reduceMotion]);
 
+  useEffect(() => {
+    const value = activeNavigationIndex * 52;
+    if (reduceMotion) {
+      activePillTranslateY.setValue(value);
+      return;
+    }
+    Animated.spring(activePillTranslateY, {
+      damping: 42,
+      stiffness: 520,
+      toValue: value,
+      useNativeDriver: true,
+    }).start();
+  }, [activeNavigationIndex, activePillTranslateY, reduceMotion]);
+
+  useEffect(() => {
+    const value = railExpanded ? 280 : 72;
+    if (reduceMotion) {
+      railWidth.setValue(value);
+      return;
+    }
+    Animated.timing(railWidth, {
+      duration: 200,
+      easing: Easing.bezier(0.42, 0, 0.58, 1),
+      toValue: value,
+      useNativeDriver: false,
+    }).start();
+  }, [railExpanded, railWidth, reduceMotion]);
+
   const nav = (
     <Animated.View
       accessibilityRole="tablist"
       style={[
         styles.navigation,
         compact ? styles.bottomNav : styles.rail,
+        !compact && {width: railWidth},
         compact && {
           opacity: mobileNavOpacity,
           transform: [{translateY: mobileNavTranslateY}],
         },
       ]}>
-      {!compact && <Text style={styles.wordmark}>omi</Text>}
+      {!compact && (
+        <View
+          style={[
+            styles.railHeader,
+            railExpanded && styles.railHeaderExpanded,
+          ]}>
+          <Text style={styles.wordmark}>omi</Text>
+          <Pressable
+            accessibilityLabel={
+              railExpanded ? 'Collapse sidebar' : 'Expand sidebar'
+            }
+            accessibilityRole="button"
+            onPress={() => setRailExpanded(current => !current)}
+            style={({pressed}) => [
+              styles.railToggle,
+              pressed && styles.pressed,
+            ]}>
+            {railExpanded ? (
+              <PanelLeftClose color="#888888" size={20} strokeWidth={2} />
+            ) : (
+              <PanelLeft color="#888888" size={20} strokeWidth={2} />
+            )}
+          </Pressable>
+        </View>
+      )}
       <View style={[styles.navItems, compact && styles.navItemsCompact]}>
+        {!compact && (
+          <Animated.View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={[
+              styles.activePill,
+              {transform: [{translateY: activePillTranslateY}]},
+            ]}
+          />
+        )}
         {navigation.map(item => (
           <NavItem
             active={
@@ -496,6 +576,7 @@ function App(): React.JSX.Element {
               (route === 'Chat' && item.label === 'Home')
             }
             compact={compact}
+            expanded={railExpanded}
             icon={item.icon}
             key={item.label}
             label={item.label}
@@ -550,7 +631,7 @@ function App(): React.JSX.Element {
 
   const composer = (
     <View style={styles.composerWrap}>
-      <View style={styles.composer}>
+      <View style={[styles.composer, {maxWidth: composerMaxWidth}]}>
         <TextInput
           accessibilityLabel="Ask Omi"
           multiline
@@ -622,179 +703,200 @@ function App(): React.JSX.Element {
     <SafeAreaView style={styles.outer}>
       <View style={[styles.shell, !compact && styles.shellWide]}>
         {!compact && nav}
-        <View style={[styles.paneInset, compact && styles.paneInsetCompact]}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={[styles.pane, compact && styles.paneCompact]}>
-            <Animated.View
-              accessibilityLabel={`${route} stage`}
-              style={[
-                styles.stageMotion,
-                {
-                  opacity: stageOpacity,
-                  transform: [{translateY: stageTranslateY}],
-                },
-              ]}>
-              <View style={styles.stage}>
-                {route === 'Home' ? (
-                  <View style={styles.searchHome}>
-                    <ProjectionList
-                      emptyCopy="Nothing matches this search yet."
-                      error={null}
-                      footer={
-                        readOutcomes === null ? undefined : (
-                          <View style={styles.readStatuses}>
-                            <OutcomeStatus
-                              label="Conversations"
-                              outcome={readOutcomes.conversations}
-                            />
-                            <OutcomeStatus
-                              label="Memories"
-                              outcome={readOutcomes.memories}
-                            />
-                            <OutcomeStatus
-                              label="Tasks"
-                              outcome={readOutcomes.tasks}
-                            />
-                          </View>
-                        )
-                      }
-                      header={
-                        <View style={styles.searchHeader}>
-                          <Text style={styles.searchEyebrow}>HOME</Text>
-                          <Text style={styles.searchTitle}>
-                            Search what you’ve seen and heard
-                          </Text>
-                          <View style={styles.searchBox}>
-                            <Search color="#888888" size={18} strokeWidth={2} />
-                            <TextInput
-                              accessibilityLabel="Search Home"
-                              onChangeText={setSearchQuery}
-                              placeholder="Search conversations, memories, and tasks"
-                              placeholderTextColor="#777777"
-                              style={styles.searchInput}
-                              value={searchQuery}
-                            />
-                          </View>
-                          <View style={styles.searchActions}>
-                            <View style={styles.filters}>
-                              {filterLabels.map(filter => (
-                                <Pressable
-                                  accessibilityRole="button"
-                                  key={filter.value}
-                                  onPress={() =>
-                                    setProjectionFilter(filter.value)
-                                  }
-                                  style={[
-                                    styles.filterChip,
-                                    projectionFilter === filter.value &&
-                                      styles.filterChipActive,
-                                  ]}>
-                                  <Text
-                                    style={[
-                                      styles.filterText,
-                                      projectionFilter === filter.value &&
-                                        styles.filterTextActive,
-                                    ]}>
-                                    {filter.label}
-                                  </Text>
-                                </Pressable>
-                              ))}
+        <View
+          style={[styles.paneInset, !floatingPane && styles.paneInsetCompact]}>
+          <View
+            accessibilityLabel="Floating pane"
+            style={[
+              styles.paneFrame,
+              !floatingPane && styles.paneFrameCompact,
+            ]}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={[styles.pane, !floatingPane && styles.paneCompact]}>
+              <Animated.View
+                accessibilityLabel={`${route} stage`}
+                style={[
+                  styles.stageMotion,
+                  {
+                    opacity: stageOpacity,
+                    transform: [{translateY: stageTranslateY}],
+                  },
+                ]}>
+                <View style={styles.stage}>
+                  {route === 'Home' ? (
+                    <View style={styles.searchHome}>
+                      <ProjectionList
+                        emptyCopy="Nothing matches this search yet."
+                        error={null}
+                        footer={
+                          readOutcomes === null ? undefined : (
+                            <View style={styles.readStatuses}>
+                              <OutcomeStatus
+                                label="Conversations"
+                                outcome={readOutcomes.conversations}
+                              />
+                              <OutcomeStatus
+                                label="Memories"
+                                outcome={readOutcomes.memories}
+                              />
+                              <OutcomeStatus
+                                label="Tasks"
+                                outcome={readOutcomes.tasks}
+                              />
                             </View>
-                            <Pressable
-                              accessibilityLabel="Open Chat"
-                              accessibilityRole="button"
-                              onPress={() => setRoute('Chat')}
-                              style={({pressed}) => [
-                                styles.chatPill,
-                                pressed && styles.pressed,
-                              ]}>
-                              <MessageCircle
-                                color="#141414"
-                                size={17}
+                          )
+                        }
+                        header={
+                          <View style={styles.searchHeader}>
+                            <Text style={styles.searchEyebrow}>HOME</Text>
+                            <Text style={styles.searchTitle}>
+                              Search what you’ve seen and heard
+                            </Text>
+                            <View style={styles.searchBox}>
+                              <Search
+                                color="#888888"
+                                size={18}
                                 strokeWidth={2}
                               />
-                              <Text style={styles.chatPillText}>Chat</Text>
-                            </Pressable>
+                              <TextInput
+                                accessibilityLabel="Search Home"
+                                onChangeText={setSearchQuery}
+                                placeholder="Search conversations, memories, and tasks"
+                                placeholderTextColor="#777777"
+                                style={styles.searchInput}
+                                value={searchQuery}
+                              />
+                            </View>
+                            <View style={styles.searchActions}>
+                              <View style={styles.filters}>
+                                {filterLabels.map(filter => (
+                                  <Pressable
+                                    accessibilityRole="button"
+                                    key={filter.value}
+                                    onPress={() =>
+                                      setProjectionFilter(filter.value)
+                                    }
+                                    style={[
+                                      styles.filterChip,
+                                      projectionFilter === filter.value &&
+                                        styles.filterChipActive,
+                                    ]}>
+                                    <Text
+                                      style={[
+                                        styles.filterText,
+                                        projectionFilter === filter.value &&
+                                          styles.filterTextActive,
+                                      ]}>
+                                      {filter.label}
+                                    </Text>
+                                  </Pressable>
+                                ))}
+                              </View>
+                              <Pressable
+                                accessibilityLabel="Open Chat"
+                                accessibilityRole="button"
+                                onPress={() => setRoute('Chat')}
+                                style={({pressed}) => [
+                                  styles.chatPill,
+                                  pressed && styles.pressed,
+                                ]}>
+                                <MessageCircle
+                                  color="#141414"
+                                  size={17}
+                                  strokeWidth={2}
+                                />
+                                <Text style={styles.chatPillText}>Chat</Text>
+                              </Pressable>
+                            </View>
+                            <Text style={styles.timelineLabel}>LATEST</Text>
                           </View>
-                          <Text style={styles.timelineLabel}>LATEST</Text>
-                        </View>
-                      }
-                      items={homeResults}
-                      loading={readsLoading}
-                    />
-                  </View>
-                ) : route === 'Chat' ? (
-                  <View style={styles.home}>
-                    <Pressable
-                      accessibilityLabel="Back to Home"
-                      accessibilityRole="button"
-                      onPress={() => setRoute('Home')}
-                      style={({pressed}) => [
-                        styles.backButton,
-                        pressed && styles.pressed,
-                      ]}>
-                      <ChevronLeft color="#b0b0b0" size={18} strokeWidth={2} />
-                      <Text style={styles.backButtonText}>Home</Text>
-                    </Pressable>
-                    <OmiMark />
-                    <Text style={styles.greeting}>I’m ready.</Text>
-                    <View style={styles.currents}>
-                      <Text style={styles.sectionLabel}>CURRENTS</Text>
-                      {messages.length === 0 &&
-                      !chatBusy &&
-                      chatError === null ? (
-                        <Text style={styles.empty}>
-                          Nothing’s waiting on you.
-                        </Text>
-                      ) : (
-                        <View style={styles.transcript}>
-                          {messages.map(message => (
-                            <Text
-                              key={message.id}
-                              style={[
-                                styles.message,
-                                message.sender === 'human' &&
-                                  styles.humanMessage,
-                              ]}>
-                              {message.text}
-                            </Text>
-                          ))}
-                          {chatBusy && (
-                            <Text style={styles.empty}>Thinking…</Text>
-                          )}
-                          {chatError !== null && (
-                            <Text style={styles.error}>{chatError}</Text>
-                          )}
-                        </View>
-                      )}
+                        }
+                        items={homeResults}
+                        loading={readsLoading}
+                      />
                     </View>
-                    <View style={styles.prompts}>
-                      {quickPrompts.map(prompt => (
+                  ) : route === 'Chat' ? (
+                    <ScrollView
+                      accessibilityLabel="Chat scroll region"
+                      contentContainerStyle={styles.chatScrollContent}
+                      style={styles.chatScroll}>
+                      <View style={styles.home}>
                         <Pressable
+                          accessibilityLabel="Back to Home"
                           accessibilityRole="button"
-                          key={prompt}
-                          onPress={() => setDraft(prompt)}
+                          onPress={() => setRoute('Home')}
                           style={({pressed}) => [
-                            styles.promptChip,
+                            styles.backButton,
                             pressed && styles.pressed,
                           ]}>
-                          <Text style={styles.promptText}>{prompt}</Text>
+                          <ChevronLeft
+                            color="#b0b0b0"
+                            size={18}
+                            strokeWidth={2}
+                          />
+                          <Text style={styles.backButtonText}>Home</Text>
                         </Pressable>
-                      ))}
-                    </View>
-                  </View>
-                ) : (
-                  <ProjectionPage
-                    loading={readsLoading}
-                    outcome={routeOutcome}
-                    route={route}
-                  />
-                )}
-              </View>
-            </Animated.View>
-            {route === 'Chat' && composer}
-          </KeyboardAvoidingView>
+                        <OmiMark />
+                        <Text style={styles.greeting}>I’m ready.</Text>
+                        <View style={styles.currents}>
+                          <Text style={styles.sectionLabel}>CURRENTS</Text>
+                          {messages.length === 0 &&
+                          !chatBusy &&
+                          chatError === null ? (
+                            <Text style={styles.empty}>
+                              Nothing’s waiting on you.
+                            </Text>
+                          ) : (
+                            <View style={styles.transcript}>
+                              {messages.map(message => (
+                                <Text
+                                  key={message.id}
+                                  style={[
+                                    styles.message,
+                                    message.sender === 'human' &&
+                                      styles.humanMessage,
+                                  ]}>
+                                  {message.text}
+                                </Text>
+                              ))}
+                              {chatBusy && (
+                                <Text style={styles.empty}>Thinking…</Text>
+                              )}
+                              {chatError !== null && (
+                                <Text style={styles.error}>{chatError}</Text>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.prompts}>
+                          {quickPrompts.map(prompt => (
+                            <Pressable
+                              accessibilityRole="button"
+                              key={prompt}
+                              onPress={() => setDraft(prompt)}
+                              style={({pressed}) => [
+                                styles.promptChip,
+                                pressed && styles.pressed,
+                              ]}>
+                              <Text style={styles.promptText}>{prompt}</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                    </ScrollView>
+                  ) : (
+                    <ProjectionPage
+                      loading={readsLoading}
+                      outcome={routeOutcome}
+                      route={route}
+                    />
+                  )}
+                </View>
+              </Animated.View>
+              {route === 'Chat' && composer}
+            </KeyboardAvoidingView>
+          </View>
         </View>
         {compact && nav}
       </View>
@@ -807,7 +909,20 @@ const styles = StyleSheet.create({
   shell: {backgroundColor: '#141414', flex: 1},
   shellWide: {flexDirection: 'row'},
   navigation: {backgroundColor: '#141414'},
-  rail: {paddingHorizontal: 8, paddingVertical: 24, width: 72},
+  rail: {paddingHorizontal: 8, paddingVertical: 24},
+  railHeader: {alignItems: 'flex-start', gap: 8},
+  railHeaderExpanded: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  railToggle: {
+    alignItems: 'center',
+    borderRadius: 12,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
   wordmark: {
     color: '#ffffff',
     fontSize: 25,
@@ -833,6 +948,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   navItemActive: {backgroundColor: '#ffffff'},
+  activePill: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    height: 48,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
   navText: {color: '#b0b0b0', fontSize: 14, fontWeight: '600'},
   navTextCollapsed: {opacity: 0, width: 0},
   navTextActive: {color: '#141414'},
@@ -844,6 +968,14 @@ const styles = StyleSheet.create({
   },
   paneInset: {flex: 1, padding: 12},
   paneInsetCompact: {padding: 0},
+  paneFrame: {
+    flex: 1,
+    shadowColor: '#000000',
+    shadowOffset: {height: 14, width: 0},
+    shadowOpacity: 0.22,
+    shadowRadius: 26,
+  },
+  paneFrameCompact: {shadowOpacity: 0},
   pane: {
     backgroundColor: '#1a1a1a',
     borderColor: '#303030',
@@ -924,6 +1056,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginTop: 28,
   },
+  chatScroll: {flex: 1},
+  chatScrollContent: {flexGrow: 1},
   home: {
     alignSelf: 'center',
     flex: 1,
@@ -1058,7 +1192,6 @@ const styles = StyleSheet.create({
     borderColor: '#3a3a3a',
     borderRadius: 28,
     borderWidth: 1,
-    maxWidth: 820,
     minHeight: 62,
     paddingHorizontal: 10,
     paddingVertical: 7,
