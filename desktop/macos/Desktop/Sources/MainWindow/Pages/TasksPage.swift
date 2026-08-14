@@ -505,6 +505,10 @@ class TasksViewModel: ObservableObject {
   @Published var isInlineCreating = false
   @Published var inlineCreateAfterTaskId: String?
   @Published var editingTaskId: String?
+  /// Task whose detail panel is open. Owned here rather than in the page so the
+  /// panel re-reads the live task after an edit, and so the automation bridge can
+  /// open it the same way a row click does.
+  @Published var detailPanelTaskID: String?
   var hoveredTaskId: String?
   @Published var animateToggleTaskId: String?
   @Published var isAnyTaskEditing = false
@@ -2830,6 +2834,21 @@ class TasksViewModel: ObservableObject {
     }
 
     registry.register(
+      name: "open_task_details",
+      summary: "Open a task's detail panel by id — the same panel a row click opens. Omit the id to close it.",
+      params: ["id"]
+    ) { [weak self] params in
+      guard let self else { return ["error": "tasks view model deallocated"] }
+      guard let id = params["id"], !id.isEmpty else {
+        self.detailPanelTaskID = nil
+        return ["open": "false"]
+      }
+      guard let task = self.findTask(id) else { return ["error": "task not found: \(id)"] }
+      self.detailPanelTaskID = task.id
+      return ["open": "true", "id": task.id, "priority": task.priority ?? ""]
+    }
+
+    registry.register(
       name: "seed_tasks",
       summary:
         "Create N tasks for reorder/stress testing; waits for backend ids so they are reorder-persistable; returns synced count + ids",
@@ -3374,7 +3393,9 @@ struct TasksPage: View {
   /// highlight the correct item without observing the full coordinator.
   @State private var activeChatTaskId: String? = nil
   @State private var showChatPanel = false
-  @State private var taskDetailTask: TaskActionItem?
+  private var taskDetailTask: TaskActionItem? {
+    viewModel.detailPanelTaskID.flatMap { viewModel.findTask($0) }
+  }
   @AppStorage("tasksChatPanelWidth") private var chatPanelWidth: Double = 400
   /// The window width before the chat panel was opened, so we can restore it exactly.
   /// Persisted so we can restore on app relaunch if the user quit with chat open.
@@ -3568,13 +3589,11 @@ struct TasksPage: View {
     }
     .onReceive(viewModel.$displayTasks) { tasks in
       chatCoordinator.ingestTaskMappings(tasks)
-      guard let taskDetailTask else { return }
-      self.taskDetailTask = tasks.first(where: { $0.id == taskDetailTask.id })
     }
     .onReceive(chatCoordinator.$isPanelOpen.removeDuplicates()) { isOpen in
       guard isOpen != showChatPanel else { return }
       if isOpen {
-        taskDetailTask = nil
+        viewModel.detailPanelTaskID = nil
         adjustWindowWidth(expand: true)
         OmiMotion.withGated(.easeInOut(duration: 0.25)) {
           showChatPanel = true
@@ -3603,7 +3622,7 @@ struct TasksPage: View {
     log(
       "TaskChat: openChatForTask called for task \(task.id) (deleted=\(task.deleted ?? false), completed=\(task.completed))"
     )
-    taskDetailTask = nil
+    viewModel.detailPanelTaskID = nil
     if !showChatPanel {
       // First open: expand window and reveal the panel together
       adjustWindowWidth(expand: true)
@@ -3628,7 +3647,7 @@ struct TasksPage: View {
   }
 
   private func closeTaskDetailPanel() {
-    taskDetailTask = nil
+    viewModel.detailPanelTaskID = nil
   }
 
   private func openTaskDetailPanel(for task: TaskActionItem) {
@@ -3637,7 +3656,7 @@ struct TasksPage: View {
       closeChatPanel()
       showChatPanel = false
     }
-    taskDetailTask = task
+    viewModel.detailPanelTaskID = task.id
   }
 
   private func handleEscapeKey() -> Bool {

@@ -13,7 +13,7 @@ final class InlineTaskTodayButtonTests: XCTestCase {
 
   func testTodayDueAtIsEndOfCurrentDay() throws {
     var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "America/New_York")!
+    calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
     let now = Date(timeIntervalSince1970: 1_755_100_000)  // fixed instant, not wall clock
 
     let dueAt = TasksViewModel.todayDueAt(now: now, calendar: calendar)
