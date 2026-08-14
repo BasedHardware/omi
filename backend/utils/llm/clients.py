@@ -423,6 +423,9 @@ def _create_byok_client(
     if provider == 'anthropic':
         anthropic_kwargs = dict(kwargs)
         anthropic_kwargs['timeout'] = anthropic_kwargs.pop('request_timeout')
+        # stream_options is an OpenAI-only transport knob; ChatAnthropic would
+        # silently forward it into model_kwargs, so strip it before construction.
+        anthropic_kwargs.pop('stream_options', None)
         return _cached_anthropic_chat(model, byok_key, anthropic_kwargs)
 
     return None
