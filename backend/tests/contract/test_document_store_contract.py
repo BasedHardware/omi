@@ -291,6 +291,17 @@ def test_query_not_in(store, uid):
     assert {d.id for d in hits} == {"p1"}
 
 
+def test_query_not_equal_and_not_in_exclude_missing_field(store, uid):
+    # cubic PR 10887: Firestore != / not-in exclude docs where the field is ABSENT. Mongo's $ne/$nin
+    # would over-return a missing-field doc without the $exists guard — assert parity on both backends.
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"team": "x"})
+    store.set(f"{base}/p2", {"team": "y"})
+    store.set(f"{base}/p3", {"name": "no-team"})  # no 'team' field at all
+    assert {d.id for d in store.query(base, filters=[("team", "!=", "x")])} == {"p2"}
+    assert {d.id for d in store.query(base, filters=[("team", "not-in", ["x"])])} == {"p2"}
+
+
 def test_query_offset_and_count(store, uid):
     base = f"users/{uid}/people"
     for i in range(5):

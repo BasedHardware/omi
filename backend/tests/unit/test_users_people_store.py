@@ -13,8 +13,13 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 
-import mongomock
 import pytest
+
+# pymongo + mongomock are on-prem (Mongo backend) deps, present in the offline test image but not in the
+# upstream requirements/pyproject manifests. Skip the whole module where they are absent (a clean upstream
+# CI checkout) instead of failing collection with ModuleNotFoundError (cubic PR 10887).
+pytest.importorskip('pymongo')
+mongomock = pytest.importorskip('mongomock')
 
 import database.users as users
 from database.store.adapters.mongo import MongoDocumentStore

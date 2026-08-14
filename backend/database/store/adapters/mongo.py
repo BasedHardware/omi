@@ -392,7 +392,13 @@ class MongoDocumentStore:
                 # selects docs whose array field contains value (mirrors Firestore array_contains).
                 mongo_filter["d." + field] = value
             else:
-                mongo_filter.setdefault("d." + field, {})[_OP[op]] = value
+                clause = mongo_filter.setdefault("d." + field, {})
+                clause[_OP[op]] = value
+                if op in ("!=", "not-in"):
+                    # Firestore != / not-in exclude documents where the field is ABSENT; Mongo's
+                    # $ne/$nin would otherwise MATCH a missing field, over-returning rows. Require the
+                    # field to exist so the row set matches Firestore (cubic PR 10887).
+                    clause["$exists"] = True
         return mongo_filter
 
     def count(self, collection: str, *, filters: Optional[Iterable[Filter]] = None) -> int:
@@ -416,7 +422,10 @@ class MongoDocumentStore:
             if op == "array_contains":
                 mongo_filter["d." + field] = value
             else:
-                mongo_filter.setdefault("d." + field, {})[_OP[op]] = value
+                clause = mongo_filter.setdefault("d." + field, {})
+                clause[_OP[op]] = value
+                if op in ("!=", "not-in"):
+                    clause["$exists"] = True  # exclude missing-field docs, matching Firestore != / not-in
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         if start_after is not None:
             if specs:
