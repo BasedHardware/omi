@@ -45,6 +45,18 @@ def get_vector_store(env: Optional[Mapping[str, str]] = None) -> VectorStore:
     return _instance
 
 
+def configured_vector_dimension(env: Optional[Mapping[str, str]] = None) -> int:
+    """The active vector store's embedding dimension. A metadata-only query still needs an all-zeros
+    placeholder vector of the RIGHT length; a hard-coded 3072 makes a store provisioned for another
+    dimension reject the query (cubic PR 10887 E1). Pinecone (cloud reference) is 3072; Qdrant reads
+    QDRANT_VECTOR_DIM (default 3072), so the cloud path is unchanged."""
+    source = os.environ if env is None else env
+    backend = (source.get("VECTOR_STORE_BACKEND") or "pinecone").strip().lower() or "pinecone"
+    if backend == "qdrant":
+        return int((source.get("QDRANT_VECTOR_DIM") or "3072").strip())
+    return 3072
+
+
 def reset_vector_store_for_tests() -> None:
     """Drop the cached singleton so a test can re-select the backend from the environment."""
     global _instance
