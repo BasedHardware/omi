@@ -3,6 +3,7 @@ import {
   loadDesktopReads,
   loadMemories,
   loadTasks,
+  parseMemoryText,
 } from '../src/desktopReadClient';
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 
@@ -129,7 +130,7 @@ test('loads and normalizes all three exact desktop read routes', async () => {
         expect.objectContaining({
           kind: 'memory',
           id: 'memory1_abc',
-          searchableText: 'The launch is Friday.',
+          searchableText: 'The launch is Friday.\ncitation-v1:launch',
           timestamp: 1785900200,
         }),
       ],
@@ -169,6 +170,19 @@ test('preserves absent memory timestamps without inventing an order', async () =
     })),
   );
   expect(result.items[0].timestamp).toBeNull();
+});
+
+test('separates a machine slug from visible memory text', () => {
+  expect(parseMemoryText('quiet-river-lantern: The launch is Friday.')).toEqual(
+    {
+      body: 'The launch is Friday.',
+      provenanceLabel: 'quiet-river-lantern',
+    },
+  );
+  expect(parseMemoryText('A normal memory: with punctuation.')).toEqual({
+    body: 'A normal memory: with punctuation.',
+    provenanceLabel: null,
+  });
 });
 
 test.each([
@@ -217,6 +231,7 @@ test('rejects a malformed page envelope before projecting items', async () => {
 });
 
 test('preserves a cursor-backed multi-page memory window', async () => {
+  const paths: string[] = [];
   const response = {
     ...page([memory], 'recall-completeness-v1'),
     window: {
@@ -226,12 +241,12 @@ test('preserves a cursor-backed multi-page memory window', async () => {
       nextCursor: 'cursor-2',
     },
   };
-  const backend = backendFor(() => ({
-    status: 200,
-    body: JSON.stringify(response),
-  }));
+  const backend = backendFor(request => {
+    paths.push(request.path);
+    return {status: 200, body: JSON.stringify(response)};
+  });
 
-  await expect(loadMemories(backend)).resolves.toEqual({
+  await expect(loadMemories(backend, 'opaque/+ cursor=')).resolves.toEqual({
     items: [expect.objectContaining({id: 'memory1_abc'})],
     page: {
       windowStatus: 'more',
@@ -242,6 +257,18 @@ test('preserves a cursor-backed multi-page memory window', async () => {
       reasons: [],
     },
   });
+  expect(paths).toEqual([
+    '/v1/memories?limit=50&cursor=opaque%2F%2B%20cursor%3D',
+  ]);
+});
+
+test('rejects an empty memory cursor before issuing a read', async () => {
+  const backend = backendFor(() => {
+    throw new Error('unexpected request');
+  });
+  await expect(loadMemories(backend, '')).rejects.toThrow(
+    'Memory cursor is malformed',
+  );
 });
 
 test('preserves an incomplete task projection and its reasons', async () => {

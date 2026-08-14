@@ -594,6 +594,159 @@ test('navigates to rewritten-backend read projections and replays the stage tran
   );
 });
 
+test('renders memory body separately from provenance and searches only loaded rows', async () => {
+  const paths: string[] = [];
+  mockBackend.request.mockImplementation(async request => {
+    paths.push(request.path);
+    if (request.path === '/v1/memories?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          contractVersion: '1.0.0',
+          items: [
+            {
+              id: 'memory-1',
+              text: 'quiet-river-lantern: The launch is Friday.',
+              citations: ['citation-v1:launch'],
+              provenance: {
+                synthesisVersion: 'synthesis-v1',
+                inputDigest: 'input',
+                outputDigest: 'output',
+              },
+              updatedAt: 1785900200,
+            },
+            {
+              id: 'memory-2',
+              text: 'Lunch was outside.',
+              citations: [],
+              provenance: {
+                synthesisVersion: 'synthesis-v1',
+                inputDigest: 'input-2',
+                outputDigest: 'output-2',
+              },
+            },
+          ],
+          window: {
+            status: 'complete',
+            complete: true,
+            hasMore: false,
+            nextCursor: null,
+          },
+          completeness: {
+            version: 'recall-completeness-v1',
+            status: 'complete',
+            reasons: [],
+          },
+          absence: null,
+        }),
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  const renderer = await renderApp();
+  const memories = renderer.root
+    .findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    )
+    .find(node => node.props.children[1].props.children === 'Memories')!;
+  await ReactTestRenderer.act(async () => memories.props.onPress());
+  const rendered = JSON.stringify(renderer.toJSON());
+  expect(rendered).toContain('The launch is Friday.');
+  expect(rendered).toContain('Provenance · quiet-river-lantern · synthesis-v1');
+  expect(rendered).toContain('citation-v1:launch');
+  expect(rendered).not.toContain('quiet-river-lantern: The launch is Friday.');
+  const beforeSearch = paths.length;
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search loaded memories')
+      .props.onChangeText('lunch');
+  });
+  const filtered = JSON.stringify(renderer.toJSON());
+  expect(filtered).toContain('Lunch was outside.');
+  expect(filtered).not.toContain('The launch is Friday.');
+  expect(paths).toHaveLength(beforeSearch);
+});
+
+test('loads the next memory page with the encoded exact cursor', async () => {
+  const paths: string[] = [];
+  const memoryPage = (
+    text: string,
+    nextCursor: string | null,
+    hasMore: boolean,
+  ) => ({
+    contractVersion: '1.0.0',
+    items: [
+      {
+        id: text,
+        text,
+        citations: [],
+        provenance: {
+          synthesisVersion: 'synthesis-v1',
+          inputDigest: `input-${text}`,
+          outputDigest: `output-${text}`,
+        },
+        updatedAt: 1785900200,
+      },
+    ],
+    window: {
+      status: hasMore ? 'more' : 'complete',
+      complete: !hasMore,
+      hasMore,
+      nextCursor,
+    },
+    completeness: {
+      version: 'recall-completeness-v1',
+      status: 'complete',
+      reasons: [],
+    },
+    absence: null,
+  });
+  mockBackend.request.mockImplementation(async request => {
+    paths.push(request.path);
+    if (request.path === '/v1/memories?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify(memoryPage('First memory', 'opaque/+ =', true)),
+      };
+    }
+    if (request.path === '/v1/memories?limit=50&cursor=opaque%2F%2B%20%3D') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify(memoryPage('Older memory', null, false)),
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  const renderer = await renderApp();
+  const memories = renderer.root
+    .findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    )
+    .find(node => node.props.children[1].props.children === 'Memories')!;
+  await ReactTestRenderer.act(async () => memories.props.onPress());
+  await ReactTestRenderer.act(async () => {
+    await renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load more memories')
+      .props.onPress();
+  });
+  const rendered = JSON.stringify(renderer.toJSON());
+  expect(rendered).toContain('First memory');
+  expect(rendered).toContain('Older memory');
+  expect(paths).toContain('/v1/memories?limit=50&cursor=opaque%2F%2B%20%3D');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more memories',
+    ),
+  ).toHaveLength(0);
+});
+
 test('opens a read-only selected-record pane from a loaded conversation row', async () => {
   const renderer = await renderApp();
   const conversations = renderer.root

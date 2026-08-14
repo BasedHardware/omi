@@ -52,10 +52,12 @@ import {
 import {omiBackend} from './src/omiNative';
 import {
   loadDesktopReads,
+  loadMemories,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
   type ConversationProjection,
   type DomainReadOutcome,
+  type MemoryProjection,
   type ReadPageState,
 } from './src/desktopReadClient';
 import {subscribeDesktopSearchCommand} from './src/desktopCommands';
@@ -473,6 +475,189 @@ function ConversationsPage({
           )}
         </View>
       </View>
+    </View>
+  );
+}
+
+function formatMemoryDate(timestamp: number | null): string {
+  if (timestamp === null) {
+    return 'Date unavailable';
+  }
+  return new Date(timestamp * 1000).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function MemoriesPage({
+  outcome,
+  loading,
+}: {
+  outcome: DomainReadOutcome<DesktopReadProjection> | null;
+  loading: boolean;
+}) {
+  const loaded = useMemo(
+    () =>
+      outcome?.status === 'success'
+        ? outcome.value.items.filter(
+            (item): item is MemoryProjection => item.kind === 'memory',
+          )
+        : [],
+    [outcome],
+  );
+  const [items, setItems] = useState<MemoryProjection[]>(loaded);
+  const [page, setPage] = useState<ReadPageState | null>(
+    outcome?.status === 'success' ? outcome.value.page : null,
+  );
+  const [query, setQuery] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
+  useEffect(() => {
+    if (outcome?.status === 'success') {
+      setItems(loaded);
+      setPage(outcome.value.page);
+      setLoadMoreError(false);
+    }
+  }, [loaded, outcome]);
+  const results = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return normalized === ''
+      ? items
+      : items.filter(item =>
+          item.searchableText.toLocaleLowerCase().includes(normalized),
+        );
+  }, [items, query]);
+  const loadMore = async () => {
+    if (
+      omiBackend === null ||
+      omiBackend === undefined ||
+      page?.nextCursor === null ||
+      page?.nextCursor === undefined ||
+      loadingMore
+    ) {
+      return;
+    }
+    setLoadingMore(true);
+    setLoadMoreError(false);
+    try {
+      const next = await loadMemories(omiBackend, page.nextCursor);
+      setItems(current => {
+        const ids = new Set(current.map(item => item.id));
+        return [...current, ...next.items.filter(item => !ids.has(item.id))];
+      });
+      setPage(next.page);
+    } catch {
+      setLoadMoreError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+  const renderItem = useCallback(
+    ({item}: {item: MemoryProjection}) => (
+      <View
+        accessibilityLabel={`Memory: ${item.title}`}
+        style={styles.memoryCard}>
+        <View style={styles.memoryMetaRow}>
+          <Text style={styles.memoryTimestamp}>
+            {formatMemoryDate(item.timestamp)}
+          </Text>
+          <Text style={styles.memoryCitationCount}>
+            {item.citations.length === 1
+              ? '1 citation'
+              : `${item.citations.length} citations`}
+          </Text>
+        </View>
+        <Text style={styles.memoryBody}>{item.summary}</Text>
+        <Text style={styles.memoryProvenance}>
+          {`Provenance · ${
+            item.provenance.label === null
+              ? item.provenance.synthesisVersion
+              : `${item.provenance.label} · ${item.provenance.synthesisVersion}`
+          }`}
+        </Text>
+        {item.citations.map(citation => (
+          <Text key={citation} style={styles.memoryCitation}>
+            {citation}
+          </Text>
+        ))}
+      </View>
+    ),
+    [],
+  );
+  const error = outcome?.status === 'error' ? outcome.error : null;
+  const filtering = query.trim() !== '';
+  return (
+    <View style={styles.memoryPage}>
+      <Text style={styles.projectionTitle}>Memories</Text>
+      <View style={styles.memorySearchBox}>
+        <Search accessible={false} color="#777777" size={17} />
+        <TextInput
+          accessibilityLabel="Search loaded memories"
+          onChangeText={setQuery}
+          placeholder="Search loaded memories"
+          placeholderTextColor="#666666"
+          style={styles.memorySearchInput}
+          value={query}
+        />
+      </View>
+      {loading && outcome === null ? (
+        <View style={styles.projectionEmpty}>
+          <ActivityIndicator color="#888888" />
+          <Text style={styles.projectionEmptyCopy}>Loading memories…</Text>
+        </View>
+      ) : error !== null ? (
+        <View style={styles.projectionEmpty}>
+          <Text style={styles.projectionEmptyTitle}>Memories unavailable</Text>
+          <Text style={styles.projectionEmptyCopy}>{error}</Text>
+        </View>
+      ) : (
+        <FlatList
+          contentContainerStyle={styles.memoryList}
+          data={results}
+          keyExtractor={item => item.id}
+          ListEmptyComponent={
+            <View style={styles.projectionEmpty}>
+              <Text style={styles.projectionEmptyTitle}>
+                {filtering ? 'No loaded memories match.' : 'No memories yet.'}
+              </Text>
+              {filtering && (
+                <Text style={styles.projectionEmptyCopy}>
+                  Search covers the memories loaded on this device.
+                </Text>
+              )}
+            </View>
+          }
+          ListFooterComponent={
+            page === null ? null : (
+              <View style={styles.memoryFooter}>
+                <ReadStatus label="Memories" page={page} />
+                {page.hasMore && page.nextCursor !== null && (
+                  <FocusPressable
+                    accessibilityLabel="Load more memories"
+                    accessibilityRole="button"
+                    disabled={loadingMore}
+                    onPress={loadMore}
+                    style={({pressed}) => [
+                      styles.loadOlderButton,
+                      pressed && styles.pressed,
+                    ]}>
+                    <Text style={styles.loadOlderText}>
+                      {loadingMore ? 'Loading more…' : 'Load more'}
+                    </Text>
+                  </FocusPressable>
+                )}
+                {loadMoreError && (
+                  <Text style={styles.error}>
+                    More memories could not be loaded.
+                  </Text>
+                )}
+              </View>
+            )
+          }
+          renderItem={renderItem}
+        />
+      )}
     </View>
   );
 }
@@ -1376,6 +1561,11 @@ function App(): React.JSX.Element {
                       loading={readsPhase === 'initial-loading'}
                       outcome={routeOutcome}
                     />
+                  ) : route === 'Memories' ? (
+                    <MemoriesPage
+                      loading={readsPhase === 'initial-loading'}
+                      outcome={routeOutcome}
+                    />
                   ) : (
                     <ProjectionPage
                       loading={readsPhase === 'initial-loading'}
@@ -1657,6 +1847,44 @@ const styles = StyleSheet.create({
   cancelledLabel: {color: '#888888', fontSize: 11, marginTop: 4},
   failedLabel: {color: '#d8a0a0', fontSize: 12, marginTop: 4},
   error: {color: '#d8a0a0', fontSize: 12, textAlign: 'center'},
+  memoryPage: {flex: 1, paddingHorizontal: 28, paddingTop: 24},
+  memorySearchBox: {
+    alignItems: 'center',
+    backgroundColor: '#202020',
+    borderColor: '#343434',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 16,
+    paddingHorizontal: 14,
+  },
+  memorySearchInput: {color: '#ffffff', flex: 1, fontSize: 14, minHeight: 44},
+  memoryList: {gap: 8, paddingBottom: 28, paddingTop: 14},
+  memoryCard: {
+    backgroundColor: '#202020',
+    borderColor: '#303030',
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+  },
+  memoryMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  memoryTimestamp: {color: '#898989', fontSize: 11, fontWeight: '600'},
+  memoryCitationCount: {color: '#707070', fontSize: 11},
+  memoryBody: {
+    color: '#eeeeee',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  memoryProvenance: {color: '#888888', fontSize: 11, marginTop: 9},
+  memoryCitation: {color: '#707070', fontSize: 11, marginTop: 3},
+  memoryFooter: {gap: 10, paddingVertical: 8},
   projection: {flex: 1, paddingHorizontal: 28, paddingVertical: 24},
   projectionTitle: {color: '#ffffff', fontSize: 22, fontWeight: '600'},
   projectionEmpty: {

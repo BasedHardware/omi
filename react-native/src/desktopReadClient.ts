@@ -24,6 +24,12 @@ export type MemoryProjection = {
   searchableText: string;
   citations: string[];
   timestamp: number | null;
+  provenance: {
+    label: string | null;
+    synthesisVersion: string;
+    inputDigest: string;
+    outputDigest: string;
+  };
 };
 
 export type TaskProjection = {
@@ -181,7 +187,11 @@ function validatePage(
   if (window.nextCursor !== null && typeof window.nextCursor !== 'string') {
     throw new Error(`${label} window cursor is malformed`);
   }
-  if ((hasMore && window.nextCursor === null) || (complete && hasMore)) {
+  if (
+    (hasMore &&
+      (window.nextCursor === null || window.nextCursor.length === 0)) ||
+    (complete && hasMore)
+  ) {
     throw new Error(`${label} window is malformed`);
   }
   const completeness = object(page.completeness, `${label} completeness`);
@@ -307,30 +317,64 @@ export async function loadConversations(
   };
 }
 
+export function parseMemoryText(text: string): {
+  body: string;
+  provenanceLabel: string | null;
+} {
+  const match = text.match(/^([a-z0-9]+(?:-[a-z0-9]+){2,}):\s+(.+)$/s);
+  return match === null
+    ? {body: text, provenanceLabel: null}
+    : {body: match[2], provenanceLabel: match[1]};
+}
+
 export async function loadMemories(
   backend: OmiBackend,
+  cursor: string | null = null,
 ): Promise<DomainRead<MemoryProjection>> {
+  if (cursor !== null && cursor.length === 0) {
+    throw new Error('Memory cursor is malformed');
+  }
+  const path: `/${string}` =
+    cursor === null
+      ? '/v1/memories?limit=50'
+      : `/v1/memories?limit=50&cursor=${encodeURIComponent(cursor)}`;
   const validated = validatePage(
-    await read(backend, 'desktop-memories-read', '/v1/memories?limit=50'),
+    await read(backend, 'desktop-memories-read', path),
     'Memories response',
     'recall-completeness-v1',
   );
   const items = validated.items.map((item, index) => {
     const id = string(item.id, `Memory ${index} id`);
     const text = string(item.text, `Memory ${index} text`);
+    const parsedText = parseMemoryText(text);
     const citations = stringArray(item.citations, `Memory ${index} citations`);
     const provenance = object(item.provenance, `Memory ${index} provenance`);
-    string(provenance.synthesisVersion, `Memory ${index} synthesisVersion`);
-    string(provenance.inputDigest, `Memory ${index} inputDigest`);
-    string(provenance.outputDigest, `Memory ${index} outputDigest`);
+    const synthesisVersion = string(
+      provenance.synthesisVersion,
+      `Memory ${index} synthesisVersion`,
+    );
+    const inputDigest = string(
+      provenance.inputDigest,
+      `Memory ${index} inputDigest`,
+    );
+    const outputDigest = string(
+      provenance.outputDigest,
+      `Memory ${index} outputDigest`,
+    );
     return {
       kind: 'memory' as const,
       id,
-      title: text,
-      summary: text,
-      searchableText: text,
+      title: parsedText.body,
+      summary: parsedText.body,
+      searchableText: `${parsedText.body}\n${citations.join('\n')}`,
       citations,
       timestamp: optionalTimestamp(item, `Memory ${index} timestamp`),
+      provenance: {
+        label: parsedText.provenanceLabel,
+        synthesisVersion,
+        inputDigest,
+        outputDigest,
+      },
     };
   });
   return {items, page: validated.page};
