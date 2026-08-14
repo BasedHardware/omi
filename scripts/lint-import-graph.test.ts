@@ -648,7 +648,7 @@ test("colocation fence rejects node_modules/.bun under frontend/", () => {
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}${result.stderr}`).toContain("bun toolchain is forbidden under frontend/");
   } finally {
-    rmSync(join(platformRoot, "frontend", "node_modules"), { recursive: true, force: true });
+    rmSync(bunDir, { recursive: true, force: true });
   }
 });
 
