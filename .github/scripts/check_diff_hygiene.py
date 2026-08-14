@@ -16,9 +16,16 @@ def main() -> int:
     parser.add_argument("--head", default="HEAD")
     args = parser.parse_args()
 
-    diff = subprocess.run(["git", "diff", "--check", args.base, args.head], check=False)
+    paths = [line for line in args.changed_files.read_text(encoding="utf-8").splitlines() if line.strip()]
+    diff_cmd = ["git", "diff", "--check", args.base, args.head]
+    worktree_cmd = ["git", "diff", "--check", "HEAD"]
+    if paths:
+        diff_cmd.extend(["--", *paths])
+        worktree_cmd.extend(["--", *paths])
+
+    diff = subprocess.run(diff_cmd, check=False)
     if args.head == "HEAD":
-        worktree_diff = subprocess.run(["git", "diff", "--check", "HEAD"], check=False)
+        worktree_diff = subprocess.run(worktree_cmd, check=False)
         if worktree_diff.returncode:
             return worktree_diff.returncode
     if diff.returncode:

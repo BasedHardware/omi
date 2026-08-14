@@ -44,6 +44,7 @@ HOOK
 
 chmod +x \
   "$ROOT/scripts/changed-files" \
+  "$ROOT/scripts/frontend-pre-push-scope" \
   "$ROOT/scripts/pre-commit" \
   "$ROOT/scripts/pre-push" \
   "$ROOT/scripts/pre-push-singleflight" \

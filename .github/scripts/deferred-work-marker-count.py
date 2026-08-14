@@ -40,6 +40,7 @@ NORMALIZED_EXCLUDED_DIR_NAMES = {
 NORMALIZED_EXCLUDED_PREFIXES = (
     ".github/workflows/",
     "app/lib/l10n/",
+    "frontend/shells/ios/app/android/",
     "omi/firmware/devkit/src/lib/opus-1.2.1/",
     "omi/firmware/omi/src/lib/core/lib/opus-1.2.1/",
 )

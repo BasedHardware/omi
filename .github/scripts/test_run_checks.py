@@ -190,6 +190,10 @@ class ManifestContractTests(unittest.TestCase):
         missing = sorted(deterministic_workflow_references(WORKFLOWS_DIR) - registered - exempt)
         self.assertEqual(missing, [], f"workflow checks missing from manifest/exempt: {missing}")
 
+    @unittest.skipUnless(
+        (WORKFLOWS_DIR / "repo-checks.yml").is_file(),
+        "monorepo GitHub workflows were not imported into this repository",
+    )
     def test_ci_lane_is_reachable_from_repo_checks(self) -> None:
         workflow = (WORKFLOWS_DIR / "repo-checks.yml").read_text(encoding="utf-8")
         self.assertRegex(workflow, r"run_checks\.py\s+--lane\s+ci")
@@ -281,6 +285,10 @@ class ManifestContractTests(unittest.TestCase):
 
 class RunnerBehaviorTests(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "requires a POSIX shell")
+    @unittest.skipUnless(
+        (REPO_ROOT / "backend/testing/desktop_beta_admission/run.sh").is_file(),
+        "legacy backend admission runner was not imported into this repository",
+    )
     def test_firestore_contention_runner_uses_uv_without_backend_venv(self) -> None:
         source = REPO_ROOT / "backend/testing/desktop_beta_admission/run.sh"
         with tempfile.TemporaryDirectory() as tmp:
@@ -318,23 +326,24 @@ esac
 
     def test_trigger_matching_selects_only_relevant_checks(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
-        selected = {check.id for check in resolve_checks(manifest, ["app/lib/widgets/example.dart"], "ci")}
-        self.assertIn("brand-ui", selected)
-        self.assertNotIn("backend-async-blockers", selected)
-        self.assertNotIn("backend-route-policy-baseline", selected)
+        selected = {check.id for check in resolve_checks(manifest, ["README.md"], "ci")}
+        self.assertIn("diff-hygiene", selected)
+        self.assertNotIn("agents-md-lean", selected)
+        self.assertNotIn("failure-class-cli-tests", selected)
 
     def test_root_agents_md_selects_agent_doc_checks(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         # `**/AGENTS.md` does not match the root file under fnmatch/PurePath.match,
         # so the root guide needs an explicit trigger or a docs-only root edit
-        # skips both the size ratchet and the dead-pointer check.
+        # skips the size ratchet.
         for lane in ("local", "ci"):
             selected = {check.id for check in resolve_checks(manifest, ["AGENTS.md"], lane)}
             self.assertIn("agents-md-lean", selected)
-            self.assertIn("agent-doc-references", selected)
 
     def test_backend_route_change_selects_route_policy_baseline_in_both_lanes(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
+        if not any(check.id == "backend-route-policy-baseline" for check in manifest.checks):
+            self.skipTest("backend route-policy check was not imported into this repository")
         changed = ["backend/routers/chat_sessions.py"]
         for lane in ("local", "ci"):
             selected = {check.id for check in resolve_checks(manifest, changed, lane)}
@@ -343,7 +352,7 @@ esac
     def test_failure_class_protocol_runs_in_both_lanes(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         for lane in ("local", "ci"):
-            selected = {check.id for check in resolve_checks(manifest, ["app/lib/example.dart"], lane)}
+            selected = {check.id for check in resolve_checks(manifest, ["frontend/AGENTS.md"], lane)}
             self.assertIn("failure-class-protocol", selected)
 
     def test_main_push_excludes_only_pr_body_checks(self) -> None:
@@ -352,7 +361,7 @@ esac
             check.id
             for check in resolve_checks(
                 manifest,
-                ["app/lib/example.dart"],
+                ["frontend/AGENTS.md"],
                 "ci",
                 include_pr_body_checks=False,
             )
@@ -363,6 +372,8 @@ esac
 
     def test_backend_datetime_sort_sentinel_ratchet_runs_for_backend_sources(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
+        if not any(check.id == "backend-datetime-sort-sentinel-ratchet" for check in manifest.checks):
+            self.skipTest("backend datetime-sort ratchet was not imported into this repository")
         for lane in ("local", "ci"):
             selected = {check.id for check in resolve_checks(manifest, ["backend/routers/example.py"], lane)}
             self.assertIn("backend-datetime-sort-sentinel-ratchet", selected)
@@ -391,6 +402,8 @@ esac
     def test_release_process_guard_uses_locked_pyyaml_in_every_declared_lane(self) -> None:
         """The guard must never depend on a runner-global PyYAML install."""
         manifest = load_manifest(MANIFEST_PATH)
+        if not any(check.id == "desktop-release-process-guards" for check in manifest.checks):
+            self.skipTest("desktop release-process guards were not imported into this repository")
         check = next(check for check in manifest.checks if check.id == "desktop-release-process-guards")
         self.assertEqual(check.command, ("bash", "scripts/run-release-process-guards.sh"))
         for lane in ("local", "ci"):

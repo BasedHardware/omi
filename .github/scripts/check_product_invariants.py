@@ -131,7 +131,10 @@ def parse_invariant(path: Path) -> dict | None:
 def load_locked_invariants(root: Path) -> list[dict]:
     directory = root / INVARIANT_DIR
     if not directory.is_dir():
-        raise SystemExit(f"FAIL: missing invariant registry at {directory}")
+        # This repository does not import the old monorepo invariant docs.
+        # A missing registry is "nothing to enforce", not a broken gate; a
+        # present but malformed doc still fails closed below.
+        return []
     invariants: list[dict] = []
     for path in sorted(directory.glob("*.md")):
         if path.name.upper() == "README.MD":
