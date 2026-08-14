@@ -20,7 +20,8 @@ enum WorkHistoryHandleExtractor {
 
   static func handles(from snapshot: WorkHistoryFrontmostSnapshot) -> [WorkHistoryHandle] {
     var result: [WorkHistoryHandle] = []
-    if isBrowser(snapshot.appName), let url = snapshot.browserURL ?? httpURL(from: snapshot.documentURL),
+    if isBrowser(snapshot),
+      let url = httpURL(from: snapshot.documentURL) ?? snapshot.browserURL,
       let handle = WorkHistoryHandle.url(url.absoluteString)
     {
       result.append(handle)
@@ -40,29 +41,55 @@ enum WorkHistoryHandleExtractor {
     return uniqued(result)
   }
 
-  static func liveSnapshot(appName: String, windowTitle: String?) -> WorkHistoryFrontmostSnapshot {
+  static func liveSnapshot(appName: String, windowTitle: String?, expectedBundleID: String? = nil)
+    -> WorkHistoryFrontmostSnapshot
+  {
     var snapshot = WorkHistoryFrontmostSnapshot(
       appName: appName,
       windowTitle: windowTitle,
-      bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+      bundleID: expectedBundleID ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     )
     guard AXIsProcessTrusted() else { return snapshot }
-    guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return snapshot }
-    let app = AXUIElementCreateApplication(pid)
+    guard let front = NSWorkspace.shared.frontmostApplication else { return snapshot }
+    let nameMatches = front.localizedName == appName
+    let bundleMatches = expectedBundleID.map { $0 == front.bundleIdentifier } ?? false
+    guard nameMatches || bundleMatches else { return snapshot }
+    snapshot.bundleID = front.bundleIdentifier
+    let app = AXUIElementCreateApplication(front.processIdentifier)
     guard let window = copyElement(app, attribute: kAXFocusedWindowAttribute) else { return snapshot }
 
     if let document = copyString(window, attribute: kAXDocumentAttribute) {
       snapshot.documentURL = URL(string: document) ?? URL(fileURLWithPath: document)
     }
-    if let url = firstURL(in: window, remaining: 24) {
+    if httpURL(from: snapshot.documentURL) == nil, let url = firstURL(in: window, remaining: 24) {
       snapshot.browserURL = url
     }
     return snapshot
   }
 
-  static func isBrowser(_ appName: String) -> Bool {
-    browserApps.contains(appName)
+  static func isBrowser(_ snapshot: WorkHistoryFrontmostSnapshot) -> Bool {
+    isBrowser(appName: snapshot.appName, bundleID: snapshot.bundleID)
   }
+
+  static func isBrowser(appName: String, bundleID: String? = nil) -> Bool {
+    if browserApps.contains(appName) { return true }
+    guard let bundleID else { return false }
+    return browserBundles.contains(bundleID)
+  }
+
+  private static let browserBundles: Set<String> = [
+    "com.google.Chrome",
+    "com.google.Chrome.canary",
+    "company.thebrowser.Browser",
+    "com.apple.Safari",
+    "org.mozilla.firefox",
+    "com.microsoft.edgemac",
+    "com.brave.Browser",
+    "com.operasoftware.Opera",
+    "org.chromium.Chromium",
+    "com.vivaldi.Vivaldi",
+    "com.kagi.kagimacOS",
+  ]
 
   private static func fileHandle(from url: URL?) -> WorkHistoryHandle? {
     guard let url else { return nil }

@@ -178,21 +178,6 @@ enum ContextBucketVisitResolver {
       arguments: [
         lookupHash, resolvedBucketID, subjectKind, subjectID, confidence, source, startedAt, startedAt,
       ])
-    if handleIdentity != nil, referenceHash != lookupHash, !referenceHash.hasPrefix("ephemeral:") {
-      try db.execute(
-        sql: """
-          INSERT INTO subject_bindings
-            (referenceHash, bucketID, subjectKind, subjectID, confidence, source,
-             occurrenceCount, createdAt, updatedAt)
-          VALUES (?, ?, ?, ?, 0.6, 'title_cooccurrence', 1, ?, ?)
-          ON CONFLICT(referenceHash) DO UPDATE SET
-            bucketID = excluded.bucketID,
-            updatedAt = excluded.updatedAt
-          """,
-        arguments: [
-          referenceHash, resolvedBucketID, subjectKind, subjectID, startedAt, startedAt,
-        ])
-    }
     return resolvedBucketID
   }
 }

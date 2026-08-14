@@ -663,13 +663,15 @@ enum ScreenContextWorkContextBuilder {
         "Prefer visits[].handles to identify the document, URL, or file the user means, then open or read that source. The screenshot timeline is fallback evidence only. This is recent historical activity, not proof of the current visible screen.",
     ]
     if let queue = await RewindDatabase.shared.getDatabaseQueue() {
+      let excluded = RewindSettings.shared.excludedApps
       let visits =
         (try? await queue.read { db in
-          try WorkHistoryIndex.fetchRecentVisits(in: db, from: start, to: now, limit: 20)
+          try WorkHistoryIndex.fetchRecentVisits(
+            in: db, from: start, to: now, limit: 20, excludedApps: excluded)
         }) ?? []
       let briefs =
         (try? await queue.read { db in
-          try WorkHistoryIndex.fetchBriefs(in: db, limit: 5)
+          try WorkHistoryIndex.fetchBriefs(in: db, limit: 5, excludedApps: excluded)
         }) ?? []
       payload["visits"] = visits.map { $0.jsonObject(clock: clock) }
       payload["briefs"] = briefs.map { $0.jsonObject() }

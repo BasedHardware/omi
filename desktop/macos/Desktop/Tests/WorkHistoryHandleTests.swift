@@ -9,7 +9,26 @@ final class WorkHistoryHandleTests: XCTestCase {
     let handle = WorkHistoryHandle.url(
       "HTTPS://User:secret@Docs.Google.COM:443/document/d/abc/?usp=sharing#heading")
     XCTAssertEqual(handle?.kind, .url)
-    XCTAssertEqual(handle?.value, "https://docs.google.com/document/d/abc?usp=sharing")
+    XCTAssertEqual(handle?.value, "https://docs.google.com/document/d/abc")
+  }
+
+  func testTrackingQueryDoesNotSplitIdentity() {
+    let shared = WorkHistoryHandle.url("https://docs.google.com/document/d/abc?usp=sharing")
+    let clean = WorkHistoryHandle.url("https://docs.google.com/document/d/abc")
+    XCTAssertEqual(shared, clean)
+  }
+
+  func testBrowserPrefersDocumentURLOverChildAXURL() {
+    let snapshot = WorkHistoryFrontmostSnapshot(
+      appName: "Safari",
+      windowTitle: "Proposal",
+      bundleID: "com.apple.Safari",
+      documentURL: URL(string: "https://docs.google.com/document/d/abc"),
+      browserURL: URL(string: "https://example.com/favicon.ico")
+    )
+    XCTAssertEqual(
+      WorkHistoryHandleExtractor.handles(from: snapshot).first?.value,
+      "https://docs.google.com/document/d/abc")
   }
 
   func testRejectsNonHttpSchemesAndAboutBlank() {

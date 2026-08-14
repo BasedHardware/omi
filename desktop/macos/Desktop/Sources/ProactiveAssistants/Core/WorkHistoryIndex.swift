@@ -79,7 +79,8 @@ enum WorkHistoryIndex {
     in db: Database,
     from start: Date,
     to end: Date,
-    limit: Int
+    limit: Int,
+    excludedApps: Set<String> = []
   ) throws -> [WorkHistoryVisitRecord] {
     guard try db.tableExists("context_visits") else { return [] }
     let columns = try db.columns(in: "context_visits").map(\.name)
@@ -95,10 +96,12 @@ enum WorkHistoryIndex {
         LIMIT ?
         """,
       arguments: [start, end, max(1, limit)])
-    return decodeVisits(from: rows)
+    let visits = decodeVisits(from: rows)
+    if excludedApps.isEmpty { return visits }
+    return visits.filter { !excludedApps.contains($0.appName) }
   }
 
-  static func fetchBriefs(in db: Database, limit: Int) throws -> [WorkstreamBrief] {
+  static func fetchBriefs(in db: Database, limit: Int, excludedApps: Set<String> = []) throws -> [WorkstreamBrief] {
     guard try db.tableExists("context_buckets") else { return [] }
     let buckets = try Row.fetchAll(
       db,
@@ -111,6 +114,15 @@ enum WorkHistoryIndex {
       arguments: [max(1, limit)])
     return try buckets.compactMap { row -> WorkstreamBrief? in
       guard let id = row["id"] as String? else { return nil }
+      if !excludedApps.isEmpty {
+        let visitApps = try String.fetchAll(
+          db,
+          sql: "SELECT DISTINCT appName FROM context_visits WHERE bucketID = ?",
+          arguments: [id])
+        if !visitApps.isEmpty, visitApps.allSatisfy({ excludedApps.contains($0) }) {
+          return nil
+        }
+      }
       let subjectKind = row["subjectKind"] as String? ?? "context"
       let subjectID = row["subjectID"] as String? ?? id
       let display = row["displayLabel"] as String?

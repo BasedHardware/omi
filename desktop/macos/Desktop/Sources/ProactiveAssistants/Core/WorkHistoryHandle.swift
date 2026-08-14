@@ -69,11 +69,21 @@ struct WorkHistoryHandle: Equatable, Hashable, Codable, Sendable {
       path.removeLast()
     }
     components.percentEncodedPath = path.isEmpty ? "/" : path
-    if let query = url.query, !query.isEmpty {
-      components.query = query
+    if let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {
+      let kept = items.filter { item in
+        let name = item.name.lowercased()
+        return !Self.droppedQueryNames.contains(name) && !name.hasPrefix("utm_")
+      }
+      if !kept.isEmpty {
+        components.queryItems = kept
+      }
     }
     return components.string
   }
+
+  private static let droppedQueryNames: Set<String> = [
+    "usp", "sid", "authuser", "tab", "pli", "hl", "gclid", "fbclid", "igshid",
+  ]
 
   static func canonicalizeFile(_ raw: String) -> String? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
