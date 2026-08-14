@@ -34,6 +34,14 @@ services:
       start_period: 20s
     networks: [omi]
     restart: unless-stopped
+    # Persist emulator state across `down`/`up` (cubic review 4909186286 #3). The entrypoint imports
+    # a prior export on start and exports on graceful shutdown; export runs on SIGTERM, so give it
+    # time to finish before SIGKILL. (Production durability is Mongo, ADR-0002 — the `mongo` profile.)
+    stop_grace_period: 30s
+    volumes:
+      # Mount at /data (not /data/emulator): firebase clears the export dir by rmdir-ing it before
+      # writing, which fails with EBUSY on a mount point — so it exports to the /data/emulator subdir.
+      - firestore-emulator-data:/data
 
   # Alternate storage backend (ADR-0002/0004). Opt-in via the `mongo` profile so the default
   # on-prem baseline stays Firestore-only (ADR-0003). To use it:
@@ -439,6 +447,9 @@ networks:
     driver: bridge
 
 volumes:
+  # Default-baseline Firestore/Auth emulator state (ADR-0003), persisted across `down`/`up` so the
+  # datastore is not lost on recreate (cubic review 4909186286 #3). PROD durability is Mongo (below).
+  firestore-emulator-data:
   # Pre-provisioned inference model weights (HF cache + NLLB CTranslate2 dir). Populated
   # out-of-band before first `--profile inference` run — the internal network has no egress.
   inference-models:

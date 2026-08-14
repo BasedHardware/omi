@@ -21,5 +21,10 @@ COPY firestore.indexes.json ./firestore.indexes.json
 # pre-download the Firestore emulator binary (avoids egress at runtime)
 RUN firebase setup:emulators:firestore
 
+# entrypoint imports prior state (if any) and exports on graceful shutdown, so emulator data
+# survives `down`/`up` on the mounted /data/emulator volume (see compose.base.yaml).
+COPY deploy/onprem/firestore-emulator/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 EXPOSE 8085 9099
-CMD ["firebase", "emulators:start", "--only", "firestore,auth", "--project", "demo-omi-local"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
