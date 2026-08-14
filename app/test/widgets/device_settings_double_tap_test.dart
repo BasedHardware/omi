@@ -144,4 +144,26 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text('An error occurred. Please try again.'), findsOneWidget);
   });
+
+  testWidgets('Find times out a stalled provider request', (tester) async {
+    final findCompleter = Completer<bool>();
+    final provider = _StubDeviceProvider(
+      device: BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -40),
+      findCompleter: findCompleter,
+    );
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('find_device_button')));
+    await tester.pump();
+
+    await tester.pump(const Duration(seconds: 30));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('An error occurred. Please try again.'), findsOneWidget);
+
+    findCompleter.complete(true);
+  });
 }

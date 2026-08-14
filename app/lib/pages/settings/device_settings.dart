@@ -32,6 +32,8 @@ class DeviceSettings extends StatefulWidget {
 }
 
 class _DeviceSettingsState extends State<DeviceSettings> {
+  static const Duration _findDeviceRequestTimeout = Duration(seconds: 30);
+
   double _dimRatio = 100.0;
   bool _isDimRatioLoaded = false;
   bool? _hasDimmingFeature;
@@ -714,7 +716,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
     var found = false;
     try {
-      found = await provider.findDevice();
+      found = await provider.findDevice().timeout(_findDeviceRequestTimeout);
     } catch (e) {
       Logger.debug('DeviceSettings: Find-device request failed: $e');
     } finally {
