@@ -553,7 +553,9 @@ def _anthropic_client_tools(tools: object) -> list[dict[str, object]]:
 WebSearchAuthorization = Literal['authorized', 'denied', 'unavailable']
 
 
-def _request(body: object, *, web_search_authorization: WebSearchAuthorization = 'unavailable') -> tuple[str, dict[str, object]]:
+def _request(
+    body: object, *, web_search_authorization: WebSearchAuthorization = 'unavailable'
+) -> tuple[str, dict[str, object]]:
     if not isinstance(body, Mapping):
         raise ValueError('request body must be an object')
     model = body.get('model')
@@ -1387,11 +1389,7 @@ async def chat_completions(
             public_model = _managed_lane_id(body)
             gateway_payload = _gateway_body(body, public_model)
         else:
-            web_search_authorization = (
-                'authorized'
-                if _web_search_requested(body)
-                else 'unavailable'
-            )
+            web_search_authorization = 'authorized' if _web_search_requested(body) else 'unavailable'
             if web_search_authorization == 'authorized':
                 web_search_authorization = await _web_search_authorized(uid)
             public_model, payload = _request(body, web_search_authorization=web_search_authorization)
