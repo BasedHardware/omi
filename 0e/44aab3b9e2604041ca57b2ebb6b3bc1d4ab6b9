@@ -1,0 +1,23 @@
+desktop/context-for-claude/scripts/build.sh
+  s_d58145f2e376ea::t_e19c64082c5d6e 185-191,194,197,199
+codemagic.yaml
+  s_d58145f2e376ea::t_ba1ee8846b9773 2966-2971
+.github/scripts/fixtures/codemagic_workflow_contract/v1.json
+  s_d58145f2e376ea::t_e2f433d6f7e135 2-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0e44aab3b9e2604041ca57b2ebb6b3bc1d4ab6b9",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
