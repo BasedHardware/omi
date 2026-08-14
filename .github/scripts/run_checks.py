@@ -368,6 +368,7 @@ def command_for_check(
     *,
     changed_files_path: Path,
     base: str,
+    target_base: str,
     head: str,
     pr_body_file: Path,
     skip_changelog: bool,
@@ -375,6 +376,7 @@ def command_for_check(
     replacements = {
         "{changed_files}": str(changed_files_path),
         "{base}": base,
+        "{target_base}": target_base,
         "{head}": head,
         "{pr_body_file}": str(pr_body_file),
     }
@@ -413,6 +415,7 @@ def execute_checks(
     base: str,
     head: str,
     pr_body_file: Path,
+    target_base: str | None = None,
     skip_changelog: bool = False,
 ) -> int:
     failures: list[str] = []
@@ -423,6 +426,7 @@ def execute_checks(
             check,
             changed_files_path=changed_files_path,
             base=base,
+            target_base=target_base or base,
             head=head,
             pr_body_file=pr_body_file,
             skip_changelog=skip_changelog,
@@ -582,6 +586,7 @@ def main() -> int:
             checks,
             changed_files_path=files_path,
             base=resolved_base,
+            target_base=args.base,
             head=args.head,
             pr_body_file=body_path,
             skip_changelog=args.skip_changelog,

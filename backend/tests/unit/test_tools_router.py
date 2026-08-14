@@ -111,6 +111,7 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.calendar_tools",
+    "utils.retrieval.safety",
     "utils.retrieval.tool_services",
     "utils.retrieval.tool_services.conversations",
     "utils.retrieval.tool_services.memories",
@@ -380,6 +381,7 @@ memories_model_mod = _stub_module("models.memories")
 class FakeMemoryDB:
     def __init__(self, **kwargs):
         self.id = kwargs.get('id', 'test-mem-id')
+        self.memory_id = kwargs.get('memory_id', self.id)
         self.content = kwargs.get('content', 'test memory')
         self.category = FakeCategory.other
         self.created_at = kwargs.get('created_at', datetime.now(timezone.utc))
@@ -398,6 +400,10 @@ memories_model_mod.MemoryDB = FakeMemoryDB
 sys.path.insert(0, str(BACKEND_DIR))
 
 # Now load the shared service modules
+retrieval_safety = _load_module_from_file(
+    "utils.retrieval.safety",
+    BACKEND_DIR / "utils" / "retrieval" / "safety.py",
+)
 conversations_svc = _load_module_from_file(
     "utils.retrieval.tool_services.conversations",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "conversations.py",
@@ -547,6 +553,36 @@ class TestGetConversationsText:
         ]
         result = conversations_svc.get_conversations_text(uid="test-uid")
         assert "1 conversations formatted" in result
+
+    def test_source_mapping_matches_search_results(self):
+        conversation = {
+            'id': 'conv-1',
+            'transcript_segments': [],
+            'structured': types.SimpleNamespace(title='Shared title', overview='Shared overview'),
+            'created_at': datetime(2026, 8, 13, tzinfo=timezone.utc),
+        }
+        conversations_db.get_conversations.return_value = [conversation]
+        list_sources = []
+        conversations_svc.get_conversations_text(uid="test-uid", source_sink=list_sources)
+
+        vector_db.query_vectors.return_value = ['conv-1']
+        conversations_db.get_conversations_by_id.return_value = [conversation]
+        search_sources = []
+        conversations_svc.search_conversations_text(uid="test-uid", query="shared", source_sink=search_sources)
+
+        assert (
+            list_sources
+            == search_sources
+            == [
+                {
+                    'kind': 'conversation',
+                    'source_id': 'conv-1',
+                    'title': 'Shared title',
+                    'preview': 'Shared overview',
+                    'created_at': '2026-08-13T00:00:00+00:00',
+                }
+            ]
+        )
 
 
 class TestGetConversationsTextMalformedPerson:
@@ -851,9 +887,40 @@ class TestRouterEnvelope:
         assert result["result_text"] == "All good"
         assert result["is_error"] is False
 
+    def test_ok_preserves_typed_sources(self):
+        source = {
+            "kind": "memory",
+            "source_id": "memory-1",
+            "title": "Memory",
+            "preview": "A bounded preview",
+        }
+        response = router_mod.ToolResponse.model_validate(router_mod._ok("get_memories", "result", [source]))
+
+        assert response.sources == [router_mod.ToolSource(**source)]
+
     def test_ok_error(self):
-        result = router_mod._ok("test_tool", "Error: something went wrong")
+        result = router_mod._ok(
+            "test_tool",
+            "Error: something went wrong",
+            [{'kind': 'memory', 'source_id': 'memory-1'}],
+        )
         assert result["is_error"] is True
+        assert router_mod.ToolResponse.model_validate(result).sources == []
+
+    @pytest.mark.parametrize('url', ['javascript:alert(1)', 'file:///tmp/source', 'example.com/source'])
+    def test_tool_source_rejects_non_http_urls(self, url):
+        with pytest.raises(ValueError, match=r'absolute HTTP\(S\) URL'):
+            router_mod.ToolSource(kind='web', source_id='source-1', url=url)
+
+    @pytest.mark.parametrize('url', ['http://example.com/source', 'https://example.com/source'])
+    def test_tool_source_accepts_http_urls(self, url):
+        assert router_mod.ToolSource(kind='web', source_id='source-1', url=url).url == url
+
+    def test_shared_safe_isoformat_preserves_iso_and_string_values(self):
+        assert (
+            retrieval_safety.safe_isoformat(datetime(2026, 8, 13, tzinfo=timezone.utc)) == '2026-08-13T00:00:00+00:00'
+        )
+        assert retrieval_safety.safe_isoformat('raw-value') == 'raw-value'
 
 
 # ===========================================================================

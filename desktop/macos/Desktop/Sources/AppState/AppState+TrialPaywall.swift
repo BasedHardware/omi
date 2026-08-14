@@ -203,7 +203,7 @@ extension AppState {
     // grant). Counting .unknown as missing would permanently suppress the
     // "All permissions granted" banner for default users, so only a proven
     // denial counts.
-    if isSystemAudioSupported, effectiveSystemAudioMode != .never,
+    if isSystemAudioSupported, audioRecordingMode != .off, shouldCaptureSystemAudio,
       systemAudioPermissionStatus == .denied
     {
       missing.append("System Audio")

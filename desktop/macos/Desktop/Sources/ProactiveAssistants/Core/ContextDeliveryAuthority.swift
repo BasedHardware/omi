@@ -4,10 +4,7 @@ import Foundation
 struct ContextDeliveryGateInput: Equatable, Sendable {
   let masterEnabled: Bool
   let frequencyLevel: Int
-  let snoozed: Bool
   let paywalled: Bool
-  let minuteOfDay: Int
-  let activePeriod: NotificationActivePeriod
   let cooldownSeconds: TimeInterval
   let dailyLimit: Int
   let lastGlobalPresentationAt: Date?
@@ -15,20 +12,14 @@ struct ContextDeliveryGateInput: Equatable, Sendable {
   init(
     masterEnabled: Bool,
     frequencyLevel: Int,
-    snoozed: Bool,
     paywalled: Bool,
-    minuteOfDay: Int,
-    activePeriod: NotificationActivePeriod = .defaultValue,
     cooldownSeconds: TimeInterval,
     dailyLimit: Int? = nil,
     lastGlobalPresentationAt: Date? = nil
   ) {
     self.masterEnabled = masterEnabled
     self.frequencyLevel = frequencyLevel
-    self.snoozed = snoozed
     self.paywalled = paywalled
-    self.minuteOfDay = minuteOfDay
-    self.activePeriod = activePeriod
     self.cooldownSeconds = cooldownSeconds
     self.dailyLimit = max(
       0,
@@ -37,32 +28,8 @@ struct ContextDeliveryGateInput: Equatable, Sendable {
   }
 }
 
-struct NotificationActivePeriod: Equatable, Sendable {
-  static let defaultValue = NotificationActivePeriod(startMinute: 8 * 60, endMinute: 22 * 60)
-
-  let startMinute: Int
-  let endMinute: Int
-
-  init(startMinute: Int, endMinute: Int) {
-    self.startMinute = min(max(0, startMinute), 1439)
-    self.endMinute = min(max(0, endMinute), 1439)
-  }
-
-  /// Equal endpoints are the explicit all-day encoding (any equal pair, including `00:00→00:00`
-  /// and `06:00→06:00`). This is not a zero-width window.
-  var isAllDay: Bool { startMinute == endMinute }
-
-  func contains(minuteOfDay: Int) -> Bool {
-    let minute = min(max(0, minuteOfDay), 1439)
-    if isAllDay { return true }
-    if startMinute < endMinute { return minute >= startMinute && minute < endMinute }
-    // Overnight wrap, e.g. 06:00→03:00: active across midnight; quiet is the complement.
-    return minute >= startMinute || minute < endMinute
-  }
-}
-
 enum ContextDeliveryGateReason: String, Equatable, Sendable {
-  case allowed, masterDisabled, frequencyDisabled, snoozed, paywalled, quietHours, cooldown, dailyBudget, duplicate
+  case allowed, masterDisabled, frequencyDisabled, snoozed, paywalled, cooldown, dailyBudget, duplicate
 }
 
 struct ContextDeliveryAttempt: Equatable, Sendable {
@@ -152,9 +119,7 @@ enum ContextDeliveryBudget {
   static func freeGate(input: ContextDeliveryGateInput) -> ContextDeliveryGateReason {
     if !input.masterEnabled { return .masterDisabled }
     if input.frequencyLevel == 0 { return .frequencyDisabled }
-    if input.snoozed { return .snoozed }
     if input.paywalled { return .paywalled }
-    if !input.activePeriod.contains(minuteOfDay: input.minuteOfDay) { return .quietHours }
     return .allowed
   }
 

@@ -4,7 +4,7 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, List, Optional
 
 import database.notifications as notification_db
 from database._client import db as firestore_db
@@ -12,6 +12,7 @@ from models.memories import MemoryDB
 from utils.conversations.render import format_local_date, resolve_display_tz
 from utils.memory.memory_service import MemoryService
 from utils.retrieval.tool_services.conversations import parse_iso_date
+from utils.retrieval.safety import safe_isoformat
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ def get_memories_text(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     now: Optional[datetime] = None,
+    source_sink: Optional[List[dict[str, Any]]] = None,
 ) -> str:
     """Fetch user memories/facts and format as LLM-ready text."""
     logger.info(f"get_memories_text - uid: {uid}, limit: {limit}, offset: {offset}")
@@ -83,6 +85,18 @@ def get_memories_text(
             date_info = f" before {end_dt.strftime('%Y-%m-%d')}"
         return f"No memories found{date_info}."
 
+    if source_sink is not None:
+        for memory in memories[:128]:
+            source_sink.append(
+                {
+                    'kind': 'memory',
+                    'source_id': memory.memory_id or memory.id,
+                    'title': 'Memory',
+                    'preview': str(memory.content or '')[:600],
+                    'created_at': safe_isoformat(memory.created_at),
+                }
+            )
+
     return f"User Memories ({len(memories)} total):\n\n{MemoryDB.get_memories_as_str(memories)}".strip()
 
 
@@ -90,6 +104,7 @@ def search_memories_text(
     uid: str,
     query: str,
     limit: int = 5,
+    source_sink: Optional[List[dict[str, Any]]] = None,
 ) -> str:
     """Semantic vector search for memories, formatted as LLM-ready text."""
     logger.info(f"search_memories_text - uid: {uid}, query: {query}, limit: {limit}")
@@ -114,6 +129,19 @@ def search_memories_text(
             memory = match.memory
             date_str = format_local_date(memory.created_at, display_tz) if memory.created_at else 'Unknown'
             result += f"- {memory.content} (relevance: {match.score:.2f}, category: {memory.category.value}, date: {date_str})\n"
+
+        if source_sink is not None:
+            for match in matches[:128]:
+                memory = match.memory
+                source_sink.append(
+                    {
+                        'kind': 'memory',
+                        'source_id': memory.memory_id or memory.id,
+                        'title': 'Memory',
+                        'preview': str(memory.content or '')[:600],
+                        'created_at': safe_isoformat(memory.created_at),
+                    }
+                )
 
         return result.strip()
 

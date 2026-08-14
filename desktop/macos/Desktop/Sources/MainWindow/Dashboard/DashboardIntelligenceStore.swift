@@ -43,6 +43,17 @@ final class TaskNavigationRequestStore {
   private(set) var pendingTarget: Target?
   private(set) var pendingTask: TaskActionItem?
   private(set) var pendingCandidate: OmiAPI.CandidateRecord?
+  private var runtimeOwnerObserver: NSObjectProtocol?
+
+  init() {
+    runtimeOwnerObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in self?.clear() }
+    }
+  }
 
   func request(task: TaskActionItem) {
     pendingTarget = .task(task.id)

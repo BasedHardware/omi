@@ -143,24 +143,36 @@ private actor GateAdmissionOrderProbe {
   }
 }
 
+/// Signals are latched, not edge-triggered. The signaller and its waiter run on
+/// separate tasks, so nothing orders `signalEntered()` before `waitUntilEntered()`
+/// (or `release()` before `waitUntilReleased()`); an unlatched signal that lands
+/// first is dropped and its waiter suspends forever, which hangs the whole suite
+/// until the per-suite budget kills it. The other probes in this file latch the
+/// same way.
 private actor GateHoldProbe {
+  private var hasEntered = false
+  private var hasReleased = false
   private var enteredWaiter: CheckedContinuation<Void, Never>?
   private var releaseContinuation: CheckedContinuation<Void, Never>?
 
   func waitUntilEntered() async {
+    if hasEntered { return }
     await withCheckedContinuation { enteredWaiter = $0 }
   }
 
   func signalEntered() {
+    hasEntered = true
     enteredWaiter?.resume()
     enteredWaiter = nil
   }
 
   func waitUntilReleased() async {
+    if hasReleased { return }
     await withCheckedContinuation { releaseContinuation = $0 }
   }
 
   func release() {
+    hasReleased = true
     releaseContinuation?.resume()
     releaseContinuation = nil
   }
@@ -358,6 +370,49 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(snapshot.startupCredentialFetches, 0)
     XCTAssertEqual(snapshot.runtimeCredentialRefreshes, 0)
     XCTAssertEqual(snapshot.ownerSynchronizations, 1)
+  }
+
+  func testPinnedPiMonoSessionsFetchTokenAfterHarnessSwitch() async throws {
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
+        preferredAdapterIsPiMono: false,
+        requestedCredentials: true,
+        isNonProduction: false),
+      "ACP/Hermes/OpenClaw must still start without a managed token")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: false),
+      "production alternate-harness starts must still fetch the managed token")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
+        preferredAdapterIsPiMono: true,
+        requestedCredentials: true,
+        isNonProduction: false))
+
+    var fetches = 0
+    let header = try await AgentRuntimeProcess.startupAuthHeader(
+      requiresCredentials: AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: false),
+      fetchAuthHeader: {
+        fetches += 1
+        return "Bearer pinned-session-token"
+      })
+    XCTAssertEqual(fetches, 1)
+    XCTAssertEqual(header, "Bearer pinned-session-token")
+
+    var skippedFetches = 0
+    let skipped = try await AgentRuntimeProcess.startupAuthHeader(
+      requiresCredentials: AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: false,
+        isNonProduction: true),
+      fetchAuthHeader: {
+        skippedFetches += 1
+        return "Bearer should-not-fetch"
+      })
+    XCTAssertEqual(skippedFetches, 0)
+    XCTAssertNil(skipped)
   }
 
   func testNamedBundleStartupUsesValidSeededCredentialWithoutForcedRefresh() {
@@ -915,10 +970,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(
       bridgeSource.contains(
         "AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(
-      bridgeSource.contains(
-        "isPiMonoHarness\n      && AgentRuntimeCredentialPolicy.requiresManagedCredentials"))
-    XCTAssertTrue(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
+    XCTAssertTrue(bridgeSource.contains("shouldRequirePiMonoCredentials("))
+    XCTAssertTrue(bridgeSource.contains("shouldFetchManagedToken"))
+    XCTAssertFalse(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
     XCTAssertTrue(
       bridgeSource.contains(
         "if requiresCredentials {\n      ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)"))
@@ -1639,6 +1693,18 @@ final class AgentRuntimeProcessTests: XCTestCase {
     )
     let finalEvents = await harness.snapshot()
     XCTAssertEqual(finalEvents.last, "admission_attempt_2")
+  }
+
+  /// The interleaving the two gate-hold tests below hit when the signalling task wins
+  /// the race: an edge-triggered probe drops both signals and suspends here forever.
+  func testGateHoldProbeObservesSignalsDeliveredBeforeItsWaitersSuspend() async {
+    let holdProbe = GateHoldProbe()
+
+    await holdProbe.signalEntered()
+    await holdProbe.release()
+
+    await holdProbe.waitUntilEntered()
+    await holdProbe.waitUntilReleased()
   }
 
   func testContextAdmissionGateCancelledWaiterDoesNotStealTurn() async throws {

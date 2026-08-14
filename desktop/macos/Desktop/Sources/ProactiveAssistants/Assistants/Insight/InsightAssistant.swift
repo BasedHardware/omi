@@ -579,12 +579,6 @@ actor InsightAssistant: ProactiveAssistant {
   private func processFrame(_ frame: CapturedFrame, since previousAnalysisTime: Date) async {
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     guard await isEnabled else { return }
-    // Continue collecting frames during quiet hours, but do not enter either
-    // paid extraction phase when the result cannot be presented.
-    let isWithinActivePeriod = await MainActor.run {
-      NotificationService.isWithinActivePeriod(now: Date())
-    }
-    guard isWithinActivePeriod else { return }
     do {
       guard let result = try await extractAdvice(from: frame, since: previousAnalysisTime) else {
         return

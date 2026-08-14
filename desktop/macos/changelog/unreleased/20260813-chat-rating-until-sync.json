@@ -1,0 +1,3 @@
+{
+  "change": "Thumbs on a just-finished reply now wait for the message to sync before saving, so the rating no longer disappears"
+}

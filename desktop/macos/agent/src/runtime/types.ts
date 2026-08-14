@@ -123,6 +123,7 @@ export type ConversationContentBlock =
   | { type: "taskCard"; id: string; taskId: string }
   | { type: "goalLink"; id: string; goalId: string; summary: string }
   | { type: "captureLink"; id: string; conversationId: string; momentTimestampMs?: number; summary: string }
+  | { type: "conversationLink"; id: string; conversationId: string; summary: string }
   | {
       type: "agentSpawn";
       id: string;

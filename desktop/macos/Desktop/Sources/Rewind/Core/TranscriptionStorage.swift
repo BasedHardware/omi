@@ -65,6 +65,7 @@ actor TranscriptionStorage {
     timezone: String = "UTC",
     inputDeviceName: String? = nil,
     clientConversationId: String? = nil,
+    conversationRole: TranscriptionConversationRole = .ambient,
     finalizationStrategy: TranscriptionFinalizationStrategy = .cloudReconcile
   ) async throws -> Int64 {
     let db = try await ensureInitialized()
@@ -77,6 +78,7 @@ actor TranscriptionStorage {
       inputDeviceName: inputDeviceName,
       status: .recording,
       clientConversationId: clientConversationId,
+      conversationRole: conversationRole,
       finalizationStrategy: finalizationStrategy
     )
 

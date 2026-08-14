@@ -2,6 +2,21 @@
 
 Prometheus + Grafana + Loki observability stack for the Omi backend on GKE.
 
+## Production telemetry contract (#9587)
+
+Repo-enforceable inventory of expected prod scrape targets, routing labels, and
+no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.prod.yaml).
+
+- **Enforced in CI** by `backend/tests/unit/test_monitoring_telemetry_contract.py`.
+- Jobs marked `coverage_status: enforced` must appear in `omi-journey-scrape-missing`.
+- Jobs marked `coverage_status: declared` are wired in values/ServiceMonitors but
+  do not yet have a dedicated coverage alert (follow-up to expand the scrape-missing rule).
+- Managed GKE control-plane exclusions (`kubeProxy` / `kubeScheduler` /
+  `kubeControllerManager`) are documented here and owned by #9138 / PR #11093 —
+  do not page `TargetDown` for those endpoints.
+- Live Instatus delivery verification and notification-policy rework remain
+  maintainer-approved Phase 2 work (not claimed by the inventory).
+
 ## Architecture
 
 ```

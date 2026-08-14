@@ -485,6 +485,18 @@ class ListenReceiver:
             self.host.transcripts.enqueue(segments)
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
+        elif kind == 'finalization_reason':
+            reason = payload.get('reason')
+            if reason in {
+                'user_stop',
+                'finish_and_continue',
+                'meeting_started',
+                'meeting_ended',
+                'max_duration_rotation',
+                'crash_recovery',
+                'retry',
+            }:
+                self.host.state.finalization_reason = reason
 
     async def _handle_speaker_assigned(self, payload: Dict[str, Any]) -> None:
         segment_ids = payload.get('segment_ids', [])

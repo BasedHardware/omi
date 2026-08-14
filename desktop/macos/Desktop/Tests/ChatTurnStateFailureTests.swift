@@ -187,6 +187,21 @@ final class ChatTurnStateFailureTests: XCTestCase {
       "The billing rejection must not invite a retry"
     )
     XCTAssertEqual(
+      notice(
+        BridgeError.agentRuntimeFailure(
+          AgentRuntimeFailure(
+            code: "adapter_execution_failed",
+            userMessage: "The local agent reset its session after an error. Send your message again.",
+            technicalMessage: "HTTP 402 status code (no body)",
+            retryable: true,
+            recoveryAction: "worker_recycled"
+          )
+        )
+      )?.retryable,
+      false,
+      "Worker recycle must not turn a 402 into a retryable session reset"
+    )
+    XCTAssertEqual(
       notice(BridgeError.nodeNotFound)?.text,
       ChatErrorState.bridgeUnavailable(reason: .nodeMissing).userFacingSummary,
       "A card that survives words the row, so the two surfaces cannot disagree"
