@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 
+import pytest
 import redis
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -35,6 +36,7 @@ def test_health_and_root_preserve_release_identity(monkeypatch):
         "backend_release_sha": "a" * 40,
         "backend_release_channel": "development",
         "chat_contract_version": "1",
+        "runtime_implementation": "python",
     }
 
     assert client.get("/").json() == expected
@@ -140,6 +142,18 @@ def test_sentry_webhook_fails_closed_and_creates_feedback_item(monkeypatch):
     assert body.json() == {"status": "created"}
     assert created[0][0] == "admin"
     assert created[0][1]["metadata"]["sentry_issue_id"] == "42"
+
+
+@pytest.mark.parametrize("secret", [None, ""])
+def test_sentry_webhook_rejects_unsigned_requests_when_secret_is_unconfigured(monkeypatch, secret):
+    if secret is None:
+        monkeypatch.delenv("SENTRY_WEBHOOK_SECRET", raising=False)
+    else:
+        monkeypatch.setenv("SENTRY_WEBHOOK_SECRET", secret)
+
+    response = make_client().post("/v1/webhooks/sentry", json={})
+
+    assert response.status_code == 503
 
 
 def test_sentry_poll_classifies_auth_failure(monkeypatch):

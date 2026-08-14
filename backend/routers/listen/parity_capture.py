@@ -14,6 +14,8 @@ from testing.parity_pack_v0.capture import CaptureInvocation, CaptureTap
 from testing.parity_pack_v0.schema import CassetteIdentity
 from testing.parity_pack_v0.whitelist import CaptureWhitelist
 
+from .parity_telemetry import record_parity_capture_event, record_parity_capture_lifecycle
+
 logger = logging.getLogger(__name__)
 
 # Cassettes are a local diagnostic aid, never an unbounded in-memory recording.
@@ -41,6 +43,19 @@ def _capture_root(environ: Mapping[str, str]) -> Path | None:
     return None
 
 
+def _allowlist_decision_reason(whitelist: CaptureWhitelist, principal_id: str | None) -> str:
+    """Classify the existing gate without retaining or emitting its principal."""
+    if whitelist.allows(principal_id):
+        return 'allowed'
+    if not whitelist.enabled:
+        return 'capture_disabled'
+    if whitelist.environment != 'dev':
+        return 'stage_not_dev'
+    if not principal_id:
+        return 'principal_missing'
+    return 'allowlist_miss'
+
+
 class ListenParityCapture:
     """Small listener-side adapter around the pack's generic ``CaptureTap``.
 
@@ -49,8 +64,17 @@ class ListenParityCapture:
     serialized into that local root; logs contain no principal or payload data.
     """
 
-    def __init__(self, invocation: CaptureInvocation | None) -> None:
+    def __init__(
+        self,
+        invocation: CaptureInvocation | None,
+        *,
+        environ: Mapping[str, str] | None = None,
+    ) -> None:
         self._invocation = invocation
+        # Production reads the process environment lazily instead of retaining a
+        # per-session copy that could include unrelated credentials. Tests may
+        # inject only the narrow capture settings they exercise.
+        self._environ = None if environ is None else dict(environ)
         self._event_count = 0
         self._audio_bytes = 0
         self._limit_reached = False
@@ -67,9 +91,37 @@ class ListenParityCapture:
         environ: Mapping[str, str] | None = None,
     ) -> "ListenParityCapture":
         env = os.environ if environ is None else environ
+        record_parity_capture_event('listen', 'accepted', 'none', environ=env)
+        whitelist = CaptureWhitelist.from_environ(dict(env))
+        record_parity_capture_lifecycle(
+            'enabled',
+            'enabled' if whitelist.enabled else 'disabled',
+            environ=env,
+        )
+        decision_reason = _allowlist_decision_reason(whitelist, principal_id)
+        record_parity_capture_event(
+            'allowlist',
+            'accepted' if decision_reason == 'allowed' else 'rejected',
+            decision_reason,
+            environ=env,
+        )
+        record_parity_capture_lifecycle(
+            'admitted',
+            'allowed' if decision_reason == 'allowed' else 'rejected',
+            environ=env,
+        )
+        if decision_reason != 'allowed':
+            return cls(None, environ=environ)
         root = _capture_root(env)
         if root is None:
-            return cls(None)
+            record_parity_capture_event('initialize', 'failed', 'root_invalid', environ=env)
+            record_parity_capture_lifecycle(
+                'bootstrap',
+                'failed',
+                error_type='ConfigurationError',
+                environ=env,
+            )
+            return cls(None, environ=environ)
         identity = CassetteIdentity(
             anon_session=_anonymous_id(principal_id, session_id),
             provider_lane="stt",
@@ -79,14 +131,30 @@ class ListenParityCapture:
             parent_event_anon=_anonymous_id(session_id, "listen-stt"),
         )
         try:
-            invocation = CaptureTap(root, CaptureWhitelist.from_environ(dict(env))).start(
-                principal_id, identity, request
-            )
-            return cls(invocation)
+            invocation = CaptureTap(root, whitelist).start(principal_id, identity, request)
+            if invocation is None:
+                record_parity_capture_event('initialize', 'failed', 'internal', environ=env)
+                record_parity_capture_lifecycle(
+                    'bootstrap',
+                    'failed',
+                    error_type='CaptureStartError',
+                    environ=env,
+                )
+                return cls(None, environ=environ)
+            record_parity_capture_event('initialize', 'succeeded', 'none', environ=env)
+            record_parity_capture_lifecycle('bootstrap', 'succeeded', environ=env)
+            return cls(invocation, environ=environ)
         except Exception as error:
             # Capture must never make an otherwise valid listen session unavailable.
             logger.warning("Parity pack capture initialization failed error_type=%s", type(error).__name__)
-            return cls(None)
+            record_parity_capture_event('initialize', 'failed', 'internal', environ=env)
+            record_parity_capture_lifecycle(
+                'bootstrap',
+                'failed',
+                error_type=type(error).__name__,
+                environ=env,
+            )
+            return cls(None, environ=environ)
 
     @property
     def enabled(self) -> bool:
@@ -130,22 +198,40 @@ class ListenParityCapture:
             invocation.observe(direction, payload)
             self._event_count += 1
             self._audio_bytes += audio_bytes
+            record_parity_capture_lifecycle('observe', 'succeeded', environ=self._environ)
         except Exception as error:
             logger.warning("Parity pack capture observe failed error_type=%s", type(error).__name__)
+            record_parity_capture_lifecycle(
+                'observe',
+                'failed',
+                error_type=type(error).__name__,
+                environ=self._environ,
+            )
 
     def persist(self) -> None:
         if self._invocation is None:
             return
+        record_parity_capture_lifecycle('persist', 'attempted', environ=self._environ)
         try:
             path = self._invocation.persist()
         except Exception as error:
             logger.warning("Parity pack capture persist failed error_type=%s", type(error).__name__)
+            record_parity_capture_event('persist', 'failed', 'internal', environ=self._environ)
+            record_parity_capture_lifecycle(
+                'persist',
+                'failed',
+                error_type=type(error).__name__,
+                environ=self._environ,
+            )
             return
+        record_parity_capture_event('persist', 'succeeded', 'none', environ=self._environ)
+        record_parity_capture_lifecycle('persist', 'succeeded', environ=self._environ)
         # Durable export is best-effort and must never affect listen availability.
         try:
             from .parity_pack_export import ensure_reconcile_loop, export_cassette_file
 
-            ensure_reconcile_loop()
-            export_cassette_file(path)
+            ensure_reconcile_loop(environ=self._environ)
+            export_cassette_file(path, environ=self._environ)
         except Exception as error:
             logger.warning("Parity pack capture export failed error_type=%s", type(error).__name__)
+            record_parity_capture_event('export', 'failed', 'internal', environ=self._environ)

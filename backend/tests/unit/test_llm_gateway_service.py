@@ -78,3 +78,29 @@ async def test_lifespan_runs_registry_cleanup_when_image_cleanup_fails(monkeypat
         pass
 
     assert set(calls) == {'accounting', 'image', 'registry'}
+
+
+@pytest.mark.asyncio
+async def test_lifespan_publishes_deployment_and_config_identity(monkeypatch):
+    observed = []
+    config = object()
+
+    async def noop_cleanup():
+        return None
+
+    monkeypatch.setenv('OMI_LLM_GATEWAY_BUILD_IDENTITY', 'deadbee')
+    monkeypatch.setattr(main, 'get_gateway_config', lambda: config)
+    monkeypatch.setattr(
+        main,
+        'observe_gateway_config_identity',
+        lambda loaded_config, *, build_identity: observed.append((loaded_config, build_identity)),
+    )
+    monkeypatch.setattr(main, 'drain_accounting_persistence_tasks', noop_cleanup)
+    monkeypatch.setattr(main.openai_compatible, 'close_image_generation_client', noop_cleanup)
+    monkeypatch.setattr(main.anthropic_messages, 'close_anthropic_messages_client', noop_cleanup)
+    monkeypatch.setattr(main, 'close_provider_registry', noop_cleanup)
+
+    async with main.lifespan(app):
+        pass
+
+    assert observed == [(config, 'deadbee')]

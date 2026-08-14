@@ -14,5 +14,6 @@
     ".github/workflows/**",
     ".github/scripts/test_*release*contract.py"
   ],
-  "status": "open"
+  "status": "dormant",
+  "dormant_since": "2026-08-10T09:37:50.107774Z"
 }

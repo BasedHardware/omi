@@ -117,9 +117,17 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published private(set) var gmailInsightsFinished = false
   @Published private(set) var calendarInsightsFinished = false
   @Published private(set) var appleNotesInsightsFinished = false
+  @Published private(set) var gmailInsightsDeferred = false
+  @Published private(set) var calendarInsightsDeferred = false
   @Published private(set) var gmailInsightsFailed = false
   @Published private(set) var calendarInsightsFailed = false
   @Published private(set) var appleNotesInsightsFailed = false
+  @Published var gmailAccounts: [GmailAccountOption] = []
+  @Published var isProbingGmailAccounts = false
+  @Published var showingGmailAccountPicker = false
+  @Published var gmailAwaitingSelection = false
+  @Published private(set) var gmailAccountSelectionFailed = false
+  private var gmailSelectionWaiter: CheckedContinuation<Void, Never>?
   private var gmailTask: Task<Void, Never>?
   private var calendarTask: Task<Void, Never>?
   private var appleNotesTask: Task<Void, Never>?
@@ -411,7 +419,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     defer { isSyncingAppleNotes = false }
 
     do {
-      let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+      let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+        maxResults: 250,
+        userInitiated: true
+      )
       if notes.isEmpty {
         appleNotesInsightCount = 0
         appleNotesSummary = ""
@@ -626,8 +637,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     scanState = .scanning
     scanStatusText = "Scanning your projects and apps..."
 
-    // Start Gmail/Calendar/web research in parallel with the file scan
-    // so insights are ready by the time the user reaches the research step.
+    // Start local/web enrichment in parallel with the file scan. Connected
+    // account imports stay behind an explicit Apps/Settings action.
     // Must use Task.detached to avoid @MainActor serialization with the scan.
     Task.detached { await self.startBackgroundInsightsIfNeeded() }
 
@@ -842,19 +853,123 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
   }
 
-  func startBackgroundInsightsIfNeeded() async {
+  func loadGmailAccounts() async {
+    guard gmailAccounts.isEmpty else { return }
+    isProbingGmailAccounts = true
+    defer { isProbingGmailAccounts = false }
+    do {
+      gmailAccounts = try await GmailAccountProbe.availableAccounts()
+      gmailAccountSelectionFailed = false
+    } catch {
+      gmailAccountSelectionFailed = true
+      lastActionError = error.localizedDescription
+    }
+  }
+
+  func selectGmailAccount(_ cookiePath: String?, label: String) {
+    GmailSelectionStore.persist(cookiePath: cookiePath, label: label)
+    showingGmailAccountPicker = false
+    resumeGmailSelection()
+  }
+
+  private func awaitGmailAccountSelectionIfNeeded() async {
+    guard !GmailSelectionStore.hasMadeChoice else { return }
+    let accounts: [GmailAccountOption]
+    do {
+      accounts = try await GmailAccountProbe.availableAccounts()
+    } catch {
+      // Probe failure is not "zero or one account": a transient failure would
+      // otherwise silently fall back to the first readable profile — the
+      // exact junk-account behavior this feature exists to prevent. Fall back
+      // to the automatic default but record the fail-open.
+      log("OnboardingPagedIntroCoordinator: Gmail account probe failed: \(error.localizedDescription)")
+      gmailAccountSelectionFailed = true
+      return
+    }
+    // Re-check after the probe: the user may have picked an account from the
+    // manual picker while the probe was still running, before this waiter
+    // exists. Installing a continuation after a choice is already persisted
+    // would suspend the gmail task forever.
+    guard !GmailSelectionStore.hasMadeChoice else { return }
+    guard accounts.count > 1 else { return }
+    gmailAccounts = accounts
+    gmailAwaitingSelection = true
+    // Surface the picker automatically; nothing else ever reacts to
+    // gmailAwaitingSelection, so without this the gmail background task would
+    // suspend forever and onboarding research would never finish.
+    showingGmailAccountPicker = true
+    await withTaskCancellationHandler(
+      operation: {
+        await withCheckedContinuation { continuation in
+          if Task.isCancelled {
+            continuation.resume()
+            return
+          }
+          gmailSelectionWaiter = continuation
+        }
+      },
+      onCancel: {
+        Task { @MainActor in
+          self.resumeGmailSelection()
+        }
+      })
+  }
+
+  private func resumeGmailSelection() {
+    guard let waiter = gmailSelectionWaiter else { return }
+    gmailSelectionWaiter = nil
+    gmailAwaitingSelection = false
+    waiter.resume()
+  }
+
+  /// Dismissing the picker without a choice must not strand the gmail
+  /// background task: fall back to the automatic (first readable) account.
+  func cancelGmailAccountSelection() {
+    showingGmailAccountPicker = false
+    GmailSelectionStore.persist(cookiePath: nil, label: "Automatic")
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "gmail_account_selection",
+      from: "manual_selection",
+      to: "automatic_profile",
+      reason: "picker_cancelled",
+      outcome: .recovered)
+    resumeGmailSelection()
+  }
+
+  func startBackgroundInsightsIfNeeded(userInitiated: Bool = false) async {
     guard !insightsStarted else { return }
     insightsStarted = true
     isLoadingInsights = true
     isResearchComplete = false
-    insightStatusText = "Reading Gmail, calendar, and Apple Notes..."
+    insightStatusText =
+      userInitiated
+      ? "Reading the selected data sources..."
+      : "Preparing your local profile..."
     gmailInsightsFinished = false
     calendarInsightsFinished = false
     appleNotesInsightsFinished = false
+    gmailInsightsDeferred = false
+    calendarInsightsDeferred = false
     gmailInsightsFailed = false
     calendarInsightsFailed = false
     appleNotesInsightsFailed = false
     webResearchSummary = ""
+
+    // Onboarding itself is not consent to read connected accounts. In
+    // particular, an existing browser Safe Storage grant must not turn a
+    // passive scan into a year-long Gmail/Calendar import. The Apps/Settings
+    // connectors own explicit imports; mark these sources complete so the
+    // local onboarding flow can continue without touching their data.
+    guard userInitiated else {
+      gmailInsightsDeferred = true
+      calendarInsightsDeferred = true
+      gmailInsightsFinished = true
+      calendarInsightsFinished = true
+      appleNotesInsightsFinished = true
+      insightStatusText = "Connect data sources from Apps when you are ready."
+      await maybeStartWebResearch()
+      return
+    }
 
     // Calendar and Gmail read the same browser Safe Storage item. Keep the
     // first consent/request singular; BrowserKeychainCache still coalesces
@@ -865,10 +980,17 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     gmailTask = Task {
       await googleInsightGate.waitForCalendar()
       guard !Task.isCancelled else { return }
+      await self.awaitGmailAccountSelectionIfNeeded()
+      guard !Task.isCancelled else { return }
+      guard !self.gmailAccountSelectionFailed else {
+        await self.markInsightFinished(.gmail)
+        return
+      }
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
           maxResults: 300,
-          query: "newer_than:365d"
+          query: "newer_than:365d",
+          userInitiated: userInitiated
         )
         guard !Task.isCancelled else { return }
 
@@ -929,7 +1051,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         let events = try await CalendarReaderService.shared.readEvents(
           daysBack: 365,
           daysForward: 90,
-          maxResults: 1000
+          maxResults: 1000,
+          userInitiated: userInitiated
         )
         guard !Task.isCancelled else { return }
 
@@ -1000,7 +1123,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       }
 
       do {
-        let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+        let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+          maxResults: 250,
+          userInitiated: false
+        )
         guard !Task.isCancelled else { return }
 
         if notes.isEmpty {

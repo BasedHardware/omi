@@ -169,135 +169,217 @@ class TaskAgentSettings: ObservableObject, @unchecked Sendable {
 
 // MARK: - Settings View
 
+/// The Task Agent block on the Assistants settings pane.
+///
+/// It is **not** a `Form`. This view is hosted inside `settingsCard(…)`, which already draws the
+/// card the block sits on; a `Form { }.formStyle(.grouped)` inside it drew a *second*, opaque,
+/// system-grouped ground over the glass — the "two grounds" failure the glass system exists to
+/// prevent — and its own inset grouping fought the pane's rhythm. So the block is laid out with the
+/// same vocabulary as every other settings block: `SettingsGlassKit`'s tile, well and hairline, the
+/// two type rungs glass carries, and no background of its own.
 struct TaskAgentSettingsView: View {
   @ObservedObject var settings = TaskAgentSettings.shared
   @State private var validation: TaskAgentSettings.EnvironmentValidation?
   @State private var isValidating = false
 
   var body: some View {
-    Form {
-      Section {
-        Toggle("Enable Terminal Task Agent", isOn: $settings.isEnabled)
-          .help("Launch Claude Code agents in a terminal for code-related tasks")
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      sectionHeader(icon: "terminal", title: "Terminal Task Agent")
 
-        if settings.isEnabled {
-          Toggle("Auto-launch for code tasks", isOn: $settings.autoLaunch)
-            .help("Automatically launch agents when code/feature/bug tasks are extracted")
-        }
-      } header: {
-        Label("Terminal Task Agent", systemImage: "terminal")
+      row(
+        title: "Enable Terminal Task Agent",
+        subtitle: "Launch Claude Code agents in a terminal for code-related tasks"
+      ) {
+        Toggle("", isOn: $settings.isEnabled)
+          .toggleStyle(OmiToggleStyle())
       }
 
       if settings.isEnabled {
-        Section {
-          TextEditor(text: $settings.customPromptPrefix)
-            .frame(minHeight: 80)
-            .font(.system(.body, design: .monospaced))
-
-          Text("Additional context to include in every agent prompt")
-            .font(.caption)
-            .foregroundColor(.secondary)
-        } header: {
-          Label("Custom Prompt Prefix", systemImage: "text.quote")
+        row(
+          title: "Auto-launch for code tasks",
+          subtitle: "Automatically launch agents when code/feature/bug tasks are extracted"
+        ) {
+          Toggle("", isOn: $settings.autoLaunch)
+            .toggleStyle(OmiToggleStyle())
         }
 
-        Section {
-          TextEditor(text: $settings.defaultPrompt)
-            .frame(minHeight: 120)
-            .font(.system(.body, design: .monospaced))
+        GlassSeparator()
 
-          HStack {
-            Text("Instructions appended to every agent prompt")
-              .font(.caption)
-              .foregroundColor(.secondary)
+        promptSection(
+          title: "Custom Prompt Prefix",
+          icon: "text.quote",
+          footnote: "Additional context to include in every agent prompt",
+          minHeight: 80,
+          text: $settings.customPromptPrefix
+        )
 
-            Spacer()
-
-            Button("Reset to Default") {
-              settings.defaultPrompt = TaskAgentSettings.defaultPromptTemplate
-            }
-            .font(.caption)
-            .disabled(settings.defaultPrompt == TaskAgentSettings.defaultPromptTemplate)
+        promptSection(
+          title: "Default Prompt",
+          icon: "text.page",
+          footnote: "Instructions appended to every agent prompt",
+          minHeight: 120,
+          text: $settings.defaultPrompt
+        ) {
+          Button("Reset to Default") {
+            settings.defaultPrompt = TaskAgentSettings.defaultPromptTemplate
           }
-        } header: {
-          Label("Default Prompt", systemImage: "text.page")
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          .disabled(settings.defaultPrompt == TaskAgentSettings.defaultPromptTemplate)
         }
 
-        Section {
-          Toggle("Skip permission prompts", isOn: $settings.skipPermissions)
-            .help("Use --dangerously-skip-permissions flag")
+        GlassSeparator()
 
-          if settings.skipPermissions {
-            Text("Warning: Claude will execute commands without asking for permission")
-              .font(.caption)
-              .foregroundColor(.orange)
-          }
-        } header: {
-          Label("Advanced", systemImage: "gearshape.2")
+        sectionHeader(icon: "gearshape.2", title: "Advanced")
+
+        row(
+          title: "Skip permission prompts",
+          subtitle: settings.skipPermissions
+            ? "Claude will execute commands without asking for permission"
+            : "Use the --dangerously-skip-permissions flag"
+        ) {
+          Toggle("", isOn: $settings.skipPermissions)
+            .toggleStyle(OmiToggleStyle())
         }
+        // A caution, not a failure: `SettingsInk.notice` is the state one step below `Ink.errorRed`.
+        .foregroundStyle(settings.skipPermissions ? SettingsInk.notice : Ink.secondary)
 
-        Section {
-          if isValidating {
-            HStack {
-              ProgressView()
-                .scaleEffect(0.8)
-              Text("Validating environment...")
-                .foregroundColor(.secondary)
-            }
-          } else if let validation = validation {
-            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-              ValidationRow(label: "tmux", isValid: validation.tmuxInstalled)
-              ValidationRow(label: "Claude CLI", isValid: validation.claudeInstalled)
-              ValidationRow(label: "Working directory", isValid: validation.workingDirectoryValid)
+        GlassSeparator()
 
-              if !validation.issues.isEmpty {
-                Divider()
-                ForEach(validation.issues, id: \.self) { issue in
-                  Text(issue)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                }
-              }
-            }
-          }
-
-          Button("Validate Environment") {
-            Task {
-              isValidating = true
-              validation = await settings.validateEnvironment()
-              isValidating = false
-            }
-          }
-        } header: {
-          Label("Environment Check", systemImage: "checkmark.shield")
-        }
+        environmentSection
       }
     }
-    .formStyle(.grouped)
     .onAppear {
       if settings.isEnabled && validation == nil {
-        Task {
-          isValidating = true
-          validation = await settings.validateEnvironment()
-          isValidating = false
-        }
+        revalidate()
       }
     }
   }
 
+  // MARK: - Sections
+
+  private var environmentSection: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      sectionHeader(icon: "checkmark.shield", title: "Environment Check")
+
+      if isValidating {
+        HStack(spacing: OmiSpacing.sm) {
+          ProgressView().scaleEffect(0.6)
+          Text("Validating environment...")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+        }
+      } else if let validation {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          ValidationRow(label: "tmux", isValid: validation.tmuxInstalled)
+          ValidationRow(label: "Claude CLI", isValid: validation.claudeInstalled)
+          ValidationRow(label: "Working directory", isValid: validation.workingDirectoryValid)
+
+          ForEach(validation.issues, id: \.self) { issue in
+            Text(issue)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.errorRed)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+
+      Button("Validate Environment") { revalidate() }
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        .disabled(isValidating)
+    }
+  }
+
+  @ViewBuilder
+  private func promptSection<Trailing: View>(
+    title: String,
+    icon: String,
+    footnote: String,
+    minHeight: CGFloat,
+    text: Binding<String>,
+    @ViewBuilder trailing: () -> Trailing = { EmptyView() }
+  ) -> some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      sectionHeader(icon: icon, title: title)
+
+      TextEditor(text: text)
+        .font(.system(size: 12, design: .monospaced))
+        .foregroundColor(Ink.primary)
+        // A `TextEditor` paints an opaque ground of its own, which on glass is a grey slab.
+        .scrollContentBackground(.hidden)
+        .frame(minHeight: minHeight)
+        .padding(OmiSpacing.sm)
+        .settingsGlassWell()
+
+      HStack(alignment: .firstTextBaseline) {
+        Text(footnote)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+        Spacer(minLength: OmiSpacing.sm)
+        trailing()
+      }
+    }
+  }
+
+  private func sectionHeader(icon: String, title: String) -> some View {
+    HStack(spacing: SettingsGlassMetrics.rowContentSpacing) {
+      SettingsIconTile(symbol: icon)
+      Text(title)
+        .scaledFont(size: OmiType.body, weight: .semibold)
+        .foregroundColor(Ink.primary)
+    }
+  }
+
+  private func row<Control: View>(
+    title: String,
+    subtitle: String,
+    @ViewBuilder control: () -> Control
+  ) -> some View {
+    HStack(alignment: .center, spacing: OmiSpacing.md) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+        Text(title)
+          .scaledFont(size: OmiType.body, weight: .medium)
+          .foregroundColor(Ink.primary)
+        Text(subtitle)
+          .scaledFont(size: OmiType.caption)
+          // The bottom rung on glass is `secondary`; there is no third one to spend here.
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      Spacer(minLength: OmiSpacing.md)
+      control()
+    }
+  }
+
+  private func revalidate() {
+    Task {
+      isValidating = true
+      validation = await settings.validateEnvironment()
+      isValidating = false
+    }
+  }
 }
 
+/// One environment prerequisite, present or missing.
+///
+/// `Ink.listeningGreen` / `Ink.errorRed` rather than `.green` / `.red`: the shorthands are SwiftUI's
+/// own colours and do not track the panel's pinned appearance or brighten under Increase Contrast.
 struct ValidationRow: View {
   let label: String
   let isValid: Bool
 
   var body: some View {
-    HStack {
+    HStack(spacing: OmiSpacing.sm) {
       Image(systemName: isValid ? "checkmark.circle.fill" : "xmark.circle.fill")
-        .foregroundColor(isValid ? .green : .red)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(isValid ? Ink.listeningGreen : Ink.errorRed)
       Text(label)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.primary)
       Spacer()
     }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(Text("\(label). \(isValid ? "Installed" : "Missing")"))
   }
 }
 
@@ -305,5 +387,6 @@ struct ValidationRow: View {
   #Preview {
     TaskAgentSettingsView()
       .frame(width: 400)
+      .padding()
   }
 #endif

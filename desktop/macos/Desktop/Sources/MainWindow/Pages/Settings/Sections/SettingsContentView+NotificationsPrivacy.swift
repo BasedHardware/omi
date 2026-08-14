@@ -25,13 +25,14 @@ extension SettingsContentView {
 
           Text("Control how often you receive notifications")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           if notificationsEnabled {
-            Divider()
-              .background(OmiColors.backgroundQuaternary)
+            GlassSeparator()
 
             notificationFrequencySlider(settingId: "notifications.frequency")
+
+            GlassSeparator()
 
             // Sits under the master toggle and the frequency slider because both gate it:
             // frequency caps how often any proactive card is delivered, and this decides
@@ -49,20 +50,7 @@ extension SettingsContentView {
                 }
             }
 
-            settingRow(
-              title: "Focus Notifications", subtitle: "Show notification on focus changes",
-              settingId: "notifications.focus"
-            ) {
-              Toggle("", isOn: $focusNotificationsEnabled)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
-                .onChange(of: focusNotificationsEnabled) { _, newValue in
-                  FocusAssistantSettings.shared.notificationsEnabled = newValue
-                  SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                      focus: FocusSettingsResponse(notificationsEnabled: newValue)))
-                }
-            }
+            GlassSeparator()
 
             settingRow(
               title: "Task Notifications",
@@ -80,6 +68,8 @@ extension SettingsContentView {
                 }
             }
 
+            GlassSeparator()
+
             settingRow(
               title: "Insight Notifications",
               subtitle: "Show notification when an insight is generated",
@@ -95,6 +85,8 @@ extension SettingsContentView {
                       insight: InsightSettingsResponse(notificationsEnabled: newValue)))
                 }
             }
+
+            GlassSeparator()
 
             settingRow(
               title: "Memory Notifications",
@@ -133,14 +125,13 @@ extension SettingsContentView {
 
           Text("Receive a daily summary of your conversations and activities")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           if dailySummaryEnabled {
-            Divider()
-              .background(OmiColors.backgroundQuaternary)
+            GlassSeparator()
 
             settingRow(
-              title: "Summary Time", subtitle: "When to send your daily summary",
+              title: "Summary Time", subtitle: "When to send your daily summary (hour only)",
               settingId: "notifications.summarytime"
             ) {
               DatePicker(
@@ -152,7 +143,13 @@ extension SettingsContentView {
               .labelsHidden()
               .fixedSize()
               .onChange(of: dailySummaryTime) { _, selectedTime in
-                let hour = SettingsControlMetrics.dailySummaryHour(from: selectedTime)
+                // Storage is hour-only; snap minutes to :00 in the control so 20:45 never
+                // appears as a saved value that reopens as 20:00.
+                let canonical = SettingsControlMetrics.canonicalizeDailySummaryTime(selectedTime)
+                if canonical != selectedTime {
+                  dailySummaryTime = canonical
+                }
+                let hour = SettingsControlMetrics.dailySummaryHour(from: canonical)
                 guard hour != dailySummaryHour else { return }
                 dailySummaryHour = hour
                 updateDailySummarySettings(hour: hour)
@@ -163,6 +160,25 @@ extension SettingsContentView {
       }
 
     }
+    // These three toggles are seeded from their local singletons when the pane is constructed,
+    // but `loadBackendSettings()` then runs `SettingsSyncManager.syncFromServer()`, which is
+    // server-authoritative and rewrites those same singletons underneath us. Without this the
+    // switches kept painting the pre-sync values — a per-device answer to a per-account
+    // question — until the next relaunch. The sync manager already announces itself; this is
+    // the pane agreeing to listen.
+    .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
+      syncNotificationTogglesFromAssistantSettings()
+    }
+  }
+
+  /// Re-reads the assistant notification toggles from their stores. A sync that agrees with the
+  /// pane assigns nothing, so the common case does not re-enter the `onChange` handlers above; a
+  /// sync that corrects the pane does, and the resulting partial update restates the value the
+  /// server just supplied, which is idempotent.
+  func syncNotificationTogglesFromAssistantSettings() {
+    taskNotificationsEnabled = TaskAssistantSettings.shared.notificationsEnabled
+    insightNotificationsEnabled = InsightAssistantSettings.shared.notificationsEnabled
+    memoryNotificationsEnabled = MemoryAssistantSettings.shared.notificationsEnabled
   }
 
   // MARK: - Privacy Section
@@ -183,7 +199,7 @@ extension SettingsContentView {
             updateRecordingPermission(newValue)
           }
 
-          Divider()
+          GlassSeparator()
 
           privacyToggleRow(
             icon: "cloud.fill",
@@ -204,25 +220,25 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "checkmark.circle.fill")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(.green)
+              .foregroundColor(Ink.listeningGreen)
               .frame(width: 20, alignment: .leading)
 
             Text("Server-side encryption")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             Text("Active")
               .scaledFont(size: OmiType.micro, weight: .semibold)
-              .foregroundColor(.green)
+              .foregroundColor(Ink.listeningGreen)
               .padding(.horizontal, OmiSpacing.xxs)
               .padding(.vertical, OmiSpacing.hairline)
-              .background(Color.green.opacity(0.15))
+              .background(Ink.listeningGreen.opacity(0.15))
               .cornerRadius(OmiChrome.stripRadius)
           }
 
           Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
       }
 
@@ -237,18 +253,18 @@ extension SettingsContentView {
             HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "list.bullet")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .frame(width: 20)
 
               Text("What We Track")
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Spacer()
 
               Image(systemName: "chevron.right")
                 .scaledFont(size: OmiType.caption, weight: .semibold)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .rotationEffect(.degrees(isTrackingExpanded ? 90 : 0))
             }
           }
@@ -278,12 +294,12 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "hand.raised.fill")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .frame(width: 20)
 
             Text("Privacy Guarantees")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
           }
 
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {

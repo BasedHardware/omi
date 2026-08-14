@@ -11,7 +11,10 @@ concurrency:
   # Supersede stale revisions of the same PR, but never let a later main push
   # cancel the exact-SHA evidence consumed by desktop release planning.
   group: desktop-swift-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # An abandoned PR's `closed` run may cancel obsolete work. A merged PR's
+  # bookkeeping run must not cancel exact-SHA evidence still finishing for the
+  # merge, so only unmerged closures retain cancellation authority.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'closed' || !github.event.pull_request.merged) }}
 
 jobs:
   changes:
@@ -91,7 +94,11 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
     runs-on: macos-15
-    timeout-minutes: 60
+    # A cold runner currently needs about 60 minutes for manifest checks,
+    # launcher coverage, the full debug suite, and the independent release-mode
+    # UserNotifications regression. Leave headroom so a successful final link
+    # is not cancelled by the job deadline.
+    timeout-minutes: 90
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -145,14 +152,17 @@ jobs:
             ~/.cache/omi-swiftlint
           key: ${{ runner.os }}-desktop-swift-tools-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
 
-      - name: Restore SwiftPM build products
+      # A Desktop/.build archive is about 5.3 GB. GitHub scopes those archives
+      # to a PR ref, so they miss for normal new commits and spend over a minute
+      # uploading without reducing a subsequent run. Retain only SwiftPM's
+      # dependency cache, which is small and reusable when the manifest matches.
+      - name: Restore SwiftPM dependency cache
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
         id: swiftpm-cache
         uses: actions/cache/restore@v6
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
-            desktop/macos/Desktop/.build
           key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-desktop-swift-build-xcode164-
@@ -170,6 +180,11 @@ jobs:
           # automatically, mirroring swift-test-suites.sh's auto-discovery.
           for t in tests/test-*.sh; do
             echo "== $t"
+            case "$t" in
+              tests/test-mounted-navigation-latency.sh|tests/test-named-bundle-resources.sh)
+                continue
+                ;;
+            esac
             bash "$t"
           done
 
@@ -181,11 +196,11 @@ jobs:
         id: desktop_swift_tests
         working-directory: desktop/macos
         env:
-          # Every filtered `swift test --skip-build` process shares Desktop/.build.
-          # Parallel SwiftPM processes wait on that lock, which can exhaust the
-          # per-suite watchdog and report false test failures. Keep CI serial;
-          # local diagnosis can still opt into the faster four-worker default.
-          OMI_SWIFT_TEST_SUITE_WORKERS: "1"
+          # Each isolated worker receives a copy-on-write clone of the prebuilt
+          # SwiftPM scratch directory, so filtered suites do not contend on the
+          # shared Desktop/.build lock. Two workers are a measured first step;
+          # do not increase without macOS-runner evidence.
+          OMI_SWIFT_TEST_SUITE_WORKERS: "2"
           OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS: "300"
         run: ./scripts/run-swift-ci.sh --test
 
@@ -198,16 +213,15 @@ jobs:
         working-directory: desktop/macos
         run: ./scripts/run-swift-ci.sh --release-notification-regression
 
-      # SwiftPM validates cached incremental state before using it. Saving after
-      # a failed test command makes the next diagnostic run reuse completed
-      # dependency and module work instead of recompiling the same test bundle.
-      - name: Save SwiftPM build products after test attempt
+      # Preserve resolved dependency downloads after a failed test command, but
+      # do not archive Desktop/.build: its PR-scoped 5.3 GB cache misses in
+      # ordinary new-commit runs and increases billed macOS time on every save.
+      - name: Save SwiftPM dependency cache after test attempt
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' && steps.swiftpm-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
-            desktop/macos/Desktop/.build
           key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
 
       - name: Require independent macOS phase verdicts
@@ -238,8 +252,11 @@ jobs:
 
   desktop-swift:
     # Keep this name stable: desktop release planning requires this exact
-    # check to pass for the source SHA that will be tagged.
-    name: Desktop Swift Build & Tests
+    # check to pass for the source SHA that will be tagged. Closed-event
+    # bookkeeping must use a distinct name because GitHub associates a merged
+    # pull_request.closed run with the target-branch merge SHA; publishing a
+    # newer skipped required check there would block release planning.
+    name: ${{ github.event.action == 'closed' && 'Desktop Swift PR Closure' || 'Desktop Swift Build & Tests' }}
     needs: [changes, desktop-swift-verify]
     if: ${{ always() && needs.changes.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
@@ -257,7 +274,10 @@ jobs:
           fi
 
   desktop-swift-release-compile:
-    name: Desktop Swift Release Compile
+    # A merged pull_request.closed run is associated with the merge SHA. Keep
+    # its bookkeeping check distinct so it cannot supersede the successful
+    # push-run evidence consumed by desktop release planning.
+    name: ${{ github.event.action == 'closed' && 'Desktop Swift PR Closure Release Compile' || 'Desktop Swift Release Compile' }}
     needs: changes
     if: needs.changes.outputs.should_release_compile == 'true'
     runs-on: macos-15

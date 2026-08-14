@@ -17,10 +17,14 @@ export interface TranscriptSegment {
 export interface TranscriptionSocketOptions {
   language?: string;
   sampleRate?: number;
+  /** Stable UUID so /v4/web/listen creates its own conversation (#5388). */
+  clientConversationId?: string;
   onSegment: (segment: TranscriptSegment) => void;
   onError: (error: string) => void;
   onConnected: () => void;
   onDisconnected: () => void;
+  /** Authoritative conversation id from conversation_session events. */
+  onConversationSession?: (conversationId: string) => void;
 }
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected';
@@ -145,35 +149,49 @@ export class TranscriptionSocket {
         source: 'web',
         include_speech_profile: 'true',
       });
+      // Own a conversation independent of an active pendant session (#5388).
+      if (this.options.clientConversationId) {
+        params.set('client_conversation_id', this.options.clientConversationId);
+      }
 
       // Store token for first-message auth
       this.pendingToken = token;
 
       const wsUrl = `${WS_BASE_URL}/v4/web/listen?${params.toString()}`;
 
-      this.ws = new WebSocket(wsUrl);
+      // Every handler below is bound to THIS socket and must ignore events once it
+      // has been superseded (`this.ws !== socket`). A token refresh closes the old
+      // socket and opens a new one ~100ms later, but `close()` only queues the close
+      // event — on a slow round trip it is delivered after the replacement socket is
+      // live, and an unguarded handler then tears down the healthy connection
+      // (state -> disconnected, this.ws -> null). Audio is silently buffered into the
+      // 100-chunk ring from then on while the UI still shows "recording": the ~50
+      // minute refresh is why a long session loses its transcript (#5399).
+      const socket = new WebSocket(wsUrl);
+      this.ws = socket;
 
-      this.ws.binaryType = 'arraybuffer';
+      socket.binaryType = 'arraybuffer';
 
       // Set connection timeout
       this.connectionTimeout = setTimeout(() => {
-        if (this.state === 'connecting') {
+        if (this.ws === socket && this.state === 'connecting') {
           console.error('TranscriptionSocket: Connection timeout');
-          this.ws?.close();
+          socket.close();
           this.ws = null;
           this.state = 'disconnected';
           this.options.onError('Connection timeout - server unreachable');
         }
       }, TranscriptionSocket.CONNECTION_TIMEOUT_MS);
 
-      this.ws.onopen = () => {
+      socket.onopen = () => {
+        if (this.ws !== socket) return;
         this.clearConnectionTimeout();
         this.state = 'connected';
 
         // Send first-message authentication
-        if (this.ws && this.pendingToken) {
+        if (this.pendingToken) {
           try {
-            this.ws.send(
+            socket.send(
               JSON.stringify({
                 type: 'auth',
                 token: this.pendingToken,
@@ -185,22 +203,25 @@ export class TranscriptionSocket {
               'TranscriptionSocket: Failed to send auth message, closing socket.',
               err,
             );
-            this.ws?.close();
+            socket.close();
           }
         }
         // Note: onConnected() and buffer flush happen after auth_response in handleMessage
       };
 
-      this.ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
+        if (this.ws !== socket) return;
         this.handleMessage(event);
       };
 
-      this.ws.onerror = (event) => {
+      socket.onerror = (event) => {
+        if (this.ws !== socket) return;
         this.clearConnectionTimeout();
         console.error('TranscriptionSocket: Error', event);
       };
 
-      this.ws.onclose = (event) => {
+      socket.onclose = (event) => {
+        if (this.ws !== socket) return;
         this.clearConnectionTimeout();
         this.state = 'disconnected';
         this.ws = null;
@@ -308,6 +329,12 @@ export class TranscriptionSocket {
             this.options.onError('Authentication failed');
             this.ws?.close(1000, 'Auth failed');
           }
+        } else if (
+          data.type === 'conversation_session' &&
+          typeof data.conversation_id === 'string' &&
+          data.status === 'in_progress'
+        ) {
+          this.options.onConversationSession?.(data.conversation_id);
         }
         // Handle other event messages (silently ignore for now)
       }
@@ -352,6 +379,9 @@ export class TranscriptionSocket {
     if (this.ws) {
       this.ws.close(1000, 'User stopped recording');
       this.ws = null;
+      // The retired socket's onclose is ignored now that it is superseded, so
+      // report the disconnect here — it used to arrive via that handler.
+      this.options.onDisconnected();
     }
 
     this.state = 'disconnected';

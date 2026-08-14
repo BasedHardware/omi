@@ -14,13 +14,17 @@ export const PCM_CHANNELS = 1;
 export enum BleAudioCodec {
   Pcm16 = 0,
   Pcm8 = 1,
+  /** 160-sample frames @ 100 fps (DevKit firmware). */
   Opus = 20,
+  /** 320-sample frames @ 50 fps (Omi CV1 firmware). */
+  OpusFs320 = 21,
 }
 
 export function mapCodecId(id: number): BleAudioCodec | number {
   if (id === 0) return BleAudioCodec.Pcm16;
   if (id === 1) return BleAudioCodec.Pcm8;
   if (id === 20) return BleAudioCodec.Opus;
+  if (id === 21) return BleAudioCodec.OpusFs320;
   return id;
 }
 

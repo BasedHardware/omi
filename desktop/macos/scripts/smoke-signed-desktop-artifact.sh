@@ -468,7 +468,21 @@ assert_backend_routing_config() {
   ! grep -Eq 'localhost|127[.]0[.]0[.]1|0[.]0[.]0[.]0|ngrok|dev-serve' "$env_file" \
     || fail "artifact .env contains a local/dev tunnel backend reference"
 
+  if [[ "$IS_EXTERNAL_PREVIEW" != true ]]; then
+    local firebase_plist firebase_project
+    firebase_plist="$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+    [[ -f "$firebase_plist" ]] || fail "production-family artifact is missing GoogleService-Info.plist"
+    firebase_project="$(/usr/libexec/PlistBuddy -c 'Print :PROJECT_ID' "$firebase_plist" 2>/dev/null || true)"
+    [[ "$firebase_project" == "based-hardware" ]] \
+      || fail "production-family artifact Firebase project must be based-hardware"
+    ! grep -q '^OMI_AUTH_API_URL=' "$env_file" \
+      || fail "production-family artifact must not bundle an OMI_AUTH_API_URL override"
+    ! grep -Eq '^(FIREBASE_AUTH_EMULATOR_HOST|FIREBASE_PROJECT_ID|OMI_DESKTOP_LOCAL_PROFILE)=' "$env_file" \
+      || fail "production-family artifact must not bundle a Firebase project, emulator, or local-profile override"
+  fi
+
   pass "Backend routing config matches the declared external backend"
+  pass "Production Firebase identity matches the declared release authority"
 }
 
 assert_sparkle_and_artifacts() {
@@ -531,10 +545,16 @@ assert_helper_runtime_integrity() {
   "$MACOS_DIR/scripts/audit-desktop-bundle-deps.sh" "$APP_BUNDLE" >/dev/null
 
   local resources="$APP_BUNDLE/Contents/Resources"
-  [[ -d "$resources/agent" ]] || fail "agent runtime missing"
-  [[ -f "$resources/agent/src/runtime/omi-tool-manifest.ts" ]] || fail "agent tool manifest missing"
-  [[ -d "$resources/pi-mono-extension" ]] || fail "pi-mono-extension missing"
-  [[ -x "$resources/Omi Computer_Omi Computer.bundle/node" ]] || fail "bundled node missing"
+  # A present-but-empty `pi-mono-extension/` used to satisfy this check while
+  # still failing every chat turn. Share the packaging contract instead of
+  # re-stating a weaker version of it here.
+  # shellcheck source=scripts/agent-runtime-payload.sh
+  source "$MACOS_DIR/scripts/agent-runtime-payload.sh"
+  local missing_runtime_payload
+  missing_runtime_payload="$(omi_agent_runtime_payload_missing "$APP_BUNDLE" | tr '\n' ' ')"
+  [[ -z "${missing_runtime_payload// /}" ]] \
+    || fail "agent runtime payload incomplete: $missing_runtime_payload"
+  [[ -x "$resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node" ]] || fail "bundled node missing"
   local sharp_arch expected_arch sharp_native libvips_native
   for sharp_arch in arm64 x64; do
     expected_arch="$sharp_arch"
@@ -586,18 +606,10 @@ run_launch_probe() {
   executable="$APP_BUNDLE/Contents/MacOS/$(plist_read CFBundleExecutable)"
   [[ -x "$executable" ]] || fail "executable missing before launch"
 
-  # The callback-only probe deliberately exits after atomically recording its
-  # result. Run the bundle executable directly so its opt-in result-path
-  # environment is deterministic; LaunchServices does not guarantee that it
-  # propagates shell environment variables into a newly launched app.
-  if [[ "$RUN_NOTIFICATION_CALLBACK_CANARY" == true ]]; then
-    OMI_NOTIFICATION_CALLBACK_SMOKE_RESULT_PATH="$NOTIFICATION_CALLBACK_MARKER" \
-      "$executable" >/tmp/omi-signed-artifact-smoke.out 2>/tmp/omi-signed-artifact-smoke.err &
-    SMOKE_PID=$!
-    pass "Signed app launched for UserNotifications callback canary"
-    return 0
-  fi
-
+  # The sustained-liveness probe is the release pipeline's only "the app at
+  # least launches" guarantee, so it runs unconditionally — including in canary
+  # mode, where the canary's direct-exec app deliberately exits after recording
+  # its marker and therefore proves nothing about staying alive.
   open -n "$APP_BUNDLE" >/tmp/omi-signed-artifact-smoke.out 2>/tmp/omi-signed-artifact-smoke.err \
     || fail "LaunchServices failed to open signed app"
 
@@ -613,6 +625,24 @@ run_launch_probe() {
   }
 
   pass "Signed app launches and remains alive"
+
+  # The callback-only probe deliberately exits after atomically recording its
+  # result. Run the bundle executable directly so its opt-in result-path
+  # environment is deterministic; LaunchServices does not guarantee that it
+  # propagates shell environment variables into a newly launched app. The
+  # liveness instance above is torn down first so the canary instance owns the
+  # bundle's single-instance state.
+  if [[ "$RUN_NOTIFICATION_CALLBACK_CANARY" == true ]]; then
+    kill "$SMOKE_PID" >/dev/null 2>&1 || true
+    local teardown_deadline=$((SECONDS + 10))
+    while kill -0 "$SMOKE_PID" >/dev/null 2>&1 && (( SECONDS < teardown_deadline )); do
+      sleep 1
+    done
+    OMI_NOTIFICATION_CALLBACK_SMOKE_RESULT_PATH="$NOTIFICATION_CALLBACK_MARKER" \
+      "$executable" >/tmp/omi-signed-artifact-smoke.out 2>/tmp/omi-signed-artifact-smoke.err &
+    SMOKE_PID=$!
+    pass "Signed app relaunched for UserNotifications callback canary"
+  fi
 }
 
 prepare_notification_callback_canary() {
@@ -724,7 +754,7 @@ if result.get("success") is not True or result.get("stage") != "complete":
     raise SystemExit(f"auth storage canary result: {result}")
 PY
   started_at=$SECONDS
-  while kill -0 "$canary_pid" >/dev/null 2>&1 && $((SECONDS - started_at)) -lt 5; do
+  while kill -0 "$canary_pid" >/dev/null 2>&1 && (( SECONDS - started_at < 5 )); do
     sleep 1
   done
   if kill -0 "$canary_pid" >/dev/null 2>&1; then

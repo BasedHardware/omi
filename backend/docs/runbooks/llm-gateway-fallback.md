@@ -1,19 +1,43 @@
 # LLM Gateway — fallback rate elevated (ticket)
 
-**What it means:** The gateway or one of its upstream routes is unhealthy. A short client transport deadline and per-process circuit send new requests directly to the legacy provider after consecutive gateway transport failures, so this is normally a degraded dependency rather than a total chat outage. A circuit-open event still requires prompt investigation: it can mean the gateway is unreachable from Cloud Run even when its pods look healthy.
+**What it means:** An active/canary gateway route or provider failed with an eligible bounded failure class and a different provider or the LKG route successfully served the request. Ordinary LKG serving because a candidate is shadowed, disabled, outside its canary bucket, or at 0% is rollout exposure, not fallback.
 
-**PromQL:** `sum(rate(llm_gateway_chat_extraction_requests_total{mode="fallback"}[30m])) / clamp_min(sum(rate(llm_gateway_chat_extraction_requests_total{mode=~"serving|fallback"}[30m])), 1e-9)`
+**PromQL:** `sum(rate(llm_gateway_requests_total{route_serving_class="actual_fallback",fallback_used="true",fallback_reason!="none",outcome="success"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome=~"success|error"}[30m])), 1e-9)`
 
-**Client-side signals:** `llm_gateway_chat_extraction_requests_total{mode="fallback"}`, `llm_gateway_circuit_open`, `llm_gateway_client_first_byte_seconds`, and structured `llm_gateway_backend_event` logs with `reason=circuit_open`. The gateway cannot emit a request metric for a TCP black hole it never receives, so inspect client-side fallback/circuit telemetry as the primary signal for reachability failures.
+**Rollout exposure:** `sum(rate(llm_gateway_requests_total{route_serving_class="lkg",outcome="success"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome="success"}[30m])), 1e-9)`. A high share can be intentional while a candidate is shadowed or at 0%; correlate with `llm_gateway_config_info` and route rollout state.
 
-**Alerts:** the deployed LLM Gateway rules page on a client fallback ratio above 5%, any open circuit, zero gateway-serving successes after 10 client attempts, p95 client first-byte latency above 5 seconds, or zero ready production gateway endpoints. The first four are client-visible by design; the fifth is the Kubernetes control-plane corroboration.
+**Client reachability:** `llm_gateway_chat_extraction_requests_total`, `llm_gateway_circuit_open`, `llm_gateway_client_first_byte_seconds`, and structured `llm_gateway_backend_event` logs remain the primary signals for a TCP black hole the gateway cannot observe.
+
+**Alert source:** `backend/charts/monitoring/alerts/resilience.json` tickets above 5% actual-fallback share for 30 minutes. Repository changes do not update live Grafana until the monitoring source is applied through its normal deployment path.
 
 **Owner:** llm-gateway / platform team.
 
 **First checks:**
-1. Confirm the current Cloud Run revisions are still `OMI_LLM_GATEWAY_FEATURE_MODE=direct` unless a deliberately gated promotion has occurred.
+1. Confirm Cloud Run / listen `OMI_LLM_GATEWAY_FEATURE_MODE` and `OMI_LLM_CHAT_AGENT_ROUTE`. Gateway-on + Luna chat-on is the intended prod default after the 2026-08 fix; chat can be killed alone via `OMI_LLM_CHAT_AGENT_ROUTE=direct` without flipping feature mode.
 2. Run the same evidence chain used by promotion: `verify-llm-gateway-serving.py` for deployment/Service/EndpointSlice/Ingress/ILB attachment, followed by the Cloud Run VPC probe. Do not treat a reserved IP as proof of reachability.
-3. Inspect `llm_gateway_circuit_open`, client fallback ratio, `llm_gateway_client_first_byte_seconds` p95, and `llm_gateway_backend_event` reasons. If the circuit is open, keep/direct-route while repairing the data plane.
-4. Then inspect gateway `llm_gateway_requests_total{fallback_used="true"}` by route/model lane and upstream provider status.
+3. Inspect `llm_gateway_circuit_open`, client fallback ratio, `llm_gateway_client_first_byte_seconds` p95, and structured `llm_gateway_backend_event` reasons. If the circuit is open, keep/direct-route while repairing the data plane.
+4. Inspect `llm_gateway_requests_total` by `route_serving_class`, `fallback_reason`, and bounded from/to route artifact labels. Treat `route_serving_class="lkg"` as rollout exposure unless a separate error signal is present.
+
+## Agentic chat / Luna kill switch (2026-08)
+
+**Outage signature (fixed class):** `unsupported lane surface: anthropic.messages` on `feature=chat_agent` / `model=omi:auto:chat-agent` when the OpenAI-compatible client hit a lane whose surface was still Anthropic Messages.
+
+**Intended prod defaults after fix:**
+- `OMI_LLM_GATEWAY_FEATURE_MODE=gateway` — fleet LLM gateway on (Luna lanes for structured/chat_agent/etc. per `generated_route_overrides.yaml`)
+- `OMI_LLM_CHAT_AGENT_ROUTE=gateway` — managed agentic/desktop chat uses gateway OpenAI-compatible lane (`omi:auto:chat-agent` → Luna)
+
+**Emergency: turn off Luna/agentic chat only (leave gateway on for other features):**
+```text
+OMI_LLM_CHAT_AGENT_ROUTE=direct
+```
+Cloud Run env update on `backend` (+ integration if needed). No need to set `FEATURE_MODE=off`.
+
+**Emergency: turn off all gateway routing:**
+```text
+OMI_LLM_GATEWAY_FEATURE_MODE=off
+```
+(optional also set `CHAT_AGENT_ROUTE=direct`)
+
+**Contract:** `should_route_chat_agent_through_gateway()` requires **both** chat-agent route=`gateway` **and** feature mode on. Direct Anthropic BYOK still bypasses the managed lane.
 
 **Severity:** Ticket — investigate during business hours unless user-facing chat error rates also rise.

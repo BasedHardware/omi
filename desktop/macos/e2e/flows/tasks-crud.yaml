@@ -1,13 +1,15 @@
 version: 2
 name: tasks-crud
 tier: 2
-description: Hermetic task create, toggle, dump, and delete via bridge actions
+description: Hermetic task create, reorder, toggle, dump, and delete via bridge actions
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/TaskSortOrderPlanner.swift
   - desktop/macos/Desktop/Sources/Services/LocalMutationAuthorization.swift
   - desktop/macos/Desktop/Sources/Stores/APIClient+Tasks.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/TaskActionItem.swift
 preconditions:
   - automation_bridge_ready
 
@@ -21,40 +23,72 @@ steps:
       state.selectedTabIndex: 4
 
   - id: S2
-    name: Create hermetic task
+    name: Create hermetic anchor task
     bridge.action:
       name: create_task
       params:
-        description: "[[MARKER:tasks-crud]] harness task"
+        description: "[[MARKER:tasks-crud]] harness anchor"
     expect:
       result.detail.synced: "true"
 
   - id: S3
+    name: Create hermetic movable task
+    bridge.action:
+      name: create_task
+      params:
+        description: "[[MARKER:tasks-crud]] harness movable"
+    expect:
+      result.detail.synced: "true"
+
+  - id: S4
     name: Dump tasks
     bridge.action:
       name: dump_tasks
     expect:
-      result.detail.count: { min: 1 }
+      result.detail.count: { min: 2 }
 
-  - id: S4
-    name: Toggle task by marker description
+  - id: S5
+    name: Reorder movable task and verify persistence
+    bridge.action:
+      name: reorder_task
+      params:
+        description: "[[MARKER:tasks-crud]] harness movable"
+        index: "1"
+        category: nodeadline
+        flush: "true"
+    expect:
+      result.detail.position: "1"
+      result.detail.persisted: "true"
+      result.detail.flushed: "true"
+
+  - id: S6
+    name: Toggle movable task by marker description
     bridge.action:
       name: toggle_task
       params:
-        description: "[[MARKER:tasks-crud]] harness task"
+        description: "[[MARKER:tasks-crud]] harness movable"
     expect:
       result.detail.completed: "true"
 
-  - id: S5
-    name: Delete task by marker description
+  - id: S7
+    name: Delete movable task by marker description
     bridge.action:
       name: delete_task
       params:
-        description: "[[MARKER:tasks-crud]] harness task"
+        description: "[[MARKER:tasks-crud]] harness movable"
     expect:
       result.detail.deleted: "true"
 
-  - id: S6
+  - id: S8
+    name: Delete anchor task by marker description
+    bridge.action:
+      name: delete_task
+      params:
+        description: "[[MARKER:tasks-crud]] harness anchor"
+    expect:
+      result.detail.deleted: "true"
+
+  - id: S9
     name: Verify task removed (dump absence)
     bridge.action:
       name: dump_tasks
@@ -63,7 +97,7 @@ steps:
     expect:
       result.detail.marker_absent: "true"
 
-  - id: S7
+  - id: S10
     name: Logs clean
     log.expect:
       absent:

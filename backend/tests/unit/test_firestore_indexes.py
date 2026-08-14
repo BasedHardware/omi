@@ -25,6 +25,23 @@ def test_memory_firestore_indexes_are_checked_in_for_unified_memory_store():
     assert "memory_archive" not in collection_groups
 
     assert (
+        "conversations",
+        "COLLECTION",
+        (("source", "ASCENDING"), ("status", "ASCENDING"), ("created_at", "DESCENDING"), ("__name__", "DESCENDING")),
+    ) in signatures
+    assert (
+        "conversations",
+        "COLLECTION",
+        (
+            ("discarded", "ASCENDING"),
+            ("source", "ASCENDING"),
+            ("status", "ASCENDING"),
+            ("created_at", "DESCENDING"),
+            ("__name__", "DESCENDING"),
+        ),
+    ) in signatures
+
+    assert (
         "memory_items",
         "COLLECTION",
         (
@@ -36,6 +53,34 @@ def test_memory_firestore_indexes_are_checked_in_for_unified_memory_store():
             ("captured_at", "ASCENDING"),
             ("memory_id", "ASCENDING"),
             ("__name__", "ASCENDING"),
+        ),
+    ) in signatures
+    assert (
+        "memory_items",
+        "COLLECTION",
+        (
+            ("account_generation", "ASCENDING"),
+            ("tier", "ASCENDING"),
+            ("status", "ASCENDING"),
+            ("processing_state", "ASCENDING"),
+            ("graph_ready", "ASCENDING"),
+            ("updated_at", "DESCENDING"),
+            ("__name__", "DESCENDING"),
+        ),
+    ) in signatures
+    # Live firestore_readiness on based-hardware-dev failed this exact
+    # composite (run 31666135748). Registry identifier:
+    # memory_items_canonical_atlas_read. Keep it in the apply spec.
+    assert (
+        "memory_items",
+        "COLLECTION",
+        (
+            ("account_generation", "ASCENDING"),
+            ("tier", "ASCENDING"),
+            ("status", "ASCENDING"),
+            ("processing_state", "ASCENDING"),
+            ("updated_at", "DESCENDING"),
+            ("__name__", "DESCENDING"),
         ),
     ) in signatures
     assert (

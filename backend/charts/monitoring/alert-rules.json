@@ -8238,7 +8238,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(llm_gateway_chat_extraction_requests_total{mode=\"fallback\"}[30m])) / clamp_min(sum(rate(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[30m])), 1e-9)",
+          "expr": "sum(rate(llm_gateway_requests_total{route_serving_class=\"actual_fallback\",fallback_used=\"true\",fallback_reason!=\"none\",outcome=\"success\"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome=~\"success|error\"}[30m])), 1e-9)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,

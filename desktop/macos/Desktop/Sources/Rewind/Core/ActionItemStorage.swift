@@ -66,7 +66,7 @@ actor ActionItemStorage {
   }
 
   /// Ensure database is initialized before use
-  private func ensureInitialized() async throws -> DatabasePool {
+  func ensureInitialized() async throws -> DatabasePool {
     if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
       return db
     }
@@ -148,6 +148,26 @@ actor ActionItemStorage {
         .limit(limit, offset: offset)
         .fetchAll(database)
 
+      return records.map { $0.toTaskActionItem() }
+    }
+  }
+
+  /// Get every non-deleted action item from the local cache. Reorder persistence
+  /// must use this complete set rather than a rendered page, search result, or
+  /// filtered subset so hidden rows keep their unique position in a category.
+  func getAllLocalActionItems(includeDeleted: Bool = false) async throws -> [TaskActionItem] {
+    let db = try await ensureInitialized()
+
+    return try await db.read { database in
+      var query = ActionItemRecord.all()
+      if !includeDeleted {
+        query = query.filter(Column("deleted") == false)
+      }
+
+      let records =
+        try query
+        .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
+        .fetchAll(database)
       return records.map { $0.toTaskActionItem() }
     }
   }
@@ -302,6 +322,52 @@ actor ActionItemStorage {
         .fetchAll(database)
 
       return records.map { $0.toTaskActionItem() }
+    }
+  }
+
+  /// Read the bounded incomplete-task surface used by the Tasks page.
+  ///
+  /// Dated rows are complete because Today/Tomorrow/Later are not pageable.
+  /// No Deadline rows are independently paged so this method never loads the
+  /// entire undated local universe merely to render the first page.
+  func getIncompleteTaskSurface(
+    noDeadlineLimit: Int = 100,
+    noDeadlineOffset: Int = 0
+  ) async throws -> (dated: [TaskActionItem], noDeadline: [TaskActionItem], hasMoreNoDeadline: Bool) {
+    let db = try await ensureInitialized()
+
+    return try await db.read { database in
+      func filteredIncomplete(
+        dueDateIsNull: Bool,
+        limit: Int,
+        offset: Int
+      ) throws -> [TaskActionItem] {
+        var query = ActionItemRecord.all()
+          .filter(Column("deleted") == false)
+          .filter(Column("completed") == false)
+        query =
+          dueDateIsNull
+          ? query.filter(Column("dueAt") == nil)
+          : query.filter(Column("dueAt") != nil)
+        let records =
+          try query
+          .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
+          .limit(limit, offset: offset)
+          .fetchAll(database)
+        return records.map { $0.toTaskActionItem() }
+      }
+
+      let dated = try filteredIncomplete(dueDateIsNull: false, limit: Int.max, offset: 0)
+      let noDeadlineLookahead = try filteredIncomplete(
+        dueDateIsNull: true,
+        limit: noDeadlineLimit + 1,
+        offset: noDeadlineOffset
+      )
+      return (
+        dated: dated,
+        noDeadline: Array(noDeadlineLookahead.prefix(noDeadlineLimit)),
+        hasMoreNoDeadline: noDeadlineLookahead.count > noDeadlineLimit
+      )
     }
   }
 
@@ -571,6 +637,14 @@ actor ActionItemStorage {
             // by stale auto-refresh data. Beyond 60s, trust the API as source
             // of truth — this prevents failed optimistic updates from persisting
             // forever (e.g. user toggled on desktop but API call failed/app crashed).
+            // A tombstone awaiting backend acknowledgement outranks anything the server
+            // says: the server still returning this task is precisely the condition the
+            // tombstone exists for. The 60s optimistic window below is not enough — the
+            // retry that flushes the deletion may run minutes or days later.
+            if existingRecord.deleted && !existingRecord.backendSynced {
+              skipped += 1
+              continue
+            }
             let incomingTimestamp = item.updatedAt ?? item.createdAt
             let isLocalStagedGuess = overrideStagedDeletions && existingRecord.deletedBy == "staged"
             let isRecentLocalChange = Date().timeIntervalSince(existingRecord.updatedAt) < 60
@@ -1102,9 +1176,15 @@ actor ActionItemStorage {
     let count = try await authorization.withCommitLease {
       try await db.write { database -> Int in
         try authorization.require()
-        let count = try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM action_items WHERE deleted = 1") ?? 0
+        // Pending tombstones are the durable record of an unacknowledged backend
+        // delete; purging them here would re-open the resurrection hole this purge
+        // is part of cleaning up.
+        let pendingClause = "NOT (backendSynced = 0 AND backendId IS NOT NULL AND backendId != '')"
+        let count =
+          try Int.fetchOne(
+            database, sql: "SELECT COUNT(*) FROM action_items WHERE deleted = 1 AND \(pendingClause)") ?? 0
         if count > 0 {
-          try database.execute(sql: "DELETE FROM action_items WHERE deleted = 1")
+          try database.execute(sql: "DELETE FROM action_items WHERE deleted = 1 AND \(pendingClause)")
         }
         try authorization.require()
         return count
@@ -1118,6 +1198,53 @@ actor ActionItemStorage {
   }
 
   /// Hard-delete an action item by backend ID
+  /// Mark a synced task deleted locally while the backend delete is still in flight.
+  ///
+  /// The previous shape was a local hard delete plus a fire-and-forget backend call: one
+  /// network failure and nothing anywhere remembered the deletion, so the next cloud
+  /// hydration re-inserted the task. (450 of Nik's deleted tasks came back exactly this
+  /// way.) A deletion the server has not acknowledged must leave a tombstone —
+  /// `deleted = 1, backendSynced = 0` — that hydration refuses to overwrite and a retry
+  /// pass can flush later.
+  func markActionItemDeletedPendingBackendSync(
+    backendId: String,
+    deletedBy: String? = "user",
+    authorization: LocalMutationAuthorization
+  ) async throws {
+    try authorization.require()
+    let db = try await ensureInitialized()
+
+    try await authorization.withCommitLease {
+      try await db.write { database in
+        try authorization.require()
+        if var record = try Self.fetchRecord(database, surfacedId: backendId) {
+          record.deleted = true
+          record.deletedBy = deletedBy
+          record.backendSynced = false
+          record.updatedAt = Date()
+          try record.update(database)
+        }
+        try authorization.require()
+      }
+    }
+
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Tombstoned action item \(backendId) pending backend delete")
+  }
+
+  /// Backend IDs whose deletion the server has not yet acknowledged.
+  func getPendingBackendDeletionIds() async throws -> [String] {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      try ActionItemRecord
+        .filter(Column("deleted") == true)
+        .filter(Column("backendSynced") == false)
+        .filter(Column("backendId") != nil && Column("backendId") != "")
+        .fetchAll(database)
+        .compactMap { $0.backendId }
+    }
+  }
+
   func deleteActionItemByBackendId(
     _ backendId: String,
     deletedBy: String? = nil,

@@ -8,7 +8,7 @@ from firebase_admin import auth
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
 from utils.api_key_families import DEV_FAMILY, MCP_FAMILY, wrong_key_family_detail
-from utils.executors import critical_executor, run_blocking
+from utils.executors import critical_executor, db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs
 from utils.memory.product_authorization import ProductAuthorizationContext
@@ -17,32 +17,66 @@ from utils.mcp_memories import (
     build_mcp_default_memory_read_context,
     build_mcp_default_memory_write_context,
 )
-from utils.other.endpoints import check_api_key_rate_limit
+from utils.other import endpoints as auth_endpoints
 from utils.scopes import Scopes, has_scope
 
 logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer()
 
+check_api_key_rate_limit = auth_endpoints.check_api_key_rate_limit
+
+
+def enforce_account_deletion_http_access(uid: str) -> None:
+    """Keep transport enforcement behind a call-time module boundary."""
+    auth_endpoints.enforce_account_deletion_http_access(uid)
+
+
+async def _enforce_account_deletion_access(uid: str) -> None:
+    await run_blocking(db_executor, enforce_account_deletion_http_access, uid)
+
+
+def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:
+    """Apply cutover fencing when FastAPI injected a Request (MCP/API-key lanes)."""
+    if request is None or not auth_endpoints.cutover_enforcement_enabled():
+        return
+    auth_endpoints.enforce_account_cutover_http_access(
+        uid,
+        method=request.method,
+        path=request.url.path,
+        headers=request.headers,
+    )
+
+
+async def _enforce_cutover_access(uid: str, request: Request | None) -> None:
+    await run_blocking(db_executor, _enforce_cutover_http_if_request, uid, request)
+
 
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
 ) -> str:
     if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         id_token = credentials.credentials
         decoded_token = await run_blocking(critical_executor, auth.verify_id_token, id_token)
-        return decoded_token["uid"]
     except Exception as e:
         logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    uid = decoded_token["uid"]
+    await _enforce_account_deletion_access(uid)
+    await _enforce_cutover_access(uid, request)
+    return uid
 
 
 api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 
-async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> str:
+async def get_uid_from_mcp_api_key(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+) -> str:
     if not api_key or not api_key.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
@@ -53,12 +87,14 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
     mismatch = wrong_key_family_detail(token, MCP_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
-    auth_result = await run_blocking(critical_executor, mcp_api_key_db.get_api_key_auth_result, token)
+    auth_result = await run_blocking(db_executor, mcp_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
     user_id = user_data["user_id"]
+    await _enforce_account_deletion_access(user_id)
+    await _enforce_cutover_access(user_id, request)
     await _check_api_key_rate_limit_async(
         prefix="mcp",
         uid=user_id,
@@ -69,7 +105,10 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
     return user_id
 
 
-async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiKeyAuth":
+async def get_mcp_api_key_auth(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+) -> "ApiKeyAuth":
     """Extract uid plus persisted MCP app/key/scope context from an MCP API key.
 
     Existing uid-only MCP auth remains available through get_uid_from_mcp_api_key.
@@ -86,11 +125,14 @@ async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiK
     mismatch = wrong_key_family_detail(token, MCP_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
-    auth_result = await run_blocking(critical_executor, mcp_api_key_db.get_api_key_auth_result, token)
+    auth_result = await run_blocking(db_executor, mcp_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
+
+    await _enforce_account_deletion_access(user_data["user_id"])
+    await _enforce_cutover_access(user_data["user_id"], request)
 
     return ApiKeyAuth(
         uid=user_data["user_id"],
@@ -169,7 +211,10 @@ class ApiKeyAuth:
         self.key_id = key_id
 
 
-async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAuth:
+async def get_api_key_auth(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+) -> ApiKeyAuth:
     """Extract user ID and scopes from API key"""
     if not api_key or not api_key.startswith("Bearer "):
         raise HTTPException(
@@ -181,12 +226,15 @@ async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAut
     mismatch = wrong_key_family_detail(token, DEV_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
-    auth_result = await run_blocking(critical_executor, dev_api_key_db.get_api_key_auth_result, token)
+    auth_result = await run_blocking(db_executor, dev_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="dev", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
 
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
+
+    await _enforce_account_deletion_access(user_data["user_id"])
+    await _enforce_cutover_access(user_data["user_id"], request)
 
     return ApiKeyAuth(
         uid=user_data["user_id"],

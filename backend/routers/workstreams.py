@@ -21,7 +21,7 @@ from models.workstream import (
     WorkstreamEventCreate,
     WorkstreamUpdate,
 )
-from utils.other import endpoints as auth
+from routers.canonical_task_access import require_canonical_task_user
 from utils.task_intelligence.workstream_index import refresh_workstream_association_index
 
 router = APIRouter()
@@ -45,7 +45,7 @@ def resolve_work_intent(
     request: WorkIntentRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> WorkIntentReceipt:
     """Idempotent backend operation behind the “Work on this with Omi” affordance."""
 
@@ -65,7 +65,7 @@ def resolve_work_intent(
 @router.get('/v1/workstreams/{workstream_id}', tags=['tasks'], response_model=WorkstreamDetailProjection)
 def get_workstream_detail(
     workstream_id: str,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> WorkstreamDetailProjection:
     try:
         return workstreams_db.get_workstream_detail(uid, workstream_id)
@@ -79,7 +79,7 @@ def update_workstream(
     request: WorkstreamUpdate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> Workstream:
     try:
         workstream = workstreams_db.update_workstream(
@@ -101,7 +101,7 @@ def append_workstream_event(
     request: WorkstreamEventCreate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> WorkstreamEvent:
     try:
         return workstreams_db.append_workstream_event(
@@ -120,7 +120,7 @@ def list_workstream_events(
     workstream_id: str,
     after_sequence: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> list[WorkstreamEvent]:
     return workstreams_db.list_workstream_events(
         uid,
@@ -136,7 +136,7 @@ def create_artifact_descriptor(
     request: ArtifactDescriptorCreate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> ArtifactDescriptor:
     try:
         return workstreams_db.create_artifact_descriptor(
@@ -161,7 +161,7 @@ def transition_artifact_status(
     request: ArtifactStatusTransitionRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> ArtifactDescriptor:
     try:
         return workstreams_db.transition_artifact_status(
@@ -180,7 +180,7 @@ def transition_artifact_status(
 def list_artifact_descriptors(
     workstream_id: str,
     limit: int = Query(100, ge=1, le=500),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> list[ArtifactDescriptor]:
     return workstreams_db.list_artifact_descriptors(uid, workstream_id, limit=limit)
 
@@ -196,7 +196,7 @@ def upsert_continuation_checkpoint(
     request: ContinuationCheckpointUpsert,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> ContinuationCheckpoint:
     if request.runtime_id != runtime_id:
         raise HTTPException(status_code=422, detail='runtime_id path and body must match')
@@ -219,7 +219,7 @@ def upsert_continuation_checkpoint(
 )
 def list_continuation_checkpoints(
     workstream_id: str,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> list[ContinuationCheckpoint]:
     return workstreams_db.list_continuation_checkpoints(uid, workstream_id)
 
@@ -229,7 +229,7 @@ def import_task_goal_links(
     request: TaskGoalLinkImportRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> TaskGoalLinkImportReport:
     try:
         return workstreams_db.import_task_goal_links(

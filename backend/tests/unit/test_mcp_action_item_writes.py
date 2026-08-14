@@ -434,6 +434,20 @@ class TestSseDispatch:
             sse.execute_tool(UID, 'create_action_item', {'description': 'x', 'due_at': 'whenever'})
         assert ei.value.code == -32602
 
+    @pytest.mark.parametrize(
+        ('tool_name', 'arguments'),
+        [
+            ('create_action_item', {'description': {'text': 'Email Bob'}}),
+            ('create_action_item', {'description': 'Email Bob', 'due_at': ['2026-07-01']}),
+            ('search_action_items', {'query': {'text': 'Bob'}}),
+        ],
+    )
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_tool_rejects_non_string_text_arguments(self, _mock_db, tool_name, arguments):
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, tool_name, arguments)
+        assert ei.value.code == -32602
+
     @patch('utils.mcp_action_items.action_items_db')
     def test_tool_complete_requires_id(self, _mock_db):
         with pytest.raises(sse.ToolExecutionError) as ei:

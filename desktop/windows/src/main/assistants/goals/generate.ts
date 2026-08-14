@@ -33,18 +33,20 @@ const RETRY_DELAYS_MS = [2_000, 8_000]
 /** The assistant id under which the "New Goal" toast is throttled/logged. */
 export const GOALS_ASSISTANT_ID = 'goals'
 
-/** Carries the status only — never a response body (it can echo the prompt, which
+/** Carries typed response metadata only — never a response body (it can echo the prompt, which
  *  carries the user's memories/conversations). */
 export class GeminiHttpError extends Error {
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    readonly retryable: boolean
+  ) {
     super(`gemini proxy HTTP ${status}`)
     this.name = 'GeminiHttpError'
   }
 }
 
 function isTransient(e: unknown): boolean {
-  if (e instanceof GeminiHttpError) return e.status === 429 || e.status >= 500
-  return !(e instanceof Error && e.name === 'AbortError')
+  return e instanceof GeminiHttpError && e.retryable
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -124,7 +126,8 @@ async function attempt(
           signal
         }
       )
-      if (!res.ok) throw new GeminiHttpError(res.status)
+      if (!res.ok)
+        throw new GeminiHttpError(res.status, res.headers?.get?.('x-omi-retryable') === 'true')
       return extractText(await res.json())
     },
     external

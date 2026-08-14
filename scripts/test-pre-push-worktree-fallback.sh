@@ -17,8 +17,15 @@
 
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# This fixture itself runs as a selected pre-push check, so it may inherit the
+# hook's linked-worktree Git environment. Resolve from the invoking directory
+# when that context has a GIT_WORK_TREE without its matching GIT_DIR; the test
+# below installs the bare GIT_DIR reproduction explicitly.
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ROOT_CANON="$(cd "$ROOT" && pwd -P)"
+# The fixture creates and selects its own bare Git directory below. Do not let
+# a hook's partial linked-worktree environment leak into that reproduction.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
 TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-pre-push-wt.XXXXXX")"
 trap 'rm -rf "$TMPDIR"' EXIT
 

@@ -7,16 +7,57 @@ from pathlib import Path
 import runpy
 import shutil
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "validate_rendered_deployment_contract.py"
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def contracts() -> SimpleNamespace:
     """Load the standalone validator without importing or mutating sys.modules."""
     return SimpleNamespace(**runpy.run_path(str(SCRIPT)))
+
+
+@pytest.fixture(scope="module")
+def rendered_pusher_deployments(contracts: SimpleNamespace) -> tuple[SimpleNamespace, dict[str, dict]]:
+    """Render the two Pusher charts once, outside the fast-test call phase."""
+    helm = shutil.which("helm")
+    assert helm is not None, "helm must be installed for the rendered deployment contract"
+    contract = next(contract for contract in contracts.CONTRACTS if contract.service == "pusher")
+    deployments = {}
+    for environment in contracts.ENVIRONMENTS:
+        documents = contracts.render_chart(contract, environment, helm)
+        deployment = contracts.deployment_for(documents, contracts.release_name(contract, environment))
+        assert deployment is not None
+        deployments[environment] = deployment
+    return contract, deployments
+
+
+@pytest.fixture(scope="module")
+def untagged_chart_results(contracts: SimpleNamespace) -> list[tuple[str, str, Any]]:
+    """Run the intentionally broad Helm rejection matrix outside the call phase."""
+    helm = shutil.which("helm")
+    assert helm is not None, "helm must be installed for the rendered deployment contract"
+    results = []
+    for environment in contracts.ENVIRONMENTS:
+        for contract in contracts.CONTRACTS:
+            result = contracts.subprocess.run(
+                [
+                    helm,
+                    "template",
+                    contracts.release_name(contract, environment),
+                    str(contracts.chart_dir(contract)),
+                    "-f",
+                    str(contracts.values_file(contract, environment)),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            results.append((environment, contract.service, result))
+    return results
 
 
 def _deployment(contracts: SimpleNamespace, *, image: str | None = None) -> dict:
@@ -129,31 +170,22 @@ def test_repository_charts_render_the_full_contract_when_helm_is_available(contr
     assert contracts.validate_all_contracts(contracts.render_chart, helm) == []
 
 
-def test_dev_pusher_rollout_preserves_the_existing_replica(contracts: SimpleNamespace):
-    helm = shutil.which("helm")
-    assert helm is not None, "helm must be installed for the rendered deployment contract"
-    contract = next(contract for contract in contracts.CONTRACTS if contract.service == "pusher")
-    documents = contracts.render_chart(contract, "dev", helm)
-    deployment = contracts.deployment_for(documents, contracts.release_name(contract, "dev"))
-
-    assert deployment is not None
+def test_dev_pusher_rollout_preserves_the_existing_replica(
+    rendered_pusher_deployments: tuple[SimpleNamespace, dict[str, dict]],
+):
+    _, deployments = rendered_pusher_deployments
+    deployment = deployments["dev"]
     rolling_update = deployment["spec"]["strategy"]["rollingUpdate"]
     assert rolling_update["maxUnavailable"] == 0
     assert rolling_update["maxSurge"] == 1
 
 
-def test_pusher_dedicated_pool_toleration_is_dev_only(contracts: SimpleNamespace):
-    helm = shutil.which("helm")
-    assert helm is not None, "helm must be installed for the rendered deployment contract"
-    contract = next(contract for contract in contracts.CONTRACTS if contract.service == "pusher")
-
-    dev_documents = contracts.render_chart(contract, "dev", helm)
-    dev_deployment = contracts.deployment_for(dev_documents, contracts.release_name(contract, "dev"))
-    prod_documents = contracts.render_chart(contract, "prod", helm)
-    prod_deployment = contracts.deployment_for(prod_documents, contracts.release_name(contract, "prod"))
-
-    assert dev_deployment is not None
-    assert prod_deployment is not None
+def test_pusher_dedicated_pool_toleration_is_dev_only(
+    rendered_pusher_deployments: tuple[SimpleNamespace, dict[str, dict]],
+):
+    _, deployments = rendered_pusher_deployments
+    dev_deployment = deployments["dev"]
+    prod_deployment = deployments["prod"]
     assert dev_deployment["spec"]["template"]["spec"].get("tolerations") == [
         {"key": "dedicated", "operator": "Equal", "value": "pusher", "effect": "NoSchedule"}
     ]
@@ -161,28 +193,20 @@ def test_pusher_dedicated_pool_toleration_is_dev_only(contracts: SimpleNamespace
 
 
 @pytest.mark.parametrize("environment", ("dev", "prod"))
-def test_pusher_explicit_zero_min_ready_seconds_renders(contracts: SimpleNamespace, environment: str):
-    helm = shutil.which("helm")
-    assert helm is not None, "helm must be installed for the rendered deployment contract"
-    contract = next(contract for contract in contracts.CONTRACTS if contract.service == "pusher")
-
-    documents = contracts.render_chart(contract, environment, helm)
-    deployment = contracts.deployment_for(documents, contracts.release_name(contract, environment))
-
-    assert deployment is not None
+def test_pusher_explicit_zero_min_ready_seconds_renders(
+    rendered_pusher_deployments: tuple[SimpleNamespace, dict[str, dict]], environment: str
+):
+    _, deployments = rendered_pusher_deployments
+    deployment = deployments[environment]
     assert deployment["spec"]["minReadySeconds"] == 0
 
 
 @pytest.mark.parametrize("environment", ("dev", "prod"))
-def test_pusher_does_not_mount_kubernetes_api_credentials(contracts: SimpleNamespace, environment: str):
-    helm = shutil.which("helm")
-    assert helm is not None, "helm must be installed for the rendered deployment contract"
-    contract = next(contract for contract in contracts.CONTRACTS if contract.service == "pusher")
-
-    documents = contracts.render_chart(contract, environment, helm)
-    deployment = contracts.deployment_for(documents, contracts.release_name(contract, environment))
-
-    assert deployment is not None
+def test_pusher_does_not_mount_kubernetes_api_credentials(
+    rendered_pusher_deployments: tuple[SimpleNamespace, dict[str, dict]], environment: str
+):
+    _, deployments = rendered_pusher_deployments
+    deployment = deployments[environment]
     assert deployment["spec"]["template"]["spec"]["automountServiceAccountToken"] is False
     assert deployment["spec"]["template"]["spec"]["containers"][0]["securityContext"] == {
         "allowPrivilegeEscalation": False,
@@ -223,24 +247,9 @@ def test_pusher_rejects_a_missing_min_ready_seconds(contracts: SimpleNamespace, 
     assert "minReadySeconds is required" in result.stderr
 
 
-def test_first_party_charts_reject_missing_image_tag_when_helm_is_available(contracts: SimpleNamespace):
-    helm = shutil.which("helm")
-    assert helm is not None, "helm must be installed for the rendered deployment contract"
-
-    for environment in contracts.ENVIRONMENTS:
-        for contract in contracts.CONTRACTS:
-            result = contracts.subprocess.run(
-                [
-                    helm,
-                    "template",
-                    contracts.release_name(contract, environment),
-                    str(contracts.chart_dir(contract)),
-                    "-f",
-                    str(contracts.values_file(contract, environment)),
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            assert result.returncode != 0, f"{environment}/{contract.service} accepted an untagged image"
-            assert "image.tag is required" in result.stderr
+def test_first_party_charts_reject_missing_image_tag_when_helm_is_available(
+    untagged_chart_results: list[tuple[str, str, Any]],
+):
+    for environment, service, result in untagged_chart_results:
+        assert result.returncode != 0, f"{environment}/{service} accepted an untagged image"
+        assert "image.tag is required" in result.stderr

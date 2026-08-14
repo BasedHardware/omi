@@ -24,8 +24,10 @@ def clean_git_environment(env: dict[str, str]) -> dict[str, str]:
 class DesktopReleaseFlowContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.workflow = (ROOT / ".github/workflows/desktop_qualify_beta.yml").read_text(encoding="utf-8")
+        self.recovery = (ROOT / ".github/workflows/desktop_recover_beta.yml").read_text(encoding="utf-8")
         self.codemagic = (ROOT / "codemagic.yaml").read_text(encoding="utf-8")
         self.release_guard = (ROOT / ".github/scripts/check-release-process-guards.py").read_text(encoding="utf-8")
+        self.promotion = (ROOT / ".github/workflows/desktop_promote_beta.yml").read_text(encoding="utf-8")
 
     def _workflow_script(self, step_name: str) -> str:
         marker = f"      - name: {step_name}\n"
@@ -108,6 +110,25 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         self.assertNotIn("omi-desktop-qualification:", self.codemagic)
         self.assertNotIn("desktop_codemagic_qualification", self.workflow)
 
+    def test_codemagic_signs_the_runtime_node_at_the_swiftpm_bundle_path(self) -> None:
+        bundled_node = (
+            'NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/'
+            'Omi Computer_Omi Computer.bundle/Contents/Resources/node"'
+        )
+        self.assertIn(bundled_node, self.codemagic)
+        self.assertNotIn(
+            'NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"',
+            self.codemagic,
+        )
+
+    def test_codemagic_normalizes_the_swiftpm_node_before_signing(self) -> None:
+        self.assertIn("source scripts/launcher-bootstrap.sh", self.codemagic)
+        self.assertIn("omi_normalize_packaged_resource_bundle", self.codemagic)
+        self.assertIn(
+            '"$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"',
+            self.codemagic,
+        )
+
     def test_m1_qualification_binds_the_immutable_tag(self) -> None:
         for fragment in (
             'checkout --quiet --detach "refs/tags/$RELEASE_TAG"',
@@ -127,15 +148,76 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         for fragment in (
             "Verify live desktop-backend chat compatibility",
             '.chat_contract_version == "1"',
-            "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+            "https://api.omiapi.com/v1/health",
+            '.status == "ok"',
+            "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/health",
             "desktop-backend-compatibility.json",
+            "Prove production Firebase UID continuity on Beta development authorities",
+            "probe_beta_uid_continuity.py",
+            "beta-uid-continuity.json",
+            "FIREBASE_AUTH_PROJECT_ID: based-hardware",
+            "Checkout trusted qualification controls",
         ):
             self.assertIn(fragment, self.workflow)
         compatibility = self.workflow.index("Verify live desktop-backend chat compatibility")
         qualify = self.workflow.index("Qualify exact candidate on the M1 Studio hermetic stack")
         self.assertLess(compatibility, qualify)
 
+    def test_uid_continuity_probe_removes_the_signer_before_candidate_scripts(self) -> None:
+        probe = self._workflow_script("Prove production Firebase UID continuity on Beta development authorities")
+        for fragment in (
+            "umask 077",
+            'gha_application_credentials_file="${GOOGLE_APPLICATION_CREDENTIALS:?google-github-actions/auth did not provide credentials}"',
+            'gha_credentials_file="${GOOGLE_GHA_CREDS_PATH:-$gha_application_credentials_file}"',
+            "trap 'rm -f -- \"$gha_application_credentials_file\" \"$gha_credentials_file\" \"$signer_file\" \"$token_file\"' EXIT",
+            'rm -f -- "$signer_file"',
+            'rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"',
+            "unset GOOGLE_APPLICATION_CREDENTIALS GOOGLE_GHA_CREDS_PATH CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+            "unset FIREBASE_PROBE_SIGNER_B64",
+            "probe_beta_uid_continuity.py",
+        ):
+            self.assertIn(fragment, probe)
+        self.assertLess(probe.index("firebase_release_probe_token.py"), probe.rindex('rm -f -- "$signer_file"'))
+        self.assertLess(probe.rindex('rm -f -- "$signer_file"'), probe.index("probe_beta_uid_continuity.py"))
+        self.assertLess(
+            probe.index('rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"'),
+            probe.index("probe_beta_uid_continuity.py"),
+        )
+        self.assertLess(
+            self.workflow.index("Prove production Firebase UID continuity on Beta development authorities"),
+            self.workflow.index("Fetch candidate release inputs into this run only"),
+        )
+        self.assertIn(
+            "      - name: Prove production Firebase UID continuity on Beta development authorities\n"
+            "        working-directory: qualification-controls",
+            self.workflow,
+        )
+
+    def test_recovery_reuses_signed_candidate_promotion_without_qualification_inputs(self) -> None:
+        for fragment in (
+            "uses: ./.github/workflows/desktop_promote_beta.yml",
+            "signed-smoke evidence",
+        ):
+            self.assertIn(fragment, self.recovery)
+        self.assertNotIn("qualification_run_id", self.recovery)
+
+    def test_reusable_promotion_accepts_only_the_exact_candidate_tag(self) -> None:
+        self.assertIn("workflow_call:", self.promotion)
+        self.assertIn("/v2/desktop/beta/promote-candidate", self.promotion)
+        self.assertNotIn("workflow_run:", self.promotion)
+
+    def test_reusable_promotion_has_no_qualification_evidence_dependency(self) -> None:
+        self.assertNotIn("qualification_run_id", self.promotion)
+        self.assertNotIn("qualification-evidence.json", self.promotion)
+        self.assertNotIn("desktop_qualify_beta.yml", self.promotion)
+
     def test_release_process_guard_accepts_the_run_isolated_tag_checkout(self) -> None:
+        # omi-test-quality: source-inspection -- static tripwire: the guard's
+        # behavioral contract (it must reject a promotion that drops the
+        # trusted-repository gate) is executed in
+        # backend/tests/unit/test_desktop_release_scripts.py, which runs in
+        # the desktop-release-process-guards lane; this tripwire only catches
+        # the run-isolated checkout constant drifting out of the guard.
         tree = ast.parse(self.release_guard)
         guard = next(
             node
@@ -164,6 +246,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             "--max-reclaim-kib 134217728",
             "33554432",
             "desktop-qualification-evidence-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}",
+            "desktop-qualification-backend-compatibility-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}",
             "overwrite: false",
             "qualification-evidence-${TARGET_SHA}-${digest}.json",
         ):
@@ -238,7 +321,8 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             ).stdout.strip()
             self.assertEqual(checked_out_sha, candidate_sha)
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "must remain untouched\n")
-            self.assertNotIn("actions/checkout@", self.workflow)
+            candidate_checkout = self.workflow.split("      - name: Checkout trusted qualification controls", 1)[0]
+            self.assertNotIn("actions/checkout@", candidate_checkout)
 
             reused_result = self._run_workflow_script(
                 "Create run-isolated qualification staging",
@@ -358,10 +442,11 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             cleanup = json.loads((stage / "cleanup-evidence.json").read_text(encoding="utf-8"))
             self.assertEqual(cleanup, {"cleanup_status": "no-lease-acquired"})
 
-    def test_normal_codemagic_candidate_build_still_dispatches_m1_workflow(self) -> None:
+    def test_normal_codemagic_candidate_build_promotes_beta_without_qualification(self) -> None:
         self.assertIn("omi-desktop-swift-release:", self.codemagic)
-        self.assertIn("Dispatch trusted macOS beta qualification", self.codemagic)
-        self.assertIn("gh workflow run desktop_qualify_beta.yml", self.codemagic)
+        self.assertIn("Promote signed candidate to Omi Beta", self.codemagic)
+        self.assertIn("/v2/desktop/beta/promote-candidate", self.codemagic)
+        self.assertNotIn("gh workflow run desktop_qualify_beta.yml", self.codemagic)
 
 
 if __name__ == "__main__":

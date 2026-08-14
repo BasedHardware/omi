@@ -31,13 +31,6 @@ workflows:
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
         - $HOME/Library/Caches/CocoaPods
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
     when:
       changeset:
         includes:
@@ -253,13 +246,6 @@ workflows:
         - $HOME/opt
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
     when:
       changeset:
         includes:
@@ -1853,12 +1839,8 @@ workflows:
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
-  #   BETA_PROMOTION_TOKEN             — narrow backend capability for candidate reservation and qualified Beta promotion
-  #   GITHUB_TOKEN                    — repo-scoped fine-grained token used only to dispatch
-  #                                     desktop_qualify_beta.yml; requires GitHub Actions: write.
-  #                                     Add Contents: write only if this credential is also used for
-  #                                     candidate-release publishing. Do not reuse the legacy
-  #                                     appstore_credentials GH_TOKEN for qualification dispatch.
+  #   BETA_PROMOTION_TOKEN             — narrow backend capability for candidate reservation and signed Beta promotion
+  #   GITHUB_TOKEN                     — repo-scoped token used for immutable candidate-release publishing
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
   #
   # Cloud Run secrets (GCP Secret Manager, DESKTOP_ prefix to avoid conflicts with Python backend):
@@ -1907,6 +1889,11 @@ workflows:
     cache:
       cache_paths:
         - ~/Library/Caches/org.swift.swiftpm
+        # SwiftPM build products for both release triples. Without this every
+        # candidate cold-compiles the full dependency graph twice (~the largest
+        # single cost in the release wall-clock); SwiftPM's own fingerprinting
+        # invalidates stale objects, so reuse is safe.
+        - $CM_BUILD_DIR/desktop/macos/Desktop/.build
     scripts: &desktop_signed_artifact_steps
       - name: Resolve trusted source and build identity
         script: |
@@ -2042,24 +2029,6 @@ workflows:
         script: |
           scripts/prepare-agent-runtime.sh --universal-node
 
-      - name: Test desktop tool surfaces
-        script: |
-          cd agent
-          NODE_BIN=""
-          for candidate in ../Desktop/Sources/Resources/node "$(brew --prefix node@22 2>/dev/null)/bin/node" "$(command -v node)"; do
-            if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
-              NODE_BIN="$candidate"
-              break
-            fi
-          done
-          if [[ -z "$NODE_BIN" ]]; then
-            echo "ERROR: Node.js 22.6+ with --experimental-strip-types required" >&2
-            exit 1
-          fi
-          "$NODE_BIN" --experimental-strip-types scripts/generate-tool-surfaces.mjs --check
-          cd ..
-          scripts/test-tool-surfaces.sh
-
       - name: Prepare universal ffmpeg (arm64 + x86_64)
         script: |
           FFMPEG_RESOURCE="Desktop/Sources/Resources/ffmpeg"
@@ -2179,55 +2148,55 @@ workflows:
         script: |
           # Unset TOOLCHAINS to use Xcode's default toolchain
           unset TOOLCHAINS
+          # brew install is only for pkg-config/headers. Keep it off the
+          # compile step; overlap it with SPM resolve. The earlier
+          # "Prepare universal libwebp" step already built universal dylibs.
+          echo "Installing webp headers/pkg-config in parallel with SPM resolve..."
+          brew install webp &
+          brew_pid=$!
           echo "Resolving SPM packages (downloads ~673MB of binary artifacts on first run)..."
+          resolve_ok=0
           for attempt in 1 2 3; do
             if xcrun swift package resolve --package-path Desktop; then
               echo "  Packages resolved on attempt $attempt"
               echo "  Artifacts: $(ls Desktop/.build/artifacts/ 2>/dev/null | wc -l | tr -d ' ') cached items"
+              resolve_ok=1
               break
             fi
             echo "  Resolution failed on attempt $attempt"
             if [ $attempt -lt 3 ]; then
               echo "  Retrying in 15 seconds..."
               sleep 15
-            else
-              echo "ERROR: Package resolution failed after 3 attempts"
-              exit 1
             fi
           done
+          if [[ "$resolve_ok" -ne 1 ]]; then
+            echo "ERROR: Package resolution failed after 3 attempts"
+            if ! wait "$brew_pid"; then
+              echo "ERROR: brew install webp also failed"
+            fi
+            exit 1
+          fi
+          if ! wait "$brew_pid"; then
+            echo "ERROR: brew install webp failed"
+            exit 1
+          fi
 
-      - name: Build Swift app (arm64 + x86_64)
-        script: |
-          # Install libwebp (required for screenshot encoding)
-          brew install webp
-
-          # Homebrew's libwebp on Codemagic's Mac mini m2 is arm64-only as of
-          # 2026-05-10, which breaks Swift's x86_64 cross-compile link step:
-          #   ld: ignoring '/opt/homebrew/opt/webp/lib/libwebp.dylib': arm64 only
-          #   Undefined symbols for x86_64: _WebPEncodeRGBA, _WebPFree
-          # The earlier "Prepare universal libwebp" step builds universal dylibs
-          # at /tmp/libwebp-universal/. Overwrite Homebrew's arm64-only copies
-          # with those universal versions so pkg-config (used by Package.swift's
-          # CWebP system-lib target) resolves to a linker-compatible dylib for
-          # both archs.
+          # Homebrew's libwebp on Codemagic's Mac mini is arm64-only, which
+          # breaks Swift's x86_64 cross-compile link step. Overwrite those
+          # copies with the universal dylibs prepared earlier so pkg-config
+          # (used by Package.swift's CWebP system-lib target) is linker-safe.
           WEBP_LIB_DIR="$(brew --prefix webp)/lib"
           for dylib in libwebp.7.dylib libsharpyuv.0.dylib; do
             src="/tmp/libwebp-universal/$dylib"
             dst="$WEBP_LIB_DIR/$dylib"
             if [ ! -f "$src" ]; then
-              echo "WARN: universal $dylib missing at $src — skipping patch"
-              continue
+              echo "ERROR: universal $dylib missing at $src"
+              exit 1
             fi
             if [ ! -e "$dst" ]; then
-              echo "WARN: Homebrew $dylib not at $dst — skipping patch"
-              continue
+              echo "ERROR: Homebrew $dylib not at $dst"
+              exit 1
             fi
-            # Replace the symlink at this well-known path with the universal
-            # file. The underlying Cellar file (libwebp.7.x.y.dylib) is read-only
-            # so we can't overwrite it directly. pkg-config's `-L<dir> -lwebp`
-            # resolves to libwebp.dylib → libwebp.7.dylib → our universal file
-            # via the now-broken chain, which is fine: dyld only cares about the
-            # last hop being readable.
             rm -f "$dst"
             cp "$src" "$dst"
             file "$dst" | grep -q "universal binary" \
@@ -2235,6 +2204,8 @@ workflows:
               || { echo "ERROR: $dst is not universal after patch"; exit 1; }
           done
 
+      - name: Build Swift app (arm64 + x86_64)
+        script: |
           mkdir -p "$BUILD_DIR"
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
@@ -2358,6 +2329,12 @@ workflows:
           RESOURCE_BUNDLE="$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
           if [ -d "$RESOURCE_BUNDLE" ]; then
             cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
+            # SwiftPM emits Resources/node at the resource-bundle root. Keep
+            # Codemagic aligned with run.sh and the signed-artifact contract by
+            # moving it to the app-style nested resource path before signing.
+            source scripts/launcher-bootstrap.sh
+            omi_normalize_packaged_resource_bundle \
+              "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
           else
             echo "WARNING: SPM resource bundle not found (non-fatal)"
           fi
@@ -2372,10 +2349,6 @@ workflows:
               exit 1
             fi
             cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"
-            mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-            cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-            cp -f agent/src/runtime/node-tools.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-            cp -f agent/src/runtime/omi-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
           else
             echo "ERROR: agent/dist not found"
             exit 1
@@ -2469,7 +2442,7 @@ workflows:
           fi
 
           # Sign node with JIT entitlements (V8 requires MAP_JIT under Hardened Runtime)
-          NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+          NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
           if [ -f "$NODE_BUNDLE_PATH" ]; then
             codesign --force --options runtime --timestamp \
               --sign "$SIGN_IDENTITY" \
@@ -2565,140 +2538,7 @@ workflows:
         script: |
           scripts/audit-desktop-bundle-deps.sh "$APP_BUNDLE"
 
-      - name: Notarize app
-        script: |
-          set -e
-          TEMP_ZIP="$BUILD_DIR/notarize-temp.zip"
-          ditto -c -k --keepParent "$APP_BUNDLE" "$TEMP_ZIP"
-
-          mkdir -p ~/private_keys
-          PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
-          echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
-
-          RESULT=$(xcrun notarytool submit "$TEMP_ZIP" \
-            --key "$PRIVATE_KEY_PATH" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
-            --wait \
-            --output-format json)
-
-          STATUS=$(echo "$RESULT" | python3 -c \
-            "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
-          SUBMISSION_ID=$(echo "$RESULT" | python3 -c \
-            "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
-
-          if [ "$STATUS" != "Accepted" ]; then
-            echo "Notarization failed: $STATUS"
-            [ -n "$SUBMISSION_ID" ] && xcrun notarytool log "$SUBMISSION_ID" \
-              --key "$PRIVATE_KEY_PATH" \
-              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-              --issuer "$APP_STORE_CONNECT_ISSUER_ID"
-            exit 1
-          fi
-          rm -f "$TEMP_ZIP"
-          echo "App notarized"
-
-      - name: Staple app
-        script: |
-          xcrun stapler staple "$APP_BUNDLE"
-          echo "App stapled"
-
-      - name: Create DMG installer
-        script: |
-          set -euo pipefail
-          pip3 install --break-system-packages "dmgbuild==$DMGBUILD_VERSION"
-
-          STAGING_DIR="/tmp/omi-dmg-staging-$$"
-          mkdir -p "$STAGING_DIR"
-          # Use ditto to preserve the notarization staple ticket (cp -R drops it)
-          ditto "$APP_BUNDLE" "$STAGING_DIR/$APP_NAME.app"
-          # Re-staple in staging dir if needed
-          xcrun stapler validate "$STAGING_DIR/$APP_NAME.app" 2>/dev/null || \
-            xcrun stapler staple "$STAGING_DIR/$APP_NAME.app"
-
-          # Finder metadata is not signed application content and makes strict
-          # codesign verification fail after the app is copied out of the DMG.
-          # Remove only these forbidden metadata forks so the staple remains.
-          while IFS= read -r path; do
-            xattr -d com.apple.FinderInfo "$path" 2>/dev/null || true
-            xattr -d com.apple.ResourceFork "$path" 2>/dev/null || true
-          done < <(find "$STAGING_DIR/$APP_NAME.app" -print)
-          codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"
-          xcrun stapler validate "$STAGING_DIR/$APP_NAME.app"
-
-          # Use dmgbuild instead of create-dmg — writes .DS_Store directly
-          # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
-          dmgbuild -s dmg-assets/dmgbuild_settings.py \
-            -D app_path="$STAGING_DIR/$APP_NAME.app" \
-            -D app_name="$APP_NAME" \
-            -D assets_dir="$(pwd)/dmg-assets" \
-            "$APP_NAME" \
-            "$DMG_PATH"
-
-          rm -rf "$STAGING_DIR"
-          echo "DMG created"
-
-      - name: Sign, notarize, and staple DMG
-        script: |
-          set -e
-          codesign --force --sign "$SIGN_IDENTITY" "$DMG_PATH"
-
-          mkdir -p ~/private_keys
-          PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
-          echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
-
-          RESULT=$(xcrun notarytool submit "$DMG_PATH" \
-            --key "$PRIVATE_KEY_PATH" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
-            --wait \
-            --output-format json)
-
-          STATUS=$(echo "$RESULT" | python3 -c \
-            "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
-          SUBMISSION_ID=$(echo "$RESULT" | python3 -c \
-            "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
-
-          if [ "$STATUS" != "Accepted" ]; then
-            echo "DMG notarization failed: $STATUS"
-            [ -n "$SUBMISSION_ID" ] && xcrun notarytool log "$SUBMISSION_ID" \
-              --key "$PRIVATE_KEY_PATH" \
-              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-              --issuer "$APP_STORE_CONNECT_ISSUER_ID"
-            exit 1
-          fi
-
-          xcrun stapler staple "$DMG_PATH"
-          echo "DMG signed, notarized, and stapled"
-
-      - name: Create Sparkle ZIP and sign
-        script: |
-          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
-            echo "External previews do not participate in the shared Sparkle feed."
-            exit 0
-          fi
-          # Sparkle expects a ZIP of .app — not a DMG
-          ditto -c -k --keepParent "$APP_BUNDLE" "$SPARKLE_ZIP_PATH"
-
-          SPARKLE_BIN="Desktop/.build/artifacts/sparkle/Sparkle/bin"
-          ED_SIGNATURE=""
-          if [ -d "$SPARKLE_BIN" ] && [ -f "$SPARKLE_BIN/sign_update" ]; then
-            if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
-              ED_SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | \
-                "$SPARKLE_BIN/sign_update" "$SPARKLE_ZIP_PATH" --ed-key-file - 2>/dev/null | \
-                grep "sparkle:edSignature" | \
-                sed 's/.*edSignature="\([^"]*\)".*/\1/')
-            fi
-          fi
-
-          if [ -z "$ED_SIGNATURE" ]; then
-            echo "ERROR: Could not generate EdDSA signature — Sparkle auto-update will not work"
-            exit 1
-          fi
-          echo "EdDSA signature: $ED_SIGNATURE"
-          echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
-
-      - name: Create Omi Beta variant (sign, notarize, package)
+      - name: Prepare Omi Beta identity
         script: |
           if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
             echo "External previews do not ship an Omi Beta variant."
@@ -2706,12 +2546,80 @@ workflows:
           fi
           set -euo pipefail
           scripts/create-omi-beta-variant.sh \
+            --phase prepare \
             --source-app "$APP_BUNDLE" \
             --build-dir "$BUILD_DIR" \
             --beta-app-name "$BETA_APP_NAME" \
-            --beta-bundle-id "$BETA_BUNDLE_ID" \
+            --beta-bundle-id "$BETA_BUNDLE_ID"
+
+      - name: Notarize stable and Beta apps concurrently
+        script: |
+          set -euo pipefail
+          NOTARIZE_ARGS=(
+            --kind app
+            --work-dir "$BUILD_DIR/notarization"
+            --artifact stable "$APP_BUNDLE"
+          )
+          if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
+            NOTARIZE_ARGS+=(--artifact beta "$BUILD_DIR/$BETA_APP_NAME.app")
+          fi
+          scripts/notarize-desktop-artifacts.sh "${NOTARIZE_ARGS[@]}"
+
+      - name: Create stable and Beta DMGs concurrently
+        script: |
+          set -euo pipefail
+          pip3 install --break-system-packages "dmgbuild==$DMGBUILD_VERSION"
+          DMG_ARGS=(
+            --work-dir "$BUILD_DIR/dmg-packaging"
+            --dmg stable "$APP_BUNDLE" "$APP_NAME" "$DMG_PATH"
+          )
+          if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
+            DMG_ARGS+=(--dmg beta "$BUILD_DIR/$BETA_APP_NAME.app" "$BETA_APP_NAME" "$BETA_DMG_PATH")
+          fi
+          scripts/create-desktop-dmgs.sh "${DMG_ARGS[@]}"
+
+      - name: Notarize stable and Beta DMGs concurrently
+        script: |
+          set -euo pipefail
+          NOTARIZE_ARGS=(
+            --kind dmg
+            --work-dir "$BUILD_DIR/notarization"
+            --artifact stable "$DMG_PATH"
+          )
+          if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
+            NOTARIZE_ARGS+=(--artifact beta "$BETA_DMG_PATH")
+          fi
+          scripts/notarize-desktop-artifacts.sh "${NOTARIZE_ARGS[@]}"
+
+      - name: Create stable and Beta Sparkle archives
+        script: |
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            echo "External previews do not participate in the shared Sparkle feed."
+            exit 0
+          fi
+          set -euo pipefail
+          # Sparkle expects a ZIP of .app — not a DMG.
+          ditto -c -k --keepParent "$APP_BUNDLE" "$SPARKLE_ZIP_PATH"
+
+          SPARKLE_BIN="Desktop/.build/artifacts/sparkle/Sparkle/bin"
+          ED_SIGNATURE=""
+          if [[ -f "$SPARKLE_BIN/sign_update" && -n "$SPARKLE_PRIVATE_KEY" ]]; then
+            ED_SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | \
+              "$SPARKLE_BIN/sign_update" "$SPARKLE_ZIP_PATH" --ed-key-file - 2>/dev/null | \
+              grep "sparkle:edSignature" | \
+              sed 's/.*edSignature="\([^"]*\)".*/\1/')
+          fi
+          if [ -z "$ED_SIGNATURE" ]; then
+            echo "ERROR: Could not generate EdDSA signature — Sparkle auto-update will not work" >&2
+            exit 1
+          fi
+          echo "ED_SIGNATURE=$ED_SIGNATURE" >> "$CM_ENV"
+
+          scripts/create-omi-beta-variant.sh \
+            --phase sparkle \
+            --build-dir "$BUILD_DIR" \
+            --beta-app-name "$BETA_APP_NAME" \
             --sparkle-zip-out "$BETA_SPARKLE_ZIP_PATH" \
-            --dmg-out "$BETA_DMG_PATH" \
             --cm-env "$CM_ENV"
 
       - name: Smoke signed desktop artifact
@@ -2728,7 +2636,6 @@ workflows:
               --preview \
               --result-json "$BUILD_DIR/desktop-smoke-result.json"
           else
-            OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
             scripts/smoke-signed-desktop-artifact.sh \
               --app "$APP_BUNDLE" \
               --zip "$SPARKLE_ZIP_PATH" \
@@ -2736,28 +2643,36 @@ workflows:
               --tag "$CM_TAG" \
               --source-sha "$(git rev-parse HEAD)" \
               --expected-channel beta \
-              --launch \
-              --auth-storage-canary \
-              --notification-callback-canary \
               --result-json "$BUILD_DIR/desktop-smoke-result.json"
-
-            # The Omi Beta variant is what beta users actually install — smoke the
-            # exact signed artifacts under the beta identity as well.
-            OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
-            scripts/smoke-signed-desktop-artifact.sh \
-              --app "$BUILD_DIR/$BETA_APP_NAME.app" \
-              --zip "$BETA_SPARKLE_ZIP_PATH" \
-              --dmg "$BETA_DMG_PATH" \
-              --tag "$CM_TAG" \
-              --source-sha "$(git rev-parse HEAD)" \
-              --expected-channel beta \
-              --expected-bundle-id "$BETA_BUNDLE_ID" \
-              --expected-feed-url "https://api.omi.me/v2/desktop/appcast.xml?identity=beta" \
-              --launch \
-              --auth-storage-canary \
-              --notification-callback-canary \
-              --result-json "$BUILD_DIR/desktop-smoke-result-beta.json"
           fi
+
+      # Keep the installable Beta identity in a distinct provider step. A failed
+      # build must reveal which signed identity failed even when the operator can
+      # see only the mirrored GitHub check summary, not private Codemagic logs.
+      - name: Smoke signed desktop beta artifact
+        script: |
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            echo "External previews do not produce the Omi Beta identity."
+            exit 0
+          fi
+          set -euo pipefail
+          OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
+          scripts/smoke-signed-desktop-artifact.sh \
+            --app "$BUILD_DIR/$BETA_APP_NAME.app" \
+            --zip "$BETA_SPARKLE_ZIP_PATH" \
+            --dmg "$BETA_DMG_PATH" \
+            --tag "$CM_TAG" \
+            --source-sha "$(git rev-parse HEAD)" \
+            --expected-channel beta \
+            --expected-bundle-id "$BETA_BUNDLE_ID" \
+            --expected-feed-url "https://api.omi.me/v2/desktop/appcast.xml?identity=beta" \
+            --expected-python-api-url "https://api.omiapi.com/" \
+            --expected-desktop-api-url "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/" \
+            --launch \
+            --auth-storage-canary \
+            --notification-callback-canary \
+            --timeout 90 \
+            --result-json "$BUILD_DIR/desktop-smoke-result-beta.json"
 
       - name: Publish immutable external preview
         script: |
@@ -2866,9 +2781,8 @@ workflows:
           changelog: ${CHANGELOG_PIPE}
           KEY_VALUE_END -->"
 
-          # A candidate is the evidence container. Once published, preserve its
-          # signed artifacts and every qualification observation; retries only
-          # resume the dispatch handoff below.
+          # A candidate is the immutable evidence container. Once published,
+          # preserve its signed artifacts; retries resume Beta promotion below.
           if gh release view "$CM_TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
             echo "GitHub release candidate already exists; preserving immutable evidence for $CM_TAG"
           else
@@ -2899,31 +2813,34 @@ workflows:
             echo "GitHub release candidate created: $CM_TAG"
           fi
 
-      - name: Dispatch trusted macOS beta qualification
+      - name: Promote signed candidate to Omi Beta
         script: |
           if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
-            echo "External previews do not enter beta or stable qualification."
+            echo "External previews do not enter the shared Beta channel."
             exit 0
           fi
           set -euo pipefail
-          # Per-tag GitHub concurrency and immutable qualification evidence own
-          # duplicate dispatches; this bounded retry only handles dispatch I/O.
-          # Codemagic also loads appstore_credentials, whose legacy GH_TOKEN
-          # takes precedence over GITHUB_TOKEN in the GitHub CLI. Bind this
-          # handoff explicitly to the desktop_secrets token that is scoped for
-          # candidate-release and Actions-dispatch access.
+          test -n "${BETA_PROMOTION_TOKEN:-}" || {
+            echo "ERROR: BETA_PROMOTION_TOKEN is required to promote the signed candidate" >&2
+            exit 1
+          }
+          # The endpoint independently reads the immutable release, tag, GitHub
+          # digests, and exact Beta signed-smoke asset. Retries are idempotent.
           for attempt in 1 2 3; do
-            if GH_TOKEN="${GITHUB_TOKEN:?desktop_secrets GITHUB_TOKEN is required for qualification dispatch}" \
-              gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
-              -f release_tag="$CM_TAG" --ref "$CM_TAG"; then
-              echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
+            if curl --fail-with-body --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              --request POST "${OMI_PYTHON_API_URL%/}/v2/desktop/beta/promote-candidate" \
+              --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data "{\"tag\":\"${CM_TAG}\"}"; then
+              echo "Omi Beta now points to $CM_TAG."
               exit 0
             fi
             if [[ "$attempt" -lt 3 ]]; then
               sleep "$((attempt * 2))"
             fi
           done
-          echo "ERROR: qualification dispatch was not confirmed after bounded retry; candidate remains non-live." >&2
+          echo "ERROR: Beta promotion was not confirmed after bounded retry; candidate remains non-live." >&2
           exit 1
 
     artifacts:
@@ -2932,6 +2849,7 @@ workflows:
       - build/*.zip
       - build/*.dSYM
       - build/desktop-smoke-result.json
+      - build/desktop-smoke-result-beta.json
     publishing:
       email:
         recipients:

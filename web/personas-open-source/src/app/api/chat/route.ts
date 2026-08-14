@@ -7,6 +7,7 @@ import {
   requestPersonaChatStream,
   resolvePersonaIdentity,
 } from '@/lib/server/persona-chat-gateway.mjs';
+import { buildPersonaSystemPrompt } from '@/lib/server/persona-chat-prompt.mjs';
 
 export async function POST(req: Request) {
   try {
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Persona not found' }, { status: 404 });
 
     const formattedMessages = [
-      { role: 'system', content: chatPrompt },
+      { role: 'system', content: buildPersonaSystemPrompt(chatPrompt) },
       ...(Array.isArray(conversationHistory) ? conversationHistory : [])
         .filter(
           (msg: unknown): msg is { sender: string; text: string } =>

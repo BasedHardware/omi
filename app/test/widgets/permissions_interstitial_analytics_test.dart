@@ -20,16 +20,15 @@ void main() {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      permissionsChannel,
-      (call) async {
-        if (call.method == 'checkServiceStatus') return 0;
-        if (call.method == 'requestPermissions') {
-          return {for (final permission in call.arguments as List<dynamic>) permission: 0};
-        }
-        return null;
-      },
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(permissionsChannel, (
+      call,
+    ) async {
+      if (call.method == 'checkServiceStatus') return 0;
+      if (call.method == 'requestPermissions') {
+        return {for (final permission in call.arguments as List<dynamic>) permission: 0};
+      }
+      return null;
+    });
   });
 
   tearDown(() {
@@ -68,23 +67,17 @@ void main() {
     await tester.idle();
     await AnalyticsManager.flushPending(force: true);
 
-    expect(
-      analytics.events,
-      ['Permissions Interstitial Shown', 'Permissions Interstitial Completed'],
-    );
+    expect(analytics.events, ['Permissions Interstitial Shown', 'Permissions Interstitial Completed']);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(app());
     await AnalyticsManager.flushPending(force: true);
 
-    expect(
-      analytics.events,
-      [
-        'Permissions Interstitial Shown',
-        'Permissions Interstitial Completed',
-        'Permissions Interstitial Shown',
-      ],
-    );
+    expect(analytics.events, [
+      'Permissions Interstitial Shown',
+      'Permissions Interstitial Completed',
+      'Permissions Interstitial Shown',
+    ]);
   });
 }
 

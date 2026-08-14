@@ -5,6 +5,7 @@ description: Cursor-free smoke flow for the Omi desktop experience harness.
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopAutomationWindowPresentation.swift
   - desktop/macos/Desktop/Sources/BrowserAutomationTarget.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Environment.swift
   - desktop/macos/Desktop/Sources/AppBuild.swift
@@ -43,6 +44,15 @@ preconditions:
   - automation_bridge_ready
 
 steps:
+  - id: S0
+    name: Park automation UI without taking the desktop
+    bridge.action:
+      name: set_automation_ui_presentation
+      params:
+        mode: quiet
+    expect:
+      result.detail.mode: quiet
+
   - id: S1
     name: Navigate to Dashboard
     bridge.navigate:

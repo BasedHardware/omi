@@ -9,16 +9,37 @@ import pytest
 from pydantic import ValidationError
 
 from models.memory_promotion import (
+    GraphRelationEndpoint,
     PROMOTION_GRAPH_ARGUMENT_KEY_MAX_LENGTH,
     PROMOTION_GRAPH_ARGUMENT_MAX_COUNT,
     PROMOTION_GRAPH_ARGUMENTS_MAX_DEPTH,
     PROMOTION_GRAPH_ARGUMENTS_MAX_JSON_BYTES,
     PROMOTION_GRAPH_PREDICATE_MAX_LENGTH,
     PROMOTION_GRAPH_SUBJECT_MAX_LENGTH,
+    PROMOTION_GRAPH_PLAN_V2_VERSION,
     PromotionGraphPlan,
     build_promotion_admission_receipt,
     valid_promotion_admission,
 )
+
+
+def test_typed_graph_endpoint_rejects_unknown_desktop_node_type():
+    with pytest.raises(ValidationError, match="node_type"):
+        GraphRelationEndpoint(label="Omi", node_type="account")
+
+
+def test_v2_graph_plan_rejects_self_loops_by_canonical_endpoint_id():
+    subject = GraphRelationEndpoint(label="Omi", node_type="thing")
+    object_endpoint = GraphRelationEndpoint(label="Omi", node_type="thing")
+    with pytest.raises(ValidationError, match="self-loops"):
+        PromotionGraphPlan(
+            schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,
+            subject_entity_id=subject.entity_id,
+            predicate="depends_on",
+            subject=subject,
+            object=object_endpoint,
+            qualifiers={},
+        )
 
 
 def _plan(**overrides):

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-already-satisfied-request-as-noop",
+  "violated_contract": "A request to establish a session must still deliver the observation its requester depends on when the target is already in the desired state. A native owner that outlives its client — a foreground service holding a BLE link across a Flutter engine restart — makes \"already satisfied\" the ordinary case, and answering it with a bare early return strands the client projection with no path back to the truth.",
+  "canonical_prevention": "Route every establish request through one policy that separates not-established, already-established, and in-progress, and make the already-established branch re-emit the readiness event the client consumes instead of returning. Prove the policy through its own seam rather than by driving the platform service.",
+  "canonical_prevention_artifact": [
+    "app/android/app/src/main/kotlin/com/friend/ios/ble/BleConnectRouter.kt",
+    "app/android/app/src/test/kotlin/com/friend/ios/ble/BleConnectRouterTest.kt"
+  ],
+  "evidence_prs": [6987],
+  "scope_hints": [
+    "app/android/app/src/main/kotlin/com/friend/ios/ble/**",
+    "app/lib/services/devices/transports/**"
+  ],
+  "status": "open"
+}

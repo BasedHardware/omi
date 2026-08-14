@@ -40,6 +40,10 @@ on:
         description: 'Optional explicit version to tag (for example, 1.2.0)'
         required: false
         type: string
+      bypass_update_feed_probe_reason:
+        description: 'Emergency only: supply a tracking-issue URL or reason AND the literal phrase I ACKNOWLEDGE THE ROUTE IS REQUIRED to skip the probe. Empty or any other text = probe runs.'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -67,6 +71,35 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      # Windows clients since #10610 fail closed without this production route.
+      # Probe BOTH channels that real clients can request: beta (opt-in) and
+      # stable (the default for fresh installs and un-toggled settings). The
+      # backend never falls stable through to beta, so a beta-only probe passing
+      # while stable 404s would still ship a broken default cohort.
+      #
+      # Break-glass: the probe is skipped only when the dispatcher supplies the
+      # literal confirmation sentinel "I ACKNOWLEDGE THE ROUTE IS REQUIRED" plus a
+      # tracking-issue/reason. An empty or arbitrary value still runs the probe.
+      # The sentinel is checked through an env var (not direct interpolation) so
+      # operator-supplied reason text is treated as data, not shell syntax.
+      - name: Probe production Windows update-feed (beta + stable)
+        if: ${{ !contains(github.event.inputs.bypass_update_feed_probe_reason, 'I ACKNOWLEDGE THE ROUTE IS REQUIRED') }}
+        shell: bash
+        run: |
+          python3 .github/scripts/probe_windows_update_feed.py \
+            --channel beta \
+            --channel stable
+
+      - name: Probe bypassed (audited emergency release)
+        if: ${{ contains(github.event.inputs.bypass_update_feed_probe_reason, 'I ACKNOWLEDGE THE ROUTE IS REQUIRED') }}
+        shell: bash
+        env:
+          BYPASS_REASON: ${{ github.event.inputs.bypass_update_feed_probe_reason }}
+        run: |
+          echo "::warning::Windows update-feed probe BYPASSED."
+          printf 'Reason: %s\n' "$BYPASS_REASON"
+          echo "This is recorded for audit. The route deploy (#10610) is still required."
 
       - name: Plan release (compute next version, tag, sync back to main)
         id: plan
@@ -190,6 +223,23 @@ jobs:
         with:
           ref: ${{ needs.plan-and-tag.outputs.release_tag }}
 
+      # Re-probe at publish time: if build-and-publish is retried (re-run failed
+      # jobs), GitHub Actions reuses the cached plan-and-tag outputs and does not
+      # re-execute the probe that ran there. Re-validate the route now so a
+      # backend rollback between tagging and publishing cannot mint a broken cohort.
+      - name: Setup Python for re-probe
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Re-probe production Windows update-feed before publish
+        if: ${{ !contains(github.event.inputs.bypass_update_feed_probe_reason, 'I ACKNOWLEDGE THE ROUTE IS REQUIRED') }}
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          python .github/scripts/probe_windows_update_feed.py \
+            --channel beta \
+            --channel stable
+
       - uses: pnpm/action-setup@v6
         with:
           version: 10
@@ -308,7 +358,7 @@ jobs:
 
           ${SIGN_NOTE}
 
-          Install: download and run the \`.exe\`. Installed apps auto-update from stable releases."
+          Install: download and run the \`.exe\`. Installed apps auto-update through \`/v2/desktop/update-feed/windows\` (beta when Settings → Receive beta updates is on; otherwise stable)."
 
           # Create the release if the plan job did not (idempotent on re-run).
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then

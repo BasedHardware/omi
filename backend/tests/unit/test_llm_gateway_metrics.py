@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from llm_gateway.gateway import metrics
+from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.errors import GatewayProviderRequestRejectedError
 from llm_gateway.gateway.schemas import ProviderRejection
 
@@ -18,14 +19,23 @@ class _MetricChild:
     def observe(self, value):
         self.parent.observations.append((self.labels, value))
 
+    def set(self, value):
+        self.parent.values.append((self.labels, value))
+
 
 class _Metric:
     def __init__(self):
         self.increments: list[dict[str, str]] = []
         self.observations: list[tuple[dict[str, str], float]] = []
+        self.values: list[tuple[dict[str, str], float]] = []
 
     def labels(self, **labels):
         return _MetricChild(self, labels)
+
+    def clear(self):
+        self.increments.clear()
+        self.observations.clear()
+        self.values.clear()
 
 
 def test_stream_terminal_metric_exposes_bounded_surface_phase_and_byok_source(monkeypatch):
@@ -63,6 +73,7 @@ def test_stream_terminal_metric_exposes_bounded_surface_phase_and_byok_source(mo
     assert labels['api_surface'] == 'anthropic_messages'
     assert labels['streaming'] == 'true'
     assert labels['phase'] == 'midstream'
+    assert labels['route_serving_class'] == 'active'
     assert labels['credential_source'] == 'service_forwarded_byok'
     assert labels['budget_source'] == 'route_default'
     assert labels['output_budget'] == 'le_128'
@@ -125,9 +136,36 @@ def test_terminal_errors_are_warning_logs_with_only_bounded_failure_fields(monke
         'surface=openai_chat_completions streaming=false phase=before_output '
         'lane=omi:auto:conv-structure route=route.conv_structure.model_config.001 '
         'provider=none model=none credential_source=service_forwarded_byok outcome=error '
-        'error_class=credential_failure failure_class=byok_auth fallback_used=false provider_rejection=none '
+        'error_class=credential_failure route_serving_class=active failure_class=byok_auth '
+        'fallback_used=false fallback_from=none fallback_to=none provider_rejection=none '
         'budget_source=none output_budget=none completion_size=unknown finish_reason=unknown ttfb_seconds=none'
     ]
+
+
+def test_config_info_separates_immutable_build_and_bounded_route_identity(monkeypatch):
+    info = _Metric()
+    monkeypatch.setattr(metrics, 'GATEWAY_CONFIG_INFO', info)
+
+    config = load_gateway_config(prod_mode=True)
+    metrics.observe_gateway_config_identity(config, build_identity='deadbee')
+
+    assert len(info.values) == len(config.lanes) * 2
+    for labels, value in info.values:
+        assert value == 1
+        assert labels['build_identity'] == 'deadbee'
+        assert labels['route_role'] in {'active', 'lkg'}
+        assert labels['route_artifact_id'].startswith('route.')
+        assert labels['artifact_digest'].startswith('sha256:')
+        assert set(labels) == {
+            'build_identity',
+            'lane_id',
+            'route_role',
+            'route_artifact_id',
+            'artifact_digest',
+        }
+
+    metrics.observe_gateway_config_identity(config, build_identity='customer/request/secret')
+    assert {labels['build_identity'] for labels, _ in info.values} == {'unknown'}
 
 
 def test_provider_rejection_terminal_identifies_route_target_and_bounds_rejection(monkeypatch, caplog):

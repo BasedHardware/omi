@@ -44,6 +44,18 @@ describe("desktop tool policy", () => {
     expect(result.decision).toBe("dispatch_required");
   });
 
+  it("classifies create_memory as an approved coordinator write", () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: "create_memory",
+      selectedBundles: ["desktop.memories.write"],
+      userExplicitMutation: true,
+    });
+
+    expect(result.requiredBundles).toEqual(["desktop.memories.write"]);
+    expect(result.decision).toBe("dispatch_required");
+    expect(result.descriptor.readOnly).toBe(false);
+  });
+
   it("requires dispatch for external sends and denies unselected bundles", () => {
     expect(
       evaluateDesktopToolPolicy({

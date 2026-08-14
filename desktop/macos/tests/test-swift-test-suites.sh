@@ -17,6 +17,8 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$TMPDIR/tests" "$TMPDIR/bin"
+mkdir -p "$TMPDIR/package/.build/debug"
+touch "$TMPDIR/package/.build/debug/test-bundle-placeholder"
 cat >"$TMPDIR/tests/AlphaTests.swift" <<'SWIFT'
 import XCTest
 final class AlphaTests: XCTestCase {
@@ -55,6 +57,27 @@ final class PiMonoWiringTests: XCTestCase {
     func testLocalAgentProviderDetectorMissingPromptIsUserFacing() {}
 }
 SWIFT
+cat >"$TMPDIR/tests/AuthRefreshResilienceTests.swift" <<'SWIFT'
+import XCTest
+final class AuthRefreshResilienceTests: XCTestCase {
+    func testOne() {}
+}
+SWIFT
+cat >"$TMPDIR/tests/AuthTokenStorageTests.swift" <<'SWIFT'
+import XCTest
+final class AuthTokenStorageTests: XCTestCase {
+    func testOne() {}
+}
+SWIFT
+# Never listed in OMI_SWIFT_TEST_SERIAL_SUITES below: the runner must derive its
+# sequential membership from the owner-authority fixture it drives.
+cat >"$TMPDIR/tests/OwnerAuthorityAdopterTests.swift" <<'SWIFT'
+import XCTest
+final class OwnerAuthorityAdopterTests: XCTestCase {
+    private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
+    func testOne() {}
+}
+SWIFT
 
 cat >"$TMPDIR/bin/xcrun" <<'SH'
 #!/usr/bin/env bash
@@ -72,7 +95,23 @@ for arg in "$@"; do
 done
 suite="${filter%/}"
 
+scratch_path=""
+previous=""
+for arg in "$@"; do
+  if [ "$previous" = "--scratch-path" ]; then
+    scratch_path="$arg"
+    break
+  fi
+  previous="$arg"
+done
+
 if [[ "$*" == *"swift test"* ]]; then
+  if [ -z "$scratch_path" ]; then
+    echo "suite missing isolated scratch path" >&2
+    exit 64
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\n' "$suite" "$scratch_path" "$HOME" "$CFFIXED_USER_HOME" "$TMPDIR" \
+    >>"$FAKE_XCRUN_SCRATCH_LOG"
   active_dir="$FAKE_XCRUN_SYNC_DIR/active"
   mkdir -p "$active_dir"
   active_marker="$active_dir/$$"
@@ -83,6 +122,11 @@ if [[ "$*" == *"swift test"* ]]; then
   # Do not rendezvous on specific suite names: xargs -P 2 starts the first two
   # suites alphabetically, which are not guaranteed to be AlphaTests/BetaTests.
   active_count="$(find "$active_dir" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+  if [[ "$suite" == AuthRefreshResilienceTests || "$suite" == AuthTokenStorageTests \
+    || "$suite" == OwnerAuthorityAdopterTests ]] \
+    && [ "$active_count" -ge 2 ]; then
+    touch "$FAKE_XCRUN_SYNC_DIR/serial-overlap"
+  fi
   if [ "$active_count" -ge 2 ]; then
     touch "$FAKE_XCRUN_SYNC_DIR/overlap-proven"
   fi
@@ -118,10 +162,12 @@ chmod +x "$TMPDIR/bin/xcrun"
 
 export PATH="$TMPDIR/bin:$PATH"
 export FAKE_XCRUN_LOG="$TMPDIR/xcrun.log"
+export FAKE_XCRUN_SCRATCH_LOG="$TMPDIR/xcrun-scratch.log"
 export FAKE_XCRUN_SYNC_DIR="$TMPDIR/xcrun-sync"
 export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/tests"
 export OMI_SWIFT_TEST_PACKAGE_PATH="$TMPDIR/package"
 export OMI_SWIFT_TEST_SUITE_WORKERS=2
+export OMI_SWIFT_TEST_SERIAL_SUITES="AuthRefreshResilienceTests AuthTokenStorageTests"
 mkdir -p "$FAKE_XCRUN_SYNC_DIR"
 
 if "$RUNNER" >"$TMPDIR/runner.out" 2>"$TMPDIR/runner.err"; then
@@ -137,11 +183,35 @@ fi
 if ! grep -q "alpha failed" "$TMPDIR/runner.out"; then
   fail "runner did not preserve the failed suite log"
 fi
-if ! grep -q "Ran 6 Swift suites in isolation with 2 worker(s)." "$TMPDIR/runner.out"; then
+if ! grep -q "Ran 9 Swift suites in isolation with 2 worker(s)." "$TMPDIR/runner.out"; then
   fail "runner did not report suite count and worker count"
 fi
+if [ -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap" ]; then
+  fail "shared-auth-domain suites overlapped another suite"
+fi
+derived_serial_scratch="$(awk -F '\t' '$1 == "OwnerAuthorityAdopterTests" {print $2}' \
+  "$FAKE_XCRUN_SCRATCH_LOG")"
+if [ -z "$derived_serial_scratch" ]; then
+  fail "runner did not execute the owner-authority fixture suite"
+fi
+case "$derived_serial_scratch" in
+  */serial-*.build) ;;
+  *) fail "runner did not derive sequential execution from the owner-authority fixture" ;;
+esac
 if ! grep -q -- "--skip ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest" "$FAKE_XCRUN_LOG"; then
   fail "runner did not pass ratcheted skips to SwiftPM"
+fi
+scratch_paths="$(awk -F '\t' '{print $2}' "$FAKE_XCRUN_SCRATCH_LOG" | sort -u | wc -l | tr -d ' ')"
+if [ "$scratch_paths" -lt 2 ]; then
+  fail "parallel suites did not receive distinct SwiftPM scratch directories"
+fi
+runtime_homes="$(awk -F '\t' '{print $4}' "$FAKE_XCRUN_SCRATCH_LOG" | sort -u | wc -l | tr -d ' ')"
+if [ "$runtime_homes" -lt 2 ]; then
+  fail "parallel suites did not receive distinct Foundation runtime homes"
+fi
+if ! awk -F '\t' '{ expected = $4; sub(/\/home$/, "/tmp", expected); if ($5 != expected) exit 1 }' \
+  "$FAKE_XCRUN_SCRATCH_LOG"; then
+  fail "runner did not isolate CoreFoundation preferences and temporary files per worker"
 fi
 
 # Local runs should get the same proven suite-level parallelism as CI unless a
@@ -151,8 +221,29 @@ unset OMI_SWIFT_TEST_SUITE_WORKERS SWIFT_TEST_SUITE_WORKERS
 if "$RUNNER" >"$TMPDIR/default-runner.out" 2>"$TMPDIR/default-runner.err"; then
   fail "default runner unexpectedly succeeded despite AlphaTests failure"
 fi
-if ! grep -q "Ran 6 Swift suites in isolation with 4 worker(s)." "$TMPDIR/default-runner.out"; then
+if ! grep -q "Ran 9 Swift suites in isolation with 4 worker(s)," "$TMPDIR/default-runner.out"; then
   fail "runner did not default local suite execution to four workers"
+fi
+
+# A discovery set made entirely of serial suites still executes with one
+# effective worker and must not report the misleading zero-worker summary.
+export OMI_SWIFT_TEST_SERIAL_SUITES="ActionItemsFTSRepairTests AlphaTests APIClientRoutingTests AuthRefreshResilienceTests AuthTokenStorageTests BetaTests ChatDiscoverabilityTests PiMonoWiringTests"
+if "$RUNNER" >"$TMPDIR/all-serial-runner.out" 2>"$TMPDIR/all-serial-runner.err"; then
+  fail "all-serial runner unexpectedly succeeded despite AlphaTests failure"
+fi
+if ! grep -q "Ran 9 Swift suites in isolation with 1 worker(s)," "$TMPDIR/all-serial-runner.out"; then
+  fail "all-serial runner did not report one effective worker"
+fi
+export OMI_SWIFT_TEST_SERIAL_SUITES="AuthRefreshResilienceTests AuthTokenStorageTests"
+
+# ...and the same per-suite budget as CI. A smaller local default is not a
+# harmless local nicety: the slowest legitimate suite needs ~245s, so a 120s
+# default reported the documented local runner FAILED on a clean main.
+ci_workflow="$(cd "$MACOS_DIR/../.." && pwd)/.github/workflows/desktop-swift-ci.yml"
+ci_budget="$(sed -n 's/^[[:space:]]*OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS:[[:space:]]*"\{0,1\}\([0-9][0-9]*\)"\{0,1\}[[:space:]]*$/\1/p' "$ci_workflow" | head -1)"
+[ -n "$ci_budget" ] || fail "could not read OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS from $ci_workflow"
+if ! grep -q "worker(s), ${ci_budget}s per-suite budget." "$TMPDIR/default-runner.out"; then
+  fail "runner default per-suite budget does not match CI's ${ci_budget}s"
 fi
 
 export OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS=1

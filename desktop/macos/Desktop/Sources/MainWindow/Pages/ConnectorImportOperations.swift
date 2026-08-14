@@ -65,7 +65,8 @@ enum ConnectorImportOperations {
     do {
       let emails = try await GmailReaderService.shared.readRecentEmails(
         maxResults: 300,
-        query: "newer_than:365d"
+        query: "newer_than:365d",
+        userInitiated: true
       )
       progress.update(
         title: "Importing Gmail history",
@@ -224,7 +225,8 @@ enum ConnectorImportOperations {
       let events = try await CalendarReaderService.shared.readEvents(
         daysBack: 365,
         daysForward: 30,
-        maxResults: 500
+        maxResults: 500,
+        userInitiated: true
       )
       progress.update(
         title: "Importing calendar events",
@@ -275,7 +277,10 @@ enum ConnectorImportOperations {
       title: "Importing Apple Notes",
       detail: "Reading recent notes and turning useful content into memories."
     )
-    let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+    let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+      maxResults: 250,
+      userInitiated: true
+    )
     let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes, limit: 200)
     let synthesis = await AppleNotesReaderService.shared.synthesizeFromNotes(notes: notes)
     let memoryCount = rawImport.saved + synthesis.memories

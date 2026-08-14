@@ -98,6 +98,15 @@ final class MemoryAtlasSnapshotCache: @unchecked Sendable {
       hasher.combine(node.createdAt)
       hasher.combine(node.updatedAt)
     }
+    for node in graph.catalogNodes ?? [] {
+      hasher.combine(node.id)
+      hasher.combine(node.label)
+      hasher.combine(node.nodeType)
+      hasher.combine(node.aliases)
+      hasher.combine(node.memoryIds)
+      hasher.combine(node.createdAt)
+      hasher.combine(node.updatedAt)
+    }
     for edge in graph.edges {
       hasher.combine(edge.id)
       hasher.combine(edge.sourceId)

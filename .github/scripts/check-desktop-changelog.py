@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 
@@ -52,6 +53,9 @@ EXEMPT_DESKTOP_PATHS = {
     # not alter the desktop application a user receives.
     "desktop/macos/scripts/desktop-flow-lint.py",
     "desktop/macos/scripts/desktop_flow_contract.py",
+    # Signed-artifact smoke harness: release infrastructure that inspects and
+    # launches the built app on CI builders, never ships inside it.
+    "desktop/macos/scripts/smoke-signed-desktop-artifact.sh",
 }
 # Test and release-infra changes are likewise never user-facing app notes; the
 # `no-changelog-needed` PR label only satisfies the PR run, so post-merge push
@@ -66,6 +70,11 @@ EXEMPT_DESKTOP_PATH_PREFIXES = (
     # a changelog fragment, and — like tests/ above — the post-merge push run
     # would otherwise redden main. Same directory the swift-format linter skips.
     "desktop/macos/Desktop/Sources/Generated/",
+    # E2E flow definitions and their docs are CI/harness test artifacts that never
+    # ship in the desktop app. Registering a new source file in a flow's `covers:`
+    # is exactly the kind of internal-only edit that reddened main on the merge
+    # push for #11039.
+    "desktop/macos/e2e/",
 )
 
 
@@ -130,6 +139,25 @@ def has_new_unreleased_fragment(base_ref: str, head_ref: str) -> bool:
     return bool(fragment_paths)
 
 
+def tree_has_unreleased_fragment(head_ref: str) -> bool:
+    """Whether the tree at head carries at least one valid unreleased fragment.
+
+    The release lane (Release Eligibility on main pushes) cares that the NEXT
+    RELEASE will have notes, not that this particular push added them — PR
+    labels that exempted the merged PR are invisible on the push lane, and a
+    fragment landed by a sibling commit since the last tag satisfies the
+    release's contract. Per-PR enforcement stays with the diff-scoped check.
+    """
+    try:
+        output = run_git(["ls-tree", "-r", "--name-only", head_ref, UNRELEASED_CHANGELOG_PREFIX])
+    except subprocess.CalledProcessError:
+        return False
+    fragment_paths = [path for path in output.splitlines() if path.endswith(".json")]
+    for path in fragment_paths:
+        validate_unreleased_fragment(head_ref, path)
+    return bool(fragment_paths)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", required=True, help="Base git ref, usually origin/main")
@@ -138,6 +166,15 @@ def main() -> int:
         "--skip",
         action="store_true",
         help="Skip enforcement, used for PRs labeled no-changelog-needed",
+    )
+    parser.add_argument(
+        "--accept-tree-fragments",
+        action="store_true",
+        default=os.getenv("DESKTOP_CHANGELOG_ACCEPT_TREE_FRAGMENTS") == "1",
+        help=(
+            "Release-lane mode: also pass when the tree at --head already carries a valid "
+            "unreleased fragment (set by Release Eligibility, where PR labels are invisible)"
+        ),
     )
     args = parser.parse_args()
 
@@ -154,6 +191,10 @@ def main() -> int:
 
     if has_new_unreleased_fragment(args.base, args.head):
         print("Desktop changelog fragment found.")
+        return 0
+
+    if args.accept_tree_fragments and tree_has_unreleased_fragment(args.head):
+        print("Release lane: unreleased changelog fragments already present in the tree.")
         return 0
 
     print("FAIL: desktop changes require an unreleased changelog fragment.", file=sys.stderr)

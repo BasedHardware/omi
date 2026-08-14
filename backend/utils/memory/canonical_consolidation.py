@@ -49,7 +49,11 @@ from models.product_memory import (
 from utils.executors import llm_executor, submit_with_context
 from utils.llm.clients import get_llm
 from utils.log_sanitizer import sanitize_pii
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import (
+    MemorySystem as MemorySystem,  # compatibility export for older test doubles; never used for routing
+    ensure_canonical_apply_control_state,
+    resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
+)
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -159,15 +163,7 @@ def _coerce_aware_utc(value: datetime) -> datetime:
 
 
 def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
-    collections = MemoryCollections(uid=uid)
-    ref = db_client.document(collections.memory_apply_control_state)
-    snapshot = ref.get()
-    payload = _snapshot_payload(snapshot)
-    if payload:
-        return MemoryControlState(**payload)
-    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    ref.set(control.model_dump(mode="json"))
-    return control
+    return ensure_canonical_apply_control_state(uid, db_client=db_client)
 
 
 def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
@@ -1263,8 +1259,6 @@ def apply_consolidation_decision(
     quarantine: bool = False,
 ) -> List[str]:
     """Atomically settle one source item, including LT graph assertion/supersedes."""
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
-        raise ConsolidationApplySkipped("not_canonical_cohort")
     source = pending_by_id.get(decision.source_memory_id)
     if source is None:
         raise ConsolidationApplySkipped(f"missing pending source: {decision.source_memory_id}")
@@ -1588,8 +1582,6 @@ def run_canonical_consolidation(
     client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
-        return ConsolidationReport(uid=uid, skipped_reason="not_canonical_cohort")
     if not consolidation_enabled():
         return ConsolidationReport(uid=uid, skipped_reason="consolidation_disabled")
 

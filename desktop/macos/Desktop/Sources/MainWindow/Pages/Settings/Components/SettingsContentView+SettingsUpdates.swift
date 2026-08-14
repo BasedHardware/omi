@@ -44,14 +44,14 @@ extension SettingsContentView {
       // even before the backend round-trip completes.
       UserDefaults.standard.set(frequency, forKey: NotificationService.frequencyDefaultsKey)
     }
-    Task {
-      do {
-        let _ = try await APIClient.shared.updateNotificationSettings(
-          enabled: enabled, frequency: frequency)
-      } catch {
-        logError("Failed to update notification settings", error: error)
-      }
-    }
+    let syncRevision = NotificationService.beginNotificationSettingsSync()
+    // Preserve request order and always send the complete locally desired state.
+    // If an earlier partial mutation fails, a later successful mutation must also
+    // repair that field before it is allowed to clear the pending-sync journal.
+    NotificationSettingsSyncQueue.shared.enqueue(
+      enabled: NotificationService.areNotificationsEnabled(),
+      frequency: NotificationService.currentFrequencyLevel(),
+      revision: syncRevision)
   }
 
   func updateLanguage(_ language: String) {
@@ -116,13 +116,20 @@ extension SettingsContentView {
 
     Task {
       do {
+        guard let deletionOwner = RuntimeOwnerIdentity.currentOwnerId() else {
+          throw AuthError.notSignedIn
+        }
         try await APIClient.shared.deleteAccount()
+        // The backend has durably admitted deletion. Persist the cleanup owner
+        // before any local transition so a crash/relaunch cannot restore this
+        // accepted account and migrate its local Rewind data into a new UID.
+        UserDefaults.standard.set(deletionOwner, forKey: .acceptedAccountDeletionOwnerId)
         await MainActor.run {
           appState.stopTranscription()
           ProactiveAssistantsPlugin.shared.stopMonitoring()
         }
         do {
-          try await AuthService.shared.signOut()
+          try await AuthService.shared.signOut(acceptedAccountDeletion: true)
           isDeletingAccount = false
         } catch {
           deleteAccountError = "Your account was deleted, but Omi couldn't sign you out. Quit and reopen Omi."

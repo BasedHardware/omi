@@ -1,19 +1,16 @@
 import 'package:collection/collection.dart';
 
-/// "N Months Free" for a tier's annual card, derived from the tier's own prices.
+/// Months saved by a tier's annual price, derived from the tier's own prices.
 ///
 /// Discounts differ per tier — legacy Neo saves 2 months while Plus and
 /// Unlimited save 3 — so this must never be hardcoded. [plans] is the raw
 /// available-plans payload for a single tier, containing its `month` and `year`
 /// entries with a Stripe `unit_amount`.
 ///
-/// Returns null when either price is missing or the annual plan isn't actually
-/// cheaper, so the caller simply renders no badge.
-String? annualSaveTag(List<Map<String, dynamic>> plans) {
-  final monthsFree = _annualMonthsFree(plans);
-  if (monthsFree == null) return null;
-  return monthsFree == 1 ? '1 Month Free' : '$monthsFree Months Free';
-}
+/// Returns the count rather than a label so the caller localizes it; null when
+/// either price is missing or the annual plan isn't actually cheaper, so the
+/// caller simply renders no badge.
+int? annualMonthsFree(List<Map<String, dynamic>> plans) => _annualMonthsFree(plans);
 
 /// Whole-percent discount of a tier's annual price vs paying monthly for a year.
 ///

@@ -12,6 +12,7 @@ import httpx
 
 from database.apps import get_app_by_id_db
 from utils.executors import critical_executor, db_executor, run_blocking
+from utils.other.endpoints import enforce_account_deletion_http_access
 from utils.http_client import safe_request_target, get_auth_client, UnsafeWebhookURLError
 from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
@@ -186,6 +187,8 @@ async def oauth_token(
         raise HTTPException(status_code=401, detail=f"Invalid Firebase ID token: {e}")
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Error verifying Firebase ID token: {e}")
+
+    await run_blocking(db_executor, enforce_account_deletion_http_access, uid)
 
     app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
     if not app_data:

@@ -24,7 +24,10 @@ type CodecID byte
 const (
 	CodecPCM16 CodecID = 0
 	CodecPCM8  CodecID = 1
-	CodecOpus  CodecID = 20
+	// CodecOpus is 160-sample frames @ 100 fps (DevKit firmware).
+	CodecOpus CodecID = 20
+	// CodecOpusFS320 is 320-sample frames @ 50 fps (Omi CV1 firmware).
+	CodecOpusFS320 CodecID = 21
 )
 
 // StripPacketHeader removes the 3-byte Omi audio header.

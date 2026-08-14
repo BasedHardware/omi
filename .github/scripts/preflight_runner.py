@@ -184,6 +184,7 @@ def run_windows_child_bootstrap(command: list[str]) -> int:
 def signal_child(
     child: subprocess.Popen[str],
     signum: int,
+    *,
     windows_job: WindowsJob | None = None,
 ) -> None:
     """Forward to the POSIX child group or terminate the Windows process tree."""
@@ -455,7 +456,7 @@ def run_owned(
             return
         if windows_job is None and child.poll() is not None:
             return
-        signal_child(child, signum, windows_job)
+        signal_child(child, signum, windows_job=windows_job)
 
     previous_handlers = {signum: signal.signal(signum, forward_signal) for signum in forwardable_signals()}
     exit_code = 1
@@ -504,9 +505,7 @@ def run_owned(
             else:
                 child_failure = f"child exited with status {exit_code}"
             signal_note = (
-                f"; runner received {signal.Signals(received_signal).name}"
-                if received_signal is not None
-                else ""
+                f"; runner received {signal.Signals(received_signal).name}" if received_signal is not None else ""
             )
             print(
                 f"FAIL: preflight {child_failure} during phase={last_phase}{signal_note}; inspect {log_path}",
@@ -528,7 +527,7 @@ def run_owned(
         return exit_code
     finally:
         if child is not None and child.poll() is None:
-            signal_child(child, signal.SIGTERM, windows_job)
+            signal_child(child, signal.SIGTERM, windows_job=windows_job)
             try:
                 child.wait(timeout=10)
             except subprocess.TimeoutExpired:

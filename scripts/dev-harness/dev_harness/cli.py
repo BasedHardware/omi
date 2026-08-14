@@ -185,9 +185,36 @@ def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]
         return False, detail
     if service == "backend":
         return _http_ok(f"{cfg.backend_url}/docs")
+    if service == "llm-gateway":
+        return _http_ok(f"{cfg.llm_gateway_url}/health")
     if service == "desktop-backend":
         return _http_ok(f"{cfg.desktop_backend_url}/health")
     return False, f"unknown service {service!r}"
+
+
+def _status_health_label(
+    cfg: config.HarnessConfig,
+    service: str,
+    *,
+    alive: bool,
+    port: int,
+) -> str:
+    """Report the same HTTP/auth health checks as startup wait, with a degraded label.
+
+    Port-open alone is not healthy for HTTP services. When the owned process is
+    still alive and the port accepts TCP but the authenticated/HTTP probe fails,
+    surface ``degraded (...)`` so manual QA can tell a wedged service from a
+    clean stop.
+    """
+    ok, detail = _service_health(cfg, service)
+    if ok:
+        return detail
+    port_listening = bool(port) and _port_open("127.0.0.1", port)
+    if alive and port_listening:
+        return f"degraded ({detail})"
+    if port and not port_listening:
+        return "port-closed"
+    return detail
 
 
 def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -> None:
@@ -316,6 +343,7 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"firebase_auth_emulator: {cfg.auth_host}")
     print(f"redis: {cfg.redis_host}:{cfg.redis_port}")
     print(f"typesense: 127.0.0.1:{cfg.typesense_port}")
+    print(f"llm_gateway: {cfg.llm_gateway_url}")
     print(f"backend: {cfg.backend_url}")
     print(f"desktop_backend: {cfg.desktop_backend_url}")
 
@@ -685,7 +713,24 @@ def _start_infrastructure(cfg: config.HarnessConfig) -> None:
 
 
 def _start_app_services(cfg: config.HarnessConfig) -> None:
-    """Start backend and desktop-backend after infrastructure is settling."""
+    """Start the isolated gateway, backend, and desktop-backend."""
+    _start_process(
+        cfg,
+        "llm-gateway",
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "llm_gateway.main:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(cfg.llm_gateway_port),
+        ],
+        cwd=cfg.repo_root / "backend",
+        log_name="llm-gateway.log",
+        port=cfg.llm_gateway_port,
+    )
     _start_process(
         cfg,
         "backend",
@@ -730,9 +775,12 @@ def _start_services(cfg: config.HarnessConfig) -> None:
 # 45 s (the old flat deadline shared across *all* services) is not enough.
 _HEALTH_TIMEOUTS: dict[str, float] = {
     "firestore": 45.0,
-    "auth": 45.0,
+    # The combined Firebase process can report Firestore ready before Auth has
+    # finished its cold startup on the qualification runner.
+    "auth": 90.0,
     "typesense": 45.0,
-    "backend": 90.0,
+    "backend": 180.0,
+    "llm-gateway": 60.0,
     "desktop-backend": 60.0,
     "redis": 30.0,
 }
@@ -756,6 +804,7 @@ def _wait_health(
         "auth": (f"http://{cfg.auth_host}/", None),
         "typesense": (f"http://127.0.0.1:{cfg.typesense_port}/collections", typesense_headers),
         "backend": (f"{cfg.backend_url}/docs", None),
+        "llm-gateway": (f"{cfg.llm_gateway_url}/health", None),
         "desktop-backend": (f"{cfg.desktop_backend_url}/health", None),
         "redis": (None, None),  # port-based check
     }
@@ -776,7 +825,8 @@ def _wait_health(
         for service in list(pending):
             if now >= deadlines[service]:
                 url = pending[service][0]
-                failures.setdefault(service, f"not healthy after {deadlines[service] - start:.0f}s at {url}")
+                endpoint = url or f"127.0.0.1:{cfg.redis_port}"
+                failures[service] = f"not healthy after {deadlines[service] - start:.0f}s at {endpoint}"
                 pending.pop(service)
         if not pending:
             break
@@ -794,18 +844,18 @@ def _wait_health(
                 if _port_open("127.0.0.1", cfg.redis_port):
                     print("redis: healthy (port-open)")
                     pending.pop(service)
+                    failures.pop(service, None)
                 continue
             ok, detail = _http_ok(url, headers=headers)
             if ok:
                 print(f"{service}: healthy ({detail})")
                 pending.pop(service)
+                failures.pop(service, None)
             else:
                 failures[service] = detail
         if pending:
             time.sleep(0.75)
-    for service, (url, _) in pending.items():
-        failures.setdefault(service, f"not healthy at {url}")
-    return [f"{service}: {failures.get(service, 'unknown failure')}" for service in pending] if failures else []
+    return [f"{service}: {detail}" for service, detail in failures.items()]
 
 
 def cmd_up(args: argparse.Namespace) -> int:
@@ -916,11 +966,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     for record in records:
         pid = int(record.get("pid", -1))
         alive = safety.process_exists(pid)
-        health = "not checked"
         service = str(record.get("service"))
         port = int(record.get("port", 0) or 0)
-        if port:
-            health = "port-open" if _port_open("127.0.0.1", port) else "port-closed"
+        health = _status_health_label(cfg, service, alive=alive, port=port)
         print(f"  - {service}: pid={pid} alive={alive} {health} log={record.get('log')}")
     return 0
 

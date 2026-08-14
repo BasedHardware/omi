@@ -733,11 +733,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return '플랜이 $date에 갱신됩니다.';
-  }
-
-  @override
   String get basicPlan => '무료 플랜';
 
   @override
@@ -2089,16 +2084,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get editMemory => '✏️ 메모리 편집';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => '기준으로 고정';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => '기준에서 고정 해제';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => '기준 메모리';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => '항상 컨텍스트에 포함';
 
   @override
   String get memoryContentHint => '아이스크림 먹는 걸 좋아해요...';
@@ -9610,4 +9605,74 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError => '해당 마이크에 연결할 수 없습니다. iPhone 설정에서 연결되어 있는지 확인하세요.';
+
+  @override
+  String get syncStatusTooOld => '너무 오래되어 동기화할 수 없습니다 — Omi가 받을 수 없습니다';
+
+  @override
+  String get planSheetChooseYourPlan => '플랜을 선택하고 무제한 Omi를 잠금 해제하세요.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, 모바일, 웹에서 사용 가능';
+
+  @override
+  String get popularBadge => '인기';
+
+  @override
+  String get worksOnDesktop => '데스크톱에서 사용 가능';
+
+  @override
+  String get noDesktopAccess => '데스크톱에서 사용 불가';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months개월 / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count개월 무료',
+      one: '1개월 무료',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi는 무료이지만, 무료 버전에는 사용 경험에 영향을 주는 제한이 있습니다:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5~7초 지연 (실시간 아님)';
+
+  @override
+  String get downgradeToFreemiumAction => '무료 버전으로 변경';
+
+  @override
+  String get getFreeUnlimitedAccess => '무제한 액세스를 무료로 받기';
+
+  @override
+  String get shareDataForTraining => '학습을 위한 데이터 공유';
+
+  @override
+  String get yourRequestUnderReview => '요청을 검토 중입니다';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => '업데이트가 필요합니다';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => '계정 마이그레이션 이후에도 계속하려면 최신 Omi 앱을 설치하세요.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => '마이그레이션 진행 중';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage => '계정을 마이그레이션하는 중입니다. 마이그레이션이 끝날 때까지 제품 기능이 일시 중지됩니다.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage => '마이그레이션 롤백 후 계정이 유지보수 상태입니다. 일부 최신 데이터가 고립될 수 있습니다.';
+
+  @override
+  String get accountCutoverOpenStore => '스토어 열기';
 }

@@ -48,10 +48,7 @@ struct OnboardingView: View {
 
   var body: some View {
     ZStack {
-      // Full dark background
-      OmiColors.backgroundPrimary
-        .ignoresSafeArea()
-
+      // No ground of its own: the glass panel owns it.
       Group {
         if appState.hasCompletedOnboarding && !isExportPreview {
           Color.clear
@@ -659,7 +656,7 @@ struct OnboardingView: View {
     }
     if AppBuild.usesLazyDevPermissions {
       AssistantSettings.shared.screenAnalysisEnabled = false
-      AssistantSettings.shared.transcriptionEnabled = false
+      AssistantSettings.shared.audioRecordingMode = .off
       log("OnboardingView: Lazy dev permissions enabled, skipping monitoring/transcription autostart")
     } else {
       startMonitoringIfNeeded()
@@ -684,16 +681,16 @@ struct OnboardingTrustPreviewCard: View {
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-            .stroke(OmiColors.backgroundQuaternary.opacity(0.35), lineWidth: 1)
+            .stroke(Ink.separator, lineWidth: 1)
         )
 
       Rectangle()
         .fill(
           LinearGradient(
             colors: [
-              OmiColors.backgroundQuaternary.opacity(0),
-              OmiColors.backgroundQuaternary.opacity(0.4),
-              OmiColors.backgroundQuaternary.opacity(0),
+              Ink.separator.opacity(0),
+              Ink.separator,
+              Ink.separator.opacity(0),
             ],
             startPoint: .leading,
             endPoint: .trailing
@@ -705,14 +702,14 @@ struct OnboardingTrustPreviewCard: View {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "shield.lefthalf.filled")
           .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         Text("Trust & Privacy")
           .font(.system(size: 17, weight: .medium))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.primary)
           .lineLimit(1)
         Text("omi protects your data")
           .font(.system(size: 15, weight: .regular))
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(1)
           .minimumScaleFactor(0.85)
       }
@@ -731,14 +728,7 @@ struct OnboardingTrustPreviewCard: View {
           detail: "Primary data stays local and belongs to you.")
       }
       .padding(OmiSpacing.lg)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-          .fill(OmiColors.backgroundTertiary.opacity(0.75))
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-              .stroke(Color.white.opacity(0.08), lineWidth: 1)
-          )
-      )
+      .glassCard()
     }
     .frame(maxWidth: .infinity)
     .padding(.vertical, OmiSpacing.xxl)
@@ -749,30 +739,32 @@ struct OnboardingTrustPreviewCard: View {
     HStack(alignment: .top, spacing: OmiSpacing.sm) {
       Image(systemName: icon)
         .font(.system(size: 14, weight: .semibold))
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .frame(width: 20, height: 20)
 
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(title)
           .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         if title == "Open Source" {
           HStack(spacing: 0) {
             Text(detail)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
             if let url = URL(string: "https://github.com/basedhardware/omi/") {
               Link("public", destination: url)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
                 .underline()
             }
             Text(" and auditable.")
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
           .font(.system(size: 12))
+          .fixedSize(horizontal: false, vertical: true)
         } else {
           Text(detail)
             .font(.system(size: 12))
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
       }
       Spacer()
@@ -866,24 +858,24 @@ struct OnboardingPrivacySheet: View {
       HStack {
         Image(systemName: "shield.lefthalf.filled")
           .scaledFont(size: OmiType.subheading)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Text("Data & Privacy")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
         Button(action: { isPresented = false }) {
           Image(systemName: "xmark.circle.fill")
             .scaledFont(size: OmiType.heading)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
       .padding(OmiSpacing.xl)
 
-      Divider()
+      GlassSeparator()
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
@@ -892,27 +884,28 @@ struct OnboardingPrivacySheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               Label("Encryption", systemImage: "lock.shield")
                 .scaledFont(size: OmiType.body, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: "checkmark.circle.fill")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(.green)
+                  .foregroundColor(Ink.listeningGreen)
                 Text("Server-side encryption")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(Ink.secondary)
                 Text("Active")
                   .scaledFont(size: OmiType.micro, weight: .semibold)
-                  .foregroundColor(.green)
+                  .foregroundColor(Ink.listeningGreen)
                   .padding(.horizontal, OmiSpacing.xxs)
                   .padding(.vertical, OmiSpacing.hairline)
-                  .background(Color.green.opacity(0.15))
+                  .background(Ink.listeningGreen.opacity(0.15))
                   .cornerRadius(OmiChrome.stripRadius)
               }
 
               Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, OmiSpacing.hairline)
             }
           }
@@ -922,7 +915,7 @@ struct OnboardingPrivacySheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               Label("What We Track", systemImage: "list.bullet")
                 .scaledFont(size: OmiType.body, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 sheetTrackingItem("Onboarding steps completed")
@@ -945,7 +938,7 @@ struct OnboardingPrivacySheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               Label("Privacy Guarantees", systemImage: "hand.raised.fill")
                 .scaledFont(size: OmiType.body, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 sheetBullet("Anonymous tracking with randomly generated IDs")
@@ -960,31 +953,25 @@ struct OnboardingPrivacySheet: View {
       }
     }
     .frame(width: 400, height: 480)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.surface)
+    .glassContent()
   }
 
   private func privacyCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
     content()
       .padding(OmiSpacing.md)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .fill(OmiColors.backgroundTertiary.opacity(0.5))
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
-          )
-      )
+      .glassCard()
   }
 
   private func sheetTrackingItem(_ text: String) -> some View {
     HStack(spacing: OmiSpacing.xs) {
       Circle()
-        .fill(OmiColors.textTertiary.opacity(0.5))
+        .fill(Ink.secondary)
         .frame(width: 3, height: 3)
       Text(text)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
   }
 
@@ -992,10 +979,10 @@ struct OnboardingPrivacySheet: View {
     HStack(spacing: OmiSpacing.xs) {
       Image(systemName: "checkmark")
         .scaledFont(size: 8, weight: .bold)
-        .foregroundColor(.green)
+        .foregroundColor(Ink.listeningGreen)
       Text(text)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
     }
   }
 }

@@ -1,13 +1,16 @@
 version: 2
 name: logout
 tier: manual
-description: Sign out via bridge sign_out — local Auth emulator only, not prod OAuth (Live P2)
+description: Exercise accepted account-deletion cleanup and sign-out via the local Auth emulator bridge (Live P2)
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/Auth/AuthOwnerTransition.swift
   - desktop/macos/Desktop/Sources/Auth/FirebaseAuthAvailability.swift
   - desktop/macos/Desktop/Sources/AuthService.swift
+  - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase+AccountDeletion.swift
   - desktop/macos/Desktop/Sources/SignInView.swift
 preconditions:
   - auth_ready
@@ -22,10 +25,13 @@ steps:
       result.detail.is_signed_in: "true"
 
   - id: S2
-    name: Sign out via bridge (local Auth emulator)
+    name: Apply accepted deletion cleanup and sign out (local Auth emulator)
     bridge.action:
       name: sign_out
+      params:
+        accepted_account_deletion: "true"
     expect:
+      result.detail.accepted_account_deletion: "true"
       result.detail.signed_out: "true"
       result.detail.is_signed_in: "false"
 

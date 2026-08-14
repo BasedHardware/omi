@@ -1,14 +1,14 @@
-// Pure helpers for the backend-mediated Omi sign-in flow (Google via
+// Pure helpers for the backend-mediated Omi sign-in flow (Google or Apple via
 // /v1/auth/authorize + /v1/auth/token, PKCE S256, loopback callback).
 // No Electron/IO imports so everything here is unit-testable under node Vitest.
 //
 // Backend contract (backend/routers/auth.py, mirrored from the macOS app's
 // AuthService.swift buildAuthorizationURL / exchangeCodeForToken):
-//   GET  {api}/v1/auth/authorize?provider=google&redirect_uri=…&state=…
+//   GET  {api}/v1/auth/authorize?provider={google|apple}&redirect_uri=…&state=…
 //        &code_challenge=…&code_challenge_method=S256
-//        → 302 to accounts.google.com; Google returns to the BACKEND's own
-//        /v1/auth/callback/google, which serves an HTML page that navigates the
-//        browser to {redirect_uri}?code=<omi auth code>&state=<our state>.
+//        → 302 to the selected provider; the provider returns to the BACKEND's
+//        own callback, which serves an HTML page that navigates the browser to
+//        {redirect_uri}?code=<omi auth code>&state=<our state>.
 //   POST {api}/v1/auth/token  (application/x-www-form-urlencoded)
 //        grant_type=authorization_code & code & redirect_uri & use_custom_token=true
 //        & code_verifier → JSON { custom_token, id_token, … }.
@@ -16,6 +16,7 @@
 // (backend _is_valid_pkce_value); oauthPkce.generateVerifier satisfies this.
 import { randomBytes } from 'crypto'
 import { base64url } from '../integrations/oauthPkce'
+import type { SignInProvider } from '../../shared/types'
 
 /** Loopback path the backend's callback page redirects to (macOS parity). */
 export const CALLBACK_PATH = '/callback'
@@ -28,12 +29,13 @@ export function generateSignInState(): string {
 
 export function buildAuthorizeUrl(args: {
   apiBase: string
+  provider: SignInProvider
   redirectUri: string
   state: string
   codeChallenge: string
 }): string {
   const u = new URL(`${args.apiBase.replace(/\/+$/, '')}/v1/auth/authorize`)
-  u.searchParams.set('provider', 'google')
+  u.searchParams.set('provider', args.provider)
   u.searchParams.set('redirect_uri', args.redirectUri)
   u.searchParams.set('state', args.state)
   u.searchParams.set('code_challenge', args.codeChallenge)
@@ -47,7 +49,11 @@ export type LoopbackCallback =
   | { kind: 'code'; code: string }
 
 /** Classify a request that hit the loopback listener. `rawUrl` is req.url. */
-export function parseLoopbackCallback(rawUrl: string, expectedState: string): LoopbackCallback {
+export function parseLoopbackCallback(
+  rawUrl: string,
+  expectedState: string,
+  provider: SignInProvider = 'google'
+): LoopbackCallback {
   let url: URL
   try {
     url = new URL(rawUrl, 'http://127.0.0.1')
@@ -65,7 +71,8 @@ export function parseLoopbackCallback(rawUrl: string, expectedState: string): Lo
     // be able to abort a pending sign-in or inject display text — noise, not
     // a flow outcome.
     if (!stateMatches) return { kind: 'ignore' }
-    return { kind: 'error', message: `Google authorization failed: ${error}` }
+    const providerName = provider === 'apple' ? 'Apple' : 'Google'
+    return { kind: 'error', message: `${providerName} authorization failed: ${error}` }
   }
   if (!stateMatches) {
     // A CODE with the wrong state is a real CSRF signal — fail the flow loudly
@@ -91,7 +98,7 @@ export function buildTokenExchangeBody(args: {
 }
 
 /** Decode a JWT payload WITHOUT verification — display-only claims (name/email)
- *  from the backend-returned Google id_token. Returns null on any malformation. */
+ *  from the backend-returned provider id_token. Returns null on any malformation. */
 export function decodeJwtClaims(jwt: string): Record<string, unknown> | null {
   const parts = jwt.split('.')
   if (parts.length !== 3) return null

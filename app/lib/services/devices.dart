@@ -9,7 +9,6 @@ import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
 import 'package:omi/services/devices/discovery/native_bluetooth_discoverer.dart';
-import 'package:omi/services/devices/errors.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/mutex.dart';
@@ -44,6 +43,8 @@ abstract class IDeviceServiceSubsciption {
 class DeviceService {
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
+  Future<void>? _activeDiscovery;
+  Future<void>? _queuedDiscovery;
 
   final List<DeviceDiscoverer> _discoverers = [
     NativeBluetoothDiscoverer(),
@@ -60,13 +61,36 @@ class DeviceService {
 
   DateTime? _firstConnectedAt;
 
-  Future<void> discover({String? desirableDeviceId, int timeout = 5}) async {
-    Logger.debug("Device discovering...");
-    if (_status != DeviceServiceStatus.ready) {
-      logCommonErrorMessage("Device service is not ready, may busying or stop");
-      return;
+  /// Runs one follow-up scan when a caller retries while the current scan is
+  /// still winding down. In particular, this makes the Bluetooth-enable
+  /// recovery action reliable instead of silently returning while a blocked
+  /// scan still owns the service.
+  Future<void> discover({String? desirableDeviceId, int timeout = 5}) {
+    if (_queuedDiscovery != null) return _queuedDiscovery!;
+    if (_status == DeviceServiceStatus.scanning) {
+      final activeDiscovery = _activeDiscovery;
+      if (activeDiscovery == null) return Future.value();
+      return _queuedDiscovery ??= activeDiscovery.then<void>(
+        (_) => _runQueuedDiscovery(desirableDeviceId: desirableDeviceId, timeout: timeout),
+        onError: (_, __) => _runQueuedDiscovery(desirableDeviceId: desirableDeviceId, timeout: timeout),
+      );
     }
+    if (_status != DeviceServiceStatus.ready) {
+      Logger.debug('Device service is not ready, may busying or stop');
+      return Future.value();
+    }
+    return _discover(desirableDeviceId: desirableDeviceId, timeout: timeout);
+  }
 
+  Future<void> _runQueuedDiscovery({String? desirableDeviceId, required int timeout}) async {
+    _queuedDiscovery = null;
+    await discover(desirableDeviceId: desirableDeviceId, timeout: timeout);
+  }
+
+  Future<void> _discover({String? desirableDeviceId, required int timeout}) async {
+    Logger.debug("Device discovering...");
+    final completion = Completer<void>();
+    _activeDiscovery = completion.future;
     _status = DeviceServiceStatus.scanning;
 
     try {
@@ -100,6 +124,8 @@ class DeviceService {
       }
     } finally {
       _status = DeviceServiceStatus.ready;
+      if (!completion.isCompleted) completion.complete();
+      _activeDiscovery = null;
     }
   }
 

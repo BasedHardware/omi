@@ -21,7 +21,11 @@ def test_google_capabilities_resolve_to_one_provider_with_required_scopes():
         assert resolved is not None
         provider_key, provider = resolved
         assert provider_key == 'google_calendar'
-        assert required_scope in oauth_authorization_query(provider)['scope'].split()
+        # gmail.readonly is a restricted scope pending Google verification, so it is
+        # withheld from the consent request (see consent_pending_scopes) even though
+        # the capability still resolves. Only verified scopes are asked for.
+        if required_scope not in provider.get('consent_pending_scopes', ()):
+            assert required_scope in oauth_authorization_query(provider)['scope'].split()
 
 
 def test_provider_resolution_normalizes_agent_and_callback_keys():

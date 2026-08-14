@@ -2157,15 +2157,13 @@ function DeveloperSection({
   const [copiedClaudeName, setCopiedClaudeName] = useState(false);
   const [copiedClaudeUrl, setCopiedClaudeUrl] = useState(false);
   const [copiedClaudeClientId, setCopiedClaudeClientId] = useState(false);
-  const [copiedClaudeSecret, setCopiedClaudeSecret] = useState(false);
 
   const mcpServerUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me'}/v1/mcp/sse`;
 
   // Claude connector values — mirror the 4 fields in Claude's "Add custom connector" form
   const claudeConnectorName = 'Omi Memory';
   const claudeConnectorUrl = mcpServerUrl;
-  const claudeConnectorClientId = 'omi';
-  const claudeConnectorSecret = mcpKeys.find((k) => k.key)?.key ?? '';
+  const claudeConnectorClientId = 'omi-claude-prod';
 
   // Experimental features (stored in localStorage)
   const [experimentalFeatures, setExperimentalFeatures] = useState({
@@ -2488,20 +2486,12 @@ function DeveloperSection({
 
             <div className="border-t border-white/[0.06] pt-4">
               <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
-                OAuth
+                Cloud OAuth
               </p>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-4">
-                  <span className="text-text-tertiary w-24">Client ID</span>
-                  <code className="text-text-primary font-mono">omi</code>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-text-tertiary w-24">Client Secret</span>
-                  <span className="text-text-quaternary italic text-xs">
-                    Use your MCP API key
-                  </span>
-                </div>
-              </div>
+              <p className="text-sm text-text-tertiary">
+                Cloud connector OAuth is provider-specific. Use the Claude setup card
+                below; do not use an MCP API key as an OAuth client secret.
+              </p>
             </div>
           </div>
         </Card>
@@ -2607,7 +2597,7 @@ function DeveloperSection({
               </button>
             </div>
 
-            {/* Field 4: OAuth Client Secret → pastes into Claude's Advanced "OAuth Client Secret" */}
+            {/* Field 4: OAuth Client Secret must be blank for Claude's public PKCE client. */}
             <div>
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 4. OAuth Client Secret{' '}
@@ -2615,33 +2605,9 @@ function DeveloperSection({
                   → Claude Advanced "OAuth Client Secret"
                 </span>
               </p>
-              {claudeConnectorSecret ? (
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(claudeConnectorSecret);
-                    setCopiedClaudeSecret(true);
-                    setTimeout(() => setCopiedClaudeSecret(false), 2000);
-                  }}
-                  className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors group"
-                >
-                  <code className="text-sm text-text-primary font-mono truncate mr-2">
-                    {claudeConnectorSecret.slice(0, 8)}…{claudeConnectorSecret.slice(-4)}
-                  </code>
-                  {copiedClaudeSecret ? (
-                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-text-quaternary group-hover:text-text-secondary transition-colors flex-shrink-0" />
-                  )}
-                </button>
-              ) : (
-                <div className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] opacity-60">
-                  <span className="text-sm text-text-quaternary italic">
-                    {mcpKeys.length > 0
-                      ? 'Create a new MCP key above — existing keys cannot be retrieved'
-                      : 'Create an MCP key first (above)'}
-                  </span>
-                </div>
-              )}
+              <div className="w-full flex items-center p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06]">
+                <span className="text-sm text-text-quaternary italic">Leave blank</span>
+              </div>
             </div>
           </div>
 
@@ -2659,7 +2625,7 @@ function DeveloperSection({
               </li>
               <li>
                 Under <span className="text-text-secondary">Advanced settings</span>,
-                paste OAuth Client ID + Secret
+                paste the OAuth Client ID and leave OAuth Client Secret blank
               </li>
               <li>
                 Click <span className="text-text-secondary">Add</span>, then{' '}

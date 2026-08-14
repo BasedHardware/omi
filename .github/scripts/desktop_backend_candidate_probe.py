@@ -5,6 +5,7 @@ The probe is deliberately bounded and content-free in its evidence. It proves:
 
 * the tagged candidate reports the admitted backend source identity;
 * readiness dependencies are healthy;
+* the candidate is the Python runtime and its Gemini proxy reaches a provider;
 * the versioned desktop chat contract is advertised on health and responses;
 * a public-web turn completes; and
 * an ordinary follow-up completes in the same history, so web routing from the
@@ -19,19 +20,23 @@ import argparse
 import json
 import os
 import re
+import signal
 import stat
 import time
 import urllib.error
 import urllib.request
+import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 HTTP_TIMEOUT_SECONDS = 75
 MAX_CHAT_SECONDS = 70
 MAX_FIRST_EVENT_SECONDS = 20
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 CONTRACT_PATTERN = re.compile(r"^[1-9][0-9]{0,5}$")
+REAL_GEMINI_PROVIDER_ROUTES = frozenset({"vertex_ai", "ai_studio", "ai_studio_byok"})
 
 
 class ProbeError(RuntimeError):
@@ -47,10 +52,46 @@ class ChatResult:
     web_search_requests: int
 
 
+@contextmanager
+def _total_response_budget(*, stage: str, started_at: float, max_elapsed_seconds: float) -> Iterator[None]:
+    """Interrupt blocking response reads when the end-to-end budget expires."""
+    remaining = max_elapsed_seconds - (time.monotonic() - started_at)
+    if remaining <= 0:
+        raise ProbeError(f"{stage}: exceeded {max_elapsed_seconds:g}s response budget")
+    if not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer"):
+        raise ProbeError(f"{stage}: total response deadline is unsupported on this runner")
+
+    alarm = signal.SIGALRM
+    previous_handler = signal.getsignal(alarm)
+    armed_at = time.monotonic()
+
+    def deadline_expired(_signum: int, _frame: object) -> None:
+        raise ProbeError(f"{stage}: exceeded {max_elapsed_seconds:g}s response budget")
+
+    signal.signal(alarm, deadline_expired)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, remaining)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(alarm, previous_handler)
+        previous_delay, previous_interval = previous_timer
+        if previous_delay > 0:
+            elapsed = time.monotonic() - armed_at
+            signal.setitimer(signal.ITIMER_REAL, max(previous_delay - elapsed, 1e-6), previous_interval)
+
+
 def _require_object(value: object, *, stage: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ProbeError(f"{stage}: expected a JSON object")
     return value
+
+
+def _require_real_gemini_provider(value: object) -> str:
+    provider = value if isinstance(value, str) else ""
+    if provider not in REAL_GEMINI_PROVIDER_ROUTES:
+        raise ProbeError("gemini_proxy: response did not come from an admitted provider route")
+    return provider
 
 
 def validate_compatibility(
@@ -93,6 +134,7 @@ def validate_health(
     expected = {
         "backend_release_sha": expected_sha,
         "backend_release_channel": expected_channel,
+        "runtime_implementation": "python",
     }
     mismatches = {
         key: {"expected": wanted, "actual": health.get(key)}
@@ -104,6 +146,7 @@ def validate_health(
     return {
         "backend_release_channel": expected_channel,
         "backend_release_sha": expected_sha,
+        "runtime_implementation": "python",
         **compatibility,
     }
 
@@ -212,6 +255,57 @@ def _require_firestore_read(base_url: str, *, timeout: int = HTTP_TIMEOUT_SECOND
     return {"status": "passed"}
 
 
+def _gemini_request(
+    base_url: str,
+    *,
+    token: str,
+    timeout: int = HTTP_TIMEOUT_SECONDS,
+) -> dict[str, object]:
+    """Exercise the actual Gemini proxy without retaining generated content."""
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": "Reply with OK."}]}],
+        "generationConfig": {"maxOutputTokens": 16, "thinkingConfig": {"thinkingBudget": 0}},
+    }
+    request = urllib.request.Request(
+        f"{base_url.rstrip('/')}/v1/proxy/gemini/models/gemini-2.5-flash:generateContent",
+        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "X-Omi-Request-Id": f"candidate-probe-{uuid.uuid4()}",
+        },
+        method="POST",
+    )
+    started_at = time.monotonic()
+    try:
+        with _total_response_budget(
+            stage="gemini_proxy", started_at=started_at, max_elapsed_seconds=MAX_CHAT_SECONDS
+        ):
+            with urllib.request.urlopen(request, timeout=min(timeout, MAX_CHAT_SECONDS)) as response:
+                response_payload = _require_object(
+                    json.loads(response.read().decode("utf-8")), stage="gemini_proxy"
+                )
+                candidates = response_payload.get("candidates")
+                if not isinstance(candidates, list) or not candidates:
+                    raise ProbeError("gemini_proxy: provider response has no candidates")
+                provider = _require_real_gemini_provider(response.headers.get("x-omi-provider"))
+                request_id = response.headers.get("x-omi-request-id") or response.headers.get("x-request-id")
+                if not request_id:
+                    raise ProbeError("gemini_proxy: typed proxy headers are missing")
+    except ProbeError:
+        raise
+    except urllib.error.HTTPError as error:
+        failure_class = error.headers.get("x-omi-error-class") if error.headers else None
+        raise ProbeError(f"gemini_proxy: HTTP {error.code} ({failure_class or 'untyped'})") from error
+    except (urllib.error.URLError, OSError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ProbeError("gemini_proxy: request failed") from error
+    elapsed = time.monotonic() - started_at
+    if elapsed > MAX_CHAT_SECONDS:
+        raise ProbeError(f"gemini_proxy: exceeded {MAX_CHAT_SECONDS}s response budget")
+    return {"elapsed_seconds": round(elapsed, 3), "provider_route": provider, "status": "passed"}
+
+
 def _chat_request(
     base_url: str,
     *,
@@ -251,29 +345,30 @@ def _chat_request(
     )
     started_at = time.monotonic()
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            response_contract = response.headers.get("x-omi-chat-contract-version")
-            if response_contract != contract_version:
-                raise ProbeError(
-                    f"{stage}: response contract mismatch "
-                    f"(expected={contract_version}, actual={response_contract or 'missing'})"
+        with _total_response_budget(stage=stage, started_at=started_at, max_elapsed_seconds=MAX_CHAT_SECONDS):
+            with urllib.request.urlopen(request, timeout=min(timeout, MAX_CHAT_SECONDS)) as response:
+                response_contract = response.headers.get("x-omi-chat-contract-version")
+                if response_contract != contract_version:
+                    raise ProbeError(
+                        f"{stage}: response contract mismatch "
+                        f"(expected={contract_version}, actual={response_contract or 'missing'})"
+                    )
+                answer, _, web_search_requests, first_event_seconds, saw_usage = parse_sse(
+                    response,
+                    stage=stage,
+                    started_at=started_at,
+                    max_elapsed_seconds=MAX_CHAT_SECONDS,
                 )
-            answer, _, web_search_requests, first_event_seconds, saw_usage = parse_sse(
-                response,
-                stage=stage,
-                started_at=started_at,
-                max_elapsed_seconds=MAX_CHAT_SECONDS,
-            )
-            elapsed_seconds = time.monotonic() - started_at
-            if elapsed_seconds > MAX_CHAT_SECONDS:
-                raise ProbeError(f"{stage}: exceeded {MAX_CHAT_SECONDS}s response budget")
-            return ChatResult(
-                answer=answer,
-                elapsed_seconds=elapsed_seconds,
-                first_event_seconds=first_event_seconds,
-                saw_usage=saw_usage,
-                web_search_requests=web_search_requests,
-            )
+                elapsed_seconds = time.monotonic() - started_at
+                if elapsed_seconds > MAX_CHAT_SECONDS:
+                    raise ProbeError(f"{stage}: exceeded {MAX_CHAT_SECONDS}s response budget")
+                return ChatResult(
+                    answer=answer,
+                    elapsed_seconds=elapsed_seconds,
+                    first_event_seconds=first_event_seconds,
+                    saw_usage=saw_usage,
+                    web_search_requests=web_search_requests,
+                )
     except ProbeError:
         raise
     except urllib.error.HTTPError as error:
@@ -302,6 +397,7 @@ def probe_candidate(
     )
     readiness = validate_readiness(_request_json(f"{base_url.rstrip('/')}/ready"))
     firestore = _require_firestore_read(base_url)
+    gemini = _gemini_request(base_url, token=token)
 
     initial_prompt = "Reply with one concise sentence confirming that the desktop chat service is available."
     initial_result = _chat_request(
@@ -339,6 +435,7 @@ def probe_candidate(
             "ordinary_follow_up_seconds": round(follow_up_result.elapsed_seconds, 3),
         },
         "firestore_read": firestore,
+        "gemini_proxy": gemini,
         "readiness": readiness,
         "target": {
             "candidate_tag": candidate_tag,

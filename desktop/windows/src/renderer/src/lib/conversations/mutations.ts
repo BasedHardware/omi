@@ -6,6 +6,7 @@
 
 import { omiApi } from '../apiClient'
 import type { MergeConversationsResponse } from '../omiApi.generated'
+import { conversationShareUrl } from '../shareLinks'
 
 /** Toggle a conversation's starred flag. Backend contract: starred is a QUERY
  *  param on a bodyless PATCH (not a JSON body). */
@@ -37,7 +38,7 @@ export async function getConversationShareLink(id: string): Promise<string> {
   await omiApi.patch(`/v1/conversations/${id}/visibility`, null, {
     params: { value: 'shared' }
   })
-  return `https://h.omi.me/conversations/${id}`
+  return conversationShareUrl(id)
 }
 
 /** Re-run Omi's summarization. `appId` targets a specific app (Mac's App Insights

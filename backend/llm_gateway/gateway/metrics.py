@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from typing import Protocol
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 from llm_gateway.gateway.accounting import AccountingEvent
+from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.errors import GatewayError
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, output_budget_bucket
-from llm_gateway.gateway.schemas import FailureClass, ProviderRejection
+from llm_gateway.gateway.schemas import FailureClass, ProviderRejection, RouteServingClass
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +29,12 @@ _REQUEST_LABELS = [
     'api_surface',
     'streaming',
     'phase',
+    'route_serving_class',
     'used_lkg',
     'fallback_used',
     'fallback_reason',
+    'fallback_from_route_artifact_id',
+    'fallback_to_route_artifact_id',
     'outcome',
     'error_class',
     'provider_rejection',
@@ -77,6 +82,12 @@ ACCOUNTING_EVENTS_TOTAL = Counter(
     ['api_surface', 'provider', 'payer', 'usage_status', 'cost_status', 'delivery'],
 )
 
+GATEWAY_CONFIG_INFO = Gauge(
+    'llm_gateway_config_info',
+    'Immutable gateway build and route/config artifact identity',
+    ['build_identity', 'lane_id', 'route_role', 'route_artifact_id', 'artifact_digest'],
+)
+
 
 class ExecutorResultLike(Protocol):
     @property
@@ -98,7 +109,16 @@ class ExecutorResultLike(Protocol):
     def fallback_reason(self) -> FailureClass | None: ...
 
     @property
+    def fallback_from_route_artifact_id(self) -> str | None: ...
+
+    @property
+    def fallback_to_route_artifact_id(self) -> str | None: ...
+
+    @property
     def used_lkg(self) -> bool: ...
+
+    @property
+    def route_serving_class(self) -> RouteServingClass: ...
 
     @property
     def output_budget(self) -> OutputBudgetDecision: ...
@@ -121,9 +141,12 @@ def observe_success(
         provider=result.selected_provider,
         model=result.selected_model,
         credential_source=credential_source,
+        route_serving_class=result.route_serving_class,
         used_lkg=result.used_lkg,
         fallback_used=result.fallback_used,
         fallback_reason=result.fallback_reason,
+        fallback_from_route_artifact_id=result.fallback_from_route_artifact_id,
+        fallback_to_route_artifact_id=result.fallback_to_route_artifact_id,
         outcome='success',
         error_class='none',
         request_id=request_id,
@@ -147,6 +170,8 @@ def observe_error(
     request_id: str,
     api_surface: str = 'openai_chat_completions',
     streaming: bool = False,
+    used_lkg: bool = False,
+    route_serving_class: RouteServingClass | str = RouteServingClass.ACTIVE,
 ) -> None:
     observe_route_result(
         started_at,
@@ -155,9 +180,12 @@ def observe_error(
         provider=error.provider,
         model=error.model,
         credential_source=credential_source,
-        used_lkg=False,
+        route_serving_class=route_serving_class,
+        used_lkg=used_lkg,
         fallback_used=False,
         fallback_reason=error.failure_class,
+        fallback_from_route_artifact_id=None,
+        fallback_to_route_artifact_id=None,
         outcome='error',
         error_class=error.code.value,
         provider_rejection=error.provider_rejection,
@@ -176,9 +204,12 @@ def observe_route_result(
     provider: str,
     model: str,
     credential_source: str,
+    route_serving_class: RouteServingClass | str = RouteServingClass.ACTIVE,
     used_lkg: bool,
     fallback_used: bool,
     fallback_reason: FailureClass | str | None,
+    fallback_from_route_artifact_id: str | None = None,
+    fallback_to_route_artifact_id: str | None = None,
     outcome: str,
     error_class: str,
     request_id: str,
@@ -201,9 +232,12 @@ def observe_route_result(
         'api_surface': _bounded(api_surface),
         'streaming': _bool_label(streaming),
         'phase': _bounded(phase),
+        'route_serving_class': _route_serving_class_label(route_serving_class),
         'used_lkg': _bool_label(used_lkg),
         'fallback_used': _bool_label(fallback_used),
         'fallback_reason': _enum_label(fallback_reason, default='none'),
+        'fallback_from_route_artifact_id': _optional_identity_label(fallback_from_route_artifact_id),
+        'fallback_to_route_artifact_id': _optional_identity_label(fallback_to_route_artifact_id),
         'outcome': _bounded(outcome),
         'error_class': _bounded(error_class),
         'provider_rejection': _provider_rejection_label(provider_rejection),
@@ -223,7 +257,8 @@ def observe_route_result(
     terminal_log = logger.warning if outcome == 'error' else logger.info
     terminal_log(
         'llm_gateway_terminal request_id=%s surface=%s streaming=%s phase=%s lane=%s route=%s provider=%s '
-        'model=%s credential_source=%s outcome=%s error_class=%s failure_class=%s fallback_used=%s '
+        'model=%s credential_source=%s outcome=%s error_class=%s route_serving_class=%s failure_class=%s '
+        'fallback_used=%s fallback_from=%s fallback_to=%s '
         'provider_rejection=%s '
         'budget_source=%s output_budget=%s completion_size=%s finish_reason=%s ttfb_seconds=%s',
         request_id,
@@ -237,8 +272,11 @@ def observe_route_result(
         labels['credential_source'],
         labels['outcome'],
         labels['error_class'],
+        labels['route_serving_class'],
         labels['fallback_reason'],
         labels['fallback_used'],
+        labels['fallback_from_route_artifact_id'],
+        labels['fallback_to_route_artifact_id'],
         labels['provider_rejection'],
         labels['budget_source'],
         labels['output_budget'],
@@ -277,6 +315,22 @@ def observe_accounting_event(event: AccountingEvent, *, delivery: str) -> None:
     ).inc()
 
 
+def observe_gateway_config_identity(config: GatewayConfig, *, build_identity: str) -> None:
+    """Publish one bounded info series per lane pointer, never per request."""
+    build_label = _build_identity_label(build_identity)
+    GATEWAY_CONFIG_INFO.clear()
+    for lane_id, lane in sorted(config.lanes.items()):
+        for route_role, route_id in (('active', lane.active_route), ('lkg', lane.last_known_good)):
+            route = config.route_artifacts[route_id]
+            GATEWAY_CONFIG_INFO.labels(
+                build_identity=build_label,
+                lane_id=_bounded(lane_id),
+                route_role=route_role,
+                route_artifact_id=_bounded(route.route_artifact_id),
+                artifact_digest=_artifact_digest_label(route.artifact_digest or route.content_digest),
+            ).set(1)
+
+
 def report_observation_failure(*, api_surface: str, request_id: str) -> None:
     """Rate-limit a payload-free warning when best-effort telemetry itself fails."""
     global _last_observation_warning_at
@@ -304,6 +358,28 @@ def _enum_label(value: object, *, default: str = 'unknown') -> str:
     if raw_value is None:
         return default
     return _bounded(str(raw_value))
+
+
+def _route_serving_class_label(value: object) -> str:
+    raw_value = getattr(value, 'value', value)
+    try:
+        return RouteServingClass(str(raw_value)).value
+    except ValueError:
+        return 'unknown'
+
+
+def _optional_identity_label(value: str | None) -> str:
+    return 'none' if value is None else _bounded(value)
+
+
+def _build_identity_label(value: str) -> str:
+    normalized = value.strip().lower()
+    return normalized if re.fullmatch(r'[0-9a-f]{7,64}', normalized) else 'unknown'
+
+
+def _artifact_digest_label(value: str) -> str:
+    normalized = value.strip().lower()
+    return normalized if re.fullmatch(r'sha256:[0-9a-f]{64}', normalized) else 'unknown'
 
 
 def _provider_rejection_label(value: object) -> str:

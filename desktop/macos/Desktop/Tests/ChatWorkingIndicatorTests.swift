@@ -69,15 +69,15 @@ final class ChatWorkingIndicatorTests: XCTestCase {
     XCTAssertEqual(ChatOmiMarkPlacement.rowHeight(showsMark: false), 0)
   }
 
-  func testIdleAndNonAssistantMessagesUseGatherMotion() {
-    XCTAssertEqual(ChatWorkingStatus.motion(for: nil), .gather)
-    XCTAssertEqual(
-      ChatWorkingStatus.motion(for: ChatMessage(text: "hello", sender: .user)),
-      .gather
+  func testOnlyTheAssistantsOwnInFlightReplyMovesTheMark() {
+    XCTAssertNil(ChatWorkingStatus.motion(for: nil))
+    XCTAssertNil(
+      ChatWorkingStatus.motion(for: ChatMessage(text: "hello", sender: .user, isStreaming: true))
     )
+    XCTAssertNil(ChatWorkingStatus.motion(for: ChatMessage(text: "Answer", sender: .ai)))
   }
 
-  func testToolProgressHasOneExpandableGroupWithAllChildDetails() {
+  func testToolProgressHasOneTimelineGroupWithAllChildDetails() {
     let blocks: [ChatContentBlock] = [
       .toolCall(
         id: "search",
@@ -101,10 +101,13 @@ final class ChatWorkingIndicatorTests: XCTestCase {
     guard let visibleGroup = visibleGroups.first,
       case .toolCalls(_, let childCalls) = visibleGroup
     else {
-      return XCTFail("Expected one expandable tool-call pill")
+      return XCTFail("Expected one tool-call timeline")
     }
     XCTAssertEqual(childCalls.map(\.id), ["search", "fetch"])
-    XCTAssertFalse(ToolCallsGroupExpansionPolicy.initiallyExpanded())
+    XCTAssertEqual(
+      ToolActivityTimelinePresentation.items(from: childCalls).map(\.connectsToNext),
+      [true, false]
+    )
   }
 
   @MainActor
@@ -126,37 +129,74 @@ final class ChatWorkingIndicatorTests: XCTestCase {
     XCTAssertNotEqual(marked, unmarked)
   }
 
-  func testLatestInFlightToolDrivesMarkMotion() {
+  /// A row reports its work once.
+  ///
+  /// While a tool runs, the row already carries a card that spins under the name of what is
+  /// running ("Searching the web"). The mark used to turn an inch to its left at the same time:
+  /// two spinners for one activity, and only one of them saying anything.
+  func testRunningToolCardIsTheRowsOnlyActivityIndicator() {
     let message = ChatMessage(
       text: "",
       sender: .ai,
+      isStreaming: true,
       contentBlocks: [
         .toolCall(id: "done", name: "Read", status: .completed),
         .toolCall(id: "fetch", name: "WebFetch", status: .running),
       ]
     )
 
-    XCTAssertEqual(ChatWorkingStatus.motion(for: message), .gather)
+    XCTAssertNil(ChatWorkingStatus.motion(for: message))
   }
 
-  func testLatestInFlightToolWinsAcrossSlowAndStalledStates() {
+  func testSlowAndStalledToolCardsKeepOwnershipOfTheIndicator() {
     let message = ChatMessage(
       text: "",
       sender: .ai,
+      isStreaming: true,
       contentBlocks: [
         .toolCall(id: "fetch", name: "WebFetch", status: .slow),
         .toolCall(id: "write", name: "Write", status: .stalled),
       ]
     )
 
-    XCTAssertEqual(ChatWorkingStatus.motion(for: message), .wave)
+    XCTAssertNil(ChatWorkingStatus.motion(for: message))
   }
 
-  func testToolMotionClassificationCoversReadWriteAndMCPNames() {
-    XCTAssertEqual(ChatMarkMotion.forTool("Read"), .gather)
-    XCTAssertEqual(ChatMarkMotion.forTool("WebFetch"), .gather)
-    XCTAssertEqual(ChatMarkMotion.forTool("Write"), .wave)
-    XCTAssertEqual(ChatMarkMotion.forTool("mcp__filesystem__edit"), .wave)
+  /// The saving, not just the tidiness: a still mark is a mark that has stopped asking the run
+  /// loop for a frame it does not need. Handing the tool-call state a `nil` motion is only half
+  /// the fix if the animated branch survives it.
+  @MainActor
+  func testMarkSchedulesNoFramesWhileAToolCardIsRunning() {
+    let message = ChatMessage(
+      text: "",
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [.toolCall(id: "fetch", name: "WebFetch", status: .running)]
+    )
+
+    XCTAssertEqual(
+      ChatOmiMark.frameSchedule(
+        motion: ChatWorkingStatus.motion(for: message),
+        reduceMotion: false
+      ),
+      .staticResting
+    )
+  }
+
+  /// …and the other half: the states where the mark is the *only* thing reporting work keep it.
+  /// Deleting the motion outright would leave a reply that has produced nothing yet with no sign
+  /// that anything is happening at all.
+  func testMarkStillTurnsWhenNothingElseSpeaksForTheWork() {
+    let thinking = ChatMessage(text: "", sender: .ai, isStreaming: true)
+    XCTAssertEqual(ChatWorkingStatus.motion(for: thinking), .gather)
+
+    let afterTheToolFinished = ChatMessage(
+      text: "Partial answer",
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [.toolCall(id: "fetch", name: "WebFetch", status: .completed)]
+    )
+    XCTAssertEqual(ChatWorkingStatus.motion(for: afterTheToolFinished), .gather)
   }
 
   @MainActor

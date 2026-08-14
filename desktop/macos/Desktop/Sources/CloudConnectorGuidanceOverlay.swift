@@ -148,9 +148,9 @@ final class CloudConnectorGuidanceOverlay {
       defer: false
     )
     panel.contentViewController = hostingController
-    panel.isOpaque = false
-    panel.backgroundColor = .clear
-    panel.hasShadow = false
+    // Transparent, shadowless and light-pinned in one call: the panel *is* the glass, and the
+    // content draws the one ambient shadow (`InkGlassStyle.floating`).
+    WindowGlass.wear(panel, as: .floating)
     panel.level = .popUpMenu
     panel.ignoresMouseEvents = true
     panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
@@ -200,9 +200,9 @@ final class CloudConnectorGuidanceOverlay {
       defer: false
     )
     panel.contentViewController = hostingController
-    panel.isOpaque = false
-    panel.backgroundColor = .clear
-    panel.hasShadow = false
+    // Transparent, shadowless and light-pinned in one call: the panel *is* the glass, and the
+    // content draws the one ambient shadow (`InkGlassStyle.floating`).
+    WindowGlass.wear(panel, as: .floating)
     panel.level = .popUpMenu
     // The card carries a close button, so it must receive clicks (the pointing overlay
     // stays click-through).
@@ -222,29 +222,34 @@ final class CloudConnectorGuidanceOverlay {
   }
 
   /// Screen Recording helper whose app icon can be dropped into System Settings.
-  func presentDragToGrantCard(appIcon: NSImage, appName: String, appURL: URL, near anchor: CGRect) {
+  func presentDragToGrantCard(
+    appIcon: NSImage,
+    appName: String,
+    appURL: URL,
+    near anchor: CGRect,
+    visibleFrameOverride: CGRect? = nil,
+    followsSettingsWindow: Bool = true
+  ) {
     dismissTask?.cancel()
     settingsWatchTask?.cancel()
     closeCurrentOverlay()
 
     let cardSize = Self.dragCardSize(appName: appName)
     dragCardSize = cardSize
-    let screen = Self.screen(forAnchor: anchor)
+    let visibleFrame = visibleFrameOverride ?? Self.screen(forAnchor: anchor).visibleFrame
     let targetFrame = Self.permissionListTargetFrame(in: anchor)
     let frame = Self.dragCardFrame(
-      target: targetFrame, cardSize: cardSize, visibleFrame: screen.visibleFrame)
+      target: targetFrame, cardSize: cardSize, visibleFrame: visibleFrame)
     let dragTargetState = ScreenRecordingDragTargetState(
       frame: targetFrame,
       direction: Self.dragCardDirection(cardFrame: frame, targetFrame: targetFrame))
     self.dragTargetState = dragTargetState
 
-    lastAutomationState = [
-      "visible": "true",
-      "kind": "dragToGrant",
-      "appName": appName,
-      "panelFrame": Self.string(frame),
-      "dropTargetFrame": Self.string(targetFrame),
-    ]
+    lastAutomationState = Self.dragToGrantAutomationState(
+      appName: appName,
+      settingsFrame: anchor,
+      visibleFrame: visibleFrame
+    )
 
     presentPermissionDropTarget(appName: appName, frame: targetFrame)
 
@@ -264,9 +269,9 @@ final class CloudConnectorGuidanceOverlay {
       defer: false
     )
     panel.contentView = hostingView
-    panel.isOpaque = false
-    panel.backgroundColor = .clear
-    panel.hasShadow = false
+    // Transparent, shadowless and light-pinned in one call: the panel *is* the glass, and the
+    // content draws the one ambient shadow (`InkGlassStyle.floating`).
+    WindowGlass.wear(panel, as: .floating)
     panel.level = .screenSaver
     panel.ignoresMouseEvents = false
     panel.becomesKeyOnlyIfNeeded = true
@@ -292,6 +297,8 @@ final class CloudConnectorGuidanceOverlay {
         self?.dismiss()
       }
     }
+
+    guard followsSettingsWindow else { return }
 
     // Follow the System Settings window: re-anchor over it once it appears, and
     // dismiss the card as soon as the user closes it — the drag target is gone.
@@ -321,19 +328,23 @@ final class CloudConnectorGuidanceOverlay {
     dragTargetState?.frame = targetFrame
     let frame = Self.dragCardFrame(
       target: targetFrame, cardSize: size, visibleFrame: screen.visibleFrame)
-    dragTargetState?.direction = Self.dragCardDirection(cardFrame: frame, targetFrame: targetFrame)
+    let direction = Self.dragCardDirection(cardFrame: frame, targetFrame: targetFrame)
+    dragTargetState?.direction = direction
     window.setFrame(frame, display: true)
     dragTargetWindow?.setFrame(targetFrame, display: true)
     lastAutomationState?["panelFrame"] = Self.string(frame)
     lastAutomationState?["dropTargetFrame"] = Self.string(targetFrame)
+    lastAutomationState?["dropTargetVertical"] = targetFrame.midY >= anchor.midY ? "upper" : "lower"
+    lastAutomationState?["dragDirection"] = direction.rawValue
   }
 
   /// The list is the actual drag destination, not the entire System Settings
   /// window. System Settings does not expose this list before Accessibility has
   /// been granted, so model its stable content region from the public window
-  /// geometry. Keep it proportional so a resized or moved Settings window gets
-  /// guidance in the same place.
-  static func permissionListTargetFrame(in settingsFrame: CGRect) -> CGRect {
+  /// geometry. The permission list is in the upper content pane, immediately
+  /// below the toolbar/header; using `minY` here puts the highlight in the lower
+  /// pane and detaches the helper card from the list the user needs to target.
+  nonisolated static func permissionListTargetFrame(in settingsFrame: CGRect) -> CGRect {
     let sidebarWidth = min(max(settingsFrame.width * 0.28, 180), 270)
     let horizontalInset = min(max(settingsFrame.width * 0.05, 24), 44)
     let x = min(
@@ -341,7 +352,8 @@ final class CloudConnectorGuidanceOverlay {
       settingsFrame.minX + sidebarWidth + horizontalInset)
     let width = max(120, settingsFrame.maxX - horizontalInset - x)
     let height = min(max(settingsFrame.height * 0.28, 96), 180)
-    let y = settingsFrame.minY + max(56, settingsFrame.height * 0.22)
+    let contentHeaderInset = max(56, settingsFrame.height * 0.22)
+    let y = settingsFrame.maxY - contentHeaderInset - height
     return CGRect(x: x, y: y, width: width, height: height)
   }
 
@@ -400,6 +412,31 @@ final class CloudConnectorGuidanceOverlay {
   static func dragCardSize(appName: String) -> CGSize {
     let hasLongDisplayName = appName.count > 16
     return CGSize(width: hasLongDisplayName ? 260 : 220, height: hasLongDisplayName ? 200 : 190)
+  }
+
+  static func dragToGrantAutomationState(
+    appName: String,
+    settingsFrame: CGRect,
+    visibleFrame: CGRect
+  ) -> [String: String] {
+    let cardSize = dragCardSize(appName: appName)
+    let targetFrame = permissionListTargetFrame(in: settingsFrame)
+    let cardFrame = dragCardFrame(
+      target: targetFrame,
+      cardSize: cardSize,
+      visibleFrame: visibleFrame
+    )
+    let direction = dragCardDirection(cardFrame: cardFrame, targetFrame: targetFrame)
+    return [
+      "visible": "true",
+      "kind": "dragToGrant",
+      "appName": appName,
+      "panelFrame": string(cardFrame),
+      "dropTargetFrame": string(targetFrame),
+      "dropTargetPane": "content",
+      "dropTargetVertical": targetFrame.midY >= settingsFrame.midY ? "upper" : "lower",
+      "dragDirection": direction.rawValue,
+    ]
   }
 
   static func dragCardInitialAlpha(reduceMotion: Bool) -> CGFloat {
@@ -470,9 +507,9 @@ final class CloudConnectorGuidanceOverlay {
       defer: false
     )
     panel.contentViewController = hostingController
-    panel.isOpaque = false
-    panel.backgroundColor = .clear
-    panel.hasShadow = false
+    // Transparent, shadowless and light-pinned in one call: the panel *is* the glass, and the
+    // content draws the one ambient shadow (`InkGlassStyle.floating`).
+    WindowGlass.wear(panel, as: .floating)
     panel.level = .popUpMenu
     // Copy buttons must receive clicks; .nonactivatingPanel keeps the browser focused.
     panel.ignoresMouseEvents = false
@@ -585,9 +622,9 @@ final class CloudConnectorGuidanceOverlay {
       defer: false
     )
     panel.contentView = hostingView
-    panel.isOpaque = false
-    panel.backgroundColor = .clear
-    panel.hasShadow = false
+    // Transparent, shadowless and light-pinned in one call: the panel *is* the glass, and the
+    // content draws the one ambient shadow (`InkGlassStyle.floating`).
+    WindowGlass.wear(panel, as: .floating)
     panel.level = .screenSaver
     // The highlight intentionally cannot receive events: the system list below
     // must remain the real drop receiver.
@@ -618,9 +655,26 @@ final class CloudConnectorGuidanceOverlay {
       presentClaudeAddHint(windowFrame: fixture.windowFrame, candidates: fixture.candidates)
     case .claudeConnectExplicit, .claudeConnectHeuristic:
       presentClaudeConnectHint(windowFrame: fixture.windowFrame, candidates: fixture.candidates)
+    case .screenRecordingDrag:
+      let appURL = Bundle.main.bundleURL
+      presentDragToGrantCard(
+        appIcon: NSWorkspace.shared.icon(forFile: appURL.path),
+        appName: fixture.appName,
+        appURL: appURL,
+        near: fixture.windowFrame,
+        visibleFrameOverride: fixture.visibleFrame,
+        followsSettingsWindow: false
+      )
     }
 
-    var state = automationState()
+    return Self.automationFixtureState(fixture, state: automationState())
+  }
+
+  static func automationFixtureState(
+    _ fixture: SpatialOverlayDogfoodFixture,
+    state: [String: String]
+  ) -> [String: String] {
+    var state = state
     state["fixture"] = fixture.rawValue
     state["action"] = fixture.actionLabel.lowercased()
     return state
@@ -726,11 +780,11 @@ private struct CloudConnectorCardHeaderView: View {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(title)
           .scaledFont(size: 13.5, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .fixedSize(horizontal: false, vertical: true)
         Text(subtitle)
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .lineSpacing(1.5)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -740,9 +794,9 @@ private struct CloudConnectorCardHeaderView: View {
       Button(action: onDismiss) {
         Image(systemName: "xmark")
           .scaledFont(size: OmiType.micro, weight: .bold)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 22, height: 22)
-          .background(Circle().fill(Color.white.opacity(0.10)))
+          .background(Circle().fill(Ink.rowFillHover))
           .contentShape(Circle())
       }
       .buttonStyle(.plain)
@@ -764,7 +818,7 @@ private struct CloudConnectorInstructionCardView: View {
       .padding(.trailing, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.lg)
       .frame(width: size.width, height: size.height, alignment: .topLeading)
-      .background(SpatialOverlayCardBackground())
+      .inkGlassPanel()
       .contentShape(Rectangle())
       .onTapGesture(perform: onDismiss)
   }
@@ -774,7 +828,7 @@ private final class TransparentHostingView<Content: View>: NSHostingView<Content
   override var isOpaque: Bool { false }
 }
 
-enum PermissionDragDirection: Equatable {
+enum PermissionDragDirection: String, Equatable {
   case up
   case down
   case left
@@ -933,17 +987,17 @@ private struct PermissionDragDropTargetView: View {
   var body: some View {
     RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
       .strokeBorder(
-        OmiColors.success.opacity(0.94),
+        Ink.listeningGreen.opacity(0.94),
         style: StrokeStyle(lineWidth: 2.5, dash: [8, 5])
       )
       .overlay(alignment: .topLeading) {
         Text("DROP \(appName.uppercased()) HERE")
           .scaledFont(size: 10.5, weight: .bold)
           .tracking(0.7)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.surface)
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xxs)
-          .background(Capsule().fill(OmiColors.success.opacity(0.96)))
+          .background(Capsule().fill(Ink.listeningGreen.opacity(0.96)))
           .padding(OmiSpacing.sm)
       }
       .frame(width: size.width, height: size.height)
@@ -977,7 +1031,7 @@ private struct ScreenRecordingDragCardView: View {
   var body: some View {
     ZStack {
       RadialGradient(
-        colors: [OmiColors.success.opacity(0.22), Color.clear],
+        colors: [Ink.listeningGreen.opacity(0.22), Color.clear],
         center: .center,
         startRadius: 8,
         endRadius: 88
@@ -986,7 +1040,7 @@ private struct ScreenRecordingDragCardView: View {
       VStack(spacing: 7) {
         Image(systemName: direction.systemImage)
           .scaledFont(size: 14, weight: .bold)
-          .foregroundColor(OmiColors.textSecondary.opacity(hintUp ? 1 : 0.6))
+          .foregroundColor(Ink.secondary.opacity(hintUp ? 1 : 0.6))
           .offset(hintOffset)
 
         AppBundleDragSource(icon: appIcon, appURL: appURL, targetState: targetState)
@@ -997,14 +1051,17 @@ private struct ScreenRecordingDragCardView: View {
           .accessibilityLabel(
             "Press and drag \(appName) to the highlighted permission list, then release")
 
+        // On the glass, not on whatever is behind it. This copy floats over the *System Settings*
+        // window, whose appearance this app does not control, so a bare run of ink plus a drop
+        // shadow is legible on one machine and invisible on the next.
         Text("Press, drag, and release \(appName)\nin the highlighted list")
-          .scaledFont(size: 13.5, weight: .bold)
-          .foregroundColor(OmiColors.textPrimary)
+          .inkStyle(.rowCopy, color: Ink.primary)
           .multilineTextAlignment(.center)
-          .lineSpacing(-1)
           .fixedSize(horizontal: false, vertical: true)
           .frame(maxWidth: size.width - 20)
-          .shadow(color: Color.black.opacity(0.65), radius: 3, y: 1)
+          .padding(.horizontal, OmiSpacing.md)
+          .padding(.vertical, OmiSpacing.sm)
+          .inkGlassPanel(cornerRadius: OmiChrome.controlRadius)
       }
     }
     .frame(width: size.width, height: size.height)
@@ -1041,7 +1098,7 @@ private struct CloudConnectorFieldCopyCardView: View {
     .padding(.trailing, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.lg)
     .frame(width: size.width, height: size.height, alignment: .topLeading)
-    .background(SpatialOverlayCardBackground())
+    .inkGlassPanel()
   }
 
   private func sectionView(_ section: CloudConnectorCopySection) -> some View {
@@ -1049,7 +1106,7 @@ private struct CloudConnectorFieldCopyCardView: View {
       if section.hasVisibleTitle {
         Text(section.title)
           .scaledFont(size: 10.5, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(1)
       }
 
@@ -1065,7 +1122,7 @@ private struct CloudConnectorFieldCopyCardView: View {
     HStack(spacing: OmiSpacing.sm) {
       Text(field.label)
         .scaledFont(size: 11.5, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .lineLimit(1)
         .minimumScaleFactor(0.82)
         .frame(width: 152, alignment: .leading)
@@ -1073,7 +1130,7 @@ private struct CloudConnectorFieldCopyCardView: View {
       Text(field.displayValue)
         .font(.system(size: 11, design: .monospaced))
         .italic(field.value.isEmpty)
-        .foregroundColor(field.value.isEmpty ? OmiColors.textTertiary : OmiColors.textSecondary)
+        .foregroundColor(field.value.isEmpty ? Ink.secondary : Ink.secondary)
         .lineLimit(1)
         .truncationMode(.middle)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1081,7 +1138,7 @@ private struct CloudConnectorFieldCopyCardView: View {
       if field.value.isEmpty {
         Text("—")
           .scaledFont(size: 10.5, weight: .semibold)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xxs)
       } else {
@@ -1100,11 +1157,11 @@ private struct CloudConnectorFieldCopyCardView: View {
           .scaledFont(size: OmiType.micro, weight: .bold)
       }
       .frame(width: 28, height: 22)
-      .foregroundColor(copiedFieldID == field.id ? OmiColors.success : OmiColors.textPrimary)
+      .foregroundColor(copiedFieldID == field.id ? Ink.listeningGreen : Ink.primary)
       .background(
         Capsule().fill(
           copiedFieldID == field.id
-            ? OmiColors.success.opacity(0.16) : Color.white.opacity(0.12))
+            ? Ink.listeningGreen.opacity(0.16) : Ink.rowFillHover)
       )
       .contentShape(Capsule())
     }
@@ -1127,49 +1184,24 @@ private struct CloudConnectorFieldCopyCardView: View {
   }
 }
 
-/// Frosted, lightly accented surface shared by the guidance bubble and the
-/// instruction card so both read as one polished family.
-private struct SpatialOverlayCardBackground: View {
-  var cornerRadius: CGFloat = 20
-
-  var body: some View {
-    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-      .fill(.ultraThinMaterial)
-      .overlay(
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-          .fill(Color.black.opacity(0.42))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-          .strokeBorder(
-            LinearGradient(
-              colors: [Color.white.opacity(0.24), Color.white.opacity(0.06)],
-              startPoint: .top, endPoint: .bottom),
-            lineWidth: 1)
-      )
-      .shadow(color: .black.opacity(0.42), radius: 26, y: 14)
-  }
-}
-
-/// Green gradient badge used as the leading glyph in spatial overlays.
+/// The leading glyph in a spatial overlay.
+///
+/// The label ladder inverted — an `Ink.primary` disc with an `Ink.surface` glyph — and deliberately
+/// not a filled hue. It was a green gradient with a coloured glow, which is a second accent on a
+/// surface whose whole design is one; inverting the ladder is high-contrast in both appearances by
+/// construction and owes no second colour pair (see `InkButtonStyle.StyledLabel.fill`).
 private struct SpatialOverlayAccentIcon: View {
   let systemName: String
   var diameter: CGFloat = 36
 
   var body: some View {
     ZStack {
-      Circle()
-        .fill(
-          LinearGradient(
-            colors: [OmiColors.success, OmiColors.success.opacity(0.72)],
-            startPoint: .topLeading, endPoint: .bottomTrailing))
+      Circle().fill(Ink.primary)
       Image(systemName: systemName)
         .scaledFont(size: diameter * 0.42, weight: .bold)
-        .foregroundColor(.white)
+        .foregroundColor(Ink.surface)
     }
     .frame(width: diameter, height: diameter)
-    .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75))
-    .shadow(color: OmiColors.success.opacity(0.45), radius: 9, y: 2)
   }
 }
 
@@ -1197,7 +1229,7 @@ private struct CloudConnectorGuidanceView: View {
           .position(x: bubbleRect.midX, y: bubbleRect.midY)
 
         TrianglePointer(edge: placement.attachmentEdge)
-          .fill(OmiColors.success)
+          .fill(Ink.listeningGreen)
           .frame(width: pointerRect.width, height: pointerRect.height)
           .position(x: pointerRect.midX, y: pointerRect.midY)
       }
@@ -1211,16 +1243,16 @@ private struct CloudConnectorGuidanceView: View {
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text("Finish in Claude")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Text("Click the \(actionLabel) button.")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
       Spacer(minLength: 0)
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.md)
-    .background(SpatialOverlayCardBackground(cornerRadius: OmiChrome.controlRadius))
+    .inkGlassPanel()
   }
 }
 

@@ -6,4 +6,18 @@
 # replacing a watched regular file with a symlink cannot bypass validation.
 set -euo pipefail
 
+# `actions/checkout` uses a synthetic merge commit for pull-request jobs. The
+# event's base SHA can lag the merge's first parent when `main` advances while
+# GitHub is preparing the run; diffing that stale SHA against the merge commit
+# then misclassifies unrelated base-branch changes as PR changes. The final
+# review surface of a merge commit is the delta from its first parent.
+if [ "$#" -eq 1 ] && [[ "$1" == *...* ]]; then
+  range="$1"
+  right_revision="${range##*...}"
+  if merge_parent="$(git rev-parse --verify "${right_revision}^1" 2>/dev/null)" \
+    && git rev-parse --verify "${right_revision}^2" >/dev/null 2>&1; then
+    set -- "$merge_parent" "$right_revision"
+  fi
+fi
+
 exec git diff --name-only --no-renames --diff-filter=ACMRTD "$@"

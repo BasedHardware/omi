@@ -98,7 +98,7 @@ def build_memory_vector_metadata(
     projection_commit_id: str,
     vector_updated_at: datetime,
 ) -> Dict[str, Any]:
-    """Neutral metadata for canonical-cohort Pinecone vectors (``memory_layer``, ``memory_schema_version``)."""
+    """Neutral metadata for universal canonical vectors (``memory_layer``, ``memory_schema_version``)."""
     shared = _shared_memory_vector_metadata_fields(
         item, projection_commit_id=projection_commit_id, vector_updated_at=vector_updated_at
     )

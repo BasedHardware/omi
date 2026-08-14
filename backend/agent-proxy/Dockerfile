@@ -17,7 +17,17 @@ FROM ${PYTHON_BASE_IMAGE}
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Patch OS packages in this layer (#7136). No extra apt packages in the final image.
+RUN apt-get update && apt-get -y dist-upgrade && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /opt/venv /opt/venv
+COPY backend/database/__init__.py ./database/__init__.py
+COPY backend/database/_client.py ./database/_client.py
+COPY backend/database/account_deletion_policy.py ./database/account_deletion_policy.py
+COPY backend/database/document_ids.py ./database/document_ids.py
+COPY backend/database/google_credentials.py ./database/google_credentials.py
+COPY backend/services/agent_vm_lifecycle.py ./services/agent_vm_lifecycle.py
+COPY backend/services/agent_vm_read.py ./services/agent_vm_read.py
 COPY backend/utils/__init__.py ./utils/__init__.py
 COPY backend/utils/executors.py ./utils/executors.py
 COPY backend/agent-proxy/resilience.py .

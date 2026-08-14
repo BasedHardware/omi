@@ -46,7 +46,9 @@ set -euo pipefail
 log="${OMI_TEST_MAKE_LOG:?}"
 case "$*" in
   *dev-up*)
-    : >"${OMI_TEST_DEV_UP_MARKER:?}"
+    count=0
+    [[ ! -f "${OMI_TEST_DEV_UP_MARKER:?}" ]] || count="$(cat "$OMI_TEST_DEV_UP_MARKER")"
+    printf '%s\n' "$((count + 1))" >"$OMI_TEST_DEV_UP_MARKER"
     printf 'dev-up\n' >>"$log"
     ;;
   *dev-down*)
@@ -67,6 +69,10 @@ if [[ "${1:-}" == "-" ]]; then
   if [[ "$script" == *"REQUIRED_SERVICES"* ]]; then
     if [[ "$scenario" == "ensure_dev_stack_fail" && -f "${OMI_TEST_DEV_UP_MARKER:-}" ]]; then
       printf '%s\n' '{"healthy":false,"reason":"injected_probe_failure"}'
+      exit 1
+    fi
+    if [[ "$scenario" == "ensure_dev_stack_retry" && "$(cat "${OMI_TEST_DEV_UP_MARKER:-/dev/null}" 2>/dev/null || true)" -lt 2 ]]; then
+      printf '%s\n' '{"healthy":false,"reason":"injected_transient_startup_failure"}'
       exit 1
     fi
     if [[ -f "${OMI_TEST_DEV_UP_MARKER:-}" || "$scenario" == "success" || "$scenario" == "keep_stack_fail" ]]; then
@@ -99,7 +105,12 @@ fi
 exit 0
 SH
 
-  chmod +x "$bin_dir/uname" "$bin_dir/git" "$bin_dir/make" "$bin_dir/python3"
+  cat >"$bin_dir/sleep" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+
+  chmod +x "$bin_dir/uname" "$bin_dir/git" "$bin_dir/make" "$bin_dir/python3" "$bin_dir/sleep"
 }
 
 prepare_fixture_repo() {
@@ -170,8 +181,18 @@ assert_ensure_dev_stack_failure_triggers_dev_down() {
   status="$(printf '%s\n' "$parsed" | sed -n '1p')"
   make_log="$(printf '%s\n' "$parsed" | sed -n '2p')"
   [[ "$status" -ne 0 ]] || fail "ensure_dev_stack failure should exit non-zero"
-  [[ "$(count_make_target "$make_log" dev-up)" -eq 1 ]] || fail "ensure_dev_stack failure must start dev-up before failing"
-  [[ "$(count_make_target "$make_log" dev-down)" -eq 1 ]] || fail "ensure_dev_stack failure must run dev-down once (got: $(cat "$make_log"))"
+  [[ "$(count_make_target "$make_log" dev-up)" -eq 2 ]] || fail "readiness must bound failed startup to two dev-up attempts"
+  [[ "$(count_make_target "$make_log" dev-down)" -eq 2 ]] || fail "failed retry must clean between attempts and at exit (got: $(cat "$make_log"))"
+}
+
+assert_transient_startup_failure_retries_once() {
+  local parsed status make_log
+  parsed="$(run_readiness_case ensure_dev_stack_retry)"
+  status="$(printf '%s\n' "$parsed" | sed -n '1p')"
+  make_log="$(printf '%s\n' "$parsed" | sed -n '2p')"
+  [[ "$status" -eq 0 ]] || fail "readiness should recover from one transient startup failure"
+  [[ "$(count_make_target "$make_log" dev-up)" -eq 2 ]] || fail "transient startup must retry exactly once"
+  [[ "$(count_make_target "$make_log" dev-down)" -eq 2 ]] || fail "retry success must clean between attempts and at exit"
 }
 
 assert_keep_stack_skips_dev_down_on_failure() {
@@ -194,6 +215,7 @@ assert_success_teardowns_once() {
 
 assert_self_check_failure_triggers_dev_down
 assert_ensure_dev_stack_failure_triggers_dev_down
+assert_transient_startup_failure_retries_once
 assert_keep_stack_skips_dev_down_on_failure
 assert_success_teardowns_once
 

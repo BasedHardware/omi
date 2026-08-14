@@ -615,7 +615,7 @@ class PushToTalkManager: ObservableObject {
   /// a free user over 30 questions could keep talking for free. Posts the same usage-limit
   /// popup and returns true so the caller early-returns.
   private func isBlockedByUsageLimit() -> Bool {
-    guard !APIKeyService.isByokActive, FloatingBarUsageLimiter.shared.isLimitReached else { return false }
+    guard isPushToTalkUsageLimitBlocked else { return false }
     log("PushToTalkManager: PTT blocked — monthly free-tier chat limit reached")
     NotificationCenter.default.post(
       name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "ptt"])
@@ -671,7 +671,7 @@ class PushToTalkManager: ObservableObject {
     log("PushToTalkManager: started listening (mode=\(mode))")
   }
 
-  private func enterLockedListening() {
+  func enterLockedListening() {
     if isBlockedByUsageLimit() { return }
     RealtimeHubController.shared.prefetchVoiceContextSnapshotIfNeeded()
     warmPTTInputRouting()
@@ -679,7 +679,7 @@ class PushToTalkManager: ObservableObject {
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
     }
-    if let turnID = currentVoiceTurnID,
+    if let turnID = currentVoiceTurnID, Self.locksExistingTurn(phase: phase),
       voiceTurnCoordinator.activeTurnID == turnID
     {
       voiceTurnCoordinator.publish(.lock(turnID: turnID))
@@ -1106,7 +1106,7 @@ class PushToTalkManager: ObservableObject {
     return maxRun >= 3 || speechFrames >= 6
   }
 
-  private func finalize() {
+  func finalize() {
     guard phase?.isRecording == true else { return }
     guard let turnID = currentVoiceTurnID else { return }
     voiceTurnCoordinator.publish(.finalize(turnID: turnID))

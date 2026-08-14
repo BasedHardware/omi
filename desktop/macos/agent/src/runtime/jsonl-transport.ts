@@ -38,6 +38,9 @@ export interface McpServerBuildContext {
   includeSwiftBackedTools?: boolean;
   screenContext?: boolean;
   executionRole?: "coordinator" | "leaf";
+  /** Server-authoritative projection admitted into this exact run snapshot. */
+  chatFirstUi?: boolean;
+  chatFirstControlGeneration?: number | null;
 }
 
 export type McpServerBuilder = (
@@ -94,6 +97,7 @@ const QUERY_WIRE_FIELDS = new Set([
   "clientId",
   "ownerId",
   "sessionId",
+  "surfaceKind",
   "producingTurnId",
   "prompt",
   "mode",
@@ -403,14 +407,17 @@ export class JsonlTransport {
     const ownerId = this.requireActiveOwner(message.ownerId);
     const sessionId = message.sessionId.trim();
     if (!sessionId) throw new Error("query requires sessionId");
+    const surfaceKind = message.surfaceKind.trim();
+    if (!surfaceKind) throw new Error("query requires surfaceKind");
     const producingTurnId = message.producingTurnId?.trim();
     if (message.producingTurnId !== undefined && !producingTurnId) {
       throw new Error("query producingTurnId must not be empty");
     }
     const session = this.kernel.ownedSession(sessionId, ownerId);
-    const surfaceKind = session.surfaceKind;
-    if (!surfaceKind) throw new Error("canonical session requires surfaceKind");
     const profile = this.kernel.sessionExecutionProfile(sessionId, ownerId);
+    // One canonical conversation may retain a legacy session identity while
+    // being bound to newer surfaces. Project the caller's resolved surface,
+    // but only through contextSnapshot's owner/session binding check.
     const snapshot = this.kernel.contextSnapshot(sessionId, ownerId, surfaceKind);
     const expectationCount = [
       message.expectedContextSnapshotVersion,
@@ -466,6 +473,12 @@ export class JsonlTransport {
         sessionId,
         adapterId: profile.adapterId,
         executionRole,
+        surfaceKind,
+        screenContext: snapshot.sourceOutcomes.some(
+          (source) => source.source === "screen" && source.outcome === "available",
+        ),
+        chatFirstUi: snapshot.capabilities.chatFirstUi === true,
+        chatFirstControlGeneration: snapshot.capabilities.chatFirstControlGeneration,
       }),
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
       recoverAfterError: this.recoverAfterError(profile.adapterId),
@@ -672,11 +685,16 @@ function boundedTerminalFailure(result: Awaited<ReturnType<AgentRuntimeKernel["e
     code,
     failureCode: persisted?.failureCode,
     userMessage,
-    technicalMessage: persisted?.technicalMessage,
+    technicalMessage: persisted?.technicalMessage
+      ? sanitizeProcessDiagnostic(persisted.technicalMessage)
+      : undefined,
     source: persisted?.source ?? "runtime",
     adapterId: persisted?.adapterId,
     provider: persisted?.provider,
     retryable: persisted?.retryable ?? false,
+    recoveryAction: persisted?.recoveryAction,
+    recoveryOutcome: persisted?.recoveryOutcome,
+    retryDisposition: persisted?.retryDisposition,
   });
 }
 

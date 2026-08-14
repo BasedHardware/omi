@@ -12,6 +12,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def safe_isoformat(value: Any) -> Optional[str]:
+    """Return a bounded ISO-like timestamp suitable for untrusted tool-source metadata."""
+    if value is None:
+        return None
+    isoformat = getattr(value, 'isoformat', None)
+    formatted = isoformat() if callable(isoformat) else value
+    return str(formatted)[:80]
+
+
 class SafetyGuardError(Exception):
     """Raised when a safety limit is exceeded."""
 
@@ -231,10 +240,18 @@ def _int_from_env(name: str, default: int) -> int:
     return value if value > 0 else default
 
 
-# claude-sonnet-4-6 (the chat_agent model) has a 200k-token context window. Cap the conversation
-# input well below it so the system prompt, tool schemas, accumulated tool results and the reply
-# tokens all still fit. 120k tokens is ~90k words of conversation — far beyond any legitimate
-# mobile chat, so real usage is never rejected, only pathological paste-dumps.
+# 120k tokens is ~90k words of conversation — far beyond any legitimate mobile chat, so real
+# usage is never rejected, only pathological paste-dumps. This is an abuse cap, not a
+# context-window cap, and it is deliberately not derived from any model's window: `chat_agent`
+# is routed per deployment and both providers it can reach have windows far above this, so the
+# system prompt, tool schemas, accumulated tool results and the reply all fit with room to
+# spare. Re-deriving it from whatever model is current raises the ceiling on what a single
+# request can cost, which is the reason to keep it low and provider-independent.
+#
+# The counter is tiktoken, so it is exact only for the OpenAI route and undercounts on the
+# Anthropic one — a conversation measured at the cap is somewhat larger in the tokens actually
+# billed there. That error is in the safe direction (the guard trips earlier than the nominal
+# limit) and stays safe only while the cap sits far below the real window.
 MAX_CHAT_INPUT_TOKENS = _int_from_env('MAX_CHAT_INPUT_TOKENS', 120_000)
 
 # Delivered to the user (and persisted) when the newest message alone is over the budget. Sent

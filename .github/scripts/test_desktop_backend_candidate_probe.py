@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import signal
 import sys
 import tempfile
 import unittest
@@ -26,6 +27,78 @@ def sse_event(payload: object) -> bytes:
 
 
 class CandidateProbeTests(unittest.TestCase):
+    def test_gemini_request_uses_unique_uuid_request_id(self) -> None:
+        class Response:
+            headers = {"x-omi-provider": "vertex_ai", "x-omi-request-id": "server-request-id"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self) -> bytes:
+                return b'{"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}'
+
+        request_id = "12345678-1234-5678-1234-567812345678"
+        with mock.patch.object(PROBE.uuid, "uuid4", return_value=request_id), mock.patch.object(
+            PROBE.urllib.request, "urlopen", return_value=Response()
+        ) as urlopen:
+            PROBE._gemini_request("https://candidate.example", token="token")
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_header("X-omi-request-id"), f"candidate-probe-{request_id}")
+
+    @unittest.skipUnless(hasattr(signal, "SIGALRM"), "requires POSIX interval timers")
+    def test_gemini_response_read_is_interrupted_at_total_budget(self) -> None:
+        class DripFeedResponse:
+            headers = {"x-omi-provider": "vertex_ai", "x-omi-request-id": "server-request-id"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self) -> bytes:
+                handler = signal.getsignal(signal.SIGALRM)
+                if handler in (signal.SIG_DFL, signal.SIG_IGN):
+                    raise AssertionError("deadline handler was not installed")
+                handler(signal.SIGALRM, None)
+                raise AssertionError("deadline handler must interrupt the response read")
+
+        with mock.patch.object(PROBE.signal, "setitimer", return_value=(0.0, 0.0)), mock.patch.object(
+            PROBE.urllib.request, "urlopen", return_value=DripFeedResponse()
+        ):
+            with self.assertRaisesRegex(PROBE.ProbeError, "exceeded 70s response budget"):
+                PROBE._gemini_request("https://candidate.example", token="token")
+
+    def test_gemini_probe_rejects_stub_or_unknown_provider_routes(self) -> None:
+        for provider in ("offline_stub", "unknown", ""):
+            with self.assertRaisesRegex(PROBE.ProbeError, "admitted provider"):
+                PROBE._require_real_gemini_provider(provider)
+        self.assertEqual(PROBE._require_real_gemini_provider("vertex_ai"), "vertex_ai")
+
+    def test_gemini_request_cannot_pass_against_offline_stub(self) -> None:
+        class StubResponse:
+            headers = {
+                "x-omi-provider": "offline_stub",
+                "x-omi-request-id": "candidate-probe-12345678",
+            }
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self) -> bytes:
+                return b'{"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}'
+
+        with mock.patch.object(PROBE.urllib.request, "urlopen", return_value=StubResponse()):
+            with self.assertRaisesRegex(PROBE.ProbeError, "admitted provider"):
+                PROBE._gemini_request("https://candidate.example", token="token")
+
     def test_compatibility_requires_live_service_contract(self) -> None:
         summary = PROBE.validate_compatibility(
             {
@@ -55,6 +128,7 @@ class CandidateProbeTests(unittest.TestCase):
                 "backend_release_sha": SHA,
                 "backend_release_channel": "development",
                 "chat_contract_version": "1",
+                "runtime_implementation": "python",
                 "release_tag": "legacy-value-is-not-the-backend-vector",
             },
             expected_sha=SHA,
@@ -67,6 +141,7 @@ class CandidateProbeTests(unittest.TestCase):
         for mutation in (
             {"backend_release_sha": "0" * 40},
             {"chat_contract_version": None},
+            {"runtime_implementation": "rust"},
         ):
             payload = {
                 "status": "healthy",
@@ -74,6 +149,7 @@ class CandidateProbeTests(unittest.TestCase):
                 "backend_release_sha": SHA,
                 "backend_release_channel": "production",
                 "chat_contract_version": "1",
+                "runtime_implementation": "python",
                 **mutation,
             }
             with self.assertRaises(PROBE.ProbeError):
@@ -90,9 +166,7 @@ class CandidateProbeTests(unittest.TestCase):
             {"status": "ready", "redis": "ready"},
         )
         with self.assertRaises(PROBE.ProbeError):
-            PROBE.validate_readiness(
-                {"status": "not_ready", "redis": {"status": "unavailable"}}
-            )
+            PROBE.validate_readiness({"status": "not_ready", "redis": {"status": "unavailable"}})
 
     def test_health_only_evidence_excludes_chat_claims(self) -> None:
         original = PROBE._request_json
@@ -103,6 +177,7 @@ class CandidateProbeTests(unittest.TestCase):
                 "backend_release_sha": SHA,
                 "backend_release_channel": "production",
                 "chat_contract_version": "1",
+                "runtime_implementation": "python",
             }
             evidence = PROBE.probe_health_only(
                 base_url="https://candidate.example",
@@ -257,6 +332,7 @@ class CandidateProbeTests(unittest.TestCase):
             "backend_release_sha": SHA,
             "backend_release_channel": "production",
             "chat_contract_version": "1",
+            "runtime_implementation": "python",
         }
         readiness = {"status": "ready", "redis": {"status": "ready"}}
         chat_results = [
@@ -265,7 +341,11 @@ class CandidateProbeTests(unittest.TestCase):
         ]
         with mock.patch.object(PROBE, "_request_json", side_effect=[health, readiness]), mock.patch.object(
             PROBE, "_require_firestore_read", return_value={"status": "passed"}
-        ), mock.patch.object(PROBE, "_chat_request", side_effect=chat_results) as chat:
+        ), mock.patch.object(
+            PROBE, "_gemini_request", return_value={"status": "passed", "provider_route": "vertex_ai"}
+        ) as gemini, mock.patch.object(
+            PROBE, "_chat_request", side_effect=chat_results
+        ) as chat:
             evidence = PROBE.probe_candidate(
                 base_url="https://candidate.example",
                 token="token",
@@ -278,6 +358,8 @@ class CandidateProbeTests(unittest.TestCase):
                 workflow_run_id="123",
             )
         self.assertEqual(chat.call_count, 2)
+        self.assertEqual(gemini.call_count, 1)
+        self.assertEqual(evidence["gemini_proxy"]["provider_route"], "vertex_ai")
         self.assertEqual(evidence["chat"]["initial_turn"], "passed")
         self.assertEqual(evidence["chat"]["ordinary_follow_up"], "passed")
         self.assertEqual(evidence["target"]["revision"], "desktop-backend-abc")
@@ -289,10 +371,13 @@ class CandidateProbeTests(unittest.TestCase):
             "backend_release_sha": SHA,
             "backend_release_channel": "development",
             "chat_contract_version": "1",
+            "runtime_implementation": "python",
         }
         readiness = {"status": "ready", "redis": {"status": "ready"}}
         with mock.patch.object(PROBE, "_request_json", side_effect=[health, readiness]), mock.patch.object(
             PROBE, "_require_firestore_read", return_value={"status": "passed"}
+        ), mock.patch.object(
+            PROBE, "_gemini_request", return_value={"status": "passed", "provider_route": "vertex_ai"}
         ), mock.patch.object(
             PROBE,
             "_chat_request",

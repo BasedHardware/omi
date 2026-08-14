@@ -67,26 +67,8 @@ enum ViewExporter {
       ),
 
       (
-        "03-ai-chat",
-        { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: ChatProvider())) },
-        CGSize(width: 900, height: 700)
-      ),
-
-      (
         "04-conversations",
         { AnyView(ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))) },
-        CGSize(width: 900, height: 700)
-      ),
-
-      (
-        "05-focus",
-        { AnyView(FocusPage()) },
-        CGSize(width: 900, height: 700)
-      ),
-
-      (
-        "06-insight",
-        { AnyView(InsightPage()) },
         CGSize(width: 900, height: 700)
       ),
 
@@ -224,7 +206,6 @@ enum ViewExporter {
       ("Chat", "bubble.left.and.bubble.right.fill", 2),
       ("Memories", "brain", 3),
       ("Tasks", "checklist", 4),
-      ("Focus", "eye.fill", 5),
       ("Advice", "lightbulb.fill", 6),
       ("Rewind", "clock.arrow.circlepath", 7),
       ("Apps", "puzzlepiece.fill", 8),
@@ -239,7 +220,7 @@ enum ViewExporter {
         // Logo placeholder
         HStack {
           Circle()
-            .fill(Color.white.opacity(0.9))
+            .fill(Ink.primary.opacity(0.9))
             .frame(width: 28, height: 28)
             .overlay(Text("O").font(.system(size: 14, weight: .bold)).foregroundColor(.black))
           Text("Omi")
@@ -259,7 +240,7 @@ enum ViewExporter {
         Spacer()
 
         Divider()
-          .background(Color.white.opacity(0.1))
+          .background(Ink.rowFillHover)
           .padding(.horizontal, OmiSpacing.md)
 
         // Bottom items
@@ -288,7 +269,7 @@ enum ViewExporter {
       .padding(.vertical, OmiSpacing.sm)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isSelected ? Color.white.opacity(0.1) : Color.clear)
+          .fill(isSelected ? Ink.rowFillHover : Color.clear)
           .padding(.horizontal, OmiSpacing.sm)
       )
     }
@@ -321,10 +302,6 @@ enum ViewExporter {
         }
       ),
       (
-        "full-ai-chat", 2,
-        { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: previewChatProvider())) }
-      ),
-      (
         "full-memories", 3,
         {
           AnyView(
@@ -342,8 +319,6 @@ enum ViewExporter {
               chatProvider: cp))
         }
       ),
-      ("full-focus", 5, { AnyView(FocusPage()) }),
-      ("full-insight", 6, { AnyView(InsightPage()) }),
       ("full-rewind", 7, { AnyView(RewindPage()) }),
       ("full-apps", 8, { AnyView(AppsPage(appProvider: AppProvider())) }),
       (
@@ -373,7 +348,7 @@ enum ViewExporter {
           .fill(Color(red: 0.050, green: 0.052, blue: 0.059))
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-              .stroke(OmiColors.border.opacity(0.22), lineWidth: 1)
+              .stroke(Ink.separator, lineWidth: 1)
           )
 
         VStack(spacing: 0) {
@@ -739,7 +714,9 @@ enum ViewExporter {
       Color(nsColor: NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 1))
       view
     }
-    .environment(\.colorScheme, .dark)
+    // Light: the app's glass is pinned `.aqua`, so a dark export is a picture of a product that no
+    // longer exists.
+    .environment(\.colorScheme, .light)
 
     let hostingView = NSHostingView(rootView: wrappedView)
     hostingView.setFrameSize(size)
@@ -751,7 +728,7 @@ enum ViewExporter {
       defer: false
     )
     window.contentView = hostingView
-    window.backgroundColor = NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 1)
+    window.backgroundColor = Ink.nsSurface
 
     hostingView.needsLayout = true
     hostingView.layoutSubtreeIfNeeded()

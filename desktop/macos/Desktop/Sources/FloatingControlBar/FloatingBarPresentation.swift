@@ -1,4 +1,19 @@
 import Foundation
+import OmiTheme
+import SwiftUI
+
+extension FloatingControlBarWindow {
+  func routePrimaryTextInputToMainAppAfterAgentExit() -> Bool {
+    guard
+      FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(
+        hasMainConversation: state.hasMainConversation)
+    else { return false }
+
+    closeAIConversation()
+    AppDelegate.summonWindowTarget()?.openMainAppChat()
+    return true
+  }
+}
 
 /// Whether a presentation request is allowed to change the user's durable
 /// Floating Bar preference. Onboarding may borrow the real bar for a demo, but
@@ -13,6 +28,71 @@ enum FloatingBarPreferenceMutation: Equatable {
     case .setEnabled(let enabled): return enabled
     case .preserve: return nil
     }
+  }
+}
+
+extension FloatingControlBarWindow {
+  var shouldOrderOutAfterConversationClose: Bool {
+    !FloatingControlBarManager.shared.isEnabled
+      && state.currentNotification == nil
+      && !state.showingAIConversation
+  }
+
+  /// Starts the token-fenced retraction after presentation eligibility has
+  /// been established. Keeping this boundary independent of `isVisible`
+  /// lets lifecycle tests exercise stale deadlines on headless CI runners.
+  func beginNotchRetraction(then completion: @escaping () -> Void) {
+    notchRetractionCancellation?.cancel()
+    cancelInFlightNotchReveal()
+    // Cancel in-flight *frame* animations. Retract/reveal use dedicated
+    // generations so a later no-op resize cannot strand the island at 0.01.
+    frameAnimationToken += 1
+    notchRetractionGeneration &+= 1
+    let generation = notchRetractionGeneration
+    OmiMotion.withGated(.easeIn(duration: 0.18)) {
+      state.notchRevealProgress = FloatingBarNotchRevealPolicy.retractedProgress
+    }
+    notchRetractionCancellation = notchRetractionScheduler.schedule(after: 0.18) { [weak self] in
+      guard let self else { return }
+      guard self.notchRetractionGeneration == generation else {
+        self.restoreNotchRevealProgressIfWindowStillVisible()
+        return
+      }
+      completion()
+      // Leave the island ready to render for show paths that skip the
+      // reveal (e.g. showTemporarily) — the next reveal re-zeroes it.
+      self.state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+      self.notchRetractionCancellation = nil
+    }
+  }
+
+  func restoreNotchRevealProgressIfWindowStillVisible() {
+    guard
+      FloatingBarNotchRevealPolicy.shouldRestoreProgressAfterCancelledRetract(
+        windowStillVisible: isVisible,
+        retractStillInFlight: notchRetractionCancellation != nil,
+        revealStillInFlight: notchRevealCancellation != nil)
+    else { return }
+    state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+  }
+
+  func scheduleNotchRevealCompletion(generation: Int, after duration: TimeInterval) {
+    notchRevealCancellation?.cancel()
+    notchRevealCancellation = notchRetractionScheduler.schedule(after: duration) { [weak self] in
+      guard let self else { return }
+      guard self.notchRevealGeneration == generation else {
+        self.restoreNotchRevealProgressIfWindowStillVisible()
+        return
+      }
+      self.state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+      self.notchRevealCancellation = nil
+    }
+  }
+
+  func cancelInFlightNotchReveal() {
+    notchRevealGeneration &+= 1
+    notchRevealCancellation?.cancel()
+    notchRevealCancellation = nil
   }
 }
 
@@ -32,9 +112,28 @@ extension FloatingControlBarManager {
   }
 
   /// Retracts an onboarding voice demo without changing the user's saved bar
-  /// setting.
+  /// setting, then restores the durable bar if it is still enabled.
   func hideForOnboardingDemo() {
-    retract(preferenceMutation: .preserve)
+    retractThenRestoreDurablePresentation()
+  }
+
+  /// After a demo `orderOut`, put the user's saved bar back. Disabled and
+  /// snoozed bars stay hidden; the preference is never written.
+  func restoreDurableBarAfterOnboardingDemo() {
+    guard
+      FloatingBarDurableVisibilityPolicy.shouldRestoreAfterOnboardingDemo(
+        isEnabled: isEnabled,
+        isSnoozed: isSnoozed)
+    else { return }
+    showForLaunch()
+  }
+
+  private func retractThenRestoreDurablePresentation() {
+    guard let window else { return }
+    window.retractIntoNotch { [weak self, weak window] in
+      window?.orderOut(nil)
+      self?.restoreDurableBarAfterOnboardingDemo()
+    }
   }
 
   func present(
@@ -54,6 +153,7 @@ extension FloatingControlBarManager {
       window?.usesNotchIslandForCurrentScreen == true
       && (window?.isVisible != true || !hasRevealedNotchThisSession)
     hasRevealedNotchThisSession = true
+    window?.applySurfaceLevel()
     window?.normalizeForTemporaryShow()
     window?.makeKeyAndOrderFront(nil)
     if shouldPlayNotchReveal {

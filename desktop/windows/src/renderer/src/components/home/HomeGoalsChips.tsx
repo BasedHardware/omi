@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { omiApi } from '../../lib/apiClient'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { goalEmoji, DEFAULT_GOAL_EMOJI } from '../../lib/goalEmoji'
 import { isCompleted, progressColor, progressPct } from '../../lib/goalVisuals'
+import { cache as goalsCache, hydrateGoalsFromDisk, writeCache } from '../../lib/goalsCache'
+import { getCacheUid } from '../../lib/persistentCache'
+import type { GoalResponse as Goal } from '../../lib/omiApi.generated'
 import type { HubHomeWidgetsProps } from './hub/hubHomeWidgetsSlot'
 
 // The resting Hub's focused-goals chip row — the compact, single-line surface
@@ -19,20 +22,28 @@ import type { HubHomeWidgetsProps } from './hub/hubHomeWidgetsSlot'
 // This mounts inside the hub cluster above the stat ribbon and MUST stay one line
 // (`shrink-0`) so it never breaks the Hub's no-scroll centering. States are all
 // single-line and roughly the same height, so the row never reflows the cluster.
-type Goal = {
-  id: string
-  title: string
-  target_value?: number | null
-  current_value?: number | null
-  // Done when is_active === false (matches the live backend Goal model).
-  is_active?: boolean
-}
+//
+// The list comes from the SAME module cache the Goals page fills (goalsCache), not
+// a private copy: the Hub's resting cluster — this row with it — unmounts whenever
+// the chat or connect panel opens, so a per-mount fetch meant every return to the
+// home screen re-flashed the skeleton and re-issued GET /v1/goals/all (#10893).
 
 // Mac caps the row at `.prefix(5)` (WhatMattersNowSection.swift:156).
 const MAX_CHIPS = 5
 
+// What the row displays: the active slice of the cached list. `null` (nothing
+// cached yet) stays null so the skeleton is shown only when there is genuinely
+// nothing to paint — never an "empty" claim we can't back.
+function activeGoals(list: Goal[] | null): Goal[] | null {
+  return list ? list.filter((g) => !isCompleted(g)) : null
+}
+
 export function HomeGoalsChips({ onShowAll, onOpenGoal }: HubHomeWidgetsProps): React.JSX.Element {
-  const [goals, setGoals] = useState<Goal[] | null>(null)
+  // Seed from the per-uid cold-start snapshot before the initial state is read,
+  // exactly as the Goals page does, so a fresh launch paints the last-known chips
+  // instead of the skeleton. The revalidating fetch below still runs.
+  hydrateGoalsFromDisk()
+  const [goals, setGoals] = useState<Goal[] | null>(() => activeGoals(goalsCache.goals))
   const { pathname } = useLocation()
   const navigate = useNavigate()
 
@@ -61,12 +72,19 @@ export function HomeGoalsChips({ onShowAll, onOpenGoal }: HubHomeWidgetsProps): 
 
   const fetchGoals = useCallback((): (() => void) => {
     let cancelled = false
+    const originUid = getCacheUid()
     omiApi
       .get('/v1/goals/all')
       .then((res) => {
         const data = res.data as Goal[] | { goals?: Goal[] }
         const list = Array.isArray(data) ? data : (data.goals ?? [])
-        if (!cancelled) setGoals(list.filter((g) => !isCompleted(g)))
+        // Account-switch guard, same as the Goals page's fetchAll: a fetch that
+        // outlived the account must not land under the new uid.
+        if (getCacheUid() === originUid) {
+          writeCache(list)
+          goalsCache.loaded = true
+        }
+        if (!cancelled) setGoals(activeGoals(list))
       })
       .catch(() => {
         // Keep any previously-loaded goals on a transient failure rather than
@@ -79,13 +97,23 @@ export function HomeGoalsChips({ onShowAll, onOpenGoal }: HubHomeWidgetsProps): 
   }, [])
 
   // Primary fetch: as soon as auth is ready (and again if the user changes).
+  // Skipped when the cache already holds an authoritative list — that is what
+  // makes closing the chat panel repaint the row instead of reloading it.
   useEffect(() => {
-    if (!userId) return
+    if (!userId || goalsCache.loaded) return
     return fetchGoals()
   }, [userId, fetchGoals])
 
   // Refetch when returning to Home (pick up goals added/completed elsewhere).
+  // Home stays MOUNTED while the user is on another tab (MainViews hides it), so
+  // coming back is a navigation, not a remount. Its first run IS the mount, where
+  // the effect above already fetched — firing both asked for the same list twice.
+  const navigated = useRef(false)
   useEffect(() => {
+    if (!navigated.current) {
+      navigated.current = true
+      return
+    }
     if (pathname !== '/home') return
     return fetchGoals()
   }, [pathname, fetchGoals])

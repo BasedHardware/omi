@@ -113,6 +113,11 @@ class TaskAssistantSettings {
   private let defaultMinConfidence: Double = 0.75
   private let defaultNotificationsEnabled = false
 
+  /// Mirrors the backend request contract. Defaults must remain within this bound so a
+  /// settings sync can never reject an app-shipped prompt; longer user-authored prompts
+  /// remain stored locally and are omitted from sync rather than truncated.
+  static let maximumSyncedAnalysisPromptLength = 10_000
+
   /// Default system prompt for task extraction (loop-based with tool calling)
   static let defaultAnalysisPrompt = """
     You are a task commitment detector. Your ONLY job: find tasks the user has committed to in conversations, or unaddressed requests directed at the user.
@@ -318,6 +323,7 @@ class TaskAssistantSettings {
     set {
       let isCustom = newValue != TaskAssistantSettings.defaultAnalysisPrompt
       UserDefaults.standard.set(newValue, forKey: analysisPromptKey)
+      SettingsSyncManager.recordLocalPromptOwner("task")
       let previewLength = min(newValue.count, 50)
       let preview = String(newValue.prefix(previewLength)) + (newValue.count > 50 ? "..." : "")
       log("Task analysis prompt updated (\(newValue.count) chars, custom: \(isCustom)): \(preview)")
@@ -326,14 +332,26 @@ class TaskAssistantSettings {
   }
 
   /// Interval between task extraction analyses in seconds
+  ///
+  /// A non-positive interval is not a schedule, and it is refused where it arrives rather than
+  /// papered over on every read. The old `value > 0 ? value : default` left the store holding a
+  /// number the app never honoured: a `0` synced down from the account read back as 600, the pane
+  /// painted 600, and the next `syncToServer()` pushed 600 — silently overwriting what the account
+  /// actually said. Normalising the write, and healing a value an older build already stored, keeps
+  /// stored state and reported state the same number.
   var extractionInterval: TimeInterval {
     get {
-      let value = UserDefaults.standard.double(forKey: extractionIntervalKey)
-      return value > 0 ? value : defaultExtractionInterval
+      let stored = UserDefaults.standard.double(forKey: extractionIntervalKey)
+      guard stored > 0 else {
+        UserDefaults.standard.set(defaultExtractionInterval, forKey: extractionIntervalKey)
+        return defaultExtractionInterval
+      }
+      return stored
     }
     set {
-      UserDefaults.standard.set(newValue, forKey: extractionIntervalKey)
-      log("Task extraction interval updated to \(newValue) seconds")
+      let interval = newValue > 0 ? newValue : defaultExtractionInterval
+      UserDefaults.standard.set(interval, forKey: extractionIntervalKey)
+      log("Task extraction interval updated to \(interval) seconds")
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }

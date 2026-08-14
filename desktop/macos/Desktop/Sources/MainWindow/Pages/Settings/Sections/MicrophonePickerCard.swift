@@ -97,11 +97,11 @@ struct MicrophonePickerCard: View {
       HStack {
         Image(systemName: "mic")
           .scaledFont(size: 16)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Text("Microphone")
           .scaledFont(size: 15, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
       }
@@ -125,6 +125,23 @@ struct MicrophonePickerCard: View {
           badge: AudioCaptureService.isMetaGlassesName(device.name) ? "Glasses" : nil
         ) {
           preferredUID = device.uid
+          onChanged()
+        }
+      }
+
+      // The pinned device is not plugged in. `AppState.startMicCaptureIfNeeded` already
+      // substitutes the Mac's input device and records the degradation, but with no row
+      // matching the stored UID this card used to answer "which microphone?" by ticking
+      // nothing at all — the one state where the honest answer matters most.
+      if pinnedDeviceIsMissing {
+        row(
+          selected: true,
+          title: "Selected microphone unavailable",
+          subtitle: "The microphone you picked isn't connected. Omi is capturing on the Mac's "
+            + "input device until it comes back. Choose another to stop waiting for it.",
+          warning: true
+        ) {
+          preferredUID = ""
           onChanged()
         }
       }
@@ -165,39 +182,50 @@ struct MicrophonePickerCard: View {
     } while refreshQueued
   }
 
+  /// True when the user has pinned a device that the current enumeration does not contain.
+  /// Guarded on a completed probe: before the first `refreshDevices()` returns, `devices` is
+  /// empty for every account and an unguarded check would flash the warning at anyone with a
+  /// pinned microphone.
+  private var pinnedDeviceIsMissing: Bool {
+    guard !preferredUID.isEmpty, !devices.isEmpty else { return false }
+    return !devices.contains { $0.uid == preferredUID }
+  }
+
   @ViewBuilder
   private func row(
     selected: Bool,
     title: String,
     subtitle: String? = nil,
     badge: String? = nil,
+    warning: Bool = false,
     action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
       HStack(alignment: .top, spacing: 12) {
-        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+        Image(systemName: warning ? "exclamationmark.triangle.fill" : (selected ? "checkmark.circle.fill" : "circle"))
           .scaledFont(size: 20)
-          .foregroundColor(selected ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .foregroundColor(warning ? SettingsInk.notice : (selected ? Ink.primary : Ink.secondary))
 
         VStack(alignment: .leading, spacing: 4) {
           HStack(spacing: 8) {
             Text(title)
               .scaledFont(size: 14, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(warning ? SettingsInk.notice : Ink.primary)
             if let badge {
               Text(badge)
                 .scaledFont(size: 11, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2)
-                .background(OmiColors.textTertiary.opacity(0.25))
+                .background(Ink.hairline)
                 .clipShape(Capsule())
             }
           }
           if let subtitle {
             Text(subtitle)
               .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
           }
         }
 

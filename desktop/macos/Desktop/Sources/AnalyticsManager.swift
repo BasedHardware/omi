@@ -39,6 +39,12 @@ class AnalyticsManager {
   /// at the same production boundary as PostHog so tests can assert the real
   /// event payload without initializing analytics or exposing a mutable global.
   private var suggestionAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  private var insightAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Delivery callbacks can race (for example a floating-bar enqueue and a system-banner
+  /// completion). Keep one terminal outcome per opaque advice delivery ID at this boundary.
+  private var recordedInsightDeliveryIDSet: Set<UUID> = []
+  private var recordedInsightDeliveryIDOrder: [UUID] = []
+  private static let maxRecordedInsightDeliveryIDs = 512
 
   func setSuggestionAssistantTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
@@ -48,6 +54,22 @@ class AnalyticsManager {
 
   private func captureSuggestionAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
     suggestionAssistantTelemetryCaptureForTests?(event, properties)
+  }
+
+  /// Scoped observation of Advice delivery telemetry. Tests install a capture at the same
+  /// production boundary as PostHog; production leaves it nil.
+  func setInsightAssistantTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    if capture != nil {
+      recordedInsightDeliveryIDSet.removeAll()
+      recordedInsightDeliveryIDOrder.removeAll()
+    }
+    insightAssistantTelemetryCaptureForTests = capture
+  }
+
+  private func captureInsightAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
+    insightAssistantTelemetryCaptureForTests?(event, properties)
   }
 
   /// Test observer for integration-connect telemetry. Mirrors the
@@ -250,14 +272,6 @@ class AnalyticsManager {
 
   func monitoringStopped() {
     PostHogManager.shared.monitoringStopped()
-  }
-
-  func distractionDetected(app: String, windowTitle: String?) {
-    PostHogManager.shared.distractionDetected(app: app, windowTitle: windowTitle)
-  }
-
-  func focusRestored(app: String) {
-    PostHogManager.shared.focusRestored(app: app)
   }
 
   // MARK: - Recording Events
@@ -713,6 +727,17 @@ class AnalyticsManager {
 
   // MARK: - Claude Agent Events
 
+  /// Sends a Chat-first event only after its closed, content-free mapper has
+  /// produced the payload. Views must use this typed entry point instead of a
+  /// generic PostHog event so rich controls cannot leak user text or IDs.
+  func chatFirst(_ event: ChatFirstAnalyticsEvent) {
+    let payload = event.analyticsPayload
+    PostHogManager.shared.track(
+      payload.eventName,
+      properties: payload.properties.mapValues { $0 as Any }
+    )
+  }
+
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
@@ -918,14 +943,6 @@ class AnalyticsManager {
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
 
-  func focusAlertShown(app: String) {
-    PostHogManager.shared.focusAlertShown(app: app)
-  }
-
-  func focusAlertDismissed(app: String, action: String) {
-    PostHogManager.shared.focusAlertDismissed(app: app, action: action)
-  }
-
   func taskExtracted(taskCount: Int) {
     PostHogManager.shared.taskExtracted(taskCount: taskCount)
   }
@@ -1074,8 +1091,52 @@ class AnalyticsManager {
     PostHogManager.shared.suggestionAssistantDeliveryOutcome(outcome, identity: identity)
   }
 
-  func insightGenerated(category: String?) {
-    PostHogManager.shared.insightGenerated(category: category)
+  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
+    let properties: [String: Any] = {
+      var value: [String: Any] = [:]
+      if let category = InsightAssistantTelemetry.boundedCategory(category) {
+        value["category"] = category
+      }
+      if let deliveryID {
+        value["delivery_id"] = deliveryID.uuidString
+      }
+      return value
+    }()
+    captureInsightAssistantTelemetryForTests("Advice Generated", properties: properties)
+    PostHogManager.shared.insightGenerated(category: category, deliveryID: deliveryID)
+  }
+
+  /// Record one terminal outcome for a generated Advice item. The bounded recent-ID window
+  /// absorbs racing presentation callbacks without allowing process-lifetime growth.
+  func insightAssistantDeliveryOutcome(
+    _ outcome: InsightAssistantTelemetry.Outcome,
+    reason: InsightAssistantTelemetry.Reason,
+    deliveryID: UUID,
+    surface: InsightAssistantTelemetry.Surface? = nil
+  ) {
+    guard recordedInsightDeliveryIDSet.insert(deliveryID).inserted else { return }
+    recordedInsightDeliveryIDOrder.append(deliveryID)
+    if recordedInsightDeliveryIDOrder.count > Self.maxRecordedInsightDeliveryIDs {
+      let evicted = recordedInsightDeliveryIDOrder.removeFirst()
+      recordedInsightDeliveryIDSet.remove(evicted)
+    }
+    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
+    let payload = InsightAssistantTelemetry.deliveryOutcomePayload(
+      outcome,
+      reason: reason,
+      identity: identity,
+      surface: surface
+    )
+    captureInsightAssistantTelemetryForTests(
+      InsightAssistantTelemetry.deliveryOutcomeEventName,
+      properties: payload
+    )
+    PostHogManager.shared.insightAssistantDeliveryOutcome(
+      outcome,
+      reason: reason,
+      deliveryID: deliveryID,
+      surface: surface
+    )
   }
 
   // MARK: - Apps Events

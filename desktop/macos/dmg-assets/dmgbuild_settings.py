@@ -33,16 +33,16 @@ show_pathbar = False
 show_sidebar = False
 sidebar_width = 0
 
-window_rect = ((200, 120), (610, 365))
+window_rect = ((200, 120), (680, 400))
 default_view = "icon-view"
 
-icon_size = 80
-text_size = 12
+icon_size = 112
+text_size = 15
 
 # Icon positions — must match background.png arrow (left=app, right=Applications)
 icon_locations = {
-    app_name + ".app": (155, 175),
-    "Applications": (455, 175),
+    app_name + ".app": (178, 258),
+    "Applications": (503, 258),
 }
 
 # Hiding the extension attaches com.apple.FinderInfo to the signed app bundle,

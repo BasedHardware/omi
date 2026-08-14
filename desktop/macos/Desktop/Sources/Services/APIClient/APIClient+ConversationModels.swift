@@ -42,11 +42,70 @@ struct ConversationMutationResponse: Decodable {
   let conversation: ServerConversation
 }
 
+/// Durable Cloud Tasks finalization projection returned by
+/// GET /v1/conversations/{id}/finalization.
+struct ConversationFinalizationStatusResponse: Decodable, Equatable {
+  let jobID: String
+  let status: String
+  let terminal: Bool
+  let retryable: Bool
+  let attemptCount: Int
+  let taskRetryCount: Int
+
+  enum CodingKeys: String, CodingKey {
+    case jobID = "job_id"
+    case status
+    case terminal
+    case retryable
+    case attemptCount = "attempt_count"
+    case taskRetryCount = "task_retry_count"
+  }
+}
+
 enum TranscriptPresenceState: Equatable {
   case omittedFromResponse
   case lockedOrRedacted
   case includedEmpty
   case includedNonEmpty
+}
+
+/// Minimal playback metadata projected from the generated conversation DTO.
+/// The archive adapter resolves short-lived signed URLs separately, so these
+/// values deliberately contain no URL or provider-specific storage path.
+struct CaptureAudioFile: Codable, Equatable, Identifiable {
+  let id: String
+  let duration: TimeInterval
+
+  init(_ wire: OmiAPI.AudioFile) {
+    id = wire.id
+    duration = wire.duration
+  }
+}
+
+struct CaptureConversationAudioSpan: Codable, Equatable {
+  let fileID: String
+  let wallOffset: TimeInterval
+  let artifactOffset: TimeInterval
+  let length: TimeInterval
+
+  init(_ wire: OmiAPI.ConversationAudioSpan) {
+    fileID = wire.fileId
+    wallOffset = wire.wallOffset
+    artifactOffset = wire.artifactOffset
+    length = wire.len
+  }
+}
+
+struct CaptureConversationAudio: Codable, Equatable {
+  let duration: TimeInterval
+  let capturedDuration: TimeInterval
+  let spans: [CaptureConversationAudioSpan]
+
+  init(_ wire: OmiAPI.ConversationAudio) {
+    duration = wire.duration
+    capturedDuration = wire.capturedDuration
+    spans = (wire.spans ?? []).map(CaptureConversationAudioSpan.init)
+  }
 }
 
 struct ServerConversation: Codable, Identifiable, Equatable {
@@ -57,6 +116,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
       && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
       && lhs.source == rhs.source
+      && lhs.audioFiles == rhs.audioFiles
+      && lhs.conversationAudio == rhs.conversationAudio
       && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
   }
 
@@ -76,6 +137,12 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   let appsResults: [AppResponse]
   let source: ConversationSource?
   let language: String?
+  /// Capture playback metadata is server-owned and is intentionally not used
+  /// by the legacy conversations surface. The chat-first capture archive reads
+  /// it only after a detail fetch, then resolves signed URLs through its own
+  /// bounded adapter.
+  let audioFiles: [CaptureAudioFile]
+  let conversationAudio: CaptureConversationAudio?
 
   let status: ConversationStatus
   let discarded: Bool
@@ -135,6 +202,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     appsResults = (wire.appsResults ?? []).map(AppResponse.init)
     source = wire.source.map { ConversationSource(rawValue: $0.rawValue) ?? .unknown }
     language = wire.language
+    audioFiles = (wire.audioFiles ?? []).map(CaptureAudioFile.init)
+    conversationAudio = wire.conversationAudio.map(CaptureConversationAudio.init)
     status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
     discarded = wire.discarded ?? false
     deleted = false  // backend REST Conversation schema does not expose deleted
@@ -182,6 +251,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     appsResults: [AppResponse],
     source: ConversationSource?,
     language: String?,
+    audioFiles: [CaptureAudioFile] = [],
+    conversationAudio: CaptureConversationAudio? = nil,
     status: ConversationStatus,
     discarded: Bool,
     deleted: Bool,
@@ -204,6 +275,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.appsResults = appsResults
     self.source = source
     self.language = language
+    self.audioFiles = audioFiles
+    self.conversationAudio = conversationAudio
     self.status = status
     self.discarded = discarded
     self.deleted = deleted
@@ -315,7 +388,8 @@ struct Structured: Codable, Equatable {
       OmiAPI.ActionItem(
         candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: nil, completed: $0.completed,
         completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description,
-        dueAt: nil, ownershipConfidence: nil, targetTaskId: nil, updatedAt: nil)
+        dueAt: nil, ownershipConfidence: nil, sourceSegmentIds: $0.sourceSegmentIDs,
+        targetTaskId: $0.targetTaskID, updatedAt: nil)
     }
     let eventsWire = events.map {
       OmiAPI.Event(
@@ -360,11 +434,24 @@ struct ActionItem: Codable, Identifiable, Equatable {
   let description: String
   let completed: Bool
   let deleted: Bool
+  /// Canonical task linkage is optional on legacy captures. When present, the
+  /// chat-first archive uses this opaque ID for a typed deep link rather than
+  /// inferring a task from the description.
+  let targetTaskID: String?
+  let sourceSegmentIDs: [String]
 
-  init(description: String, completed: Bool, deleted: Bool) {
+  init(
+    description: String,
+    completed: Bool,
+    deleted: Bool,
+    targetTaskID: String? = nil,
+    sourceSegmentIDs: [String] = []
+  ) {
     self.description = description
     self.completed = completed
     self.deleted = deleted
+    self.targetTaskID = targetTaskID
+    self.sourceSegmentIDs = sourceSegmentIDs
   }
 
   /// Adapter from the generated wire DTO (OmiAPI.ActionItem). `deleted` is a
@@ -374,6 +461,8 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.description = wire.description_
     self.completed = wire.completed ?? false
     self.deleted = false
+    self.targetTaskID = wire.targetTaskId
+    self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
   }
 
   init(from decoder: Decoder) throws {
@@ -381,6 +470,8 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.description = wire.description_
     self.completed = wire.completed ?? false
     self.deleted = false
+    self.targetTaskID = wire.targetTaskId
+    self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
   }
 
   func encode(to encoder: Encoder) throws {
@@ -397,7 +488,8 @@ struct ActionItem: Codable, Identifiable, Equatable {
       description_: description,
       dueAt: nil,
       ownershipConfidence: nil,
-      targetTaskId: nil,
+      sourceSegmentIds: sourceSegmentIDs,
+      targetTaskId: targetTaskID,
       updatedAt: nil
     )
     try wire.encode(to: encoder)

@@ -7,6 +7,9 @@ extension APIClient {
   struct RequestAuthPolicy: Sendable {
     var signOutOn401: Bool
     var recordsAuthRetryTelemetry: Bool = true
+    /// Non-idempotent writes can opt out of replaying the request after a 401.
+    /// Keep the default enabled so existing API behavior remains unchanged.
+    var allowsAuthRetry: Bool = true
 
     /// When true, a post-refresh HTTP 401 is returned to the caller instead of
     /// throwing `.unauthorized`, so provider-shaped bodies can be inspected.
@@ -19,6 +22,7 @@ extension APIClient {
     static let providerCredentialBoundary = RequestAuthPolicy(
       signOutOn401: false,
       recordsAuthRetryTelemetry: false,
+      allowsAuthRetry: true,
       returnsPersistent401Response: true
     )
 
@@ -26,6 +30,7 @@ extension APIClient {
       RequestAuthPolicy(
         signOutOn401: false,
         recordsAuthRetryTelemetry: true,
+        allowsAuthRetry: true,
         returnsPersistent401Response: false,
         expectedAuthOwnerId: ownerId
       )
@@ -35,6 +40,7 @@ extension APIClient {
       RequestAuthPolicy(
         signOutOn401: false,
         recordsAuthRetryTelemetry: true,
+        allowsAuthRetry: true,
         returnsPersistent401Response: false,
         expectedAuthOwnerId: snapshot.ownerID,
         authorizationSnapshot: snapshot

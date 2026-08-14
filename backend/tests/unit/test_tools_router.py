@@ -111,6 +111,7 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.calendar_tools",
+    "utils.retrieval.safety",
     "utils.retrieval.tool_services",
     "utils.retrieval.tool_services.conversations",
     "utils.retrieval.tool_services.memories",
@@ -123,7 +124,6 @@ _SYS_MODULE_NAMES = [
     "utils.memory.default_read_rollout",
     "utils.memory.memory_system",
     "utils.memory.memory_service",
-    "utils.memory.surface_routing",
     "utils.rate_limit_config",
     "routers",
     "routers.tools",
@@ -206,32 +206,36 @@ _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
 _stub_package("utils.memory")
 
-memory_adapter_stub = _stub_module("utils.memory.chat_memory_adapter")
-memory_adapter_stub.list_default_chat_memories_decision_text = MagicMock(
-    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
-)
-memory_adapter_stub.search_memory_default_chat_memories_vector_decision_text = MagicMock(
-    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
-)
-memory_adapter_stub.chat_legacy_read_authorized = MagicMock(
-    side_effect=lambda result: result.read_decision == "use_legacy_safe"
-    or (result.read_decision == "deny_memory" and result.fallback_reason == "missing_rollout_state")
-)
-read_rollout_stub = _stub_module("utils.memory.default_read_rollout")
-read_rollout_stub.MemoryReadDecision = types.SimpleNamespace(
-    USE_MEMORY="use_memory",
-    USE_LEGACY_SAFE="use_legacy_safe",
-    DENY_MEMORY="deny_memory",
-)
-
-memory_system_stub = _stub_module("utils.memory.memory_system")
-memory_system_stub.MemorySystem = types.SimpleNamespace(LEGACY="legacy", CANONICAL="canonical")
-
 memory_service_stub = _stub_module("utils.memory.memory_service")
-memory_service_stub.MemoryService = MagicMock
 
-surface_routing_stub = _stub_module("utils.memory.surface_routing")
-surface_routing_stub.pin_memory_system = MagicMock(return_value=memory_system_stub.MemorySystem.LEGACY)
+
+class FakeMemoryService:
+    """Exercise the universal service contract while keeping this router suite hermetic."""
+
+    def __init__(self, *, db_client=None):
+        self.db_client = db_client
+
+    def read(self, uid, *, limit=100, offset=0, now=None):
+        del now
+        return [FakeMemoryDB(**row) for row in memories_db.get_memories(uid, limit=limit, offset=offset)]
+
+    def search(self, uid, query, *, limit=5):
+        rows = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
+        ids = [row["memory_id"] for row in rows]
+        scores = {row["memory_id"]: float(row.get("score", 0.0)) for row in rows}
+        hydrated = {
+            row["id"]: FakeMemoryDB(**row)
+            for row in memories_db.get_memories_by_ids(uid, ids)
+            if not row.get("is_locked", False)
+        }
+        return [
+            types.SimpleNamespace(memory=hydrated[memory_id], score=scores[memory_id])
+            for memory_id in ids
+            if memory_id in hydrated
+        ]
+
+
+memory_service_stub.MemoryService = FakeMemoryService
 boundary_stub = _stub_module("utils.retrieval.tool_result_boundaries")
 boundary_stub.preserve_chat_memory_tool_result_boundary = MagicMock(side_effect=lambda _tool_name, result: result)
 
@@ -290,6 +294,8 @@ factory_mod.deserialize_conversation = MagicMock(
 )
 search_mod = _stub_module("utils.conversations.search")
 search_mod.keyword_search_conversation_ids = MagicMock(return_value=[])
+search_mod.parse_exact_conversation_reference = MagicMock(return_value=None)
+search_mod.conversation_matches_date_range = MagicMock(return_value=True)
 
 
 def _merge_conversation_search_ids(keyword_ids, vector_ids):
@@ -311,6 +317,10 @@ transcript_chunks_mod.hydrate_chunk_texts = MagicMock(side_effect=_hydrate_chunk
 def reset_conversation_search_stubs():
     search_mod.keyword_search_conversation_ids.reset_mock()
     search_mod.keyword_search_conversation_ids.return_value = []
+    search_mod.parse_exact_conversation_reference.reset_mock()
+    search_mod.parse_exact_conversation_reference.return_value = None
+    search_mod.conversation_matches_date_range.reset_mock()
+    search_mod.conversation_matches_date_range.return_value = True
     search_mod.merge_conversation_search_ids.reset_mock()
     search_mod.merge_conversation_search_ids.side_effect = _merge_conversation_search_ids
     transcript_chunks_mod.hydrate_chunk_texts.reset_mock()
@@ -371,9 +381,11 @@ memories_model_mod = _stub_module("models.memories")
 class FakeMemoryDB:
     def __init__(self, **kwargs):
         self.id = kwargs.get('id', 'test-mem-id')
+        self.memory_id = kwargs.get('memory_id', self.id)
         self.content = kwargs.get('content', 'test memory')
         self.category = FakeCategory.other
         self.created_at = kwargs.get('created_at', datetime.now(timezone.utc))
+        self.is_locked = kwargs.get('is_locked', False)
 
     @staticmethod
     def get_memories_as_str(memories):
@@ -388,6 +400,10 @@ memories_model_mod.MemoryDB = FakeMemoryDB
 sys.path.insert(0, str(BACKEND_DIR))
 
 # Now load the shared service modules
+retrieval_safety = _load_module_from_file(
+    "utils.retrieval.safety",
+    BACKEND_DIR / "utils" / "retrieval" / "safety.py",
+)
 conversations_svc = _load_module_from_file(
     "utils.retrieval.tool_services.conversations",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "conversations.py",
@@ -538,6 +554,36 @@ class TestGetConversationsText:
         result = conversations_svc.get_conversations_text(uid="test-uid")
         assert "1 conversations formatted" in result
 
+    def test_source_mapping_matches_search_results(self):
+        conversation = {
+            'id': 'conv-1',
+            'transcript_segments': [],
+            'structured': types.SimpleNamespace(title='Shared title', overview='Shared overview'),
+            'created_at': datetime(2026, 8, 13, tzinfo=timezone.utc),
+        }
+        conversations_db.get_conversations.return_value = [conversation]
+        list_sources = []
+        conversations_svc.get_conversations_text(uid="test-uid", source_sink=list_sources)
+
+        vector_db.query_vectors.return_value = ['conv-1']
+        conversations_db.get_conversations_by_id.return_value = [conversation]
+        search_sources = []
+        conversations_svc.search_conversations_text(uid="test-uid", query="shared", source_sink=search_sources)
+
+        assert (
+            list_sources
+            == search_sources
+            == [
+                {
+                    'kind': 'conversation',
+                    'source_id': 'conv-1',
+                    'title': 'Shared title',
+                    'preview': 'Shared overview',
+                    'created_at': '2026-08-13T00:00:00+00:00',
+                }
+            ]
+        )
+
 
 class TestGetConversationsTextMalformedPerson:
     def setup_method(self):
@@ -603,6 +649,39 @@ class TestSearchConversationsText:
         result = conversations_svc.search_conversations_text(uid="test-uid", query="test query")
         assert "Found" in result
         assert "1 conversations formatted" in result
+
+    def test_exact_reference_bypasses_keyword_and_vector_search(self):
+        conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
+        search_mod.parse_exact_conversation_reference.return_value = conversation_id
+        conversations_db.get_conversations_by_id.return_value = [
+            {'id': conversation_id, 'transcript_segments': [], 'is_locked': False},
+        ]
+
+        result = conversations_svc.search_conversations_text(
+            uid="test-uid", query=f"https://h.omi.me/conversations/{conversation_id}"
+        )
+
+        assert "matching exactly" in result
+        assert "1 conversations formatted" in result
+        search_mod.keyword_search_conversation_ids.assert_not_called()
+        vector_db.query_vectors.assert_not_called()
+        conversations_db.get_conversations_by_id.assert_called_once_with("test-uid", [conversation_id])
+
+    def test_exact_reference_respects_date_filter(self):
+        conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
+        search_mod.parse_exact_conversation_reference.return_value = conversation_id
+        search_mod.conversation_matches_date_range.return_value = False
+        conversations_db.get_conversations_by_id.return_value = [
+            {'id': conversation_id, 'transcript_segments': [], 'is_locked': False},
+        ]
+
+        result = conversations_svc.search_conversations_text(
+            uid="test-uid", query=conversation_id, start_date="2026-01-01T00:00:00Z"
+        )
+
+        assert "No conversations found" in result
+        search_mod.keyword_search_conversation_ids.assert_not_called()
+        vector_db.query_vectors.assert_not_called()
 
     def test_start_date_only_sets_ends_at(self):
         """One-sided date: start_date only should set ends_at to avoid $lte: None."""
@@ -808,9 +887,40 @@ class TestRouterEnvelope:
         assert result["result_text"] == "All good"
         assert result["is_error"] is False
 
+    def test_ok_preserves_typed_sources(self):
+        source = {
+            "kind": "memory",
+            "source_id": "memory-1",
+            "title": "Memory",
+            "preview": "A bounded preview",
+        }
+        response = router_mod.ToolResponse.model_validate(router_mod._ok("get_memories", "result", [source]))
+
+        assert response.sources == [router_mod.ToolSource(**source)]
+
     def test_ok_error(self):
-        result = router_mod._ok("test_tool", "Error: something went wrong")
+        result = router_mod._ok(
+            "test_tool",
+            "Error: something went wrong",
+            [{'kind': 'memory', 'source_id': 'memory-1'}],
+        )
         assert result["is_error"] is True
+        assert router_mod.ToolResponse.model_validate(result).sources == []
+
+    @pytest.mark.parametrize('url', ['javascript:alert(1)', 'file:///tmp/source', 'example.com/source'])
+    def test_tool_source_rejects_non_http_urls(self, url):
+        with pytest.raises(ValueError, match=r'absolute HTTP\(S\) URL'):
+            router_mod.ToolSource(kind='web', source_id='source-1', url=url)
+
+    @pytest.mark.parametrize('url', ['http://example.com/source', 'https://example.com/source'])
+    def test_tool_source_accepts_http_urls(self, url):
+        assert router_mod.ToolSource(kind='web', source_id='source-1', url=url).url == url
+
+    def test_shared_safe_isoformat_preserves_iso_and_string_values(self):
+        assert (
+            retrieval_safety.safe_isoformat(datetime(2026, 8, 13, tzinfo=timezone.utc)) == '2026-08-13T00:00:00+00:00'
+        )
+        assert retrieval_safety.safe_isoformat('raw-value') == 'raw-value'
 
 
 # ===========================================================================

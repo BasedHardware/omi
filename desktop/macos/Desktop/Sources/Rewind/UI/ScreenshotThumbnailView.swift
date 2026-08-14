@@ -1,372 +1,311 @@
+//
+//  ScreenshotThumbnailView.swift — one result card, the well it is built around, and the one decoder
+//  the grid loads its pictures through.
+//
+//  **One shape, two contents.** Every card is the same size and carries the same three parts (a well,
+//  a title, a source line), so a grid row is never ragged and `RewindSearchLayout.cardHeight` keeps
+//  describing every card in it. What differs is what is *in* the well — a photograph, or the words
+//  the frame matched on when its picture is gone. A picture and a run of type are not mistakable for
+//  each other at a glance, which is why this needs no badge and no legend.
+//
+//  **And it is a control.** A search result you cannot open is half a feature: the whole reason to
+//  find the moment you were looking at something is to go and look at it. The hit state is drawn
+//  *outside* the card's own bounds so pressing one never changes the grid's geometry by a point.
+//
+
 @preconcurrency import AppKit
-@preconcurrency import Foundation
 import OmiTheme
-@preconcurrency import SwiftUI
+import SwiftUI
 
-/// Thumbnail view for a single screenshot in the grid
-struct ScreenshotThumbnailView: View {
-  let screenshot: Screenshot
-  let isSelected: Bool
-  let searchQuery: String?
-  let onSelect: () -> Void
-  let onDelete: () -> Void
+// MARK: - The decoder
 
-  @State private var thumbnailImage: NSImage? = nil
-  @State private var isHovered = false
-  @State private var isLoading = true
+/// The one place the results grid turns a screenshot into a picture.
+///
+/// A grid of thumbnails is the hot path of this whole surface, and two things make it stutter:
+/// decoding the full-resolution screenshot behind a 231 pt card, and decoding it again every time a
+/// row scrolls out of view and back. This fixes both — it asks `RewindStorage` for a *downsampled*
+/// image at the size the card actually draws, and it keeps what it decoded.
+///
+/// **The decode runs off the main thread.** `RewindStorage.loadScreenshotThumbnail` is `@MainActor`,
+/// so its ImageIO step lands on the main thread and every cell that appears mid-scroll pays for it in
+/// dropped frames. `downsampledImage` is `nonisolated` and pure, so this calls the actor only for the
+/// bytes and does the decode on a background task.
+///
+/// Carries one decoded image back from that task. `NSImage` is a mutable AppKit class old enough to
+/// predate `Sendable` and cannot conform, so the hand-off is boxed rather than bare. It is safe
+/// because the image is built inside the detached task and read exactly once on the way out — the
+/// two isolation domains never hold it at the same time.
+private struct ThumbnailBox: @unchecked Sendable {
+  let image: NSImage?
+}
 
-  var body: some View {
-    Button(action: onSelect) {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        // Thumbnail image
-        ZStack {
-          if let image = thumbnailImage {
-            Image(nsImage: image)
-              .resizable()
-              .aspectRatio(contentMode: .fill)
-              .frame(height: 120)
-              .clipped()
-          } else if isLoading {
-            Rectangle()
-              .fill(OmiColors.backgroundTertiary)
-              .frame(height: 120)
-              .overlay {
-                ProgressView()
-                  .progressViewStyle(.circular)
-                  .scaleEffect(0.8)
-              }
-          } else {
-            Rectangle()
-              .fill(OmiColors.backgroundTertiary)
-              .frame(height: 120)
-              .overlay {
-                Image(systemName: "photo")
-                  .scaledFont(size: 24)
-                  .foregroundColor(OmiColors.textQuaternary)
-              }
-          }
+@MainActor
+final class RewindThumbnailLoader {
+  static let shared = RewindThumbnailLoader()
 
-          // Hover overlay with delete button
-          if isHovered {
-            Color.black.opacity(0.3)
+  /// Longest edge asked of the decoder. A card is `cardWidth` (≈231 pt) across and Retina draws it at
+  /// 2×, so 480 px is the size the picture is actually shown at. Asking for more than the file holds
+  /// costs nothing — `kCGImageSourceThumbnailMaxPixelSize` is a ceiling, not a target.
+  static let maxPixelSize = Int(
+    (RewindSearchLayout.cardWidth(panelWidth: ChatComposerLayout.contentLaneMaxWidth) * 2).rounded())
 
-            VStack {
-              HStack {
-                // App icon badge
-                AppIconView(appName: screenshot.appName, size: 20)
-                  .padding(OmiSpacing.xxs)
-                  .background(Color.black.opacity(0.5))
-                  .cornerRadius(OmiChrome.badgeRadius)
+  /// Roughly 60 decoded cards. A 480 px thumbnail is ~1.2 MB decoded, so this is ~72 MB — enough that
+  /// scrolling a page of results and coming back is free, and bounded so a long session cannot grow
+  /// without limit. `NSCache` also drops it all under memory pressure, which a dictionary would not.
+  private let cache: NSCache<NSNumber, NSImage> = {
+    let cache = NSCache<NSNumber, NSImage>()
+    cache.countLimit = 60
+    return cache
+  }()
 
-                Spacer()
+  private init() {}
 
-                Button {
-                  onDelete()
-                } label: {
-                  Image(systemName: "trash")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(.white)
-                    .padding(OmiSpacing.xs)
-                    .background(Color.red.opacity(0.8))
-                    .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-              }
-              Spacer()
-
-              // Time overlay at bottom
-              HStack {
-                Spacer()
-                Text(screenshot.formattedTime)
-                  .scaledFont(size: OmiType.caption, weight: .medium, design: .monospaced)
-                  .foregroundColor(.white)
-                  .padding(.horizontal, OmiSpacing.sm)
-                  .padding(.vertical, OmiSpacing.xxs)
-                  .background(Color.black.opacity(0.6))
-                  .cornerRadius(OmiChrome.stripRadius)
-              }
-            }
-            .padding(OmiSpacing.xs)
-          }
-
-          // Search match indicator
-          if searchQuery != nil && screenshot.ocrDataJson != nil {
-            VStack {
-              HStack {
-                Spacer()
-                Image(systemName: "text.magnifyingglass")
-                  .scaledFont(size: OmiType.micro)
-                  .foregroundColor(OmiColors.backgroundPrimary)
-                  .padding(OmiSpacing.xxs)
-                  .background(OmiColors.accent)
-                  .clipShape(Circle())
-              }
-              Spacer()
-            }
-            .padding(OmiSpacing.xs)
-          }
-        }
-        .frame(height: 120)
-        .cornerRadius(OmiChrome.elementRadius)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(isSelected ? OmiColors.accent : Color.clear, lineWidth: 2)
-        )
-
-        // Info section
-        HStack(spacing: OmiSpacing.sm) {
-          // App icon
-          AppIconView(appName: screenshot.appName, size: 16)
-
-          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-            // App name
-            Text(screenshot.appName)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
-              .lineLimit(1)
-
-            // Time
-            Text(screenshot.formattedTime)
-              .scaledFont(size: OmiType.micro, design: .monospaced)
-              .foregroundColor(OmiColors.textTertiary)
-          }
-
-          Spacer()
-
-          // OCR indicator
-          if screenshot.isIndexed && screenshot.ocrText != nil && !screenshot.ocrText!.isEmpty {
-            Image(systemName: "doc.text.fill")
-              .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.accent.opacity(0.6))
-              .help("Text extracted")
-          }
-        }
-
-        // Search context snippet (when searching)
-        if let query = searchQuery,
-          let snippet = screenshot.contextSnippet(for: query)
-        {
-          SearchContextSnippet(snippet: snippet, query: query)
-        }
-
-        // Window title (if available and no search context)
-        else if let title = screenshot.windowTitle, !title.isEmpty {
-          Text(title)
-            .scaledFont(size: OmiType.micro)
-            .foregroundColor(OmiColors.textQuaternary)
-            .lineLimit(1)
-        }
-      }
-      .padding(OmiSpacing.sm)
-      .background(isSelected ? OmiColors.accent.opacity(0.1) : OmiColors.backgroundTertiary.opacity(0.5))
-      .cornerRadius(OmiChrome.smallControlRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .stroke(isSelected ? OmiColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
-      )
-    }
-    .buttonStyle(.plain)
-    .onHover { hovering in
-      isHovered = hovering
-      if hovering {
-        NSCursor.pointingHand.push()
-      } else {
-        NSCursor.pop()
-      }
-    }
-    .task {
-      await loadThumbnail()
-    }
+  /// What is already decoded, answered synchronously.
+  ///
+  /// Checked before the card ever shows its placeholder: a cell that scrolls back into view has its
+  /// picture on the very first frame, so a fast scroll does not flash grey wells behind it.
+  func cached(_ screenshot: Screenshot) -> NSImage? {
+    guard let id = screenshot.id else { return nil }
+    return cache.object(forKey: NSNumber(value: id))
   }
 
-  private func loadThumbnail() async {
-    isLoading = true
+  /// Decode this screenshot's thumbnail, or hand back what was already decoded.
+  func thumbnail(for screenshot: Screenshot) async -> NSImage? {
+    if let cached = cached(screenshot) { return cached }
+    let size = Self.maxPixelSize
     do {
-      let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
-      // Create thumbnail
-      let thumbnailSize = NSSize(width: 300, height: 200)
-      thumbnailImage = resizeImage(image, to: thumbnailSize)
+      let data = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+      // The expensive half, off the main thread. `downsampledImage` touches no actor state.
+      //
+      // `NSImage` predates `Sendable` and cannot conform, so the decoded image comes back in a box
+      // rather than bare: the value is constructed inside the detached task and read once here, so
+      // no two isolation domains ever hold it at the same time.
+      let boxed = await Task.detached(priority: .utility) {
+        ThumbnailBox(image: RewindStorage.downsampledImage(from: data, maxPixelSize: size))
+      }.value
+      guard let image = boxed.image else { return nil }
+      if let id = screenshot.id {
+        cache.setObject(image, forKey: NSNumber(value: id))
+      }
+      return image
     } catch {
-      logError("ScreenshotThumbnailView: Failed to load thumbnail: \(error)")
+      // A frame whose file retention already removed is a real and common state, not an error worth
+      // logging on every scroll. The card draws what the frame said instead.
+      return nil
     }
-    isLoading = false
-  }
-
-  private func resizeImage(_ image: NSImage, to size: NSSize) -> NSImage {
-    let newImage = NSImage(size: size)
-    newImage.lockFocus()
-    image.draw(
-      in: NSRect(origin: .zero, size: size),
-      from: NSRect(origin: .zero, size: image.size),
-      operation: .copy,
-      fraction: 1.0
-    )
-    newImage.unlockFocus()
-    return newImage
   }
 }
 
-/// Displays a search context snippet with the query highlighted
-struct SearchContextSnippet: View {
-  let snippet: String
+// MARK: - The well
+
+/// The card's picture, or the words that stand in for it.
+///
+/// Both forms are built here, from the same shape, aspect ratio, clip and edge, so they are the same
+/// object at the same size and neither can drift into being taller than the other. That identity is
+/// what lets `RewindSearchLayout.cardHeight` describe a card without knowing which kind it is.
+struct RewindSearchWell: View {
+  let screenshot: Screenshot
+  /// What the frame said, for the state where there is no picture to show it.
+  var fallbackText: String?
+
+  @State private var image: NSImage?
+
+  private var shape: RoundedRectangle {
+    RoundedRectangle(cornerRadius: RewindSearchLayout.cardCornerRadius, style: .continuous)
+  }
+
+  var body: some View {
+    shape
+      .fill(image == nil && fallbackText?.isEmpty == false ? RewindSearchInk.textWell : RewindSearchInk.wellPlaceholder)
+      .aspectRatio(RewindSearchLayout.thumbnailAspect, contentMode: .fit)
+      .overlay { content }
+      .clipShape(shape)
+      .overlay(shape.strokeBorder(Ink.hairline.opacity(0.5), lineWidth: 1))
+      .task(id: screenshot.id) {
+        // Synchronous hit first, so a cached picture never costs a frame of placeholder.
+        if let cached = RewindThumbnailLoader.shared.cached(screenshot) {
+          image = cached
+          return
+        }
+        image = await RewindThumbnailLoader.shared.thumbnail(for: screenshot)
+      }
+  }
+
+  @ViewBuilder
+  private var content: some View {
+    if let image {
+      Image(nsImage: image)
+        .resizable()
+        // Fill and clip: a screenshot letterboxed inside a 4:3 well leaves two grey bars, and a grid
+        // of those reads as broken images.
+        .aspectRatio(contentMode: .fill)
+        .clipped()
+    } else if let fallbackText, !fallbackText.isEmpty {
+      // The no-picture state, when the frame still knows what was on it. The text is the honest
+      // substitute for the picture — same well, same size, nothing invented.
+      VStack(alignment: .leading, spacing: 5) {
+        Image(systemName: "text.alignleft")
+          .font(.system(size: 11, weight: .semibold))
+          .foregroundStyle(Ink.secondary)
+        Text(fallbackText)
+          .inkStyle(.statusLabel, color: Ink.primary)
+          .lineLimit(4)
+          .truncationMode(.tail)
+          .multilineTextAlignment(.leading)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .padding(10)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    } else {
+      // …and the no-picture, no-text state, which is still a real one. A neutral well with a quiet
+      // glyph is honest; nothing here is ever a broken-image icon.
+      Image(systemName: "photo")
+        .font(.system(size: 18, weight: .light))
+        .foregroundStyle(Ink.secondary)
+    }
+  }
+}
+
+// MARK: - The card
+
+/// One thing the search found: a moment on screen, as a picture with a title and a source under it.
+struct RewindSearchResultCard: View {
+  let group: SearchResultGroup
   let query: String
+  var panelWidth: CGFloat = RewindSearchLayout.panelWidth
+  /// Whether the keyboard is on this card. Drawn as weight, never as hue.
+  var isSelected: Bool = false
+  var onOpen: () -> Void = {}
 
-  var body: some View {
-    Text(attributedSnippet)
-      .scaledFont(size: OmiType.micro)
-      .lineLimit(2)
-      .padding(.horizontal, OmiSpacing.xs)
-      .padding(.vertical, OmiSpacing.xxs)
-      .background(OmiColors.accent.opacity(0.1))
-      .cornerRadius(OmiChrome.stripRadius)
+  @State private var isHovering = false
+
+  /// The front of a window title is the part that says what it is; when there is none, the app is the
+  /// most specific true thing the card can be called.
+  private var title: String {
+    guard let windowTitle = group.windowTitle, !windowTitle.isEmpty else { return group.appName }
+    return windowTitle
   }
 
-  private var attributedSnippet: AttributedString {
-    var result = AttributedString(snippet)
-    result.foregroundColor = OmiColors.textTertiary
+  private var snippet: String? { group.representativeScreenshot.contextSnippet(for: query) }
 
-    // Highlight the search query
-    let lowercasedSnippet = snippet.lowercased()
-    let lowercasedQuery = query.lowercased()
-
-    var searchStart = lowercasedSnippet.startIndex
-    while let range = lowercasedSnippet.range(of: lowercasedQuery, range: searchStart..<lowercasedSnippet.endIndex) {
-      if let attrRange = Range(range, in: result) {
-        result[attrRange].foregroundColor = OmiColors.accent
-        result[attrRange].font = .system(size: 10, weight: .semibold)
-      }
-      searchStart = range.upperBound
+  var body: some View {
+    Button(action: onOpen) {
+      content
     }
+    .buttonStyle(RewindSearchCardStyle(isHovering: isHovering, isSelected: isSelected))
+    .onHover { isHovering = $0 }
+    .omiAnimation(.easeOut(duration: InkMotion.press), value: isHovering)
+    // The matched text, whole, for the two readers a 231 pt card cannot serve: somebody hovering to
+    // check *why* this frame came back, and somebody who cannot see the picture at all.
+    .help(snippet ?? title)
+    .accessibilityLabel(Text(readAloud))
+    .accessibilityHint(Text(Self.activationHint))
+    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+  }
 
-    return result
+  static let activationHint = "Opens the timeline at this moment"
+
+  private var content: some View {
+    VStack(alignment: .leading, spacing: 7) {
+      RewindSearchWell(screenshot: group.representativeScreenshot, fallbackText: snippet)
+      Text(title)
+        // One line, always. `.tail` and not the default middle truncation.
+        .inkStyle(.rowCopy, color: Ink.primary)
+        .lineLimit(1)
+        .truncationMode(.tail)
+      HStack(spacing: 5) {
+        AppIconView(appName: group.appName, size: 12)
+        Text(group.appName)
+          .inkStyle(.statusLabel, color: Ink.secondary)
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .layoutPriority(1)
+        Text("•").inkStyle(.statusLabel, color: Ink.secondary)
+        Text(RewindSearchTime.describe(group.startTime))
+          .inkStyle(.statusLabel, color: Ink.secondary)
+          .lineLimit(1)
+          .fixedSize()
+      }
+    }
+    .frame(width: RewindSearchLayout.cardWidth(panelWidth: panelWidth), alignment: .leading)
+  }
+
+  /// The card read aloud. The snippet is left out because the title and source already name the card;
+  /// a page of OCR read after every one would make the grid unusable with VoiceOver.
+  private var readAloud: String {
+    let when = RewindSearchTime.describe(group.startTime)
+    let frames = group.count > 1 ? ", \(group.count) frames" : ""
+    return "\(title), \(group.appName)\(frames), \(when)"
   }
 }
 
-/// Grid view showing multiple screenshot thumbnails
-struct ScreenshotGridView: View {
-  let screenshots: [Screenshot]
-  let selectedScreenshot: Screenshot?
-  let searchQuery: String?
-  let onSelect: (Screenshot) -> Void
-  let onDelete: (Screenshot) -> Void
+/// How a result card answers the pointer: a wash behind it on hover, a stronger one with an edge when
+/// the keyboard is on it, and a dip in opacity while it is held.
+///
+/// **The affordance is drawn outside the card's own bounds, and that is deliberate.** A card is a
+/// picture, a title and a source line with no padding of its own — insetting them to make room for a
+/// highlight would change `RewindSearchLayout.cardHeight`, which the panel's ceiling and its scroll
+/// fade are both stated in terms of. A `background` is layout-neutral, and the negative padding lets
+/// the wash spread into the gutter the grid already leaves between cards. So the card gains a hit
+/// state without the grid moving by a point.
+private struct RewindSearchCardStyle: ButtonStyle {
+  let isHovering: Bool
+  let isSelected: Bool
 
-  @State private var groupByApp = false
+  /// A shade larger than the card's own corner, because the wash sits outside it: two concentric
+  /// rounded rectangles with the *same* radius read as a rendering seam rather than as one object.
+  private static let cornerRadius = RewindSearchLayout.cardCornerRadius + 4
+  /// How far the wash spreads past the card. Half the grid's gutter, so two selected neighbours could
+  /// never touch.
+  private static let outset: CGFloat = RewindSearchLayout.cardGutter / 2
 
-  private let columns = [
-    GridItem(.adaptive(minimum: 180, maximum: 250), spacing: OmiSpacing.md)
-  ]
-
-  var body: some View {
-    VStack(spacing: 0) {
-      // View controls
-      HStack {
-        Text("\(screenshots.count) screenshots")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
-
-        if let query = searchQuery {
-          Text("matching \"\(query)\"")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.accent)
-        }
-
-        Spacer()
-
-        // Group toggle
-        Toggle(isOn: $groupByApp) {
-          HStack(spacing: OmiSpacing.xxs) {
-            Image(systemName: groupByApp ? "square.grid.3x3.fill" : "square.grid.3x3")
-            Text("Group by app")
-          }
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
-        }
-        .toggleStyle(.button)
-        .buttonStyle(.plain)
-      }
-      .padding(.horizontal, OmiSpacing.xxl)
-      .padding(.bottom, OmiSpacing.md)
-
-      // Grid
-      ScrollView {
-        if groupByApp {
-          groupedGridContent
-        } else {
-          standardGridContent
-        }
-      }
-    }
-  }
-
-  private var standardGridContent: some View {
-    LazyVGrid(columns: columns, spacing: OmiSpacing.md) {
-      ForEach(screenshots) { screenshot in
-        ScreenshotThumbnailView(
-          screenshot: screenshot,
-          isSelected: selectedScreenshot?.id == screenshot.id,
-          searchQuery: searchQuery,
-          onSelect: { onSelect(screenshot) },
-          onDelete: { onDelete(screenshot) }
-        )
-      }
-    }
-    .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.bottom, OmiSpacing.xxl)
-  }
-
-  private var groupedGridContent: some View {
-    let grouped = Dictionary(grouping: screenshots) { $0.appName }
-    let sortedKeys = grouped.keys.sorted()
-
-    return LazyVStack(alignment: .leading, spacing: OmiSpacing.xxl) {
-      ForEach(sortedKeys, id: \.self) { appName in
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
-          // App header
-          HStack(spacing: OmiSpacing.sm) {
-            AppIconView(appName: appName, size: 20)
-
-            Text(appName)
-              .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
-
-            Text("(\(grouped[appName]?.count ?? 0))")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
-
-            Spacer()
-          }
-          .padding(.horizontal, OmiSpacing.xxl)
-
-          // Screenshots for this app
-          LazyVGrid(columns: columns, spacing: OmiSpacing.md) {
-            ForEach(grouped[appName] ?? []) { screenshot in
-              ScreenshotThumbnailView(
-                screenshot: screenshot,
-                isSelected: selectedScreenshot?.id == screenshot.id,
-                searchQuery: searchQuery,
-                onSelect: { onSelect(screenshot) },
-                onDelete: { onDelete(screenshot) }
-              )
-            }
-          }
-          .padding(.horizontal, OmiSpacing.xxl)
-        }
-      }
-    }
-    .padding(.bottom, OmiSpacing.xxl)
+  func makeBody(configuration: Configuration) -> some View {
+    let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+    let fill: Color = {
+      if isSelected { return RewindSearchInk.chipFillSelected }
+      return isHovering || configuration.isPressed ? RewindSearchInk.chipFillHover : .clear
+    }()
+    return
+      configuration.label
+      // Pressed drops opacity rather than scaling: a card is a picture of something real, and a
+      // photograph that shrinks under the finger reads as a toy.
+      .opacity(configuration.isPressed ? 0.72 : 1)
+      .background(
+        shape
+          .fill(fill)
+          .overlay(shape.strokeBorder(isSelected ? Ink.hairline : Color.clear, lineWidth: 1))
+          .padding(-Self.outset)
+      )
+      // The whole card is the target, including the air between the picture and the caption — a
+      // control with holes in it is a control that ignores half its clicks.
+      .contentShape(Rectangle())
+      .omiAnimation(.easeOut(duration: InkMotion.press), value: configuration.isPressed)
   }
 }
 
-#if canImport(PreviewsMacros)
-  #Preview {
-    ScreenshotGridView(
-      screenshots: [],
-      selectedScreenshot: nil,
-      searchQuery: nil,
-      onSelect: { _ in },
-      onDelete: { _ in }
-    )
-    .frame(width: 800, height: 600)
-    .background(OmiColors.backgroundPrimary)
+// MARK: - When
+
+/// How a card says when it was.
+///
+/// A pure function of two dates so the phrasing is a test rather than a screenshot. Relative for
+/// anything inside a day, because "3 hours ago" is the question a person actually asks of their own
+/// screen history; a clock time for anything older, because "at 5:49 PM" without a day is a lie.
+enum RewindSearchTime {
+  static func describe(_ date: Date, now: Date = Date()) -> String {
+    let seconds = now.timeIntervalSince(date)
+    if seconds < 60 { return "just now" }
+    if seconds < 3600 { return "\(Int(seconds / 60))m ago" }
+    if seconds < 86_400 { return "\(Int(seconds / 3600))h ago" }
+
+    let calendar = Calendar.current
+    let formatter = DateFormatter()
+    if calendar.isDateInYesterday(date) {
+      formatter.dateFormat = "'yesterday' h:mm a"
+    } else if calendar.isDate(date, equalTo: now, toGranularity: .year) {
+      formatter.dateFormat = "MMM d, h:mm a"
+    } else {
+      formatter.dateFormat = "MMM d, yyyy"
+    }
+    return formatter.string(from: date)
   }
-#endif
+}

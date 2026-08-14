@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 
@@ -8,15 +9,20 @@ from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
 from llm_gateway.gateway.request_context import REQUEST_ID_HEADER, request_id_for, resolve_request_id
+from llm_gateway.gateway.metrics import observe_gateway_config_identity
 from llm_gateway.gateway.accounting_sink import drain_accounting_persistence_tasks
 from llm_gateway.routers import anthropic_messages, health, metrics, openai_compatible
-from llm_gateway.routers.dependencies import close_provider_registry
+from llm_gateway.routers.dependencies import close_provider_registry, get_gateway_config
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    observe_gateway_config_identity(
+        get_gateway_config(),
+        build_identity=os.getenv('OMI_LLM_GATEWAY_BUILD_IDENTITY', ''),
+    )
     try:
         yield
     finally:

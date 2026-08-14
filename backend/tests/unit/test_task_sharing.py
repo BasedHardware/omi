@@ -47,6 +47,8 @@ for sub in [
     "llm_usage",
     "_client",
     "chat",
+    "chat_first_intents",
+    "task_intelligence_control",
     "goals",
     "knowledge_graph",
     "daily_summaries",
@@ -63,6 +65,7 @@ sys.modules["database.firestore_transaction_retry"].FirestoreContentionExhausted
     (RuntimeError,),
     {},
 )
+sys.modules["database.task_intelligence_control"].get_task_workflow_control = MagicMock()
 
 # Stub vector_db functions used by routers.action_items
 vector_db_mod = sys.modules["database.vector_db"]

@@ -1021,11 +1021,41 @@ async def test_finalizer_never_logs_a_provider_exception_body(monkeypatch, caplo
 
 
 @pytest.mark.anyio
-async def test_completed_conversation_replays_only_the_durable_fanout_boundary(monkeypatch):
+@pytest.mark.parametrize(
+    ('source', 'external_data', 'discarded', 'expected_intent_kwargs'),
+    [
+        ('omi', None, False, {'conversation_id': 'conversation-1', 'summary': 'Captured title'}),
+        (
+            'desktop',
+            {'conversation_role': 'meeting'},
+            False,
+            {'conversation_id': 'conversation-1', 'summary': 'Captured title', 'is_desktop_meeting': True},
+        ),
+        ('desktop', {'conversation_role': 'ambient'}, False, None),
+        (
+            'desktop',
+            {'conversation_role': 'meeting', 'conversation_finalization_reason': 'max_duration_rotation'},
+            False,
+            None,
+        ),
+        ('desktop', {'conversation_role': 'meeting'}, True, None),
+    ],
+)
+async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
+    monkeypatch, source, external_data, discarded, expected_intent_kwargs
+):
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    conversation = SimpleNamespace(id='conversation-1', status=ConversationStatus.completed, language='en')
+    conversation = SimpleNamespace(
+        id='conversation-1',
+        status=ConversationStatus.completed,
+        language='en',
+        source=SimpleNamespace(value=source),
+        external_data=external_data,
+        discarded=discarded,
+        structured=SimpleNamespace(title='Captured title', overview='Captured overview'),
+    )
     integrations = AsyncMock(return_value=[])
     monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
     monkeypatch.setattr(
@@ -1045,6 +1075,8 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
     completed = MagicMock(return_value=True)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', completed)
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
+    capture_arrival = MagicMock()
+    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', capture_arrival)
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
         'uid-1',
@@ -1060,9 +1092,16 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
         idempotency_key='conversation:conversation-1:finalization',
         require_delivery=True,
     )
-    extracted.assert_called_once_with('uid-1', conversation)
+    if discarded:
+        extracted.assert_not_called()
+    else:
+        extracted.assert_called_once_with('uid-1', conversation)
     assert disposition == ConversationFinalizationDisposition.completed
     completed.assert_called_once_with('job-1', 2, 3)
+    if expected_intent_kwargs is None:
+        capture_arrival.assert_not_called()
+    else:
+        capture_arrival.assert_called_once_with('uid-1', **expected_intent_kwargs)
 
 
 @pytest.mark.anyio

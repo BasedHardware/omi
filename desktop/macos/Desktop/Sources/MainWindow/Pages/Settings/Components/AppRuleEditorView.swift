@@ -14,21 +14,21 @@ struct ExcludedAppRow: View {
 
       Text(appName)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Spacer()
 
       Button("Remove \(appName)", systemImage: "xmark.circle.fill", action: onRemove)
         .labelStyle(.iconOnly)
         .scaledFont(size: OmiType.subheading)
-        .foregroundColor(isHovered ? OmiColors.error : OmiColors.textTertiary)
+        .foregroundColor(isHovered ? Ink.errorRed : Ink.secondary)
         .buttonStyle(.plain)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(isHovered ? OmiColors.backgroundQuaternary.opacity(0.5) : Color.clear)
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+        .fill(isHovered ? Ink.hairline : Color.clear)
     )
     .onHover { hovering in
       isHovered = hovering
@@ -51,7 +51,7 @@ struct AppRuleEditorView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text(title)
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       HStack(spacing: OmiSpacing.sm) {
         TextField(placeholder, text: $newAppName)
@@ -67,12 +67,12 @@ struct AppRuleEditorView: View {
         HStack {
           Text("Currently Running Apps")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           Spacer()
           Button("Refresh running apps", systemImage: "arrow.clockwise", action: refreshRunningApps)
             .labelStyle(.iconOnly)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .buttonStyle(.plain)
         }
 
@@ -134,7 +134,7 @@ struct BrowserKeywordListView: View {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "line.3.horizontal.decrease")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         TextField("Filter keywords...", text: $filterText)
           .textFieldStyle(.plain)
           .scaledFont(size: OmiType.caption)
@@ -144,14 +144,14 @@ struct BrowserKeywordListView: View {
           }
           .labelStyle(.iconOnly)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .buttonStyle(.plain)
         }
       }
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xxs)
-      .background(OmiColors.backgroundTertiary)
-      .cornerRadius(OmiChrome.badgeRadius)
+      .background(Ink.rowFill)
+      .cornerRadius(SettingsGlassMetrics.pillRadius)
 
       // Keyword chips in a wrapping flow layout
       ScrollView {
@@ -160,19 +160,19 @@ struct BrowserKeywordListView: View {
             HStack(spacing: OmiSpacing.xxs) {
               Text(keyword)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
               Button("Remove \(keyword)", systemImage: "xmark") {
                 onRemove(keyword)
               }
               .labelStyle(.iconOnly)
               .scaledFont(size: 8, weight: .bold)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .buttonStyle(.plain)
             }
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.vertical, OmiSpacing.xxs)
-            .background(OmiColors.backgroundTertiary)
-            .cornerRadius(OmiChrome.badgeRadius)
+            .background(Ink.rowFill)
+            .cornerRadius(SettingsGlassMetrics.pillRadius)
           }
         }
         .padding(.vertical, OmiSpacing.hairline)
@@ -192,7 +192,7 @@ struct BrowserKeywordListView: View {
 
       Text("\(keywords.count) keywords")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
   }
 
@@ -219,18 +219,18 @@ struct RunningAppChip: View {
 
         Text(appName)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Image(systemName: "plus.circle.fill")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(isHovered ? OmiColors.accent : OmiColors.textTertiary)
+          .foregroundColor(isHovered ? Ink.accent : Ink.secondary)
       }
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xs)
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.pillRadius, style: .continuous)
           .fill(
-            isHovered ? OmiColors.backgroundQuaternary : OmiColors.backgroundTertiary.opacity(0.5))
+            isHovered ? Ink.hairline : Ink.rowFill)
       )
     }
     .buttonStyle(.plain)

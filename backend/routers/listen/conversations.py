@@ -24,6 +24,7 @@ from utils.transcribe_decisions import (
     decide_recording_session_reconnect_action,
     recording_session_id_for_lifecycle_event,
     select_recording_session_id,
+    should_attach_to_existing_in_progress,
 )
 from utils.transcribe_store import calendar_db, conversations_db, redis_db
 
@@ -229,6 +230,7 @@ class LiveConversationController:
             call_id=request.call_id if self.host.is_multi_channel else None,
             client_device_id=context.client_device_id,
             client_platform=context.platform,
+            external_data={'conversation_role': request.conversation_role},
         )
         await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
@@ -260,6 +262,16 @@ class LiveConversationController:
             return None
         existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
         if not existing:
+            await self.create_new_in_progress_conversation()
+            return None
+        existing_source = existing.get('source')
+        if hasattr(existing_source, 'value'):
+            existing_source = existing_source.value
+        # Cross-source sockets (pendant + web meeting) must not share one conversation (#5388).
+        if not should_attach_to_existing_in_progress(
+            existing_source=existing_source if isinstance(existing_source, str) else None,
+            request_source=self.host.request.source,
+        ):
             await self.create_new_in_progress_conversation()
             return None
         finished_at = datetime.fromisoformat(existing['finished_at'].isoformat())

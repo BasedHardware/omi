@@ -18,25 +18,24 @@ const REQUEST_TIMEOUT_MS = 30_000
 /** 3 attempts total. Mac's backoff, exactly: 2s then 8s. */
 const RETRY_DELAYS_MS = [2_000, 8_000]
 
-/** Carries the status only — never a response body (it can echo the prompt,
+/** Carries typed response metadata only — never a response body (it can echo the prompt,
  *  which carries the screen contents). */
 export class GeminiHttpError extends Error {
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    readonly retryable: boolean
+  ) {
     super(`gemini proxy HTTP ${status}`)
     this.name = 'GeminiHttpError'
   }
 }
 
-/** 5xx and 429 are worth another attempt; a 400/401/403 will fail identically
- *  three times in a row, and retrying a paywall/auth rejection just burns the
- *  user's battery. */
+/** Replay only when the backend explicitly marks the response retryable. */
 function isTransient(e: unknown): boolean {
-  if (e instanceof GeminiHttpError) return e.status === 429 || e.status >= 500
-  // A per-request TIMEOUT (surfaced as 'TimeoutError') and a bare network error
-  // (TypeError from net.fetch) are both worth retrying. Only a genuine session
-  // sign-out — the external AbortSignal firing, surfaced as 'AbortError' — is
-  // terminal: the token is dead, so retrying is pointless.
-  return !(e instanceof Error && e.name === 'AbortError')
+  if (e instanceof GeminiHttpError) return e.retryable
+  // Local timeouts, bare network failures, and session cancellation are
+  // ambiguous after dispatch, so they fail closed instead of replaying.
+  return false
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -55,7 +54,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /** Run `fn` with a per-request timeout, composed with an optional external
- *  (session) abort signal. A timeout surfaces as a 'TimeoutError' (retryable),
+ *  (session) abort signal. A timeout surfaces as a terminal 'TimeoutError',
  *  while the external signal surfaces as an 'AbortError' (a session sign-out —
  *  terminal). `fn` sees a single composed signal and doesn't care which fired. */
 async function withTimeout<T>(
@@ -140,7 +139,8 @@ async function attempt(
           signal
         }
       )
-      if (!res.ok) throw new GeminiHttpError(res.status)
+      if (!res.ok)
+        throw new GeminiHttpError(res.status, res.headers?.get?.('x-omi-retryable') === 'true')
       return extractText(await res.json())
     },
     external

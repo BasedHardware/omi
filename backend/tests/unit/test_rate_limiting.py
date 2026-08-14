@@ -503,6 +503,9 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "mcp:memories_read",
             "mcp:memories_write",
             "knowledge_graph:rebuild",
+            "knowledge_graph:extract",
+            "knowledge_graph:canonical",
+            "memories:extract",
             "wrapped:generate",
             "integration:conversations",
             "integration:memories",
@@ -533,8 +536,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_conversations_router_has_rate_limits(self):
         matches = self._grep_file("routers/conversations.py", r"with_rate_limit.*conversations:")
-        # create, reprocess, search, merge, and events = 5 endpoints
-        self.assertEqual(len(matches), 5, f"conversations.py expected 5 rate limits, got {len(matches)}")
+        # create, reprocess, topic, search, merge, and events = 6 endpoints
+        self.assertEqual(len(matches), 6, f"conversations.py expected 6 rate limits, got {len(matches)}")
 
     def test_chat_router_has_rate_limits(self):
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*(?:chat:|voice:|file:)")
@@ -663,8 +666,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_memories_router_has_rate_limits(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:")
-        # create, batch, 3 review (list/get/resolve), delete, delete_all, delete_batch, 4 modify endpoints = 12
-        self.assertEqual(len(matches), 12, f"memories.py expected 12 rate limits, got {len(matches)}")
+        # extract, create, batch, 3 review (list/get/resolve), delete, delete_all, delete_batch, 5 modify = 14
+        self.assertEqual(len(matches), 14, f"memories.py expected 14 rate limits, got {len(matches)}")
 
     def test_memories_create_endpoint_rate_limited(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:create")
@@ -770,6 +773,25 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.real_module.check_rate_limit("uid1", "p", 999, 7200)
         _, kwargs = self.mock_lua.call_args
         self.assertEqual(kwargs['args'], [7200], "Lua should only receive window, not max_requests")
+
+    def test_reversible_reservation_maps_admission_and_does_not_count_denials(self):
+        self.real_module._RATE_LIMIT_RESERVE_LUA = MagicMock(return_value=[1, 3, 3600])
+        allowed, remaining, retry = self.real_module.reserve_rate_limit("uid1", "desktop_reasoning", 10, 3600)
+        self.assertTrue(allowed)
+        self.assertEqual((remaining, retry), (7, 0))
+        self.real_module._RATE_LIMIT_RESERVE_LUA.assert_called_once_with(
+            keys=["rl:desktop_reasoning:uid1"], args=[3600, 10]
+        )
+
+        self.real_module._RATE_LIMIT_RESERVE_LUA.return_value = [0, 10, 1200]
+        allowed, remaining, retry = self.real_module.reserve_rate_limit("uid1", "desktop_reasoning", 10, 3600)
+        self.assertFalse(allowed)
+        self.assertEqual((remaining, retry), (0, 1200))
+
+    def test_reversible_reservation_release_uses_same_counter_key(self):
+        self.real_module._RATE_LIMIT_RELEASE_LUA = MagicMock(return_value=2)
+        self.real_module.release_rate_limit("uid1", "desktop_reasoning")
+        self.real_module._RATE_LIMIT_RELEASE_LUA.assert_called_once_with(keys=["rl:desktop_reasoning:uid1"], args=[])
 
 
 if __name__ == '__main__':

@@ -15,3 +15,21 @@ func TestStripPacketHeader(t *testing.T) {
 		t.Fatal("uuids empty")
 	}
 }
+
+// Codec IDs are firmware-coupled: 20 is DevKit, 21 is Omi CV1 (opusFS320).
+func TestCodecIDs(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		got  CodecID
+		want byte
+	}{
+		{"pcm16", CodecPCM16, 0},
+		{"pcm8", CodecPCM8, 1},
+		{"opus", CodecOpus, 20},
+		{"opusFS320", CodecOpusFS320, 21},
+	} {
+		if byte(tc.got) != tc.want {
+			t.Errorf("%s = %d, want %d", tc.name, tc.got, tc.want)
+		}
+	}
+}

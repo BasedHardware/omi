@@ -9,9 +9,12 @@ import pytest
 
 from database import knowledge_graph as kg_db
 from models.memory_promotion import (
+    PROMOTION_GRAPH_PLAN_V2_VERSION,
+    GraphRelationEndpoint,
     MemoryGraphAssertion,
     PromotionGraphPlan,
     build_memory_graph_assertion,
+    canonical_graph_entity_id,
 )
 from utils.memory import kg_graph_traversal
 
@@ -76,11 +79,14 @@ class _FakeDb:
     def __init__(self, docs=None):
         self.docs = dict(docs or {})
         self.limit_calls: list[tuple[str, int]] = []
+        self.get_all_batch_sizes: list[int] = []
 
     def collection(self, name: str):
         return _CollectionRef(self, name)
 
     def get_all(self, refs):
+        refs = list(refs)
+        self.get_all_batch_sizes.append(len(refs))
         return [ref.get() for ref in refs]
 
 
@@ -113,6 +119,7 @@ def _active_item(assertion: MemoryGraphAssertion, **overrides: Any) -> dict[str,
     item = {
         "uid": UID,
         "memory_id": assertion.memory_id,
+        "account_generation": 4,
         "status": "active",
         "tier": "long_term",
         "processing_state": "processed",
@@ -199,6 +206,121 @@ def test_get_knowledge_graph_merges_current_assertion_and_replaces_its_stale_leg
     assert edge["label"] == "resides_in"
     assert edge["memory_ids"] == ["mem-canonical", "mem-legacy"]
     assert edge["id"].startswith("edge_")
+
+
+def test_canonical_entity_ids_join_two_fenced_assertions_into_a_two_hop_path():
+    alpha = canonical_graph_entity_id("Alpha")
+    beta = canonical_graph_entity_id("Beta")
+    gamma = canonical_graph_entity_id("Gamma")
+    first_plan = PromotionGraphPlan(
+        schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,
+        subject_entity_id=alpha,
+        predicate="depends_on",
+        subject=GraphRelationEndpoint(entity_id=alpha, label="Alpha", node_type="organization"),
+        object=GraphRelationEndpoint(entity_id=beta, label="Beta", node_type="organization"),
+        qualifiers={"source": "roadmap"},
+    )
+    second_plan = PromotionGraphPlan(
+        schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,
+        subject_entity_id=beta,
+        predicate="depends_on",
+        subject=GraphRelationEndpoint(entity_id=beta, label="Beta", node_type="organization"),
+        object=GraphRelationEndpoint(entity_id=gamma, label="Gamma", node_type="organization"),
+        qualifiers={"confidence": "high"},
+    )
+    first = build_memory_graph_assertion(
+        uid=UID,
+        memory_id="mem-alpha-beta",
+        item_revision=1,
+        content_hash="hash-alpha-beta",
+        evidence_ids=["ev-alpha-beta"],
+        graph_plan=first_plan,
+        commit_id="commit-alpha-beta",
+        commit_sequence=1,
+        created_at=NOW,
+    )
+    second = build_memory_graph_assertion(
+        uid=UID,
+        memory_id="mem-beta-gamma",
+        item_revision=1,
+        content_hash="hash-beta-gamma",
+        evidence_ids=["ev-beta-gamma"],
+        graph_plan=second_plan,
+        commit_id="commit-beta-gamma",
+        commit_sequence=2,
+        created_at=NOW,
+    )
+
+    graph = kg_db.merge_knowledge_graph_records({"nodes": [], "edges": []}, [first, second])
+
+    assert {node["id"] for node in graph["nodes"]} == {alpha, beta, gamma}
+    assert {(edge["source_id"], edge["target_id"]) for edge in graph["edges"]} == {
+        (alpha, beta),
+        (beta, gamma),
+    }
+
+
+def test_v2_qualifiers_never_project_as_nodes_or_edges():
+    subject = canonical_graph_entity_id("Subject")
+    object_id = canonical_graph_entity_id("Object")
+    assertion = build_memory_graph_assertion(
+        uid=UID,
+        memory_id="mem-v2-qualified",
+        item_revision=1,
+        content_hash="hash-v2-qualified",
+        evidence_ids=["ev-v2-qualified"],
+        graph_plan=PromotionGraphPlan(
+            schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,
+            subject_entity_id=subject,
+            predicate="depends_on",
+            subject=GraphRelationEndpoint(entity_id=subject, label="Subject", node_type="organization"),
+            object=GraphRelationEndpoint(entity_id=object_id, label="Object", node_type="organization"),
+            qualifiers={"location": "Seattle", "priority": "high"},
+        ),
+        commit_id="commit-v2-qualified",
+        commit_sequence=1,
+        created_at=NOW,
+    )
+
+    records = assertion.graph_records()
+
+    assert {node["id"] for node in records["nodes"]} == {subject, object_id}
+    assert [(edge["source_id"], edge["target_id"], edge["label"]) for edge in records["edges"]] == [
+        (subject, object_id, "depends_on")
+    ]
+
+
+def test_v2_assertion_remains_readable_when_item_retains_legacy_arguments():
+    subject = canonical_graph_entity_id("Alpha")
+    object_id = canonical_graph_entity_id("Beta")
+    assertion = build_memory_graph_assertion(
+        uid=UID,
+        memory_id="mem-v2-legacy-item-arguments",
+        item_revision=1,
+        content_hash="hash-v2-legacy-item-arguments",
+        evidence_ids=["ev-v2-legacy-item-arguments"],
+        graph_plan=PromotionGraphPlan(
+            schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,
+            subject_entity_id=subject,
+            predicate="depends_on",
+            subject=GraphRelationEndpoint(entity_id=subject, label="Alpha", node_type="organization"),
+            object=GraphRelationEndpoint(entity_id=object_id, label="Beta", node_type="organization"),
+            qualifiers={},
+        ),
+        commit_id="commit-v2-legacy-item-arguments",
+        commit_sequence=1,
+        created_at=NOW,
+    )
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, arguments={"location": "Seattle"})))
+
+    assert kg_db.get_active_memory_graph_assertions(UID, db_client=db) == [assertion]
+
+
+def test_v1_assertion_still_requires_matching_item_arguments():
+    assertion = _assertion()
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, arguments={"location": "Portland"})))
+
+    assert kg_db.get_active_memory_graph_assertions(UID, db_client=db) == []
 
 
 @pytest.mark.parametrize(
@@ -393,3 +515,92 @@ def test_existing_graph_traversal_sees_atomic_assertion_without_an_llm_call(monk
             (assertion.memory_id,),
         )
     ]
+
+
+def test_load_fenced_assertions_preserves_caller_order_and_skips_missing():
+    first = _assertion("mem-first", commit_sequence=2)
+    third = _assertion("mem-third", commit_sequence=4)
+    docs = {
+        **_docs_for(first, _active_item(first)),
+        **_docs_for(third, _active_item(third)),
+    }
+    db = _FakeDb(docs)
+
+    loaded = kg_db.load_fenced_assertions_for_memory_items(
+        UID,
+        ["mem-second", "mem-first", "mem-missing", "mem-third"],
+        account_generation=4,
+        db_client=db,
+    )
+
+    assert [assertion.memory_id for assertion in loaded] == ["mem-first", "mem-third"]
+
+
+def test_load_fenced_assertions_batches_assertion_and_item_reads():
+    assertions = [_assertion(f"mem-{index:03d}", commit_sequence=index + 1) for index in range(205)]
+    docs: dict[str, dict[str, Any]] = {}
+    for assertion in assertions:
+        docs.update(_docs_for(assertion, _active_item(assertion)))
+    db = _FakeDb(docs)
+    memory_ids = [assertion.memory_id for assertion in assertions]
+
+    loaded = kg_db.load_fenced_assertions_for_memory_items(
+        UID,
+        memory_ids,
+        account_generation=4,
+        db_client=db,
+    )
+
+    assert len(loaded) == 205
+    assert max(db.get_all_batch_sizes) <= kg_db.MEMORY_GRAPH_ASSERTION_BATCH_SIZE
+    assert db.get_all_batch_sizes == [100, 100, 5, 100, 100, 5]
+
+
+def test_load_fenced_assertions_excludes_wrong_account_generation():
+    assertion = _assertion("mem-stale-generation")
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, account_generation=3)))
+
+    assert (
+        kg_db.load_fenced_assertions_for_memory_items(
+            UID,
+            [assertion.memory_id],
+            account_generation=4,
+            db_client=db,
+        )
+        == []
+    )
+
+
+def test_load_fenced_assertions_excludes_restricted_sensitivity_labels():
+    assertion = _assertion("mem-restricted")
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, sensitivity_labels=["HeAlTh"])))
+
+    assert (
+        kg_db.load_fenced_assertions_for_memory_items(
+            UID,
+            [assertion.memory_id],
+            account_generation=4,
+            db_client=db,
+        )
+        == []
+    )
+
+
+def test_load_fenced_assertions_ignores_miskeyed_memory_item_documents():
+    assertion = _assertion("mem-authoritative")
+    docs = _docs_for(assertion, _active_item(assertion))
+    item_path = f"users/{UID}/memory_items/{assertion.memory_id}"
+    miskeyed_item = dict(docs[item_path])
+    miskeyed_item["memory_id"] = "mem-payload-alias"
+    docs[item_path] = miskeyed_item
+    db = _FakeDb(docs)
+
+    assert (
+        kg_db.load_fenced_assertions_for_memory_items(
+            UID,
+            [assertion.memory_id],
+            account_generation=4,
+            db_client=db,
+        )
+        == []
+    )

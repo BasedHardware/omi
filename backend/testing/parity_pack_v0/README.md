@@ -62,8 +62,10 @@ contract unchanged for existing players:
 | `memory_import` | `v3_memory_import_batch` | Bounded import artifacts and ingestion result (not raw media) |
 
 The development listen deployment mounts `/var/omi-parity-pack` as an `emptyDir`
-for explicitly allowlisted dogfood principals and best-effort exports cassette
-JSON to a private development bucket:
+for explicitly allowlisted dogfood principals. Pod `fsGroup: 10001` matches the
+non-root backend image group so the listener can create and persist the
+`cassettes/` directory, then best-effort export cassette JSON to a private
+development bucket:
 
 ```text
 gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0/cassettes/<identity-key>.json
@@ -83,6 +85,14 @@ npm run test:parity-pack-v0
 
 Never promote cassettes to production storage or commit them to the repository.
 The emptyDir scratch is still lost on pod restart before a successful export.
+
+Dev listen capture exposes the zero-initialized
+`omi_parity_pack_capture_events_total{stage,outcome,reason_class}` counter and a
+matching `parity_pack_capture_event` log marker. The closed labels distinguish
+accepted listens, allowlist decisions, capture initialization, cassette
+persistence, and GCS export attempt/success/failure. These events never include
+principal or session identifiers, payloads, credentials, or cassette object
+paths; non-dev runtimes do not increment or log them.
 
 ## Replay players
 

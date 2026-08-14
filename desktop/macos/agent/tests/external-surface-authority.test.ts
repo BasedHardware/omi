@@ -13,7 +13,11 @@ import {
 } from "../src/runtime/agent-spawn-journal.js";
 import { handleAgentControlToolCall } from "../src/runtime/control-tools.js";
 import { recordJournalTurn, terminalizeJournalTurn, updateJournalTurn } from "../src/runtime/conversation-journal.js";
-import { routeExternalSurfaceTool } from "../src/runtime/external-surface-tool-policy.js";
+import {
+  hasExplicitMemorySaveIntent,
+  hasMemoryContentInUserRequest,
+  routeExternalSurfaceTool,
+} from "../src/runtime/external-surface-tool-policy.js";
 import { AgentRuntimeKernel, ExternalSurfaceAuthorityError } from "../src/runtime/kernel.js";
 import type { AuthorizedRunToolInvocation } from "../src/runtime/run-tool-capability.js";
 import { finalizeRelayToolResult } from "../src/runtime/relay-tool-result.js";
@@ -423,6 +427,83 @@ describe("external realtime surface authority", () => {
       toolInput: { subjectKind: "run", subjectId: "run-1", dismissed: true },
       originatingPrompt: "Dismiss that background agent pill",
     })).toMatchObject({ action: "execute", toolName: "set_desktop_attention_override" });
+  });
+
+  it("requires an affirmative remember/save command before relaying create_memory", () => {
+    for (const prompt of [
+      "I prefer tea.",
+      "Should I save this?",
+      "Please do not remember this.",
+      "I don't want you to save that.",
+    ]) {
+      expect(hasExplicitMemorySaveIntent(prompt), prompt).toBe(false);
+      expect(routeExternalSurfaceTool({
+        toolName: "create_memory",
+        toolInput: { content: "I prefer tea." },
+        originatingPrompt: prompt,
+      })).toMatchObject({ action: "reject", code: "memory_save_not_authorized" });
+    }
+
+    for (const prompt of [
+      "Remember that I prefer tea.",
+      "Please save this: I prefer tea.",
+      "I prefer tea, remember this.",
+      "I want you to remember that I prefer tea.",
+    ]) {
+      expect(hasExplicitMemorySaveIntent(prompt), prompt).toBe(true);
+      expect(routeExternalSurfaceTool({
+        toolName: "create_memory",
+        toolInput: { content: "I prefer tea." },
+        originatingPrompt: prompt,
+      })).toEqual({
+        action: "execute",
+        toolName: "create_memory",
+        toolInput: { content: "I prefer tea." },
+        recoveredFromDelegation: false,
+      });
+    }
+  });
+
+  it("binds create_memory content to the originating user request", () => {
+    expect(hasMemoryContentInUserRequest(
+      { content: "  I  prefer\ttea. " },
+      "Remember that I prefer tea.",
+    )).toBe(true);
+    expect(hasMemoryContentInUserRequest(
+      { content: "C++ 👍" },
+      "Remember this: C++ 👍",
+    )).toBe(true);
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "I prefer tea." },
+      originatingPrompt: "Remember this",
+    })).toMatchObject({ action: "reject", code: "memory_content_not_in_user_request" });
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "I enjoy tea." },
+      originatingPrompt: "Remember that I prefer tea.",
+    })).toMatchObject({ action: "reject", code: "memory_content_not_in_user_request" });
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "I prefer tea." },
+      originatingPrompt: "Please save this: I prefer tea.",
+    })).toMatchObject({ action: "execute", toolName: "create_memory" });
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "   " },
+      originatingPrompt: "Remember this: I prefer tea.",
+    })).toMatchObject({ action: "reject", code: "memory_content_not_in_user_request" });
+  });
+
+  it("keeps external memory intent aligned with the native conservative command set", () => {
+    expect(hasExplicitMemorySaveIntent("Could you please remember this?")).toBe(true);
+    for (const prompt of [
+      "Can you remember this?",
+      "Please save that I prefer tea.",
+      "Please keep this in mind.",
+    ]) {
+      expect(hasExplicitMemorySaveIntent(prompt), prompt).toBe(false);
+    }
   });
 
   it("defaults external spawns to Omi unless the current user selects one provider", () => {

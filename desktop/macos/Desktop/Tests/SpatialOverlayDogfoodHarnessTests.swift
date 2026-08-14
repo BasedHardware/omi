@@ -78,6 +78,39 @@ final class SpatialOverlayDogfoodHarnessTests: XCTestCase {
     )
   }
 
+  @MainActor
+  func testScreenRecordingDragFixtureExposesDeterministicState() {
+    let fixture = SpatialOverlayDogfoodFixture.screenRecordingDrag
+    let state = CloudConnectorGuidanceOverlay.dragToGrantAutomationState(
+      appName: fixture.appName,
+      settingsFrame: fixture.windowFrame,
+      visibleFrame: fixture.visibleFrame
+    )
+    let fixtureState = CloudConnectorGuidanceOverlay.automationFixtureState(fixture, state: state)
+    let target = fixture.targetRect
+
+    XCTAssertEqual(fixture.rawValue, "screen-recording-drag")
+    XCTAssertEqual(fixtureState["fixture"], "screen-recording-drag")
+    XCTAssertEqual(fixtureState["action"], "screen recording")
+    XCTAssertEqual(fixtureState["kind"], "dragToGrant")
+    XCTAssertEqual(fixtureState["appName"], "Omi Fixture")
+    XCTAssertEqual(fixtureState["dropTargetPane"], "content")
+    XCTAssertEqual(fixtureState["dropTargetVertical"], "upper")
+    XCTAssertEqual(fixtureState["dragDirection"], "right")
+    XCTAssertEqual(target, CloudConnectorGuidanceOverlay.permissionListTargetFrame(in: fixture.windowFrame))
+    XCTAssertEqual(target, fixture.recordedTargetRect)
+    XCTAssertGreaterThan(target.midY, fixture.windowFrame.midY)
+    XCTAssertEqual(
+      fixture.topLeftTargetRect,
+      CGRect(
+        x: target.minX,
+        y: fixture.visibleFrame.maxY - target.maxY,
+        width: target.width,
+        height: target.height
+      )
+    )
+  }
+
   private func assertCallout(
     _ placement: SpatialOverlayPlacementResult,
     pointsAt target: CGRect,

@@ -3,10 +3,10 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, cast
 
+from fastapi import HTTPException
 from google.cloud.firestore_v1 import FieldFilter, LastUpdateOption, Query
 
 from config.memory_confidence import CONFIDENCE_BANDS
-from database import memories as memories_db
 from database import memory_ledger
 from database.firestore_index_registry import (
     REVIEW_QUEUE_BY_CONFLICT_QUERY,
@@ -30,7 +30,6 @@ users_collection = 'users'
 review_queue_collection = 'memory_review_queue'
 review_queue_state_collection = 'memory_state'
 corrections_collection = 'memory_corrections'
-memories_collection = 'memories'
 REVIEW_PURGE_ARRAY_CONTAINS_ANY_CHUNK_SIZE = 30
 REVIEW_PURGE_PAGE_SIZE = 100
 REVIEW_LIST_PAGE_SIZE = 100
@@ -836,43 +835,32 @@ def append_resolution_commit(
     correction: Optional[Dict[str, Any]],
     mutations: List[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    if decision == 'drop' or not mutations:
+    if decision == "drop" or not mutations:
         return None
-    if decision == 'accept':
-        candidate_raw: object = item.get('candidate')
+    # Historical review rows remain readable, but their resolution may not
+    # mutate the protected historical memory collection.  Import lazily to
+    # avoid the canonical adapter -> review queue module cycle; the operation
+    # itself still runs only after this module is fully initialized.
+    from utils.memory.memory_service import MemoryService
+
+    memory_service = MemoryService(db_client=db)
+    if decision == "accept":
+        candidate_raw: object = item.get("candidate")
         candidate: Dict[str, Any] = cast(Dict[str, Any], candidate_raw) if isinstance(candidate_raw, dict) else {}
-        conflict_with_raw: object = item.get('conflict_with')
+        conflict_with_raw: object = item.get("conflict_with")
         conflict_with: List[str] = cast(List[str], conflict_with_raw) if isinstance(conflict_with_raw, list) else []
-        return memories_db.merge_contradict_memory(
-            uid,
-            accepted_fact(candidate),
-            conflict_with,
-        )
-    if decision == 'correct':
+        memory_service.write(uid, accepted_fact(candidate))
+        _delete_review_conflicts_idempotently(memory_service, uid, conflict_with)
+    if decision == "correct":
         correction_dict: Dict[str, Any] = correction if correction is not None else {}
-        target_id: Any = correction_dict.get('target_fact_id') or item.get('fact_id')
-        arg_changes_raw: object = correction_dict.get('arg_changes')
+        target_id: Any = correction_dict.get("target_fact_id") or item.get("fact_id")
+        arg_changes_raw: object = correction_dict.get("arg_changes")
         arg_changes: Dict[str, Any] = cast(Dict[str, Any], arg_changes_raw) if isinstance(arg_changes_raw, dict) else {}
-        return memories_db.refine_memory(uid, target_id, arg_changes)
+        if arg_changes:
+            memory_service.refine(uid, str(target_id), arg_changes)
     if decision == 'reject':
-        now = datetime.now(timezone.utc)
         fact_id: Any = item.get('fact_id')
-        memory_ref = db.collection(users_collection).document(uid).collection(memories_collection).document(fact_id)
-
-        def write_projection(transaction: Any) -> None:
-            snapshot = memory_ref.get(transaction=transaction)
-            if snapshot.exists:
-                transaction.update(memory_ref, {'invalid_at': now, 'updated_at': now, 'review_status': 'rejected'})
-
-        return memory_ledger.append_commit(
-            uid,
-            None,
-            mutations,
-            run_id=f"review_queue:{item.get('review_id')}",
-            commit_time=now,
-            projection_writer=write_projection,
-            use_current_head=True,
-        )
+        _delete_review_conflicts_idempotently(memory_service, uid, [str(fact_id)])
     return memory_ledger.append_commit(
         uid,
         None,
@@ -880,6 +868,40 @@ def append_resolution_commit(
         run_id=f"review_queue:{item.get('review_id')}",
         use_current_head=True,
     )
+
+
+def _delete_review_conflicts_idempotently(memory_service: Any, uid: str, memory_ids: List[str]) -> None:
+    """Tombstone review conflicts as one bounded canonical operation.
+
+    The legacy review ledger is written after canonical mutations for wire
+    compatibility.  A retry can therefore observe conflicts already
+    tombstoned if the ledger write failed; filter those identities before the
+    batch operation and treat a fully tombstoned 404 as success.  Active or
+    unknown identities still fail closed instead of silently dropping a
+    conflict.
+    """
+    normalized = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
+    if not normalized:
+        return
+    status_reader = getattr(memory_service, '_canonical_status', None)
+    pending: List[str] = []
+    if callable(status_reader):
+        for memory_id in normalized:
+            status = status_reader(uid, memory_id)
+            if status != MemoryItemStatus.tombstoned:
+                pending.append(memory_id)
+    else:
+        pending = normalized
+    if not pending:
+        return
+    try:
+        memory_service.delete_batch(uid, pending)
+    except HTTPException as exc:
+        if exc.status_code != 404 or not callable(status_reader):
+            raise
+        remaining = [memory_id for memory_id in pending if status_reader(uid, memory_id) != MemoryItemStatus.tombstoned]
+        if remaining:
+            raise
 
 
 def resolve_expired_review_conflicts(

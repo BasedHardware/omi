@@ -2,28 +2,6 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedInUser(uid) {
-      return request.auth != null && request.auth.uid == uid;
-    }
-
-    function isServerOwnedMemoryPath(collectionId) {
-      return collectionId in [
-        'memory_items',
-        'memory_operations',
-        'memory_source_replacements',
-        'memory_outbox',
-        'memory_control',
-        'memory_state',
-        'memory_commits',
-        'memory_evidence',
-        'memory_graph_assertions',
-        'memory_review_queue',
-        'v3_compatibility_projection',
-        'v3_compatibility_projection_items',
-        'short_term_lifecycle_transitions'
-      ];
-    }
-
     // Canonical memory state is server-owned. The backend/Admin SDK performs all
     // reads and writes through IAM and bypasses Firestore client rules. Mobile
     // and web clients must use backend APIs instead of reading internals or

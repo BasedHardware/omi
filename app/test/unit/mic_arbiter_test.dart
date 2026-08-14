@@ -50,6 +50,9 @@ class FakeMic implements IMicRecorderService {
     capturedOnStop?.call();
     capturedOnStop = null;
   }
+
+  @override
+  void probeStallAfterForeground() {}
 }
 
 void main() {

@@ -45,7 +45,10 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
-RUN apt-get update && apt-get -y install ffmpeg curl libjemalloc2 && rm -rf /var/lib/apt/lists/*
+# Patch OS packages in this layer before installing runtime deps (#7136).
+RUN apt-get update && apt-get -y dist-upgrade \
+    && apt-get -y install --no-install-recommends ffmpeg curl libjemalloc2 \
+    && rm -rf /var/lib/apt/lists/*
 
 # jemalloc eliminates glibc malloc fragmentation that causes RSS to grow linearly
 # under high-churn bytearray allocations from WebSocket audio streams (#6938)
@@ -63,8 +66,6 @@ RUN ldconfig && \
 
 COPY --from=builder /opt/venv /opt/venv
 COPY .github/scripts/desktop_release_manifest.py /app/desktop_release_manifest_contract.py
-COPY .github/scripts/desktop_qualification_admission.py /app/desktop_qualification_admission_contract.py
-COPY .github/scripts/desktop_qualification_evidence.py /app/desktop_qualification_evidence_contract.py
 COPY backend/ .
 
 # Run as a non-root user: a compromise of the app process (e.g. via a

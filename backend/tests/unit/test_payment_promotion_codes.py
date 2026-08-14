@@ -154,6 +154,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     sub_mod.get_basic_plan_limits = MagicMock()
     sub_mod.get_paid_plan_definitions = MagicMock()
     sub_mod.get_plan_type_from_price_id = MagicMock()
+    sub_mod.is_purchasable_price_id = MagicMock(return_value=True)
     sub_mod.get_plan_limits = MagicMock()
     sub_mod.is_paid_plan = MagicMock(return_value=True)
     sub_mod.filter_plans_for_user = MagicMock()

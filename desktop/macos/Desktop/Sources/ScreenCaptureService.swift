@@ -129,7 +129,11 @@ final class ScreenCaptureService: Sendable {
   }
 
   /// Open System Preferences to Screen Recording settings
+  @MainActor
   static func openScreenRecordingPreferences() {
+    // System Settings must own the screen while the user drags the Omi row or toggles access.
+    // Returning to Omi is handled by ShellSummon on app activation, using the frame captured here.
+    ShellSummon.suspendForPermissionPrompt()
     guard
       let url = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
@@ -272,6 +276,7 @@ final class ScreenCaptureService: Sendable {
     case .alreadyGranted:
       NSApp.activate()
     case .systemSettings:
+      ShellSummon.suspendForPermissionPrompt()
       requestAllScreenCapturePermissions()
       openScreenRecordingPreferences()
     }

@@ -87,6 +87,9 @@ class ChangelogRequirementTests(unittest.TestCase):
             # Generated Swift is derived from the OpenAPI contract, never a
             # user-facing app note (EXEMPT_DESKTOP_PATH_PREFIXES).
             "desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift",
+            # E2E flow definitions are harness test artifacts; #11039 only added a
+            # `covers:` entry and the post-merge push run reddened main.
+            "desktop/macos/e2e/flows/notifications-settings.yaml",
         ):
             with self.subTest(path=path):
                 self.assertFalse(checker.is_desktop_change_requiring_changelog(path))
@@ -99,6 +102,37 @@ class ChangelogRequirementTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertTrue(checker.is_desktop_change_requiring_changelog(path))
+
+    def test_release_lane_accepts_fragments_already_in_the_tree(self) -> None:
+        # Release Eligibility runs on main pushes, where the merged PR's
+        # no-changelog-needed label is invisible (#11373 wedged the release
+        # train exactly this way). The release contract is that the NEXT
+        # RELEASE has notes — fragments already in the tree satisfy it.
+        def fake_git(args: list[str]) -> str:
+            if args[0] == "ls-tree":
+                return "desktop/macos/changelog/unreleased/20260810-fix.json"
+            if args[0] == "show":
+                return '{"change": "Fixed a thing"}'
+            raise AssertionError(f"unexpected git invocation: {args}")
+
+        with unittest.mock.patch.object(checker, "run_git", side_effect=fake_git):
+            self.assertTrue(checker.tree_has_unreleased_fragment("HEAD"))
+
+    def test_release_lane_rejects_an_empty_unreleased_directory(self) -> None:
+        with unittest.mock.patch.object(checker, "run_git", return_value=""):
+            self.assertFalse(checker.tree_has_unreleased_fragment("HEAD"))
+
+    def test_release_lane_still_fails_on_an_invalid_tree_fragment(self) -> None:
+        def fake_git(args: list[str]) -> str:
+            if args[0] == "ls-tree":
+                return "desktop/macos/changelog/unreleased/bad.json"
+            if args[0] == "show":
+                return "{}"
+            raise AssertionError(f"unexpected git invocation: {args}")
+
+        with unittest.mock.patch.object(checker, "run_git", side_effect=fake_git):
+            with self.assertRaises(SystemExit):
+                checker.tree_has_unreleased_fragment("HEAD")
 
 
 if __name__ == "__main__":

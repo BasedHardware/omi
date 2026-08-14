@@ -281,23 +281,6 @@ extension PostHogManager {
     track("Monitoring Stopped")
   }
 
-  func distractionDetected(app: String, windowTitle: String?) {
-    track(
-      "Distraction Detected",
-      properties: [
-        "app": app,
-        "has_window_title": !(windowTitle?.isEmpty ?? true),
-      ])
-  }
-
-  func focusRestored(app: String) {
-    track(
-      "Focus Restored",
-      properties: [
-        "app": app
-      ])
-  }
-
   // MARK: - Recording Events
 
   func transcriptionStarted() {
@@ -518,10 +501,9 @@ extension PostHogManager {
   // but it actually tracks when a conversation/recording is created, not a "memory".
   // This matches Flutter's naming for analytics consistency.
 
-  func conversationCreated(conversationId: String, source: String, durationSeconds: Int? = nil) {
+  func conversationCreated(conversationId _: String, source: String, durationSeconds: Int? = nil) {
     var properties: [String: Any] = [
-      "conversation_id": conversationId,
-      "source": source,
+      "source": source
     ]
     if let duration = durationSeconds {
       properties["duration_seconds"] = duration
@@ -722,23 +704,6 @@ extension PostHogManager {
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
 
-  func focusAlertShown(app: String) {
-    track(
-      "Focus Alert Shown",
-      properties: [
-        "app": app
-      ])
-  }
-
-  func focusAlertDismissed(app: String, action: String) {
-    track(
-      "Focus Alert Dismissed",
-      properties: [
-        "app": app,
-        "action": action,
-      ])
-  }
-
   func taskExtracted(taskCount: Int) {
     track(
       "Task Extracted",
@@ -896,10 +861,29 @@ extension PostHogManager {
     )
   }
 
-  func insightGenerated(category: String?) {
+  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
     var properties: [String: Any] = [:]
-    if let cat = category { properties["category"] = cat }
+    if let cat = InsightAssistantTelemetry.boundedCategory(category) { properties["category"] = cat }
+    if let deliveryID { properties["delivery_id"] = deliveryID.uuidString }
     track("Advice Generated", properties: properties.isEmpty ? nil : properties)
+  }
+
+  func insightAssistantDeliveryOutcome(
+    _ outcome: InsightAssistantTelemetry.Outcome,
+    reason: InsightAssistantTelemetry.Reason,
+    deliveryID: UUID,
+    surface: InsightAssistantTelemetry.Surface? = nil
+  ) {
+    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
+    track(
+      InsightAssistantTelemetry.deliveryOutcomeEventName,
+      properties: InsightAssistantTelemetry.deliveryOutcomePayload(
+        outcome,
+        reason: reason,
+        identity: identity,
+        surface: surface
+      )
+    )
   }
 
   // MARK: - Apps Events

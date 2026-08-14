@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import XCTest
 
 @testable import Omi_Computer
@@ -413,6 +414,301 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
     XCTAssertEqual(snapshot.acceptCalls, 2)
   }
 
+  func testRepeatedParaphrasesReconcileButDistinctTasksRemainSeparate() {
+    let first = canonicalOutboxRecord(
+      "Reply to Hermes M4 MBA to approve opening the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let paraphrase = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let distinctTask = canonicalOutboxRecord(
+      "Follow up with Hermes M4 MBA about the staging deploy issue",
+      sourceApp: "Telegram"
+    )
+    let differentPR = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open dev-only PR 11434",
+      sourceApp: "Telegram"
+    )
+    let review = canonicalOutboxRecord(
+      "Review Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let close = canonicalOutboxRecord(
+      "Close Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+
+    XCTAssertTrue(ScreenCandidateReconciliation.isEquivalent(first, paraphrase))
+    XCTAssertFalse(ScreenCandidateReconciliation.isEquivalent(first, distinctTask))
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(
+        canonicalOutboxRecord("Approve Hermes PR 11433", sourceApp: "Telegram"),
+        differentPR
+      ),
+      "different task identifiers must never be merged")
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(paraphrase, review),
+      "Approve vs Review are distinct action intents")
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(paraphrase, close),
+      "Approve vs Close are distinct action intents")
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(
+        for: paraphrase.description, metadata: paraphrase.metadata ?? [:]),
+      "approve")
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(
+        for: first.description, metadata: first.metadata ?? [:]),
+      "approve")
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(
+        for: review.description, metadata: review.metadata ?? [:]),
+      "review")
+  }
+
+  func testActionSignatureIsPolarityAwareAndSplitsCommonPurposeClasses() {
+    let approve = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let doNotApprove = canonicalOutboxRecord(
+      "Do not approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let neverApprove = canonicalOutboxRecord(
+      "Never approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let replyToApprove = canonicalOutboxRecord(
+      "Reply to Hermes M4 MBA to approve opening the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let fix = canonicalOutboxRecord("Fix the Hermes M4 MBA login flake", sourceApp: "Slack")
+    let test = canonicalOutboxRecord("Test the Hermes M4 MBA login flake", sourceApp: "Slack")
+    let merge = canonicalOutboxRecord("Merge the Hermes M4 MBA login flake", sourceApp: "Slack")
+    let deploy = canonicalOutboxRecord("Deploy the Hermes M4 MBA login flake", sourceApp: "Slack")
+    let delete = canonicalOutboxRecord("Delete the Hermes M4 MBA login flake", sourceApp: "Slack")
+    let update = canonicalOutboxRecord("Update the Hermes M4 MBA login flake", sourceApp: "Slack")
+
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(
+        for: approve.description, metadata: approve.metadata ?? [:]),
+      "approve")
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(
+        for: doNotApprove.description, metadata: doNotApprove.metadata ?? [:]),
+      "not_approve")
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(
+        for: neverApprove.description, metadata: neverApprove.metadata ?? [:]),
+      "not_approve")
+    let cannotApprove = canonicalOutboxRecord(
+      "Cannot approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let cantApprove = canonicalOutboxRecord(
+      "Cant approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let wontApprove = canonicalOutboxRecord(
+      "Wont approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let wonTApprove = canonicalOutboxRecord(
+      "Won't approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let shouldntApprove = canonicalOutboxRecord(
+      "Shouldnt approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    let shouldnTApprove = canonicalOutboxRecord(
+      "Shouldn't approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    for negated in [
+      cannotApprove, cantApprove, wontApprove, wonTApprove, shouldntApprove, shouldnTApprove,
+    ] {
+      XCTAssertEqual(
+        ScreenCandidateReconciliation.actionSignature(
+          for: negated.description, metadata: negated.metadata ?? [:]),
+        "not_approve",
+        negated.description)
+      XCTAssertFalse(
+        ScreenCandidateReconciliation.isEquivalent(approve, negated),
+        negated.description)
+    }
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(
+        for: replyToApprove.description, metadata: replyToApprove.metadata ?? [:]),
+      "approve",
+      "reply-to-approve must keep positive approve polarity")
+    XCTAssertFalse(ScreenCandidateReconciliation.isEquivalent(approve, doNotApprove))
+    XCTAssertFalse(ScreenCandidateReconciliation.isEquivalent(approve, neverApprove))
+    XCTAssertTrue(ScreenCandidateReconciliation.isEquivalent(approve, replyToApprove))
+
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(for: fix.description, metadata: [:]), "fix")
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(for: test.description, metadata: [:]), "test")
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(for: merge.description, metadata: [:]), "merge")
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(for: deploy.description, metadata: [:]),
+      "deploy")
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(for: delete.description, metadata: [:]),
+      "delete")
+    XCTAssertEqual(
+      ScreenCandidateReconciliation.actionSignature(for: update.description, metadata: [:]),
+      "update")
+    XCTAssertFalse(ScreenCandidateReconciliation.isEquivalent(fix, test))
+    XCTAssertFalse(ScreenCandidateReconciliation.isEquivalent(merge, deploy))
+    XCTAssertFalse(ScreenCandidateReconciliation.isEquivalent(delete, update))
+  }
+
+  func testNilVersusPresentDueDatesStillBurstDedupeWhileDistinctDuesStaySeparate() {
+    let due = Date(timeIntervalSince1970: 1_800_000_000)
+    let noDue = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram",
+      dueAt: nil
+    )
+    let withDue = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram",
+      dueAt: due
+    )
+    let nearbyDue = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram",
+      dueAt: due.addingTimeInterval(30)
+    )
+    let distinctDue = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram",
+      dueAt: due.addingTimeInterval(24 * 60 * 60)
+    )
+
+    XCTAssertTrue(
+      ScreenCandidateReconciliation.isEquivalent(noDue, withDue),
+      "nil vs present due must stay compatible to prevent inference-flap duplicates")
+    XCTAssertTrue(ScreenCandidateReconciliation.isEquivalent(withDue, nearbyDue))
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(withDue, distinctDue),
+      "distinct non-nil due dates must remain separate")
+  }
+
+  func testCreateDoesNotReconcileWithTargetedRefineOrDuplicate() {
+    let create = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    var refine = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    refine.setMetadata([
+      "capture_kind": "direct_request",
+      "already_done": false,
+      "refines_task": "task-42",
+    ])
+    var duplicate = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    duplicate.setMetadata([
+      "capture_kind": "direct_request",
+      "already_done": false,
+      "duplicate_of": "task-42",
+    ])
+    var otherTarget = canonicalOutboxRecord(
+      "Approve Hermes M4 MBA to open the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    otherTarget.setMetadata([
+      "capture_kind": "direct_request",
+      "already_done": false,
+      "refines_task": "task-99",
+    ])
+
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(create, refine),
+      "pure create must not merge with a targeted refine")
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(create, duplicate),
+      "pure create must not merge with a targeted duplicate_of")
+    XCTAssertTrue(
+      ScreenCandidateReconciliation.isEquivalent(refine, duplicate),
+      "same target may still reconcile across refine/duplicate_of")
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(refine, otherTarget),
+      "different targets must stay distinct")
+  }
+
+  func testCreateNeverMatchesTargetedUpdate() {
+    // A create capture (no target) must not reuse a prior targeted update
+    // candidate (duplicate_of/refines_task set). Target presence is part of
+    // the action identity.
+    let createRecord = canonicalOutboxRecord(
+      "Reply to Hermes M4 MBA about the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    var updateRecord = canonicalOutboxRecord(
+      "Reply to Hermes M4 MBA about the dev-only PR",
+      sourceApp: "Telegram"
+    )
+    updateRecord.setMetadata([
+      "capture_kind": "direct_request",
+      "already_done": false,
+      "duplicate_of": "task-42",
+    ])
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(createRecord, updateRecord),
+      "a create (no target) must not match a targeted update (duplicate_of set)")
+    XCTAssertFalse(
+      ScreenCandidateReconciliation.isEquivalent(updateRecord, createRecord),
+      "a targeted update must not match a create (no target)")
+  }
+
+  func testPendingCanonicalReceiptIsAlreadyCapturedNotCompletedWork() async throws {
+    let candidateID = "candidate-pending-dedupe-\(UUID().uuidString)"
+    let inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      canonicalOutboxRecord(
+        "Approve Hermes M4 MBA to open the dev-only PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let id = try XCTUnwrap(inserted.id)
+
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: id,
+      candidateID: candidateID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+
+    let descriptions = try await StagedTaskStorage.shared.getRecentCanonicalCandidateDescriptions()
+    XCTAssertTrue(descriptions.contains(inserted.description))
+
+    let repeated = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      canonicalOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the dev-only PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let repeatedID = try XCTUnwrap(repeated.id)
+    let reused = try await StagedTaskStorage.shared.recentEquivalentCanonicalReceipt(
+      for: repeated,
+      excludingID: repeatedID
+    )
+    XCTAssertEqual(reused?.candidateID, candidateID)
+    try await StagedTaskStorage.shared.deleteById(repeatedID)
+    try await StagedTaskStorage.shared.deleteById(id)
+  }
+
   func testCanonicalTaskFieldsSurviveSwiftWireAndCacheRoundTrip() throws {
     let fixtureURL = repositoryRoot()
       .appendingPathComponent("backend/tests/unit/fixtures/task_intelligence/canonical_round_trip_v1.json")
@@ -495,6 +791,24 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
     )
     XCTAssertTrue(workstreamPatchJSON["next_review_at"] is NSNull)
     XCTAssertFalse(workstreamPatchJSON.keys.contains("objective"))
+  }
+
+  private func canonicalOutboxRecord(
+    _ description: String,
+    sourceApp: String,
+    dueAt: Date? = nil
+  ) -> StagedTaskRecord {
+    var record = StagedTaskRecord(
+      description: description,
+      source: "candidate_outbox",
+      dueAt: dueAt,
+      sourceApp: sourceApp
+    )
+    record.setMetadata([
+      "capture_kind": "direct_request",
+      "already_done": false,
+    ])
+    return record
   }
 
   func testCandidateTaskChangeUsesDiscriminatedGeneratedPayload() throws {
@@ -662,5 +976,644 @@ final class TaskIntelligenceSQLiteRoundTripTests: XCTestCase {
       receipt,
       CanonicalCaptureReceipt(candidateID: "candidate-1", status: "accepted", taskID: "task-1")
     )
+  }
+
+  func testMarkCanonicalReceiptReusesCandidateIDWithoutUniqueViolationOrSecondRow() async throws {
+    let candidateID = "candidate-reuse-\(UUID().uuidString)"
+    let first = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the dev-only PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let firstID = try XCTUnwrap(first.id)
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: firstID,
+      candidateID: candidateID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+
+    let paraphrase = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the dev-only PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let paraphraseID = try XCTUnwrap(paraphrase.id)
+    let reused = try await StagedTaskStorage.shared.recentEquivalentCanonicalReceipt(
+      for: paraphrase,
+      excludingID: paraphraseID
+    )
+    XCTAssertEqual(reused?.candidateID, candidateID)
+
+    // Production reuse write path: stamp the same candidateID onto R2.
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: paraphraseID,
+      candidateID: candidateID,
+      status: reused?.status ?? OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: reused?.taskID
+    )
+
+    guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+      return XCTFail("database should be initialized")
+    }
+    let rows = try await dbQueue.read { db in
+      try Row.fetchAll(
+        db,
+        sql: """
+              SELECT id, backendId, backendSynced, deleted
+              FROM staged_tasks
+              WHERE backendId = ?
+          """,
+        arguments: [candidateID]
+      )
+    }
+    XCTAssertEqual(rows.count, 1, "exactly one local row may own the candidate backendId")
+    XCTAssertEqual(rows[0]["id"] as? Int64, firstID)
+    XCTAssertEqual(rows[0]["backendSynced"] as? Int64, 1)
+
+    let paraphraseExists = try await dbQueue.read { db in
+      try Int.fetchOne(
+        db, sql: "SELECT COUNT(*) FROM staged_tasks WHERE id = ?", arguments: [paraphraseID]) ?? 0
+    }
+    XCTAssertEqual(paraphraseExists, 0, "duplicate outbox row must be retired")
+
+    let receipt = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(id: firstID)
+    XCTAssertEqual(receipt?.candidateID, candidateID)
+    XCTAssertEqual(receipt?.status, OmiAPI.CandidateStatus.pending.rawValue)
+  }
+
+  func testAcceptedAndPendingReceiptsAreReusableInsideWindow() async throws {
+    let pendingID = "candidate-pending-\(UUID().uuidString)"
+    let acceptedID = "candidate-accepted-\(UUID().uuidString)"
+
+    let pending = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the pending PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let pendingRowID = try XCTUnwrap(pending.id)
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: pendingRowID,
+      candidateID: pendingID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+
+    let accepted = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the accepted PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let acceptedRowID = try XCTUnwrap(accepted.id)
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: acceptedRowID,
+      candidateID: acceptedID,
+      status: OmiAPI.CandidateStatus.accepted.rawValue,
+      taskID: "task-accepted"
+    )
+
+    let pendingRepeat = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the pending PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let pendingRepeatID = try XCTUnwrap(pendingRepeat.id)
+    let pendingReuse = try await StagedTaskStorage.shared.recentEquivalentCanonicalReceipt(
+      for: pendingRepeat,
+      excludingID: pendingRepeatID
+    )
+    XCTAssertEqual(pendingReuse?.candidateID, pendingID)
+    XCTAssertEqual(pendingReuse?.status, OmiAPI.CandidateStatus.pending.rawValue)
+
+    let acceptedRepeat = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the accepted PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let acceptedRepeatID = try XCTUnwrap(acceptedRepeat.id)
+    let acceptedReuse = try await StagedTaskStorage.shared.recentEquivalentCanonicalReceipt(
+      for: acceptedRepeat,
+      excludingID: acceptedRepeatID
+    )
+    XCTAssertEqual(acceptedReuse?.candidateID, acceptedID)
+    XCTAssertEqual(acceptedReuse?.status, OmiAPI.CandidateStatus.accepted.rawValue)
+    XCTAssertEqual(acceptedReuse?.taskID, "task-accepted")
+  }
+
+  func testOutsideReuseWindowAllowsLegitimateRepeat() async throws {
+    let candidateID = "candidate-window-\(UUID().uuidString)"
+    let now = Date()
+    var aged = reconciliationOutboxRecord(
+      "Approve Hermes M4 MBA to open the timed PR",
+      sourceApp: "Telegram"
+    )
+    aged.createdAt = now.addingTimeInterval(-(ScreenCandidateReconciliation.reuseWindow + 60))
+    aged.updatedAt = aged.createdAt
+    let inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(aged)
+    let id = try XCTUnwrap(inserted.id)
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: id,
+      candidateID: candidateID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+
+    let repeatObservation = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the timed PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let repeatID = try XCTUnwrap(repeatObservation.id)
+    let reused = try await StagedTaskStorage.shared.recentEquivalentCanonicalReceipt(
+      for: repeatObservation,
+      excludingID: repeatID,
+      now: now
+    )
+    XCTAssertNil(reused, "outside the 30m window a legitimate repeat must create again")
+  }
+
+  func testOwnerScopedInvalidationRefusesForeignRewindOwnerWithoutMutating() async throws {
+    let candidateID = "candidate-owner-refuse-\(UUID().uuidString)"
+    let inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the owner-scoped PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let id = try XCTUnwrap(inserted.id)
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: id,
+      candidateID: candidateID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+
+    do {
+      _ = try await StagedTaskStorage.shared.invalidateCanonicalReceipt(
+        candidateID: candidateID, ownerID: "some-other-owner")
+      XCTFail("expected owner mismatch")
+    } catch let error as CanonicalReceiptInvalidationError {
+      XCTAssertEqual(
+        error, .ownerMismatch(expected: "some-other-owner", actual: testUserId))
+    }
+
+    let receipt = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(id: id)
+    XCTAssertEqual(receipt?.status, OmiAPI.CandidateStatus.pending.rawValue)
+  }
+
+  func testDismissInvalidatesLocalReceiptSoEquivalentCanCreateAgain() async throws {
+    let candidateID = "candidate-dismiss-\(UUID().uuidString)"
+    let inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the dismissible PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let id = try XCTUnwrap(inserted.id)
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: id,
+      candidateID: candidateID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+
+    let didTerminalize = try await StagedTaskStorage.shared.invalidateCanonicalReceipt(
+      candidateID: candidateID, ownerID: testUserId)
+    XCTAssertTrue(didTerminalize)
+
+    let receipt = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(id: id)
+    XCTAssertEqual(receipt?.status, OmiAPI.CandidateStatus.rejected.rawValue)
+
+    let paraphrase = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the dismissible PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let paraphraseID = try XCTUnwrap(paraphrase.id)
+    let decision = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: paraphrase,
+      localOutboxID: paraphraseID
+    )
+    guard case .proceedAsDeliveryLeader = decision else {
+      return XCTFail("rejected local receipts must not block a new create; got \(decision)")
+    }
+    let paraphraseStillPresent = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(
+      id: paraphraseID)
+    // Unsynced outbox rows have no receipt yet; presence is checked via retry queue.
+    let retryable = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()
+    XCTAssertTrue(
+      retryable.contains(where: { $0.id == paraphraseID }),
+      "R2 must remain for a fresh create when adoption is refused")
+    XCTAssertNil(paraphraseStillPresent)
+  }
+
+  func testDismissBeforeAdoptDoesNotResurrectRejectedReceipt() async throws {
+    let candidateID = "candidate-dismiss-before-adopt-\(UUID().uuidString)"
+    let first = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the race PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let firstID = try XCTUnwrap(first.id)
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: firstID,
+      candidateID: candidateID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+
+    let paraphrase = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the race PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let paraphraseID = try XCTUnwrap(paraphrase.id)
+
+    // Dismiss lands before adoption — the atomic adopt must re-read status and refuse.
+    let didTerminalize = try await StagedTaskStorage.shared.invalidateCanonicalReceipt(
+      candidateID: candidateID, ownerID: testUserId)
+    XCTAssertTrue(didTerminalize)
+    let decision = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: paraphrase,
+      localOutboxID: paraphraseID
+    )
+    guard case .proceedAsDeliveryLeader = decision else {
+      return XCTFail("expected proceed after rejected receipt; got \(decision)")
+    }
+
+    let receipt = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(id: firstID)
+    XCTAssertEqual(
+      receipt?.status, OmiAPI.CandidateStatus.rejected.rawValue,
+      "rejected receipt must stay rejected; adoption must not demote terminal status")
+    let retryable = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()
+    XCTAssertTrue(retryable.contains(where: { $0.id == paraphraseID }))
+  }
+
+  func testAdoptBeforeDismissRetiresDuplicateThenInvalidationSticks() async throws {
+    let candidateID = "candidate-adopt-before-dismiss-\(UUID().uuidString)"
+    let first = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the race PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let firstID = try XCTUnwrap(first.id)
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: firstID,
+      candidateID: candidateID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+
+    let paraphrase = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the race PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let paraphraseID = try XCTUnwrap(paraphrase.id)
+
+    let decision = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: paraphrase,
+      localOutboxID: paraphraseID
+    )
+    guard case .adoptedExistingReceipt(let adopted) = decision else {
+      return XCTFail("expected adopt; got \(decision)")
+    }
+    XCTAssertEqual(adopted.candidateID, candidateID)
+    XCTAssertEqual(adopted.status, OmiAPI.CandidateStatus.pending.rawValue)
+
+    let didTerminalize = try await StagedTaskStorage.shared.invalidateCanonicalReceipt(
+      candidateID: candidateID, ownerID: testUserId)
+    XCTAssertTrue(didTerminalize)
+
+    let receipt = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(id: firstID)
+    XCTAssertEqual(receipt?.status, OmiAPI.CandidateStatus.rejected.rawValue)
+    let paraphraseExists = try await {
+      guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+        XCTFail("database should be initialized")
+        return -1
+      }
+      return try await dbQueue.read { db in
+        try Int.fetchOne(
+          db, sql: "SELECT COUNT(*) FROM staged_tasks WHERE id = ?", arguments: [paraphraseID])
+          ?? 0
+      }
+    }()
+    XCTAssertEqual(paraphraseExists, 0, "adopt must retire R2 without leaving a second row")
+
+    // A later stamp must not resurrect pending over rejected.
+    let late = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the race PR again",
+        sourceApp: "Telegram"
+      )
+    )
+    let lateID = try XCTUnwrap(late.id)
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: lateID,
+      candidateID: candidateID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+    let afterDemoteAttempt = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(
+      id: firstID)
+    XCTAssertEqual(
+      afterDemoteAttempt?.status, OmiAPI.CandidateStatus.rejected.rawValue,
+      "markCanonicalReceipt must never demote terminal status")
+  }
+
+  func testZeroMatchInvalidationReturnsFalseUntilMarkThenTerminalizes() async throws {
+    let candidateID = "candidate-zero-match-\(UUID().uuidString)"
+    // Create→mark not landed yet: unsynced outbox has no candidate id to match.
+    let inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the zero-match PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let id = try XCTUnwrap(inserted.id)
+
+    let first = try await StagedTaskStorage.shared.invalidateCanonicalReceipt(
+      candidateID: candidateID, ownerID: testUserId)
+    XCTAssertFalse(first, "zero-match must not pretend cleanup succeeded")
+
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: id,
+      candidateID: candidateID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+
+    let second = try await StagedTaskStorage.shared.invalidateCanonicalReceipt(
+      candidateID: candidateID, ownerID: testUserId)
+    XCTAssertTrue(second)
+    let receipt = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(id: id)
+    XCTAssertEqual(receipt?.status, OmiAPI.CandidateStatus.rejected.rawValue)
+  }
+
+  func testInFlightCreateDismissMarkInvalidationSequence() async throws {
+    let candidateID = "candidate-inflight-\(UUID().uuidString)"
+    // Simulate: backend create returned C, dismiss ran before local mark.
+    let inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the in-flight PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let id = try XCTUnwrap(inserted.id)
+
+    let dismissBeforeMark = try await StagedTaskStorage.shared.invalidateCanonicalReceipt(
+      candidateID: candidateID, ownerID: testUserId)
+    XCTAssertFalse(dismissBeforeMark)
+
+    // In-flight mark lands as pending after dismiss cleanup saw zero rows.
+    try await StagedTaskStorage.shared.markCanonicalReceipt(
+      id: id,
+      candidateID: candidateID,
+      status: OmiAPI.CandidateStatus.pending.rawValue,
+      taskID: nil
+    )
+    let pending = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(id: id)
+    XCTAssertEqual(pending?.status, OmiAPI.CandidateStatus.pending.rawValue)
+
+    // Subsequent apply (load) terminalizes the resurrected pending receipt.
+    let retry = try await StagedTaskStorage.shared.invalidateCanonicalReceipt(
+      candidateID: candidateID, ownerID: testUserId)
+    XCTAssertTrue(retry)
+    let terminal = try await StagedTaskStorage.shared.getCanonicalCaptureReceipt(id: id)
+    XCTAssertEqual(terminal?.status, OmiAPI.CandidateStatus.rejected.rawValue)
+  }
+
+  func testDualUnsyncedEquivalentElectsOldestLeaderInBothCallOrders() async throws {
+    let older = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the dual-create PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let olderID = try XCTUnwrap(older.id)
+    // Ensure deterministic createdAt ordering if inserts share a clock tick.
+    try await setOutboxCreatedAt(id: olderID, createdAt: Date().addingTimeInterval(-5))
+
+    let newer = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the dual-create PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let newerID = try XCTUnwrap(newer.id)
+    try await setOutboxCreatedAt(id: newerID, createdAt: Date())
+
+    // Newer resolves first — must coalesce; older remains sole leader.
+    let newerDecision = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: newer,
+      localOutboxID: newerID
+    )
+    XCTAssertEqual(newerDecision, .coalescedIntoDeliveryLeader)
+
+    let olderDecision = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: older,
+      localOutboxID: olderID
+    )
+    XCTAssertEqual(olderDecision, .proceedAsDeliveryLeader)
+
+    let retryable = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()
+    XCTAssertTrue(retryable.contains(where: { $0.id == olderID }))
+    XCTAssertFalse(retryable.contains(where: { $0.id == newerID }))
+  }
+
+  func testDualUnsyncedEquivalentOlderFirstStillCoalescesNewer() async throws {
+    let older = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the dual-create-order PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let olderID = try XCTUnwrap(older.id)
+    try await setOutboxCreatedAt(id: olderID, createdAt: Date().addingTimeInterval(-5))
+
+    let newer = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the dual-create-order PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let newerID = try XCTUnwrap(newer.id)
+    try await setOutboxCreatedAt(id: newerID, createdAt: Date())
+
+    let olderDecision = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: older,
+      localOutboxID: olderID
+    )
+    XCTAssertEqual(olderDecision, .proceedAsDeliveryLeader)
+
+    let newerDecision = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: newer,
+      localOutboxID: newerID
+    )
+    XCTAssertEqual(newerDecision, .coalescedIntoDeliveryLeader)
+
+    let retryable = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()
+    XCTAssertTrue(retryable.contains(where: { $0.id == olderID }))
+    XCTAssertFalse(retryable.contains(where: { $0.id == newerID }))
+  }
+
+  func testDeliveryLeaderRemainsForRetryAfterSimulatedFailure() async throws {
+    let leader = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the leader-retry PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let leaderID = try XCTUnwrap(leader.id)
+
+    let first = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: leader,
+      localOutboxID: leaderID
+    )
+    XCTAssertEqual(first, .proceedAsDeliveryLeader)
+
+    // Simulated deliver failure / crash: no markCanonicalReceipt. Leader stays.
+    let stillUnsynced = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()
+    XCTAssertTrue(stillUnsynced.contains(where: { $0.id == leaderID }))
+
+    let retry = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: leader,
+      localOutboxID: leaderID
+    )
+    XCTAssertEqual(retry, .proceedAsDeliveryLeader)
+  }
+
+  func testNonEquivalentUnsyncedRowsBothProceedAsLeaders() async throws {
+    let approve = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the distinct-intent PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let approveID = try XCTUnwrap(approve.id)
+
+    let review = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Review Hermes M4 MBA to open the distinct-intent PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let reviewID = try XCTUnwrap(review.id)
+
+    XCTAssertFalse(ScreenCandidateReconciliation.isEquivalent(approve, review))
+
+    let approveDecision = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: approve,
+      localOutboxID: approveID
+    )
+    let reviewDecision = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: review,
+      localOutboxID: reviewID
+    )
+    XCTAssertEqual(approveDecision, .proceedAsDeliveryLeader)
+    XCTAssertEqual(reviewDecision, .proceedAsDeliveryLeader)
+
+    let retryable = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()
+    XCTAssertTrue(retryable.contains(where: { $0.id == approveID }))
+    XCTAssertTrue(retryable.contains(where: { $0.id == reviewID }))
+  }
+
+  func testEquivalentLeaderElectionSearchesBeyondOneHundredUnrelatedRows() async throws {
+    let older = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Approve Hermes M4 MBA to open the backlog PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let olderID = try XCTUnwrap(older.id)
+    try await setOutboxCreatedAt(id: olderID, createdAt: Date().addingTimeInterval(-10))
+
+    for index in 0..<101 {
+      let unrelated = try await StagedTaskStorage.shared.insertLocalStagedTask(
+        reconciliationOutboxRecord(
+          "Review unrelated backlog item \(index)",
+          sourceApp: "Slack"
+        )
+      )
+      try await setOutboxCreatedAt(
+        id: try XCTUnwrap(unrelated.id),
+        createdAt: Date().addingTimeInterval(Double(index - 5))
+      )
+    }
+
+    let newer = try await StagedTaskStorage.shared.insertLocalStagedTask(
+      reconciliationOutboxRecord(
+        "Reply to Hermes M4 MBA to approve opening the backlog PR",
+        sourceApp: "Telegram"
+      )
+    )
+    let newerID = try XCTUnwrap(newer.id)
+
+    let decision = try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+      for: newer,
+      localOutboxID: newerID
+    )
+    XCTAssertEqual(decision, .coalescedIntoDeliveryLeader)
+
+    let retryable = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()
+    XCTAssertTrue(retryable.contains(where: { $0.id == olderID }))
+    XCTAssertFalse(retryable.contains(where: { $0.id == newerID }))
+  }
+
+  func testDefaultOutboxRetryLoadIsNotTruncatedAtFiftyRows() async throws {
+    for index in 0..<55 {
+      _ = try await StagedTaskStorage.shared.insertLocalStagedTask(
+        reconciliationOutboxRecord(
+          "Process durable retry item \(index)",
+          sourceApp: "Slack"
+        )
+      )
+    }
+
+    let allRetryable = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()
+    let boundedRetryable = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox(limit: 50)
+    XCTAssertEqual(allRetryable.count, 55)
+    XCTAssertEqual(boundedRetryable.count, 50)
+  }
+
+  private func setOutboxCreatedAt(id: Int64, createdAt: Date) async throws {
+    guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+      XCTFail("database should be initialized")
+      return
+    }
+    try await dbQueue.write { db in
+      try db.execute(
+        sql: "UPDATE staged_tasks SET createdAt = ? WHERE id = ?",
+        arguments: [createdAt, id]
+      )
+    }
+  }
+
+  private func reconciliationOutboxRecord(
+    _ description: String,
+    sourceApp: String
+  ) -> StagedTaskRecord {
+    var record = StagedTaskRecord(
+      description: description,
+      source: "candidate_outbox",
+      sourceApp: sourceApp
+    )
+    record.setMetadata([
+      "capture_kind": "direct_request",
+      "already_done": false,
+    ])
+    return record
   }
 }

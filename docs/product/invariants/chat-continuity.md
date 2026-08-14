@@ -142,7 +142,7 @@ rollback window; this is migration input, not a second store.
 - `desktop/macos/Desktop/Sources/Providers/ChatProvider.swift`
 - `desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/**`
-- `desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift`
+- `desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift`
 - `desktop/macos/Desktop/Sources/MainWindow/Components/Chat*.swift`
 - `desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift`
 - `desktop/macos/Desktop/Sources/Rewind/Core/TaskChatMessageStorage.swift`

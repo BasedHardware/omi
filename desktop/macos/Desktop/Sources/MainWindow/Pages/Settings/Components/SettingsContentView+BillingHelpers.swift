@@ -144,7 +144,7 @@ extension SettingsContentView {
   func planAccentColor(for planId: String) -> Color {
     // Architect is the premium white-accent tier; Operator + legacy Unlimited
     // are the mass-market green tier.
-    planId == "architect" ? OmiColors.accent : OmiColors.success
+    planId == "architect" ? Ink.accent : Ink.listeningGreen
   }
 
   func planSummaryText(for plan: SubscriptionPlanOption) -> String {
@@ -327,41 +327,55 @@ extension SettingsContentView {
     VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
         VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-          Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
-            .scaledFont(size: OmiType.micro, weight: .bold)
-            .foregroundColor(accent)
-            .tracking(0.8)
+          // The tint is the disc, not the word — the same measurement `SettingsStatusChip`
+          // documents. These are *named system colours* on a light panel: `systemGreen` sets a
+          // 10 pt bold eyebrow at ≈1.6:1 against this card and `systemBlue` at ≈2.4:1, so the
+          // plan's colour was there and the plan's name could not be read. Moving the hue to a
+          // 6 pt disc keeps the tier legible at a glance *and* legible as words.
+          HStack(spacing: 5) {
+            Circle()
+              .fill(accent)
+              .frame(width: 6, height: 6)
+            Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
+              .scaledFont(size: OmiType.micro, weight: .bold)
+              .foregroundColor(Ink.secondary)
+              .tracking(0.8)
+          }
 
           Text(plan.title)
             .scaledFont(size: OmiType.heading, weight: .bold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           if let subtitle = plan.subtitle ?? planSubtitle(for: plan.id) {
             Text(subtitle)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
 
         Spacer()
 
+        // Selection is carried by the tile's own fill and border, so the price does not also change
+        // colour to say it. The selected branch of both of these used to tint the copy — and at
+        // `accent.opacity(0.8)` on a selected card that was the faintest text on the pane, i.e. the
+        // state that most wanted reading was the one hardest to read.
         VStack(alignment: .trailing, spacing: OmiSpacing.hairline) {
           Text(planSummaryText(for: plan))
             .scaledFont(size: OmiType.subheading, weight: .bold)
-            .foregroundColor(isSelected ? accent : OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
             .minimumScaleFactor(0.72)
 
           Text("starting price")
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(isSelected ? accent.opacity(0.8) : OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .fixedSize(horizontal: true, vertical: false)
       }
 
       Text(plan.description ?? planDescription(for: plan.id))
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         ForEach(plan.features.prefix(4), id: \.self) { feature in
@@ -370,20 +384,21 @@ extension SettingsContentView {
               Circle()
                 .fill(accent.opacity(0.16))
                 .frame(width: 18, height: 18)
+              // The disc carries the tint; the mark on it is ink. A `systemGreen` glyph on a 16%
+              // `systemGreen` disc is the same sub-2:1 pair the eyebrow had.
               Image(systemName: "checkmark")
                 .scaledFont(size: OmiType.micro, weight: .bold)
-                .foregroundColor(accent)
+                .foregroundColor(Ink.primary)
             }
             Text(feature)
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
 
       if isSelected && canPurchase {
-        Divider()
-          .overlay(OmiColors.backgroundQuaternary)
+        GlassSeparator()
 
         VStack(alignment: .leading, spacing: OmiSpacing.sm) {
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {
@@ -400,7 +415,7 @@ extension SettingsContentView {
                 Image(systemName: isPromoCodeExpanded ? "chevron.up" : "chevron.down")
                   .scaledFont(size: OmiType.micro)
               }
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
             }
             .buttonStyle(.plain)
 
@@ -420,7 +435,7 @@ extension SettingsContentView {
                     Text(error)
                       .scaledFont(size: OmiType.caption)
                   }
-                  .foregroundColor(OmiColors.warning)
+                  .foregroundColor(SettingsInk.notice)
                 }
               }
               .transition(.opacity.combined(with: .move(edge: .top)))
@@ -429,7 +444,7 @@ extension SettingsContentView {
 
           Text("Choose billing")
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           HStack(spacing: OmiSpacing.sm) {
             ForEach(sortedPrices(for: plan)) { price in
@@ -447,7 +462,7 @@ extension SettingsContentView {
                         .scaledFont(size: OmiType.caption, weight: .bold)
                       Text(price.priceString)
                         .scaledFont(size: OmiType.caption)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(Ink.secondary)
                     }
                     .frame(maxWidth: .infinity)
                   }
@@ -462,11 +477,14 @@ extension SettingsContentView {
         HStack {
           Text("Current Plan")
             .scaledFont(size: OmiType.caption, weight: .bold)
+            .foregroundColor(Ink.primary)
           Spacer()
+          // The glyph keeps the tint — it is a graphical object, which is a 3:1 bar rather than a
+          // 4.5:1 one — and the words next to it stop being set in a hue that cannot clear either.
           Image(systemName: "checkmark.circle.fill")
             .scaledFont(size: OmiType.caption)
+            .foregroundColor(accent)
         }
-        .foregroundColor(accent)
         .padding(.vertical, OmiSpacing.sm)
       } else {
         Button(action: {
@@ -486,17 +504,21 @@ extension SettingsContentView {
     }
     .padding(OmiSpacing.xxl)
     .frame(maxWidth: .infinity, alignment: .leading)
+    // The tile is now the pane's *only* card here rather than content inside one, so at rest it is
+    // exactly the card every other pane draws — `Ink.rowFill` behind an `Ink.separator` hairline.
+    // It was `Ink.wash` behind `Ink.hairline`, which are the well and control-outline tokens: right
+    // for something sitting on a card, a shade too heavy once it *is* the card.
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-        .fill(isSelected ? accent.opacity(0.12) : OmiColors.backgroundPrimary.opacity(0.68))
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+        .fill(isSelected ? accent.opacity(0.12) : Ink.rowFill)
         .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
             .stroke(
-              isSelected ? accent.opacity(0.85) : OmiColors.backgroundQuaternary,
+              isSelected ? accent.opacity(0.85) : Ink.separator,
               lineWidth: isSelected ? 1.5 : 1)
         )
     )
-    .contentShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
+    .contentShape(RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous))
     .onTapGesture {
       guard canPurchase else { return }
       selectedPlanIdForCheckout = plan.id
@@ -526,20 +548,28 @@ extension SettingsContentView {
 
   // MARK: - Slider Index Helpers
 
+  // Each of these was `options.firstIndex(of: stored) ?? 0`. See
+  // `SettingsControlMetrics.nearestLadderIndex` for what that `?? 0` did to a stored value the
+  // slider does not offer, and why the handle now snaps to the nearest step instead. When it is only
+  // an approximation, `offLadderStepNote` says so under the slider.
+
   var analysisDelaySliderIndex: Int {
-    analysisDelayOptions.firstIndex(of: analysisDelay) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(of: analysisDelay, in: analysisDelayOptions)
   }
 
   var taskIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: taskExtractionInterval) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(
+      of: taskExtractionInterval, in: extractionIntervalOptions)
   }
 
   var insightIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: insightExtractionInterval) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(
+      of: insightExtractionInterval, in: extractionIntervalOptions)
   }
 
   var memoryIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: memoryExtractionInterval) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(
+      of: memoryExtractionInterval, in: extractionIntervalOptions)
   }
 
   // MARK: - Helpers
@@ -575,42 +605,6 @@ extension SettingsContentView {
 
     // Persist the setting
     AssistantSettings.shared.screenAnalysisEnabled = enabled
-  }
-
-  func toggleTranscription(enabled: Bool) {
-    // Check microphone permission
-    if enabled && !appState.hasMicrophonePermission {
-      transcriptionError = "Microphone permission required"
-      isTranscribing = false
-      return
-    }
-
-    transcriptionError = nil
-    isTogglingTranscription = true
-
-    // Track setting change
-    AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
-
-    if enabled {
-      appState.startTranscription()
-      isTogglingTranscription = false
-      isTranscribing = true
-    } else {
-      appState.stopTranscription()
-      isTogglingTranscription = false
-      isTranscribing = false
-    }
-
-    // Persist the setting
-    AssistantSettings.shared.transcriptionEnabled = enabled
-  }
-
-  func setSystemAudioCaptureMode(_ mode: AssistantSettings.SystemAudioCaptureMode) {
-    AnalyticsManager.shared.settingToggled(
-      setting: "system_audio_capture_mode_\(mode.rawValue)", enabled: mode != .never)
-    // Persisting posts .systemAudioCaptureModeDidChange; AppState re-applies the gate live for
-    // any in-progress recording.
-    AssistantSettings.shared.systemAudioCaptureMode = mode
   }
 
   func startGlowPreview() {
@@ -737,9 +731,11 @@ extension SettingsContentView {
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
     let transcriptionVocabularyRevisionAtLoadStart =
       AssistantSettings.shared.transcriptionVocabularyRevision
+    let notificationSettingsRevisionAtLoadStart = UserDefaults.standard.integer(
+      forKey: NotificationService.settingsSyncRevisionDefaultsKey)
+    let notificationSettingsPendingAtLoadStart =
+      NotificationService.hasPendingNotificationSettingsSync()
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
-    systemAudioCaptureMode = AssistantSettings.shared.systemAudioCaptureMode
-
     Task {
       do {
         // Load all settings in parallel
@@ -768,12 +764,36 @@ extension SettingsContentView {
           dailySummaryHour = dailySummary.hour
           dailySummaryTime = SettingsControlMetrics.dailySummaryDate(
             forHour: dailySummary.hour, referenceDate: Date())
-          notificationsEnabled = notifications.enabled
-          notificationFrequency = notifications.frequency
-          // Mirror to UserDefaults so NotificationService can gate/throttle without a backend roundtrip.
-          UserDefaults.standard.set(
-            notifications.enabled, forKey: NotificationService.masterEnabledDefaultsKey)
-          UserDefaults.standard.set(notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
+          let notificationSettingsRevisionNow = UserDefaults.standard.integer(
+            forKey: NotificationService.settingsSyncRevisionDefaultsKey)
+          let notificationSettingsPendingNow =
+            NotificationService.hasPendingNotificationSettingsSync()
+          if NotificationService.shouldPreserveLocalNotificationSettings(
+            revisionAtLoadStart: notificationSettingsRevisionAtLoadStart,
+            currentRevision: notificationSettingsRevisionNow,
+            pendingAtLoadStart: notificationSettingsPendingAtLoadStart,
+            pendingNow: notificationSettingsPendingNow)
+          {
+            // A newer local change may have raced this GET, or the app may have
+            // quit before its previous PATCH completed. Preserve the local
+            // mirror and retry the complete pair instead of hydrating stale
+            // server values over the user's choice.
+            notificationsEnabled = NotificationService.areNotificationsEnabled()
+            notificationFrequency = NotificationService.currentFrequencyLevel()
+            if notificationSettingsPendingNow {
+              let retryEnabled = notificationsEnabled
+              let retryFrequency = notificationFrequency
+              updateNotificationSettings(enabled: retryEnabled, frequency: retryFrequency)
+            }
+          } else {
+            notificationsEnabled = notifications.enabled
+            notificationFrequency = notifications.frequency
+            // Mirror to UserDefaults so NotificationService can gate/throttle without a backend roundtrip.
+            UserDefaults.standard.set(
+              notifications.enabled, forKey: NotificationService.masterEnabledDefaultsKey)
+            UserDefaults.standard.set(
+              notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
+          }
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled
           privateCloudSyncEnabled = cloudSync.enabled
@@ -916,7 +936,8 @@ extension SettingsContentView {
 
     FloatingBarUsageLimiter.shared.applyPlan(
       plan: subscription.subscription.plan,
-      status: subscription.subscription.status
+      status: subscription.subscription.status,
+      desktopGrandfatherUntil: subscription.desktopGrandfatherUntil
     )
 
     if subscription.subscription.plan != .basic,

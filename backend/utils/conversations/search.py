@@ -2,14 +2,115 @@ import logging
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
+from urllib.parse import urlsplit
+from uuid import UUID
 
 import typesense
+
+from utils.share_links import accepted_share_hosts, share_base_url
 
 logger = logging.getLogger(__name__)
 
 
 class ConversationSearchUnavailableError(Exception):
     """Raised when Typesense is unreachable or times out (transient upstream failure)."""
+
+
+_EXACT_CONVERSATION_PATH_PREFIX = '/conversations/'
+
+
+def _canonical_conversation_uuid(value: str) -> Optional[str]:
+    """Return a normalized UUID only when ``value`` is a complete canonical UUID."""
+    if len(value) != 36:
+        return None
+    try:
+        parsed = UUID(value)
+    except ValueError:
+        return None
+    if str(parsed) != value.lower():
+        return None
+    return str(parsed)
+
+
+def parse_exact_conversation_reference(query: str) -> Optional[str]:
+    """Extract a canonical conversation UUID from an ID or Omi share URL.
+
+    Exact references intentionally accept only the two values Omi presents to users: a UUID or an
+    HTTPS URL on the configured share host (default ``h.omi.me``) with the exact
+    ``/conversations/<uuid>`` path. Anything else remains a natural-language query so partial IDs
+    and lookalike URLs cannot turn search into document probing.
+    """
+    value = query.strip() if query else ''
+    if exact_id := _canonical_conversation_uuid(value):
+        return exact_id
+
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return None
+
+    host = (parsed.hostname or '').lower()
+    try:
+        configured = urlsplit(share_base_url())
+        port = parsed.port
+        configured_port = configured.port
+    except ValueError:
+        return None
+    configured_host = (configured.hostname or '').lower()
+    if host == configured_host:
+        expected_port = configured_port
+        expected_path_prefix = f'{configured.path.rstrip("/")}{_EXACT_CONVERSATION_PATH_PREFIX}'
+    elif host == 'h.omi.me':
+        expected_port = None
+        expected_path_prefix = _EXACT_CONVERSATION_PATH_PREFIX
+    else:
+        return None
+    if (
+        parsed.scheme.lower() != 'https'
+        or host not in accepted_share_hosts()
+        or parsed.username is not None
+        or parsed.password is not None
+        or port != expected_port
+        or parsed.query
+        or parsed.fragment
+        or not parsed.path.startswith(expected_path_prefix)
+    ):
+        return None
+
+    return _canonical_conversation_uuid(parsed.path[len(expected_path_prefix) :])
+
+
+def clamp_conversation_search_pagination(page: Optional[int], per_page: Optional[int]) -> tuple[int, int]:
+    """Clamp the unbounded search request pagination at the shared search boundary."""
+    return max(1, page or 1), max(1, min(per_page or 10, 250))
+
+
+def conversation_matches_date_range(
+    conversation: Dict[str, Any], start_date: Optional[int] = None, end_date: Optional[int] = None
+) -> bool:
+    """Apply the same ``created_at`` timestamp filters to an exact hydrated conversation."""
+    if start_date is None and end_date is None:
+        return True
+
+    created_at = conversation.get('created_at')
+    if isinstance(created_at, datetime):
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        timestamp = created_at.timestamp()
+    elif isinstance(created_at, (int, float)):
+        timestamp = float(created_at)
+    elif isinstance(created_at, str):
+        try:
+            parsed = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            timestamp = parsed.timestamp()
+        except ValueError:
+            return False
+    else:
+        return False
+
+    return (start_date is None or timestamp >= start_date) and (end_date is None or timestamp <= end_date)
 
 
 def _is_typesense_transient_error(exc: BaseException) -> bool:
@@ -135,8 +236,7 @@ def search_conversations(
     # negative, or a huge value would otherwise TypeError here (len(...) >= per_page / page + 1) or trip
     # Typesense RequestMalformed and 500 the request. Clamp at this shared boundary, mirroring the
     # clamps in routers/memories.py and routers/mcp.py. Typesense caps a single page at 250 hits.
-    page = max(1, page or 1)
-    per_page = max(1, min(per_page or 10, 250))
+    page, per_page = clamp_conversation_search_pagination(page, per_page)
     try:
         stripped_query = query.strip() if query else ''
         has_filter_only_browse = bool(speaker_id) or start_date is not None or end_date is not None
