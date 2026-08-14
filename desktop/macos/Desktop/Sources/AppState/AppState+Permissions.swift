@@ -22,7 +22,7 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
   struct AppKitAlertOperations {
     let beginSheetModal: BeginSheetModal
 
-    static let live = AppKitAlertOperations { alert, window, completion in
+    @MainActor static let live = AppKitAlertOperations { alert, window, completion in
       alert.beginSheetModal(for: window) { _ in completion() }
     }
   }
@@ -44,7 +44,7 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
       AppKitSheetAlertPresenter.presentableShellWindow(
         ShellSummon.shellWindow(), isActive: NSApp.isActive)
     },
-    appKitOperations: AppKitAlertOperations = .live,
+    appKitOperations: AppKitAlertOperations? = nil,
     revealMainWindow: @escaping () -> Void = {
       if let appDelegate = AppDelegate.summonWindowTarget() {
         appDelegate.openMainAppWindow()
@@ -56,7 +56,7 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     canHostSheet: @escaping SheetHostChecker = { $0.attachedSheet == nil }
   ) {
     self.shellWindowProvider = shellWindowProvider
-    self.appKitOperations = appKitOperations
+    self.appKitOperations = appKitOperations ?? .live
     self.revealMainWindow = revealMainWindow
     self.canHostSheet = canHostSheet
     NotificationCenter.default.addObserver(
