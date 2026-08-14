@@ -92,10 +92,14 @@ class FakeVectorStore:
         for key in doomed:
             del self._data[key]
 
+    _LIST_IDS_PAGE = 100  # yield bounded pages like the real adapters (Pinecone/Qdrant), not one page
+
     def list_ids(self, namespace: str, *, prefix: str) -> Iterator[List[str]]:
-        page = sorted(vid for (ns, vid) in self._data if ns == namespace and vid.startswith(prefix))
-        if page:
-            yield page
+        # cubic PR 10887 D8: mirror the port contract's paginated shape so a consumer that iterates
+        # pages is exercised against the fake, not just a single all-ids page.
+        matches = sorted(vid for (ns, vid) in self._data if ns == namespace and vid.startswith(prefix))
+        for start in range(0, len(matches), self._LIST_IDS_PAGE):
+            yield matches[start : start + self._LIST_IDS_PAGE]
 
 
 class PineconeIndexVectorStore:
