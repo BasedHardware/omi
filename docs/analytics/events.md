@@ -51,6 +51,8 @@ send its payload.
 
 `Encoded Audio Duration Measured` is emitted by the live listen receiver at session teardown from authoritative decoded mono PCM bytes and negotiated sample rate. It carries recording/conversation identity, codec, decoded bytes, and audio duration; malformed frames are excluded.
 
+`Speech Positive Duration Measured` is emitted by the live listen receiver at session teardown from the server VAD's cumulative speech clock. It carries recording/conversation identity, seconds, VAD mode, and the closed `server_vad` measurement source.
+
 | Event | Owning surface | Emission contract and authoritative emitter | Key properties / person properties | Alert |
 |---|---|---|---|---|
 | `Transcript Started` | Backend `/v4/listen` provider lane | Once, when an Omi-owned live STT attempt receives its first nontrivial audio frame: [`LiveSTTAttempt`](../../backend/utils/observability/transcription.py) | `recording_id`, `conversation_id` when allocated, closed `transcription_source`, bounded `stt_provider`, configured `stt_model`, `transcript_language`, and bounded `app_platform`. `uid` is only the PostHog `distinct_id`. No transcript content. | Not alerted; live transcription denominator. |

@@ -610,7 +610,21 @@ class ListenReceiver:
                     },
                 )
             if self.vad_gate is not None:
+                vad_metrics = self.vad_gate.get_metrics()
                 logger.info(json.dumps(self.vad_gate.to_json_log()))
+                speech_ms = max(0, int(vad_metrics.get('speech_ms_total') or 0))
+                if speech_ms:
+                    emit_product_event(
+                        uid=request.uid,
+                        event='Speech Positive Duration Measured',
+                        properties={
+                            'recording_id': self.host.recording_session_id,
+                            'conversation_id': self.host.state.current_conversation_id,
+                            'duration_seconds': speech_ms / 1000,
+                            'measurement': 'server_vad',
+                            'vad_mode': vad_metrics.get('mode') or 'unknown',
+                        },
+                    )
             if not self.host.use_custom_stt:
                 await self._flush_stt_buffer(buffer, force=True)
             await self._drain_stt_sockets()
