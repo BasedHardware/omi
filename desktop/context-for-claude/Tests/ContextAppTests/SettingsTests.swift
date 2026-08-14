@@ -922,6 +922,66 @@ final class SettingsTests: XCTestCase {
         XCTAssertTrue(provider.conflicts().isEmpty, "the one-click switch clears the row")
     }
 
+    // MARK: - Readiness
+
+    /// **A recorder that cannot say the chord in it is dead is a recorder that lies.**
+    ///
+    /// `⌘ + ⌘` and `⌘⌘⇧` are watched for through a system-wide `flagsChanged` monitor, which macOS
+    /// gates behind Accessibility. Without that grant neither fires — and the pane printed them
+    /// exactly as it does on a working Mac, because `ShortcutBindingProvider` had no member for
+    /// `GlobalShortcuts.readiness(for:)` and so Settings never asked. The warning is the fix, so the
+    /// warning is what is pinned: it names the permission, and it says outright that pressing the
+    /// shortcut does nothing.
+    func testAnUnarmedShortcutCarriesAWarningThatNamesAccessibility() {
+        XCTAssertNil(ShortcutReadiness.armed.note, "an armed shortcut has nothing to warn about")
+        XCTAssertTrue(ShortcutReadiness.armed.isArmed)
+
+        let note = ShortcutReadiness.needsAccessibility.note
+        XCTAssertNotNil(note)
+        XCTAssertTrue(note?.contains("Accessibility") ?? false, note ?? "")
+        XCTAssertTrue(note?.contains("does nothing") ?? false, note ?? "")
+        XCTAssertFalse(ShortcutReadiness.needsAccessibility.isArmed)
+
+        // A refusal keeps macOS's own reason rather than being flattened into a generic sentence:
+        // "something else already uses ⌥⌘K" is the only version of this the user can act on.
+        let refusal = "Something else on this Mac already uses ⌥⌘K."
+        XCTAssertEqual(ShortcutReadiness.rejected(refusal).note, refusal)
+        XCTAssertFalse(ShortcutReadiness.rejected(refusal).isArmed)
+    }
+
+    /// The row's subtitle is the reference copy *plus* the warning, in that order — the fallback
+    /// promise ("Clear it to use ⌘ + ⌘") is still true when the chord cannot fire; it is the firing
+    /// that is not, so the warning is appended rather than substituted.
+    @MainActor
+    func testTheShortcutRowStatesBothTheFallbackAndTheWarning() {
+        let provider = InMemoryShortcutBindings(
+            readiness: [.openActivity: .needsAccessibility])
+        XCTAssertEqual(provider.readiness(for: .openActivity), .needsAccessibility)
+        XCTAssertEqual(provider.readiness(for: .openSearch), .armed, "only the slot asked about moves")
+
+        let pane = SettingsGeneralPane(
+            store: makeStore(), shortcuts: provider,
+            exclusions: ExclusionsObserver(engine: makeEngine()))
+        let subtitle = pane.subtitle(for: .openActivity)
+        XCTAssertTrue(subtitle.hasPrefix(ShortcutAction.openActivity.subtitle), subtitle)
+        XCTAssertTrue(subtitle.contains("Accessibility"), subtitle)
+        XCTAssertEqual(
+            pane.subtitle(for: .openSearch), ShortcutAction.openSearch.subtitle,
+            "an armed slot says nothing extra")
+        XCTAssertTrue(pane.needsAccessibility, "the repair row is offered")
+    }
+
+    /// The repair row explains *why* there is no prompt to press, because there is not one: macOS
+    /// has no dialog for Accessibility, and a user told to "allow it when asked" waits forever.
+    func testTheAccessibilityRepairRowExplainsThatThereIsNoPrompt() {
+        let copy = SettingsGeneralPane.accessibilitySubtitle
+        XCTAssertTrue(copy.contains("no prompt"), copy)
+        XCTAssertTrue(copy.contains("Accessibility"), copy)
+        // And it names the way out that needs no grant at all, which is the whole reason the
+        // recorder exists beside the gesture.
+        XCTAssertTrue(copy.contains("works without this"), copy)
+    }
+
     @MainActor
     func testObserversAreNotifiedAndReleased() {
         let provider = InMemoryShortcutBindings()
@@ -933,6 +993,42 @@ final class SettingsTests: XCTestCase {
         provider.removeObserver(token)
         provider.clear(.openActivity)
         XCTAssertEqual(notifications, 1)
+    }
+
+    // MARK: - Accessibility
+
+    /// **A STATIC CHECKER, not behavioural coverage.** It reads the panes' source text; it does not
+    /// run them. Labelled as such deliberately (`AGENTS.md` § Bug Fixes), because the enforceable
+    /// guard here is the compiler one — `SettingsToggle` has no initialiser that takes no title, so
+    /// an unlabelled switch is not spellable — and this only catches somebody reaching past it.
+    ///
+    /// What it guards: every switch on these panes was `Toggle("", isOn:)` + `.labelsHidden()`. That
+    /// hides the visual label correctly and empties the *accessibility* one, so VoiceOver announced
+    /// eleven switches across five panes as an unnamed "on"/"off" — Airgap Mode indistinguishable
+    /// from Sound, Screen Capture from Show Dock Icon. The two `Picker("")`s had the same hole.
+    func testNoControlOnASettingsPaneCarriesAnEmptyAccessibilityLabel() throws {
+        let settings = URL(fileURLWithPath: #filePath)  // Tests/ContextAppTests/SettingsTests.swift
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/ContextApp/Settings", isDirectory: true)
+        let names = try FileManager.default.contentsOfDirectory(atPath: settings.path)
+            .filter { $0.hasSuffix(".swift") }
+        XCTAssertFalse(names.isEmpty, "no pane sources found at \(settings.path)")
+
+        for name in names {
+            let source = try String(contentsOf: settings.appendingPathComponent(name), encoding: .utf8)
+            for (offset, line) in source.split(separator: "\n", omittingEmptySubsequences: false).enumerated()
+            {
+                // Comments describe the defect; they are not it.
+                guard !line.trimmingCharacters(in: .whitespaces).hasPrefix("//"),
+                    !line.trimmingCharacters(in: .whitespaces).hasPrefix("///")
+                else { continue }
+                for empty in [#"Toggle("""#, #"Picker("""#] where line.contains(empty) {
+                    XCTFail(
+                        "\(name):\(offset + 1) spells \(empty), which leaves the control unnamed to "
+                            + "VoiceOver. Use SettingsToggle(title:isOn:) or name the Picker.")
+                }
+            }
+        }
     }
 
     // MARK: - The window's own contract

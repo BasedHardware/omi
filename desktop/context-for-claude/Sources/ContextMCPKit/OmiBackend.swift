@@ -370,20 +370,38 @@ public final class OmiBackend: @unchecked Sendable {
     /// requests an hour.
     public static let historyProbeOffset = 500
 
+    /// The name this client answers to in the app's audited egress list.
+    ///
+    /// `ContextApp` cannot link this target — it is a library the *other* executable is built from —
+    /// so `NetworkEgress.Client.mcpOmiBackend` carries this string as its raw value rather than
+    /// importing it. That is what makes the record this process emits and the record the app would
+    /// emit for it the same line, and it is checked from both sides: `AirgapTests` here, and
+    /// `AirgapEgressTests` there.
+    public static let egressClientName = "omi-backend"
+
     private let credential: (key: String, source: OmiKeySource)?
-    private let session: URLSession
     private let cache = ResponseCache()
     private let seen = SeenRange()
     /// Reads Airgap Mode. A closure rather than a stored `Bool` because the answer has to be taken
     /// afresh at each attempt — see the gate in `get` — and injectable so a test can drive both
     /// answers, and count the reads, without a network or a configuration file.
     private let isAirgapped: @Sendable () -> Bool
+    /// The one function in this target that opens a socket.
+    ///
+    /// Injectable for the same reason `ScreenActivityUploader` takes a `transport` on the app side:
+    /// it is the difference between a test that *infers* no request was issued from the error it got
+    /// back, and one that fails on contact. Without it, a green airgap test and a test that quietly
+    /// reached `api.omi.me` and came back `.unauthorized` are told apart only by reading the error
+    /// — and the account behind that host is rate-limited, so "the suite proves the guard by
+    /// exercising it" is not a trade this file may make.
+    private let transport: @Sendable (URLRequest) -> Result<Data, OmiBackendError>
 
     /// Deliberately not public: the credential never leaves this module, and no caller outside it
     /// can hand one in or read one back out.
     init(
         credential: (key: String, source: OmiKeySource)? = OmiKeyResolver.resolve(),
-        isAirgapped: @escaping @Sendable () -> Bool = { MCPNetworkEgress.isAirgapped() }
+        isAirgapped: @escaping @Sendable () -> Bool = { MCPNetworkEgress.isAirgapped() },
+        transport: (@Sendable (URLRequest) -> Result<Data, OmiBackendError>)? = nil
     ) {
         self.credential = credential
         self.isAirgapped = isAirgapped
@@ -394,7 +412,8 @@ public final class OmiBackend: @unchecked Sendable {
         configuration.waitsForConnectivity = false
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.httpShouldSetCookies = false
-        session = URLSession(configuration: configuration)
+        let session = URLSession(configuration: configuration)
+        self.transport = transport ?? { request in Self.perform(request, on: session) }
     }
 
     public var isConfigured: Bool { credential != nil }
@@ -750,7 +769,19 @@ public final class OmiBackend: @unchecked Sendable {
         }
     }
 
+    /// Runs `request` through whatever transport this instance was built with, and names the failure
+    /// in the log. Method and path only — never the query, which carries the user's own words.
     private func send(_ request: URLRequest, path: String, method: String) -> Result<Data, OmiBackendError> {
+        let result = transport(request)
+        if case let .failure(error) = result {
+            MCPServer.note("omi: \(method) /\(path) failed — \(error.reason)")
+        }
+        return result
+    }
+
+    private static func perform(
+        _ request: URLRequest, on session: URLSession
+    ) -> Result<Data, OmiBackendError> {
         let box = Box<Result<Data, OmiBackendError>>(.failure(.timedOut))
         let semaphore = DispatchSemaphore(value: 0)
 
@@ -792,13 +823,9 @@ public final class OmiBackend: @unchecked Sendable {
 
         // Belt and braces over URLSession's own timeout: a wedged callback must never hold the MCP
         // read loop, because Claude is waiting on stdout.
-        if semaphore.wait(timeout: .now() + Self.requestTimeout + 2) == .timedOut {
+        if semaphore.wait(timeout: .now() + requestTimeout + 2) == .timedOut {
             task.cancel()
-            MCPServer.note("omi: \(method) /\(path) timed out")
             return .failure(.timedOut)
-        }
-        if case let .failure(error) = box.value {
-            MCPServer.note("omi: \(method) /\(path) failed — \(error.reason)")
         }
         return box.value
     }

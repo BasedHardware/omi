@@ -1,6 +1,6 @@
-import ContextCore
 import AppKit
 import Combine
+import ContextCore
 import SwiftUI
 
 /// The entire non-onboarding UI: one 320 pt popover hanging off the menu bar mark.
@@ -44,6 +44,9 @@ struct StatusView: View {
 
     @State private var claude: (claudeCode: Bool, claudeDesktop: Bool) = (false, false)
     @State private var claudeNote: String?
+    /// True while the two config files are being rewritten. A second press cannot start a second
+    /// write, which is the same rule the account line's round trip follows.
+    @State private var isConnecting = false
 
     /// Whether the two provider rows are showing under the account line.
     ///
@@ -186,15 +189,17 @@ struct StatusView: View {
     private var capabilityRows: some View {
         // No spacing: menu rows abut, and each row already carries its own 22 pt height.
         VStack(spacing: 0) {
-            ForEach(reports, id: \.name) { report in
+            ForEach(rows) { row in
                 InkPermissionRow(
-                    title: label(for: report.name),
-                    granted: report.granted,
+                    // The missing member's noun when a group is half granted — see
+                    // `MenuBarCapabilityRow` for why the noun moves and the status word does not.
+                    title: row.noun,
+                    granted: row.granted,
                     // `Permissions` owns the status word, so this popover and the onboarding rows can
                     // never disagree about what the user still has to do.
-                    status: report.detail,
+                    status: row.status,
                     native: true,
-                    action: { handle(report) }
+                    action: { handle(row.group) }
                 )
                 .frame(maxWidth: .infinity)
             }
@@ -207,17 +212,17 @@ struct StatusView: View {
         engine.capabilities.isEmpty ? Permissions.report() : engine.capabilities
     }
 
-    /// `Capability.title` is the first-person sentence onboarding uses to introduce itself. This is a
-    /// glance surface for a user who has already been introduced, so it gets the noun instead.
-    private func label(for name: String) -> String {
-        CapabilityGroup(rawValue: name)?.title ?? name
+    private var rows: [MenuBarCapabilityRow] {
+        reports.map { MenuBarCapabilityRow(report: $0, isGranted: { Permissions.check($0) }) }
     }
 
-    private func handle(_ report: CapabilityReport) {
-        guard let group = CapabilityGroup(rawValue: report.name) else { return }
+    private func handle(_ group: CapabilityGroup) {
         // The row stands for several grants, so a tap acts on the nearest one still missing — and on
         // the first member when they are all in, because that is the pane a user opens to revoke.
-        let capability = group.members.first { !Permissions.check($0) } ?? group.members[0]
+        // The same member `MenuBarCapabilityRow` names, so the pane that opens is the one the row
+        // was pointing at.
+        let missing = group.firstMissing { Permissions.check($0) }
+        let capability = missing ?? group.namesake
 
         // A granted Screen Recording checkbox over a dead capture is the one row that lies, and the
         // only cure is a relaunch — so that is what tapping it does.
@@ -226,7 +231,7 @@ struct StatusView: View {
         }
 
         // A granted row is still worth a tap: the pane is the only route to revoking it.
-        guard !report.granted else {
+        guard missing != nil else {
             Permissions.openSettings(for: capability)
             return
         }
@@ -254,10 +259,15 @@ struct StatusView: View {
                 Spacer(minLength: 8)
 
                 if !isConnected {
-                    Button("Connect", action: connect)
+                    // The label carries the in-flight state rather than a third colour: the popover's
+                    // faint rung is spent (`InkGlassTests` counts it), and a word is a better signal
+                    // than a shade in any case — the press writes two of Claude's config files, and
+                    // saying so is what stops a second press.
+                    Button(isConnecting ? "Connecting…" : "Connect", action: connect)
                         .buttonStyle(.plain)
                         .font(.system(size: Self.menuFontSize))
                         .foregroundStyle(Ink.accent)
+                        .disabled(isConnecting)
                 }
             }
             .frame(minHeight: Self.rowHeight)
@@ -366,7 +376,8 @@ struct StatusView: View {
     private var uploadNote: String? {
         if let error = uploads.lastError { return error }
         if uploads.pendingCount > 0 {
-            return "\(uploads.pendingCount) conversation\(uploads.pendingCount == 1 ? "" : "s") waiting to upload"
+            return
+                "\(uploads.pendingCount) conversation\(uploads.pendingCount == 1 ? "" : "s") waiting to upload"
         }
         return nil
     }
@@ -382,10 +393,19 @@ struct StatusView: View {
         }
     }
 
+    /// Same shape as `refresh()`, and for the same reason: `register()` reads, decodes and rewrites
+    /// both of Claude's config files. Run on the actor that has to draw, it froze the popover under
+    /// the press — and `isConnecting` is why the `await` matters, since without a suspension point
+    /// SwiftUI never gets a frame in which to show that anything is happening.
     private func connect() {
-        let result = ClaudeRegistrar.register()
-        claude = (result.claudeCode, result.claudeDesktop)
-        claudeNote = result.message
+        isConnecting = true
+        claudeNote = nil
+        Task {
+            let result = await Task.detached(priority: .userInitiated) { ClaudeRegistrar.register() }.value
+            claude = (result.claudeCode, result.claudeDesktop)
+            claudeNote = result.message
+            isConnecting = false
+        }
     }
 
     // MARK: - Controls
@@ -424,7 +444,15 @@ struct StatusView: View {
             // The chord printed here is `openActivity`'s — the app's advertised way in, and the one
             // a user is most likely to have seen. `openSearch` opens this same window with its field
             // focused, but a row can only print one shortcut and the primary is the one to teach.
-            MenuCommand(title: "Open Activity", shortcut: GlobalShortcuts.shared.display(for: .openActivity)) {
+            //
+            // **Printed only while it is armed.** A key equivalent trailing a menu item is a promise
+            // that pressing it does this, and the gesture defaults are watched for through a global
+            // event monitor macOS gates behind Accessibility — so on a Mac that has not granted it,
+            // `⌘ + ⌘` beside this row taught a gesture that does nothing. That is the same defect as
+            // the Settings recorder printing it, and it is worse here: this row is the *reason* the
+            // ungranted user can reach the window at all, and a dead chord beside it suggests they
+            // never needed the row.
+            MenuCommand(title: "Open Activity", shortcut: activityShortcut) {
                 SearchBarWindow.present()
             }
 
@@ -443,6 +471,17 @@ struct StatusView: View {
             MenuCommand(title: "Settings…", shortcut: "⌘,") { SettingsWindow.present() }
                 .keyboardShortcut(",")
 
+            // **The only way back into the walkthrough once it has been left.**
+            //
+            // The tutorial now survives the relaunch macOS forces on it (`TutorialResume`), but a
+            // user who pressed *Skip* spent that record deliberately — and until this row existed,
+            // `Tutorial.start` had exactly one caller, inside onboarding's final card, which runs
+            // once per install. Skipping was therefore permanent, and the app's own explanation of
+            // itself was unreachable for the rest of its life on that Mac.
+            MenuCommand(title: "Show Me Around") {
+                Tutorial.start(store: Engine.shared.contextStore)
+            }
+
             Divider()
                 .padding(.vertical, 4)
 
@@ -460,13 +499,33 @@ struct StatusView: View {
         }
     }
 
+    /// The chord to print beside **Open Activity**, or nil when there is none to promise.
+    ///
+    /// Read at render rather than cached: Accessibility is granted in System Settings while the app
+    /// runs, and the popover's one-second tick is what brings this back the moment it lands.
+    private var activityShortcut: String? {
+        let shortcuts = GlobalShortcuts.shared
+        guard shortcuts.readiness(for: .openActivity) == .armed else { return nil }
+        return shortcuts.display(for: .openActivity)
+    }
+
     /// Claude's two config files are edited by hand, by installers, and by Claude itself, so the
     /// connection line is re-read on open rather than cached for the life of the process. Once per
     /// open is enough — parsing `~/.claude.json` is not something to do on a one-second tick.
+    ///
+    /// **Off the main actor**, for the reason `SettingsAgentsPane.setRegistered` gives at length:
+    /// `ClaudeRegistrar.status()` opens and JSON-decodes `~/.claude.json` — Claude Code's own state
+    /// store, which grows with the user's history rather than with anything we write — and Claude
+    /// Desktop's config. Doing that synchronously in `onAppear` froze the popover under the click
+    /// that opened it, for however long those two files take on that Mac. The Agents pane already
+    /// moved the identical call off; a second call site doing it the other way is the inconsistency,
+    /// not a second opinion.
     private func refresh() {
         engine.refreshCapabilities()
-        claude = ClaudeRegistrar.status()
         claudeNote = nil
+        Task {
+            claude = await Task.detached(priority: .userInitiated) { ClaudeRegistrar.status() }.value
+        }
     }
 }
 

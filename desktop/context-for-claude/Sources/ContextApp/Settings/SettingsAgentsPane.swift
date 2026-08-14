@@ -48,7 +48,11 @@ struct SettingsAgentsPane: View {
                     title: "Claude target",
                     subtitle: targetSubtitle
                 ) {
-                    Picker("", selection: $store.claudeTarget) {
+                    // Titled, then `labelsHidden()`: the row's own title is the label a sighted user
+                    // reads, and the empty string this used to carry was also the accessibility
+                    // label — leaving VoiceOver to announce an unnamed picker. Same fix, same
+                    // reason, as `SettingsToggle`.
+                    Picker("Claude target", selection: $store.claudeTarget) {
                         ForEach(ClaudeRouter.Target.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                     .labelsHidden()
@@ -74,15 +78,13 @@ struct SettingsAgentsPane: View {
                     if isRegistering || registration == nil {
                         ProgressView().controlSize(.small)
                     } else {
-                        Toggle(
-                            "",
+                        SettingsToggle(
+                            title: "Claude Connection",
                             isOn: Binding(
-                                get: { registration?.claudeCode == true || registration?.claudeDesktop == true },
-                                set: { setRegistered($0) })
-                        )
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
+                                get: {
+                                    registration?.claudeCode == true || registration?.claudeDesktop == true
+                                },
+                                set: { setRegistered($0) }))
                     }
                 }
             }
@@ -113,7 +115,9 @@ struct SettingsAgentsPane: View {
                         + "tools actually present, so it will fill in as you install them."
                     : nil
             ) {
-                SettingsRowStack(items: survey.map { AgentSurveyRow(surface: $0.surface, presence: $0.presence) }) {
+                SettingsRowStack(
+                    items: survey.map { AgentSurveyRow(surface: $0.surface, presence: $0.presence) }
+                ) {
                     row in
                     SettingsRow(
                         icon: row.presence.isInstalled ? "checkmark.seal" : "questionmark.app.dashed",

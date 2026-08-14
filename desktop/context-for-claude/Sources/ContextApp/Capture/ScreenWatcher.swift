@@ -388,6 +388,12 @@ final class ScreenWatcher {
         // not at `emit`, because deduplication legitimately suppresses most frames and a healthy
         // watcher looking at one unchanging document would otherwise look stalled.
         noteServed()
+        // …and the same pixels are the only unarguable answer to "is Screen Recording granted".
+        // Stamped here rather than only where a frame is stored, for the same reason: a
+        // deduplicated frame is still a frame this process was allowed to take.
+        // `Permissions.check(.screen)` prefers this to `CGPreflightScreenCaptureAccess`, which
+        // reads false for a re-signed bundle that is demonstrably capturing.
+        Permissions.noteCaptureSucceeded(.screen)
         reportStandDown(nil)
 
         let capturedAt = ContextTime.now

@@ -4,45 +4,59 @@ import ContextCore
 import SwiftUI
 
 /// The search surface: a prompt bar, a gap, and a panel of what you can filter by and what was
-/// found. **The content of the app's main window.**
+/// found. **The content of the floating panel `SearchBarWindow` puts up.**
 ///
-/// **Two panels, not one.** The bar and the panel under it are separate objects with real air
-/// between them (`SearchLayout.panelGap`), each cut to its own corner. That separation is the design
-/// — it is what says "this is a place you type" and "this is a place you look" without a label — and
-/// it is the one thing a refactor here must not quietly undo by wrapping both in a single container.
-/// It survived the move into a titled window: what changed is that the panels are raised regions on
-/// the window's own glass rather than two pieces of glass over the desktop (see `SearchGlassPanel`).
+/// **Two panels, not one.** The bar and the panel under it are separate floating objects with real
+/// air between them (`SearchLayout.panelGap`), each cut to its own corner, each on its own glass,
+/// each casting its own shadow. That separation is the design — it is what says "this is a place you
+/// type" and "this is a place you look" without a label — and it is the one thing a refactor here
+/// must not quietly undo by wrapping both in a single container.
 ///
-/// **It measures the window rather than the window measuring it.** As a floating panel this view
-/// reported its natural height upwards and the window resized itself to match on every keystroke,
-/// which is exactly the wrong direction for a frame the user owns — one drag of the corner would be
-/// undone by the next character typed. The geometry reader here is that arrow reversed: the window is
-/// whatever the user made it, and the width the grid reflows to and the room the results body gets
-/// are both functions of it (`SearchLayout.panelWidth(inWindowOfWidth:)`,
-/// `SearchLayout.availableResultsBodyHeight(inWindowOfHeight:showingNote:)`).
+/// **It measures itself and the window follows.** The lower panel is content-sized — three empty
+/// sections and a page of cards are 300 pt apart — so the surface reports its own height upwards
+/// (`onHeightChange`) and the window resizes around its top edge. A Spotlight panel has no frame the
+/// user owns, so there is nothing for the measurement to fight.
 ///
-/// **The bar answers for itself.** It used to be a delivery mechanism: whatever was typed went to
-/// Claude on Return, and the panel underneath was only a filter for what had been captured. That is
-/// a strange thing for a search bar to be — the app owns two full-text indexes over the user's own
-/// machine, and the fastest possible answer to "what was that invoice site" was a round trip through
-/// another application, a window switch, and a model call. Return now searches, the results are the
-/// app's own, and they cover **both** halves of what it captures: the screens it saw and the
-/// conversations it heard.
+/// **Typing searches; Return asks.** This bar has flip-flopped on that once already, and the split is
+/// what both halves of the argument were actually right about. Handing every keystroke to Claude made
+/// the fastest possible answer to "what was that invoice site" a round trip through another
+/// application, a window switch and a model call — when this app owns two full-text indexes over the
+/// user's own machine. So typing narrows locally and instantly (`SearchResultsModel`), over **both**
+/// halves of what is captured: the screens it saw and the conversations it heard. But a *question* —
+/// "what was I supposed to send Priya" — is not a lookup, and this app cannot answer it. Return hands
+/// it to whichever Claude `Settings → Agents → Claude target` names, through the same `ClaudeRouter`
+/// the first-run tutorial uses. Nothing but what is in the field is ever sent, and an empty field
+/// launches nothing at all.
 ///
-/// The one line under the field survives that change with a narrower job. It used to say where the
-/// question had gone; there is nowhere for it to go now, so it appears only when the read itself
-/// failed — which is the one state the panel's own empty copy cannot express, because "found
-/// nothing" and "could not look" license opposite conclusions.
+/// The one line under the field says when that did not work. It carries two failures now — a read
+/// that could not run, and a handoff that fell short of what the keycap promised — and nothing else:
+/// a note after a *successful* search would be a status line reporting that the thing on screen is on
+/// screen, and a note after a successful handoff would be describing a Claude the user is already
+/// looking at. Success is visible; only failure needs saying.
 struct SearchBarView: View {
     /// A question to start from, handed over by the timeline's "Search All" pill.
     let initialQuery: String
+    let onDismiss: () -> Void
+    /// The surface's total height, whenever it changes. The window owns its own frame; this is how
+    /// it learns the content grew a line.
+    var onHeightChange: (CGFloat) -> Void = { _ in }
     /// **Where a result goes.** Activating a card hands the moment out here; the window turns it into
-    /// `RewindWindow.present(store:at:)`.
+    /// `RewindWindow.present(store:at:)` and closes this surface.
     ///
     /// A closure rather than a call into `RewindWindow` from inside the view, for the reason every
     /// other window operation in this app is one: a view that opens windows cannot be rendered in a
     /// test or a preview without opening them.
     var onOpenMoment: (SearchMoment) -> Void = { _ in }
+    /// **The timeline, asked for by name rather than by picking a moment.** The bar's own way to the
+    /// other window, and the reason the pill exists: a Spotlight panel that can only be left by
+    /// activating a result is a panel a user with no result to activate is stuck on.
+    ///
+    /// A closure for the same reason `onOpenMoment` is one — see `RewindView.onSearch`, which is this
+    /// same seam pointing the other way.
+    var onOpenTimeline: () -> Void = {}
+    /// Settings. The other half of what the timeline's header has always carried, and missing here
+    /// for exactly as long as this surface was the one the app opened on.
+    var onOpenSettings: () -> Void = {}
     /// Where a frame from the activity spine goes. A separate seam from `onOpenMoment` rather than a
     /// conversion into `SearchMoment`: that type carries a search hit's evidence — the matched
     /// snippet, the facet fields, the row it came from — and an activity tile has none of it. Making
@@ -52,22 +66,23 @@ struct SearchBarView: View {
     @State private var query: String
     @StateObject private var results: SearchResultsModel
 
-    /// **Which body the window is showing.**
+    /// **Which body the panel is showing.**
     ///
-    /// The main window has two: the activity surface, and the search results this file has always
-    /// drawn. Stated as a value rather than as a boolean inside the `body` so a beat added later has
-    /// to answer the question, and so the two cannot both be on screen.
+    /// The surface has two: the activity surface, and the search results this file has always drawn.
+    /// Stated as a value rather than as a boolean inside the `body` so a beat added later has to
+    /// answer the question, and so the two cannot both be on screen.
     ///
-    /// It opens on `.activity`, which is the point of the window: what this Mac has been doing, in
-    /// the order it happened. A question moves it to `.results` and clearing the field moves it back,
-    /// so the two are one surface with a question in it rather than two places to remember.
+    /// It opens on `.activity`, which is what the panel is for before a question is asked: what this
+    /// Mac has been doing, in the order it happened. A question moves it to `.results` and clearing
+    /// the field moves it back, so the two are one surface with a question in it rather than two
+    /// places to remember.
     @State private var shownBody: LowerPanel = .activity
 
-    /// Asked for, never held — see `ActivityStore.store` for why a window built at launch cannot keep
-    /// the store it found there.
+    /// Asked for, never held — see `ActivityStore.store` for why a surface cannot keep the store it
+    /// found when it was built.
     private let store: () -> ContextStore?
 
-    /// The two things the main window's lower panel can be.
+    /// The two things the lower panel can be.
     enum LowerPanel: Equatable {
         /// What this Mac has been doing, `ActivitySurface` — see the mounting point in `body`.
         case activity
@@ -78,38 +93,58 @@ struct SearchBarView: View {
     init(
         initialQuery: String = "",
         store: @escaping () -> ContextStore? = { nil },
+        onDismiss: @escaping () -> Void,
+        onHeightChange: @escaping (CGFloat) -> Void = { _ in },
         onOpenMoment: @escaping (SearchMoment) -> Void = { _ in },
-        onOpenActivityMoment: @escaping (ActivityMoment) -> Void = { _ in }
+        onOpenActivityMoment: @escaping (ActivityMoment) -> Void = { _ in },
+        onOpenTimeline: @escaping () -> Void = {},
+        onOpenSettings: @escaping () -> Void = {}
     ) {
         self.initialQuery = initialQuery
+        self.onDismiss = onDismiss
+        self.onHeightChange = onHeightChange
         self.onOpenMoment = onOpenMoment
         self.onOpenActivityMoment = onOpenActivityMoment
+        self.onOpenTimeline = onOpenTimeline
+        self.onOpenSettings = onOpenSettings
         self.store = store
         _query = State(initialValue: initialQuery)
         _results = StateObject(wrappedValue: SearchResultsModel(store: store))
-        // A window handed a question to start from is answering it, not showing the day.
+        // A panel handed a question to start from is answering it, not showing the day.
         _shownBody = State(initialValue: initialQuery.isEmpty ? .activity : .results)
     }
 
     /// The already-answered form, for previews and the render harness. Nothing it draws can reach
     /// the user's database.
-    init(query: String, results: SearchResultsModel) {
+    init(query: String, results: SearchResultsModel, onDismiss: @escaping () -> Void = {}) {
         self.initialQuery = query
+        self.onDismiss = onDismiss
         self.store = { nil }
         _query = State(initialValue: query)
         _results = StateObject(wrappedValue: results)
         _shownBody = State(initialValue: query.isEmpty ? .activity : .results)
     }
 
+    /// What the last handoff could not do, or nil — the second of the two things the note line says.
+    ///
+    /// Held here rather than on `SearchResultsModel`, which is the reader of this Mac's indexes and
+    /// has no business knowing another application exists. Cleared the moment the question changes:
+    /// "I couldn't find Claude" standing over a question it was never told about is a sentence about
+    /// nothing.
+    @State private var handoffNote: String?
+
     /// The one line under the field, or nil when there is nothing to say and the keyboard hint has
     /// the space instead.
     ///
-    /// Only ever a failure now. A note that appears after every successful search would be a status
-    /// line reporting that the thing on screen is on screen, and it would resize the window a line
-    /// taller on every keystroke.
-    private var note: String? { results.loadError }
+    /// Only ever a failure — of the read, or of the handoff. A note that appeared after every
+    /// successful search would be a status line reporting that the thing on screen is on screen, and
+    /// it would resize the window a line taller on every keystroke.
+    ///
+    /// The handoff leads, because it is the one the user just asked for: a Return that could not
+    /// reach Claude is news, and a stale read failure underneath it is not.
+    private var note: String? { handoffNote ?? results.loadError }
 
-    /// When the window is looking at, from the one control that decides it.
+    /// When the panel is looking at, from the one control that decides it.
     ///
     /// Read off the results model rather than duplicated, because the time chips live in the filter
     /// block that the results body owns. Two copies of "which day" is the bug where the spine and the
@@ -119,32 +154,36 @@ struct SearchBarView: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let panelWidth = SearchLayout.panelWidth(inWindowOfWidth: proxy.size.width)
-            VStack(alignment: .leading, spacing: SearchLayout.panelGap) {
-                SearchGlassPanel { promptBar(panelWidth: panelWidth) }
-                lowerPanel(
-                    panelWidth: panelWidth,
-                    availableBodyHeight: SearchLayout.availableResultsBodyHeight(
-                        inWindowOfHeight: proxy.size.height, showingNote: note != nil))
-                // The two panels add up to exactly the window's height by construction
-                // (`SearchLayout.windowChrome` plus the body's share of what is left), so this only
-                // ever absorbs a point of rounding. It is here so that if they ever do not, the
-                // leftover is bare glass at the bottom rather than a stretched panel.
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .padding(.horizontal, SearchLayout.windowInset)
-            .padding(.bottom, SearchLayout.windowInset)
-            // The band the traffic lights sit in. The glass runs under the title bar; the field the
-            // user is typing into may not.
-            .padding(.top, SearchLayout.titleBarInset)
+        VStack(alignment: .leading, spacing: SearchLayout.panelGap) {
+            SearchGlassPanel { promptBar }
+            lowerPanel
         }
-        // `ask`, not `search`: the window opens empty, and `search` treats "still empty" as nothing
-        // to do, so the panel used to open having never read anything at all.
-        .onAppear { results.ask(query) }
+        // The clear margin the shadows fall off into. Without it the window clips them and the
+        // panels look stamped onto the desktop rather than floating over it.
+        .padding(SearchLayout.shadowMargin)
+        .frame(width: SearchLayout.surfaceWidth, alignment: .top)
+        .background(SearchHeightReader(key: SearchSurfaceHeightKey.self))
+        // Measured, not predicted. The second panel is content-sized — three empty sections and a
+        // page of cards are 300 pt apart — so the window has to take the height the view arrived at
+        // rather than one this file guessed.
+        .onPreferenceChange(SearchSurfaceHeightKey.self) { height in
+            guard height > 0 else { return }
+            onHeightChange(height)
+        }
+        // `ask`, not `search`: the bar opens empty, and `search` treats "still empty" as nothing to
+        // do, so the panel used to open having never read anything at all.
+        .onAppear {
+            results.ask(query)
+            // A freshly mounted surface has no detail on it by definition, so anything still
+            // holding the Escape route is a leftover from a panel that was dismissed while a detail
+            // was open. Clearing it here is what keeps a stale hold from eating the *next* panel's
+            // Escape — the one key that must never do nothing on a summoned overlay.
+            ActivityDetailEscape.shared.release()
+        }
         .onChange(of: query) { text in
             results.search(text)
+            // A new question is not the one the handoff failed on.
+            handoffNote = nil
             // The question decides which body answers it. An emptied field is not a search for
             // nothing — it is the absence of a question, which is the day.
             let asked = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -155,7 +194,7 @@ struct SearchBarView: View {
         .onReceive(NotificationCenter.default.publisher(for: SearchBarWindow.refocusNotification)) { note in
             guard let prefill = note.userInfo?[SearchBarWindow.prefillKey] as? String else { return }
             // Only a prefill that really arrived. The notification is also the plain "take the
-            // keyboard back" signal, and a window brought forward with nothing to ask must not wipe
+            // keyboard back" signal, and a panel brought forward with nothing to ask must not wipe
             // the question already in the field.
             query = prefill
             // A prefill is a new question from somewhere else in the app, and the panel de-duplicates
@@ -171,38 +210,45 @@ struct SearchBarView: View {
     ///
     /// **`ActivitySurface` mounts on the `.activity` branch.** It is owned elsewhere and is not this
     /// file's to invent. What lives here is only the seam: one value (`shownBody`) deciding which of
-    /// the two the window is showing, and one place that switches on it, so the surface cannot end up
+    /// the two the panel is showing, and one place that switches on it, so the surface cannot end up
     /// drawing both or neither.
     @ViewBuilder
-    private func lowerPanel(panelWidth: CGFloat, availableBodyHeight: CGFloat) -> some View {
+    private var lowerPanel: some View {
         switch shownBody {
         case .activity:
             SearchGlassPanel {
-                // The time chips are the window's, not the surface's: `SearchTimeFilter.range`
-                // already returns exactly the bounds pair the activity store narrows on, so both
-                // bodies answer "when" from one value and cannot disagree about which day it is.
+                // The time chips are the bar's, not the surface's: `SearchTimeFilter.range` already
+                // returns exactly the bounds pair the activity store narrows on, so both bodies
+                // answer "when" from one value and cannot disagree about which day it is.
                 ActivitySurface(
                     store: store,
+                    // The real account, not the absent one. Three of the five chips — conversations,
+                    // memories, tasks — have no local source at all, so a surface built with the
+                    // default `ActivityAccountAbsent` renders four of its five filters permanently
+                    // empty and says the account is unreachable while the user is signed in.
+                    account: OmiActivityFeed(),
                     query: query,
                     since: bounds.since,
                     until: bounds.until,
-                    onOpenMoment: onOpenActivityMoment)
-                .frame(width: panelWidth, height: availableBodyHeight, alignment: .topLeading)
+                    onOpenMoment: onOpenActivityMoment
+                )
+                // Stated, not measured, and the one place this surface sizes a body by hand. The
+                // results grid hugs its content because a page of results is a finite thing; the
+                // spine is a stream of everything this Mac has done, so it is longer than the panel
+                // in every state that is not an empty install. Given the ceiling directly, it fills
+                // the tallest panel this surface allows and scrolls inside it.
+                .frame(
+                    width: SearchLayout.panelWidth, height: SearchLayout.maximumResultsBodyHeight,
+                    alignment: .topLeading)
             }
         case .results:
-            SearchGlassPanel {
-                SearchResultsView(
-                    model: results,
-                    onOpen: open,
-                    panelWidth: panelWidth,
-                    availableBodyHeight: availableBodyHeight)
-            }
+            SearchGlassPanel { SearchResultsView(model: results, onOpen: open) }
         }
     }
 
     // MARK: - The bar
 
-    private func promptBar(panelWidth: CGFloat) -> some View {
+    private var promptBar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 // The app's own mark, not the icon of whatever answers `claude://`. The glyph at the
@@ -214,18 +260,19 @@ struct SearchBarView: View {
                     .accessibilityHidden(true)
                 SearchQueryField(
                     query: $query,
-                    available: SearchLayout.queryFieldWidth(panelWidth: panelWidth),
+                    available: SearchLayout.queryFieldWidth,
                     onSubmit: submit,
-                    // **Escape clears the question; it does not close the window.** On a summoned
-                    // panel those were the same gesture. On the app's main window they are not: a
-                    // window that vanishes when you press Escape in its search field is a window you
-                    // cannot use a search field in. Clearing puts the surface back to its resting
-                    // state — the newest captures, nothing typed — which is what Escape means in
-                    // every other search field on this platform.
-                    onCancel: clear,
+                    // Escape closes the panel — **unless the activity surface has a detail open, in
+                    // which case it means "back to the spine" and the panel stays up.** The field
+                    // editor's `cancelOperation:` is one of the two routes that sees Escape; the
+                    // other is `SearchPanel.sendEvent`, which intercepts key code 53 before the
+                    // responder chain runs and must ask the same question there for this to hold in
+                    // practice. See `ActivityDetailEscape`.
+                    onCancel: cancel,
                     onGridStep: { results.move($0) })
                 Spacer(minLength: 12)
                 if note == nil { keyboardHint }
+                SearchBarExits(onOpenTimeline: onOpenTimeline, onOpenSettings: onOpenSettings)
             }
             .frame(height: SearchLayout.barHeight)
 
@@ -242,20 +289,20 @@ struct SearchBarView: View {
             }
         }
         .padding(.horizontal, SearchLayout.panelPaddingHorizontal)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: SearchLayout.panelWidth, alignment: .leading)
         .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.settle)), value: note)
     }
 
-    /// `↵  Search`, and it is also the control.
+    /// `↵  Ask Claude`, and it is also the control.
     ///
     /// The reference shows only the keycaps. A bar whose one action exists solely as a key press is
     /// unusable to anyone who cannot press it, so the hint is a button — same glyphs, same weight,
     /// with a target under them.
     ///
-    /// It says `Search` and not `Search again` even though the panel is already showing an answer by
-    /// the time anyone can read it. "Again" would be accurate and useless: the hint's job on an
-    /// untouched bar is to say what this thing *is*, and a search bar whose keycap advertises a
-    /// refresh reads as a bar that has not searched yet.
+    /// It used to say `Search`, which was true of Return and is not any more. A keycap that names the
+    /// wrong action is worse than no keycap: the panel is already full of results by the time anybody
+    /// reads it, so `Search` would read as a refresh right up until it opened another application.
+    /// The word names the one thing pressing the key does that the user cannot already see happening.
     private var keyboardHint: some View {
         Button(action: submit) {
             // Both halves on the same rung. The word used to sit a step below the keycap, which is
@@ -264,40 +311,103 @@ struct SearchBarView: View {
             // keycap still leads by shape.
             HStack(spacing: 6) {
                 Text("↵").inkStyle(.statusLabel, color: Ink.secondary)
-                Text("Search").inkStyle(.statusLabel, color: Ink.secondary)
+                Text("Ask Claude").inkStyle(.statusLabel, color: Ink.secondary)
             }
             .fixedSize()
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Self.searchActionName)
-        .help(Self.searchActionName)
+        .accessibilityLabel(Self.askActionName)
+        .help(Self.askActionName)
     }
 
-    /// What the action is called wherever it is named in words rather than in keycaps.
+    /// What **typing** is called wherever it is named in words rather than in keycaps — the field's
+    /// own label, and what the bar is.
     ///
     /// It names **both** halves on purpose. A user who has only ever seen this bar hand things to
     /// Claude has no reason to expect it to know what was said out loud, and the accessibility label
     /// is one of two places (the placeholder is the other) where that can be said in a sentence.
+    ///
+    /// It is deliberately not the *Return* key's name. Two actions live on this bar now and they do
+    /// different things, so a screen reader has to be able to tell them apart: the field searches
+    /// this Mac as you type, and the button beside it sends the question away.
     static let searchActionName = "Search this Mac's screens and conversations"
 
+    /// What Return is called. The counterpart to the keycap, and the only place the destination is
+    /// named in a sentence.
+    static let askActionName = "Ask Claude this question"
+
     // MARK: - Submit
+
+    /// **What Return means**, as a value.
+    ///
+    /// Three answers, decided in one pure place rather than in the middle of `submit`, because the
+    /// one that matters is the one nobody thinks to try: Return on a bar with nothing typed into it.
+    /// It must not launch anything — an empty question handed to another application is a window
+    /// switch the user did not ask for — and "must not" is only checkable if the decision is
+    /// something a test can call.
+    enum ReturnKey: Equatable {
+        /// A card is selected: open that moment. The selection exists for no other purpose, and a
+        /// highlighted card that Return ignored would be a dead end the user walked into on purpose.
+        case openTheSelection
+        /// Nothing typed, so there is no question to hand anybody. `ask` and not `search`: `search`
+        /// de-duplicates identical text, and capture is live, so re-asking is a real question with a
+        /// possibly different answer. Nothing leaves this app.
+        case readAgain
+        /// A question, trimmed. It goes to Claude, and it is the only thing that does.
+        case askClaude(String)
+    }
+
+    static func returnMeans(query: String, hasSelection: Bool) -> ReturnKey {
+        guard !hasSelection else { return .openTheSelection }
+        let question = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return question.isEmpty ? .readAgain : .askClaude(question)
+    }
 
     private func submit() {
         // The shared chrome cue; it honours the system UI-sound setting itself.
         Sound.effect(.click)
-        // **Return means whichever thing the keyboard is currently on.** With a card selected it
-        // opens that moment — the selection exists for no other purpose, and a highlighted card that
-        // Return ignored would be a dead end the user walked into on purpose.
-        if let selected = results.selectedMoment {
-            open(selected)
-            return
+        switch Self.returnMeans(query: query, hasSelection: results.selectedMoment != nil) {
+        case .openTheSelection:
+            if let selected = results.selectedMoment { open(selected) }
+        case .readAgain:
+            results.ask(query)
+        case .askClaude(let question):
+            askClaude(question)
         }
-        // Otherwise `ask`, not `search`: `search` de-duplicates identical text, and by the time
-        // Return is pressed the text is always identical — every keystroke already searched. Return
-        // means "ask again", and capture is live, so asking again is a real question with a possibly
-        // different answer. Nothing is cleared and nothing is dismissed: the results are the point,
-        // and a bar that emptied itself on Return would throw away the query that produced them.
-        results.ask(query)
+    }
+
+    /// Hand the question over, and say so only if it did not get there.
+    ///
+    /// **The panel dismisses on a real delivery**, for the same reason it dismisses when it opens a
+    /// moment: the answer is now in another window, and a Spotlight panel floating over the
+    /// application it just summoned is in the way of the thing it just did. It is also how the user
+    /// can tell where the question went — Claude comes forward with it in the composer, which no note
+    /// line could say better.
+    ///
+    /// Anything short of that keeps the panel up and puts the router's own sentence on the note line,
+    /// because those are the states nothing else on screen would explain: no Claude on this Mac, no
+    /// `claude` command, or a clipboard fallback that needs the user to paste. Dismissing on those
+    /// would be the silent failure this whole path is supposed to be incapable of.
+    private func askClaude(_ question: String) {
+        switch ClaudeRouter.handOff(question, to: SettingsStore.shared.claudeTarget) {
+        case .arrived:
+            handoffNote = nil
+            onDismiss()
+        case .note(let sentence):
+            handoffNote = sentence
+        }
+    }
+
+    /// **What Escape means**, in one place.
+    ///
+    /// A surface with two depths cannot have one answer to the key that leaves. The activity spine
+    /// can have a detail pushed over it, and on a panel that dismisses itself the difference between
+    /// "back" and "gone" is the difference between losing your place and losing the window. So the
+    /// detail is offered the key first; only when nothing is holding it does Escape mean what it has
+    /// always meant here.
+    private func cancel() {
+        guard !ActivityDetailEscape.shared.consume() else { return }
+        onDismiss()
     }
 
     /// Hand a moment to whoever owns the windows.
@@ -307,16 +417,93 @@ struct SearchBarView: View {
     private func open(_ moment: SearchMoment) {
         onOpenMoment(moment)
     }
+}
 
-    /// Back to the resting state: no question, no selection, the newest captures.
-    ///
-    /// `ask` and not `search`, for the same reason `submit` uses it — with the field already emptied
-    /// by the binding, `search("")` would find nothing to do and leave the previous answer on screen.
-    private func clear() {
-        results.clearSelection()
-        query = ""
-        results.ask("")
+// MARK: - The two ways out of the panel
+
+/// **The Timeline pill and the gear**, at the bar's trailing edge.
+///
+/// The regression they close: this surface had no route to either of the app's other windows. The
+/// timeline could only be reached by activating a moment — so a user with no result to activate, and
+/// anybody who wanted Settings at all, was on a surface with no way off it. `RewindView`'s header has
+/// carried a "Search All" pill and a gear since it shipped, for exactly that reason; this is that pair
+/// pointing the other way, drawn to the same metrics so the two surfaces read as one product.
+///
+/// A type of its own rather than two computed properties on `SearchBarView`, so a test can build the
+/// pair, press it, and measure what it costs the bar — see `SearchLayout.trailingControlsWidth`, which
+/// is the room the query chip gives up for it.
+struct SearchBarExits: View {
+    /// Opens the timeline. A closure rather than a call into `RewindWindow`, for the reason every
+    /// other window operation in this app is one: a view that opens windows cannot be rendered in a
+    /// test or a preview without opening them.
+    var onOpenTimeline: () -> Void = {}
+    var onOpenSettings: () -> Void = {}
+
+    var body: some View {
+        HStack(spacing: 8) {
+            timelinePill
+            gearButton
+        }
+        .fixedSize()
     }
+
+    /// "Timeline", with its chord — `RewindView.searchPill`'s shape to the point: 10/5 padding, a
+    /// capsule of `Ink.rowFill` inside `Ink.hairline`, and the shortcut in a keycap chip rather than
+    /// in the label.
+    ///
+    /// The chord is `⌘T` and not a bare key, unlike the timeline's `/`: everything typed on this
+    /// surface goes into a search field, so a shortcut without a modifier would fire in the middle of
+    /// a question.
+    private var timelinePill: some View {
+        Button(action: onOpenTimeline) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Timeline")
+                    .font(.system(size: 12, weight: .medium))
+                Text(Self.timelineShortcut)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Ink.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(Ink.wash))
+            }
+            .foregroundStyle(Ink.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Ink.rowFill)
+                    .overlay(Capsule(style: .continuous).strokeBorder(Ink.hairline, lineWidth: 1)))
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("t", modifiers: .command)
+        .accessibilityLabel(Self.timelineActionName)
+        .help(Self.timelineActionName)
+    }
+
+    /// `RewindView.gearButton`'s 26 pt disc, to the point of the glyph weight — two different gears on
+    /// two surfaces of one app is the tell that nobody looked at them together.
+    private var gearButton: some View {
+        Button(action: onOpenSettings) {
+            Image(systemName: "gearshape")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Ink.primary)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(Ink.rowFill))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Self.settingsActionName)
+        .help(Self.settingsActionName)
+    }
+
+    /// What the pill's keycap prints, and the chord it really binds. One value, so the two cannot
+    /// disagree — a hint that names a keystroke nothing listens for is worse than no hint.
+    static let timelineShortcut = "⌘T"
+    static let timelineActionName = "Open the timeline"
+    static let settingsActionName = "Settings"
 }
 
 // MARK: - The field
@@ -346,7 +533,8 @@ private struct SearchQueryField: View {
                     .fill(SearchInk.queryChipFill)
                     .overlay(
                         Capsule(style: .continuous)
-                            .strokeBorder(SearchInk.queryChipStroke, lineWidth: 1))
+                            .strokeBorder(SearchInk.queryChipStroke, lineWidth: 1)
+                    )
                     .frame(
                         width: SearchMetrics.chipWidth(for: query, available: available),
                         height: SearchMetrics.queryLineHeight)
@@ -373,26 +561,23 @@ private struct SearchQueryField: View {
 
 /// An AppKit text field, not a SwiftUI `TextField`.
 ///
-/// Three SwiftUI mechanisms were tried in the real app and none of them worked: `@FocusState` never
-/// gave the field focus, `.onSubmit` never fired on Return, and Escape reached the field (it dropped
-/// focus) without any observer of ours seeing it — including an `NSEvent.addLocalMonitorForEvents`
-/// monitor and an `NSWindow.sendEvent` override.
+/// Three SwiftUI mechanisms were tried in the real app and none of them works inside a borderless
+/// non-activating panel: `@FocusState` never gave the field focus, `.onSubmit` never fired on Return,
+/// and Escape reached the field (it dropped focus) without any observer of ours seeing it — including
+/// an `NSEvent.addLocalMonitorForEvents` monitor and an `NSPanel.sendEvent` override.
 ///
-/// **That measurement was taken on the borderless non-activating panel this surface used to be, and
-/// it is not a reason to go back and try again.** `control(_:textView:doCommandBy:)` is the
-/// documented path for both keys and the one that actually runs, and — the part that matters more
-/// than the focus story — the arrow-key routing below is the only keyboard path into the results at
-/// all. The cards cannot take focus themselves, so ripping this out for a `TextField` would take the
-/// grid's navigation with it. Everything about how it looks still comes from `Ink`.
+/// `NSTextField` reports both keys through `control(_:textView:doCommandBy:)`, which is the documented
+/// path and the one that actually runs, and it can be made first responder directly. Everything about
+/// how it looks still comes from `Ink` — the same face, size and colour roles the SwiftUI version had.
 private struct SearchField: NSViewRepresentable {
     @Binding var text: String
     let onSubmit: () -> Void
     let onCancel: () -> Void
     /// The arrow keys reach the results from here for the same reason Return and Escape do: the
-    /// field holds the first responder for as long as the user is typing, so a key press that never
+    /// field holds the first responder for the whole life of this surface, so a key press that never
     /// reaches the field's delegate never happens at all. The cards cannot take focus themselves —
-    /// full keyboard access is off by default — so this is not one way into the results, it is the
-    /// only one.
+    /// the panel is non-activating and full keyboard access is off by default — so this is not one
+    /// way into the results, it is the only one.
     ///
     /// Returns whether the results took the key, which is what lets ← and → be shared: the field
     /// keeps them until a card is selected, and gets them back the moment one is not. See
@@ -505,59 +690,18 @@ private struct SearchField: NSViewRepresentable {
     }
 }
 
-/// Takes the keyboard when the window is **asked for**, and once when it is first built.
+/// Takes focus the moment it joins a window, so the bar is typeable on the first open.
 ///
-/// The old rule was "grab first responder every time this view joins a window, twice, the second time
-/// asynchronously". That was written for a panel that was rebuilt from nothing on every ⌘⌘⇧, where
-/// the only moment the field could be given focus was the moment it appeared — and the async pass was
-/// needed because SwiftUI is still assembling the hierarchy when `viewDidMoveToWindow` runs, so a
-/// first responder set inside that pass gets replaced.
-///
-/// Neither reason survives a persistent window, and the rule actively misbehaves in one: a view that
-/// claims the first responder unconditionally whenever it is re-attached takes the keyboard away from
-/// whatever else the window contains. So the grab is once, on the way in, and after that it happens
-/// only when something says the window has been asked for — `SearchBarWindow.refocusNotification`,
-/// posted by `present()` and on `didBecomeKey`.
-///
-/// Selecting the existing text is part of the same statement: a user who summons this window with a
-/// question already in it means to replace it, exactly as ⌘-Space does.
+/// The async pass is the one that sticks: SwiftUI is still assembling the hierarchy when
+/// `viewDidMoveToWindow` runs, and a first responder set inside that pass gets replaced.
 final class FocusingTextField: NSTextField {
-    private var hasTakenTheKeyboard = false
-    private var refocusObserver: NSObjectProtocol?
-
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard let window else {
-            // Torn down here rather than in `deinit`: this is the one place that is guaranteed to be
-            // on the main actor, and an observer left behind would outlive the field it points at.
-            if let refocusObserver {
-                NotificationCenter.default.removeObserver(refocusObserver)
-                self.refocusObserver = nil
-            }
-            return
-        }
-
-        if refocusObserver == nil {
-            refocusObserver = NotificationCenter.default.addObserver(
-                forName: SearchBarWindow.refocusNotification, object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.takeTheKeyboard() }
-            }
-        }
-
-        guard !hasTakenTheKeyboard else { return }
-        hasTakenTheKeyboard = true
+        guard let window else { return }
         window.makeFirstResponder(self)
         DispatchQueue.main.async { [weak self] in
             guard let self, self.window === window else { return }
             window.makeFirstResponder(self)
         }
-    }
-
-    /// First responder, with whatever is already typed selected.
-    private func takeTheKeyboard() {
-        guard let window, window.isVisible else { return }
-        window.makeFirstResponder(self)
-        currentEditor()?.selectAll(nil)
     }
 }

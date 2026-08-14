@@ -246,6 +246,130 @@ final class ClaudeRouterTests: XCTestCase {
         XCTAssertTrue(script.contains(#"cd "$HOME" || exit 1"#), script)
     }
 
+    // MARK: - The search bar's Return
+
+    /// A launcher that records what it was asked for and answers however the case needs, so nothing
+    /// here opens an application on whoever is running the suite.
+    private func launcher(
+        answering result: Result<ClaudeRouter.Delivery, ClaudeRouter.RouteError>,
+        recording asked: @escaping (String, ClaudeRouter.Target) -> Void = { _, _ in }
+    ) -> ClaudeRouter.Route {
+        { query, target in
+            asked(query, target)
+            return result
+        }
+    }
+
+    private func delivery(
+        _ mechanism: ClaudeRouter.Mechanism, to target: ClaudeRouter.Target = .claudeApp
+    ) -> ClaudeRouter.Delivery {
+        ClaudeRouter.Delivery(
+            target: target, mechanism: mechanism, deliveredCharacters: 1, wasTruncated: false)
+    }
+
+    /// The bar's two targets are one product in two shells, and this is the constant that makes that
+    /// true: `.terminal` runs the `claude` CLI, which is Claude Code, so the app target opens the
+    /// Claude Code tab rather than the ordinary chat. The tutorial's `.chat` is the deliberate other
+    /// choice — see `ClaudeHandoff.surface` — and the two must not collapse into one.
+    @MainActor
+    func testTheBarOpensTheClaudeCodeTabAndTheTutorialDoesNot() throws {
+        XCTAssertEqual(ClaudeRouter.searchSurface, .code)
+        XCTAssertNotEqual(ClaudeRouter.searchSurface, ClaudeHandoff.surface)
+        let url = try XCTUnwrap(
+            ClaudeRouter.prefillURL(for: "what was that invoice site", surface: ClaudeRouter.searchSurface))
+        XCTAssertEqual(url.host, "code", url.absoluteString)
+    }
+
+    /// **What the bar was asked to hand over is exactly what was typed, and it goes to the target the
+    /// user picked.** Nothing is appended, nothing is inferred from the results on screen.
+    @MainActor
+    func testTheQuestionHandedOverIsTheQuestionInTheFieldAndNothingElse() {
+        for target in ClaudeRouter.Target.allCases {
+            var asked: [(String, ClaudeRouter.Target)] = []
+            _ = ClaudeRouter.handOff(
+                "what was that invoice site", to: target,
+                using: launcher(
+                    answering: .success(delivery(.terminal(cli: "/opt/homebrew/bin/claude", handler: "Ghostty"))),
+                    recording: { asked.append(($0, $1)) }))
+            XCTAssertEqual(asked.map(\.0), ["what was that invoice site"])
+            XCTAssertEqual(asked.map(\.1), [target], "the dropdown has to decide where the question goes")
+        }
+    }
+
+    /// A real delivery is the panel's cue to get out of the way, and the *only* one. Both mechanisms
+    /// that put the question in front of the user count; neither says anything, because Claude coming
+    /// forward with the prompt in it says it better than a note line could.
+    @MainActor
+    func testOnlyADeliveryTheUserCanSeeDismissesThePanel() throws {
+        let url = try XCTUnwrap(ClaudeRouter.prefillURL(for: "x", surface: .code))
+        for mechanism in [
+            ClaudeRouter.Mechanism.prefilledTab(surface: .code, url: url),
+            .terminal(cli: "/opt/homebrew/bin/claude", handler: "Ghostty"),
+        ] {
+            XCTAssertEqual(
+                ClaudeRouter.handOff("x", to: .claudeApp, using: launcher(answering: .success(delivery(mechanism)))),
+                .arrived(delivery(mechanism)))
+        }
+    }
+
+    /// **The clipboard branch is not a delivery the panel may dismiss on.** It reached Claude and
+    /// filled nothing in, so the one sentence that tells the user to paste has to still be on screen
+    /// — dismissing here would leave somebody looking at an empty composer with no idea why.
+    @MainActor
+    func testTheClipboardFallbackKeepsThePanelUpAndSaysToPaste() {
+        let handoff = ClaudeRouter.handOff(
+            "x", to: .claudeApp, using: launcher(answering: .success(delivery(.clipboard))))
+        guard case .note(let sentence) = handoff else {
+            return XCTFail("a clipboard fallback dismissed the panel: \(handoff)")
+        }
+        XCTAssertTrue(sentence.contains("paste"), sentence)
+    }
+
+    /// **A question that goes nowhere must never go nowhere quietly.** Every failure the router can
+    /// report comes back as a sentence for the note line — a Mac with no Claude, a Mac with no
+    /// `claude` command — because a Return that appeared to do nothing is the failure this return
+    /// type exists to make impossible.
+    @MainActor
+    func testAClaudeThatCannotBeReachedIsSaidOutLoud() {
+        for error in [
+            ClaudeRouter.RouteError.unavailable("I can't find Claude on this Mac."),
+            .unavailable("I can't find the claude command on this Mac."),
+            .couldNotPrepare("I couldn't start Terminal: no."),
+        ] {
+            XCTAssertEqual(
+                ClaudeRouter.handOff("x", to: .claudeApp, using: launcher(answering: .failure(error))),
+                .note(error.sentence))
+        }
+    }
+
+    /// **Return on an empty bar launches nothing**, and it is decided before any launcher is reached.
+    /// A window switch nobody asked for is the worst thing an accidental keypress on a summoned panel
+    /// could do.
+    func testReturnOnAnEmptyFieldNeverReachesClaude() {
+        for empty in ["", "   ", "\n\t "] {
+            XCTAssertEqual(
+                SearchBarView.returnMeans(query: empty, hasSelection: false), .readAgain,
+                "\(empty.debugDescription) was treated as a question")
+        }
+    }
+
+    /// A selected card outranks the question: the selection exists so Return can open it, and a
+    /// highlighted result that Return sent to Claude instead would be a dead end.
+    func testASelectedResultStillOwnsReturn() {
+        XCTAssertEqual(
+            SearchBarView.returnMeans(query: "what was that invoice site", hasSelection: true),
+            .openTheSelection)
+        XCTAssertEqual(SearchBarView.returnMeans(query: "", hasSelection: true), .openTheSelection)
+    }
+
+    /// And with a question typed and nothing selected, Return is the handoff — trimmed, so the
+    /// trailing space left by a paste is not part of what Claude is asked.
+    func testATypedQuestionWithNoSelectionIsWhatGoesToClaude() {
+        XCTAssertEqual(
+            SearchBarView.returnMeans(query: "  what was that invoice site \n", hasSelection: false),
+            .askClaude("what was that invoice site"))
+    }
+
     // MARK: - Copy
 
     /// Every mechanism has a sentence, and none of them claims a pre-fill that did not happen.

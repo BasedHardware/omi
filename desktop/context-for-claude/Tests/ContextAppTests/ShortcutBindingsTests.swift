@@ -16,6 +16,10 @@ import XCTest
 private final class FakeShortcutRegistry: ShortcutRegistry {
     /// Labels this machine "already has taken", i.e. what `RegisterEventHotKey` would refuse.
     var refusedLabels: Set<String> = []
+    /// Whether this Mac is AX-trusted. False is the state that used to be invisible in Settings: the
+    /// gesture defaults are watched for through a system-wide monitor macOS gates behind
+    /// Accessibility, so without it they simply never fire.
+    var isAXTrusted = true
     /// Every re-arm. The count is the assertion behind "immediately": a provider that only wrote to
     /// `UserDefaults` would leave this at zero and look identical in Settings.
     private(set) var reapplies = 0
@@ -34,7 +38,8 @@ private final class FakeShortcutRegistry: ShortcutRegistry {
     func readiness(for action: GlobalShortcuts.Action) -> GlobalShortcuts.Readiness {
         switch binding(for: action) {
         case .gestureDefault:
-            return .armed
+            // Exactly `GlobalShortcuts.readiness`'s own rule for this case.
+            return isAXTrusted ? .armed : .needsAccessibility
         case .recorded(let recorded):
             guard refusedLabels.contains(recorded.label) else { return .armed }
             return .rejected("Something else on this Mac already uses \(recorded.chord.display).")
@@ -161,6 +166,64 @@ final class LiveShortcutBindingsTests: XCTestCase {
         XCTAssertEqual(registry.armedChords()[.openActivity], ShortcutChord.bothCommandKeys)
     }
 
+    // MARK: Readiness
+
+    /// **The pane could not ask whether the chord it prints will fire.**
+    ///
+    /// `GlobalShortcuts.readiness(for:)` exists for Settings — its own note says the gesture defaults
+    /// cannot be registered as hot keys, that macOS gates the `flagsChanged` monitor behind
+    /// Accessibility, and that "when that grant is missing the shortcut does not fire, and
+    /// `readiness(for:)` says so rather than letting Settings imply otherwise". `ShortcutBindingProvider`
+    /// had no member for it, so Settings never asked and printed `⌘ + ⌘` on a Mac where pressing it
+    /// did nothing whatsoever. This is the seam that closes it.
+    func testAGestureDefaultWithoutAccessibilityReportsThatItWillNotFire() {
+        let bindings = provider()
+        for action in ShortcutAction.allCases {
+            XCTAssertEqual(bindings.readiness(for: action), .armed)
+        }
+
+        registry.isAXTrusted = false
+        for action in ShortcutAction.allCases {
+            XCTAssertEqual(
+                bindings.readiness(for: action), .needsAccessibility,
+                "\(action.title) is on its gesture default, which cannot fire without the grant")
+        }
+    }
+
+    /// A **recorded** chord goes through `RegisterEventHotKey`, which needs no permission at all —
+    /// so it stays armed on the same ungranted Mac. That asymmetry is the whole reason the recorder
+    /// is worth offering to a user who refused Accessibility, and a readiness that reported the
+    /// permission for both kinds of binding would send them to a pane that cannot help.
+    func testARecordedKeyEquivalentStaysArmedWithoutAccessibility() {
+        let bindings = provider()
+        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openActivity), .recorded)
+
+        registry.isAXTrusted = false
+        XCTAssertEqual(bindings.readiness(for: .openActivity), .armed)
+        XCTAssertEqual(
+            bindings.readiness(for: .openSearch), .needsAccessibility,
+            "the slot still on its gesture default is the one that stops working")
+    }
+
+    /// A refusal carries macOS's own reason all the way to the row. Flattening it into a generic
+    /// sentence would drop the only part the user can act on — which chord is already taken.
+    func testARefusedRegistrationSurfacesItsReasonAsReadiness() {
+        let bindings = provider()
+        registry.refusedLabels = ["K"]
+        // Recorded straight into the registry, bypassing `record`'s rollback, because the state
+        // being asserted is the one a *previously* stored chord lands in when the machine's other
+        // software takes the shortcut between launches.
+        registry.setRecorded(
+            GlobalShortcuts.Recorded(keyCode: 40, modifiers: [.command, .option], label: "K"),
+            for: .openActivity)
+
+        guard case .rejected(let reason) = bindings.readiness(for: .openActivity) else {
+            return XCTFail("a chord macOS refused must not read as armed")
+        }
+        XCTAssertTrue(reason.contains("already uses"), reason)
+        XCTAssertFalse(bindings.readiness(for: .openActivity).isArmed)
+    }
+
     // MARK: Refusal
 
     /// The failure the old provider could not express: it returned `.recorded` whatever happened, so
@@ -272,7 +335,8 @@ final class LiveShortcutBindingsTests: XCTestCase {
             .resolvingSymlinksInPath()
             .appendingPathComponent("context-live-conflicts-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(
-            at: root.appendingPathComponent("Codex.app", isDirectory: true), withIntermediateDirectories: true)
+            at: root.appendingPathComponent("Codex.app", isDirectory: true), withIntermediateDirectories: true
+        )
         defer { try? FileManager.default.removeItem(at: root) }
 
         let keymap = root.appendingPathComponent("keybindings.json")

@@ -2,6 +2,7 @@ import AppKit
 import CoreText
 import SwiftUI
 import XCTest
+
 @testable import ContextApp
 
 final class MenuBarPresentationTests: XCTestCase {
@@ -78,7 +79,8 @@ final class MenuBarPresentationTests: XCTestCase {
         // are meant to read as different steps is the ladder collapsing.
         XCTAssertEqual(InkType.introHero.size, 34)
         XCTAssertEqual(InkType.stepHeadline.size, 27)
-        XCTAssertEqual(InkType.firstTitle.size, InkType.stepHeadline.size, "one headline size, as on the site")
+        XCTAssertEqual(
+            InkType.firstTitle.size, InkType.stepHeadline.size, "one headline size, as on the site")
         XCTAssertEqual(InkType.prose.size, 17)
         XCTAssertEqual(InkType.rowCopy.size, 15)
         XCTAssertEqual(InkType.buttonLabel.size, 15)
@@ -143,7 +145,8 @@ final class MenuBarPresentationTests: XCTestCase {
         let card = OnboardingWindow.cardSize.width
         XCTAssertLessThanOrEqual(
             InkLayout.permissionsMaxWidth, card * 0.78,
-            "a \(InkLayout.permissionsMaxWidth) pt column runs past the backdrop's falloff on a \(card) pt card")
+            "a \(InkLayout.permissionsMaxWidth) pt column runs past the backdrop's falloff on a \(card) pt card"
+        )
 
         // The reading column keeps its measure: at 17 pt, 488 pt is already near 80 characters a
         // line, and a paragraph does not get more readable by getting wider.
@@ -217,10 +220,12 @@ final class MenuBarPresentationTests: XCTestCase {
             let lightness = InkContrastProbe.lightness(under: appearance)
             XCTAssertGreaterThanOrEqual(
                 abs(lightness.primary - lightness.secondary), 8,
-                "primary/secondary are \(lightness.primary) / \(lightness.secondary) L* in \(appearance.rawValue)")
+                "primary/secondary are \(lightness.primary) / \(lightness.secondary) L* in \(appearance.rawValue)"
+            )
             XCTAssertGreaterThanOrEqual(
                 abs(lightness.secondary - lightness.tertiary), 8,
-                "secondary/tertiary are \(lightness.secondary) / \(lightness.tertiary) L* in \(appearance.rawValue)")
+                "secondary/tertiary are \(lightness.secondary) / \(lightness.tertiary) L* in \(appearance.rawValue)"
+            )
         }
     }
 
@@ -244,6 +249,85 @@ final class MenuBarPresentationTests: XCTestCase {
         XCTAssertEqual(copy.detail, "The local connector is configured for Claude Code.")
     }
 
+    // MARK: - Capability rows
+
+    /// A row built the way the popover builds it, from the same grouped report the engine publishes.
+    private func rows(granted isGranted: @escaping (Capability) -> Bool) -> [MenuBarCapabilityRow] {
+        Permissions.groupedReport(granted: isGranted)
+            .map { MenuBarCapabilityRow(report: $0, isGranted: isGranted) }
+    }
+
+    private func row(_ group: CapabilityGroup, granted: @escaping (Capability) -> Bool)
+        -> MenuBarCapabilityRow
+    {
+        rows(granted: granted).first { $0.group == group }!
+    }
+
+    /// **The row that could not say which half was missing.**
+    ///
+    /// `CapabilityGroup.screen` is Screen Recording *and* Accessibility, and `groupedReport` ANDs
+    /// them — so with the screen granted and Accessibility not, the popover read
+    /// `Screen — Action required` over a screen that was being captured perfectly well. The user
+    /// opened Privacy & Security ▸ Screen Recording, found this app already ticked, and had nothing
+    /// to tell them the missing grant was in a different pane. The four-word status vocabulary
+    /// cannot express which member, and is not asked to: the **noun** names the work that remains.
+    func testAHalfGrantedGroupNamesTheMemberThatIsMissingRatherThanTheGroup() {
+        let screen = row(.screen, granted: { $0 != .accessibility })
+        XCTAssertEqual(screen.noun, "Accessibility")
+        XCTAssertFalse(screen.granted)
+
+        // The symmetrical case, which had the same defect: the microphone works, the system-audio
+        // tap does not, and the row said "Microphone".
+        let microphone = row(.microphone, granted: { $0 != .systemAudio })
+        XCTAssertEqual(microphone.noun, "System audio")
+        XCTAssertFalse(microphone.granted)
+    }
+
+    /// With nothing granted, the noun is the group's own — the first thing to do is the thing the
+    /// group is named after, so renaming the row there would be churn with no information in it.
+    func testAWhollyMissingGroupKeepsItsOwnNoun() {
+        XCTAssertEqual(row(.screen, granted: { _ in false }).noun, "Screen")
+        XCTAssertEqual(row(.microphone, granted: { _ in false }).noun, "Microphone")
+    }
+
+    /// And a settled group is called what it has always been called. A row whose name moved while
+    /// nothing was wrong would make the popover unreadable at a glance, which is its only job.
+    func testAGrantedGroupKeepsItsOwnNounAndReportsGranted() {
+        for row in rows(granted: { _ in true }) {
+            XCTAssertTrue(row.granted)
+            XCTAssertEqual(row.noun, row.group.namesake.noun)
+        }
+        XCTAssertEqual(rows(granted: { _ in true }).map(\.noun), ["Microphone", "Screen"])
+    }
+
+    /// **The status column is untouched.** `docs/design-system.md` § Permission row fixes it at four
+    /// words, and the whole point of moving the noun is that the vocabulary did not have to grow a
+    /// fifth. `Permissions` stays its only author — this type passes `detail` through unchanged.
+    func testTheStatusWordStaysInsideTheDesignSystemVocabulary() {
+        let vocabulary: Set<String> = ["Granted", "Open", "Checking", "Action required"]
+        for granted in [
+            { (_: Capability) in true }, { (_: Capability) in false }, { $0 != Capability.accessibility },
+        ] {
+            for (row, report) in zip(rows(granted: granted), Permissions.groupedReport(granted: granted)) {
+                XCTAssertTrue(vocabulary.contains(row.status), row.status)
+                XCTAssertEqual(row.status, report.detail, "the status word is not this type's to decide")
+                XCTAssertEqual(row.granted, report.granted)
+            }
+        }
+    }
+
+    /// The noun names the pane the row's own tap opens (`StatusView.handle`), which is what makes it
+    /// actionable rather than merely more precise: both read `firstMissing`, so a user sent to
+    /// Accessibility was told the row was about Accessibility.
+    func testTheNounNamesThePaneTheTapWouldOpen() {
+        for missing in Capability.allCases {
+            let isGranted: (Capability) -> Bool = { $0 != missing }
+            guard let group = CapabilityGroup.allCases.first(where: { $0.members.contains(missing) }) else {
+                return XCTFail("\(missing) belongs to no group")
+            }
+            XCTAssertEqual(row(group, granted: isGranted).noun, missing.noun)
+        }
+    }
 }
 
 // MARK: - The bundled faces
@@ -266,7 +350,8 @@ enum InkTestFonts {
             .deletingLastPathComponent()  // Tests
             .deletingLastPathComponent()  // package root
             .appendingPathComponent("Resources/Fonts", isDirectory: true)
-        let contents = (try? FileManager.default.contentsOfDirectory(at: fonts, includingPropertiesForKeys: nil)) ?? []
+        let contents =
+            (try? FileManager.default.contentsOfDirectory(at: fonts, includingPropertiesForKeys: nil)) ?? []
         for url in contents where ["otf", "ttf"].contains(url.pathExtension.lowercased()) {
             var error: Unmanaged<CFError>?
             _ = CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)

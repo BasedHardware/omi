@@ -24,9 +24,9 @@ import Sparkle
 /// a feed every six hours while a switch labelled "Stops this app from reaching the network" is on
 /// would be the exact broken promise `Backend/NetworkEgress.swift` was written to end — that file
 /// exists because Airgap Mode once meant "no favicons" while the app uploaded the user's screen. So
-/// `.updateCheck` names itself in `NetworkEgress.Client` and is enforced in two places: Sparkle's own
-/// permission gate, which fires before the feed is fetched and is the only seam the *background*
-/// checker has, and ``checkForUpdates()``, which explains itself rather than silently doing nothing.
+/// `.updateCheck` names itself in `NetworkEgress.Client` and is enforced at every point Sparkle will
+/// let it be — see ``UpdateEgress`` — plus ``checkForUpdates()``, which explains itself rather than
+/// silently doing nothing.
 @MainActor
 final class ContextUpdater: ObservableObject {
 
@@ -142,10 +142,75 @@ final class ContextUpdater: ObservableObject {
   }
 }
 
+/// Every moment Sparkle reaches the network on this app's behalf, and the one switch all of them ask.
+///
+/// **A check and its download are two requests, and they were guarded as one.** `mayPerform` fires
+/// before the appcast is fetched, and with `automaticallyDownloadsUpdates` true Sparkle then goes on
+/// — release notes, then the archive — without asking again. So "was the check allowed?" was the
+/// only question the app ever answered, and Airgap Mode turned on between the feed coming back and
+/// the archive going out still pulled tens of megabytes from a host the user had just asked this app
+/// to stop talking to. Naming the steps makes the omission visible; asking at each one closes it.
+///
+/// The list is exhaustive for the same reason `NetworkEgress.Client` is: a step nobody enumerated is
+/// a step nobody can check, and `UpdatePolicyTests` iterates ``Step/allCases``.
+///
+/// **What this cannot do, stated plainly.** Sparkle exposes no way to cancel a download already in
+/// flight — there is no delegate callback during one and no public cancel on `SPUUpdater` — so a
+/// switch flipped *mid-archive* is obeyed on the next step, not on the current byte. Every point
+/// Sparkle offers is used here; the remaining window is Sparkle's, not this app's.
+enum UpdateEgress {
+
+  /// The three callbacks, in the order Sparkle invokes them.
+  ///
+  /// Raw values are the slugs a refusal is recorded under, so they are fixed and carry no user text.
+  enum Step: String, CaseIterable, Sendable {
+    /// `updater(_:mayPerform:)` — before the appcast is fetched. The only seam the *background*
+    /// checker has: nobody calls it, so nobody can guard it at a call site.
+    case feedCheck = "feed-check"
+    /// `updater(_:shouldDownloadReleaseNotesForUpdate:)` — a second request, to the
+    /// `<releaseNotesLink>` in the feed. Cheap, and still a request the user was told would not be
+    /// made.
+    case releaseNotes = "release-notes"
+    /// `updater(_:shouldProceedWithUpdate:updateCheck:)` — the last callback before Sparkle
+    /// downloads the archive, and the only one that can refuse it.
+    case archiveDownload = "archive-download"
+  }
+
+  /// Whether `step` may reach the network right now, recording the refusal when it may not.
+  ///
+  /// The flag is read here rather than passed in from the step before, because the whole point is
+  /// that the answer changes between steps. `isSuppressed` is injected so both answers are drivable
+  /// in a test without a feed, an archive, or a running updater.
+  static func permits(
+    _ step: Step,
+    isSuppressed: () -> Bool = { NetworkEgress.isSuppressed(.updateCheck) }
+  ) -> Bool {
+    guard isSuppressed() else { return true }
+    ContextLog.info("update \(step.rawValue) suppressed: Airgap Mode is on", "update")
+    NetworkEgress.recordSuppression(.updateCheck, outcome: .degraded)
+    return false
+  }
+
+  /// What Sparkle is thrown when a step is refused. Carries the same sentence the Settings row
+  /// shows, so a refusal reads the same wherever it surfaces.
+  static var refusal: NSError {
+    NSError(
+      domain: "com.omi.context-for-claude.update",
+      code: 1,
+      userInfo: [NSLocalizedDescriptionKey: NetworkEgress.explanation(.updateCheck)])
+  }
+}
+
 /// Sparkle's delegate, kept separate because Sparkle requires an `NSObject` and calls back on its own
 /// schedule — including from `willInstallUpdate:`, moments before it terminates the process.
+///
+/// Internal rather than private so a test can ask the ObjC runtime whether this class actually
+/// implements the callbacks Airgap Mode is enforced through. That is not ceremony: `SPUUpdaterDelegate`
+/// is an all-optional protocol, Sparkle decides what to call with `-respondsToSelector:`, and a gate
+/// written for a callback that is never invoked looks exactly like a gate that works. The download
+/// gate below was missing for as long as this file existed, and nothing failed.
 @MainActor
-private final class UpdaterEvents: NSObject, SPUUpdaterDelegate {
+final class UpdaterEvents: NSObject, SPUUpdaterDelegate {
 
   /// Weak: Sparkle holds the delegate for the life of the updater, and the updater is owned by the
   /// object this points back at.
@@ -160,12 +225,29 @@ private final class UpdaterEvents: NSObject, SPUUpdaterDelegate {
   /// manual. Throwing here is how Airgap Mode is enforced against the *background* checker, which
   /// has no other seam: nobody calls it, so nobody can guard it at a call site.
   func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
-    guard NetworkEgress.isSuppressed(.updateCheck) else { return }
-    NetworkEgress.recordSuppression(.updateCheck, outcome: .degraded)
-    throw NSError(
-      domain: "com.omi.context-for-claude.update",
-      code: 1,
-      userInfo: [NSLocalizedDescriptionKey: NetworkEgress.explanation(.updateCheck)])
+    guard UpdateEgress.permits(.feedCheck) else { throw UpdateEgress.refusal }
+  }
+
+  /// The release notes named by `<releaseNotesLink>` are a second request to a second URL, and
+  /// Sparkle would fetch them to render its sheet. Returning `false` costs the sheet its notes and
+  /// nothing else.
+  func updater(_ updater: SPUUpdater, shouldDownloadReleaseNotesForUpdate item: SUAppcastItem) -> Bool {
+    UpdateEgress.permits(.releaseNotes)
+  }
+
+  /// **The gate on the download itself.** Sparkle has chosen an item from the feed and is about to
+  /// fetch the archive; throwing here means the user is neither shown it nor sent it.
+  ///
+  /// This is the callback the app did not implement, and the gap it left was not theoretical:
+  /// `automaticallyDownloadsUpdates` is true, so an allowed check ran straight on into a download
+  /// with no second question. Someone who turned Airgap Mode on while the appcast was in flight got
+  /// the archive anyway.
+  func updater(
+    _ updater: SPUUpdater,
+    shouldProceedWithUpdate updateItem: SUAppcastItem,
+    updateCheck: SPUUpdateCheck
+  ) throws {
+    guard UpdateEgress.permits(.archiveDownload) else { throw UpdateEgress.refusal }
   }
 
   /// A downloaded update is extracted in the background. This state/message is also reflected in

@@ -95,6 +95,11 @@ enum MCPNetworkEgress {
     /// carry conversation ids and the query would carry the user's own words, so neither is logged —
     /// there is nothing here but constants.
     static func recordSuppression() {
-        MCPServer.note("[fallback] area=mcp from=omi-backend to=suppressed reason=airgap-mode outcome=degraded")
+        // Interpolated rather than spelled out, so the slug this process reports under and the one
+        // `NetworkEgress.Client.mcpOmiBackend` audits in the app cannot drift apart silently. The two
+        // targets cannot see each other's types; this constant is the whole of the contract.
+        MCPServer.note(
+            "[fallback] area=mcp from=\(OmiBackend.egressClientName) to=suppressed "
+                + "reason=airgap-mode outcome=degraded")
     }
 }

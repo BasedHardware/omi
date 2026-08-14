@@ -141,7 +141,7 @@ final class SearchResultsModel: ObservableObject {
     /// **Closed is the resting state, and that is the whole of a defect this surface shipped with.**
     /// The filter block is three full-width sections — time chips, a site row, a row of 46 pt app
     /// icons — and it sat above the results inside a panel whose ceiling is
-    /// `SearchLayout.defaultResultsBodyHeight`. It ate very nearly all of it. So the answer to a
+    /// `SearchLayout.maximumResultsBodyHeight`. It ate very nearly all of it. So the answer to a
     /// query was: a screenful of filter furniture, the word `RESULTS`, one row of cards, and the
     /// next row sliced by the panel's edge. A person who had just searched their own machine saw
     /// three of their hundred-and-nine screenshots without scrolling, under a stack of controls they
@@ -183,13 +183,11 @@ final class SearchResultsModel: ObservableObject {
 
     /// **The capture database, asked for on every read rather than captured once.**
     ///
-    /// A provider and not a `ContextStore?`, and the difference is the whole of a latent bug the main
-    /// window would have made permanent. The store opens lazily on the engine's own queue, so it is
-    /// routinely `nil` for the second or two after launch. While the search surface was rebuilt from
-    /// nothing on every open, a `nil` healed itself — the next open captured a store that was by then
-    /// open. The window is built once and kept for the life of the process, so the same code would
-    /// have captured `nil` **forever**: a surface that renders as permanently empty, with no error to
-    /// explain it and no path back.
+    /// A provider and not a `ContextStore?`. The store opens lazily on the engine's own queue, so it
+    /// is routinely `nil` for the second or two after launch — and a surface handed that `nil` once,
+    /// at construction, holds it for as long as it lives: a panel summoned in that second renders as
+    /// permanently empty, with no error to explain it and no path back. Asked for on every read
+    /// instead, so the answer is always the store that exists *now*.
     private let store: () -> ContextStore?
 
     init(store: @escaping () -> ContextStore?) {
@@ -471,11 +469,11 @@ final class SearchResultsModel: ObservableObject {
 
     /// **Reads again once capture has a database to read.**
     ///
-    /// The other half of the provider above. A window opened at launch asks before the store is open
-    /// and gets nothing; without this it would sit on an empty panel until the user typed, which on
-    /// the app's main window is the first thing anybody sees. Nothing publishes the store's opening —
-    /// `Engine.contextStore` is a computed property over the capture stack's own queue — so this
-    /// looks, briefly and at a cadence nobody can perceive.
+    /// The other half of the provider above. A panel summoned before the store is open asks and gets
+    /// nothing; without this it would sit on an empty body until the user typed, which is the first
+    /// thing anybody sees. Nothing publishes the store's opening — `Engine.contextStore` is a
+    /// computed property over the capture stack's own queue — so this looks, briefly and at a cadence
+    /// nobody can perceive.
     ///
     /// **Bounded, and that is not a detail.** A store that never opens is a real state (a denied
     /// grant, a disk that will not take the file), and an unbounded retry against it is a loop that

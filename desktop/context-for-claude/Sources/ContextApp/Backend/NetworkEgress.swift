@@ -42,8 +42,22 @@ enum NetworkEgress {
         /// Sparkle asking the appcast whether a newer build exists, and downloading it if so. Not an
         /// Omi endpoint and not the user's data — but "off this Mac" is the test, not "to Omi", and
         /// a scheduled request every six hours discloses that this app is installed here and which
-        /// build is running. See `Update/ContextUpdater.swift` for the two places it is enforced.
+        /// build is running. See `Update/UpdateEgress.Step` for the three places it is enforced.
         case updateCheck = "update-check"
+        /// `context-for-claude-mcp` reading `https://api.omi.me/v1/mcp/*` — a *different process*,
+        /// spawned per Claude session, with its own `URLSession`.
+        ///
+        /// It is in this list even though nothing in this target calls it, and that is the point.
+        /// The enumeration is the audited answer to "does Airgap Mode cover everything the product
+        /// does?", and a sibling process the app itself launches is part of the product; leaving it
+        /// out let `AirgapEgressTests` iterate `allCases` and report full coverage while the largest
+        /// per-request disclosure the product makes — the user's own recall queries — was outside
+        /// the list entirely. The guard lives where the socket does, in
+        /// `ContextMCPKit/OmiBackend.swift`, and answers to `MCPNetworkEgress`; the raw value here
+        /// is `OmiBackend.egressClientName`, so the record that process emits and the record this
+        /// one would emit are the same line. `ContextApp` cannot link `ContextMCPKit`, so the two
+        /// halves are tied by that shared slug and by a test on each side.
+        case mcpOmiBackend = "omi-backend"
 
         /// The subsystem a suppression is reported under, so the fallback record lands in the same
         /// area as that client's other degradations rather than in an "airgap" bucket of its own.
@@ -52,7 +66,7 @@ enum NetworkEgress {
             case .signIn, .tokenRefresh: return .auth
             case .omiAPI, .screenActivitySync, .conversationUpload: return .upload
             case .listenSocket, .speechModelDownload: return .capture
-            case .mcpKeyProvisioning: return .mcp
+            case .mcpKeyProvisioning, .mcpOmiBackend: return .mcp
             // Both land in `settings` because that is where the user meets them: the favicon beside
             // an exclusion row, and the Updates row's "Check Now". There is no `updates` area, and
             // adding one for a single client would put a suppression nobody is looking for into a
@@ -98,6 +112,13 @@ enum NetworkEgress {
         case .screenActivitySync, .conversationUpload, .omiAPI, .mcpKeyProvisioning:
             return "Airgap Mode is on, so nothing is being uploaded to your Omi account. "
                 + "Everything stays captured on this Mac and syncs when you turn it off."
+        case .mcpOmiBackend:
+            // Reads, not uploads, and the reader is Claude — so this says what an answer is missing
+            // rather than what is queued. The sentence the MCP process actually renders is
+            // `MCPNetworkEgress.suppressedReadClause`, written for a model rather than for a
+            // Settings row; this is the same promise in this list's voice.
+            return "Airgap Mode is on, so Context for Claude's MCP tools aren't reading your Omi "
+                + "account. They still answer from what this Mac captured locally."
         case .listenSocket:
             return "Airgap Mode is on, so audio isn't being sent for cloud transcription. "
                 + "Transcription continues on this Mac."
@@ -129,6 +150,9 @@ enum NetworkEgress {
     /// go up later is `.degraded`, work that is gone for good is `.dropped`. Nothing in this app
     /// passes `.dropped` for a *user* artefact — see each call site.
     static func recordSuppression(_ client: Client, outcome: ContextFallbackOutcome) {
+        #if DEBUG
+        observer?(client, outcome)
+        #endif
         ContextTelemetry.recordFallback(
             area: client.area,
             from: client.rawValue,
@@ -136,4 +160,18 @@ enum NetworkEgress {
             reason: "airgap-mode",
             outcome: outcome)
     }
+
+    #if DEBUG
+    /// Every suppression this app records, offered here before it reaches the log.
+    ///
+    /// It exists because of `MCPKeyProvisioner.retire`, which refused correctly and reported
+    /// nothing for as long as it existed. A guard is the conspicuous half of a suppression and the
+    /// record is the half nobody misses until the telemetry is read, so "was it gated?" and "did it
+    /// say so?" have to be separately checkable — and `ContextTelemetry` writes to `os.Logger`,
+    /// which a test cannot read back.
+    ///
+    /// DEBUG-only and `nil` in production: this is a way to *watch* the one writer, not a second
+    /// one. A test that sets it must clear it again, or the next test inherits its recorder.
+    nonisolated(unsafe) static var observer: ((Client, ContextFallbackOutcome) -> Void)?
+    #endif
 }

@@ -135,12 +135,13 @@ final class SearchRenderHarness: XCTestCase {
         NSApp.appearance = NSAppearance(named: appearance)
 
         let screen = try XCTUnwrap(NSScreen.main)
-        // The window's own default frame, which is what a person opening this app actually sees. It
-        // used to be "the tallest the surface can get", because the surface resized itself to its
-        // content and the harness had no such loop to run; the window is a fixed frame the content
-        // fits into now, so there is nothing to predict.
-        let surface = SearchLayout.defaultWindowSize.width
-        let height = SearchLayout.defaultWindowSize.height
+        let surface = SearchLayout.surfaceWidth
+        // The tallest the surface can get. The shipped window resizes itself to the measured height
+        // (`onHeightChange`); this harness has no such loop, so it opens at the ceiling and lets the
+        // panel sit shorter inside it rather than clipping a panel that grew.
+        let height = SearchLayout.surfaceHeight(
+            showingNote: false,
+            panelHeight: SearchLayout.panelHeaderHeight + SearchLayout.maximumResultsBodyHeight)
         // The captured rectangle: the surface plus a frame of synthetic desktop around it, so the
         // shadow and the glass have something real to sit on and the whole capture is ours.
         let inset: CGFloat = 34
@@ -160,7 +161,16 @@ final class SearchRenderHarness: XCTestCase {
             contentRect: backdropFrame, styleMask: [.borderless], backing: .buffered, defer: false)
         backdrop.isOpaque = true
         backdrop.hasShadow = false
-        backdrop.level = .floating
+        // **`.screenSaver`, not `.floating`.** The backdrop is the entire privacy guarantee, and the
+        // frame it guards is written to a file on disk. At `.floating` it only clears *this*
+        // process's windows: another application's panel, notification or overlay sits at the same
+        // level or above it, lands inside the captured rectangle, and is then somebody's real screen
+        // in a PNG. Measured rather than assumed — two frames of an earlier run of these render
+        // harnesses came back with a browser's window furniture and its coloured reflections along
+        // the edge. Anything left
+        // floating above this window ends up in the capture, so it goes above the levels an ordinary
+        // application window can reach.
+        backdrop.level = .screenSaver
         backdrop.contentView = {
             let view = NSImageView(frame: NSRect(origin: .zero, size: backdropFrame.size))
             view.image = desktop
@@ -172,42 +182,33 @@ final class SearchRenderHarness: XCTestCase {
         let panelFrame = NSRect(
             x: backdropFrame.minX + inset, y: backdropFrame.minY + inset,
             width: surface, height: height)
-        // **The shipped window's shape, not a stand-in for it.** This used to rebuild the borderless
-        // non-activating panel by hand, which would now emit goldens of a surface that does not
-        // ship — no title bar, no window shadow, two pieces of glass over the desktop instead of two
-        // regions on one. Same style mask, same `WindowGlass.wear(_:as: .titled)`, same
-        // `InkGlassView` container and constraints as `SearchBarWindow.present`.
+        // **The shipped surface's shape, not a stand-in for it.** The same borderless non-activating
+        // panel `SearchBarWindow.present` puts up: transparent ground, no window shadow — each panel
+        // casts its own, inside the window — and the light pin that keeps the type dark on a Dark Mac.
         //
-        // `.popUpMenu` is the one deliberate difference: the harness has an opaque backdrop window
-        // it must sit on top of, and window level is not something a golden can see.
-        let window = NSWindow(
+        // The level is the one deliberate difference: it has to clear the backdrop above, which sits
+        // at `.screenSaver`, and window level is not something a golden can see.
+        let window = NSPanel(
             contentRect: panelFrame,
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false)
-        window.title = SearchBarWindow.title
-        window.minSize = SearchLayout.minimumWindowSize
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = false
         window.isReleasedWhenClosed = false
-        WindowGlass.wear(window, as: .titled)
-        window.level = .popUpMenu
+        InkGlass.pin(window)
+        window.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
 
-        let root = InkGlassView(
-            frame: NSRect(origin: .zero, size: panelFrame.size), style: .fullBleed)
+        let root = NSView(frame: NSRect(origin: .zero, size: panelFrame.size))
         root.autoresizingMask = [.width, .height]
-        window.contentView = root
-        root.layoutSubtreeIfNeeded()
 
         let hosting = NSHostingView(
             rootView: SearchBarView(query: query, results: model))
-        hosting.sizingOptions = [.minSize, .maxSize]
-        hosting.translatesAutoresizingMaskIntoConstraints = false
+        hosting.frame = root.bounds
+        hosting.autoresizingMask = [.width, .height]
         root.addSubview(hosting)
-        NSLayoutConstraint.activate([
-            hosting.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            hosting.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            hosting.topAnchor.constraint(equalTo: root.topAnchor),
-            hosting.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-        ])
+        window.contentView = root
         window.orderFrontRegardless()
 
         // A run loop, not a sleep: the material samples the desktop through the window server, the

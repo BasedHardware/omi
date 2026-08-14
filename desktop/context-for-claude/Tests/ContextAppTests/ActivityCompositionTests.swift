@@ -67,10 +67,49 @@ final class ActivityCompositionTests: XCTestCase {
         ]
     }
 
+    private func accountConversation(
+        id: String, start: Date, minutes: Double, title: String = "Team Refines Omi Update Video",
+        emoji: String = "🎬", overview: String? = nil
+    ) -> ActivityAccountConversation {
+        ActivityAccountConversation(
+            id: id,
+            title: title,
+            emoji: emoji,
+            startedAt: start.timeIntervalSince1970,
+            finishedAt: start.addingTimeInterval(minutes * 60).timeIntervalSince1970,
+            overview: overview)
+    }
+
+    private func accountMemory(id: String, at timestamp: Date, content: String = "prefers async")
+        -> ActivityAccountMemory
+    {
+        ActivityAccountMemory(id: id, content: content, at: timestamp.timeIntervalSince1970)
+    }
+
+    private func accountTask(
+        id: String, at timestamp: Date, text: String = "send the deck", completed: Bool = false
+    ) -> ActivityAccountTask {
+        ActivityAccountTask(
+            id: id, text: text, completed: completed, at: timestamp.timeIntervalSince1970)
+    }
+
     private func compose(
-        sessions: [SessionSummary] = [], screen: [Date: ActivityDayScreen] = [:]
+        sessions: [SessionSummary] = [],
+        account: ActivityAccountFeed = .unreachable,
+        screen: [Date: ActivityDayScreen] = [:]
     ) -> [ActivityDay] {
-        ActivityComposer.compose(sessions: sessions, screen: screen, calendar: Self.calendar)
+        ActivityComposer.compose(
+            sessions: sessions, account: account, screen: screen, calendar: Self.calendar)
+    }
+
+    /// The id a local session takes in the merged stream, so the assertions below read as the rule
+    /// rather than as a string somebody typed twice.
+    private func localRow(_ sessionID: Int64) -> String {
+        "conv:\(ActivityConversation.localID(sessionID))"
+    }
+
+    private func localShotRow(_ sessionID: Int64) -> String {
+        "conv-shot:\(ActivityConversation.localID(sessionID))"
     }
 
     // MARK: - Order
@@ -87,7 +126,9 @@ final class ActivityCompositionTests: XCTestCase {
             ])
 
         XCTAssertEqual(days.map(\.id), [startOfDay(11), startOfDay(10)])
-        XCTAssertEqual(days[1].rows.map(\.id), ["conv:2", "conv:1"], "the later conversation leads")
+        XCTAssertEqual(
+            days[1].rows.map(\.id), [localRow(2), localRow(1)],
+            "the later conversation leads")
         XCTAssertEqual(
             days.flatMap(\.rows).map(\.anchor), days.flatMap(\.rows).map(\.anchor).sorted(by: >))
     }
@@ -110,7 +151,7 @@ final class ActivityCompositionTests: XCTestCase {
                 ]))
 
         let rows = try! XCTUnwrap(days.first).rows
-        XCTAssertEqual(rows.map(\.id), ["conv:1", "conv-shot:1", "shot:10"])
+        XCTAssertEqual(rows.map(\.id), [localRow(1), localShotRow(1), "shot:10"])
 
         let attached = rows[1]
         XCTAssertTrue(attached.isAttached, "a frame inside the window is a child of the row above")
@@ -140,7 +181,7 @@ final class ActivityCompositionTests: XCTestCase {
                 ]))
 
         let rows = try! XCTUnwrap(days.first).rows
-        let attached = rows.first { $0.id == "conv-shot:1" }
+        let attached = rows.first { $0.id == localShotRow(1) }
         XCTAssertNotNil(attached, "the frame inside the window must still find its conversation")
         guard case .moments(let shown, _)? = attached?.content else {
             return XCTFail("the attached row is a strip")
@@ -162,8 +203,8 @@ final class ActivityCompositionTests: XCTestCase {
 
         XCTAssertTrue(days[0].rows.contains { $0.isAttached }, "unfiltered, the strip is a child")
 
-        let soloed = ActivityComposer.filter(days, kind: .screen, query: "")
-        XCTAssertEqual(soloed.flatMap(\.rows).map(\.kind), [.screen])
+        let soloed = ActivityComposer.filter(days, kind: .rewind, query: "")
+        XCTAssertEqual(soloed.flatMap(\.rows).map(\.kind), [.rewind])
         XCTAssertTrue(
             soloed.flatMap(\.rows).allSatisfy { !$0.isAttached },
             "a soloed row has nothing above it to inherit a timestamp from")
@@ -179,7 +220,7 @@ final class ActivityCompositionTests: XCTestCase {
             ])
         XCTAssertEqual(days.count, 2)
 
-        let filtered = ActivityComposer.filter(days, kind: .everything, query: "slack")
+        let filtered = ActivityComposer.filter(days, kind: .all, query: "slack")
         XCTAssertEqual(filtered.map(\.id), [startOfDay(11)])
     }
 
@@ -216,8 +257,8 @@ final class ActivityCompositionTests: XCTestCase {
             ])
 
         let filtered = ActivityComposer.filter(
-            days, kind: .everything, query: "", earliest: at(day: 10, hour: 12))
-        XCTAssertEqual(filtered.flatMap(\.rows).map(\.id), ["conv:2"])
+            days, kind: .all, query: "", earliest: at(day: 10, hour: 12))
+        XCTAssertEqual(filtered.flatMap(\.rows).map(\.id), [localRow(2)])
     }
 
     // MARK: - Clusters
@@ -271,7 +312,7 @@ final class ActivityCompositionTests: XCTestCase {
             screen: screen(10, [frame, frame], total: 2))
 
         let rows = try! XCTUnwrap(days.first).rows
-        XCTAssertEqual(rows.map(\.id), ["conv:1", "conv-shot:1"])
+        XCTAssertEqual(rows.map(\.id), [localRow(1), localShotRow(1)])
         guard case .moments(let shown, let total) = rows[1].content else {
             return XCTFail("the attached row is a strip")
         }
@@ -335,8 +376,8 @@ final class ActivityCompositionTests: XCTestCase {
         XCTAssertEqual(quiet.subtitle, "8m 9s")
 
         let full = ActivityConversation(
-            session: session(id: 2, start: at(day: 10, hour: 14), minutes: 8.15, lines: 4),
-            momentCount: 6)
+            session: session(id: 2, start: at(day: 10, hour: 14), minutes: 8.15, lines: 4)
+        ).counted(momentCount: 6)
         XCTAssertEqual(full.subtitle, "8m 9s · 4 spoken lines · 6 screen moments")
 
         let instant = ActivityConversation(
@@ -344,6 +385,18 @@ final class ActivityCompositionTests: XCTestCase {
         XCTAssertEqual(
             instant.subtitle, ActivityFormat.time(at(day: 10, hour: 14)),
             "a row with no counts still says when it happened")
+
+        // An account conversation is a summary, not a recording: it has no spoken lines to count, so
+        // the clause is dropped rather than printed as "0 spoken lines".
+        let fromAccount = ActivityConversation(
+            account: accountConversation(id: "a1", start: at(day: 10, hour: 14), minutes: 8.15))
+        XCTAssertEqual(fromAccount.subtitle, "8m 9s")
+        XCTAssertEqual(fromAccount.title, "Team Refines Omi Update Video")
+        XCTAssertEqual(fromAccount.emoji, "🎬")
+        XCTAssertNil(
+            ActivityConversation(session: session(id: 4, start: at(day: 10, hour: 9), minutes: 5))
+                .emoji,
+            "a local session has no emoji to show, and must not be given an invented one")
     }
 
     func testPluralAgreesWithItsCountAndGroupsItsDigits() {
@@ -410,16 +463,189 @@ final class ActivityCompositionTests: XCTestCase {
 
     /// `everything` is the absence of a filter, not a third kind of row. A row that held it would be
     /// invisible to both chips.
-    func testNoRowIsEverEverything() {
+    func testNoRowIsEverAll() {
         let start = at(day: 10, hour: 14)
         let days = compose(
             sessions: [session(id: 1, start: start, minutes: 30)],
+            account: ActivityAccountFeed(
+                memories: [accountMemory(id: "m1", at: at(day: 10, hour: 11))],
+                tasks: [accountTask(id: "t1", at: at(day: 10, hour: 12))]),
             screen: screen(10, [moment(id: 60, at: start.addingTimeInterval(60))]))
 
-        XCTAssertFalse(days.flatMap(\.rows).contains { $0.kind == .everything })
-        XCTAssertEqual(ActivityKind.chips, [.everything, .conversations, .screen])
+        XCTAssertFalse(days.flatMap(\.rows).contains { $0.kind == .all })
         XCTAssertEqual(
-            ActivityKind.chips.map(\.title), ["Activity", "Conversations", "Screens"])
+            ActivityKind.chips, [.all, .conversations, .memories, .tasks, .rewind])
+        XCTAssertEqual(
+            ActivityKind.chips.map(\.title),
+            ["All", "Conversations", "Memories", "Tasks", "Rewind"])
+    }
+
+    // MARK: - The account half
+
+    /// **The account's telling of a conversation wins over this Mac's.** They are one conversation
+    /// described twice — the Mac heard the speech, the account summarised it — and showing both would
+    /// print every conversation on the spine as a pair the moment somebody signs in.
+    func testALocalSessionOverlappingAnAccountConversationIsDroppedForIt() {
+        let start = at(day: 10, hour: 14)
+        let days = compose(
+            sessions: [
+                // Starts a minute after the account's, which is the ordinary case: two clocks, one
+                // conversation.
+                session(id: 1, start: start.addingTimeInterval(60), minutes: 28),
+                // Hours away from anything the account knows about.
+                session(id: 2, start: at(day: 10, hour: 20), minutes: 10, app: "Slack"),
+            ],
+            account: ActivityAccountFeed(
+                conversations: [accountConversation(id: "a1", start: start, minutes: 30)]))
+
+        let rows = try! XCTUnwrap(days.first).rows
+        XCTAssertEqual(
+            rows.map(\.id), [localRow(2), "conv:a1"],
+            "the overlapping local session is gone; the one with no counterpart survives")
+
+        guard case .conversation(let survivor) = rows[0].content,
+            case .conversation(let fromAccount) = rows[1].content
+        else { return XCTFail("both rows are conversations") }
+        XCTAssertEqual(survivor.source, .local)
+        XCTAssertEqual(survivor.title, "Slack conversation", "no title means the app, not a guess")
+        XCTAssertEqual(fromAccount.source, .account)
+        XCTAssertEqual(fromAccount.title, "Team Refines Omi Update Video")
+        XCTAssertEqual(
+            try! XCTUnwrap(days.first).conversationCount, 2,
+            "the day counts the conversations it kept, not the records it read")
+    }
+
+    /// Memories and tasks are their own rows, grouped by the run they came out of, and they **never
+    /// attach**: the seam carries no conversation id, so a memory landing inside a conversation's
+    /// window is a coincidence until the account says otherwise.
+    func testMemoriesAndTasksClusterIntoRowsAndNeverAttach() {
+        let start = at(day: 10, hour: 14)
+        let gap = ActivityComposer.momentClusterGap
+        let days = compose(
+            sessions: [session(id: 1, start: start, minutes: 30)],
+            account: ActivityAccountFeed(
+                memories: [
+                    // Both inside the conversation's window, and close enough to be one run.
+                    accountMemory(id: "m1", at: start.addingTimeInterval(120)),
+                    accountMemory(id: "m2", at: start.addingTimeInterval(300)),
+                    // Past the gap, so a second row.
+                    accountMemory(id: "m3", at: start.addingTimeInterval(-gap - 1)),
+                ],
+                tasks: [accountTask(id: "t1", at: start.addingTimeInterval(180))]))
+
+        let rows = try! XCTUnwrap(days.first).rows
+        XCTAssertEqual(rows.map(\.id), ["mem:m2", "task:t1", localRow(1), "mem:m3"])
+        XCTAssertTrue(
+            rows.allSatisfy { !$0.isAttached },
+            "nothing the account sent is a child of a conversation")
+
+        guard case .memories(let run) = rows[0].content else { return XCTFail("a run of memories") }
+        XCTAssertEqual(run.map(\.id), ["m2", "m1"], "newest first inside the row too")
+
+        let day = try! XCTUnwrap(days.first)
+        XCTAssertEqual(day.memoryCount, 3)
+        XCTAssertEqual(day.taskCount, 1)
+        XCTAssertEqual(
+            day.matchCount, 5, "three memories, one task and one conversation — things, not rows")
+    }
+
+    /// A day of nothing but memories still gets a header, and the header says what is in it.
+    func testADayHeaderNamesEveryKindItHolds() {
+        let days = compose(
+            account: ActivityAccountFeed(
+                memories: [accountMemory(id: "m1", at: at(day: 10, hour: 11))],
+                tasks: [
+                    accountTask(id: "t1", at: at(day: 10, hour: 12)),
+                    accountTask(id: "t2", at: at(day: 10, hour: 13)),
+                ]))
+
+        let day = try! XCTUnwrap(days.first)
+        XCTAssertEqual(day.subtitle, "1 memory · 2 tasks")
+        XCTAssertEqual(day.thingCount, 3)
+    }
+
+    /// **An unreachable account is not an empty one.** The local half of the stream still composes —
+    /// a signed-out Mac shows the screen moments it has — and the empty copy says something else
+    /// entirely when there is nothing left to show.
+    func testAnUnreachableAccountStillLeavesTheLocalStreamStanding() {
+        let anchor = at(day: 10, hour: 9)
+        let days = compose(
+            account: .unreachable,
+            screen: screen(10, [moment(id: 70, at: anchor), moment(id: 71, at: anchor)]))
+
+        XCTAssertEqual(days.flatMap(\.rows).map(\.kind), [.rewind])
+        XCTAssertEqual(try! XCTUnwrap(days.first).momentCount, 2)
+
+        let unreachable = ActivityEmptyCopy.resolve(
+            isPreparing: false, readFailure: nil, query: "", kind: .memories,
+            accountReachable: false)
+        let empty = ActivityEmptyCopy.resolve(
+            isPreparing: false, readFailure: nil, query: "", kind: .memories,
+            accountReachable: true)
+        XCTAssertNotEqual(
+            unreachable, empty,
+            "\"nobody answered\" and \"there was nothing\" are different claims")
+        XCTAssertEqual(unreachable.headline, "I couldn't reach your Omi account.")
+        XCTAssertEqual(empty.headline, "Nothing captured in this window yet.")
+    }
+
+    /// **Every reason an account is unreachable is a different sentence**, because each one leaves
+    /// the reader in a different place. A rejected key is one action away from fixed; being signed
+    /// out is not a fault; Airgap Mode is a switch they turned on. And none of the four may ever
+    /// read like the fifth state — an account that genuinely holds nothing.
+    func testEachUnreachableReasonSaysSomethingTheReaderCanActOn() throws {
+        func copy(_ reason: ActivityAccountUnreachableReason?) -> ActivityEmptyCopy {
+            ActivityEmptyCopy.resolve(
+                isPreparing: false, readFailure: nil, query: "", kind: .memories,
+                accountReachable: false, accountUnreachableReason: reason)
+        }
+        let genuinelyEmpty = ActivityEmptyCopy.resolve(
+            isPreparing: false, readFailure: nil, query: "", kind: .memories, accountReachable: true)
+
+        let rejected = copy(.keyRejected)
+        XCTAssertEqual(
+            rejected.headline, "Omi couldn't authenticate this Mac, so your account can't be read.")
+        XCTAssertEqual(
+            copy(.keyUnavailable), rejected,
+            "a key that was never minted and one the account refused are the same thing to do about")
+        XCTAssertTrue(
+            try XCTUnwrap(rejected.detail).contains("not an empty account"),
+            "the one thing an expired key must never be reported as")
+
+        XCTAssertEqual(copy(.signedOut).headline, "Sign in to Omi to see your account here.")
+        XCTAssertEqual(
+            copy(.airgapped).headline, "Airgap Mode is on, so your Omi account isn't being read.")
+        // No reason given — a preview, a fake, a reader with nothing to say — keeps the sentence
+        // this surface has always shown rather than inventing a cause.
+        XCTAssertEqual(copy(.noAnswer), copy(nil))
+        XCTAssertEqual(copy(nil).headline, "I couldn't reach your Omi account.")
+
+        for reason in [ActivityAccountUnreachableReason.airgapped, .signedOut, .keyUnavailable, .keyRejected, .noAnswer] {
+            XCTAssertNotEqual(
+                copy(reason), genuinelyEmpty,
+                "\(reason) must never render as an account that holds nothing")
+        }
+    }
+
+    // MARK: - The corpus line
+
+    /// The corner has two jobs and they are not the same sentence: at rest it says how much is being
+    /// held, under a filter how much survived. Collapsing them is how a surface ends up claiming
+    /// "0 moments captured" the moment somebody types a letter.
+    func testTheCorpusSentenceSaysWhichQuestionItIsAnswering() {
+        XCTAssertEqual(
+            ActivityCount.sentence(matching: 12, total: 2_278, isFiltering: false, isSettled: false),
+            "2,278 so far · still counting everything Omi has kept")
+        XCTAssertEqual(
+            ActivityCount.sentence(matching: 12, total: 2_278, isFiltering: false, isSettled: true),
+            "2,278 moments in everything Omi has kept")
+        XCTAssertEqual(
+            ActivityCount.sentence(matching: 1, total: 2_278, isFiltering: true, isSettled: true),
+            "1 result · of 2,278 in everything Omi has kept")
+        XCTAssertEqual(
+            ActivityCount.sentence(matching: 0, total: 1, isFiltering: false, isSettled: true),
+            "1 moment in everything Omi has kept",
+            "the noun agrees with the number it is beside")
     }
 
     // MARK: - The day walk

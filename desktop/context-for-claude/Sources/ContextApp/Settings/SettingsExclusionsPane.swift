@@ -139,7 +139,7 @@ struct SettingsExclusionsPane: View {
 
     private var controlsBar: some View {
         HStack(spacing: 10) {
-            Picker("", selection: $tab) {
+            Picker("Exclusions list", selection: $tab) {
                 ForEach(ExclusionsPaneModel.Tab.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -308,18 +308,12 @@ struct SettingsExclusionsPane: View {
                 title: ExclusionsPaneModel.privateTabsTitle,
                 subtitle: ExclusionsPaneModel.privateTabsSubtitle
             ) {
-                Toggle(
-                    "",
+                SettingsToggle(
+                    title: ExclusionsPaneModel.privateTabsTitle,
                     isOn: Binding(
                         get: { isOn },
-                        set: { value in
-                            Sound.effect(.click)
-                            ExclusionEngine.shared.setExcludePrivateBrowsing(value)
-                        })
-                )
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
+                        set: { ExclusionEngine.shared.setExcludePrivateBrowsing($0) }),
+                    onChange: { _ in Sound.effect(.click) })
             }
         }
     }

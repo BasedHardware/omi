@@ -149,8 +149,48 @@ final class AccountPresentationTests: XCTestCase {
         XCTAssertFalse(quiet.noteIsError, "a backlog is a fact, not a failure — it must not go red")
 
         // An empty string is not an error. `OmiAuth` clears the field rather than blanking it, but a
-        // blank sentence in red is the worst of both.
-        XCTAssertNil(line(signInError: "").note)
+        // blank sentence in red is the worst of both. It falls through to the standing cost line
+        // below rather than to nothing, which is the only part of this that moved.
+        XCTAssertNotEqual(line(signInError: "").note, "")
         XCTAssertFalse(line(signInError: "").noteIsError)
+    }
+
+    // MARK: - What signing out costs
+
+    /// **Signing out deletes this Mac's MCP key, and nothing said so.**
+    ///
+    /// `OmiAuth.signOut()` calls `MCPKeyProvisioner.shared.removeKey()`. `/v1/mcp/*` is the one
+    /// endpoint family a Firebase session token cannot open, so without that key Claude loses the
+    /// account half of this product outright — months of Omi history — while the local capture on
+    /// this Mac keeps working and keeps answering. Two halves failing separately, one of them
+    /// silently, is precisely the state a user cannot diagnose from outside; the popover's summary
+    /// only ever said uploads had stopped, which is the smaller and less surprising half.
+    ///
+    /// The line also has to say the press is undoable, because it is: `ensureKey()` runs on the next
+    /// successful sign-in.
+    func testTheSignedOutLineSaysWhatTheMissingKeyCostsAndThatSigningInRestoresIt() {
+        let out = line()
+
+        XCTAssertEqual(out.note, AccountPresentation.signedOutCost)
+        XCTAssertFalse(out.noteIsError, "this is a consequence of a deliberate press, not a failure")
+        XCTAssertTrue(out.note?.contains("account history") ?? false, out.note ?? "")
+        XCTAssertTrue(out.note?.contains("Signing in restores it") ?? false, out.note ?? "")
+        // …and it does not overclaim in the other direction: what was captured on this Mac is still
+        // readable, which is the half that keeps working and the half a user would otherwise assume
+        // had gone too.
+        XCTAssertTrue(out.note?.contains("captured here") ?? false, out.note ?? "")
+    }
+
+    /// Something actually wrong still outranks the standing explanation. One small line, and a live
+    /// failure or a stuck backlog is the more urgent thing to put in it.
+    func testALiveProblemDisplacesTheCostLine() {
+        XCTAssertEqual(line(signInError: "Omi rejected the sign-in.").note, "Omi rejected the sign-in.")
+        XCTAssertEqual(
+            line(uploadNote: "3 conversations waiting to upload").note,
+            "3 conversations waiting to upload")
+
+        // And it is never shown to a signed-in account, where it would be false.
+        XCTAssertNil(line(signedIn: true, email: "someone@example.com").note)
+        XCTAssertNil(line(signingIn: true).note)
     }
 }

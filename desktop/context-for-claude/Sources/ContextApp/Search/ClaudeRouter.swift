@@ -5,20 +5,21 @@ import UniformTypeIdentifiers
 
 /// Hands a query to Claude.
 ///
-/// **This is no longer the search bar's path.** It used to be the entire retrieval story — the bar
-/// took a sentence and gave it to Claude, which answered it with the MCP tools `ClaudeRegistrar`
-/// registers. The bar answers for itself now, over this app's own indexes (`SearchResultsModel`), so
-/// nothing here is on the way to a result any more.
+/// **Two callers, one act, and it is not searching.** The first-run tutorial teaches somebody to ask
+/// Claude a question about their own day (`ClaudeHandoff`), and the search bar's Return key hands
+/// over whatever question is in the field (`handOff`, below). Both are the same act — a *question*
+/// leaving this app for a Claude that can answer it with the MCP tools `ClaudeRegistrar` registers.
 ///
-/// What is still on this path is the *guided hand-off*: the first-run tutorial teaches somebody to
-/// ask Claude a question about their own day, and `ClaudeHandoff` routes that one suggested question
-/// through here into a real Claude. That is a different act from searching — it is the moment the
-/// product's whole premise becomes visible — and it is why this file survives the search bar leaving
-/// it.
+/// **What this file is deliberately not on the path of is the search itself.** Typing narrows the
+/// panel live, over this app's own indexes (`SearchResultsModel`), and nothing here is on the way to
+/// one of those results: a round trip through another application is a poor answer to "what was that
+/// invoice site" when the app owns two full-text indexes over the user's own machine. So the bar
+/// keeps both truths — keystrokes are local and instant, Return is a question — and the only thing
+/// on this side of the line is the key press.
 ///
-/// **Which target that handoff uses is the user's choice, not this file's.** `Settings → Agents →
-/// Claude target` writes `SettingsStore.claudeTarget`, `ClaudeHandoff` reads it at the moment it
-/// hands over, and both branches below are reachable from that one dropdown. There is deliberately no
+/// **Which target either handoff uses is the user's choice, not this file's.** `Settings → Agents →
+/// Claude target` writes `SettingsStore.claudeTarget`; both callers read it at the moment they hand
+/// over, and both branches below are reachable from that one dropdown. There is deliberately no
 /// `preferredTarget` here: the preference has a home in Settings, and a second copy of it on the
 /// router is how the two ever come to disagree. The Settings row also reads `targetSubtitle`, so what
 /// it promises is what this file would really do on that particular Mac.
@@ -309,6 +310,59 @@ enum ClaudeRouter {
         }
     }
 
+    // MARK: - The search bar's Return
+
+    /// Which Claude the **search bar** opens on the `.claudeApp` target: the Claude Code tab.
+    ///
+    /// Not the same choice as `ClaudeHandoff.surface`, and the difference is the whole reason
+    /// `Surface` is a parameter. The tutorial is teaching somebody to ask a question, so it opens the
+    /// ordinary chat. This bar's other target is the `claude` CLI, which *is* Claude Code — so
+    /// picking `.code` here is what makes the dropdown a choice of **shell** (an app window or a
+    /// terminal) rather than a silent choice of product, and it is the surface
+    /// `docs/rewind-and-settings.md` has always described this bar as opening.
+    static let searchSurface = Surface.code
+
+    /// The one call into the routing above, as something a test can replace.
+    ///
+    /// A seam and not a convenience: `route` opens applications, so a suite that exercised the bar's
+    /// Return for real would take over the screen of whoever ran it.
+    typealias Route = @MainActor (String, Target) -> Result<Delivery, RouteError>
+
+    /// What the bar does about the attempt — the only two things it can do.
+    enum Handoff: Equatable, Sendable {
+        /// The question is in front of the user, in a Claude. There is nothing left to say and the
+        /// panel is now standing over the app it just summoned, so the bar gets out of the way.
+        case arrived(Delivery)
+        /// It did not arrive as promised. The panel stays up and puts this on its one note line —
+        /// including the clipboard branch, which reached Claude but filled nothing in, and is a
+        /// sentence the user has to be able to read *because* it asks them to paste.
+        case note(String)
+    }
+
+    /// **Return, decided in one place.**
+    ///
+    /// Every branch that is not a real delivery comes back as a sentence rather than as silence: a
+    /// question that went nowhere and said nothing is the failure mode this whole return type exists
+    /// to make impossible.
+    ///
+    /// An empty query never reaches a launcher — `route` refuses it before it touches anything — but
+    /// the bar guards it first anyway, so Return on an untouched field is not even a note.
+    @MainActor
+    static func handOff(_ query: String, to target: Target, using route: Route? = nil) -> Handoff {
+        let deliver = route ?? { ClaudeRouter.route($0, to: $1, surface: searchSurface) }
+        switch deliver(query, target) {
+        case .success(let delivery):
+            switch delivery.mechanism {
+            case .prefilledTab, .terminal:
+                return .arrived(delivery)
+            case .clipboard:
+                return .note(delivery.mechanism.note)
+            }
+        case .failure(let error):
+            return .note(error.sentence)
+        }
+    }
+
     // MARK: - The launcher
 
     /// A one-shot `.command` file, opened with whatever app owns that extension.
@@ -359,11 +413,10 @@ enum ClaudeRouter {
     //
     // `preferredTarget` used to live here: a `UserDefaults` reader over
     // `"context.settings.claudeTarget"`, whose one caller was the search bar deciding where to send
-    // what had been typed. The bar no longer sends anything anywhere, so the reader had no readers —
-    // and a persisted preference that nothing reads is worse than no preference at all, because the
-    // Settings row that writes it still looks like it does something. It is not coming back: the key
-    // has exactly one owner, `SettingsStore.claudeTarget`, and exactly one consumer, `ClaudeHandoff`,
-    // which reads it there.
+    // what had been typed. The bar sends again, so that reader has a caller again — but it is still
+    // not coming back here. The key has exactly one owner, `SettingsStore.claudeTarget`, and its
+    // consumers (`SearchBarView`'s Return, `ClaudeHandoff`) read it there, at the moment they hand
+    // over. A second copy of a preference on the thing it steers is how the two come to disagree.
 
     /// The reference's "Claude target" subtitle, rewritten to describe what actually happens — one
     /// sentence per target, each a fact about the machine it is running on. Read by

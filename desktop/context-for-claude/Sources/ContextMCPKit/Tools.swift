@@ -535,7 +535,15 @@ extension Tools {
     static var activitySchema: JSONValue {
         Schema.object(
             properties: [
-                ("since", Schema.string("Start of the range to summarise. \(dateHelp)")),
+                (
+                    "since",
+                    Schema.string(
+                        """
+                        Start of the range to summarise. At most \(activityMaxRangeDays) days are \
+                        read per call; ask for a longer stretch and the most recent \
+                        \(activityMaxRangeDays) days of it come back, saying so. \(dateHelp)
+                        """)
+                ),
                 ("until", Schema.string("End of the range to summarise; defaults to now. \(dateHelp)")),
             ],
             required: ["since"]
@@ -1229,14 +1237,40 @@ extension Tools {
             swappedNote = "\n\n_`since` was later than `until`; the range was read the other way round._"
         }
 
+        // Clamped to the most recent `activityMaxRangeSeconds`, and said out loud. The tail rather
+        // than the head because `until` defaults to now: a caller who names an absurd `since` is
+        // asking "what have I been doing", and the recent end is the half that answers it.
+        var clampNote = ""
+        if until - since > activityMaxRangeSeconds {
+            let asked = since
+            since = until - activityMaxRangeSeconds
+            clampNote = """
+                _You asked for \(ContextTime.describe(asked)) to \(ContextTime.describe(until)). \
+                `activity` \(clampedRangeMarker), so this covers \(ContextTime.describe(since)) \
+                onwards and **nothing before that was read** — a gap in this answer, not an idle \
+                Mac. Ask again with `since` and `until` inside the earlier stretch to see it._
+                """
+        }
+
+        // Above the body, not below it. A month of blocks can outrun `maxToolResultCharacters`, and
+        // that clamp cuts the tail — a disclosure appended after the last block is exactly the text
+        // a long answer drops, leaving the shortened window reading as the one that was asked for.
+        func answer(_ body: String) -> String {
+            ([clampNote, body].filter { !$0.isEmpty }).joined(separator: "\n\n") + swappedNote
+        }
+
         let blocks = try Queries.activity(store, since: since, until: until)
         guard !blocks.isEmpty else {
-            return emptyMessage(
-                store,
-                "Context for Claude recorded no screen activity on this Mac between \(ContextTime.describe(since)) and \(ContextTime.describe(until))."
-            )
+            // The empty answer carries it too. "No screen activity between X and Y" printed over a
+            // window the caller never named is the exact sentence that turns "not read" into "never
+            // happened" — the thing every empty answer in this file exists to prevent.
+            return answer(
+                emptyMessage(
+                    store,
+                    "Context for Claude recorded no screen activity on this Mac between \(ContextTime.describe(since)) and \(ContextTime.describe(until))."
+                ))
         }
-        return renderActivity(blocks, since: since, until: until) + swappedNote
+        return answer(renderActivity(blocks, since: since, until: until))
     }
 
     /// A store that opens but cannot be queried is a *third* state, and the one `try?` used to erase:
@@ -1760,6 +1794,28 @@ extension Tools {
     private static let maxHitCharacters = 36_000
     private static let omiOverviewLimit = 400
     private static let omiScreenTextLimit = 600
+
+    /// The widest stretch `activity` will read in one call.
+    ///
+    /// Every other tool carries a `limit` that bounds the rows it touches. `activity` has none, and
+    /// its range came straight from the model — whatever date it named, over a store the default
+    /// retention never prunes. `Queries.activity` folds its rows through a cursor, so a huge range
+    /// no longer *holds* them, but it still reads every one: on a synthetic year of capture at a
+    /// frame a minute (525,600 frames), the walk was 5.5 s spent inside a single tool call, on the
+    /// user's Mac, while Claude waits. The same read over 31 days was 0.47 s — the cost is linear in
+    /// the range, which is exactly why bounding the range is the fix.
+    ///
+    /// 31 days because it is wider than the job the tool's own description describes — today, the
+    /// afternoon, this week, a weekly review — so no ordinary call notices it. `clampToolResult`
+    /// cannot serve here: it trims the *rendered* answer after the read has already happened, and
+    /// the read is the cost.
+    static let activityMaxRangeSeconds: Double = 31 * 86_400
+    static var activityMaxRangeDays: Int { Int(activityMaxRangeSeconds / 86_400) }
+
+    /// Carried by every answer whose range was clamped, for the same reason `clampedResultMarker`
+    /// is carried by every clamped body: a bounded read that does not announce itself is read as a
+    /// complete account of the window it prints.
+    static var clampedRangeMarker: String { "reads at most \(activityMaxRangeDays) days in one call" }
 
     // MARK: Building
 
@@ -2348,6 +2404,10 @@ extension Tools {
         case "microphone": return "the microphone"
         case "systemAudio": return "call and system audio"
         case "screen": return "screen recording"
+        // Named for what it costs the reader rather than for the TCC record, because
+        // "accessibility" says nothing at all about which answers get worse. Screen capture still
+        // reads the pixels without it; what is missing is the application's own strings.
+        case "accessibility": return "reading the exact text in windows"
         default: return name
         }
     }

@@ -32,32 +32,18 @@ struct SearchResultsView: View {
     /// a window; the cards are still buttons there, they just have nowhere to go.
     var onOpen: (SearchMoment) -> Void = { _ in }
 
-    /// The width the window is actually giving this panel. Defaulted to the default frame's, so a
-    /// preview or a golden render can draw the panel without a window to measure.
-    var panelWidth: CGFloat = SearchLayout.panelWidth
-
-    /// The room the window has left under the prompt bar. Defaulted the same way, and for the same
-    /// reason — see `SearchLayout.defaultResultsBodyHeight`.
-    var availableBodyHeight: CGFloat = SearchLayout.defaultResultsBodyHeight
-
     /// The natural height of everything under the divider, measured rather than assumed. See
     /// `SearchPanelHeightKey` for why a constant here is wrong at both ends.
     @State private var contentHeight: CGFloat = 0
 
-    private var bodyHeight: CGFloat {
-        SearchLayout.resultsBodyHeight(available: availableBodyHeight)
-    }
+    private var bodyHeight: CGFloat { SearchLayout.resultsBodyHeight(contentHeight: contentHeight) }
 
     /// Whether there is more below the panel's bottom edge than fits inside it.
-    private var scrolls: Bool {
-        SearchLayout.bodyScrolls(contentHeight: contentHeight, available: availableBodyHeight)
-    }
+    private var scrolls: Bool { SearchLayout.bodyScrolls(contentHeight: contentHeight) }
 
     /// How deep the bottom edge dissolves, and the room the content gains under itself to match.
     /// Zero when the panel contains everything it has.
-    private var fade: CGFloat {
-        SearchLayout.scrollFade(contentHeight: contentHeight, available: availableBodyHeight)
-    }
+    private var fade: CGFloat { SearchLayout.scrollFade(contentHeight: contentHeight) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -70,7 +56,7 @@ struct SearchResultsView: View {
             // shown — which is worse than the keyboard not working at all.
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
-                    SearchFilterContent(model: model, onOpen: onOpen, panelWidth: panelWidth)
+                    SearchFilterContent(model: model, onOpen: onOpen)
                         .background(SearchHeightReader(key: SearchPanelHeightKey.self))
                         // Spare room under the last row, only when the body scrolls, so that a reader
                         // who has scrolled all the way down has the fade falling on empty glass rather
@@ -100,7 +86,7 @@ struct SearchResultsView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(width: SearchLayout.panelWidth, alignment: .top)
         .onPreferenceChange(SearchPanelHeightKey.self) { contentHeight = $0 }
     }
 
@@ -162,19 +148,13 @@ struct SearchResultsView: View {
         return "Filter — \(summary)"
     }
 
-    /// Fixed-width columns, not adaptive: the card width is arithmetic (`SearchLayout.cardWidth`)
-    /// that a test can hold. An adaptive grid would quietly become two or four across after a padding
-    /// change and nothing would say so.
-    ///
-    /// A function of the panel's real width now that the window is resizable — three columns that
-    /// reflow, never two or four.
-    static func columns(panelWidth: CGFloat = SearchLayout.panelWidth) -> [GridItem] {
-        Array(
-            repeating: GridItem(
-                .fixed(SearchLayout.cardWidth(panelWidth: panelWidth)),
-                spacing: SearchLayout.cardGutter, alignment: .topLeading),
-            count: SearchLayout.resultColumns)
-    }
+    /// Fixed-width columns, not adaptive: the panel is a known width, so the card width is arithmetic
+    /// (`SearchLayout.cardWidth`) that a test can hold. An adaptive grid would quietly become two or
+    /// four across after a padding change and nothing would say so.
+    static let columns: [GridItem] = Array(
+        repeating: GridItem(
+            .fixed(SearchLayout.cardWidth()), spacing: SearchLayout.cardGutter, alignment: .topLeading),
+        count: SearchLayout.resultColumns)
 }
 
 // MARK: - The sections
@@ -189,9 +169,6 @@ struct SearchFilterContent: View {
     @ObservedObject var model: SearchResultsModel
     /// Passed straight through to the cards. See `SearchResultsView.onOpen`.
     var onOpen: (SearchMoment) -> Void = { _ in }
-    /// The width the window is giving the panel this content is inside. See
-    /// `SearchResultsView.panelWidth`.
-    var panelWidth: CGFloat = SearchLayout.panelWidth
 
     var body: some View {
         VStack(alignment: .leading, spacing: InkLayout.rhythm[3]) {
@@ -210,7 +187,7 @@ struct SearchFilterContent: View {
         .padding(.horizontal, SearchLayout.panelPaddingHorizontal)
         .padding(.top, InkLayout.rhythm[3])
         .padding(.bottom, SearchLayout.panelPaddingVertical)
-        .frame(width: panelWidth, alignment: .leading)
+        .frame(width: SearchLayout.panelWidth, alignment: .leading)
     }
 
     // MARK: Sections
@@ -309,10 +286,7 @@ struct SearchFilterContent: View {
             // that yet" over an untouched search bar is a verdict on a search that never ran.
             SearchEmptyNote(SearchCopy.results(intent: model.intent))
         } else {
-            LazyVGrid(
-                columns: SearchResultsView.columns(panelWidth: panelWidth), alignment: .leading,
-                spacing: InkLayout.rhythm[3]
-            ) {
+            LazyVGrid(columns: SearchResultsView.columns, alignment: .leading, spacing: InkLayout.rhythm[3]) {
                 ForEach(model.moments) { moment in
                     SearchResultCard(
                         moment: moment,

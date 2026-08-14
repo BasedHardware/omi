@@ -1,10 +1,22 @@
 //
 //  ActivityStore.swift — what the Activity list is made of, and when it is rebuilt.
 //
-//  The capture database already owns all of this and none of it is replaced here: frames stay with
-//  `RewindQueries`, speech stays with `Queries`. This is a projection over the two, and it
-//  deliberately holds no authority — no writes, no second cache, no third opinion about what was
-//  captured.
+//  The capture database and the account already own all of this and none of it is replaced here:
+//  frames stay with `RewindQueries`, speech stays with `Queries`, and conversations, memories and
+//  tasks stay with the account behind `ActivityAccountReading`. This is a projection over the three,
+//  and it deliberately holds no authority — no writes, no second cache, no third opinion about what
+//  was captured.
+//
+//  **The account is read once per time window, and it is allowed to say nothing.** An unreachable
+//  account is an ordinary state, not an error: the store keeps `accountReachable` so the empty copy
+//  can tell "nobody answered" from "there was nothing", and the local half of the stream is composed
+//  either way.
+//
+//  **Once per window is right for an answer and wrong for a failure.** A read that failed for a
+//  reason that heals on its own — a rate limit, a timeout, no route — leaves the panel empty until
+//  the user moves the window, which is a surface that stays broken long after the thing that broke
+//  it has gone. So those reasons, and only those, are re-read on a bounded schedule; see
+//  `scheduleAccountReread`.
 //
 //  **Days are read one at a time, newest first, and a few at a time.** A Mac with a year of capture
 //  has a year of days, and reading them all before the first paint would put a spinner in front of
@@ -23,6 +35,43 @@ import Combine
 import ContextCore
 import Foundation
 
+// MARK: - Why an account did not answer
+
+/// The reason behind `ActivityAccountFeed.reachable == false`.
+///
+/// `reachable` is a `Bool` because the spine only ever branches two ways on it — compose the account
+/// rows, or do not. **The reader needs more than that**, and only in one place: an empty stream has
+/// to say something true, and "I couldn't reach your account" is the wrong thing to tell someone
+/// whose key expired (they can fix it) or who never signed in (nothing is wrong). So the reason
+/// travels beside the feed rather than inside it, and only a reader that actually knows one reports
+/// it.
+enum ActivityAccountUnreachableReason: Sendable, Equatable {
+    /// The user turned Airgap Mode on. Nothing was asked, and nothing is wrong.
+    case airgapped
+    /// No Omi account is signed in.
+    case signedOut
+    /// Signed in, but this Mac has no key to read the account with — one has never been provisioned,
+    /// or minting one failed.
+    case keyUnavailable
+    /// This Mac had a key and the account refused it, and it could not be replaced.
+    case keyRejected
+    /// The account answered, and what it said was 429. Nothing is wrong with the key, the request or
+    /// this Mac — the account is asking us to wait, so this is the one unreachable reason that
+    /// repairs itself. `scheduleAccountReread` is what waits.
+    case rateLimited
+    /// Asked, and nothing answered: offline, an outage, a route that went away.
+    case noAnswer
+}
+
+/// An account reader that can say *why* it came back unreachable.
+///
+/// Deliberately separate from `ActivityAccountReading`: a preview's account, a test's account and
+/// `ActivityAccountAbsent` have no diagnosis to give and should not be made to invent one.
+protocol ActivityAccountDiagnosing: Sendable {
+    /// The reason behind the most recent read, or nil when the last read succeeded.
+    func unreachableReason() async -> ActivityAccountUnreachableReason?
+}
+
 @MainActor
 final class ActivityStore: ObservableObject {
 
@@ -34,6 +83,19 @@ final class ActivityStore: ObservableObject {
     /// How many things survived the request — one count, computed once, so the chrome and the body
     /// can never quietly disagree about what is on screen.
     @Published private(set) var matchCount = 0
+    /// How much this Mac and the account are holding between them, before any filter. `nil` until
+    /// there is something to count, which the corner reads as "counting" rather than as a zero.
+    @Published private(set) var corpusTotal: Int?
+    /// Whether `corpusTotal` is a finished count. The day walk fills older days in behind an
+    /// already-readable list, so the number climbs under the reader until the walk and the account
+    /// read are both done — and a number that moves has to say why.
+    @Published private(set) var corpusSettled = false
+    /// Whether the account answered the last read. **Not the same as an empty account**, which is
+    /// the whole reason `ActivityAccountFeed` carries `reachable`.
+    @Published private(set) var accountReachable = false
+    /// Why it did not answer, when the reader knows. `nil` for a reachable account and for a reader
+    /// with no diagnosis to give — the empty copy falls back to the general sentence there.
+    @Published private(set) var accountUnreachableReason: ActivityAccountUnreachableReason?
     /// Set when a read threw. **Not the same as an empty day**, and the surface has to be able to
     /// say which: an empty list under a failed read is not an answer about the machine.
     @Published private(set) var readFailure: String?
@@ -46,7 +108,13 @@ final class ActivityStore: ObservableObject {
 
     /// Which kind the chips have soloed. Read by the stream to decide whether attached rows still
     /// indent.
-    private(set) var kind: ActivityKind = .everything
+    private(set) var kind: ActivityKind = .all
+
+    /// Whether the corner is describing a narrowed stream or the whole corpus. One value, so the
+    /// sentence and the list can never disagree about whether a filter is on.
+    var isFiltering: Bool {
+        kind != .all || !currentQuery.isEmpty || since != nil || until != nil
+    }
 
     /// The one decoder every tile draws through. Owned here rather than per-tile for the reason
     /// `FrameLoader` documents: a second loading path is a second cache and a second set of bugs.
@@ -71,6 +139,12 @@ final class ActivityStore: ObservableObject {
     /// history rather than the screen's.
     nonisolated static let sessionCeiling = 500
 
+    /// How many of each kind one account read asks for. Bounded for the same reason
+    /// `sessionCeiling` is, and more urgently: this one crosses a network, so an unbounded read is a
+    /// request whose size is the user's whole history and whose cost is the first paint of the
+    /// panel. Well past what any reader scrolls in one window, and far short of an account dump.
+    nonisolated static let accountCeiling = 300
+
     /// The coalescing window for recomposition.
     ///
     /// Composition's cost is the size of the corpus, not the size of the day that arrived, so
@@ -85,13 +159,23 @@ final class ActivityStore: ObservableObject {
     /// where it was in the launch sequence. `SearchResultsModel` takes the same provider for the same
     /// reason; the two surfaces in this window must heal on the same terms.
     private let store: () -> ContextStore?
+    /// The account half of the spine. Held rather than asked for: unlike `ContextStore` it is a
+    /// value the host owns from the start, and `ActivityAccountAbsent` is a perfectly good one.
+    private let account: ActivityAccountReading
     private let calendar: Calendar
+    /// The healing schedule, injectable so a test can prove the ladder without spending it.
+    private let accountRetryDelays: [Duration]
 
     /// Composed, unfiltered. The filter pass reads this and never mutates it.
     private var composed: [ActivityDay] = []
     /// Per-day screen capture, keyed by the local start of the day.
     private var screen: [Date: ActivityDayScreen] = [:]
     private var sessions: [SessionSummary] = []
+    /// What the account last answered, for the window currently open.
+    private var accountFeed: ActivityAccountFeed = .unreachable
+    /// Whether the account read for the current window has come back at all. Distinct from
+    /// `accountReachable`, which is what it *said*.
+    private var accountSettled = false
 
     /// Days whose frames have been read, so a scroll never re-queries a day it already has.
     private var loadedDays: Set<Date> = []
@@ -110,19 +194,53 @@ final class ActivityStore: ObservableObject {
     private var didStart = false
     private var recomposeTask: Task<Void, Never>?
 
-    init(store: @escaping () -> ContextStore?, calendar: Calendar = .current) {
+    /// Which time window a landing read belongs to.
+    ///
+    /// The account read is a network round trip and the window can move under it — a chip press is
+    /// instant and a request is not — so a feed that lands after the question changed would populate
+    /// the spine with the answer to the previous one. The database reads are bounded by the same
+    /// counter for the same reason, and it costs one comparison.
+    private var generation = 0
+
+    init(
+        store: @escaping () -> ContextStore?,
+        account: ActivityAccountReading = ActivityAccountAbsent(),
+        calendar: Calendar = .current,
+        accountRetryDelays: [Duration] = ActivityStore.accountRetryDelays
+    ) {
         self.store = store
+        self.account = account
         self.calendar = calendar
+        self.accountRetryDelays = accountRetryDelays
     }
 
-    /// A store with its answer already in it, for previews and tests. Takes no store, so nothing it
-    /// does can touch the user's database.
-    init(days: [ActivityDay], calendar: Calendar = .current) {
+    /// A store with its answer already in it, for previews and tests. Takes no store and no account,
+    /// so nothing it does can touch the user's database or the network.
+    ///
+    /// - Parameters:
+    ///   - accountReachable: what the empty copy is entitled to say. A store handed days has by
+    ///     definition read something, so the default is the reachable one.
+    ///   - corpusSettled: whether the corner's number is a finished count. `false` renders the
+    ///     "still counting" branch, which is otherwise only reachable mid-walk.
+    init(
+        days: [ActivityDay],
+        accountReachable: Bool = true,
+        accountUnreachableReason: ActivityAccountUnreachableReason? = nil,
+        corpusSettled: Bool = true,
+        calendar: Calendar = .current
+    ) {
         self.store = { nil }
+        self.account = ActivityAccountAbsent()
         self.calendar = calendar
+        self.accountRetryDelays = Self.accountRetryDelays
         self.composed = days
         self.days = days
         self.matchCount = days.reduce(0) { $0 + $1.matchCount }
+        self.corpusTotal = days.isEmpty ? nil : days.reduce(0) { $0 + $1.thingCount }
+        self.corpusSettled = corpusSettled
+        self.accountReachable = accountReachable
+        self.accountUnreachableReason = accountReachable ? nil : accountUnreachableReason
+        self.accountSettled = true
         self.isPreparing = false
         self.didStart = true
     }
@@ -160,15 +278,29 @@ final class ActivityStore: ObservableObject {
 
     /// Discards everything read for the previous time window and reads the new one.
     private func openWindow() {
+        generation &+= 1
+        let generation = self.generation
         screen.removeAll()
         sessions.removeAll()
         loadedDays.removeAll()
         queue.removeAll()
         queued.removeAll()
         composed = []
+        accountFeed = .unreachable
+        accountSettled = false
+        accountReachable = false
+        accountUnreachableReason = nil
+        // The healing schedule belongs to the window that failed. A new window asks a new question,
+        // and it is entitled to the whole ladder again.
+        accountRetry?.cancel()
+        accountRetry = nil
+        accountRereads = 0
+        corpusSettled = false
         isPreparing = store() != nil
         readFailure = nil
         loader.purge()
+
+        readAccount(generation: generation)
 
         guard let store = store() else {
             recompose()
@@ -181,11 +313,109 @@ final class ActivityStore: ObservableObject {
         Task.detached(priority: .userInitiated) { [weak self] in
             let opening = ActivityStore.readOpening(
                 store: store, calendar: calendar, since: since, until: until)
-            await self?.absorb(opening: opening)
+            await self?.absorb(opening: opening, generation: generation)
         }
     }
 
-    private func absorb(opening: ActivityOpeningRead) {
+    /// One read of the account for the window that is open.
+    ///
+    /// Runs beside the database's read, not behind it: they are two halves of one window and neither
+    /// is the other's precondition. It is `Task` rather than `Task.detached` because `read` is the
+    /// seam's own `async` — where it does its work is the implementation's decision, not this
+    /// store's.
+    private func readAccount(generation: Int) {
+        let since = self.since
+        let until = self.until
+        Task { [weak self, account] in
+            let feed = await account.read(
+                since: since, until: until, limit: Self.accountCeiling)
+            // Asked only when it matters, and only of a reader that has one. A reachable account has
+            // no reason to give, and most readers here are previews and fakes with nothing to say.
+            let reason =
+                feed.reachable ? nil : await (account as? ActivityAccountDiagnosing)?.unreachableReason()
+            self?.absorb(account: feed, reason: reason, generation: generation)
+        }
+    }
+
+    /// What the account answered, for the window that asked.
+    private func absorb(
+        account feed: ActivityAccountFeed,
+        reason: ActivityAccountUnreachableReason?,
+        generation: Int
+    ) {
+        guard generation == self.generation else { return }
+        accountFeed = feed
+        accountSettled = true
+        accountReachable = feed.reachable
+        accountUnreachableReason = feed.reachable ? nil : reason
+        if feed.reachable {
+            accountRereads = 0
+        } else {
+            scheduleAccountReread(reason, generation: generation)
+        }
+        recompose()
+    }
+
+    // MARK: - Healing
+
+    /// When to read the account again after a read that failed for a reason that can clear on its
+    /// own, and how many times.
+    ///
+    /// **Bounded, and the bound is the point** — the same argument `waitForTheStore` makes. A backend
+    /// that stays rate-limited is a real state, and a client that keeps asking is how this Mac
+    /// becomes the reason it stays that way. Four attempts spread over about eight minutes: long
+    /// enough that an ordinary rate-limit window or a closed lid has passed, short enough that
+    /// someone who opened the panel is still looking at it, and then it stops. The surface keeps
+    /// saying what it already says, which was true when it said it.
+    nonisolated static let accountRetryDelays: [Duration] = [
+        .seconds(30), .seconds(60), .seconds(120), .seconds(240),
+    ]
+
+    private var accountRetry: Task<Void, Never>?
+    private var accountRereads = 0
+
+    /// Whether waiting is a plausible repair for this reason.
+    ///
+    /// **Only failures that time can fix come back.** A rate limit lifts, a timeout was one packet, a
+    /// route returns — a panel that never asked again would stay empty long after the cause had gone.
+    /// Airgap Mode, a signed-out app and a key the account refused are not like that: they need the
+    /// user, so re-reading them on a timer is a poll that can only produce the same answer — and for
+    /// a rejected key it would spend a freshly minted credential every attempt.
+    ///
+    /// `keyUnavailable` counts as healable because minting is a network call like any other: the
+    /// state this ladder was written for is an account rate-limiting `POST /v1/mcp/keys` as well as
+    /// the reads. Its one permanent shape — a key that was minted and could not be written to disk —
+    /// costs nothing to ask again, because `MCPKeyProvisioner` refuses to re-mint for the rest of the
+    /// launch and answers from memory.
+    nonisolated static func healsOnItsOwn(_ reason: ActivityAccountUnreachableReason) -> Bool {
+        switch reason {
+        case .rateLimited, .noAnswer, .keyUnavailable: return true
+        case .airgapped, .signedOut, .keyRejected: return false
+        }
+    }
+
+    /// Queues the next read, if this failure is one that another read could answer differently.
+    ///
+    /// A reader with no diagnosis to give — `ActivityAccountAbsent`, a preview, a fake — is never
+    /// re-read: "no reason" is not evidence that waiting would help.
+    private func scheduleAccountReread(
+        _ reason: ActivityAccountUnreachableReason?, generation: Int
+    ) {
+        guard let reason, Self.healsOnItsOwn(reason) else { return }
+        guard accountRereads < accountRetryDelays.count else { return }
+        let delay = accountRetryDelays[accountRereads]
+        accountRereads += 1
+        accountRetry?.cancel()
+        accountRetry = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled, generation == self.generation else { return }
+            self.accountRetry = nil
+            self.readAccount(generation: generation)
+        }
+    }
+
+    private func absorb(opening: ActivityOpeningRead, generation: Int) {
+        guard generation == self.generation else { return }
         if opening.failed { readFailure = Self.readFailureNote }
         sessions = opening.sessions
         // One frame of an app captured today teaches the whole back catalogue of that app what its
@@ -202,6 +432,7 @@ final class ActivityStore: ObservableObject {
         recompose()
         // Nothing to read is a finished read, not a permanent spinner.
         if queue.isEmpty, active == 0 { isPreparing = false }
+        updateCorpusSettled()
     }
 
     private func enqueue(days: [Date]) {
@@ -243,18 +474,27 @@ final class ActivityStore: ObservableObject {
     private func pump() {
         guard let store = store() else { return }
         let calendar = self.calendar
+        let generation = self.generation
         while active < Self.maximumConcurrentDayLoads, !queue.isEmpty {
             let day = queue.removeFirst()
             active += 1
             Task.detached(priority: .userInitiated) { [weak self] in
                 let read = ActivityStore.readDay(day, store: store, calendar: calendar)
-                await self?.absorb(day: day, read: read)
+                await self?.absorb(day: day, read: read, generation: generation)
             }
         }
     }
 
-    private func absorb(day: Date, read: ActivityDayRead) {
+    private func absorb(day: Date, read: ActivityDayRead, generation: Int) {
+        // **The counter is decremented before the generation is checked.** `active` counts reads in
+        // flight, which is a fact about the process rather than about the window that asked: a stale
+        // read that returned without decrementing would hold a slot for the rest of the session and
+        // stall the new window's walk three days in.
         active -= 1
+        guard generation == self.generation else {
+            pump()
+            return
+        }
         queued.remove(day)
         loadedDays.insert(day)
         if read.failed { readFailure = Self.readFailureNote }
@@ -268,6 +508,7 @@ final class ActivityStore: ObservableObject {
         isPreparing = false
         if read.screen != .empty { recomposeSoon() }
         pump()
+        updateCorpusSettled()
     }
 
     // MARK: - Readouts
@@ -317,8 +558,24 @@ final class ActivityStore: ObservableObject {
     private func recompose() {
         recomposeTask?.cancel()
         recomposeTask = nil
-        composed = ActivityComposer.compose(sessions: sessions, screen: screen, calendar: calendar)
+        composed = ActivityComposer.compose(
+            sessions: sessions, account: accountFeed, screen: screen, calendar: calendar)
+        // **The corpus is counted from the day headers, not from the rows.** A day header counts
+        // every frame of the day; the rows only ever draw the sample. A total summed over the stream
+        // would therefore report a five-figure day as the two hundred frames the strips could hold.
+        corpusTotal = composed.isEmpty ? nil : composed.reduce(0) { $0 + $1.thingCount }
+        updateCorpusSettled()
         refilter()
+    }
+
+    /// Whether the corner's number has stopped moving: both halves are in and the day walk is over.
+    ///
+    /// Called from the walk as well as from composition, because **the last day of a walk very often
+    /// composes nothing.** A day whose read came back empty is absorbed without recomposing (there
+    /// is no new row to draw), so a surface that only settled inside `recompose` would keep saying
+    /// "still counting" for the rest of the session on any Mac whose oldest days hold no capture.
+    private func updateCorpusSettled() {
+        corpusSettled = accountSettled && !isPreparing && queue.isEmpty && active == 0
     }
 
     private func refilter() {

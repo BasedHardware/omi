@@ -88,10 +88,22 @@ wrong for us either way: this package has no updater to check, and our telemetry
 switch to suppress. "Takes effect after relaunch" is wrong in any app for a privacy control.
 
 Ours means **this app stops reaching the network.** Screen-activity sync, conversation upload,
-cloud transcription, MCP key provisioning, favicon fetches, *and* sign-in all stop, immediately and
-without a relaunch, enforced in one place (`Sources/ContextApp/Backend/NetworkEgress.swift`) that
-every remote client asks, plus the app's sibling process — `Sources/ContextMCPKit/Airgap.swift`
-suppresses `OmiBackend`, the MCP server's one remote client. Nothing is discarded to achieve it —
+cloud transcription, MCP key provisioning, favicon fetches, the speech-model download, every Sparkle
+update request, *and* sign-in all stop, immediately and without a relaunch, enforced in one place
+(`Sources/ContextApp/Backend/NetworkEgress.swift`) that every remote client asks, plus the app's
+sibling process — `Sources/ContextMCPKit/Airgap.swift` suppresses `OmiBackend`, the MCP server's one
+remote client, which names itself to that same audited list as `.mcpOmiBackend`.
+
+**The flag is re-read at the moment of each request, never cached at the start of a flow**, and the
+two places that got that wrong are the shape to watch for. Sign-in waits on a person in a browser,
+so `OmiAuth` asks again inside the one function that posts rather than once at the press
+(`OmiAuth.post(url:contentType:body:client:)`). Sparkle turns one allowed check into three requests
+— feed, release notes, archive — so each is gated for itself (`UpdateEgress.Step`); with
+`automaticallyDownloadsUpdates` on, gating only the check meant a switch flipped while the appcast
+was in flight still pulled the archive. Sparkle offers no way to cancel a download already running,
+so a switch flipped mid-archive is obeyed at the next step; that window is Sparkle's, not ours.
+
+Nothing is discarded to achieve it —
 captures keep accumulating locally and queued uploads stay queued — and nothing that works offline
 stops working: capture, OCR, local transcription, search, and the local MCP tools are unaffected.
 Sign-in is refused rather than excepted, and says so on screen, because a session obtained under

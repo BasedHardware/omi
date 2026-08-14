@@ -12,14 +12,12 @@ import XCTest
 /// reaching the network, and is careful *not* to claim Claude is restricted, because the MCP tools
 /// still read local capture when asked.
 ///
-/// **Hermetic as they pass, not as they fail.** Every configuration read is against a file the test
-/// wrote into its own temporary directory, and every assertion is reached by the gate
-/// short-circuiting before any request — so a green run touches no network. But `OmiBackend` builds
-/// its own `URLSession` with no transport seam, so were the gate removed these tests would reach
-/// `api.omi.me` for real and their failure would differ online and offline. `AirgapEgressTests` on
-/// the app side shows the right shape: it installs a transport that fails the test on contact, which
-/// asserts *no request was issued* rather than inferring it from the error. Giving `OmiBackend` the
-/// same seam is the follow-up this file wants.
+/// **Hermetic in both directions now.** Every configuration read is against a file the test wrote
+/// into its own temporary directory, and `OmiBackend` takes a `transport` — so a gate that stopped
+/// working fails the test on contact instead of quietly reaching `api.omi.me` and coming back
+/// `.unauthorized`. That was the follow-up this file used to ask for, and it is not fastidiousness:
+/// the account behind that host is rate-limited, and a suite that proves a guard by exercising it
+/// spends the user's budget to learn what a tripwire says for free.
 final class AirgapTests: XCTestCase {
 
     // MARK: The gate
@@ -27,16 +25,54 @@ final class AirgapTests: XCTestCase {
     /// The guard test for the hole this file exists to close.
     ///
     /// It fails against the code as it was: with no gate in `OmiBackend.get`, a configured backend
-    /// issues a real `GET https://api.omi.me/v1/mcp/conversations` and comes back `.unauthorized`,
-    /// `.offline` or `.timedOut` — never `.airgapped`. The specific error is therefore also the
-    /// proof that no request left this machine; a suppressed read is the only way to reach it.
+    /// builds `GET https://api.omi.me/v1/mcp/conversations` and hands it to the transport — which is
+    /// a tripwire, so the assertion is that *no request was issued* rather than an inference drawn
+    /// from whichever error the network happened to return.
     func testAConfiguredAccountIsNotReadWhileAirgapModeIsOn() {
-        let backend = OmiBackend(credential: (key: "not-a-real-key", source: .environment), isAirgapped: { true })
+        let backend = OmiBackend(
+            credential: (key: "not-a-real-key", source: .environment),
+            isAirgapped: { true },
+            transport: { request in
+                XCTFail("Airgap Mode must not let a read reach \(request.url?.host ?? "the network")")
+                return .failure(.offline("unreachable"))
+            })
 
         let result = backend.conversations(since: nil, until: nil, limit: 5)
 
         XCTAssertEqual(result.failure, .airgapped)
         XCTAssertNil(result.value)
+    }
+
+    /// The control the tripwire above needs: the same read, the same client, switch off — it reaches
+    /// the transport. Without it, a backend that refused everything would pass every assertion here
+    /// and leave `recall` unable to see the account at all.
+    func testTheSameReadReachesTheNetworkWhenAirgapModeIsOff() {
+        let sent = RequestLog()
+        let backend = OmiBackend(
+            credential: (key: "not-a-real-key", source: .environment),
+            isAirgapped: { false },
+            transport: { request in
+                sent.record(request)
+                return .success(Data("[]".utf8))
+            })
+
+        _ = backend.conversations(since: nil, until: nil, limit: 5)
+
+        XCTAssertEqual(sent.count, 1, "one read, one request")
+        XCTAssertEqual(sent.lastMethod, "GET")
+    }
+
+    /// This process names itself to the app's audited egress list, and this is the assertion that
+    /// keeps the two sides agreeing.
+    ///
+    /// `ContextApp` cannot link this target, so `NetworkEgress.Client.mcpOmiBackend` carries this
+    /// string as its raw value rather than importing it — which means the record this process emits
+    /// and the record the app would emit for it are the same line. That mattered because for a while
+    /// this client was in no list at all: `AirgapEgressTests` iterated `Client.allCases` and reported
+    /// a complete audit of a product whose sibling process it could not see. Its counterpart is
+    /// `AirgapEgressTests.testTheMCPProcessIsInTheAuditedListUnderTheNameItReportsItselfBy`.
+    func testTheMCPClientAnswersToTheNameTheAppAuditsItUnder() {
+        XCTAssertEqual(OmiBackend.egressClientName, "omi-backend")
     }
 
     /// The switch is live in both directions, and this process is spawned per Claude session — so a
@@ -151,6 +187,31 @@ final class AirgapTests: XCTestCase {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
         return url
+    }
+
+    /// What the transport was asked to send. The tripwire tests assert nothing arrives here; the
+    /// control asserts something does.
+    private final class RequestLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var requests: [URLRequest] = []
+
+        func record(_ request: URLRequest) {
+            lock.lock()
+            requests.append(request)
+            lock.unlock()
+        }
+
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return requests.count
+        }
+
+        var lastMethod: String? {
+            lock.lock()
+            defer { lock.unlock() }
+            return requests.last?.httpMethod
+        }
     }
 
     /// A counter a `@Sendable` closure may write to. `OmiBackend` issues its reads from the calling

@@ -1,11 +1,12 @@
 //
 //  ActivityModel.swift — the captured day, as one list.
 //
-//  A conversation and the frames that were on screen while it happened are records of the same
-//  minute, and until now the app filed them in two places: the timeline draws pixels, the search
-//  panel draws hits, and answering "what was I doing at eight?" meant visiting both and reconciling
-//  them by eye. This composes them into **one reverse-chronological stream, grouped by day** — the
-//  order they actually happened in, newest first.
+//  A conversation, the memories and tasks it left behind, and the frames that were on screen while
+//  it happened are records of the same minute, and until now the app filed them in three places: the
+//  timeline draws pixels, the search panel draws hits, the account holds the rest, and answering
+//  "what was I doing at eight?" meant visiting all three and reconciling them by eye. This composes
+//  them into **one reverse-chronological stream, grouped by day** — the order they actually happened
+//  in, newest first.
 //
 //  **Conversations stay dominant and the frames stay first-class.** A run of screen moments that
 //  fell inside a conversation's window renders *indented under* it, which is what keeps the
@@ -27,27 +28,33 @@ import Foundation
 
 /// The one axis the stream filters on.
 ///
-/// `everything` is not a third kind of row — it is the absence of a filter — which is why
-/// `ActivityRow.kind` can never hold it. The composer only ever writes `.conversations` or
-/// `.screen` into a row, and `ActivityComposer.filter` treats `.everything` as "match anything"
-/// rather than as a value to compare against.
+/// `all` is not a fifth kind of row — it is the absence of a filter, and the merged view is the
+/// whole point of the surface: one spine where a conversation, the memory it produced, the task it
+/// left behind and the screen you were on sit together. `ActivityRow.kind` can therefore never hold
+/// it: the composer only ever writes one of the other four into a row, and `ActivityComposer.filter`
+/// treats `.all` as "match anything" rather than as a value to compare against.
 enum ActivityKind: String, CaseIterable, Identifiable, Sendable {
-    case everything
+    case all
     case conversations
-    case screen
+    case memories
+    case tasks
+    case rewind
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .everything: return "Activity"
+        case .all: return "All"
         case .conversations: return "Conversations"
-        case .screen: return "Screens"
+        case .memories: return "Memories"
+        case .tasks: return "Tasks"
+        case .rewind: return "Rewind"
         }
     }
 
-    /// The chips, in the order they are shown.
-    static let chips: [ActivityKind] = [.everything, .conversations, .screen]
+    /// The chips, in the order they are shown — the declaration order, so there is one place the
+    /// order lives rather than a list that can drift out of step with the cases.
+    static let chips: [ActivityKind] = allCases
 }
 
 // MARK: - Leaves
@@ -116,49 +123,117 @@ struct ActivityMoment: Identifiable, Equatable, Sendable {
     }
 }
 
-/// One spoken session, plus the count the row states about it.
+/// One conversation on the spine, from whichever half of the world knew about it.
 ///
-/// Wraps `SessionSummary` rather than restating it: the summary is what `Queries.sessions` already
-/// returns and what every other reader of this database sees, and a second shape for the same
-/// session is a second place for "how long was it" to be answered differently.
+/// **Two sources, one row shape.** The account is the one that knows what a conversation was *about*
+/// — it carries the title and the emoji the mockup shows — and this Mac is the one that knows a
+/// conversation happened at all when nobody is signed in. Rather than two row kinds, the difference
+/// is one field (`source`) and two optionals, so the stream's ordering, attachment and counting
+/// rules are written once.
 struct ActivityConversation: Identifiable, Equatable, Sendable {
-    let session: SessionSummary
+    /// Who told us about this conversation. It decides one thing on screen — whether the tile is the
+    /// account's emoji or the speech mark — and nothing else.
+    enum Source: Equatable, Sendable {
+        case account
+        case local
+    }
+
+    let id: String
+    let source: Source
+    let title: String
+    /// The account's emoji. `nil` for a local session, which has no way to know one; the row draws
+    /// the speech mark instead rather than inventing a glyph the account did not choose.
+    let emoji: String?
+    let startedAt: Date
+    let duration: TimeInterval
+    /// How many transcript lines this Mac heard. Zero for an account conversation, which is a
+    /// summary rather than a recording — the clause is dropped rather than printed as "0".
+    let segmentCount: Int
+    /// What the account calls it, when it says anything. Shown under the counts.
+    let overview: String?
+    /// What the row was matched against before it was lowercased — the parts a typed query should
+    /// reach that the title does not already carry.
+    let matchable: String
     /// How many screen moments fell inside this conversation's window. Filled in by the composer,
     /// which is the only thing that knows.
     let momentCount: Int
 
-    init(session: SessionSummary, momentCount: Int = 0) {
-        self.session = session
+    init(
+        id: String,
+        source: Source,
+        title: String,
+        emoji: String? = nil,
+        startedAt: Date,
+        duration: TimeInterval,
+        segmentCount: Int = 0,
+        overview: String? = nil,
+        matchable: String = "",
+        momentCount: Int = 0
+    ) {
+        self.id = id
+        self.source = source
+        self.title = title
+        self.emoji = emoji
+        self.startedAt = startedAt
+        self.duration = max(0, duration)
+        self.segmentCount = segmentCount
+        self.overview = overview
+        self.matchable = matchable
         self.momentCount = momentCount
     }
 
-    var id: Int64 { session.id }
-
-    var startedAt: Date { Date(timeIntervalSince1970: session.startedAt) }
-
-    /// The end of the conversation's window on the clock — and **the same window the day header's
-    /// duration states**, which is why it is derived from `durationSeconds` rather than from
-    /// `endedAt`.
-    ///
-    /// A session that is still open has no `endedAt`, but it does have a last line, and
-    /// `Queries.sessions` already resolves that into `durationSeconds`. Reading `endedAt` directly
-    /// would make a live conversation a *point* on the clock: it would attach none of the frames
-    /// captured while it was happening, which is exactly the conversation a reader is most likely
-    /// to be looking at.
-    var finishedAt: Date { startedAt.addingTimeInterval(duration) }
-
-    var duration: TimeInterval { max(0, session.durationSeconds) }
-
-    /// How many transcript lines it produced.
-    var segmentCount: Int { session.lineCount }
-
-    /// What the row is called. There is no server-side title here — this database stores speech,
-    /// not summaries — so the app that was in front is the most specific true thing available, and
-    /// "Conversation" is the fallback rather than an invented headline.
-    var title: String {
-        let hint = (session.appHint ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return hint.isEmpty ? "Conversation" : "\(hint) conversation"
+    /// One conversation as the account tells it.
+    init(account: ActivityAccountConversation) {
+        let started = Date(timeIntervalSince1970: account.startedAt)
+        self.init(
+            id: account.id,
+            source: .account,
+            title: account.title,
+            emoji: account.emoji.isEmpty ? nil : account.emoji,
+            startedAt: started,
+            duration: max(0, account.finishedAt - account.startedAt),
+            overview: account.overview,
+            matchable: account.overview ?? "")
     }
+
+    /// One spoken session as this Mac heard it.
+    ///
+    /// There is no server-side title in this database — it stores speech, not summaries — so the app
+    /// that was in front is the most specific true thing available, and "Conversation" is the
+    /// fallback rather than an invented headline.
+    ///
+    /// **The window is derived from `durationSeconds`, not from `endedAt`.** A session that is still
+    /// open has no `endedAt`, but it does have a last line, and `Queries.sessions` already resolves
+    /// that into a duration. Reading `endedAt` directly would make a live conversation a *point* on
+    /// the clock: it would attach none of the frames captured while it was happening, which is
+    /// exactly the conversation a reader is most likely to be looking at.
+    init(session: SessionSummary) {
+        let hint = (session.appHint ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        self.init(
+            id: ActivityConversation.localID(session.id),
+            source: .local,
+            title: hint.isEmpty ? "Conversation" : "\(hint) conversation",
+            startedAt: Date(timeIntervalSince1970: session.startedAt),
+            duration: session.durationSeconds,
+            segmentCount: session.lineCount,
+            matchable: "\(session.appHint ?? "") \(session.preview)")
+    }
+
+    /// A local session's identity in the merged stream. Prefixed so a session id and an account id
+    /// can never collide on a surface that now holds both.
+    static func localID(_ sessionID: Int64) -> String { "local:\(sessionID)" }
+
+    /// The same conversation, told what the composer worked out about it.
+    func counted(momentCount: Int) -> ActivityConversation {
+        ActivityConversation(
+            id: id, source: source, title: title, emoji: emoji, startedAt: startedAt,
+            duration: duration, segmentCount: segmentCount, overview: overview,
+            matchable: matchable, momentCount: momentCount)
+    }
+
+    /// The end of the conversation's window on the clock — and **the same window the frames attach
+    /// inside of**.
+    var finishedAt: Date { startedAt.addingTimeInterval(duration) }
 
     /// "8m 9s · 42 spoken lines · 6 screen moments" — and each clause is dropped when its count is
     /// zero rather than shown as "0 spoken lines", which reads as a defect rather than as an
@@ -179,9 +254,57 @@ struct ActivityConversation: Identifiable, Equatable, Sendable {
     /// What a typed query is matched against. Pre-lowercased, because the filter runs on every
     /// keystroke and folding a thousand rows per keystroke is work the composer already did once.
     var searchText: String {
-        [title, session.appHint ?? "", session.preview]
-            .joined(separator: " ")
-            .lowercased()
+        [title, matchable].joined(separator: " ").lowercased()
+    }
+}
+
+// MARK: - Memories and tasks
+
+/// One durable fact the account is keeping.
+///
+/// A projection of `ActivityAccountMemory` rather than the seam's own type, for the reason
+/// `ActivityMoment` is one: the stream sorts, clusters and filters these, and every one of those is
+/// a `Date` comparison against a value the seam states in epoch seconds.
+struct ActivityMemory: Identifiable, Equatable, Sendable {
+    let id: String
+    let text: String
+    let timestamp: Date
+
+    init(id: String, text: String, timestamp: Date) {
+        self.id = id
+        self.text = text
+        self.timestamp = timestamp
+    }
+
+    init(memory: ActivityAccountMemory) {
+        self.init(
+            id: memory.id, text: memory.content,
+            timestamp: Date(timeIntervalSince1970: memory.at))
+    }
+}
+
+/// One commitment the account extracted or the user wrote down.
+///
+/// **Read-only here, deliberately.** `ActivityAccountReading` has one method and it reads; a tick
+/// this surface could toggle would be a write the seam does not carry, so the glyph states the
+/// task's condition rather than offering to change it.
+struct ActivityTask: Identifiable, Equatable, Sendable {
+    let id: String
+    let text: String
+    let isCompleted: Bool
+    let timestamp: Date
+
+    init(id: String, text: String, isCompleted: Bool, timestamp: Date) {
+        self.id = id
+        self.text = text
+        self.isCompleted = isCompleted
+        self.timestamp = timestamp
+    }
+
+    init(task: ActivityAccountTask) {
+        self.init(
+            id: task.id, text: task.text, isCompleted: task.completed,
+            timestamp: Date(timeIntervalSince1970: task.at))
     }
 }
 
@@ -191,6 +314,11 @@ struct ActivityConversation: Identifiable, Equatable, Sendable {
 struct ActivityRow: Identifiable, Equatable {
     enum Content: Equatable {
         case conversation(ActivityConversation)
+        /// The memories of one run, together. A memory is one sentence and a row per sentence is a
+        /// column of stubs; the run they came out of is the thing worth having a row for.
+        case memories([ActivityMemory])
+        /// The tasks of one run, on the same terms.
+        case tasks([ActivityTask])
         /// The frames a strip draws, plus how many there were in the run they were taken from — a
         /// strip that silently shows 8 of 184 is a strip that lies about the day.
         case moments(shown: [ActivityMoment], total: Int)
@@ -201,7 +329,7 @@ struct ActivityRow: Identifiable, Equatable {
     let id: String
     /// Where this row sits on the clock. The only thing the stream is ordered by.
     let anchor: Date
-    /// Never `.everything`: a row is one kind of thing.
+    /// Never `.all`: a row is one kind of thing.
     let kind: ActivityKind
     /// True when this row was produced by the conversation directly above it. Indented while the
     /// whole stream is shown; flattened — and given its own timestamp — the moment one kind is
@@ -227,9 +355,30 @@ struct ActivityDay: Identifiable, Equatable {
     /// what was being hidden.
     let momentCount: Int
     let conversationCount: Int
+    let memoryCount: Int
+    let taskCount: Int
     let rows: [ActivityRow]
 
-    /// "1,204 moments · 4 conversations". Zero clauses are dropped for the same reason as on a row.
+    init(
+        id: Date,
+        title: String,
+        momentCount: Int = 0,
+        conversationCount: Int = 0,
+        memoryCount: Int = 0,
+        taskCount: Int = 0,
+        rows: [ActivityRow]
+    ) {
+        self.id = id
+        self.title = title
+        self.momentCount = momentCount
+        self.conversationCount = conversationCount
+        self.memoryCount = memoryCount
+        self.taskCount = taskCount
+        self.rows = rows
+    }
+
+    /// "1,204 moments · 4 conversations · 3 memories". Zero clauses are dropped for the same reason
+    /// as on a row.
     ///
     /// **This line is the whole of a collapsed day.** With the rows folded away it is the only
     /// thing saying what is behind the header, so it names every kind the day holds.
@@ -239,8 +388,17 @@ struct ActivityDay: Identifiable, Equatable {
         if conversationCount > 0 {
             parts.append(ActivityFormat.plural(conversationCount, "conversation", "conversations"))
         }
+        if memoryCount > 0 {
+            parts.append(ActivityFormat.plural(memoryCount, "memory", "memories"))
+        }
+        if taskCount > 0 { parts.append(ActivityFormat.plural(taskCount, "task", "tasks")) }
         return parts.joined(separator: " · ")
     }
+
+    /// How many *things* this day holds, counted from the header rather than from the rows — the
+    /// unit the corpus line at the top of the panel is denominated in. See `matchCount` for why the
+    /// two are different sums.
+    var thingCount: Int { momentCount + conversationCount + memoryCount + taskCount }
 
     /// How many *things* this day is showing, which is not the same as how many rows it drew: one
     /// strip can stand for a hundred and eighty-four frames. The count the surface says out loud is
@@ -249,6 +407,8 @@ struct ActivityDay: Identifiable, Equatable {
         rows.reduce(0) { total, row in
             switch row.content {
             case .conversation: return total + 1
+            case .memories(let memories): return total + memories.count
+            case .tasks(let tasks): return total + tasks.count
             case .moments(_, let count): return total + count
             }
         }
@@ -374,4 +534,43 @@ enum ActivityFormat {
         formatter.dateFormat = "EEEE d MMMM yyyy"
         return formatter
     }()
+}
+
+// MARK: - The corpus line
+
+/// The one sentence in the panel header's trailing corner.
+///
+/// It has two jobs and they are not the same sentence: at rest it says how much this Mac and the
+/// account are holding between them, and under a filter it says how much of that survived. Collapsing
+/// them into one string is how a surface ends up claiming "0 moments captured" the moment somebody
+/// types a letter.
+///
+/// **Every branch names its scope, because there is a second counter on this surface.** The hour rail
+/// on the left counts *one day* of screen capture; this corner counts everything. A large `0` beside
+/// `798 so far · still counting` is unreadable unless each says which it is about, and giving the two
+/// different *nouns* is not enough — the missing words are "today" and "everything". The rail says its
+/// own half.
+enum ActivityCount {
+    /// **The scope this corner counts, in the app's own words.** One constant rather than three
+    /// literals, so the branches cannot end up describing three different corpora.
+    static let scope = "everything Omi has kept"
+
+    /// - Parameter isSettled: whether `total` is a finished count. The day walk fills older days in
+    ///   behind an already-readable list, so the number climbs under the reader — it says so instead
+    ///   of presenting a moving figure as a settled one.
+    static func sentence(matching: Int, total: Int, isFiltering: Bool, isSettled: Bool) -> String {
+        guard isFiltering else {
+            guard isSettled else { return "\(number(total)) so far · still counting \(scope)" }
+            return "\(number(total)) moment\(total == 1 ? "" : "s") in \(scope)"
+        }
+        return "\(number(matching)) result\(matching == 1 ? "" : "s") · of \(number(total)) in \(scope)"
+    }
+
+    /// What the corner says before anything has been counted. Not a confident zero: nothing has been
+    /// read yet, and a zero is a claim about the machine.
+    static let counting = "Counting what you've captured…"
+
+    /// Grouped digits, because the count is routinely five figures and an ungrouped one is unreadable
+    /// at a glance — which is the only way this line is ever read.
+    static func number(_ value: Int) -> String { ActivityFormat.number(value) }
 }

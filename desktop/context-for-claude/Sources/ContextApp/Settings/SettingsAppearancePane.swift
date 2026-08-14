@@ -45,10 +45,11 @@ struct SettingsAppearancePane: View {
                     title: "Show Dock Icon",
                     subtitle: "Keeps the app's icon visible in the Dock during normal use."
                 ) {
-                    Toggle("", isOn: $store.showsDockIcon)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
+                    SettingsToggle(
+                        title: "Show Dock Icon", isOn: $store.showsDockIcon,
+                        // The only switch on these panes that had no click, for no reason anyone
+                        // recorded — every other one on the same card sounds.
+                        onChange: { _ in Sound.effect(.click) })
                 }
             }
 
@@ -77,20 +78,16 @@ struct SettingsAppearancePane: View {
                         subtitle: control.subtitle,
                         shortcutHint: control.shortcutHint
                     ) {
-                        Toggle(
-                            "",
+                        SettingsToggle(
+                            title: control.title,
                             isOn: Binding(
                                 get: { store.timelineControls[control] },
                                 set: { value in
-                                    Sound.effect(.click)
                                     var next = store.timelineControls
                                     next[control] = value
                                     store.timelineControls = next
-                                })
-                        )
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
+                                }),
+                            onChange: { _ in Sound.effect(.click) })
                     }
                 }
             }

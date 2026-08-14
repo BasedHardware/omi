@@ -8,9 +8,10 @@ import XCTest
 /// The search surface: two panels, a gap, and everything the second one draws.
 ///
 /// The claims here are the ones a screenshot cannot make and a refactor can quietly break — that the
-/// two panels are still two, that the grid is still three across at a width its cards survive, that a
-/// long title truncates instead of making its row taller, and that the type on the glass is still
-/// legible over the worst desktop that can be behind it.
+/// two panels are still two, that the grid is still four across at a width its cards survive, that
+/// the whole surface still fits the smallest display it opens on, that a long title truncates instead
+/// of making its row taller, and that the type on the glass is still legible over the worst desktop
+/// that can be behind it.
 final class SearchSurfaceTests: XCTestCase {
 
     override func setUp() {
@@ -34,93 +35,65 @@ final class SearchSurfaceTests: XCTestCase {
         XCTAssertLessThanOrEqual(SearchLayout.panelGap, 14)
     }
 
-    /// …and the window's chrome really contains the gap and both panels, so a window cannot be sized
-    /// as if the two were touching.
-    func testTheWindowChromeAccountsForBothPanelsAndTheGap() {
-        let chrome = SearchLayout.windowChrome(showingNote: false)
+    /// …and the surface's height really contains the gap and both panels, so the window cannot be
+    /// sized as if the two were touching.
+    func testTheSurfaceHeightAccountsForBothPanelsAndTheGap() {
+        let height = SearchLayout.surfaceHeight(showingNote: false)
         XCTAssertEqual(
-            chrome,
-            SearchLayout.titleBarInset + SearchLayout.barHeight + SearchLayout.panelGap
-                + SearchLayout.panelHeaderHeight + SearchLayout.windowInset)
+            height,
+            SearchLayout.shadowMargin * 2 + SearchLayout.barHeight + SearchLayout.panelGap
+                + SearchLayout.initialFilterPanelHeight)
         // The bar grows by a line when it has something to say about where the question went, and
-        // the room left for the results has to shrink with it or the sentence is drawn outside the
-        // panel.
+        // the window has to grow with it or the sentence is drawn outside the panel.
         XCTAssertEqual(
-            SearchLayout.windowChrome(showingNote: true) - chrome, SearchLayout.noteHeight)
-        // …and a taller window is more room for results, one point for one — which is the whole
-        // reason this window is worth resizing.
+            SearchLayout.surfaceHeight(showingNote: true) - height, SearchLayout.noteHeight)
+        // A taller panel is a taller window, one for one — this is the whole of the resize path.
         XCTAssertEqual(
-            SearchLayout.availableResultsBodyHeight(inWindowOfHeight: chrome + 600)
-                - SearchLayout.availableResultsBodyHeight(inWindowOfHeight: chrome + 400),
+            SearchLayout.surfaceHeight(showingNote: false, panelHeight: 600)
+                - SearchLayout.surfaceHeight(showingNote: false, panelHeight: 400),
             200)
-        // The two are inverses, so the default frame really does give the body its default height.
-        XCTAssertEqual(
-            SearchLayout.availableResultsBodyHeight(
-                inWindowOfHeight: SearchLayout.windowHeight()),
-            SearchLayout.defaultResultsBodyHeight)
     }
 
-    /// **The results body fills the window, whatever is in it.**
-    ///
-    /// This replaced two things at once: a hard 545 pt ceiling, and a body that hugged its own
-    /// content below that ceiling. The ceiling was a property of a surface that resized itself around
-    /// its content on every keystroke. The hug was right for a floating panel over the desktop and
-    /// inverts in a window — a frame has a bottom edge whatever the panel does, so a body sized to
-    /// three results leaves half the window as bare glass, which reads as a rendering fault rather
-    /// than as "there are only three".
-    ///
-    /// What is left is a floor and the frame.
-    func testTheResultsBodyFillsTheRoomTheWindowHas() {
-        XCTAssertEqual(SearchLayout.resultsBodyHeight(available: 400), 400)
-        // Three cards' worth of content in a tall window still gets the whole window.
-        XCTAssertEqual(SearchLayout.resultsBodyHeight(available: 900), 900)
-        // …and a window dragged shorter than the floor still leaves a body rather than a negative one.
+    /// The panel's scroll body is clamped at both ends, and both ends are defects it prevents: a
+    /// sliver below the floor, and above the ceiling a panel taller than a 13" display.
+    func testThePanelBodyIsClampedAtBothEnds() {
         XCTAssertEqual(
-            SearchLayout.resultsBodyHeight(available: 0), SearchLayout.minimumResultsBodyHeight)
-
-        // Filling is not the same as never scrolling: content past the frame still says so.
-        XCTAssertFalse(SearchLayout.bodyScrolls(contentHeight: 260, available: 400))
-        XCTAssertTrue(SearchLayout.bodyScrolls(contentHeight: 5_000, available: 400))
-        // A taller window buys the same content more room rather than more scrolling.
-        XCTAssertFalse(SearchLayout.bodyScrolls(contentHeight: 800, available: 900))
+            SearchLayout.resultsBodyHeight(contentHeight: 0), SearchLayout.minimumResultsBodyHeight)
+        XCTAssertEqual(
+            SearchLayout.resultsBodyHeight(contentHeight: 5_000),
+            SearchLayout.maximumResultsBodyHeight)
+        // Inside the clamp the panel is exactly as tall as what is in it, so nothing scrolls that
+        // did not need to.
+        XCTAssertEqual(SearchLayout.resultsBodyHeight(contentHeight: 260), 260)
+        XCTAssertLessThan(SearchLayout.minimumResultsBodyHeight, SearchLayout.maximumResultsBodyHeight)
     }
 
-    /// The panels take their corner from the **shared** glass rather than a second one mixed here.
+    /// The panels wear the **shared** glass rather than a second one mixed here.
     ///
-    /// Stated as the value a private copy would have to diverge on. It is a tripwire and not a
-    /// behavioural test — but the failure it catches (a search surface rounded unlike every other
-    /// panel in the app) is a visual one that no behavioural test sees.
-    ///
-    /// There is no shadow half to this any more. The panels wore `InkGlass`'s ambient shadow while
-    /// they were two pieces of glass over the desktop inside a borderless window; they are regions on
-    /// the main window's own glass now, and the window frame draws the only shadow there is.
-    func testThePanelsTakeTheirCornerFromTheSharedGlass() {
+    /// Stated as the two values a private copy would have to diverge on. It is a tripwire and not a
+    /// behavioural test — but the failure it catches (a search surface rounded and shadowed unlike
+    /// every other panel in the app) is a visual one that no behavioural test sees.
+    func testThePanelsTakeTheirCornerAndShadowFromTheSharedGlass() {
         XCTAssertEqual(SearchLayout.panelCornerRadius, InkGlass.cornerRadius)
+        XCTAssertEqual(SearchLayout.shadowMargin, InkGlassShadow.ambient.padding)
+        XCTAssertGreaterThan(
+            SearchLayout.shadowMargin, 0,
+            "with no margin the window clips the ambient shadow and the panels look stamped on")
     }
 
-    /// **The window may not be made narrower than three legible cards, or shorter than one row.**
-    ///
-    /// `minimumCardWidth` used to be an opinion the fixed 760 pt panel satisfied by construction. A
-    /// resizable window makes it a real bound, and this is where it is enforced.
-    func testTheMinimumWindowSizeKeepsThreeLegibleCards() {
-        let minimum = SearchLayout.minimumWindowSize
-        let panel = SearchLayout.panelWidth(inWindowOfWidth: minimum.width)
-        XCTAssertGreaterThanOrEqual(
-            SearchLayout.cardWidth(panelWidth: panel), SearchLayout.minimumCardWidth,
-            "the window can be dragged narrow enough to clip the grid")
-        XCTAssertGreaterThanOrEqual(
-            SearchLayout.availableResultsBodyHeight(inWindowOfHeight: minimum.height),
-            SearchLayout.minimumResultsBodyHeight)
-        // Narrower than the window can go, the arithmetic still holds rather than going negative.
-        XCTAssertEqual(SearchLayout.panelWidth(inWindowOfWidth: 10), SearchLayout.minimumPanelWidth)
-        XCTAssertLessThan(minimum.width, SearchLayout.defaultWindowSize.width)
-        XCTAssertLessThan(minimum.height, SearchLayout.defaultWindowSize.height)
-    }
-
-    /// The first-run placement is clamped into the screen: the default frame is taller than the naive
-    /// "upper third" arithmetic leaves room for on a 13" display.
+    /// The window is the surface, including the margin the shadow falls into.
     @MainActor
-    func testTheWindowIsPlacedInsideTheScreenEvenWhenItIsTallerThanTheOpeningOffset() {
+    func testTheWindowIsSizedFromTheSurfaceAndGrowsWithTheNote() {
+        let resting = SearchBarWindow.surfaceSize()
+        XCTAssertEqual(resting.width, SearchLayout.surfaceWidth)
+        XCTAssertEqual(resting.height, SearchLayout.surfaceHeight(showingNote: false))
+        XCTAssertGreaterThan(SearchBarWindow.surfaceSize(showingNote: true).height, resting.height)
+    }
+
+    /// The surface is a tall two-panel object, so the placement rule has to be clamped: the naive
+    /// "upper third" arithmetic put its bottom edge under the dock on a 13" display.
+    @MainActor
+    func testThePanelIsPlacedInsideTheScreenEvenWhenItIsTallerThanTheOpeningOffset() {
         // A 13" MacBook's usable area, stated rather than read, so the claim does not depend on the
         // display the suite happens to run on.
         let visible = NSRect(x: 0, y: 0, width: 1470, height: 931)
@@ -130,59 +103,273 @@ final class SearchSurfaceTests: XCTestCase {
         XCTAssertEqual(frame.midX, visible.midX, accuracy: 1)
     }
 
+    // MARK: - The two ways out of the panel
+
+    /// **The bar can reach the timeline and Settings.**
+    ///
+    /// The regression this holds. While this surface was a titled main window it had a prompt bar, a
+    /// spine of everything the Mac had done, and no route to either of the app's other windows: the
+    /// timeline could only be reached by activating a moment, and Settings not at all. The timeline's
+    /// own header has carried a "Search All" pill and a gear since it shipped, for exactly this
+    /// reason, and these two are that pair pointing the other way.
+    ///
+    /// Three claims, because three things break separately: that the surface still carries both
+    /// hand-offs (an initialiser that silently drops a parameter), that pressing each control really
+    /// calls the one it belongs to (the classic swap), and that the pair fits in the room the bar
+    /// reserves for it — controls wider than `trailingControlsWidth` push the query chip, which is the
+    /// one thing on this surface that may not be squeezed.
+    ///
+    /// The surface is built with a query in it on purpose: that opens it on `.results` rather than on
+    /// the activity spine, so nothing here constructs the account feed.
+    @MainActor
+    func testTheBarCanReachTheTimelineAndSettings() {
+        var view = SearchBarView(query: "invoice", results: SearchResultsModel(moments: []))
+        var reached: [String] = []
+        view.onOpenTimeline = { reached.append("timeline") }
+        view.onOpenSettings = { reached.append("settings") }
+        view.onOpenTimeline()
+        view.onOpenSettings()
+        XCTAssertEqual(
+            reached, ["timeline", "settings"],
+            "the surface dropped one of the two hand-offs it was given")
+
+        // The controls themselves, pressed. `SearchBarExits` is what the prompt bar mounts, so this
+        // is the real pill and the real gear rather than a description of them.
+        var pressed: [String] = []
+        let exits = SearchBarExits(
+            onOpenTimeline: { pressed.append("timeline") },
+            onOpenSettings: { pressed.append("settings") })
+        exits.onOpenTimeline()
+        exits.onOpenSettings()
+        XCTAssertEqual(pressed, ["timeline", "settings"])
+
+        let host = NSHostingView(rootView: exits)
+        host.layoutSubtreeIfNeeded()
+        let width = host.fittingSize.width
+        XCTAssertGreaterThan(width, 60, "the pill and the gear drew nothing")
+        XCTAssertLessThan(
+            width, SearchLayout.trailingControlsWidth,
+            "the pill and the gear are \(width) pt wide, past the "
+                + "\(SearchLayout.trailingControlsWidth) pt the bar reserves — they take the room out "
+                + "of the query chip")
+    }
+
+    // MARK: - Clicking away from the panel
+
+    /// **Click anywhere else and the panel goes.**
+    ///
+    /// The plain case, and the only one where the panel closes itself: it lost the keyboard, a
+    /// runloop turn later nothing of ours has it back, nothing is modal, and no system prompt is up.
+    /// The user clicked into another application.
+    func testAClickOutsideThePanelClosesIt() {
+        XCTAssertTrue(Self.clickedAway.closesThePanel)
+    }
+
+    /// **A click inside the panel is not a click away from it — and focus churn is neither.**
+    ///
+    /// This is the one the suite could not see and a real launch found in 375 ms. The trigger used to
+    /// be `didResignKey`, which cannot tell the two apart: a `.nonactivatingPanel` is ordered in under
+    /// whatever application is frontmost, takes key, and has it taken straight back. The log read
+    /// `search bar presented (key: true)` and then `dismissed by a click outside it`, with nobody
+    /// having touched anything — the app opened and shut itself, and every test here still passed,
+    /// because a headless suite has no key window to lose.
+    ///
+    /// The trigger is now the gesture: a global mouse-down, tested against the panel's own rectangle.
+    /// This covers the half of that decision that is expressible without a window on screen.
+    func testAClickInsideThePanelIsNotAClickAway() {
+        let panel = NSRect(x: 100, y: 200, width: 800, height: 600)
+
+        XCTAssertFalse(
+            SearchBarWindow.clickLandedOutside(NSPoint(x: 500, y: 500), panel: panel),
+            "a press on the panel's own surface must never close it")
+        XCTAssertFalse(
+            SearchBarWindow.clickLandedOutside(NSPoint(x: 101, y: 201), panel: panel),
+            "the window rectangle includes the shadow margin, and its edge belongs to the panel")
+        XCTAssertTrue(
+            SearchBarWindow.clickLandedOutside(NSPoint(x: 50, y: 500), panel: panel),
+            "a press beside the panel is the gesture this feature is named after")
+        XCTAssertTrue(
+            SearchBarWindow.clickLandedOutside(NSPoint(x: 500, y: 1_000), panel: panel))
+    }
+
+    /// **…and nothing the panel itself put on screen counts as clicking away.**
+    ///
+    /// Every exemption, one at a time, from the same otherwise-dismissing state — so a `&&` dropped
+    /// out of `closesThePanel` fails here rather than in somebody's session. These are the states
+    /// that make the difference between a Spotlight and a panel that cannot be used:
+    ///
+    /// - **Settings and the timeline.** Both are opened *from* this panel, and both come forward and
+    ///   activate the app, which is precisely the panel doing its job. A gear that closes the surface
+    ///   it is attached to is a gear that does nothing.
+    /// - **The tutorial's coach card**, which takes key on entry for the beats the user is meant to
+    ///   press — the same exemption, because it is another window of ours. A panel that vanished
+    ///   there would take the coached surface away mid-beat.
+    /// - **A sheet or a modal**, whose parent window is not key while it is up.
+    /// - **The login-Keychain password sheet**, which is another process's window and therefore looks
+    ///   exactly like clicking into another application — the one case where that reading is wrong,
+    ///   because this app raised the prompt without being asked to.
+    /// - **Focus bouncing straight back**, which is a popover closing and not a gesture at all.
+    func testThePanelSurvivesEverythingItOpenedForItself() {
+        let exemptions: [(String, (inout SearchResignation) -> Void)] = [
+            ("Settings, the timeline, a popover, or a coach card took key", {
+                $0.anotherWindowOfOursHasFocus = true
+            }),
+            ("a sheet or a modal session is up", { $0.aSheetOrModalIsUp = true }),
+            ("the system keychain prompt is up", { $0.aSystemSecurityPromptIsUp = true }),
+            ("the keyboard came straight back to the panel", { $0.panelTookKeyBack = true }),
+        ]
+        for (what, apply) in exemptions {
+            var resignation = Self.clickedAway
+            apply(&resignation)
+            XCTAssertFalse(
+                resignation.closesThePanel,
+                "the panel closed itself while \(what) — that is not the user clicking away from it")
+        }
+    }
+
+    /// **A panel some other route already closed is never closed a second time.**
+    ///
+    /// The guard that keeps `SearchPanelWatch.report(.closed)` at exactly one per real dismissal.
+    /// `SearchBarWindow.travel(to:)` is the shape it is for: it presents the timeline — which takes
+    /// key away from this panel and so schedules this very check — and *then* dismisses the panel
+    /// itself, announcing `.closed` on the way. A second announcement is not cosmetic:
+    /// `TutorialModel` clears `searchPanelIsOurs` on `.closed`, so a spurious one hands the tutorial
+    /// a panel it believes it no longer owns.
+    ///
+    /// Asserted against the announcement rather than only against the flag, so the claim is about
+    /// what observers hear.
+    @MainActor
+    func testAPanelAlreadyDismissedIsNotClosedAgainByTheClickOutsideRule() {
+        var already = Self.clickedAway
+        already.panelIsStillTheOpenOne = false
+        XCTAssertFalse(
+            already.closesThePanel,
+            "the click-outside rule would dismiss a panel another route already closed, announcing "
+                + "a second `.closed` for one dismissal")
+
+        // One dismissal, one announcement — including the second `dismiss()` that finds nothing to
+        // close, which is the shape `travel(to:)` and this rule can produce together.
+        var heard: [SearchPanelEvent] = []
+        let token = SearchPanelWatch.addObserver { heard.append($0) }
+        defer { SearchPanelWatch.removeObserver(token) }
+        SearchBarWindow.dismiss()
+        XCTAssertEqual(heard, [.closed])
+    }
+
+    /// The state a click into another application leaves behind: the panel had the keyboard, is still
+    /// the open one, has lost it, and nothing of ours or of the system's took it.
+    private static let clickedAway = SearchResignation(
+        panelIsStillTheOpenOne: true,
+        panelTookKeyBack: false,
+        anotherWindowOfOursHasFocus: false,
+        aSheetOrModalIsUp: false,
+        aSystemSecurityPromptIsUp: false)
+
     // MARK: - The grid
 
-    /// **Three across, at a width the cards survive.**
-    func testTheResultsGridIsThreeAcrossWithCardsWideEnoughToRead() {
-        XCTAssertEqual(SearchLayout.resultColumns, 3)
-        XCTAssertEqual(SearchResultsView.columns().count, SearchLayout.resultColumns)
+    /// **Four across, at a width the cards survive.**
+    ///
+    /// It was three across at a 760 pt panel. The claim that moved with the panel is only the count;
+    /// the one that did not move is the one worth having — a card at or under `minimumCardWidth` is a
+    /// card whose title truncates before it says anything, and the widening is only worth doing if
+    /// the cards come through it unchanged. They do: 229.5 pt now against 230.7 pt at three columns.
+    func testTheResultsGridIsFourAcrossWithCardsWideEnoughToRead() {
+        XCTAssertEqual(SearchLayout.resultColumns, 4)
+        XCTAssertEqual(SearchResultsView.columns.count, SearchLayout.resultColumns)
 
         let card = SearchLayout.cardWidth()
         XCTAssertGreaterThanOrEqual(
             card, SearchLayout.minimumCardWidth,
             "a \(card) pt card has no room for a title before it truncates")
+        // The fourth column was paid for out of the panel's new width and not out of the cards. The
+        // three-across card at the old 760 pt panel is the number to beat, and it is restated here
+        // rather than derived because the whole point is that it is the *old* geometry.
+        let threeAcrossAtTheOldWidth = (760 - SearchLayout.panelPaddingHorizontal * 2 - 14 * 2) / 3
+        XCTAssertEqual(
+            card, threeAcrossAtTheOldWidth, accuracy: 4,
+            "the extra width went into fatter cards rather than into another column of answers")
+
         // The columns and their gutters really do fill the panel's content width — a grid that
         // overflows is a grid whose last column is clipped at the panel's edge.
-        let used = card * 3 + SearchLayout.cardGutter * 2
+        let used =
+            card * CGFloat(SearchLayout.resultColumns)
+            + SearchLayout.cardGutter * CGFloat(SearchLayout.resultColumns - 1)
         XCTAssertEqual(used, SearchLayout.contentWidth(), accuracy: 0.001)
     }
 
-    /// …and it reflows: at every panel width the surface could plausibly be given, three columns
-    /// either still fit or the arithmetic says how much narrower they got. Nothing here may produce a
+    /// …and it reflows: at every panel width the surface could plausibly be given, the columns either
+    /// still fit or the arithmetic says how much narrower they got. Nothing here may produce a
     /// negative or zero card, which is what clipping looks like from the layout's side.
     func testTheGridReflowsWithoutProducingAClippedColumn() {
-        for width in stride(from: 520.0, through: 1200.0, by: 40.0) {
+        let columns = CGFloat(SearchLayout.resultColumns)
+        for width in stride(from: 520.0, through: 1400.0, by: 40.0) {
             let card = SearchLayout.cardWidth(panelWidth: width)
             XCTAssertGreaterThan(card, 0, "panel width \(width) produced a \(card) pt card")
-            let used = card * 3 + SearchLayout.cardGutter * 2
+            let used = card * columns + SearchLayout.cardGutter * (columns - 1)
             XCTAssertLessThanOrEqual(
                 used, SearchLayout.contentWidth(panelWidth: width) + 0.001,
                 "the grid overflows its panel at \(width) pt")
         }
-        // The shipped width is comfortably above the point where three columns stop being readable.
+        // The shipped width is comfortably above the point where the columns stop being readable.
         XCTAssertGreaterThan(
             SearchLayout.cardWidth(panelWidth: SearchLayout.panelWidth),
             SearchLayout.minimumCardWidth * 1.2)
     }
 
-    /// **The window's default frame is tall enough for a whole card, even with the filter block
-    /// open.**
+    /// **The whole surface still fits the smallest display it opens on, at its widest and at its
+    /// tallest.**
     ///
-    /// This is the clipped-card defect stated as arithmetic. The body has to clear the filter block
-    /// plus one complete card — picture, title *and* source line — or the very first row the user
-    /// sees is sliced through the middle at the panel's edge, which is what the first two passes of
-    /// this design did.
+    /// The constraint the panel's new size was chosen against, stated so the next person to widen it
+    /// finds out from a failing test rather than from a laptop. Both ends are real:
     ///
-    /// It used to hold a hard 545 pt ceiling there. The ceiling is gone — the body takes whatever
-    /// room the window has — so what the number now decides is the frame a machine that has never
-    /// moved the window opens at, and that is the frame this holds: opening on a sliced first row is
-    /// the same defect whether a constant or a default caused it.
-    ///
-    /// Measured with the block **open**, because that is the state the claim is about: the block is
-    /// closed at rest (`SearchResultsModel.isShowingFilters`), and measuring it closed would leave
-    /// this asserting that a header plus one card fits in 545 pt — true, and not the defect.
+    /// - **Across.** The window is `panelWidth` plus the clear margin the shadows fall into. A
+    ///   surface that reached the edges of a 13" display would stop reading as a floating panel and
+    ///   start reading as a sheet stretched over the desktop, which is the shape this design exists
+    ///   to not be.
+    /// - **Down.** The tallest the surface can ever be is the body at its ceiling, the panel's own
+    ///   header above it, the bar grown by its note line, the gap and both shadow margins. Past the
+    ///   display it is not clipped — `defaultFrame` clamps it — it is simply pinned to the bottom
+    ///   edge with its head off the top of the usable area, which is worse than clipping because it
+    ///   takes the prompt bar with it.
     @MainActor
-    func testTheDefaultFrameLeavesRoomForAWholeCard() {
+    func testTheSurfaceFitsAThirteenInchDisplayAtItsWidestAndTallest() {
+        // A 13" MacBook at 1440 × 900, less the 25 pt menu bar. Stated rather than read from
+        // `NSScreen` so the claim does not depend on the display the suite happens to run on.
+        let visible = NSRect(x: 0, y: 0, width: 1440, height: 875)
+
+        XCTAssertLessThanOrEqual(
+            SearchLayout.surfaceWidth, visible.width - 240,
+            "the surface is \(SearchLayout.surfaceWidth) pt wide, which leaves a 13\" display too "
+                + "little desktop either side for this to read as a panel floating over one")
+
+        let tallest = SearchLayout.surfaceHeight(
+            showingNote: true,
+            panelHeight: SearchLayout.panelHeaderHeight + SearchLayout.maximumResultsBodyHeight)
+        XCTAssertLessThanOrEqual(
+            tallest, visible.height,
+            "at its tallest the surface is \(tallest) pt, past the \(visible.height) pt a 13\" "
+                + "display has under its menu bar — the prompt bar goes off the top of the screen")
+
+        // …and the placement really does put a whole panel inside that rectangle, rather than the
+        // arithmetic above being true of a shape the app never opens at.
+        let opening = SearchBarWindow.defaultFrame(in: visible)
+        XCTAssertTrue(visible.contains(opening), "the opening panel does not fit a 13\" display")
+    }
+
+    /// **The panel is tall enough for a whole card, even with the filter block open.**
+    ///
+    /// This is the clipped-card defect stated as arithmetic. The body's ceiling has to clear the
+    /// filter block plus one complete card — picture, title *and* source line — or the very first
+    /// row the user sees is sliced through the middle at the panel's edge, which is what the first
+    /// two passes of this design did.
+    ///
+    /// Measured with the block **open**, because that is the state the claim is now about: the
+    /// block is closed at rest (`SearchResultsModel.isShowingFilters`), and measuring it closed
+    /// would leave this asserting that a header plus one card fits in 545 pt — true, and not the
+    /// defect. What the ceiling has to survive is the state where the filters really are above the
+    /// grid, which is the state this opens.
+    @MainActor
+    func testTheCeilingLeavesRoomForAWholeCard() {
         let model = SearchResultsModel(
             moments: [], websites: ["arc.net"],
             apps: [SearchAppFacet(name: "Arc", bundleId: nil)])
@@ -193,17 +380,17 @@ final class SearchSurfaceTests: XCTestCase {
         let filters = filterBlock.fittingSize.height - SearchLayout.chipHeight
 
         XCTAssertGreaterThanOrEqual(
-            SearchLayout.defaultResultsBodyHeight, filters + SearchLayout.cardHeight(),
-            "the default frame gives the body \(SearchLayout.defaultResultsBodyHeight) pt, which "
-                + "cuts the first row of cards — it needs \(filters + SearchLayout.cardHeight())")
+            SearchLayout.maximumResultsBodyHeight, filters + SearchLayout.cardHeight(),
+            "the panel tops out at \(SearchLayout.maximumResultsBodyHeight) pt, which cuts the first "
+                + "row of cards — it needs \(filters + SearchLayout.cardHeight())")
     }
 
     // MARK: - The results lead, and the filters are one press behind them
 
     /// **A search shows the user their screenshots, not a screenful of filter controls.**
     ///
-    /// The reported defect, as arithmetic on the real view. In the window's default frame the
-    /// body gets `SearchLayout.defaultResultsBodyHeight`, and the filter block — four time chips, a row of
+    /// The reported defect, as arithmetic on the real view. The panel's body is capped at
+    /// `SearchLayout.maximumResultsBodyHeight`, and the filter block — four time chips, a row of
     /// site pills, a row of 46 pt app icons — used to sit inside that cap *above* the grid and take
     /// very nearly all of it. So a query with a hundred and nine answers showed three of them and
     /// sliced the fourth row, and what a person saw after searching their own machine was a stack
@@ -238,7 +425,7 @@ final class SearchSurfaceTests: XCTestCase {
             let row = two - one
             XCTAssertGreaterThan(row, 0, "a second row of cards cost the panel no height at all")
             let chrome = one - row
-            return Int(((SearchLayout.defaultResultsBodyHeight - chrome) / row).rounded(.down))
+            return Int(((SearchLayout.maximumResultsBodyHeight - chrome) / row).rounded(.down))
         }
 
         let closed = visibleRows(showingFilters: false)
@@ -361,8 +548,9 @@ final class SearchSurfaceTests: XCTestCase {
             XCTAssertNil(SearchResultsModel.destination(of: direction, from: 0, count: 8, columns: 0))
         }
 
-        // The grid the keys step over is the grid the panel draws — a column count restated here
-        // would let ↓ keep stepping by three after the panel became two or four across.
+        // The grid the keys step over is the grid the panel draws — a column count restated there
+        // would have left ↓ stepping by three when the panel went four across, which is the whole of
+        // this claim and is exactly what happened to the width of this panel.
         XCTAssertEqual(SearchResultsModel.gridColumns, SearchLayout.resultColumns)
     }
 
@@ -372,10 +560,20 @@ final class SearchSurfaceTests: XCTestCase {
     /// insertion point through what has been typed, and a bar where they sometimes do not is a bar
     /// that eats your editing. The borrow is announced by the return value, so the field can hand
     /// the key straight back — and this asserts both directions of that, plus the way out.
+    ///
+    /// **The page and every landing are stated in `SearchLayout.resultColumns`, not in cards.** This
+    /// walked a six-card page and expected index 4 back, which was one whole row on a three-across
+    /// grid and is not one on the four-across grid the panel draws now. A test that had to be
+    /// re-typed for a column count is a test that can silently stop asserting "↓ is a row" the next
+    /// time the panel is widened, so it asks the layout instead.
     @MainActor
     func testLeftAndRightStayWithTheQueryUntilTheKeyboardIsInTheGrid() {
+        // Two full rows, so the second row is never ragged and "one row down" always lands on a card.
+        let columns = SearchLayout.resultColumns
         let model = SearchResultsModel(
-            moments: (1...6).map { Self.moment(id: Int64($0), title: "Docs — arc.net", app: "Arc") },
+            moments: (1...(columns * 2)).map {
+                Self.moment(id: Int64($0), title: "Docs — arc.net", app: "Arc")
+            },
             query: "invoice")
 
         XCTAssertFalse(model.move(.left), "← was taken from the query with no card selected")
@@ -388,11 +586,12 @@ final class SearchSurfaceTests: XCTestCase {
         XCTAssertEqual(model.selectedMoment?.id, model.moments[1].id)
         XCTAssertTrue(model.move(.down))
         XCTAssertEqual(
-            model.selectedMoment?.id, model.moments[4].id, "↓ did not move a whole row on the model")
+            model.selectedMoment?.id, model.moments[columns + 1].id,
+            "↓ did not move a whole row on the model")
 
         // Back out along the ranking, and off the front of it: the last ← is consumed (it is what
         // drops the selection), and the one after it is the query's again.
-        for _ in 0..<4 { XCTAssertTrue(model.move(.left)) }
+        for _ in 0..<(columns + 1) { XCTAssertTrue(model.move(.left)) }
         XCTAssertEqual(model.selectedMoment?.id, model.moments[0].id)
         XCTAssertTrue(model.move(.left))
         XCTAssertNil(model.selection, "← off the best answer must put the keyboard back in the query")
@@ -419,11 +618,11 @@ final class SearchSurfaceTests: XCTestCase {
         XCTAssertFalse(SearchLayout.bodyScrolls(contentHeight: SearchLayout.minimumResultsBodyHeight / 2))
         XCTAssertFalse(SearchLayout.bodyScrolls(contentHeight: 300))
         XCTAssertFalse(
-            SearchLayout.bodyScrolls(contentHeight: SearchLayout.defaultResultsBodyHeight),
+            SearchLayout.bodyScrolls(contentHeight: SearchLayout.maximumResultsBodyHeight),
             "content that lands exactly on the ceiling fits — it has nothing below it")
 
         // Past the ceiling the content is cut, and that is precisely when the edge has to say so.
-        XCTAssertTrue(SearchLayout.bodyScrolls(contentHeight: SearchLayout.defaultResultsBodyHeight + 1))
+        XCTAssertTrue(SearchLayout.bodyScrolls(contentHeight: SearchLayout.maximumResultsBodyHeight + 1))
         XCTAssertTrue(SearchLayout.bodyScrolls(contentHeight: 5_000))
 
         // The fade is a signal, not a curtain: readable as a dissolve, and never deep enough to
@@ -436,9 +635,9 @@ final class SearchSurfaceTests: XCTestCase {
         // number, so the reader who scrolls to the end has the fade falling on spare glass rather
         // than on the last card's source line.
         XCTAssertEqual(SearchLayout.scrollFade(contentHeight: 300), 0)
-        XCTAssertEqual(SearchLayout.scrollFade(contentHeight: SearchLayout.defaultResultsBodyHeight), 0)
+        XCTAssertEqual(SearchLayout.scrollFade(contentHeight: SearchLayout.maximumResultsBodyHeight), 0)
         XCTAssertEqual(
-            SearchLayout.scrollFade(contentHeight: SearchLayout.defaultResultsBodyHeight + 1),
+            SearchLayout.scrollFade(contentHeight: SearchLayout.maximumResultsBodyHeight + 1),
             SearchLayout.scrollFadeHeight)
         XCTAssertEqual(SearchLayout.scrollFade(contentHeight: 5_000), SearchLayout.scrollFadeHeight)
     }
@@ -479,9 +678,9 @@ final class SearchSurfaceTests: XCTestCase {
     ///
     /// Measured on the real filter block and the real grid at the shipped panel width, so the inputs
     /// are the heights the app actually produces rather than numbers chosen to make the predicate
-    /// true. A row or two fits inside the window's default frame and must not be faded; four rows and
-    /// thirty-four rows do not fit and must be. The sweep asserts both directions occur, so it cannot
-    /// pass by never exercising the branch.
+    /// true. One row fits inside the ceiling and must not be faded; four rows and thirty-four rows do
+    /// not fit and must be. The sweep asserts both directions occur, so it cannot pass by never
+    /// exercising the branch.
     @MainActor
     func testEveryResultCountEitherFitsOrSaysItDoesNot() {
         var scrolled: [Int] = []
@@ -494,8 +693,11 @@ final class SearchSurfaceTests: XCTestCase {
             let host = NSHostingView(rootView: SearchFilterContent(model: model))
             host.layoutSubtreeIfNeeded()
             let content = host.fittingSize.height
-            let body = SearchLayout.resultsBodyHeight()
+            let body = SearchLayout.resultsBodyHeight(contentHeight: content)
 
+            XCTAssertLessThanOrEqual(
+                body, SearchLayout.maximumResultsBodyHeight,
+                "\(count) results made the panel taller than a 13\" display can hold")
             XCTAssertEqual(
                 SearchLayout.bodyScrolls(contentHeight: content), content > body + 0.5,
                 "at \(count) results the panel's bottom edge disagrees with whether it is cut: "
@@ -514,10 +716,8 @@ final class SearchSurfaceTests: XCTestCase {
                 XCTAssertEqual(
                     SearchLayout.scrollFade(contentHeight: content), 0,
                     "\(count) results fit, and a fade over them promises a row that is not there")
-                // …and the body still fills the frame rather than shrinking to what fits, which is
-                // the change this replaced: a panel sized to three cards inside a 705 pt window left
-                // half the window as bare glass.
-                XCTAssertGreaterThan(body, content)
+                // A panel that fits is exactly as tall as what is in it, and shows all of it.
+                XCTAssertEqual(body, content, accuracy: 0.5)
             }
         }
         XCTAssertFalse(scrolled.isEmpty, "no count in the sweep overflowed — the sweep proves nothing")
@@ -575,7 +775,7 @@ final class SearchSurfaceTests: XCTestCase {
 
     /// The chip hugs what has been typed, and stops at the bar's edge instead of running past it.
     func testTheQueryChipHugsTheTextAndClampsToTheBar() {
-        let available = SearchLayout.queryFieldWidth()
+        let available = SearchLayout.queryFieldWidth
         XCTAssertGreaterThan(available, SearchMetrics.minimumChipWidth)
 
         XCTAssertEqual(
@@ -814,10 +1014,11 @@ final class SearchSurfaceTests: XCTestCase {
         XCTAssertGreaterThan(
             full, empty + 200,
             "an empty panel is nearly as tall as a full one — the empty state is a slab of glass")
-        // …and the empty content really is short, which is what makes the fill worth having: the
-        // panel is the window's height either way, so the alternative was this much glass with a
-        // border drawn a third of the way down it.
-        XCTAssertLessThan(empty, 300, "the empty content is \(empty) pt")
+        XCTAssertLessThanOrEqual(
+            SearchLayout.resultsBodyHeight(contentHeight: empty),
+            SearchLayout.maximumResultsBodyHeight)
+        // …and the empty panel really is short enough that the window is not mostly nothing.
+        XCTAssertLessThan(empty, 300, "the empty panel is \(empty) pt of mostly blank glass")
         XCTAssertGreaterThan(empty, 0)
     }
 
@@ -905,25 +1106,33 @@ final class SearchSurfaceTests: XCTestCase {
     }
 
     /// A **static tripwire**, not behavioural coverage: the behaviour is covered by
-    /// `testSearchingReadsBothTheScreensAndTheConversations` below, which runs the real read. This
-    /// catches the other way the rule breaks — the routing quietly coming back as a second action on
-    /// the bar, or as a "send this to Claude" button beside the results.
+    /// `testSearchingReadsBothTheScreensAndTheConversations` below, which runs the real read.
     ///
-    /// `ClaudeRouter` itself is deliberately *not* asserted out of existence: the first-run tutorial
-    /// still routes its one suggested question into a real Claude chat, and Settings still offers the
-    /// target. What must not come back is the **search path** reaching for it.
-    func testNoFileOnTheSearchPathRoutesToClaude() throws {
+    /// **This used to list `SearchBarView.swift` too, and no longer does.** The rule it was written
+    /// for was "the search bar answers for itself", enforced by forbidding the whole surface from
+    /// naming `ClaudeRouter` — and that over-shot the thing worth protecting. What made routing a
+    /// defect was that it was on the way to *a result*: every recall became a round trip through
+    /// another application when this app owns two full-text indexes over the same machine. Return is
+    /// not on the way to a result. It is the one key that says the user has a **question** rather
+    /// than a lookup, and `SearchBarView.askClaude` is where it leaves — see that file's own note on
+    /// why typing and Return are now different acts.
+    ///
+    /// So the tripwire keeps the half that is still true, and it is the half that was always doing
+    /// the work: **the read-and-render path must not reach for Claude.** A keystroke that costs a
+    /// window switch, or a "send this to Claude" button grown beside the results, is the regression —
+    /// and neither of those can happen without one of these two files naming the router.
+    func testNoFileOnTheResultsPathRoutesToClaude() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // ContextAppTests
             .deletingLastPathComponent()  // Tests
             .deletingLastPathComponent()  // package root
-        for file in ["SearchBarView.swift", "SearchResultsModel.swift", "SearchResultsView.swift"] {
+        for file in ["SearchResultsModel.swift", "SearchResultsView.swift"] {
             let source = try String(
                 contentsOf: root.appendingPathComponent("Sources/ContextApp/Search/\(file)"),
                 encoding: .utf8)
             XCTAssertFalse(
                 source.contains("ClaudeRouter"),
-                "\(file) reaches for ClaudeRouter again — the search bar answers for itself")
+                "\(file) reaches for ClaudeRouter — searching and rendering answer from this Mac")
         }
     }
 

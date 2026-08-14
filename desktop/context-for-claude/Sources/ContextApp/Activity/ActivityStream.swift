@@ -76,8 +76,9 @@ struct ActivityStream: View {
     /// Hands a frame to whatever owns the timeline. Defaulted so a preview can draw the list
     /// without a route to a window.
     var onOpenMoment: (ActivityMoment) -> Void = { _ in }
-    /// Hands a conversation to whatever owns transcripts.
-    var onOpenConversation: (ActivityConversation) -> Void = { _ in }
+    /// Hands a conversation, a memory or a task to whatever pushes details. One closure for the
+    /// three, because they leave this list by one route and arrive at one screen.
+    var onOpen: (ActivityDetailSubject) -> Void = { _ in }
 
     @StateObject private var viewport = ActivityViewport()
     /// Which days are folded shut. Lives with the view rather than with the store because it is a
@@ -128,10 +129,10 @@ struct ActivityStream: View {
                             ForEach(day.rows) { row in
                                 ActivityRowView(
                                     row: row,
-                                    showsIndent: store.kind == .everything,
+                                    showsIndent: store.kind == .all,
                                     loader: store.loader,
                                     onOpenMoment: onOpenMoment,
-                                    onOpenConversation: onOpenConversation
+                                    onOpen: onOpen
                                 )
                                 .background(anchor(for: row, in: day))
                             }
@@ -205,7 +206,9 @@ struct ActivityStream: View {
             isPreparing: store.isPreparing,
             readFailure: store.readFailure,
             query: store.currentQuery,
-            kind: store.kind)
+            kind: store.kind,
+            accountReachable: store.accountReachable,
+            accountUnreachableReason: store.accountUnreachableReason)
     }
 }
 
@@ -214,16 +217,39 @@ struct ActivityStream: View {
 /// The two lines an empty stream shows, resolved from state rather than assembled in a `body`.
 ///
 /// The rule worth stating: **"nothing was captured" is a claim about the machine, and it may only
-/// be made once something has actually been read.** A read that is still running, or one that
-/// threw, is not an empty answer — and saying so is the difference between a surface you can trust
-/// and one that quietly under-reports the day.
+/// be made once something has actually been read.** A read that is still running, one that threw,
+/// and an account that never answered are none of them an empty answer — and saying so is the
+/// difference between a surface you can trust and one that quietly under-reports the day.
+///
+/// **An unreachable account is the newest of those and the easiest to get wrong**, because it is the
+/// one that renders as a perfectly ordinary empty list. Three of the five things this surface shows
+/// live in the account, so a signed-out Mac soloed to `Memories` has nothing to draw — and
+/// "Nothing captured in this window yet" there is a claim about the user's life made from a failed
+/// network read.
+///
+/// **And "unreachable" is itself several different things to the person reading it.** A key the
+/// account rejected is a thing they can fix in one action; being signed out is not a fault at all;
+/// Airgap Mode is a switch they turned on themselves and can turn off. Telling all three "I couldn't
+/// reach your Omi account" is true and useless — it hands someone a dead end where they had a next
+/// step. So each names the state and the action, and none of them ever implies the account is empty.
 struct ActivityEmptyCopy: Equatable, Sendable {
     let headline: String
     /// `nil` while the first day is still being read — there is nothing useful to add to "reading".
     let detail: String?
 
+    /// The sentence every unreachable state ends on: the local half is still real, and the missing
+    /// half is named, so an empty list is never mistaken for an empty life.
+    private static let localHalfStillShows =
+        "Screen moments from this Mac still show up here. Conversations, memories and tasks come "
+        + "from your account."
+
     static func resolve(
-        isPreparing: Bool, readFailure: String?, query: String, kind: ActivityKind
+        isPreparing: Bool,
+        readFailure: String?,
+        query: String,
+        kind: ActivityKind,
+        accountReachable: Bool,
+        accountUnreachableReason: ActivityAccountUnreachableReason? = nil
     ) -> ActivityEmptyCopy {
         if let readFailure {
             return ActivityEmptyCopy(headline: "Couldn't read this Mac's capture.", detail: readFailure)
@@ -236,15 +262,55 @@ struct ActivityEmptyCopy: Equatable, Sendable {
                 headline: "Nothing captured matches “\(query)”.",
                 detail: "Try a different word, or widen the time window.")
         }
+        guard accountReachable else { return unreachable(accountUnreachableReason) }
         return ActivityEmptyCopy(
             headline: "Nothing captured in this window yet.", detail: emptyKindDetail(kind))
     }
 
+    private static func unreachable(_ reason: ActivityAccountUnreachableReason?) -> ActivityEmptyCopy {
+        switch reason {
+        case .airgapped:
+            return ActivityEmptyCopy(
+                headline: "Airgap Mode is on, so your Omi account isn't being read.",
+                detail:
+                    "Screen moments from this Mac still show up here. Turn Airgap Mode off in "
+                    + "Settings to bring conversations, memories and tasks back.")
+        case .signedOut:
+            return ActivityEmptyCopy(
+                headline: "Sign in to Omi to see your account here.",
+                detail: localHalfStillShows)
+        // The one unreachable reason that repairs itself: nothing is wrong with the key or this Mac,
+        // the account is asking us to wait, and `ActivityStore.scheduleAccountReread` is already
+        // waiting. So it says so — and says nothing about signing in or reconnecting, which would
+        // send someone to fix a thing that is not broken.
+        case .rateLimited:
+            return ActivityEmptyCopy(
+                headline: "Your Omi account is rate-limiting this Mac, so it isn't answering yet.",
+                detail:
+                    "Nothing is wrong with your account — I'll ask again shortly. "
+                    + localHalfStillShows)
+        // One sentence for both, because they are one thing to the reader: this Mac cannot open an
+        // account that is there. Which of the two it was — a key the account refused, or one that
+        // was never minted — changes nothing they can do about it.
+        case .keyRejected, .keyUnavailable:
+            return ActivityEmptyCopy(
+                headline: "Omi couldn't authenticate this Mac, so your account can't be read.",
+                detail:
+                    "This is not an empty account. Sign out and back in to Omi from the menu bar to "
+                    + "reconnect it. Screen moments from this Mac show up here either way.")
+        case .noAnswer, .none:
+            return ActivityEmptyCopy(
+                headline: "I couldn't reach your Omi account.", detail: localHalfStillShows)
+        }
+    }
+
     private static func emptyKindDetail(_ kind: ActivityKind) -> String {
         switch kind {
-        case .everything: return "Conversations and screen moments appear here as they happen."
+        case .all: return "Conversations, memories, tasks and screen moments appear here as they happen."
         case .conversations: return "Conversations appear here once this Mac has heard one."
-        case .screen: return "Screen moments appear here while screen capture is on."
+        case .memories: return "Memories appear here as Omi learns something worth keeping."
+        case .tasks: return "Tasks appear here as Omi hears you commit to something."
+        case .rewind: return "Screen moments appear here while screen capture is on."
         }
     }
 }

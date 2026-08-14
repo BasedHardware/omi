@@ -182,6 +182,18 @@ final class Engine: ObservableObject {
     /// Why capture is not whole right now: paused by the user, a permission never granted, or a
     /// source that died. Nil only when everything permitted is actually running.
     @Published private(set) var pausedReason: String?
+    /// **The menu bar's rows, and only the menu bar's.** One row per *capability* — "Microphone"
+    /// standing for the mic and the system-audio tap, "Screen" for the pixels and the window text —
+    /// which is a presentation decision about what the app does, not a report of what macOS granted.
+    ///
+    /// It stopped being only the menu bar's in `03c88c032b`, which switched this from
+    /// `Permissions.report()` to `Permissions.groupedReport()` and, because the same array is
+    /// written into `capture-state.json`, silently changed the machine-readable wire from one row
+    /// per TCC record to a group verdict. `screen` then read `granted: false` whenever Accessibility
+    /// alone was missing — over a live screen stream — and the MCP `status` tool told Claude a whole
+    /// class of local context was missing while frames were landing. `publishState` publishes
+    /// `Permissions.report()` for exactly that reason: the wire names TCC records, the menu bar
+    /// names capabilities, and neither has to be read as the other.
     @Published private(set) var capabilities: [CapabilityReport] = []
     /// Wall-clock seconds of today that Context for Claude actually covered. The one number in the menu bar.
     @Published private(set) var todaySeconds: Double = 0
@@ -1038,7 +1050,9 @@ final class Engine: ObservableObject {
         let state = Self.publishedState(
             components: componentStates,
             isPaused: isPaused,
-            capabilities: capabilities,
+            // Not `capabilities`: those are grouped for the menu bar, and a group verdict written
+            // under a stream's name is read by every machine downstream as that stream's grant.
+            capabilities: Permissions.report(),
             lastOutput: lastOutput,
             transcriptionGap: transcriptionGapReason)
 
@@ -1214,7 +1228,7 @@ final class Engine: ObservableObject {
         // The same sentence `Queries.status` uses for a stale heartbeat, so Claude reads one story.
         pausedReason = "Context for Claude is not running"
         let final = CaptureState(
-            capturing: false, pausedReason: pausedReason, capabilities: capabilities)
+            capturing: false, pausedReason: pausedReason, capabilities: Permissions.report())
         // Snapshot first, then write on the heartbeat queue: a timer tick already in flight runs
         // ahead of this write and re-stamps `final` rather than resurrecting a "capturing" state on
         // top of it.
@@ -1552,9 +1566,14 @@ private final class EngineStore: @unchecked Sendable {
     private func closeSessionsLeftOpen(_ store: ContextStore) {
         let sessions = (try? Queries.sessions(store, since: nil, until: nil, limit: 200)) ?? []
         for session in sessions where session.endedAt == nil {
-            let lastLineAt = ((try? Queries.transcript(store, sessionId: session.id)) ?? [])
-                .map(\.at).max()
-            try? store.closeSession(session.id, at: lastLineAt ?? session.startedAt)
+            // The summary already carries the last line's time, so pulling the transcript back to
+            // recover it read the whole conversation — every segment, its text, for all 200
+            // sessions in the scan — on every launch, to close what is usually the single session a
+            // crash left open. `sessions` measures an unclosed session to `MAX(segments.endedAt)`
+            // in the query that produced the row, and to `startedAt` when it holds no lines at all,
+            // which is the same fallback this loop used to spell out.
+            let lastLineAt = session.startedAt + session.durationSeconds
+            try? store.closeSession(session.id, at: lastLineAt)
             // Sessions orphaned by a crash still belong in the account.
             let orphan = session.id
             Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: orphan) }

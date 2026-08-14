@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import ContextCore
 import SwiftUI
 
@@ -32,6 +33,9 @@ struct SettingsGeneralPane: View {
     @State private var recording: ShortcutAction?
     @State private var rejection: String?
     @State private var isLaunchAtLoginOn = LoginItem.isEnabled
+    /// The readiness the rows were last drawn with, so an activation that changed nothing does not
+    /// rebuild the pane out from under the user's scroll position.
+    @State private var lastReadiness: [ShortcutReadiness] = []
 
     var body: some View {
         SettingsPaneScroll {
@@ -40,11 +44,15 @@ struct SettingsGeneralPane: View {
                     SettingsRow(
                         icon: action.symbol,
                         title: action.title,
-                        subtitle: action.subtitle
+                        // The row says outright when the chord beside it cannot fire. Appended to
+                        // the standing subtitle rather than replacing it, because "clear it to use
+                        // ⌘ + ⌘" is still true — it is the *firing* that is not.
+                        subtitle: subtitle(for: action)
                     ) {
                         ShortcutRecorderField(
                             chord: shortcuts.binding(for: action),
                             fallback: action.defaultChord,
+                            isArmed: shortcuts.readiness(for: action).isArmed,
                             isRecording: recording == action,
                             beginRecording: { begin(action) },
                             capture: { capture($0, for: action) },
@@ -59,6 +67,25 @@ struct SettingsGeneralPane: View {
                     .font(.system(size: 11))
                     .foregroundStyle(Ink.errorRed)
                     .padding(.horizontal, 4)
+            }
+
+            // The one press that fixes the state the rows have just reported. Offered only when
+            // Accessibility is what is missing: a refused key equivalent is not repaired by opening
+            // a privacy pane, and a button that cannot help is worse than no button.
+            if needsAccessibility {
+                SettingsSection {
+                    SettingsRow(
+                        icon: "hand.raised",
+                        title: "Accessibility",
+                        subtitle: Self.accessibilitySubtitle
+                    ) {
+                        Button("Open Accessibility Settings") {
+                            Sound.effect(.click)
+                            Permissions.openSettings(for: .accessibility)
+                        }
+                        .controlSize(.small)
+                    }
+                }
             }
 
             // Shown **only** on a live conflict. The provider is asked every time the pane renders
@@ -93,15 +120,11 @@ struct SettingsGeneralPane: View {
                     title: "Launch on Login",
                     subtitle: "Whether the app automatically starts when you sign in to your computer."
                 ) {
-                    Toggle(
-                        "",
+                    SettingsToggle(
+                        title: "Launch on Login",
                         isOn: Binding(
                             get: { isLaunchAtLoginOn },
-                            set: { setLaunchAtLogin($0) })
-                    )
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                            set: { setLaunchAtLogin($0) }))
                 }
 
                 SettingsRowDivider()
@@ -133,18 +156,12 @@ struct SettingsGeneralPane: View {
                     title: "Airgap Mode",
                     subtitle: Self.airgapSubtitle
                 ) {
-                    Toggle(
-                        "",
+                    SettingsToggle(
+                        title: "Airgap Mode",
                         isOn: Binding(
                             get: { exclusions.snapshot.airgapMode },
-                            set: { enabled in
-                                Sound.effect(.click)
-                                ExclusionEngine.shared.setAirgapMode(enabled)
-                            })
-                    )
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                            set: { ExclusionEngine.shared.setAirgapMode($0) }),
+                        onChange: { _ in Sound.effect(.click) })
                 }
 
                 SettingsRowDivider()
@@ -155,18 +172,14 @@ struct SettingsGeneralPane: View {
                     subtitle: "Plays the ambient bed during the first-run sequence. "
                         + "Click sounds follow your system's interface-sound setting."
                 ) {
-                    Toggle(
-                        "",
+                    SettingsToggle(
+                        title: "Sound",
                         isOn: Binding(
                             get: { Sound.music.isEnabled },
                             set: { enabled in
                                 Sound.music.isEnabled = enabled
                                 if enabled { Sound.effect(.click) }
-                            })
-                    )
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                            }))
                 }
             }
 
@@ -174,11 +187,66 @@ struct SettingsGeneralPane: View {
                 UpdatesSettingsRow(updater: ContextUpdater.shared)
             }
         }
-        .onAppear { isLaunchAtLoginOn = LoginItem.isEnabled }
+        .onAppear {
+            isLaunchAtLoginOn = LoginItem.isEnabled
+            // Accessibility can have been granted since this window was last built, and the readiness
+            // rows above are only as fresh as the registration behind them.
+            GlobalShortcuts.shared.refresh()
+            lastReadiness = readinessSnapshot
+        }
+        // Coming back to the app is the whole of the signal that a permission changed: it is granted
+        // in System Settings and macOS posts nothing when it happens. `GlobalShortcuts` and
+        // `LiveShortcutBindings` both re-arm on this notification; this is what makes the rows say so.
+        //
+        // The generation is bumped **only when an answer actually moved**, because bumping it rebuilds
+        // the pane through `.id` and that puts the scroll position back at the top. Re-activating the
+        // app is something a user does constantly with a settings window open, and a pane that jumped
+        // every time would be a worse bug than the one this is fixing.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) {
+            _ in
+            isLaunchAtLoginOn = LoginItem.isEnabled
+            GlobalShortcuts.shared.refresh()
+            let current = readinessSnapshot
+            guard current != lastReadiness else { return }
+            lastReadiness = current
+            shortcutGeneration += 1
+        }
         // `id` on the generation forces the recorders to re-read the provider after a record or clear
         // without this pane holding a second copy of the bindings.
         .id(shortcutGeneration)
     }
+
+    // MARK: - Readiness
+
+    // Internal rather than private, like `SettingsStoragePane`'s three confirmation strings and for
+    // the same reason: this is the only warning the user gets that a shortcut they can see does not
+    // work, and copy nothing reads is copy nothing can hold to its claims. A sentence built inside
+    // `body` is not reachable from a test, which is how the pane went on printing `⌘ + ⌘` over a
+    // dead gesture with a full suite passing.
+
+    /// Reference copy plus the truth about whether the chord fires, in that order.
+    func subtitle(for action: ShortcutAction) -> String {
+        guard let note = shortcuts.readiness(for: action).note else { return action.subtitle }
+        return "\(action.subtitle) \(note)"
+    }
+
+    var needsAccessibility: Bool {
+        ShortcutAction.allCases.contains { shortcuts.readiness(for: $0) == .needsAccessibility }
+    }
+
+    /// Both slots' answers, for the "did anything move?" comparison above. An array rather than a
+    /// dictionary because there are two of them and `ShortcutAction.allCases` fixes the order.
+    private var readinessSnapshot: [ShortcutReadiness] {
+        ShortcutAction.allCases.map { shortcuts.readiness(for: $0) }
+    }
+
+    /// Why the app cannot simply ask. Accessibility has no system prompt — the only route is the
+    /// Settings row — which is why this is a button that opens a pane rather than one that requests.
+    static let accessibilitySubtitle =
+        "The gesture shortcuts are watched for system-wide, and macOS only allows that with "
+        + "Accessibility granted. There is no prompt for it: switch Context for Claude on in "
+        + "Privacy & Security ▸ Accessibility, then come back. A shortcut you record with a key in "
+        + "it works without this."
 
     // MARK: - Shortcuts
 
@@ -233,6 +301,9 @@ struct SettingsGeneralPane: View {
 struct ShortcutRecorderField: View {
     let chord: SettingsShortcutChord?
     let fallback: SettingsShortcutChord
+    /// Whether the chord printed here will actually fire. A field that looks identical armed and
+    /// dead is a field that lies about the one thing it is for.
+    var isArmed: Bool = true
     let isRecording: Bool
     let beginRecording: () -> Void
     let capture: (SettingsShortcutChord) -> Void
@@ -246,7 +317,7 @@ struct ShortcutRecorderField: View {
             Button(action: beginRecording) {
                 Text(label)
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(isCleared ? Ink.secondary : Ink.primary)
+                    .foregroundStyle(isCleared || !isArmed ? Ink.secondary : Ink.primary)
                     .frame(minWidth: 62)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -256,10 +327,12 @@ struct ShortcutRecorderField: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(isRecording ? Ink.accent : Ink.hairline, lineWidth: isRecording ? 2 : 1))
+                            .strokeBorder(border, lineWidth: isRecording ? 2 : 1))
             }
             .buttonStyle(.plain)
-            .help(isRecording ? "Press the shortcut, or Escape to stop" : "Click to record a shortcut")
+            .help(helpText)
+            .accessibilityLabel(Text("Shortcut"))
+            .accessibilityValue(Text(accessibilityValue))
 
             Button(action: clear) {
                 Image(systemName: "xmark.circle.fill")
@@ -270,11 +343,38 @@ struct ShortcutRecorderField: View {
             .opacity(isCleared ? 0 : 1)
             .disabled(isCleared)
             .help("Clear it to use \(fallback.displayString)")
+            .accessibilityLabel(Text("Clear shortcut"))
+            .accessibilityHidden(isCleared)
         }
         .onChange(of: isRecording) { _, recording in
             recording ? arm() : disarm()
         }
+        // Rebuilt views arrive with `isRecording` already true and no `onChange` to fire — the pane
+        // re-`id`s itself on every record, clear and app activation. Without this the field would go
+        // on showing "…" over a monitor that had been torn down with the previous instance.
+        .onAppear { if isRecording { arm() } }
         .onDisappear(perform: disarm)
+    }
+
+    /// Red for a chord that cannot fire, so the field carries the state as well as the copy under
+    /// it. `Ink.errorRed` and never a purple — see `INV-UI-1`.
+    private var border: Color {
+        if isRecording { return Ink.accent }
+        return isArmed ? Ink.hairline : Ink.errorRed
+    }
+
+    private var helpText: String {
+        if isRecording { return "Press the shortcut, or Escape to stop" }
+        if !isArmed { return "This shortcut is not active. Click to record one that is." }
+        return "Click to record a shortcut"
+    }
+
+    /// Spoken, not glyphs. `⌘ + ⌘` reads out as three symbols and none of the meaning, which is what
+    /// `SettingsShortcutChord.spokenDescription` exists for.
+    private var accessibilityValue: String {
+        if isRecording { return "Recording" }
+        let spoken = (chord ?? fallback).spokenDescription
+        return isArmed ? spoken : "\(spoken), not active"
     }
 
     /// A cleared slot shows the default chord greyed, which is what "Clear it to use ⌘ + ⌘" describes:
@@ -290,7 +390,10 @@ struct ShortcutRecorderField: View {
         disarm()
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
             // Escape abandons the recording rather than binding ⎋, which nothing should be bound to.
-            guard event.keyCode != 53 else {
+            // Named rather than `53`, and it is the same constant `GlobalShortcuts.Recorded`
+            // refuses on the other path — two spellings of one key code is how the recorder and the
+            // registrar drift into disagreeing about what may be bound.
+            guard event.keyCode != UInt16(kVK_Escape) else {
                 cancelRecording()
                 return nil
             }

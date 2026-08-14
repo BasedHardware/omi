@@ -401,8 +401,15 @@ enum StorageLimit {
     /// round one because the unit they are stored in is the unit they are printed in.
     static let gigabyte: Int64 = 1_000_000_000
 
-    /// Deliberately not `ContextStore.defaultFrameBytesCap` (4 GiB): that cap is the app's own
-    /// backstop and applies whether or not the user asked for a limit. This is the number they chose.
+    /// Deliberately not `ContextStore.defaultFrameBytesCap` (4 GiB). That constant is only the
+    /// *default argument* of `ContextStore.enforceRetention(olderThanDays:toFitBytes:)`, and nothing
+    /// in this app takes it: `Engine.scheduleRetentionSweep` runs only when the strategy is `.limit`
+    /// and always passes this number explicitly. So there is no 4 GiB backstop under a user who left
+    /// Storage on **Off** — that user keeps everything, forever, exactly as the radio row promises.
+    ///
+    /// Said here because this comment used to claim the opposite ("that cap is the app's own backstop
+    /// and applies whether or not the user asked for a limit"), and a note that describes a bound
+    /// nothing enforces is how the next person to read it writes copy promising one.
     static let defaultBytes: Int64 = 5 * gigabyte
     static let minimumBytes: Int64 = gigabyte
     static let maximumBytes: Int64 = 200 * gigabyte
@@ -562,7 +569,9 @@ final class SettingsStore: ObservableObject {
         self.appliesToRunningApp = appliesToRunningApp
 
         func enumValue<T: RawRepresentable>(_ key: String, _ fallback: T) -> T where T.RawValue == String {
-            guard let raw = defaults.string(forKey: key), let value = T(rawValue: raw) else { return fallback }
+            guard let raw = defaults.string(forKey: key), let value = T(rawValue: raw) else {
+                return fallback
+            }
             return value
         }
         func flag(_ key: String, default fallback: Bool) -> Bool {

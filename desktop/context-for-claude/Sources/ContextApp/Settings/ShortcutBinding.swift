@@ -230,6 +230,42 @@ enum ShortcutRecordResult: Equatable, Sendable {
     case rejected(String)
 }
 
+// MARK: - Whether the chord in the recorder will actually fire
+
+/// What the recorder is allowed to imply about the chord printed in it.
+///
+/// The mirror of `GlobalShortcuts.Readiness` in this pane's vocabulary, and it exists because the
+/// recorder had no way to ask. `GlobalShortcuts.readiness(for:)` was written for exactly this — its
+/// own documentation says the gesture defaults "cannot be registered as hot keys at all … macOS gates
+/// [the monitor] behind Accessibility. When that grant is missing the shortcut does not fire, and
+/// `readiness(for:)` says so rather than letting Settings imply otherwise" — but the seam this pane
+/// talks through had no member for it, so Settings never asked and printed `⌘ + ⌘` on a Mac where
+/// pressing it did nothing at all. A recorder showing a chord that cannot fire is the same defect as
+/// a control that silently does nothing; it is worse, because the user has evidence for the opposite.
+enum ShortcutReadiness: Equatable, Sendable {
+    /// Registered, or watched for, and it will fire.
+    case armed
+    /// A gesture binding on a Mac that has not granted Accessibility. Nothing fires.
+    case needsAccessibility
+    /// macOS refused the recorded key equivalent — almost always because something else holds it.
+    case rejected(String)
+
+    var isArmed: Bool { self == .armed }
+
+    /// The line printed under the row. Nil when there is nothing wrong to say.
+    ///
+    /// Named here rather than in the view so the copy is assertable: this is the only warning the
+    /// user gets that a shortcut they can *see* does not work.
+    var note: String? {
+        switch self {
+        case .armed: return nil
+        case .needsAccessibility:
+            return "This shortcut needs Accessibility to fire. Until it is granted, pressing it does nothing."
+        case .rejected(let reason): return reason
+        }
+    }
+}
+
 // MARK: - The seam
 
 /// What the General pane needs from the global-shortcut layer, and nothing else.
@@ -249,6 +285,9 @@ enum ShortcutRecordResult: Equatable, Sendable {
 protocol ShortcutBindingProvider: AnyObject {
     /// The chord in force for `action`, or nil when the slot is cleared.
     func binding(for action: ShortcutAction) -> SettingsShortcutChord?
+    /// Whether the chord the recorder is about to print will actually fire. Read on every render —
+    /// Accessibility is granted outside this process and macOS posts nothing when it happens.
+    func readiness(for action: ShortcutAction) -> ShortcutReadiness
     /// Live check. Empty when nothing clashes, which is the common case.
     func conflicts() -> [SettingsShortcutConflict]
     func record(_ chord: SettingsShortcutChord, for action: ShortcutAction) -> ShortcutRecordResult
@@ -281,17 +320,27 @@ final class InMemoryShortcutBindings: ShortcutBindingProvider {
     private var declaredConflicts: [SettingsShortcutConflict]
     private var observers: [UUID: @MainActor () -> Void] = [:]
 
+    /// Overridden per slot by a test that wants the ungranted-Accessibility row. `.armed` everywhere
+    /// else, because this stand-in registers nothing and so has nothing that can be refused.
+    var declaredReadiness: [ShortcutAction: ShortcutReadiness]
+
     init(
         chords: [ShortcutAction: SettingsShortcutChord]? = nil,
-        conflicts: [SettingsShortcutConflict] = []
+        conflicts: [SettingsShortcutConflict] = [],
+        readiness: [ShortcutAction: ShortcutReadiness] = [:]
     ) {
         self.chords =
             chords
             ?? Dictionary(uniqueKeysWithValues: ShortcutAction.allCases.map { ($0, $0.defaultChord) })
         self.declaredConflicts = conflicts
+        self.declaredReadiness = readiness
     }
 
     func binding(for action: ShortcutAction) -> SettingsShortcutChord? { chords[action] }
+
+    func readiness(for action: ShortcutAction) -> ShortcutReadiness {
+        declaredReadiness[action] ?? .armed
+    }
 
     func conflicts() -> [SettingsShortcutConflict] { declaredConflicts }
 

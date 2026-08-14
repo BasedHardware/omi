@@ -200,6 +200,65 @@ final class UpdatePolicyTests: XCTestCase {
     XCTAssertTrue(sentence.contains("Settings"), sentence)
   }
 
+  /// **The regression test for a check and its download being guarded as one thing.**
+  ///
+  /// `automaticallyDownloadsUpdates` is true, so an allowed check runs straight on into a release-
+  /// notes fetch and an archive download with no second question asked. Only the *check* was gated,
+  /// so Airgap Mode turned on while the appcast was in flight still pulled tens of megabytes from a
+  /// host the user had just told this app to stop talking to.
+  ///
+  /// Written over `Step.allCases` rather than as a list, for the same reason `AirgapEgressTests` is
+  /// written over `Client.allCases`: a step added later is covered the moment it names itself.
+  func testEverySparkleStepReReadsAirgapModeForItselfRatherThanInheritingTheCheck() {
+    let recorder = AirgapSuppressionRecorder()
+    defer { recorder.stop() }
+
+    for step in UpdateEgress.Step.allCases {
+      XCTAssertFalse(
+        UpdateEgress.permits(step, isSuppressed: { true }),
+        "\(step.rawValue) must not reach the network under Airgap Mode")
+    }
+    XCTAssertEqual(
+      recorder.records.count, UpdateEgress.Step.allCases.count,
+      "each refused step reports its own suppression, or the telemetry undercounts what was stopped")
+    XCTAssertTrue(recorder.records.allSatisfy { $0.client == .updateCheck })
+
+    for step in UpdateEgress.Step.allCases {
+      XCTAssertTrue(
+        UpdateEgress.permits(step, isSuppressed: { false }),
+        "\(step.rawValue) must be unaffected when Airgap Mode is off")
+    }
+    XCTAssertEqual(
+      recorder.records.count, UpdateEgress.Step.allCases.count, "and nothing more is reported")
+  }
+
+  /// The gates above are only real if Sparkle actually calls them, and `SPUUpdaterDelegate` is an
+  /// all-optional protocol dispatched through `-respondsToSelector:`. A guard written for a callback
+  /// the delegate does not implement looks exactly like a guard that works — which is precisely how
+  /// the download went ungated for as long as the file existed.
+  ///
+  /// So this asks the ObjC runtime the same question Sparkle asks, of the real production class.
+  /// The selectors carry a trailing `error:` where the Swift method `throws`.
+  func testTheDelegateSparkleTalksToActuallyImplementsEachGatedCallback() {
+    let gated = [
+      "updater:mayPerformUpdateCheck:error:",
+      "updater:shouldDownloadReleaseNotesForUpdate:",
+      "updater:shouldProceedWithUpdate:updateCheck:error:",
+    ]
+    for name in gated {
+      XCTAssertTrue(
+        UpdaterEvents.instancesRespond(to: NSSelectorFromString(name)),
+        "Sparkle asks for \(name) and would go ahead unguarded if it is not answered")
+    }
+  }
+
+  /// A refusal Sparkle surfaces has to be the same sentence the Settings row shows, or a person
+  /// meets two different explanations for one switch.
+  func testTheErrorSparkleIsThrownCarriesTheSentenceTheSettingsRowShows() {
+    XCTAssertEqual(
+      UpdateEgress.refusal.localizedDescription, NetworkEgress.explanation(.updateCheck))
+  }
+
   // MARK: - What the next launch is told
 
   /// The note the outgoing build leaves so the incoming one can tell "I was just updated" from "I

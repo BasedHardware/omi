@@ -15,18 +15,9 @@ struct SettingsCapturePane: View {
                     title: "Screen Capture",
                     subtitle: "Controls whether your screen is actively being recorded."
                 ) {
-                    Toggle(
-                        "",
-                        isOn: Binding(
-                            get: { store.screenCaptureEnabled },
-                            set: { value in
-                                Sound.effect(.click)
-                                store.screenCaptureEnabled = value
-                            })
-                    )
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                    SettingsToggle(
+                        title: "Screen Capture", isOn: $store.screenCaptureEnabled,
+                        onChange: { _ in Sound.effect(.click) })
                 }
 
                 SettingsRowDivider()
@@ -48,18 +39,9 @@ struct SettingsCapturePane: View {
                         + "keyboard or mouse activity, until you touch the machine again. "
                         + "Audio transcription is not affected."
                 ) {
-                    Toggle(
-                        "",
-                        isOn: Binding(
-                            get: { store.pausesOnInactivity },
-                            set: { value in
-                                Sound.effect(.click)
-                                store.pausesOnInactivity = value
-                            })
-                    )
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                    SettingsToggle(
+                        title: "Pause on Inactivity", isOn: $store.pausesOnInactivity,
+                        onChange: { _ in Sound.effect(.click) })
                 }
             }
 

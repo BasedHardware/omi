@@ -171,6 +171,47 @@ struct SettingsRowStack<Item: Identifiable, RowContent: View>: View {
 
 // MARK: - Controls
 
+/// The switch on the right of a `SettingsRow`, and the **only** switch shape these panes have.
+///
+/// It exists because of what every one of them used to be: `Toggle("", isOn:)` followed by
+/// `.labelsHidden()`. That hides the visual label — which is right, the row's own title is the label
+/// a sighted user reads — but the string it hides is also the *accessibility* label, and it was
+/// empty. So VoiceOver announced eleven switches across five panes as an unnamed "on"/"off": Launch
+/// on Login, Airgap Mode, Sound, Show Dock Icon, the four Timeline controls, Screen Capture, Pause on
+/// Inactivity, Exclude Private Tabs and Claude Connection were, to a user not looking at the screen,
+/// indistinguishable from each other. Turning off the wrong one of those is turning off capture, or
+/// turning off Airgap.
+///
+/// `Toggle(title, isOn:).labelsHidden()` is the one-word idiom that fixes it, and this type is what
+/// makes it unskippable: the pane cannot spell a switch without a title, because there is no
+/// initialiser that takes none. `docs/product/invariants` asks for compiler-first boundaries before
+/// source scrapes, and this is one — the empty label is no longer expressible.
+struct SettingsToggle: View {
+    /// The row's own title, verbatim. Two names for one control is worse than one.
+    let title: String
+    @Binding var isOn: Bool
+    /// Run before the write, for the click. A closure rather than an `onChange`, because the sound
+    /// is feedback for the press and not for the value settling.
+    var onChange: (Bool) -> Void = { _ in }
+
+    var body: some View {
+        Toggle(
+            title,
+            isOn: Binding(
+                get: { isOn },
+                set: { value in
+                    onChange(value)
+                    isOn = value
+                })
+        )
+        // Hides the text, keeps the accessibility label. That is the whole distinction this type
+        // exists to hold on to.
+        .labelsHidden()
+        .toggleStyle(.switch)
+        .controlSize(.small)
+    }
+}
+
 /// The four Capture Quality tiles, and the three Appearance tiles: one selectable tile shape, ringed
 /// in the accent when chosen.
 struct SettingsTile<Content: View>: View {

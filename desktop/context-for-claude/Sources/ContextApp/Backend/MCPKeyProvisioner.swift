@@ -13,6 +13,12 @@ import Foundation
 /// resolver expects to find one — which matters because the local capture is minutes deep while the
 /// account is months deep, and the account is the whole point.
 ///
+/// The app reads that same key back. `/v1/mcp/*` is the one endpoint family a Firebase ID token
+/// cannot open — `get_uid_from_mcp_api_key` looks the bearer up in `mcp_api_keys` and a token that
+/// is not an `omi_mcp_…` key is a flat 401 — so the Activity surface authenticates with this
+/// credential rather than with the session it is signed in as. That makes one key per Mac serve both
+/// halves of the product, and makes the app the half that can repair it: see `key(replacing:)`.
+///
 /// Everything here is best-effort. Capture, upload and the local MCP tools do not depend on it: a
 /// failure costs account history, never the app.
 @MainActor
@@ -47,6 +53,16 @@ final class MCPKeyProvisioner {
     private var didLogReuse = false
     private var didLogAirgap = false
 
+    /// How many keys a rejection has been allowed to replace this launch.
+    ///
+    /// **This is the loop stop.** The Activity surface polls, so a backend that rejects every key it
+    /// issues would otherwise have this Mac mint one per read — filling the account's key list with
+    /// credentials nobody can use and revoking each of them a moment later. Two is enough for the
+    /// case this exists for (the key on disk was superseded or revoked) and far short of a storm;
+    /// past it the rejection is the account's answer, not a stale file, and the surface says so.
+    private var reprovisions = 0
+    private static let reprovisionCeiling = 2
+
     private init() {}
 
     // MARK: - Entry point
@@ -70,6 +86,51 @@ final class MCPKeyProvisioner {
         try? Self.removeKeyFiles(at: Self.keyFileURL)
         isBlockedForThisLaunch = false
         didLogReuse = false
+        reprovisions = 0
+    }
+
+    // MARK: - Reading it back
+
+    /// The key this Mac should present to `/v1/mcp/*`, provisioning one first if there is none.
+    ///
+    /// `nil` is every reason there is no credential — signed out, Airgap Mode, a mint that failed —
+    /// and the caller's job is to report the account unreachable rather than to render an empty one.
+    func key() async -> String? {
+        await ensureKey()
+        return Self.storedKey(at: Self.keyFileURL)
+    }
+
+    /// Replaces a key the backend has just rejected, and answers with whatever this Mac should use
+    /// now — `nil` when nothing can be.
+    ///
+    /// Two things keep this from becoming a mint loop. **A key that is no longer the one on disk has
+    /// already been replaced**, by a sibling read that hit the same 401 a moment earlier — the three
+    /// Activity sources race, so without that check the second and third rejections would each
+    /// revoke the key the first one just wrote. And past `reprovisionCeiling` this stops minting
+    /// entirely: a freshly issued key that is *also* rejected is the account refusing, and the only
+    /// honest thing left is to say the account could not be read.
+    func key(replacing rejected: String) async -> String? {
+        let keyURL = Self.keyFileURL
+        if let onDisk = Self.storedKey(at: keyURL), onDisk != rejected { return onDisk }
+
+        guard reprovisions < Self.reprovisionCeiling else {
+            ContextLog.error(
+                "The Omi backend rejected this Mac's MCP key again; not minting another this launch",
+                Self.category)
+            return nil
+        }
+        reprovisions += 1
+        ContextLog.info("The Omi backend rejected this Mac's MCP key; provisioning a new one", Self.category)
+
+        // Removed before the mint, because `provision()` treats a key on disk as the reuse
+        // mechanism and would otherwise hand the rejected one straight back.
+        try? Self.removeKeyFiles(at: keyURL)
+        didLogReuse = false
+        await ensureKey()
+
+        // An unchanged key means nothing was minted — signed out, Airgap Mode, or the mint failed.
+        guard let fresh = Self.storedKey(at: keyURL), fresh != rejected else { return nil }
+        return fresh
     }
 
     // MARK: - Provisioning
@@ -109,10 +170,11 @@ final class MCPKeyProvisioner {
         // destructive and ineffective: `OmiKeyResolver` in `ContextMCPKit` falls back to any other
         // Omi key it can find in `~/.claude.json`, so removing ours would not stop the MCP binary
         // reaching the backend — it would only make it borrow someone else's credential. That binary
-        // is a separate process with its own `URLSession` (`ContextMCPKit/OmiBackend.swift`) and it
-        // does not read Airgap Mode today; it links `ContextCore`, so the same
-        // `ExclusionEngine.shared.current.airgapMode` this file consults is available to it, and
-        // that is where that hole has to be closed.
+        // is a separate process with its own `URLSession` (`ContextMCPKit/OmiBackend.swift`), and
+        // that is where that hole is closed rather than here: it re-reads the same `exclusions.json`
+        // through `MCPNetworkEgress` before every request, and names itself to this app's audited
+        // list as `NetworkEgress.Client.mcpOmiBackend`. So a key left on disk is a key that binary
+        // will not spend while the switch is on.
         guard !NetworkEgress.isSuppressed(.mcpKeyProvisioning) else {
             if !didLogAirgap {
                 didLogAirgap = true
@@ -186,17 +248,30 @@ final class MCPKeyProvisioner {
     /// so it can never match `omi-memory`'s key or anything a person typed. `OmiAPI` has no DELETE
     /// verb and this is its only caller, so the request is built here from the same header set —
     /// the pattern `ScreenActivityUploader` already uses for the endpoint it owns.
-    private static func retire(_ keyId: String) async {
+    @discardableResult
+    static func retire(
+        _ keyId: String,
+        isSuppressed: () -> Bool = { NetworkEgress.isSuppressed(.mcpKeyProvisioning) }
+    ) async -> RevokeOutcome {
         // This request is built here rather than through `OmiAPI`, so it does not inherit `OmiAPI`'s
         // airgap guard and needs its own. Unreachable under Airgap Mode today — `provision()` stops
         // before the mint that produces a superseded id — but "unreachable" is a property of today's
         // call graph, and this is a DELETE to a remote host.
-        guard !NetworkEgress.isSuppressed(.mcpKeyProvisioning) else { return }
+        //
+        // **The record is not optional and this is where that was learned.** For as long as this
+        // guard existed it refused and said nothing, which made it the one suppression in the app
+        // that never reached telemetry — so the answer to "what did Airgap Mode actually stop?" was
+        // wrong by exactly this call, and wrong in the direction that hides a client rather than
+        // inventing one. A refusal nobody records is a refusal nobody can audit.
+        guard !isSuppressed() else {
+            NetworkEgress.recordSuppression(.mcpKeyProvisioning, outcome: .degraded)
+            return .suppressedByAirgap
+        }
 
         // Stricter than `.urlPathAllowed`, which would let a "/" in an id walk off the endpoint.
         let unreserved = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
         guard let escaped = keyId.addingPercentEncoding(withAllowedCharacters: unreserved), !escaped.isEmpty else {
-            return
+            return .unusableId
         }
         var request = URLRequest(url: OmiAPI.baseURL.appendingPathComponent("v1/mcp/keys/\(escaped)"))
         request.httpMethod = "DELETE"
@@ -207,12 +282,30 @@ final class MCPKeyProvisioner {
             // 404 counts: the key is gone, which is the whole point of the call.
             guard status == 204 || status == 200 || status == 404 else {
                 ContextLog.error("Superseded Omi MCP key could not be revoked (HTTP \(status))", category)
-                return
+                return .attempted
             }
             ContextLog.info("Revoked this Mac's superseded Omi MCP key", category)
         } catch {
             ContextLog.error("Superseded Omi MCP key could not be revoked: \(error.localizedDescription)", category)
         }
+        return .attempted
+    }
+
+    /// What a revoke did, returned rather than swallowed so the refusal is drivable in a test.
+    ///
+    /// Inferring "nothing was sent" from a `Void` function means either believing the guard or
+    /// issuing the DELETE to find out, and this is a live account behind a rate limit. The value is
+    /// the evidence instead.
+    enum RevokeOutcome: Equatable, Sendable {
+        /// Airgap Mode was on. No URL was built, so nothing was sent and nothing is owed.
+        case suppressedByAirgap
+        /// The id could not be escaped into a path segment. Also sends nothing — and it is the
+        /// control the airgap case needs, because it proves a refusal can be reached with the
+        /// switch off.
+        case unusableId
+        /// A DELETE was issued. Whether the backend accepted it is in the log, not here: a failed
+        /// revoke costs tidiness, never function.
+        case attempted
     }
 
     private static let session: URLSession = {

@@ -113,10 +113,19 @@ final class LiveShortcutBindings: ShortcutBindingProvider {
         self.exclusions = exclusions
         // Another app's shortcut is changed in that app, and the only reliable signal that happened
         // is the user coming back to us. `GlobalShortcuts` re-registers on the same notification.
+        //
+        // `notify()` as well as the invalidation, because coming back is also the one moment
+        // `readiness(for:)` can have changed: Accessibility is granted in System Settings, macOS
+        // posts nothing when it happens, and returning to this app is the whole of the signal. A
+        // pane that dropped its cached conflict report but kept printing "needs Accessibility" over
+        // a grant the user had just given would be telling them their work did not land.
         activationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.invalidateConflictScan() }
+            MainActor.assumeIsolated {
+                self?.invalidateConflictScan()
+                self?.notify()
+            }
         }
         // Seeded before registering, because `addObserver` calls back immediately with the current
         // set: without this the first callback would read as a change and fire a render nobody
@@ -153,6 +162,18 @@ final class LiveShortcutBindings: ShortcutBindingProvider {
         return SettingsShortcutChord(keyCode: recorded.keyCode, modifierFlags: recorded.modifiers.appKitFlags)
     }
 
+    /// The shortcut layer's own answer, translated. Read live rather than cached: Accessibility is
+    /// granted in System Settings while this app runs, and `GlobalShortcuts.readiness` computes
+    /// `AXElement.isTrusted` at the moment it is asked — so a pane that re-renders after the user
+    /// comes back from that pane shows the new answer without anything having to be told.
+    func readiness(for action: ShortcutAction) -> ShortcutReadiness {
+        switch registry.readiness(for: registryAction(action)) {
+        case .armed: return .armed
+        case .needsAccessibility: return .needsAccessibility
+        case .rejected(let reason): return .rejected(reason)
+        }
+    }
+
     func record(_ chord: SettingsShortcutChord, for action: ShortcutAction) -> ShortcutRecordResult {
         // Normalised first: the recorder masks with `deviceIndependentFlagsMask`, which still carries
         // Caps Lock and Fn. Comparing or storing an unnormalised chord would make the same keypress
@@ -177,7 +198,8 @@ final class LiveShortcutBindings: ShortcutBindingProvider {
         guard !SettingsShortcutChord.reservedByMacOS.contains(normalized) else {
             return .rejected("macOS reserves \(display).")
         }
-        if let other = ShortcutAction.allCases.first(where: { $0 != action && binding(for: $0) == normalized }) {
+        if let other = ShortcutAction.allCases.first(where: { $0 != action && binding(for: $0) == normalized }
+        ) {
             return .rejected("\(other.title) already uses \(display).")
         }
 

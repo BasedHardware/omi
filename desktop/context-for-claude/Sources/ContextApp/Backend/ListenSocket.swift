@@ -295,6 +295,17 @@ final class ListenSocket: ObservableObject {
         }
 
         guard wantsConnection, generation == connectionId else { return }
+        // **Asked again, on the other side of the await.** The guard at the top of this function ran
+        // before `OmiAPI.shared.headers` suspended, and a token that is still valid returns without
+        // its own airgap check — so a switch flipped while this was suspended would find nothing else
+        // between here and `task.resume()`. Of everything airgap gates, this is the socket that
+        // matters most: it carries the microphone and the system-audio tap. The two guards beside it
+        // re-read `wantsConnection` and `generation` across the same await for the same reason; this
+        // is the third fact that can change while nobody is looking.
+        guard !NetworkEgress.isSuppressed(.listenSocket) else {
+            reportAirgapped()
+            return
+        }
         guard let url = Self.listenURL(clientConversationId: clientConversationId) else {
             permanentFailure("The Omi backend URL is unusable, so transcription cannot start.")
             return

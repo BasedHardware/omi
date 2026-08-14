@@ -161,6 +161,53 @@ final class StatusHonestyTests: XCTestCase {
             "the sentence has to forbid the inference, not merely report the fact: \(clause)")
     }
 
+    /// **The mirror image, and the one that told Claude something false about the user's data.**
+    ///
+    /// A running install wrote a live `screen` stream and a `screen` permission reading
+    /// `granted: false` into the same heartbeat, because the app had begun publishing the menu
+    /// bar's *grouped* rows — where "Screen" stands for the pixels and the window text together —
+    /// under a name every reader here takes for the Screen Recording grant. This clause then told a
+    /// model that screen context "was never captured at all" over frames that were landing every
+    /// few seconds, which is worse than an empty answer: it licenses a confident wrong one.
+    func testAPermissionIsNeverReportedDeniedOverAStreamThatIsLive() {
+        let clause = Tools.deniedCaptureClause(
+            CaptureState(
+                streams: [
+                    StreamReport(name: StreamName.storage, state: .live),
+                    StreamReport(
+                        name: StreamName.microphone, state: .live, lastOutputAt: 1_786_684_315),
+                    StreamReport(name: StreamName.screen, state: .live, lastOutputAt: 1_786_684_216),
+                ],
+                capabilities: [
+                    CapabilityReport(name: "microphone", granted: true, detail: "Granted"),
+                    CapabilityReport(name: "screen", granted: false, detail: "Action required"),
+                ]))
+
+        XCTAssertNil(
+            clause,
+            "a recorder whose every stream is live has nothing to warn about: \(clause ?? "")")
+    }
+
+    /// The same pair through the tool a user is sent to when something looks wrong.
+    func testTheStatusListDoesNotCallACapturingScreenUngranted() {
+        let state = CaptureState(
+            streams: [
+                StreamReport(name: StreamName.screen, state: .live, lastOutputAt: 1_786_684_216)
+            ],
+            capabilities: [
+                CapabilityReport(name: "screen", granted: false, detail: "Action required")
+            ])
+        let rendered = Tools.renderStatus(
+            status(
+                health: .capturing, capturing: true, capabilities: state.capabilities,
+                streams: state.streams))
+
+        XCTAssertTrue(rendered.contains("**screen**: granted"), rendered)
+        XCTAssertFalse(
+            rendered.contains("At least one capture permission is off"),
+            "the sentence that made a model report missing context over a live screen: \(rendered)")
+    }
+
     /// The pre-existing behaviour, unchanged: a heartbeat with no stream detail at all still
     /// reports its denied permissions and says nothing about streams it knows nothing about.
     func testAStateWithNoStreamDetailStillReportsDeniedPermissions() throws {

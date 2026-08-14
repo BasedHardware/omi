@@ -171,6 +171,11 @@ final class OmiAuth: ObservableObject {
 
         // Before `isSigningIn` is set and before a browser opens. Opening a tab and then refusing the
         // code it comes back with would be a worse lie than refusing the press.
+        //
+        // This is the *first* of the guards on this flow and never the last one. Nothing between
+        // here and `NSWorkspace.shared.open` below suspends, so the browser cannot be opened against
+        // a stale answer — but `waitForCode()` below suspends for as long as a person takes, and the
+        // two requests after it re-ask for themselves in `post(url:contentType:body:client:)`.
         guard !NetworkEgress.isSuppressed(.signIn) else {
             ContextLog.info("Sign-in refused: Airgap Mode is on", "auth")
             NetworkEgress.recordSuppression(.signIn, outcome: .bypassed)
@@ -326,7 +331,8 @@ final class OmiAuth: ObservableObject {
                 Self.formEncoded([
                     ("grant_type", "refresh_token"),
                     ("refresh_token", refreshToken),
-                ]).utf8)
+                ]).utf8),
+            client: .tokenRefresh
         )
 
         guard response.statusCode == 200 else {
@@ -437,7 +443,8 @@ final class OmiAuth: ObservableObject {
         ])
 
         let (data, response) = try await post(
-            url: url, contentType: "application/x-www-form-urlencoded", body: Data(body.utf8))
+            url: url, contentType: "application/x-www-form-urlencoded", body: Data(body.utf8),
+            client: .signIn)
         guard response.statusCode == 200 else {
             throw OmiAuthError.http(
                 response.statusCode, "Omi rejected the sign-in \(Self.errorSummary(data)).")
@@ -471,7 +478,8 @@ final class OmiAuth: ObservableObject {
             "returnSecureToken": true,
         ])
 
-        let (data, response) = try await post(url: url, contentType: "application/json", body: body)
+        let (data, response) = try await post(
+            url: url, contentType: "application/json", body: body, client: .signIn)
         guard response.statusCode == 200 else {
             throw OmiAuthError.http(
                 response.statusCode, "Firebase rejected Omi's sign-in \(Self.errorSummary(data)).")
@@ -498,13 +506,52 @@ final class OmiAuth: ObservableObject {
         )
     }
 
-    private func post(url: URL, contentType: String, body: Data) async throws -> (Data, HTTPURLResponse) {
+    private func post(
+        url: URL, contentType: String, body: Data, client: NetworkEgress.Client
+    ) async throws -> (Data, HTTPURLResponse) {
+        try await Self.post(
+            url: url, contentType: contentType, body: body, client: client,
+            transport: { [urlSession] request in try await urlSession.data(for: request) })
+    }
+
+    /// The one function in this type that touches the network, and therefore the one place Airgap
+    /// Mode can honestly be read.
+    ///
+    /// **The re-read here is the fix, not decoration.** Sign-in used to be guarded once, at the
+    /// press, and then waited on `LoopbackCallbackServer.waitForCode()` — an unbounded wait, because
+    /// what it is waiting for is a person in a browser. Everything after that wait ran on an answer
+    /// taken minutes earlier: someone who reached for Airgap Mode *while* their browser was open —
+    /// the exact moment a person reaches for it — still shipped an authorization code to
+    /// `api.omi.me` and a custom token to Google. A flow-level guard cannot see a switch that moves
+    /// mid-flow; a request-level one cannot miss it.
+    ///
+    /// Static, and with both the gate and the transport injected, so the refusal is drivable in a
+    /// test without a browser, a loopback socket, or a request to anybody's real account.
+    static func post(
+        url: URL,
+        contentType: String,
+        body: Data,
+        client: NetworkEgress.Client,
+        isSuppressed: (NetworkEgress.Client) -> Bool = { NetworkEgress.isSuppressed($0) },
+        transport: (URLRequest) async throws -> (Data, URLResponse)
+    ) async throws -> (Data, HTTPURLResponse) {
+        // Before the `URLRequest` exists, so no body carrying a code, a verifier or a refresh token
+        // is ever assembled — let alone sent.
+        guard !isSuppressed(client) else {
+            ContextLog.info("\(client.rawValue) request suppressed: Airgap Mode is on", "auth")
+            // `.bypassed` for a sign-in: the whole attempt is abandoned and the user is told.
+            // `.degraded` for a refresh: the stored session is untouched and resumes, with no
+            // browser round trip, the moment the switch goes off.
+            NetworkEgress.recordSuppression(client, outcome: client == .signIn ? .bypassed : .degraded)
+            throw OmiAuthError.airgapMode
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.httpBody = body
 
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await transport(request)
         guard let http = response as? HTTPURLResponse else {
             throw OmiAuthError.badResponse("The server sent a response Context for Claude couldn't read.")
         }
