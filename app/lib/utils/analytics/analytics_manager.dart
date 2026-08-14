@@ -553,6 +553,7 @@ class AnalyticsManager {
         'type': device.type.name,
         'device_vendor': vendor,
         'hardware_family': hardwareFamily,
+        ..._deviceIdentityProperties(device),
       },
     );
     setUserProperty('device_vendor', vendor);
@@ -569,6 +570,7 @@ class AnalyticsManager {
         'type': device.type.name,
         'device_vendor': device.type.analyticsVendor,
         'hardware_family': hardwareFamily,
+        ..._deviceIdentityProperties(device),
       },
     );
     _setUserPropertiesBatch({
@@ -597,6 +599,23 @@ class AnalyticsManager {
   }
 
   static String _knownDeviceValue(String value) => value.isEmpty || value == 'Unknown' ? 'unknown' : value;
+
+  static Map<String, Object> _deviceIdentityProperties(BtDevice device) {
+    final serial = device.serialNumber?.trim();
+    return {
+      'transport_device_id': device.id,
+      'transport_id_kind': 'ble_identifier',
+      'transport_id_stability': 'platform_dependent',
+      if (serial != null && serial.isNotEmpty && serial != 'Unknown') ...{
+        'hardware_id': serial,
+        'hardware_id_kind': 'manufacturer_serial',
+        'hardware_id_stable': true,
+      } else ...{
+        'hardware_id_kind': 'unavailable',
+        'hardware_id_stable': false,
+      },
+    };
+  }
 
   void memoriesPageCategoryOpened(MemoryCategory category) =>
       track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
