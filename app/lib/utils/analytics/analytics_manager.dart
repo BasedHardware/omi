@@ -885,7 +885,18 @@ class AnalyticsManager {
   void upgradePlanSelected({required String plan, required String source}) =>
       track('Upgrade Plan Selected', properties: {'plan': plan, 'source': source});
 
-  void upgradeSucceeded() => track('Upgrade Succeeded');
+  void upgradeSucceeded({required String previousPlan, required String newPlan, required String billingInterval}) {
+    track(
+      'Subscription Plan Changed',
+      properties: {
+        'previous_plan': previousPlan,
+        'new_plan': newPlan,
+        'billing_interval': billingInterval,
+        'change_source': 'mobile_checkout',
+      },
+    );
+    track('Upgrade Succeeded');
+  }
 
   void upgradeCancelled() => track('Upgrade Cancelled');
 
