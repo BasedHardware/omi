@@ -128,7 +128,6 @@ src/recordings
 /app/lib/firebase_options.dart
 /app/lib/firebase_options_*.dart
 !/app/lib/firebase_options_local.dart
-/app/ios/Runner/Info-Dev.plist
 /app/firebase.json
 
 # Solidworks models

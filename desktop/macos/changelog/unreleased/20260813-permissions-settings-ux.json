@@ -1,0 +1,3 @@
+{
+  "change": "Calmed the Permissions settings page: a lock in the nav with an orange mark while grants are missing, a plain Permissions title, compact granted rows, and a single Not Granted status"
+}

@@ -110,13 +110,13 @@ finally:
 
 
 def _call(limit, offset):
-    db = MagicMock(return_value=[])
-    runtime = mem_mod.V3GetRuntime(enabled=False, source_decision='disabled')
+    service = MagicMock()
+    service.read.return_value = []
     scope_request = types.SimpleNamespace(device_scope='all', client_device_id=None)
     with (
-        patch.object(mem_mod.memories_db, 'get_memories', db),
-        patch.object(mem_mod, 'canonical_read_enabled', return_value=False),
+        patch.object(mem_mod, 'MemoryService', return_value=service),
         patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope_request),
+        patch.object(mem_mod, '_validate_device_scope_request'),
     ):
         mem_mod.get_memories(
             response=MagicMock(),
@@ -127,10 +127,10 @@ def _call(limit, offset):
             client_device_id=None,
             x_app_platform=None,
             x_device_id_hash=None,
-            memory_runtime=runtime,
         )
-    # get_memories(uid, limit, offset)
-    return db.call_args.args[1], db.call_args.args[2]
+    if service.read.called:
+        return service.read.call_args.kwargs['limit'], service.read.call_args.kwargs['offset']
+    return service.read_page.call_args.kwargs['limit'], 0
 
 
 def test_negative_offset_is_clamped_not_500():

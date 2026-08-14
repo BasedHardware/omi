@@ -68,7 +68,7 @@ The unit of work is the violated contract, not only the line where the symptom a
 
 ## Git
 
-- **Setup (required before first commit):** `make setup` — fetches `origin/main`, fast-forwards when safe, installs repo Git hooks (including the auto-formatting pre-commit hook) with linked-worktree-safe paths.
+- **Setup (required before first commit):** `make setup` — fetches `origin/main`, fast-forwards when safe, installs repo Git hooks (including the auto-formatting pre-commit hook) with linked-worktree-safe paths. Never set repo-local `user.name`/`user.email`; fixture identities belong only in temp test repos (`git -c`).
 - Before starting work: `git fetch origin && git pull --ff-only` on `main` — don't branch off stale state.
 - Always work in a git worktree for code changes (`git worktree add`); commit to the current branch and never switch branches mid-task.
 - Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
@@ -126,7 +126,7 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 
 ## Deploys & Release Pipelines
 
-- Desktop (daily candidate → qualified beta → manual stable): `desktop/macos/AGENTS.md` → Release Pipeline.
+- Desktop (hourly candidate → signed-smoke Beta → manual Stable): `desktop/macos/AGENTS.md` → Release Pipeline.
 - Backend: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`. Runtime env contract: `backend/AGENTS.md` → Service Map.
 - Firmware (Omi CV1): `omi/firmware/AGENTS.md`.
 

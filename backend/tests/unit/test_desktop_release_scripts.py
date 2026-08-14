@@ -105,23 +105,16 @@ def test_canonical_manifest_is_the_exact_immutable_object_registered_and_promote
     assert pointer["release_id"] == accepted["release_id"]
 
 
-# omi-test-quality: source-inspection -- static contract: GitHub cannot execute a workflow_run fixture locally.
+# omi-test-quality: source-inspection -- static contract: reusable workflow capability boundary.
 def test_beta_workflow_has_only_the_narrow_server_owned_promotion_capability():
     workflow = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
-    assert "/v2/desktop/beta/promote-qualified" in workflow
+    assert "/v2/desktop/beta/promote-candidate" in workflow
     assert 'Authorization: Bearer ${BETA_PROMOTION_TOKEN}' in workflow
     assert '--data "{\\"tag\\":\\"${RELEASE_TAG}\\"}"' in workflow
-    for required in (
-        "actions: read",
-        "github.event.workflow_run.id",
-        "github.event.workflow_run.run_attempt",
-        "actions/runs/$QUALIFICATION_RUN_ID/artifacts",
-        "qualification-evidence.json",
-        "EVIDENCE_SOURCE_SHA",
-    ):
-        assert required in workflow
-    assert "github.event.workflow_run.head_branch" not in workflow
-    assert "github.event.workflow_run.head_sha" not in workflow
+    assert "workflow_call:" in workflow
+    assert "workflow_run:" not in workflow
+    assert "desktop_qualify_beta.yml" not in workflow
+    assert "qualification_run_id" not in workflow
     for forbidden in (
         "gcloud",
         "google-github-actions/auth",
@@ -140,7 +133,7 @@ def test_beta_workflow_has_only_the_narrow_server_owned_promotion_capability():
 def _canonical_candidate_reservation_contract(workflow: str) -> bool:
     """Recognize only an executable reserve immediately before canonical publication."""
     start = workflow.find("      - name: Create GitHub release\n")
-    end = workflow.find("      - name: Dispatch trusted macOS beta qualification\n", start)
+    end = workflow.find("      - name: Promote signed candidate to Omi Beta\n", start)
     if start < 0 or end < 0:
         return False
     publish = workflow[start:end]
@@ -165,7 +158,7 @@ def test_codemagic_reserves_the_exact_candidate_before_every_canonical_publish_a
     publication = 'gh release create "$CM_TAG"'
     reserve = "/v2/desktop/beta/candidates/reserve"
     assert not _canonical_candidate_reservation_contract(
-        workflow.replace(reserve, "/v2/desktop/beta/promote-qualified")
+        workflow.replace(reserve, "/v2/desktop/beta/promote-candidate")
     )
     assert not _canonical_candidate_reservation_contract(
         workflow.replace(reserve, "reserve-placeholder").replace(publication, f"{publication}\n{reserve}")
@@ -181,7 +174,7 @@ def test_codemagic_reserves_the_exact_candidate_before_every_canonical_publish_a
     )
 
 
-def test_qualification_workflow_binds_immutable_controls_and_candidate_identity():
+def test_codemagic_promotes_exact_candidate_without_dispatching_qualification():
     """A later main commit cannot replace controls or invalidate tag-bound evidence."""
     admission = _load("desktop_qualification_admission", "desktop_qualification_admission.py")
     tag = "v0.12.64+12064-macos"
@@ -210,7 +203,9 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
 
     codemagic = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
     qualification = QUALIFY_BETA_WORKFLOW.read_text(encoding="utf-8")
-    assert '-f release_tag="$CM_TAG" --ref "$CM_TAG"' in codemagic
+    assert "/v2/desktop/beta/promote-candidate" in codemagic
+    assert '--data "{\\"tag\\":\\"${CM_TAG}\\"}"' in codemagic
+    assert "gh workflow run desktop_qualify_beta.yml" not in codemagic
     assert 'git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"' in qualification
     # The release attachment is content-addressed from the exact checked-out
     # candidate SHA and evidence digest, not a mutable tag-only filename.
@@ -222,12 +217,15 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
 
 def test_codemagic_produces_canonical_app_and_strictly_verifiable_dmg():
     workflow = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
+    dmg_helper = (REPO_ROOT / "desktop/macos/scripts/create-desktop-dmgs.sh").read_text(encoding="utf-8")
     smoke = (REPO_ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh").read_text(encoding="utf-8")
     assert workflow.count('APP_NAME: "Omi"') == 1
     assert 'APP_NAME: "omi"' not in workflow
-    assert "xattr -d com.apple.FinderInfo" in workflow
-    assert "xattr -d com.apple.ResourceFork" in workflow
-    assert 'codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"' in workflow
+    assert "scripts/create-desktop-dmgs.sh" in workflow
+    assert "xattr -d com.apple.FinderInfo" in dmg_helper
+    assert "xattr -d com.apple.ResourceFork" in dmg_helper
+    assert 'codesign --verify --deep --strict --verbose=2 "$staged_app"' in dmg_helper
+    assert 'xcrun stapler validate "$staged_app"' in dmg_helper
     assert 'dmg_app_name="$(expected_app_bundle_name)"' in smoke
     assert 'dmg_app="$DMG_MOUNTPOINT/$dmg_app_name"' in smoke
     assert "DMG-contained $dmg_app_name failed deep strict codesign verification" in smoke
@@ -492,26 +490,16 @@ def test_stable_repair_bundle_requires_the_release_publication_time():
         repair_installer.build_repair_bundle(manifest, "gs://omi_macos_updates")
 
 
-def test_qualification_is_serialized_by_tag_and_retried_without_release_body_state():
+def test_codemagic_beta_promotion_is_bounded_idempotent_and_has_no_release_body_state():
     codemagic = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
-    dispatch = codemagic[codemagic.index("      - name: Dispatch trusted macOS beta qualification") :]
-    qualification = QUALIFY_BETA_WORKFLOW.read_text(encoding="utf-8")
+    promotion = codemagic[codemagic.index("      - name: Promote signed candidate to Omi Beta") :]
 
-    assert "duplicate dispatches" in dispatch
-    assert 'gh release edit "$CM_TAG"' not in dispatch
-    # The sole M1 Studio is the serialized resource; a tag-scoped group would
-    # permit competing qualifications to use that same runner concurrently.
-    assert "group: desktop-beta-qualification-m1" in qualification
-    assert "cancel-in-progress: false" in qualification
-    assert "for attempt in 1 2 3" in dispatch
-    assert "ERROR: qualification dispatch was not confirmed after bounded retry" in dispatch
-    assert dispatch.index("ERROR: qualification dispatch was not confirmed after bounded retry") < dispatch.index(
-        "exit 1"
-    )
-    assert "desktop_qualification_dispatch.py" not in qualification
-    # The verdict accepts a qualification only through the sole M1 job output.
-    assert "M1_QUALIFIED: ${{ needs.qualify-m1-studio.outputs.qualified }}" in qualification
-    assert 'test "$M1_QUALIFIED" = true' in qualification
+    assert "Retries are idempotent" in promotion
+    assert 'gh release edit "$CM_TAG"' not in promotion
+    assert "for attempt in 1 2 3" in promotion
+    assert "ERROR: Beta promotion was not confirmed after bounded retry" in promotion
+    assert promotion.index("ERROR: Beta promotion was not confirmed after bounded retry") < promotion.rindex("exit 1")
+    assert "desktop_qualify_beta.yml" not in promotion
 
 
 def test_qualification_publishes_the_single_artifact_pair_and_immutable_evidence_for_server_readback():
@@ -545,7 +533,7 @@ def test_stable_workflow_reads_current_beta_and_owns_its_cas_inputs():
     workflow = PROMOTE_PROD_WORKFLOW.read_text(encoding="utf-8")
 
     assert "Read current pointers and capture workflow-owned CAS inputs" in workflow
-    assert "Fetch exact retained qualified manifest" in workflow
+    assert "Fetch exact retained Beta manifest" in workflow
     assert "actions/download-artifact@v7" not in workflow
     assert "Register immutable release manifest" not in workflow
     assert "appcast.xml?identity=stable" in workflow
@@ -557,14 +545,11 @@ def test_stable_workflow_reads_current_beta_and_owns_its_cas_inputs():
     assert "repoint" not in workflow
 
 
-def test_stable_workflow_selects_its_own_trusted_qualification():
+def test_stable_workflow_uses_current_beta_manifest_without_qualification_lookup():
     workflow = PROMOTE_PROD_WORKFLOW.read_text(encoding="utf-8")
-    assert (
-        'actions/workflows/desktop_qualify_beta.yml/runs?event=workflow_dispatch&status=completed&per_page=100'
-        in workflow
-    )
-    assert "desktop_qualification_admission.py" in workflow
-    assert "qualification_run_id:" not in workflow
+    assert "desktop_qualify_beta.yml" not in workflow
+    assert "desktop_qualification_admission.py" not in workflow
+    assert 'text(beta, "release_id") != os.environ["RELEASE_TAG"]' in workflow
 
 
 def test_beta_pointer_lost_response_retry_remains_exact_and_generation_stable():
@@ -601,7 +586,7 @@ def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
     latest_route = workflow.index("      - name: Publish latest stable repair route")
 
     assert immutable_repair < pointer < legacy_bridge < latest_route
-    assert "Fetch exact retained qualified manifest" in workflow
+    assert "Fetch exact retained Beta manifest" in workflow
     assert "gh release download" not in workflow
     assert "--if-generation-match=0" in workflow
     assert "manifest_sha256" in workflow
@@ -611,16 +596,11 @@ def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
     assert "gcloud run deploy" not in workflow
 
 
-def test_release_process_guard_matches_trusted_auto_promotion(monkeypatch):
-    """Behavioral contract: the guard rejects a promotion that drops its trusted-repository gate."""
+def test_release_process_guard_rejects_reintroduced_qualification_trigger(monkeypatch):
     monkeypatch.syspath_prepend(str(SCRIPTS))
     guard = _load("release_process_guards", "check-release-process-guards.py")
     promotion_text = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
-    trusted_repository = "github.event.workflow_run.head_repository.full_name == github.repository"
-    obsolete_dispatch_gate = "github.event.workflow_run.event == 'workflow_dispatch'"
-
-    assert trusted_repository in promotion_text
-    assert obsolete_dispatch_gate not in promotion_text
+    assert "workflow_run:" not in promotion_text
 
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -635,10 +615,10 @@ def test_release_process_guard_matches_trusted_auto_promotion(monkeypatch):
             shutil.copy2(REPO_ROOT / relative_path, target)
 
         promotion = root / ".github/workflows/desktop_promote_beta.yml"
-        promotion.write_text(promotion_text.replace(trusted_repository, "", 1), encoding="utf-8")
+        promotion.write_text(promotion_text + "\n# workflow_run:\n", encoding="utf-8")
         guard.ROOT = root
         errors = guard.check_desktop_qualification_runner()
-        assert any(trusted_repository in error for error in errors), errors
+        assert any("still depends on qualification" in error for error in errors), errors
 
         promotion.write_text(promotion_text, encoding="utf-8")
         assert guard.check_desktop_qualification_runner() == []

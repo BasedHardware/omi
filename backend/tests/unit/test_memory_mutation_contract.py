@@ -21,41 +21,47 @@ def client(monkeypatch):
             for dependency in route.dependant.dependencies:
                 app.dependency_overrides[dependency.call] = lambda: 'test-user'
 
-    monkeypatch.setattr(memories, '_canonical_write_enabled_or_fail_closed', lambda *_args, **_kwargs: False)
     monkeypatch.setattr(
         memories,
         '_validate_mutable_memory',
         lambda *_args, **_kwargs: {'category': 'system'},
     )
-    monkeypatch.setattr(memories, 'upsert_memory_vector', lambda *_args, **_kwargs: None)
-    return TestClient(app)
+    monkeypatch.setattr(memories, 'submit_with_context', lambda *_args, **_kwargs: None)
+
+    calls = []
+
+    class _UniversalMemoryService:
+        def __init__(self, **_kwargs):
+            pass
+
+        def update_content(self, uid, memory_id, value):
+            calls.append(('content', uid, memory_id, value))
+
+        def update_visibility(self, uid, memory_id, value):
+            calls.append(('visibility', uid, memory_id, value))
+
+    monkeypatch.setattr(memories, 'MemoryService', _UniversalMemoryService)
+    with TestClient(app) as test_client:
+        test_client.memory_calls = calls
+        yield test_client
 
 
 def test_edit_memory_accepts_canonical_json_body(client, monkeypatch):
-    calls = []
-    monkeypatch.setattr(memories.memories_db, 'edit_memory', lambda *args: calls.append(args))
-
     response = client.patch('/v3/memories/memory-1', json={'value': 'Updated content'})
 
     assert response.status_code == 200
     assert response.json() == {'status': 'ok'}
-    assert calls == [('test-user', 'memory-1', 'Updated content')]
+    assert client.memory_calls == [('content', 'test-user', 'memory-1', 'Updated content')]
 
 
 def test_edit_memory_retains_legacy_query_parameter(client, monkeypatch):
-    calls = []
-    monkeypatch.setattr(memories.memories_db, 'edit_memory', lambda *args: calls.append(args))
-
     response = client.patch('/v3/memories/memory-1', params={'value': 'Legacy content'})
 
     assert response.status_code == 200
-    assert calls == [('test-user', 'memory-1', 'Legacy content')]
+    assert client.memory_calls == [('content', 'test-user', 'memory-1', 'Legacy content')]
 
 
 def test_canonical_body_takes_precedence_over_legacy_query_parameter(client, monkeypatch):
-    calls = []
-    monkeypatch.setattr(memories.memories_db, 'edit_memory', lambda *args: calls.append(args))
-
     response = client.patch(
         '/v3/memories/memory-1',
         params={'value': 'Legacy content'},
@@ -63,7 +69,7 @@ def test_canonical_body_takes_precedence_over_legacy_query_parameter(client, mon
     )
 
     assert response.status_code == 200
-    assert calls == [('test-user', 'memory-1', 'Canonical content')]
+    assert client.memory_calls == [('content', 'test-user', 'memory-1', 'Canonical content')]
 
 
 @pytest.mark.parametrize('json_body', [None, {}, {'content': 'wrong field'}, {'value': {'nested': 'object'}}])
@@ -74,24 +80,18 @@ def test_edit_memory_rejects_missing_or_malformed_value(client, json_body):
 
 
 def test_visibility_accepts_canonical_json_body(client, monkeypatch):
-    calls = []
-    monkeypatch.setattr(memories.memories_db, 'change_memory_visibility', lambda *args: calls.append(args))
-
     response = client.patch('/v3/memories/memory-1/visibility', json={'value': 'public'})
 
     assert response.status_code == 200
     assert response.json() == {'status': 'ok'}
-    assert calls == [('test-user', 'memory-1', 'public')]
+    assert client.memory_calls == [('visibility', 'test-user', 'memory-1', 'public')]
 
 
 def test_visibility_retains_legacy_query_parameter(client, monkeypatch):
-    calls = []
-    monkeypatch.setattr(memories.memories_db, 'change_memory_visibility', lambda *args: calls.append(args))
-
     response = client.patch('/v3/memories/memory-1/visibility', params={'value': 'private'})
 
     assert response.status_code == 200
-    assert calls == [('test-user', 'memory-1', 'private')]
+    assert client.memory_calls == [('visibility', 'test-user', 'memory-1', 'private')]
 
 
 @pytest.mark.parametrize(

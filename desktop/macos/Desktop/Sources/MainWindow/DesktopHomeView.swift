@@ -42,7 +42,7 @@ struct DesktopHomeView: View {
 
   @EnvironmentObject private var appState: AppState
   @StateObject private var viewModelContainer = ViewModelContainer()
-  /// The cohort shell owns typed navigation at the root, never through legacy
+  /// The Chat-first shell owns typed navigation at the root, never through legacy
   /// sidebar indices. It persists only route/collapse state, not enrollment.
   @StateObject private var chatFirstNavigation = ChatFirstShellNavigation()
   @ObservedObject private var authState = AuthState.shared
@@ -196,11 +196,9 @@ struct DesktopHomeView: View {
       .onAppear {
         log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
 
-        // Post-onboarding guidance. The popup's overlay is this view's
-        // (`mainContentWithOverlays`), so arming it is this view's job too. While the only trigger
-        // was `DashboardPage.onAppear`, the default Home — which is no longer `DashboardPage` —
-        // never fired it, and a user who had just finished setup was handed a silent app.
-        if PostOnboardingPromptSuggestions.shouldArmPopup() {
+        // Chat-first renders starter prompts in main chat; only legacy may arm the floating popup.
+        FloatingPrimaryTextInputRouting.configure(routesToMainApp: usesChatFirstShell)
+        if !usesChatFirstShell && PostOnboardingPromptSuggestions.shouldArmPopup() {
           showTryAskingPopup = true
         }
         updatePolicyManager.refresh(force: true)
@@ -265,7 +263,7 @@ struct DesktopHomeView: View {
           "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
         )
         chatFirstCapabilitySample.ownerDidChange(to: nil)
-        resetSessionScopedStartupWarmups(preserveCrispReadState: false)
+        resetSessionScopedStartupWarmups()
         appState.conversationRepository.reset()
         appState.folders = []
         appState.selectedFolderId = nil
@@ -282,7 +280,7 @@ struct DesktopHomeView: View {
         log(
           "DesktopHomeView: resetOnboardingRequested — clearing live onboarding state for current app"
         )
-        resetSessionScopedStartupWarmups(preserveCrispReadState: false)
+        resetSessionScopedStartupWarmups()
         appState.hasCompletedOnboarding = false
         onboardingStep = 0
         onboardingFurthestStep = 0
@@ -291,19 +289,7 @@ struct DesktopHomeView: View {
       }
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
         log("DesktopHomeView: app terminating — cancelling startup warmups")
-        resetSessionScopedStartupWarmups(preserveCrispReadState: true)
-      }
-      // Handle transcription toggle from menu bar
-      .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) {
-        notification in
-        if let enabled = notification.userInfo?["enabled"] as? Bool {
-          log("DesktopHomeView: Menu bar toggled transcription: \(enabled)")
-          if enabled {
-            appState.startTranscription()
-          } else {
-            appState.stopTranscription()
-          }
-        }
+        resetSessionScopedStartupWarmups()
       }
       // Periodic file re-scan (every 3 hours)
       .task {
@@ -388,7 +374,7 @@ struct DesktopHomeView: View {
       }
     }
     .environment(\.colorScheme, .light)  // No window ground since `ShellWindowChrome`; each panel is its own glass.
-    .background(ShellWindowAttachment().frame(width: 0, height: 0)).shellWindowDragSurface()
+    .background(ShellWindowAttachment().frame(width: 0, height: 0))
     .frame(minWidth: DesktopWindowLayoutPolicy.width, minHeight: DesktopWindowLayoutPolicy.height)
     .preferredColorScheme(.light)  // Glass is pinned light — see `InkGlass`. Deliberate, not a bug.
     .tint(Ink.accent)
@@ -584,10 +570,9 @@ struct DesktopHomeView: View {
     guard !usesChatFirstShell else { return }
     // Tier 0 or tier 6+ shows everything — no redirect needed
     guard currentTierLevel > 0 && currentTierLevel < 6 else { return }
-    // Don't redirect from settings/permissions/help pages
+    // Don't redirect from settings/permissions pages
     let nonMainPages: Set<Int> = [
       SidebarNavItem.settings.rawValue, SidebarNavItem.permissions.rawValue,
-      SidebarNavItem.help.rawValue,
     ]
     guard !nonMainPages.contains(selectedIndex) else { return }
 
@@ -616,12 +601,12 @@ struct DesktopHomeView: View {
   /// The constant floating top bar (nav + new-item counts + Capture/Listening)
   /// replaces the old left nav rail. It shows on every main content page —
   /// including Settings, whose page has no back button, so the bar's nav pills
-  /// are the way out. Permissions/help are full-screen utility flows with their
-  /// own chrome and stay bar-less — the Memory atlas is the same: it has its
+  /// are the way out. Permissions is a full-screen utility flow with its own
+  /// chrome and stays bar-less — the Memory atlas is the same: it has its
   /// own back affordance and header, so the redundant top bar hides while it's open.
   private var showsTopBar: Bool {
     guard !useLegacyHomeDesign, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
-    return ![.permissions, .help].contains(item)
+    return item != .permissions
   }
 
   /// Reference instant for the top bar's "new since you were last here" counts.
@@ -804,13 +789,12 @@ struct DesktopHomeView: View {
     }
   }
 
-  private func resetSessionScopedStartupWarmups(preserveCrispReadState: Bool) {
+  private func resetSessionScopedStartupWarmups() {
     viewModelContainer.resetStartupState()
     didScheduleConversationWarmup = false
     didScheduleAgentVMProvisioning = false
     proactiveMonitoringStartGate.finishAttempt()
     initialFileIndexingBackfill.releaseReservation()
-    CrispManager.shared.stop(preserveReadState: preserveCrispReadState)
   }
 
   private func scheduleAgentVMProvisioning() {
@@ -934,7 +918,7 @@ struct DesktopHomeView: View {
   private func restorePersistedCaptureServices(reason: String) {
     let settings = AssistantSettings.shared
     if PersistedCaptureLaunchPolicy.shouldStartTranscription(
-      intentEnabled: settings.transcriptionEnabled,
+      intentEnabled: settings.audioRecordingMode != .off,
       isTranscribing: appState.isTranscribing
     ) {
       log("DesktopHomeView: Restoring transcription from persisted intent (\(reason))")
@@ -1104,7 +1088,7 @@ struct DesktopHomeView: View {
 
   /// Existing menu, keyboard, and automation callers retain their legacy
   /// names. This is the sole root adapter between those callers and typed
-  /// cohort navigation.
+  /// Chat-first navigation.
   private func navigateToLegacyDestination(_ item: SidebarNavItem) {
     if usesChatFirstShell {
       chatFirstNavigation.selectLegacyDestination(item)
@@ -1131,20 +1115,19 @@ struct DesktopHomeView: View {
         GoalCelebrationView()
       }
       .overlay {
-        if showTryAskingPopup {
+        if !usesChatFirstShell && showTryAskingPopup {
           let suggestions = PostOnboardingPromptSuggestions.suggestions()
           if !suggestions.isEmpty {
             TryAskingPopupView(
               suggestions: suggestions,
               onAsk: { suggestion in
                 showTryAskingPopup = false
-                PostOnboardingPromptSuggestions.shouldShowPopup = false
+                PostOnboardingPromptSuggestions.consume()
                 FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
               },
               onDismiss: {
                 showTryAskingPopup = false
-                PostOnboardingPromptSuggestions.shouldShowPopup = false
-                PostOnboardingPromptSuggestions.isDismissed = true
+                PostOnboardingPromptSuggestions.consume()
               }
             )
           }
@@ -1155,6 +1138,7 @@ struct DesktopHomeView: View {
   private func mainContentWithNotifications<Content: View>(_ content: Content) -> some View {
     content
       .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
+        guard !usesChatFirstShell else { return }
         showTryAskingPopup = true
       }
       .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
@@ -1211,8 +1195,8 @@ struct DesktopHomeView: View {
             memoryDestinationRawValue = destination.rawValue
           }
           // Settings owns pages now, not only preference rows, so a caller that names Settings can
-          // name the row it means (`SupportThreadRoute`). Without it a "Help from Founder" banner
-          // could only drop the user on whichever section they last had open.
+          // name the row it means. Without it a banner could only drop the user on whichever
+          // section they last had open.
           if let sectionRaw = notification.userInfo?["settingsSection"] as? String,
             let section = SettingsContentView.SettingsSection.automationMatch(sectionRaw)
           {
@@ -1248,6 +1232,8 @@ struct DesktopHomeView: View {
       .onChange(of: chatFirstNavigation.visibleRoute) { _, _ in reportAutomationState() }
       .onChange(of: chatFirstNavigation.isSidebarCollapsed) { _, _ in reportAutomationState() }
       .onChange(of: useLegacyHomeDesign) { _, newValue in
+        FloatingPrimaryTextInputRouting.configure(routesToMainApp: usesChatFirstShell)
+        if usesChatFirstShell { showTryAskingPopup = false }
         OmiMotion.withGated(.easeInOut(duration: 0.2)) {
           isSidebarCollapsed = !newValue
         }
@@ -1330,8 +1316,7 @@ struct DesktopHomeView: View {
             ? SidebarNavItem.dashboard.rawValue
             : previousIndexBeforeSettings
         }
-      }
-    )
+      }, appState: appState)
   }
 
   // Main content area. It paints **no background**: the window has no ground at all
@@ -1546,8 +1531,6 @@ private struct PageContentView: View {
         )
       case 10:
         PermissionsPage(appState: appState)
-      case 12:
-        HelpPage()
       default:
         QueryShellHome(
           viewModel: viewModelContainer.dashboardViewModel,
@@ -1567,6 +1550,11 @@ private struct PageContentView: View {
 /// so tapping a row navigates to the detail view.
 struct ConversationsPageHost: View {
   let appState: AppState
+  /// Optional exact record supplied by a Chat-first conversation deep-link.
+  /// The normal Conversations page still owns list loading and row selection;
+  /// this value only seeds selection when a link fetched a record that is not
+  /// present in the current page.
+  var initialConversation: ServerConversation? = nil
   @State private var selectedConversation: ServerConversation? = nil
   @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
 
@@ -1590,6 +1578,14 @@ struct ConversationsPageHost: View {
       // account's conversation after an in-place account switch.
       .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
         selectedConversation = nil
+      }
+      .onAppear {
+        if let initialConversation {
+          selectedConversation = initialConversation
+        }
+      }
+      .onChange(of: initialConversation?.id) { _, _ in
+        selectedConversation = initialConversation
       }
   }
 }

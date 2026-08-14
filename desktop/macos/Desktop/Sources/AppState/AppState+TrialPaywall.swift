@@ -203,7 +203,7 @@ extension AppState {
     // grant). Counting .unknown as missing would permanently suppress the
     // "All permissions granted" banner for default users, so only a proven
     // denial counts.
-    if isSystemAudioSupported, effectiveSystemAudioMode != .never,
+    if isSystemAudioSupported, audioRecordingMode != .off, shouldCaptureSystemAudio,
       systemAudioPermissionStatus == .denied
     {
       missing.append("System Audio")
@@ -226,11 +226,11 @@ extension AppState {
 
   /// Open notification preferences in System Settings (directly to Omi's settings)
   func openNotificationPreferences() {
-    ShellSummon.suspendForPermissionPrompt()
     let bundleId = Bundle.main.bundleIdentifier ?? "com.omi.computer-macos"
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleId)")
     {
+      log("Opening notification settings for bundle \(bundleId)")
       NSWorkspace.shared.open(url)
     }
   }

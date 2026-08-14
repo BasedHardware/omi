@@ -186,6 +186,7 @@ class SpeechProfileProvider extends ChangeNotifier
       throw Exception("Can not create new speech profile socket");
     }
     _socket?.subscribe(this, this);
+    await _socket?.requestFirstOnboardingQuestion();
   }
 
   /// Start phone microphone streaming (alternative to BLE device streaming).

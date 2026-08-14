@@ -85,13 +85,16 @@ struct ModelQoS {
       }
     }
 
-    /// Insight generation
-    static var insight: String {
-      switch activeTier {
-      case .premium: return "gemini-2.5-flash"
-      case .max: return "gemini-2.5-pro"
-      }
-    }
+    /// Insight generation.
+    ///
+    /// Pro on both tiers, deliberately. Insight ran on `gemini-pro-latest` for everyone until
+    /// this dropped to Flash at the premium tier, and the click-through fell with it: 2.34%
+    /// in the week of 2026-04-12 (39.8k sent, 336 distinct clickers) against 0.7–0.96%
+    /// through July. Unlike the other proactive assistants this one is cheap to run well —
+    /// a 10-minute timer caps it at ~6 analyses/hour no matter how much the user switches
+    /// windows — and its whole job is finding the one non-obvious thing, which is exactly
+    /// where the weaker model stops earning its interruption.
+    static var insight: String { "gemini-2.5-pro" }
 
     /// Live notch suggestions.
     ///
@@ -108,6 +111,11 @@ struct ModelQoS {
 
     /// Embeddings (not tier-dependent, kept separate)
     static var embedding: String { "gemini-embedding-001" }
+  }
+
+  struct Proactivity {
+    static let extractionOperation = "proactive_extraction"
+    static let reasoningOperation = "proactive_reasoning"
   }
 
   // MARK: - Tier Info (for UI / debugging)

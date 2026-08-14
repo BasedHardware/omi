@@ -350,10 +350,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     memory_system.MemorySystem = _MemorySystem
     add("utils.memory.memory_system", memory_system)
 
-    memory_system_pin = ModuleType("utils.memory.memory_system_pin")
-    memory_system_pin.memory_system_request_scope = MagicMock()
-    add("utils.memory.memory_system_pin", memory_system_pin)
-
     canonical_memory_adapter = ModuleType("utils.memory.canonical_memory_adapter")
     canonical_memory_adapter.extraction_memory_id = MagicMock()
     add("utils.memory.canonical_memory_adapter", canonical_memory_adapter)

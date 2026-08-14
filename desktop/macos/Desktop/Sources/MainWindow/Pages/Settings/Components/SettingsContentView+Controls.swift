@@ -85,6 +85,26 @@ enum SettingsControlMetrics {
   static func dailySummaryHour(from date: Date, calendar: Calendar = .current) -> Int {
     calendar.component(.hour, from: date)
   }
+
+  /// Daily Summary persists hour only. Any minute the picker offers is snapped to `:00`
+  /// immediately so the control never shows a time that cannot round-trip.
+  static func canonicalizeDailySummaryTime(_ date: Date, calendar: Calendar = .current) -> Date {
+    dailySummaryDate(forHour: dailySummaryHour(from: date, calendar: calendar), referenceDate: date, calendar: calendar)
+  }
+
+  /// General → Notifications mirrors macOS TCC/banner style only. Product enablement lives in
+  /// Notifications & Privacy (master + frequency).
+  static func generalNotificationPermissionStatusText(
+    hasPermission: Bool, bannersDisabled: Bool
+  ) -> String {
+    if !hasPermission {
+      return "macOS notification permission is off"
+    }
+    if bannersDisabled {
+      return "Permission granted, but macOS banners are off"
+    }
+    return "macOS banners enabled"
+  }
 }
 
 struct SettingsMenuPicker<SelectionValue: Hashable, Content: View>: View {
@@ -797,6 +817,31 @@ extension SettingsContentView {
         Text(
           "You're on a newer beta build (\(updaterViewModel.currentVersion)). The latest stable release is \(stableVersion).\n\nSwitching to Stable means you won't receive new updates until a stable release surpasses your current version. You can also download the stable version now."
         )
+      }
+
+      settingsCard(settingId: "about.discord") {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "person.2.fill")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.secondary)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Community")
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundColor(Ink.primary)
+
+            Text("Get help from the omi community and team")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+
+          Spacer()
+
+          Button("Join Discord") {
+            openURLInDefaultBrowser(SupportLinks.discord)
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        }
       }
 
       settingsCard(settingId: "about.reportissue") {

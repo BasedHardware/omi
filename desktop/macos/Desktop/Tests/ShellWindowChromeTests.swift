@@ -91,8 +91,8 @@ final class ShellWindowChromeTests: XCTestCase {
   }
 
   /// …and the window still moves. It has two handles: the transparent title bar over the reserved
-  /// band and a thresholded SwiftUI gesture across the content. The native background-drag switch is
-  /// deliberately off because AppKit mistakes hosted SwiftUI buttons for background.
+  /// band and a thresholded simultaneous SwiftUI gesture on the visible top bar. The native
+  /// background-drag switch is deliberately off because AppKit mistakes hosted buttons for background.
   func testTheWindowIsStillMovableWithoutATitleBarToGrab() {
     let window = makeWindow()
     window.isMovableByWindowBackground = false
@@ -136,34 +136,33 @@ final class ShellWindowChromeTests: XCTestCase {
 
   // MARK: - Summoned vs anchored
 
-  /// A summoned shell behaves like the thing it is: it comes up over whatever you were reading, and
-  /// clicking outside puts it away. `hidesOnDeactivate` is the native AppKit ownership boundary for
-  /// that behavior, so no global mouse monitor or Accessibility permission is involved.
-  func testASummonedShellFloatsOverOtherAppsAndPutsItselfAwayWhenYouClickOutside() {
+  /// **The app-switcher guard.** The shell used to be a `.floating` panel with `hidesOnDeactivate`, so
+  /// switching to any other app ordered it out — and a window that is not on screen is in no switcher's
+  /// list, which left ⌥-Tab and ⌘-Tab window cycling with no Omi window to offer at all. These two
+  /// properties are the whole difference between an application window and an overlay, so they are
+  /// asserted directly rather than through the presentation that happens to be applied.
+  func testASummonedShellStaysOnScreenAtNormalLevelSoWindowSwitchersCanOfferIt() {
     let window = makeWindow()
 
     ShellWindowChrome.dress(window, as: .summoned)
 
-    XCTAssertEqual(window.level, .floating, "a summoned surface that sinks behind the app you called it over")
-    XCTAssertTrue(window.hidesOnDeactivate, "clicking outside must dismiss the summoned shell")
+    XCTAssertEqual(window.level, .normal, "an overlay level is not a window any switcher will cycle to")
+    XCTAssertFalse(window.hidesOnDeactivate, "AppKit orders a hidden window out of every switcher's list")
     XCTAssertTrue(window.collectionBehavior.contains(.fullScreenAuxiliary))
     XCTAssertTrue(window.collectionBehavior.contains(.moveToActiveSpace))
   }
 
-  /// `dress` runs repeatedly as auth/onboarding changes presentation. It must write both directions:
-  /// a signed-in shell dismisses on click-away, while sign-in and onboarding survive browser and
-  /// System Settings trips.
-  func testDressingReconcilesClickAwayBehaviorForEachPresentation() {
+  /// `dress` runs repeatedly as auth and onboarding change presentation, and no presentation may
+  /// reintroduce the auto-hide: a signed-in shell has to survive a trip to another app for the same
+  /// reason onboarding has to survive a trip to System Settings.
+  func testNoPresentationEverMakesTheShellHideItselfOnDeactivate() {
     let window = makeWindow()
 
-    ShellWindowChrome.dress(window, as: .summoned)
-    XCTAssertTrue(window.hidesOnDeactivate)
-
-    ShellWindowChrome.dress(window, as: .anchored)
-    XCTAssertFalse(window.hidesOnDeactivate)
-
-    ShellWindowChrome.dress(window, as: .summoned)
-    XCTAssertTrue(window.hidesOnDeactivate)
+    for presentation in ShellWindowChrome.Presentation.allCases {
+      ShellWindowChrome.dress(window, as: presentation)
+      XCTAssertFalse(window.hidesOnDeactivate, "\(presentation) hides the shell from every window switcher")
+      XCTAssertEqual(window.level, .normal, "\(presentation) puts the shell at a level switchers skip")
+    }
   }
   /// **The first-run guard.** Onboarding sends people to System Settings for microphone, screen
   /// recording and accessibility, and every trip deactivates this app. A shell that auto-hid would
